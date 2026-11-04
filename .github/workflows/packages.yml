@@ -630,6 +630,46 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
 
+  # The on-prem install path for real: build two signed offline releases of
+  # openadapt-flow[privacy] from uv.lock on this connected runner, then, as
+  # root in a network namespace with no route out, install the first from its
+  # wheelhouse, refuse a tampered second, update to the signed second, roll
+  # back, and run the air-gap attestation (egress probe, audit chain). pip has
+  # no index and the machine has no network, so a wheel missing from the
+  # archive fails the install. deploy/on-prem/bin/test-offline-install.sh.
+  # First, bin/test-update.sh: the update state machine's refusal, migration
+  # and recovery paths with a fake venv build, which nothing else runs.
+  flow-onprem-offline:
+    name: flow on-prem offline install, update and rollback (egress blocked)
+    needs: scope
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.flow == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: packages/flow
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+      - name: Signed update and rollback state machine (hermetic, fake build)
+        run: bash deploy/on-prem/bin/test-update.sh
+      - name: Build two signed offline releases from the lock (connected)
+        run: bash deploy/on-prem/bin/test-offline-install.sh stage "$RUNNER_TEMP/offline"
+      - name: Install, update and roll back with egress blocked
+        # env -u SUDO_UID keeps the command root inside the namespace:
+        # install.sh owns the release tree as root.
+        run: >-
+          sudo env -u SUDO_UID -u SUDO_GID "PATH=$PATH"
+          deploy/on-prem/bin/run-egress-blocked.sh
+          bash deploy/on-prem/bin/test-offline-install.sh verify "$RUNNER_TEMP/offline"
+
   # The agent-framework adapters (openadapt_flow.integrations.agents): each
   # framework's own agent loop with a scripted model, writing through a real
   # HTTP app, from the lock with every framework extra (CrewAI pinned beside
@@ -1425,6 +1465,7 @@ jobs:
       - flow-lint
       - flow-unit
       - flow-critical
+      - flow-onprem-offline
       - flow-agent-frameworks
       - flow-native-census
       - flow-linux-atspi
@@ -1478,6 +1519,7 @@ jobs:
               "flow-lint": "flow",
               "flow-unit": "flow",
               "flow-critical": "flow",
+              "flow-onprem-offline": "flow",
               "flow-agent-frameworks": "flow",
               "flow-native-census": "flow",
               "flow-linux-atspi": "flow",

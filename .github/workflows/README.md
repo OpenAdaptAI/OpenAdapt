@@ -102,7 +102,7 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 | main.yml | `run-ci` | ubuntu-latest, Python 3.12 | ubuntu-latest, Python 3.12 | ubuntu-latest and macos-latest, Python 3.10 to 3.12 |
 | main.yml | `unsupported-python-guard` | no | no | Python 3.13 and 3.14 |
 | packages.yml | `types`, `agent` | Python 3.12 | Python 3.12 | Python 3.10 and 3.12 |
-| packages.yml | `flow-lint`, `flow-critical` | yes | yes | yes |
+| packages.yml | `flow-lint`, `flow-critical`, `flow-onprem-offline` | yes | yes | yes |
 | ci.yml | `smoke`, `ci` | yes | yes | no |
 | packages.yml | `flow-unit` | 3 shards packed by measured time, fast lane (without `nightly_only.txt`) | no | 2 shards |
 | packages.yml | `flow-native-census` | no | no | Windows and macOS |
