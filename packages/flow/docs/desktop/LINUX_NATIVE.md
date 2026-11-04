@@ -74,15 +74,44 @@ the live session.
 
 ## Qualification
 
-Root CI records under Xvfb and, after a merge to main, reads a GTK3 button
-over AT-SPI (`packages/capture/tests/test_linux_atspi_integration.py`). The
-`linux-atspi-x11` qualification job (`packages/flow/.github/workflows/ci.yml`)
-owns an isolated Xvfb display, session D-Bus, AT-SPI registry, and minimal GTK3 application. It runs exactly three
-fresh-process text-and-button trials, verifies each effect from exact file bytes
-outside the target UI, then runs three ambiguous-control and three stale-handle
-trials that must refuse with the effect file absent. Its artifact explicitly
-reports silent incorrect success, over-halt, refusal failures, native delivery,
-latency, cleanup, and model calls.
+The `flow-linux-atspi` job in the monorepo's `packages.yml` (post-merge tier:
+every push to `main`, nightly and dispatch; `packages-gate` requires it there)
+runs on an isolated Xvfb display with openbox, a session D-Bus started after
+`DISPLAY` is set (the D-Bus-activated AT-SPI registry needs it to synthesize
+input), the AT-SPI registry and GTK3. It runs two qualifications and uploads
+both results:
+
+- `scripts/qualify_linux_atspi.py` drives the backend on a minimal GTK3
+  fixture: three fresh-process text-and-button trials, each effect checked from
+  exact file bytes outside the target UI, then three ambiguous-control and three
+  stale-handle trials that must refuse with the effect file absent.
+- `benchmark/repair_every_backend/qualify_linux.py` records a write workflow on
+  a GTK3 chart app with a SQLite database (`tests/native_apps/chart_gtk.py`),
+  compiles it and certifies it under `clinical-write`, runs it governed
+  (`standard`) with a SQL record check, and checks that another patient's
+  chart and a look-alike chart (one MRN character different) stop before the
+  save. It then repairs an "Update available" notice: the new "Later" click is
+  admitted on its AT-SPI element identity and the record check, a scripted
+  person approves, and the resumed run is `VERIFIED` with exactly one new row.
+
+`benchmark/linux_container/run.sh` runs either one in a local container with
+the same setup.
+
+### Element identity
+
+`LinuxBackend.element_identity_at(x, y)` reads the element under a point for a
+repair's new click, in the shape the macOS and Windows backends use: the
+mapped role and accessible name `structural_locator_at` stores, the accessible
+id, the raw AT-SPI role and name of each ancestor up to the pinned window, the
+window title and the application name. The ancestry must reach the pinned
+window by its exact title, bounds and process; anything else is no identity,
+and the click is refused.
+
+### Typed input
+
+`text_value_at(x, y)` and `focused_text_value()` read an editable field's exact
+text over AT-SPI, so the runtime verifies a TYPE step from the field itself.
+Password fields abstain.
 
 The default unit suite separately exercises exact-window selection, bounded
 candidate enumeration, traversal refusal, target-window capture, Wayland portal

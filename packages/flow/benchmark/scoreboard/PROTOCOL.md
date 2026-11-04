@@ -171,6 +171,17 @@ imports) and, for agent arms, one ledger per item with every model call's
 tokens and cost. Screenshots and videos are not committed. Raw data is
 committed before any number is quoted.
 
+## Note on amendment numbers
+
+Amendments 11 to 14 were written as Amendments 10 to 13 on their branch. They
+were renumbered when the branch merged after Amendment 10 (lifecycle
+economics). Old Amendment N is now Amendment N+1. Files committed before the
+merge keep the old numbers:
+`raw/openemr_referral/code_agent/2026-10-25-rb/meta.json`,
+`raw/openemr_referral/code_agent/2026-10-25-rb-admit/meta.json` and
+`raw/mockmed/code_agent/2026-10-25-rb/HAND_REVIEW.md`. Their "Amendment 11" is
+Amendment 12 here.
+
 ## Amendment 1 (2026-10-18, after a code review, before any figure was quoted)
 
 Arms 1 and 3 on MockMed and arm 1 on openIMIS were running when these changes
@@ -380,11 +391,6 @@ harm is not priced. `build.py` lists every run under `lifecycle/results/`
 that has a REPORT.md.
 
 ## Amendment 11 (2026-10-25): arm 7 with a read-back on every save, and the program it compiles
-
-Amendments 11 to 14 were written as Amendments 10 to 13 on their branch and
-renumbered when the branch merged after Amendment 10 (lifecycle economics).
-Run notes committed under `raw/` before the merge use the old numbers: their
-"Amendment 11" is Amendment 12 here.
 
 Written while arm 7 was on item 25, before any result was summed. Code as
 action became the default first-run agent,
