@@ -644,33 +644,50 @@ def _enforce_surface_binding(
 def _recording_encryption_key(args: argparse.Namespace, backend: str) -> Optional[str]:
     """The passphrase that encrypts this recording, or ``None`` for plaintext.
 
-    An explicit ``OPENADAPT_RECORDING_KEY`` turns encryption on. Where the
-    recorder can encrypt every file from the first frame (the web recorder),
-    a configured ``OPENADAPT_BUNDLE_KEY`` turns it on by default too, so a
-    deployment that seals its bundles does not leave the recordings they come
-    from in plaintext. ``--no-encrypt`` opts out. The desktop recorders write
-    a raw capture session through openadapt-capture that Flow cannot encrypt
-    yet, so an explicit recording key refuses them rather than write
-    plaintext.
+    The web recorder encrypts every file from the first frame under
+    ``OPENADAPT_RECORDING_KEY`` or ``OPENADAPT_BUNDLE_KEY``, and under the
+    local key in strict mode (:mod:`openadapt_flow.at_rest`); otherwise the
+    plaintext recording is logged. ``--no-encrypt`` and
+    ``OPENADAPT_FLOW_PLAINTEXT_AT_REST`` opt out, with a warning and a ledger
+    line. The desktop recorders write a raw capture session through
+    openadapt-capture that Flow cannot encrypt yet: by default they record in
+    plaintext and name the directory on stderr and in the ledger;
+    ``OPENADAPT_FLOW_AT_REST=strict`` and a configured recording key refuse.
     """
     import os
 
-    from openadapt_flow import crypto, sealed_set
+    from openadapt_flow import at_rest, crypto, sealed_set
 
-    if getattr(args, "no_encrypt", False):
-        return None
-    explicit = os.environ.get(sealed_set.RECORDING_ENV_KEY) or None
-    if backend != "web":
-        if explicit:
-            raise SystemExit(
-                f"record: {sealed_set.RECORDING_ENV_KEY} is set, but the "
-                f"{backend} recorder writes its raw capture session (database, "
-                "video) through openadapt-capture, which Flow cannot encrypt "
-                "yet. Nothing was recorded. Record on an encrypted volume and "
-                "pass --no-encrypt, or use --backend web."
-            )
-        return None
-    return explicit or crypto.resolve_key(None)
+    out = getattr(args, "out", None) or "the recording directory"
+    try:
+        if getattr(args, "no_encrypt", False):
+            if at_rest.strict():
+                at_rest.unsealed_write("a recording (--no-encrypt)", out)
+            at_rest.record_plaintext(f"a recording at {out}", "record --no-encrypt")
+            return None
+        explicit = os.environ.get(sealed_set.RECORDING_ENV_KEY) or None
+        if backend != "web":
+            if explicit:
+                raise SystemExit(
+                    f"record: {sealed_set.RECORDING_ENV_KEY} is set, but the "
+                    f"{backend} recorder writes its raw capture session "
+                    "(database, video) through openadapt-capture, which Flow "
+                    "cannot encrypt yet. Nothing was recorded. Record on an "
+                    "encrypted volume and pass --no-encrypt, or use --backend web."
+                )
+            if not at_rest.plaintext_allowed(f"a desktop recording at {out}"):
+                at_rest.unsealed_write(f"a {backend} recording", out)
+            return None
+    except at_rest.AtRestRefused as exc:
+        raise SystemExit(f"record: {exc}") from exc
+    if explicit or os.environ.get(crypto.ENV_KEY):
+        return explicit or crypto.resolve_key(None)
+    try:
+        return (
+            crypto.resolve_key(None) if at_rest.seal_new("a recording", out) else None
+        )
+    except at_rest.AtRestRefused as exc:
+        raise SystemExit(f"record: {exc}") from exc
 
 
 def _stamp_recording_surface(recording_dir: Path, surface: str) -> None:
@@ -2279,12 +2296,19 @@ def _cmd_induce(args: argparse.Namespace) -> int:
         else:
             traces.append(path)
             notes.append(None)
-    if sealed_inputs and (args.report or args.probe_on):
+    from openadapt_flow import at_rest
+
+    # Encrypted demonstrations induce an encrypted program, and so do
+    # plaintext ones unless plaintext at rest is explicitly allowed.
+    seal_output = sealed_inputs or at_rest.seal_new("an induced program", args.out)
+    if seal_output and (args.report or args.probe_on):
         # Both write the induced program (or probe bundles) outside any
         # sealed set; refuse rather than write plaintext.
         print(
-            "induce REFUSED: --report and --probe-on are not available for "
-            "encrypted inputs yet. Nothing was written."
+            "induce REFUSED: --report and --probe-on write outside an "
+            "encrypted bundle, so they are not available while Flow encrypts "
+            f"at rest. Set {at_rest.OPT_OUT_ENV}='<reason>' to allow plaintext. "
+            "Nothing was written."
         )
         return 2
 
@@ -2321,10 +2345,9 @@ def _cmd_induce(args: argparse.Namespace) -> int:
     if args.name:
         workflow = workflow.model_copy(update={"name": args.name})
     out = Path(args.out)
-    if sealed_inputs:
-        # Encrypted demonstrations induce an encrypted program.
-        passphrase = sealed_set.passphrase_for("bundle") or sealed_set.recording_key()
-        assert passphrase is not None  # the CLI guard refused a missing key
+    if seal_output:
+        passphrase = sealed_set.output_bundle_key()
+        assert passphrase is not None  # resolves to the local key by default
         with sealed_set.writing(out, "bundle", passphrase):
             workflow.save(out)
     else:
@@ -9174,9 +9197,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-encrypt",
         action="store_true",
         help=(
-            "Write the recording in plaintext even when OPENADAPT_BUNDLE_KEY "
-            "or OPENADAPT_RECORDING_KEY is set (web recordings are encrypted "
-            "by default when a key is configured)"
+            "Write a web recording in plaintext (recorded in "
+            "~/.openadapt/plaintext-at-rest.jsonl). Web recordings are "
+            "encrypted by default, under the configured key or a local one; "
+            "refused under OPENADAPT_FLOW_AT_REST=strict"
         ),
     )
     p.add_argument(
@@ -13096,6 +13120,169 @@ _SEALED_READY_COMMANDS: frozenset[str] = frozenset(
 )
 
 
+#: Commands whose output can't be encrypted yet (docs/phi_at_rest.md): by
+#: default they write it in plaintext and name it on stderr and in the ledger;
+#: OPENADAPT_FLOW_AT_REST=strict refuses them before they run.
+_UNSEALED_OUTPUT_COMMANDS: dict[str, str] = {
+    "openadapt_flow.__main__:_cmd_visualize": "the visualize page",
+    "openadapt_flow.__main__:_cmd_visualize_process": "the visualize page",
+    "openadapt_flow.__main__:_cmd_explain": "the explain output",
+    "openadapt_flow.__main__:_cmd_teach": "the teach output",
+    "openadapt_flow.__main__:_cmd_emit_skill": "the emitted skill",
+    "openadapt_flow.__main__:_cmd_push": "the push upload copy",
+    # Their parent reports (composition, variant, process) can't be sealed
+    # yet and are written after records change, so strict refuses up front.
+    "openadapt_flow.__main__:_cmd_compose": "the composition report",
+    "openadapt_flow.__main__:_cmd_process": "the process report",
+    "openadapt_flow.__main__:_cmd_variants": "the variant report",
+    "openadapt_flow.__main__:_cmd_route": "the variant report",
+    "openadapt_flow.__main__:_cmd_for_each": "the looped bundle",
+    "openadapt_flow.__main__:_cmd_bench": "the bench report",
+    "openadapt_flow.__main__:_cmd_sanitize": "the sanitized copy",
+    "openadapt_flow.cli_redact_report:_cmd_redact_report": "the redacted report",
+    "openadapt_flow.cli_shadow:cmd_shadow": "the shadow snapshots and report",
+    "openadapt_flow.compile_agent.cli:cmd_compile_agent": (
+        "the compile-agent screenshots and traces"
+    ),
+    "openadapt_flow.agent_guard.cli:cmd_guard": "the guard's run record",
+    "openadapt_flow.jit.cli:cmd_jit": "the compiled agent run",
+}
+
+#: Commands that write no recorded screen, record or report data (service
+#: health and control, the no-outbound allow list, key and Seal verification).
+#: Under OPENADAPT_FLOW_AT_REST=strict only these and the sealed-ready commands
+#: run; every other command is held back before it starts.
+_STRICT_SAFE_COMMANDS: frozenset[str] = frozenset(
+    {
+        "openadapt_flow.cli_service:_cmd_boot_check",
+        "openadapt_flow.cli_service:_cmd_egress_audit",
+        "openadapt_flow.cli_service:_cmd_health",
+        "openadapt_flow.cli_service:_cmd_notices",
+        "openadapt_flow.cli_service:_cmd_pf_check",
+        "openadapt_flow.cli_service:_cmd_pf_render",
+        "openadapt_flow.cli_service:_cmd_restart",
+        "openadapt_flow.cli_service:_cmd_run",
+        "openadapt_flow.cli_no_outbound:_cmd_add",
+        "openadapt_flow.cli_no_outbound:_cmd_derive",
+        "openadapt_flow.cli_no_outbound:_cmd_list",
+        "openadapt_flow.cli_no_outbound:_cmd_remove",
+        "openadapt_flow.cli_local_seal:_guarded",
+        "openadapt_flow.cli_receipt:cmd_anchor",
+        "openadapt_flow.cli_receipt:cmd_keys_export",
+        "openadapt_flow.cli_receipt:cmd_verify",
+        "openadapt_flow.agent.seal_cli:cmd_keys_pin",
+        "openadapt_flow.agent.seal_cli:cmd_keys_show",
+        "openadapt_flow.agent.seal_cli:cmd_verify",
+    }
+)
+
+
+#: Sealed-ready commands that seal plaintext input themselves under strict
+#: mode (a recording, a compiled, induced or admitted bundle, a run directory).
+_STRICT_SELF_SEALING: frozenset[str] = frozenset(
+    {
+        "openadapt_flow.__main__:_cmd_record",
+        "openadapt_flow.__main__:_cmd_compile",
+        "openadapt_flow.__main__:_cmd_induce",
+        "openadapt_flow.cli_admit:cmd_admit_run",
+        "openadapt_flow.__main__:_cmd_run",
+        "openadapt_flow.__main__:_cmd_replay",
+        "openadapt_flow.__main__:_cmd_resume",
+    }
+)
+
+
+def _plaintext_directories_in(args: argparse.Namespace) -> list[Path]:
+    """Existing directories among the arguments that are not inside a sealed
+    set. Files a person passes (a config, a results JSON) are not artifacts
+    and are not checked."""
+    from openadapt_flow import sealed_set
+
+    found: list[Path] = []
+    for name, value in vars(args).items():
+        if name == "func":
+            continue
+        for item in value if isinstance(value, (list, tuple)) else [value]:
+            if not isinstance(item, (str, Path)) or not str(item):
+                continue
+            text = str(item)
+            if "://" in text or "\n" in text or len(text) > 4096:
+                continue
+            candidates = [text]
+            if isinstance(item, str) and "=" in text:
+                candidates.append(text.split("=", 1)[1])
+            for candidate in candidates:
+                path = Path(candidate)
+                if not path.is_dir():
+                    continue
+                if sealed_set.is_sealed(path) or sealed_set.sealed_root(path):
+                    continue
+                if path not in found:
+                    found.append(path)
+    return found
+
+
+def _unsealed_output_check(args: argparse.Namespace) -> None:
+    """Warn and record, or refuse in strict mode, a command whose output
+    can't be encrypted yet. Strict mode runs only the sealed-ready and
+    strict-safe commands. Also rejects a mistyped OPENADAPT_FLOW_AT_REST."""
+    from openadapt_flow import at_rest
+
+    func = getattr(args, "func", None)
+    command = f"{getattr(func, '__module__', '')}:{getattr(func, '__name__', '')}"
+    video = getattr(args, "record_video", None)
+    if at_rest.strict():  # raises on an unknown mode before anything runs
+        if command not in _SEALED_READY_COMMANDS | _STRICT_SAFE_COMMANDS:
+            raise at_rest.AtRestRefused(
+                f"{at_rest.MODE_ENV}=strict runs only the commands that keep "
+                "patient data encrypted, and this one writes files outside an "
+                "encrypted set. Nothing was run."
+            )
+        if command in _SEALED_READY_COMMANDS and command not in _STRICT_SELF_SEALING:
+            # These keep sealed input sealed; given plaintext input they
+            # re-save or write beside it in plaintext. So every directory
+            # they are given must already be encrypted.
+            plain = _plaintext_directories_in(args)
+            if plain:
+                raise at_rest.AtRestRefused(
+                    f"{at_rest.MODE_ENV}=strict runs this command on encrypted "
+                    f"input only, and {plain[0]} is not encrypted. Seal it first "
+                    "(openadapt-flow seal, or compile/run under strict mode). "
+                    "Nothing was run."
+                )
+        if command == "openadapt_flow.__main__:_cmd_qualify" and getattr(
+            args, "qualify_cmd", None
+        ) in {"run-case", "drills"}:
+            raise at_rest.AtRestRefused(
+                f"{at_rest.MODE_ENV}=strict holds back qualification trials: "
+                "their case inputs and fault files are written beside the "
+                "sealed run. Nothing was run."
+            )
+        # Written after records change, so refused before the run starts.
+        healed = getattr(args, "save_healed_to", None)
+        if healed:
+            at_rest.unsealed_write("a healed bundle (--save-healed-to)", healed)
+        workers = getattr(args, "workers", None)
+        if isinstance(workers, int) and workers > 0:
+            at_rest.unsealed_write(
+                "the worker pool report (--workers)", "the run directory"
+            )
+    if video:
+        at_rest.unsealed_write("a screen video (--record-video)", video)
+    artifact = _UNSEALED_OUTPUT_COMMANDS.get(command)
+    if artifact is None:
+        return
+    target = next(
+        (
+            getattr(args, name)
+            for name in ("out", "output", "out_dir", "dest")
+            if isinstance(getattr(args, name, None), (str, Path))
+        ),
+        "its output",
+    )
+    at_rest.unsealed_write(artifact, target)
+
+
 def _sealed_paths_in(args: argparse.Namespace) -> list[Path]:
     from openadapt_flow import sealed_set
 
@@ -13197,6 +13384,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     if refusal is not None:
         print(f"REFUSED: {refusal}", file=sys.stderr)
         return 2
+    from openadapt_flow import at_rest
+
+    try:
+        _unsealed_output_check(args)
+    except (at_rest.AtRestRefused, ValueError) as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 2
     try:
         code = args.func(args)
         if getattr(args, "command", None) in ("run", "replay"):
@@ -13209,9 +13403,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             if note:
                 print(note, file=sys.stderr)
         return code
-    except sealed_set.SealedSetError as exc:
+    except (sealed_set.SealedSetError, at_rest.AtRestRefused) as exc:
         # A sealed bundle or encrypted recording that is missing its key,
-        # was changed after sealing, or holds an unknown file: fail closed.
+        # was changed after sealing, or holds an unknown file, or a write
+        # strict mode refuses: fail closed.
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 2
     except BrowserSupportMissing as exc:
