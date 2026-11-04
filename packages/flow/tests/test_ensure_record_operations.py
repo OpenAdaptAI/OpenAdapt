@@ -162,6 +162,35 @@ def test_a_person_version_with_a_wrong_phone_passes_person_but_not_consistent():
     assert r.outcome == "needs_review"
 
 
+@pytest.mark.parametrize(
+    "first, outcome",
+    [
+        ({"resourceType": "Patient", "id": "x"}, "created_verified"),  # saved in steps
+        (
+            patient("x", telecom=[{"system": "phone", "value": "617-555-0199"}]),
+            "created_verified",
+        ),
+        (
+            {"resourceType": "Patient", "id": "x", "birthDate": "1984-07-03"},
+            "needs_review",
+        ),
+        (
+            patient("x", birthDate="1984-07-03", telecom=[]),
+            "needs_review",
+        ),  # someone else
+    ],
+)
+def test_either_is_never_stricter_than_person_and_accepts_steps(first, outcome):
+    x = patient("x")
+    either = {"correction": {"between": "either"}}
+    r = judge(contract(**either), PARAMS, base(), stepped(first), {"x": x}, x)
+    assert r.outcome == outcome, r.reasons
+    if judge(contract(), PARAMS, base(), stepped(first), {"x": x}, x).outcome == (
+        "created_verified"
+    ):
+        assert r.outcome == "created_verified"
+
+
 def test_consistent_still_needs_every_other_correction_condition():
     x = patient("x")
     partial = {"resourceType": "Patient", "id": "x"}

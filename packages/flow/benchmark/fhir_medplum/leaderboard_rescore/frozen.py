@@ -94,6 +94,7 @@ class FrozenMedplum:
         self.base_url = base_url.rstrip("/")
         self.reader_ref = reader_ref
         self.now = datetime.min.replace(tzinfo=timezone.utc)
+        self.horizon: Optional[datetime] = None
         #: "Type/id" -> versions oldest first, as (lastUpdated, content).
         self.versions: dict[str, list[tuple[datetime, dict[str, Any]]]] = defaultdict(
             list
@@ -117,10 +118,22 @@ class FrozenMedplum:
 
     # -- the clock -------------------------------------------------------------------
 
-    def at(self, when: datetime) -> "FrozenMedplum":
+    def at(self, when: datetime, horizon: Optional[datetime] = None) -> "FrozenMedplum":
+        """Read as of ``when``; with ``horizon``, never show a stored version
+        or event newer than it, however far the clock runs (the harness's
+        next action, which a healthy check would have preceded)."""
+
         self.now = when
+        self.horizon = horizon
         self.served = []
         return self
+
+    def _seen(self) -> datetime:
+        """The newest stored moment a read may show."""
+
+        if self.horizon is not None and self.horizon < self.now:
+            return self.horizon
+        return self.now
 
     def sleep(self, seconds: float) -> None:
         self.now += timedelta(seconds=seconds)
@@ -129,7 +142,7 @@ class FrozenMedplum:
 
     def _history(self, ref: str) -> list[tuple[datetime, dict[str, Any]]]:
         vs = self.versions.get(ref, [])
-        return [v for v in vs if v[0] <= self.now]
+        return [v for v in vs if v[0] <= self._seen()]
 
     def current(self, ref: str) -> Optional[dict[str, Any]]:
         """The live version of ``ref`` at ``now``, None when absent or deleted."""
@@ -166,7 +179,7 @@ class FrozenMedplum:
         )
 
     def audit_events(self) -> list[dict[str, Any]]:
-        upto = bisect_right(self._times, self.now)
+        upto = bisect_right(self._times, self._seen())
         logged = [e for _, e in self.events[:upto]]
         return logged + [e for t, e in self.served if t <= self.now]
 

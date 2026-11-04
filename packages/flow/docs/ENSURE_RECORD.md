@@ -81,7 +81,7 @@ briefly it stood.
 operations:
   correction:
     accept: true            # with accept_corrections; both must be true
-    between: consistent     # or person (the default)
+    between: either         # or person (the default), or consistent
   cardinality:
     own_transient: true     # default false
   bookkeeping:              # default none
@@ -119,7 +119,10 @@ per-system recipes (`source-policy.yaml`).
   app does: the first version can be `{}`) is one write. A version that held
   another birth date, another patient or a wrong phone number refuses.
   `consistent` is stricter than `person` on values (a corrected phone
-  number refuses) and looser on missing ones.
+  number refuses) and looser on missing ones. `either` accepts a version
+  that is the person or holds only the task's values: never stricter than
+  `person`, and a record saved in steps still counts as one write. A
+  version that names someone else refuses under all three.
 - **`cardinality.own_transient`.** A second record of the contract's type
   that the agent created and deleted again in the window (a double submit,
   or a save resubmitted after a lost response, then cleaned up) counts as

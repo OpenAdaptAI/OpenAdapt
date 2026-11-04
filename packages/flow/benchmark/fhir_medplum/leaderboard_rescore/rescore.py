@@ -63,6 +63,11 @@ OPERATIONS = HERE / "contracts_operations"
 STACKS = {"claude": 9800, "openai": 9810}
 #: The harness sleeps 2.5 s after the seed, then snapshots and reads.
 BASELINE_AFTER_SEED_S = 2.6
+#: Deviation 1: cap what the check sees at the harness's next step.
+#: ``--as-registered`` turns it off, for the numbers as first computed.
+HORIZON = True
+#: Deviation 2: a retried run's seed is the creates after its last wipe.
+RETRY_SEED = True
 #: Actor display names Medplum stamps on audit events.
 AGENT, SETUP, CHECK = "OpenAdapt Bot", "Medplum Admin", "openadapt-record-check"
 
@@ -96,6 +101,13 @@ class Stack:
                 actors[who["display"]] = who["reference"]
         self.agent_ref, self.setup_ref = actors[AGENT], actors[SETUP]
         self.server = FrozenMedplum(dump, self.base_url, reader_ref=actors[CHECK])
+        #: Every audit event by the setup user, oldest first: the harness's
+        #: own steps (wipe, seed, read-back after each check).
+        self.setup_times = sorted(
+            datetime.fromisoformat(e["recorded"].replace("Z", "+00:00"))
+            for e in events
+            if e["agent"][0]["who"]["reference"] == self.setup_ref
+        )
         #: Setup writes of the wiped types, oldest first: (time, action, ref).
         self.setup_writes = sorted(
             (
@@ -144,7 +156,11 @@ def rebuild(
     baseline_at = max(last_setup, prev_end) + timedelta(seconds=BASELINE_AFTER_SEED_S)
     if not baseline_at < start:
         raise ValueError("the baseline time falls after the run started")
-    creates = [ref for _, action, ref in setup if action == "C"]
+    # Deviation 2: a retried run (``attempts`` > 1) wiped and seeded again
+    # in the same gap; its seed is the creates after the last wipe.
+    deletes = [i for i, (_, action, _) in enumerate(setup) if action == "D"]
+    after_wipe = setup[deletes[-1] + 1 :] if deletes and RETRY_SEED else setup
+    creates = [ref for _, action, ref in after_wipe if action == "C"]
     seeds = case.get("seed") or []
     if len(creates) != len(seeds):
         raise ValueError(f"{len(creates)} setup creates for {len(seeds)} seed records")
@@ -157,7 +173,11 @@ def rebuild(
 
 
 def contract_path(kind: str, which: str) -> Path:
-    return CONTRACTS[kind] if which == "main" else OPERATIONS / f"{kind}.yaml"
+    if which == "main":
+        return CONTRACTS[kind]
+    if which == "operations-v2":  # exploratory (deviation 3)
+        return HERE / "contracts_operations_v2" / f"{kind}.yaml"
+    return OPERATIONS / f"{kind}.yaml"
 
 
 def judge_row(
@@ -181,13 +201,22 @@ def judge_row(
     stack.server.at(baseline_at)
     try:
         baseline = capture_baseline(contract, params, reader)
+        served = stack.server.served
     except Unreadable as exc:
         return {
             "outcome": "needs_review",
             "reasons": [f"unreadable: {exc}"],
             "unreadable": True,
         }
-    stack.server.now = check_at
+    # Deviation 1 (PREREGISTRATION.md): the store shows only what happened
+    # before the harness's next step after the check. A healthy check finished
+    # before that step; with the token expired it failed at once, and the
+    # harness's read-back and after-check writes followed within a second.
+    nxt = [t for t in stack.setup_times if t > check_at]
+    # Exclusive: the step itself (the read-back) came after a healthy check.
+    cap = nxt[0] - timedelta(microseconds=1) if nxt and HORIZON else None
+    stack.server.at(check_at, horizon=cap)
+    stack.server.served = served
     result = verify_ensure(
         contract, params, baseline, reader=reader, sleep=stack.server.sleep
     )
@@ -204,7 +233,9 @@ def judge_row(
 
 def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--contracts", choices=("main", "operations"), required=True)
+    ap.add_argument(
+        "--contracts", choices=("main", "operations", "operations-v2"), required=True
+    )
     ap.add_argument("--agent", action="append", choices=sorted(STACKS))
     ap.add_argument(
         "--only-live",
@@ -212,13 +243,20 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="only rows the live verifier judged (the fidelity check)",
     )
     ap.add_argument("--out", type=Path)
+    ap.add_argument(
+        "--as-registered",
+        action="store_true",
+        help="without deviation 1 (the store is not capped at the harness's next step)",
+    )
     args = ap.parse_args(argv)
+    global HORIZON, RETRY_SEED
+    HORIZON = RETRY_SEED = not args.as_registered
     suite = yaml.safe_load(CASES.read_text())
     cases = {c["id"]: c for c in suite["cases"]}
     times = json.loads((DATA / "times.json").read_text())
     out: dict[str, Any] = {
         "schema": "openadapt.leaderboard-rescore/v1",
-        "contracts": args.contracts,
+        "contracts": args.contracts + ("-as-registered" if args.as_registered else ""),
         "inputs": {
             p.name: hashlib.sha256(p.read_bytes()).hexdigest()
             for p in sorted(DATA.iterdir())

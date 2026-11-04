@@ -103,4 +103,34 @@ on the public set would tune to it).
 
 ## Deviations
 
-None yet.
+### Deviation 1: the store is capped at the harness's next step (after the run)
+
+Found on the first committed run. In the 163 runs whose token had expired,
+the live verifier failed at once (`verify_s` about 0), so the harness's
+next steps (its read-back of the record, the fault proxy's after-check
+writes, such as A10's stray record) followed the check within a second. The
+replay simulates a healthy check's settling reads (4–6 s), so it saw those
+steps as the agent writing after the window closed (88 rows under main)
+and the read-back as another actor reading the record. A healthy check
+always finished before the harness's next step, so the replay now shows
+only what happened before the setup user's first audit event after the
+check. The fidelity gate still passes (59/59). The as-registered results
+are kept (`results/*-as-registered.json`, `score-as-registered.json`) and
+reported beside the corrected ones. The artifact failed closed: it raised
+both sensitivity and false flags.
+
+### Deviation 2: a retried run's seed (after the run)
+
+openai r2-A04 ran twice (`attempts: 2`); the harness wiped and seeded again
+in the same gap, so the re-score found 4 setup creates for 2 seed records
+and did not rebuild the row (flagged, as registered). The seed is now the
+setup creates after the gap's last wipe.
+
+### Deviation 3: an exploratory column (after the run)
+
+The registered `between: consistent` refuses a corrected wrong
+non-identity value, which #1655's `person` rule accepts. Seeing that, a
+third column, `operations-v2`, pins `app_semantics/medplum-v2.yaml`
+(`between: either`: the person, or only the task's values). It was chosen
+after seeing the results and is reported as exploratory, not as the
+pre-registered outcome.

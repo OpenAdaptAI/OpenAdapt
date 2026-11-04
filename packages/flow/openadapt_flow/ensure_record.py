@@ -124,7 +124,7 @@ class ChangeFeed(BaseModel):
         return self
 
 
-Between = Literal["person", "consistent"]
+Between = Literal["person", "consistent", "either"]
 
 
 class CorrectionOp(BaseModel):
@@ -140,6 +140,9 @@ class CorrectionOp(BaseModel):
     #: new record in steps), and nothing else. A version that held a value
     #: the task didn't give, such as another person's birth date, is refused
     #: either way: a search no audit event names may have shown it.
+    #: ``either``: the person, or ``consistent``; never stricter than
+    #: ``person`` (#1655's rule, which accepts a corrected non-identity
+    #: value), and also accepting a record saved in steps.
     between: Between = "person"
 
 
@@ -641,8 +644,13 @@ def holds_only_task_values(
 def _between_ok(
     contract: EnsureContract, version: Mapping[str, Any], params: Mapping[str, Any]
 ) -> bool:
-    if contract.operations.correction.between == "consistent":
+    mode = contract.operations.correction.between
+    if mode == "consistent":
         return holds_only_task_values(contract, version, params)
+    if mode == "either":
+        return is_person(contract, version, params) or holds_only_task_values(
+            contract, version, params
+        )
     return is_person(contract, version, params)
 
 
@@ -1353,7 +1361,7 @@ def correction_refused(
     if any(not _between_ok(contract, body, params) for body in change.bodies):
         # A version that was someone else (or no one) may have been found by
         # a search no audit event names, and acted on.
-        if contract.operations.correction.between == "consistent":
+        if contract.operations.correction.between != "person":
             return (
                 f"{changed}, and a version in between held a value the task didn't give"
             )

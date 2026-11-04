@@ -64,7 +64,12 @@ the evidence counts. That check ran before any unjudged row was re-scored.
 ## Results
 
 See [RESULTS.md](RESULTS.md), scored as fixed in
-[PREREGISTRATION.md](PREREGISTRATION.md).
+[PREREGISTRATION.md](PREREGISTRATION.md) (with its three logged deviations).
+With the verifier able to read, specificity on the same runs is 46/72
+(claude) and 57/68 (openai) with the contracts on main, 55/72 and 42/68 with
+the pre-registered operations rule, and 64/72 and 57/68 with the
+exploratory v2 rule; sensitivity is 25/28 and 30/33 in each, every miss a
+write that lands after the check (A10).
 
 ## Files
 
