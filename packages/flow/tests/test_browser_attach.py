@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import faulthandler
 import json
 import os
 import shutil
+import signal
 import subprocess
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -1433,18 +1436,144 @@ def test_page_closure_scrubs_replaced_prefilled_and_reflected_secrets() -> None:
     assert click["structural"]["identity_withheld"] == "secret-value-in-identity"
 
 
-@pytest.mark.timeout(300)
+# The live CDP attach test below drives about thirty real recordings through
+# one Chromium. It takes about 130 s alone and 250 s or more on a loaded
+# four-worker CI runner, so one pytest-timeout over the whole test was both
+# too tight and unsafe: the timeout fired inside Playwright's sync dispatcher
+# and left its event loop marked running in the xdist worker, and every later
+# browser test on that worker failed. The test now runs in a child pytest
+# process. Each recording (a "trial") has its own watchdog well under the old
+# 300 s, the whole child has a hard budget, and on any overrun the parent kills
+# the child's process group, Chromium included, so nothing leaks back.
+_LIVE_CDP_CHILD_ENV = "OPENADAPT_FLOW_LIVE_CDP_ATTACH_CHILD"
+_LIVE_CDP_WATCHDOG_ENV = "OPENADAPT_FLOW_LIVE_CDP_ATTACH_WATCHDOG"
+_LIVE_CDP_TRIAL_BUDGET_S = 90
+_LIVE_CDP_TOTAL_BUDGET_S = 540
+
+
+def _kill_process_group(process: subprocess.Popen) -> None:
+    """Kill a child started in its own session and everything it spawned."""
+
+    if hasattr(os, "killpg"):
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+    elif process.poll() is None:
+        process.kill()
+
+
+def _run_live_cdp_attach_in_child(
+    request: pytest.FixtureRequest,
+    tmp_path: Path,
+    *,
+    total_budget_s: float = _LIVE_CDP_TOTAL_BUDGET_S,
+) -> None:
+    """Run this test's body in a child pytest process with a hard budget."""
+
+    watchdog = tmp_path / "trial-watchdog.txt"
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("PYTEST_XDIST")
+        and key not in {"PYTEST_CURRENT_TEST", "OPENADAPT_TEST_LANE"}
+    }
+    env[_LIVE_CDP_CHILD_ENV] = "1"
+    env[_LIVE_CDP_WATCHDOG_ENV] = str(watchdog)
+    command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        request.node.nodeid,
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        f"--basetemp={tmp_path / 'child'}",
+    ]
+    process = subprocess.Popen(
+        command,
+        cwd=request.config.rootpath,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        start_new_session=True,
+    )
+    timed_out = False
+    try:
+        output, _ = process.communicate(timeout=total_budget_s)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        _kill_process_group(process)
+        output, _ = process.communicate()
+    finally:
+        # A child that died on its trial watchdog skipped its own cleanup, so
+        # reap whatever is left of its group (Chromium, the Playwright driver).
+        _kill_process_group(process)
+    trials = watchdog.read_text() if watchdog.exists() else "(no trial started)"
+    detail = (
+        f"\n--- trials ---\n{trials}\n--- child output (tail) ---\n{output[-12000:]}"
+    )
+    if timed_out:
+        pytest.fail(f"the live CDP attach child exceeded {total_budget_s} s{detail}")
+    assert process.returncode == 0, (
+        f"the live CDP attach child failed (exit {process.returncode}){detail}"
+    )
+
+
+def _arm_live_cdp_trial_watchdog(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """In the child, give every recording its own hard time budget.
+
+    Each record_interactive call re-arms a faulthandler watchdog. A trial that
+    overruns its budget dumps every thread's stack into the watchdog file and
+    exits the child, which the parent reports with the trial's name.
+    """
+
+    log = open(os.environ[_LIVE_CDP_WATCHDOG_ENV], "a", encoding="utf-8")  # noqa: SIM115
+    original = record_interactive
+    started = [time.monotonic(), "chromium startup"]
+
+    def bounded_record_interactive(*args: Any, **kwargs: Any) -> Path:
+        now = time.monotonic()
+        label = Path(args[1] if len(args) > 1 else kwargs["out_dir"]).name
+        log.write(f"{started[1]}: {now - started[0]:.1f} s\n")
+        log.write(f"trial {label} (budget {_LIVE_CDP_TRIAL_BUDGET_S} s) started\n")
+        log.flush()
+        started[:] = [now, label]
+        faulthandler.dump_traceback_later(_LIVE_CDP_TRIAL_BUDGET_S, exit=True, file=log)
+        return original(*args, **kwargs)
+
+    def disarm() -> None:
+        faulthandler.cancel_dump_traceback_later()
+        log.write(f"{started[1]}: {time.monotonic() - started[0]:.1f} s\n")
+        log.close()
+
+    request.addfinalizer(disarm)
+    monkeypatch.setattr(
+        sys.modules[__name__], "record_interactive", bounded_record_interactive
+    )
+    faulthandler.dump_traceback_later(_LIVE_CDP_TRIAL_BUDGET_S, exit=True, file=log)
+
+
+@pytest.mark.timeout(_LIVE_CDP_TOTAL_BUDGET_S + 60)
 def test_live_cdp_attach_records_compiles_and_leaves_browser_running_three_trials(
     attach_app_url: str,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    request: pytest.FixtureRequest,
 ) -> None:
     """Three real Chromium trials cover attach, secrets, frames, and detach."""
 
     executable = _chromium_executable()
     if executable is None:
         pytest.skip("no Chromium executable is installed")
+    if os.environ.get(_LIVE_CDP_CHILD_ENV) != "1":
+        _run_live_cdp_attach_in_child(request, tmp_path)
+        return
+    _arm_live_cdp_trial_watchdog(request, monkeypatch)
     from playwright.sync_api import sync_playwright
 
     profile = tmp_path / "chrome-profile"
