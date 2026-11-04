@@ -1423,7 +1423,7 @@ Runs against the pinned reference fixture
 README documents the pinned compose bring-up and fixture bootstrap). The
 bundle's effect
 contracts are exactly the ones the reference matrix ships
-(`openadapt_flow/benchmark/frappe_lending.py::loan_application_effects`):
+(`benchmark/harness/frappe_lending.py::loan_application_effects`):
 one `record_written` (at-most-once for the synthetic applicant) plus a
 `field_equals` read-back per entered field, each bound to `{param: ...}`.
 

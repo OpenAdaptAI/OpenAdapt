@@ -549,7 +549,7 @@ class EffectsConfig(BaseModel):
             if not isinstance(env_name, str) or not _ENV_VAR_NAME.fullmatch(env_name):
                 raise ValueError(
                     f"effects.secret_env[{slot!r}] must be the NAME of an "
-                    "environment variable (for example OPENEMR_READER_PASSWORD), "
+                    "environment variable (for example APP_READER_PASSWORD), "
                     "never the credential itself"
                 )
         return v

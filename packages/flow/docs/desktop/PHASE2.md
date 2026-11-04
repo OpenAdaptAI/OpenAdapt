@@ -58,7 +58,7 @@ so `WindowsBackend` sees exactly what it drives).
 | `scripts/desktop/patient_notes.ps1` | WinForms target app (list-select → edit note → save); drift knobs via `pn_env.json` |
 | `scripts/desktop/pn_db.py` | SQLite ground-truth CLI (seed/list/save/get/all) |
 | `scripts/desktop/uia_arm.py` | UIA-selector arm (pywinauto), identity + positional |
-| `openadapt_flow/benchmark/desktop_benchmark.py` | Orchestrator: 3 arms × drift matrix, DB judge, results.json/BENCHMARK.md/chart |
+| `benchmark/harness/desktop_benchmark.py` | Orchestrator: 3 arms × drift matrix, DB judge, results.json/BENCHMARK.md/chart |
 
 ## Snapshots (reversibility + warm boot)
 
@@ -78,7 +78,7 @@ state without a full VM revert.
 
 ```bash
 # one-off full matrix (6 conditions × 3 arms × n):
-python -m openadapt_flow.benchmark.desktop_benchmark --out benchmark/desktop --n 3
+python -m benchmark.harness.desktop_benchmark --out benchmark/desktop --n 3
 ```
 
 `DesktopHarness.connect()` starts the VM, launches the session-1 shim, deploys

@@ -885,6 +885,7 @@ def _build_and_run_replayer(
     api_steps_off_reason: Optional[str] = None,
     rollback_plan=None,
     fresh_session=None,
+    gui_undo_counts: Optional[bool] = None,
 ):
     """Build the shared Replayer configuration and execute one workflow.
 
@@ -892,7 +893,10 @@ def _build_and_run_replayer(
     ``rollback_plan`` (``openadapt_flow.rollback``) reads the system of
     record before the run and, after a stop, runs the approved
     compensations and proves the store is back; ``fresh_session`` returns
-    the backend to a signed-out start for a GUI compensation.
+    the backend to a start for a GUI compensation. ``gui_undo_counts``
+    False: a GUI compensation runs after a stop, but doesn't count as an
+    undo for the undo-or-person rule (a desktop screen with no qualified
+    cleanup), so each save goes to a person first.
     """
     replayer = _configured_replayer(
         backend,
@@ -925,7 +929,10 @@ def _build_and_run_replayer(
     _refuse_rollback_durable(rollback_plan, durable)
     if rollback_plan is not None:
         _require_undo_or_person(
-            workflow, rollback_plan, approval_gate, api_only=fresh_session is None
+            workflow,
+            rollback_plan,
+            approval_gate,
+            api_only=fresh_session is None or gui_undo_counts is False,
         )
     before = rollback_plan.arm(dict(params)) if rollback_plan is not None else None
     if rollback_plan is not None and before is None:
@@ -1253,15 +1260,20 @@ def _replay_desktop(
     approval_gate=None,
     qualification_fault_driver=None,
     surface_cfgs=None,
+    rollback_plan=None,
 ) -> int:
     """Replay against a non-browser native/remote backend built by the factory.
 
     No Playwright browser, no bundled MockMed, no session video — those are
     web-only. ``--drift`` (a MockMed teaching aid) is refused. The backend is
     built from the resolved ``BackendConfig`` and the shared replayer wiring runs
-    exactly as it does for the web path.
+    exactly as it does for the web path. With ``rollback_plan``, a GUI
+    compensation starts from the run's start screen (the halt cleanup and its
+    start check, ``rollback.screen_fresh_session``); the whole-store reads
+    prove it either way.
     """
     from openadapt_flow.backends.factory import build_backend
+    from openadapt_flow.rollback import screen_fresh_session, screen_undo_counts
 
     if args.drift:
         raise SystemExit(
@@ -1306,6 +1318,17 @@ def _replay_desktop(
             qualification_fault_driver=qualification_fault_driver,
             surface_backends=surface_backends,
             deployment_surface=backend_cfg.deployment_surface,
+            rollback_plan=rollback_plan,
+            fresh_session=(
+                screen_fresh_session(
+                    backend, workflow, bundle_dir=bundle, run_dir=run_dir
+                )
+                if rollback_plan is not None
+                else None
+            ),
+            gui_undo_counts=(
+                screen_undo_counts(workflow) if rollback_plan is not None else None
+            ),
         )
     finally:
         for owned in (backend, *surface_backends.values()):
@@ -2801,7 +2824,8 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             surface_cfgs=surface_cfgs,
         )
     if _normalize_kind(backend_cfg.kind) != "web":
-        _refuse_rollback_unwired(cfg, "a desktop or remote-display backend")
+        from openadapt_flow.rollback import plan_from_deployment
+
         return _replay_desktop(
             args,
             backend_cfg,
@@ -2832,6 +2856,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             approval_gate=approval_gate,
             qualification_fault_driver=fault_driver,
             surface_cfgs=surface_cfgs,
+            rollback_plan=plan_from_deployment(cfg, effect_verifier),
         )
 
     headed = args.headed or cfg.backend.headed
@@ -5339,8 +5364,32 @@ def _cmd_silent_saves(args: argparse.Namespace) -> int:
     return int(silent_saves_main(list(args.silent_saves_argv)))
 
 
+def _checkout_harness_on_path(command: str) -> bool:
+    """Put the checkout's ``benchmark`` harness on ``sys.path``.
+
+    The harness lives in ``packages/flow/benchmark/harness``, outside the
+    package, so a wheel install has none and the command says so.
+    """
+    checkout = Path(__file__).resolve().parents[1]
+    if not (checkout / "benchmark" / "harness" / "__init__.py").is_file():
+        print(
+            f"{command} runs from a source checkout of OpenAdapt "
+            "(packages/flow/benchmark/harness); the wheel does not ship it.",
+            file=sys.stderr,
+        )
+        return False
+    if str(checkout) not in sys.path:
+        # Appended, so nothing in the checkout shadows an installed module.
+        sys.path.append(str(checkout))
+    return True
+
+
 def _cmd_benchmark(args: argparse.Namespace) -> int:
-    from openadapt_flow.benchmark.run_benchmark import run_benchmark
+    if not _checkout_harness_on_path("benchmark"):
+        return 2
+    from benchmark.harness.run_benchmark import (  # type: ignore[import-not-found]
+        run_benchmark,
+    )
 
     results = run_benchmark(
         Path(args.out),
@@ -5787,6 +5836,23 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
     import os
     import stat
 
+    def _recheck_ledger_identity(path: Path, initial: os.stat_result) -> None:
+        try:
+            final = os.lstat(path)
+        except OSError as exc:
+            raise ValueError(
+                "qualification attempt ledger could not be inspected"
+            ) from exc
+        if (
+            stat.S_ISLNK(final.st_mode)
+            or not stat.S_ISDIR(final.st_mode)
+            or final.st_dev != initial.st_dev
+            or final.st_ino != initial.st_ino
+        ):
+            raise ValueError(
+                "qualification attempt ledger changed while it was inspected"
+            )
+
     def private_directory(path: Path, *, migrate_owned_root: bool = False) -> Path:
         """Open a private directory without trusting a pathname after inspection."""
         path.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -5798,6 +5864,16 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
             ) from exc
         if stat.S_ISLNK(initial.st_mode) or not stat.S_ISDIR(initial.st_mode):
             raise ValueError("qualification attempt ledger is not a private directory")
+        if os.name == "nt":
+            # Windows cannot open a directory as a file descriptor. Hold a
+            # handle that refuses a reparse point, blocks a rename or a
+            # junction swap until the marker is written, and proves the
+            # directory sits in this user's profile.
+            from openadapt_flow._windows_directory import hold_private_directory
+
+            held_directories.append(hold_private_directory(path))
+            _recheck_ledger_identity(path, initial)
+            return path
         flags = os.O_RDONLY
         if hasattr(os, "O_DIRECTORY"):
             flags |= os.O_DIRECTORY
@@ -5833,21 +5909,7 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
                     )
         finally:
             os.close(descriptor)
-        try:
-            final = os.lstat(path)
-        except OSError as exc:
-            raise ValueError(
-                "qualification attempt ledger could not be inspected"
-            ) from exc
-        if (
-            stat.S_ISLNK(final.st_mode)
-            or not stat.S_ISDIR(final.st_mode)
-            or final.st_dev != initial.st_dev
-            or final.st_ino != initial.st_ino
-        ):
-            raise ValueError(
-                "qualification attempt ledger changed while it was inspected"
-            )
+        _recheck_ledger_identity(path, initial)
         return path
 
     case = args._qualification_case_execution["case"]
@@ -5881,60 +5943,77 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
         json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
     state_root = Path(os.environ.get("OPENADAPT_HOME", Path.home() / ".openadapt"))
+    held_directories: list = []
     try:
-        ledger_dir = private_directory(
-            private_directory(state_root, migrate_owned_root=True)
-            / "qualification-attempts"
-        )
-    except ValueError:
-        print(
-            "run REFUSED: qualification attempt ledger is not available safely. "
-            "Nothing was executed."
-        )
-        return False
-    marker = ledger_dir / f"{attempt_key}.json"
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    try:
-        descriptor = os.open(marker, flags, 0o600)
-    except FileExistsError:
-        print(
-            "run REFUSED: this qualification case attempt already started in this "
-            "local qualification ledger; "
-            "reconcile its retained run evidence before another attempt. "
-            "Nothing was executed."
-        )
-        return False
-    except OSError:
-        print(
-            "run REFUSED: qualification case attempt could not be claimed safely. "
-            "Nothing was executed."
-        )
-        return False
-    try:
-        os.write(descriptor, canonical)
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-    try:
-        directory_flags = os.O_RDONLY
-        if hasattr(os, "O_DIRECTORY"):
-            directory_flags |= os.O_DIRECTORY
-        if hasattr(os, "O_NOFOLLOW"):
-            directory_flags |= os.O_NOFOLLOW
-        directory = os.open(ledger_dir, directory_flags)
         try:
-            os.fsync(directory)
+            root = private_directory(state_root, migrate_owned_root=True)
+            if held_directories:
+                # Open the ledger under the held root's resolved path, so a
+                # junction above the root swapped now cannot move it.
+                root = Path(held_directories[-1].final_path)
+            ledger_dir = private_directory(root / "qualification-attempts")
+        except ValueError:
+            print(
+                "run REFUSED: qualification attempt ledger is not available safely. "
+                "Nothing was executed."
+            )
+            return False
+        # On Windows the marker goes under the held ledger's resolved path,
+        # so a junction higher up that is swapped after the check cannot
+        # redirect it.
+        marker = (
+            Path(held_directories[-1].final_path) if held_directories else ledger_dir
+        ) / f"{attempt_key}.json"
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            descriptor = os.open(marker, flags, 0o600)
+        except FileExistsError:
+            print(
+                "run REFUSED: this qualification case attempt already started in this "
+                "local qualification ledger; "
+                "reconcile its retained run evidence before another attempt. "
+                "Nothing was executed."
+            )
+            return False
+        except OSError:
+            print(
+                "run REFUSED: qualification case attempt could not be claimed safely. "
+                "Nothing was executed."
+            )
+            return False
+        try:
+            os.write(descriptor, canonical)
+            os.fsync(descriptor)
         finally:
-            os.close(directory)
-    except OSError:
-        print(
-            "run REFUSED: qualification attempt ledger could not be persisted safely. "
-            "Nothing was executed."
-        )
-        return False
-    return True
+            os.close(descriptor)
+        try:
+            # Windows cannot open a directory to flush it; the marker's own
+            # bytes were flushed above, and NTFS journals the new entry.
+            if os.name != "nt":
+                directory_flags = os.O_RDONLY
+                if hasattr(os, "O_DIRECTORY"):
+                    directory_flags |= os.O_DIRECTORY
+                if hasattr(os, "O_NOFOLLOW"):
+                    directory_flags |= os.O_NOFOLLOW
+                directory = os.open(ledger_dir, directory_flags)
+                try:
+                    os.fsync(directory)
+                finally:
+                    os.close(directory)
+        except OSError:
+            print(
+                "run REFUSED: qualification attempt ledger could not be persisted safely. "
+                "Nothing was executed."
+            )
+            return False
+        return True
+
+    finally:
+        # Close the Windows directory handles only after the marker exists.
+        for held in reversed(held_directories):
+            held.close()
 
 
 def _cmd_qualify_run_case(args: argparse.Namespace) -> int:
@@ -12645,7 +12724,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     argv = admit_default_form(argv)
     # Strict no-outbound mode (OPENADAPT_NO_OUTBOUND=1) is installed before
-    # any command runs, so no code path can open a connection off the machine.
+    # any command runs, so no Python socket in this process, and no child it
+    # starts uncontained, can open a connection off the machine. Native code and
+    # loopback relays are outside it (docs/OFFLINE_SEALS.md).
     from openadapt_flow import no_outbound
 
     no_outbound.enforce_from_env()
