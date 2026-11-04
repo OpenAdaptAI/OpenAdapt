@@ -120,3 +120,62 @@ def test_a_sealed_key_opens_only_with_its_own_enclave_key(enclave):
     assert bytes(enclave.open(handle, sealed, reason="test")) == b"\x07" * 32
     with pytest.raises(ApproverKeychainError):
         enclave.open(other, sealed, reason="test")
+
+
+def test_a_pin_another_program_wrote_reads_as_no_pin():
+    """Attack: a same-user process deletes Desktop's Keychain pin and plants
+    its own (readable by any app), or rewrites Desktop's in place. Read with
+    Keychain prompts off, neither may come back as a root, and the read must
+    not wait on a prompt someone could allow."""
+
+    import subprocess
+    import uuid
+
+    from openadapt_desktop.auth.store import SERVICE_NAME
+
+    account = f"desktop-approver-root-probe-{uuid.uuid4().hex[:12]}"
+    read = (
+        "from openadapt_desktop.approver_keychain import _no_keychain_ui\n"
+        "from openadapt_desktop.auth import store\n"
+        "with _no_keychain_ui():\n"
+        f"    print(store._kr_get(store._keyring(), {account!r}))\n"
+    )
+    security = "/usr/bin/security"
+
+    def desktop_reads() -> str:
+        done = subprocess.run(
+            [sys.executable, "-c", read], capture_output=True, text=True, timeout=30
+        )
+        assert done.returncode == 0, done.stderr
+        return done.stdout.strip().splitlines()[-1]
+
+    try:
+        import keyring
+
+        keyring.set_password(SERVICE_NAME, account, "a" * 64)
+        assert desktop_reads() == "a" * 64
+
+        # Rewritten in place by another program.
+        subprocess.run(
+            [security, "add-generic-password", "-U", "-s", SERVICE_NAME, "-a", account,
+             "-w", "b" * 64],
+            check=True, timeout=15,
+        )
+        assert desktop_reads() == "None"
+
+        # Deleted and planted fresh, readable by any app.
+        subprocess.run(
+            [security, "delete-generic-password", "-s", SERVICE_NAME, "-a", account],
+            check=True, capture_output=True, timeout=15,
+        )
+        subprocess.run(
+            [security, "add-generic-password", "-A", "-s", SERVICE_NAME, "-a", account,
+             "-w", "c" * 64],
+            check=True, timeout=15,
+        )
+        assert desktop_reads() == "None"
+    finally:
+        subprocess.run(
+            [security, "delete-generic-password", "-s", SERVICE_NAME, "-a", account],
+            capture_output=True, timeout=15,
+        )

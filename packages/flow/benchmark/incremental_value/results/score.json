@@ -1,0 +1,250 @@
+{
+ "cost_model": "V1 (economic_comparison/assumptions.json); modelled, not measured",
+ "x1": {
+  "A_agent_readback": {
+   "items": 89,
+   "infra_excluded": 1,
+   "correct_completions": 70,
+   "missed_harmful_changes": 13,
+   "caught_harmful_changes": 1,
+   "false_stops": 5,
+   "failed_stops": 0,
+   "silent_absent": 0,
+   "duplicates": 1,
+   "correct_after_handling": 76,
+   "people_min_items_modelled": 100.5,
+   "setup_people_min_modelled": 60.0,
+   "people_min_per_correct_txn_modelled": 2.112,
+   "people_min_per_correct_txn_items_only_modelled": 1.322,
+   "model_usd_total": 4.932,
+   "model_usd_per_item": 0.0554,
+   "wall_s_median": 26.8,
+   "wall_s_p90": 31.5,
+   "verify_s_median": 0.0,
+   "by_kind": {
+    "ordinary": {
+     "correct": 50
+    },
+    "fault": {
+     "correct": 7,
+     "missed_harm": 13,
+     "correct_stop": 1,
+     "caught_harm": 1,
+     "false_stop": 1
+    },
+    "perturbation": {
+     "correct": 12,
+     "false_stop": 4
+    }
+   }
+  },
+  "B_agent_openadapt": {
+   "items": 89,
+   "infra_excluded": 1,
+   "correct_completions": 72,
+   "missed_harmful_changes": 4,
+   "caught_harmful_changes": 10,
+   "false_stops": 3,
+   "failed_stops": 0,
+   "silent_absent": 0,
+   "duplicates": 1,
+   "correct_after_handling": 85,
+   "people_min_items_modelled": 106.0,
+   "setup_people_min_modelled": 90.0,
+   "people_min_per_correct_txn_modelled": 2.306,
+   "people_min_per_correct_txn_items_only_modelled": 1.247,
+   "model_usd_total": 4.842,
+   "model_usd_per_item": 0.0544,
+   "wall_s_median": 59.1,
+   "wall_s_p90": 95.6,
+   "verify_s_median": 15.83,
+   "by_kind": {
+    "ordinary": {
+     "correct": 50
+    },
+    "fault": {
+     "correct": 5,
+     "caught_harm": 10,
+     "missed_harm": 4,
+     "false_stop": 3,
+     "correct_stop": 1
+    },
+    "perturbation": {
+     "correct": 16
+    }
+   }
+  },
+  "verdict": {
+   "1_fewer_missed_harms": true,
+   "2_false_stops_within": true,
+   "false_stop_allowance": 1,
+   "3_fewer_people_min_per_correct_txn": false,
+   "B_wins": false
+  }
+ },
+ "x0.5": {
+  "A_agent_readback": {
+   "items": 89,
+   "infra_excluded": 1,
+   "correct_completions": 70,
+   "missed_harmful_changes": 13,
+   "caught_harmful_changes": 1,
+   "false_stops": 5,
+   "failed_stops": 0,
+   "silent_absent": 0,
+   "duplicates": 1,
+   "correct_after_handling": 76,
+   "people_min_items_modelled": 50.2,
+   "setup_people_min_modelled": 60.0,
+   "people_min_per_correct_txn_modelled": 1.451,
+   "people_min_per_correct_txn_items_only_modelled": 0.661,
+   "model_usd_total": 4.932,
+   "model_usd_per_item": 0.0554,
+   "wall_s_median": 26.8,
+   "wall_s_p90": 31.5,
+   "verify_s_median": 0.0,
+   "by_kind": {
+    "ordinary": {
+     "correct": 50
+    },
+    "fault": {
+     "correct": 7,
+     "missed_harm": 13,
+     "correct_stop": 1,
+     "caught_harm": 1,
+     "false_stop": 1
+    },
+    "perturbation": {
+     "correct": 12,
+     "false_stop": 4
+    }
+   }
+  },
+  "B_agent_openadapt": {
+   "items": 89,
+   "infra_excluded": 1,
+   "correct_completions": 72,
+   "missed_harmful_changes": 4,
+   "caught_harmful_changes": 10,
+   "false_stops": 3,
+   "failed_stops": 0,
+   "silent_absent": 0,
+   "duplicates": 1,
+   "correct_after_handling": 85,
+   "people_min_items_modelled": 53.0,
+   "setup_people_min_modelled": 90.0,
+   "people_min_per_correct_txn_modelled": 1.682,
+   "people_min_per_correct_txn_items_only_modelled": 0.624,
+   "model_usd_total": 4.842,
+   "model_usd_per_item": 0.0544,
+   "wall_s_median": 59.1,
+   "wall_s_p90": 95.6,
+   "verify_s_median": 15.83,
+   "by_kind": {
+    "ordinary": {
+     "correct": 50
+    },
+    "fault": {
+     "correct": 5,
+     "caught_harm": 10,
+     "missed_harm": 4,
+     "false_stop": 3,
+     "correct_stop": 1
+    },
+    "perturbation": {
+     "correct": 16
+    }
+   }
+  },
+  "verdict": {
+   "1_fewer_missed_harms": true,
+   "2_false_stops_within": true,
+   "false_stop_allowance": 1,
+   "3_fewer_people_min_per_correct_txn": false,
+   "B_wins": false
+  }
+ },
+ "x2": {
+  "A_agent_readback": {
+   "items": 89,
+   "infra_excluded": 1,
+   "correct_completions": 70,
+   "missed_harmful_changes": 13,
+   "caught_harmful_changes": 1,
+   "false_stops": 5,
+   "failed_stops": 0,
+   "silent_absent": 0,
+   "duplicates": 1,
+   "correct_after_handling": 76,
+   "people_min_items_modelled": 201.0,
+   "setup_people_min_modelled": 60.0,
+   "people_min_per_correct_txn_modelled": 3.434,
+   "people_min_per_correct_txn_items_only_modelled": 2.645,
+   "model_usd_total": 4.932,
+   "model_usd_per_item": 0.0554,
+   "wall_s_median": 26.8,
+   "wall_s_p90": 31.5,
+   "verify_s_median": 0.0,
+   "by_kind": {
+    "ordinary": {
+     "correct": 50
+    },
+    "fault": {
+     "correct": 7,
+     "missed_harm": 13,
+     "correct_stop": 1,
+     "caught_harm": 1,
+     "false_stop": 1
+    },
+    "perturbation": {
+     "correct": 12,
+     "false_stop": 4
+    }
+   }
+  },
+  "B_agent_openadapt": {
+   "items": 89,
+   "infra_excluded": 1,
+   "correct_completions": 72,
+   "missed_harmful_changes": 4,
+   "caught_harmful_changes": 10,
+   "false_stops": 3,
+   "failed_stops": 0,
+   "silent_absent": 0,
+   "duplicates": 1,
+   "correct_after_handling": 85,
+   "people_min_items_modelled": 212.0,
+   "setup_people_min_modelled": 90.0,
+   "people_min_per_correct_txn_modelled": 3.553,
+   "people_min_per_correct_txn_items_only_modelled": 2.494,
+   "model_usd_total": 4.842,
+   "model_usd_per_item": 0.0544,
+   "wall_s_median": 59.1,
+   "wall_s_p90": 95.6,
+   "verify_s_median": 15.83,
+   "by_kind": {
+    "ordinary": {
+     "correct": 50
+    },
+    "fault": {
+     "correct": 5,
+     "caught_harm": 10,
+     "missed_harm": 4,
+     "false_stop": 3,
+     "correct_stop": 1
+    },
+    "perturbation": {
+     "correct": 16
+    }
+   }
+  },
+  "verdict": {
+   "1_fewer_missed_harms": true,
+   "2_false_stops_within": true,
+   "false_stop_allowance": 1,
+   "3_fewer_people_min_per_correct_txn": false,
+   "B_wins": false
+  }
+ },
+ "note": "Aggregates only. Fault class detail is in README.md; the per-item ledgers name private fault cases and are kept with the fault set in openadapt-internal."
+}

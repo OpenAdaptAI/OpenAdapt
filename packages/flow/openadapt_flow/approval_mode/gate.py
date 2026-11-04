@@ -274,6 +274,16 @@ READBACK_WINDOW = 1
 class ApprovalGate:
     """Pre-save gate and post-run finish for one item under an approval mode."""
 
+    #: Rollback on (``rollback.enabled``): a save without an approved
+    #: compensation goes to a person first (:meth:`_check_undo_or_person`).
+    undo_or_person: bool = False
+    #: Whether a ``delete`` compensation counts as an undo here
+    #: (``rollback.allow_delete``).
+    undo_allows_delete: bool = False
+    #: Whether only an API-only compensation can run here (an attached
+    #: browser gets no fresh session for a screen compensation).
+    undo_api_only: bool = False
+
     def __init__(
         self,
         mode: ApprovalMode | str | None,
@@ -854,6 +864,17 @@ class ApprovalGate:
                 return GateVerdict(
                     proceed=False, decision=failure, checks=tuple(checks)
                 )
+        if self.undo_or_person:
+            # Rollback on: a save no approved compensation can undo goes to a
+            # person first. Recorded only when it does, so the evidence of an
+            # undoable save is the same as without rollback.
+            check, failure = self._check_undo_or_person(ctx)
+            if failure is not None:
+                checks.append(check)
+                self._halt(ctx, failure, checks)
+                return GateVerdict(
+                    proceed=False, decision=failure, checks=tuple(checks)
+                )
         # Every pre-check passed. Record that a save without a person is about
         # to start, so an interrupted item is found by the next one.
         if not self._item_started_logged:
@@ -1271,6 +1292,59 @@ class ApprovalGate:
         )
 
     # -- P5 --------------------------------------------------------------------
+    def _check_undo_or_person(
+        self, ctx: SaveContext
+    ) -> tuple[CheckOutcome, Optional[ItemDecision]]:
+        """With rollback on, a save no approved compensation can undo waits
+        for a person (docs/ROLLBACK.md): undo, or a person, before the write.
+
+        It is reported as an each-item save (code ``each_item``), so Desktop
+        and the phone card show it as one; the detail names the cause.
+        """
+
+        if not self.undo_or_person:
+            return (
+                CheckOutcome(
+                    code="each_item",
+                    passed=True,
+                    detail="off",
+                    step_id=ctx.step.id,
+                ),
+                None,
+            )
+        from openadapt_flow.rollback import undoable
+
+        if undoable(
+            ctx.workflow,
+            ctx.step.id,
+            allow_delete=self.undo_allows_delete,
+            api_only=self.undo_api_only,
+        ):
+            return (
+                CheckOutcome(
+                    code="each_item",
+                    passed=True,
+                    detail="undoable",
+                    step_id=ctx.step.id,
+                ),
+                None,
+            )
+        return (
+            CheckOutcome(
+                code="each_item",
+                passed=False,
+                detail="no_approved_compensation",
+                step_id=ctx.step.id,
+            ),
+            ItemDecision(
+                kind=ItemDecisionKind.APPROVAL_REQUIRED,
+                reason="each_item",
+                needs_person=True,
+                counts_toward_problems=False,
+                switch_off=None,
+            ),
+        )
+
     def _check_record_check_ready(
         self, ctx: SaveContext
     ) -> tuple[CheckOutcome, Optional[ItemDecision]]:

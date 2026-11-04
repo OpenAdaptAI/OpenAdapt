@@ -47,10 +47,12 @@
 # PyPI to serve the attested wheel and sdist, and publishes the draft.
 #
 # Signing: macOS DMGs are ad-hoc signed unless Developer ID credentials exist.
-# Windows goes through SignPath when the four SIGNPATH_* secrets are set (one
-# request deep-signs the MSI and its program files and signs the NSIS setup),
-# and ships unsigned otherwise. Linux bytes are covered by the GitHub
-# attestation. File names, the website manifest, the channel, and the release
+# Windows goes through SignPath when the four SIGNPATH_* secrets are set with
+# the release-signing policy (one request deep-signs the MSI and its program
+# files and signs the NSIS setup), and ships unsigned when none is set. Any
+# other policy, test-signing included, fails the build: test-signed builds
+# come from signpath-test-sign.yml, which publishes nothing. Linux bytes are
+# covered by the GitHub attestation. File names, the website manifest, the channel, and the release
 # notes state each platform's mode. The result is an unadmitted release
 # candidate; it creates no Production state.
 #
@@ -408,7 +410,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           # Release builds restore no cache; see the note at the top.
           enable-cache: false
@@ -598,10 +600,12 @@ jobs:
     needs: gate
     if: needs.gate.outputs.release == 'true'
     runs-on: windows-2022
-    # The protected environment holds the SignPath credentials. With all four,
-    # one SignPath request deep-signs the MSI (the installer and the program
-    # files in it) and signs the NSIS setup; with none, both ship unsigned and
-    # say so; with some, the build fails. The artifact configuration is
+    # The protected environment holds the SignPath credentials. With all four
+    # and the release-signing policy, one SignPath request deep-signs the MSI
+    # (the installer and the program files in it) and signs the NSIS setup;
+    # with none, both ship unsigned and say so; with some, or with any other
+    # policy (test-signing included), the build fails. The artifact
+    # configuration is
     # .signpath/artifact-configurations/openadapt-desktop-installers.xml.
     environment: native-release
     permissions:
@@ -614,17 +618,9 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: "22"
-          # Release builds restore no cache; see the note at the top.
-          package-manager-cache: false
-
-      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
-        with:
-          toolchain: "1.97.0"
-          targets: x86_64-pc-windows-msvc
-
+      # None of the four (unsigned), or all four with exactly release-signing
+      # (SignPath); a partial set or any other policy fails here, before the
+      # build. Test-signing runs in signpath-test-sign.yml instead.
       - name: Validate complete-or-absent SignPath credentials
         id: signing
         env:
@@ -638,27 +634,11 @@ jobs:
           --platform windows
           --github-output "$env:GITHUB_OUTPUT"
 
-      - name: Install locked Tauri CLI
-        run: npm ci --ignore-scripts
-
-      - name: Build engine sidecar for Tauri externalBin
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m pip install --disable-pip-version-check uv==0.11.29
-          python scripts/sync_frozen_dependencies.py
-          uv run --locked python scripts/build_frozen_engine.py
-          uv run --locked python scripts/verify_build_artifact.py sidecar
-          uv run --locked python scripts/smoke_test_frozen_flow.py
-          mkdir -p src-tauri/binaries
-          cp dist/openadapt-engine.exe \
-            src-tauri/binaries/openadapt-engine-x86_64-pc-windows-msvc.exe
-
+      # Node, Rust, the frozen engine sidecar and the Tauri MSI and NSIS
+      # bundles, from the lockfiles, with no caches. signpath-test-sign.yml
+      # runs the same action.
       - name: Build MSI and NSIS installers
-        run: >-
-          npm run tauri build --
-          --bundles msi,nsis
-          --target x86_64-pc-windows-msvc
+        uses: ./.github/actions/build-desktop-windows-installers
 
       - name: Collect the installers for signing
         if: steps.signing.outputs.method == 'signpath'

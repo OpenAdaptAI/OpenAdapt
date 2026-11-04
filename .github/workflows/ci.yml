@@ -11,7 +11,8 @@ name: CI
 # - A smoke test of every package, whatever changed: each installs from its
 #   lock, imports and starts (scripts/ci/smoke.py).
 #
-# `ci` passes when every job above passed or was not selected. Until branch
+# `ci` passes when every job above passed or was not selected; it is skipped
+# (which counts as passing) when they all passed. Until branch
 # protection names `ci`, the old required names, `run-ci (ubuntu-latest,
 # 3.12)` and `packages-gate`, report the same result from this workflow.
 # CodeQL keeps reporting `Analyze (python)` from codeql.yml.
@@ -52,7 +53,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: |
@@ -73,17 +74,23 @@ jobs:
           PYSTRAY_BACKEND: dummy
         run: python3 scripts/ci/smoke.py
 
+  # The required checks. Each one needs the three jobs above and runs only
+  # when one of them did not pass (or on a draft), to fail the check. When all
+  # three pass it is skipped, and GitHub counts a skipped required check as
+  # passing, so a green run needs no runner here. On 2026-11-03 these jobs
+  # did no work but each waited 15 to 30 minutes for a runner, after
+  # packages-gate and then after `ci`. Inside Packages, packages-gate still
+  # runs and fails the `packages` result when a selected job was skipped.
+  # `always()` keeps them evaluated after a failure or a cancel.
   ci:
     name: ci
     needs: [packages, launcher, smoke]
-    # Always reports, so a failed or cancelled job fails the check rather
-    # than leaving it missing.
-    if: always()
+    if: always() && (github.event.pull_request.draft == true || needs.packages.result != 'success' || needs.launcher.result != 'success' || needs.smoke.result != 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # A skipped required check counts as passing, so a draft would show
-      # green. Fail instead: a draft can't merge, and marking it ready
+      # A draft runs nothing, so every need above is skipped. Fail rather
+      # than let a draft show green: it can't merge, and marking it ready
       # (ready_for_review) starts a full run.
       - name: Fail on a draft pull request
         if: github.event.pull_request.draft == true
@@ -107,28 +114,69 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
 
-  # The names branch protection requires today. Remove both once it requires
-  # `ci` instead (.github/workflows/README.md has the command).
+  # The names branch protection requires today, with the same rule as `ci`.
+  # Remove both once it requires `ci` instead (.github/workflows/README.md has
+  # the command).
   legacy-run-ci:
     name: run-ci (ubuntu-latest, 3.12)
-    needs: ci
-    if: always()
+    needs: [packages, launcher, smoke]
+    if: always() && (github.event.pull_request.draft == true || needs.packages.result != 'success' || needs.launcher.result != 'success' || needs.smoke.result != 'success')
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
     steps:
-      - name: Report the result of ci
+      # A draft runs nothing, so every need above is skipped. Fail rather
+      # than let a draft show green: it can't merge, and marking it ready
+      # (ready_for_review) starts a full run.
+      - name: Fail on a draft pull request
+        if: github.event.pull_request.draft == true
+        run: |
+          echo "::error::draft PR: CI runs when marked ready for review."
+          exit 1
+      - name: Require every job to pass or be unselected
         env:
-          RESULT: ${{ needs.ci.result }}
-        run: test "$RESULT" = success
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+
+          bad = {}
+          for name, need in json.loads(os.environ["RESULTS"]).items():
+              print(f"{name}: {need['result']}")
+              if need["result"] != "success":
+                  bad[name] = need["result"]
+          if bad:
+              print(f"failed: {bad}")
+          sys.exit(1 if bad else 0)
+          PY
 
   legacy-packages-gate:
     name: packages-gate
-    needs: ci
-    if: always()
+    needs: [packages, launcher, smoke]
+    if: always() && (github.event.pull_request.draft == true || needs.packages.result != 'success' || needs.launcher.result != 'success' || needs.smoke.result != 'success')
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
     steps:
-      - name: Report the result of ci
+      # A draft runs nothing, so every need above is skipped. Fail rather
+      # than let a draft show green: it can't merge, and marking it ready
+      # (ready_for_review) starts a full run.
+      - name: Fail on a draft pull request
+        if: github.event.pull_request.draft == true
+        run: |
+          echo "::error::draft PR: CI runs when marked ready for review."
+          exit 1
+      - name: Require every job to pass or be unselected
         env:
-          RESULT: ${{ needs.ci.result }}
-        run: test "$RESULT" = success
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+
+          bad = {}
+          for name, need in json.loads(os.environ["RESULTS"]).items():
+              print(f"{name}: {need['result']}")
+              if need["result"] != "success":
+                  bad[name] = need["result"]
+          if bad:
+              print(f"failed: {bad}")
+          sys.exit(1 if bad else 0)
+          PY

@@ -74,6 +74,7 @@ from openadapt_flow.fault_gate import (
     load_coverage,
 )
 from openadapt_flow.qualify.result import verify_config_sha256
+from openadapt_flow.runtime.effects import late_write
 from openadapt_flow.runtime.effects.adapter import verifier_identity
 from openadapt_flow.runtime.effects.effect import (
     Effect,
@@ -149,6 +150,11 @@ _STRENGTH_RANK = {
 FRAME_AUDIT_DETAIL = "openadapt:frame_audit"
 #: Where the baseline keeps the whole-database snapshot (``frame.database``).
 FRAME_DB_DETAIL = "openadapt:frame_database"
+#: Why the whole-database snapshot couldn't be read, when it couldn't.
+FRAME_DB_ERROR = "openadapt:frame_database_error"
+#: Where the baseline keeps the target versions read (``frame.versions``), as
+#: keyed MACs.
+FRAME_VERSIONS_DETAIL = "openadapt:frame_versions"
 #: Where the baseline keeps the read set as keyed MACs (``effects/sealed.py``).
 SEALED_DETAIL = "openadapt:sealed_records"
 
@@ -171,6 +177,10 @@ _NEW_RECEIPT_FIELDS = (
     "verification_tier",
 )
 _OPTIONAL_RECEIPT_FIELDS = ("remediates", "correlation_id")
+#: Optional too: when a verified write's recheck is due (whole-second UTC),
+#: present only when the contract sets ``frame.database.recheck_after_s``.
+#: It equals ``evidence.frame.recheck.due_at``.
+RECHECK_RECEIPT_FIELD = "recheck_due_at"
 #: ``checked_how`` is optional too, but a label, not an opaque id.
 _SIGNATURE_FIELDS = frozenset(
     {
@@ -254,7 +264,13 @@ def load_verify_config(path: str | Path) -> VerifyConfig:
 
 #: ``openadapt.verify/v1`` sections only qualify reads (RFC-0002, Qualify-only
 #: sections). verify-run accepts and ignores them, so one file serves both.
-QUALIFY_ONLY_SECTIONS: tuple[str, ...] = ("app", "save_step", "inputs", "campaign")
+QUALIFY_ONLY_SECTIONS: tuple[str, ...] = (
+    "app",
+    "save_step",
+    "inputs",
+    "campaign",
+    "business_rules",
+)
 
 
 def _record_effects(record: Any) -> list[Effect]:
@@ -361,6 +377,38 @@ def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyCo
             raise VerifyRunError(
                 "frame.database.views names no such surface: " + ", ".join(unknown)
             )
+        unknown = sorted(set(database.judged_by.values()) - surfaces)
+        if unknown:
+            raise VerifyRunError(
+                "frame.database.judged_by names no such surface: " + ", ".join(unknown)
+            )
+        named = list(database.judged_by.values())
+        twice = sorted({s for s in named if named.count(s) > 1})
+        if twice:
+            raise VerifyRunError(
+                "frame.database.judged_by names one surface for two tables: "
+                + ", ".join(twice)
+            )
+        attribution_spec = cfg.frame.attribution if cfg.frame is not None else None
+        surface_ignore = set(cfg.frame.ignore_fields if cfg.frame is not None else [])
+        if attribution_spec is not None and attribution_spec.kind == "record_field":
+            surface_ignore |= set(attribution_spec.server_set)
+        for table in sorted(database.judged_by):
+            loose = sorted(surface_ignore - set(database.ignore_columns_for(table)))
+            if loose:
+                raise VerifyRunError(
+                    f"frame.database.judged_by: the surface for {table} ignores "
+                    f"{', '.join(loose)}, which the table doesn't ignore "
+                    "(frame.database.ignore_columns)"
+                )
+        both = sorted(
+            set(database.judged_by) & (set(database.views) | set(database.modes()))
+        )
+        if both:
+            raise VerifyRunError(
+                "frame.database.judged_by names a table that views or "
+                "allow_tables also names: " + ", ".join(both)
+            )
     for effect in cfg.effects:
         if effect.needs_operator_confirmation:
             raise VerifyRunError(
@@ -370,6 +418,23 @@ def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyCo
             raise VerifyRunError(
                 "an on-screen read-back effect cannot be verified after the fact"
             )
+        for name in effect.absent_is_null_fields():
+            # Only a JSON body leaves a null field out. A SQL row or a FHIR
+            # record carries every column or path, and the REST reader never
+            # resolves a dotted key: there a declared field would read as
+            # null on every record, whatever was written.
+            if "." in name:
+                raise VerifyRunError(
+                    f"absent_is_null on {name!r}: a dotted key is never read "
+                    "from a REST body, so it can't be declared absent"
+                )
+            json_kinds = ("rest", "graphql")
+            if any((kind or "").strip().lower() not in json_kinds for kind in kinds):
+                raise VerifyRunError(
+                    f"absent_is_null on {name!r}: only a rest or graphql read "
+                    "may leave a null field out; a SQL row or FHIR record "
+                    "always carries it"
+                )
     return cfg
 
 
@@ -422,6 +487,144 @@ def _audit_verifier(cfg: VerifyConfig, params: Mapping[str, object]) -> Any:
         )
     except ValueError as exc:
         raise VerifyRunError(f"cannot build the audit read: {exc}") from exc
+
+
+def _read_versions(
+    cfg: VerifyConfig, params: Mapping[str, object]
+) -> Optional[list[dict[str, Any]]]:
+    """The ``frame.versions`` read: one record per version, or None when it
+    can't be read."""
+
+    spec = cfg.frame.versions if cfg.frame is not None else None
+    if spec is None:
+        return None
+    try:
+        reader = build_effect_verifier(EffectsConfig.model_validate(spec.read), params)
+    except ValueError as exc:
+        raise VerifyRunError(f"cannot build the versions read: {exc}") from exc
+    try:
+        state = reader.capture_pre_state() if reader is not None else None
+    except Exception:  # noqa: BLE001 - unreadable -> the check stops the run
+        return None
+    if not isinstance(state, EffectState) or not state.reachable:
+        return None
+    return [dict(r) for r in state.records]
+
+
+def _judge_versions(
+    cfg: VerifyConfig,
+    frame: FrameVerdict,
+    before: EffectState,
+    effects: Sequence[Effect],
+    verdicts: Sequence[EffectVerdict],
+    params: Mapping[str, object],
+    salt: bytes,
+) -> FrameVerdict:
+    """Add ``frame.versions`` to the frame: a version of a target in the
+    window that isn't the agent's own refutes it; one that can't be read or
+    attributed leaves it not checked."""
+
+    from openadapt_flow.runtime.effects.versions import VersionVerdict, judge_versions
+
+    spec = cfg.frame.versions if cfg.frame is not None else None
+    if spec is None:
+        return frame
+    field_name = spec.target_field or cfg.frame.identity_field or "id"  # type: ignore[union-attr]
+    # Whether a target existed is told by its identity, which a save doesn't
+    # change, never by the target field's value after the write: a target
+    # field the write changed would make an old record look created.
+    identity = cfg.frame.identity_field or "id"  # type: ignore[union-attr]
+    from openadapt_flow.runtime.effects.surfaces import surface_of
+
+    def index(rows: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
+        for r in rows:
+            if r.get(identity) not in (None, ""):
+                out.setdefault(str(r.get(identity)), dict(r))
+        return out
+
+    def before_rows(effect: Effect) -> Optional[dict[str, dict[str, Any]]]:
+        """The records read before the write where this effect looks: its
+        surface's own read, else the verifier's records. None: no read says
+        which records were there (then no target is taken as new)."""
+
+        surface = surface_of(effect)
+        if surface:
+            sub = (before.detail or {}).get(surface)
+            if not isinstance(sub, Mapping) or not sub.get("reachable"):
+                return None
+            rows = sub.get("records")
+            return index(rows) if isinstance(rows, list) else None
+        return index(before.records) if before.reachable else None
+
+    def writes_a_target(effect: Effect) -> bool:
+        """A write effect whose records can be targets. A guard ("nothing
+        here", ``record_written`` with ``expected_count`` 0) never is."""
+
+        if effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS):
+            return False
+        return not (
+            effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count == 0
+        )
+
+    ignored = set(cfg.frame.ignore_fields)  # type: ignore[union-attr]
+    targets: list[tuple[Optional[str], bool, bool]] = []
+    for effect, verdict in zip(effects, verdicts):
+        if not writes_a_target(effect):
+            continue
+        if not verdict.confirmed:
+            continue
+        if (
+            spec.target_surface is not None
+            and surface_of(effect) != spec.target_surface
+        ):
+            continue  # a row beside the target, not the target
+        old = before_rows(effect)
+        for record in verdict.matched_records:
+            value = record.get(field_name)
+            text = None if value in (None, "") else str(value)
+            key = record.get(identity)
+            was = None if key in (None, "") or old is None else old.get(str(key))
+            # A record is new only when the read before the write shows it
+            # wasn't there. No identity, or no read to look in: never new.
+            existed = was is not None or key in (None, "") or old is None
+            # Changed in the window: a field read before differs now (a
+            # sealed baseline marks a changed field, so it differs too).
+            changed = existed and (
+                was is None
+                or any(record.get(k) != v for k, v in was.items() if k not in ignored)
+            )
+            targets.append((text, existed, changed))
+    stored = (before.detail or {}).get(FRAME_VERSIONS_DETAIL)
+    if spec.target_surface is not None and not any(
+        writes_a_target(e) and surface_of(e) == spec.target_surface for e in effects
+    ):
+        # A surface no write target is read from (a typo in a hand-written
+        # contract, or a surface only a guard reads) would leave no target,
+        # and no target holds.
+        result = VersionVerdict(
+            "not_checked",
+            "unknown_surface",
+            reason="frame.versions.target_surface names a surface no write "
+            "target is read from, so no target's versions can be judged",
+        )
+    else:
+        result = judge_versions(
+            spec,
+            stored if isinstance(stored, Mapping) else {},
+            _read_versions(cfg, params),
+            targets,
+            _mac_key(salt),
+            params,
+        )
+    frame.versions = result
+    if result.status == "refuted":
+        frame.status = "refuted"
+        frame.reason = result.reason
+    elif result.status == "not_checked" and frame.status == "held":
+        frame.status = "not_checked"
+        frame.reason = result.reason
+    return frame
 
 
 def _db_connect(read: Mapping[str, Any]) -> Any:
@@ -506,8 +709,12 @@ def _ref_columns(cfg: VerifyConfig) -> list[str]:
     if a is not None:
         cols |= {a.record_key} if a.record_key else set()
         cols |= set(a.record_keys.values())
+        cols |= {o.column for o in a.owners.values()}
     for side in frame.side_records:
         cols |= {side.link_field, side.of_field}
+    if frame.learned is not None:
+        # A learned excuse is checked by its actor column and moved columns.
+        cols |= set(frame.learned.columns_to_keep())
     profile = frame.database.loaded_profile() if frame.database else None
     if profile is not None:
         cols |= set(profile.ref_columns())
@@ -515,9 +722,13 @@ def _ref_columns(cfg: VerifyConfig) -> list[str]:
 
 
 def _read_database(
-    cfg: VerifyConfig, salt: bytes, before: Optional[Any] = None
+    cfg: VerifyConfig,
+    salt: bytes,
+    before: Optional[Any] = None,
+    errors: Optional[list[str]] = None,
 ) -> Optional[Any]:
-    """The whole-database snapshot, or None when it can't be read."""
+    """The whole-database snapshot, or None when it can't be read (and then
+    why, appended to ``errors``)."""
 
     from openadapt_flow.runtime.effects.db_snapshot import mac_key, take_snapshot
 
@@ -537,8 +748,11 @@ def _read_database(
             ref_columns=_ref_columns(cfg),
             schemas=database.schemas,
             optional_modes=database.profile_modes(),  # type: ignore[arg-type]
+            links=database.recheck_after_s is not None,
         )
-    except Exception:  # noqa: BLE001 - unreadable -> the frame is not checked
+    except Exception as exc:  # noqa: BLE001 - unreadable -> the frame is not checked
+        if errors is not None:
+            errors.append(f"{type(exc).__name__}: {exc}")
         return None
 
 
@@ -589,10 +803,23 @@ class _DatabaseFrame:
     still_moving: bool = False
     #: The app profile's judgment of one row change (``AppProfile.excuse``).
     excuse: Any = None
-    #: Every user's id by sign-in name (in memory only), and the names and
-    #: ids of other users who wrote in the window.
+    #: Every user's id by sign-in name (in memory only), to resolve an
+    #: audit entry's actor to an owner column (owner-scoped attribution).
     users_map: dict[str, str] = field(default_factory=dict)
-    colleagues: tuple[set[str], set[str]] = (set(), set())
+    #: Append-only tables in both reads whose profile rule excuses the acting
+    #: user's insert entries that name no record.
+    no_record_inserts: list[str] = field(default_factory=list)
+    #: The profile's record-field values that name no record.
+    no_record_values: list[str] = field(default_factory=list)
+    #: The settled read after the save, and when it was taken: what a later
+    #: recheck compares with (``recheck_after_s``).
+    post: Any = None
+    post_read_at: str = ""
+    #: The snapshot the rows are judged against.
+    old: Any = None
+    #: (table, record) -> the row key MAC of the table's row with that
+    #: record's primary key values, or None when they can't be read from it.
+    row_key: Any = None
 
 
 def _rules_used(profile: Any, old: Any, new: Any) -> list[str]:
@@ -650,8 +877,10 @@ def _database_frame(
         Snapshot,
         SnapshotError,
         cell_hash,
+        key_text,
         mac_key,
-        same_state,
+        row_key_hash,
+        settled_state,
         unpack,
         unread_reasons,
     )
@@ -677,15 +906,34 @@ def _database_frame(
     new = _read_database(cfg, salt, before=old)
     if new is None:
         return unreachable
-    # Read again a moment later: the two reads must match, or the app is
-    # still writing and what the save caused can't be told yet.
-    time.sleep(database.settle_s)
-    again = _read_database(cfg, salt, before=old)
-    if again is None:
-        return unreachable
-    if not same_state(new, again):
+    new_at = _now()
+    # Read again a moment later: two reads in a row must match, or the app
+    # is still writing and what the save caused can't be told yet. A live
+    # app moves on its own, so up to ``settle_attempts`` more reads are
+    # taken, each ``settle_s`` after the last; the earlier read of the first
+    # matching pair is judged. Rows added to append-only tables between the
+    # two don't count: the frame excuses them anyway.
+    attempts = database.settle_attempts
+    settled = False
+    used = 0
+    for used in range(1, attempts + 1):
+        time.sleep(database.settle_s)
+        again = _read_database(cfg, salt, before=old)
+        if again is None:
+            return unreachable
+        if settled_state(new, again):
+            settled = True
+            break
+        if used < attempts:
+            new, new_at = again, _now()
+    if not settled:
         moving = _DatabaseFrame({}, {}, [], {}, ("", ""), {}, None)
         moving.still_moving = True
+        moving.evidence = {
+            "settle_attempts": used,
+            "settle_attempts_allowed": attempts,
+            "settled": False,
+        }
         return moving
     if not (old.code_visible and new.code_visible):
         blind = _DatabaseFrame({}, {}, [], {}, ("", ""), {}, None)
@@ -693,6 +941,16 @@ def _database_frame(
         return blind
     key = mac_key(salt)
     out = _DatabaseFrame({}, {}, [], {}, (old.clock, new.clock), {}, None)
+    out.post, out.post_read_at, out.old = new, new_at, old
+
+    def row_key(table: str, record: Mapping[str, Any]) -> Optional[str]:
+        t = old.tables.get(table)
+        pk = list(t.primary_key) if t is not None else []
+        if not pk or any(record.get(c) is None for c in pk):
+            return None
+        return row_key_hash(key, key_text(pk, record), table)
+
+    out.row_key = row_key
     if "audit" in new.extra:
         out.audit_after = list(new.extra["audit"])
     if old.objects != new.objects:
@@ -700,6 +958,11 @@ def _database_frame(
             ("(database code)", "triggers, views, routines or events changed")
         )
     counts = {"compare": 0, "append_only": 0, "skip": 0}
+    from openadapt_flow.app_profiles import table_name
+
+    profile = database.loaded_profile()
+    no_record = profile.no_record_insert_tables() if profile is not None else set()
+    out.no_record_values = list(profile.no_record_values) if profile is not None else []
     for name in sorted(set(old.tables) | set(new.tables)):
         a, b = old.tables.get(name), new.tables.get(name)
         try:
@@ -709,6 +972,13 @@ def _database_frame(
         out.unread.extend((name, why) for why in reasons)
         if b is not None:
             counts[b.mode] = counts.get(b.mode, 0) + 1
+        if (
+            a is not None
+            and b is not None
+            and a.mode == b.mode == "append_only"
+            and table_name(name) in no_record
+        ):
+            out.no_record_inserts.append(name)
         if (
             a is None
             or b is None
@@ -741,7 +1011,14 @@ def _database_frame(
             1 for t in new.tables.values() if t.non_transactional
         ),
         "schemas": list(new.schemas),
+        **(
+            {"schemas_skipped": list(new.schemas_skipped)}
+            if new.schemas_skipped
+            else {}
+        ),
         "allow_list_sha256": database.allow_list_sha256(),
+        "settle_attempts": used,
+        "settle_attempts_allowed": attempts,
     }
     profile = database.loaded_profile()
     if profile is not None:
@@ -756,22 +1033,48 @@ def _database_frame(
         out.users_map = {
             str(r.get("name")): str(r.get("id")) for r in new.extra.get("users_map", [])
         }
-        frame_out = out
 
         def excuse(name: str, before: Any, after: Any, fields: list[str]) -> Any:
+            from openadapt_flow.runtime.effects.db_snapshot import every_cell_hashed
+
+            tables = (old.tables.get(name), new.tables.get(name))
+            if any(t is not None and not every_cell_hashed(t) for t in tables):
+                # A column no cell MAC shows may have moved: no rule judges it.
+                return False
             return profile.excuse(
-                name,
-                before,
-                after,
-                fields,
-                hashers[name],
-                names,
-                ids,
-                frame_out.colleagues,
+                name, before, after, fields, hashers[name], names, ids
             )
 
         out.excuse = excuse
     return out
+
+
+def _later_status(found: Sequence[Optional[str]]) -> Optional[str]:
+    """``clean`` when a later write's window covers a change and none calls
+    it disputed; ``disputed`` when one does; None when none covers it."""
+
+    hits = [f for f in found if f is not None]
+    if not hits:
+        return None
+    return "disputed" if "disputed" in hits else "clean"
+
+
+def _collateral_record(verdict: FrameVerdict, db: Any, salt: bytes) -> dict[str, Any]:
+    rows: list[list[str]] = []
+    entries: list[Mapping[str, Any]] = []
+    unmapped = False
+    for change in verdict.collateral:
+        if change.audit_only and isinstance(change.entry, Mapping):
+            entries.append(change.entry)
+        elif change.surface in db.slices and isinstance(change.key, str):
+            rows.append([change.surface, change.key])
+        else:
+            unmapped = True  # a change a recheck can't match by key
+    return {
+        "rows": sorted(rows),
+        "entries": sorted(_audit_ids_each(entries, salt)),
+        "unmapped": unmapped or bool(verdict.collateral and not db.slices),
+    }
 
 
 def _read_audit(verifier: Any) -> Optional[list[dict[str, Any]]]:
@@ -781,6 +1084,48 @@ def _read_audit(verifier: Any) -> Optional[list[dict[str, Any]]]:
         return _post_records(verifier.capture_pre_state())
     except Exception:  # noqa: BLE001 - an unreadable log attributes nothing
         return None
+
+
+def _declared_by_surface(
+    table: str,
+    surface: str,
+    state: tuple[EffectState, Optional[list[dict[str, Any]]]],
+    effects: Sequence[Effect],
+    routes: Mapping[str, Sequence[str]],
+    db: _DatabaseFrame,
+) -> set[str]:
+    """Row key MACs of ``table``'s rows that ``surface`` declares
+    (``frame.database.judged_by``): its records, before or after the save,
+    that an effect routed to it selects, matched to the table by primary
+    key. The table judges those rows itself, every column exactly, with the
+    surface's fields as the ones a declared row may change. Empty when a
+    declared record's key can't be read, so nothing is declared there and a
+    declared change stops the write."""
+
+    from openadapt_flow.runtime.effects.effect import record_matches
+    from openadapt_flow.runtime.effects.frame import declared_selectors
+
+    before_state, after_records = state
+    if after_records is None or not before_state.reachable:
+        return set()
+    selectors = [
+        s
+        for i, effect in enumerate(effects)
+        if surface in routes.get(str(i), ())
+        for s in declared_selectors(effect)
+    ]
+    typed = before_state.substrate == "sql"
+    keys: set[str] = set()
+    for record in [*before_state.records, *after_records]:
+        if not any(
+            record_matches(dict(record), s, text_numbers=typed) for s in selectors
+        ):
+            continue
+        k = db.row_key(table, record)
+        if k is None:
+            return set()
+        keys.add(k)
+    return keys
 
 
 def judge_run_frame(
@@ -793,19 +1138,34 @@ def judge_run_frame(
     audit_verifier: Any = None,
     run_actors: Sequence[str] = (),
     salt: bytes = b"",
+    database_only: bool = False,
+    later: Sequence[Any] = (),
 ) -> FrameVerdict:
-    """Read the slice after the save and judge the frame against ``before``."""
+    """Read the slice after the save and judge the frame against ``before``.
+
+    ``database_only`` (a recheck): judge ``frame.database`` and the audit
+    log only; the verifier's own read set is not read, and is used only to
+    route effects to their tables. ``later``: the windows of later writes
+    (``late_write.LaterWindow``) whose own frames already judged the rows
+    and audit entries in them.
+    """
 
     from openadapt_flow.runtime.effects.surfaces import surface_of
 
     spec = cfg.frame or FrameSpec()
-    try:
-        capture = getattr(verifier, "capture_post_state", None) or (
-            verifier.capture_pre_state
-        )
-        after = capture()
-    except Exception:  # noqa: BLE001 - unreadable -> not checked
-        after = None
+    # The database first, then the surfaces: a row a surface judges
+    # (``database.judged_by``) is read by it no earlier than the settled
+    # read a recheck compares with, so no change falls between the two.
+    db = _database_frame(cfg, before, salt)
+    after: Any = None
+    if not database_only:
+        try:
+            capture = getattr(verifier, "capture_post_state", None) or (
+                verifier.capture_pre_state
+            )
+            after = capture()
+        except Exception:  # noqa: BLE001 - unreadable -> not checked
+            after = None
     routed = getattr(verifier, "verifiers", None)
     slices: dict[str, tuple[EffectState, Optional[list[dict[str, Any]]]]] = {}
     routes: Optional[dict[str, list[str]]] = None
@@ -827,7 +1187,7 @@ def judge_run_frame(
         for i, effect in enumerate(bound_effects):
             own = surface_of(effect) or ""
             routes[str(i)] = views.get(read_of(own), [own]) if own in routed else [own]
-        for name in routed:
+        for name in [] if database_only else routed:
             sub = before.detail.get(name, {}) if isinstance(before.detail, dict) else {}
             post = (
                 after.detail.get(name, {})
@@ -842,18 +1202,22 @@ def judge_run_frame(
                 ),
                 list(post.get("records", [])) if post.get("reachable") else None,
             )
-    else:
+    elif not database_only:
         slices[""] = (before, _post_records(after))
     identities: Optional[dict[str, str]] = None
-    db = _database_frame(cfg, before, salt)
+    #: Table -> row key MACs its ``judged_by`` surface declares.
+    declared_rows: dict[str, set[str]] = {}
     if db is not None and db.still_moving:
+        tries = db.evidence.get("settle_attempts", 1)
         return FrameVerdict(
             status="not_checked",
             reason=(
-                "the database was still changing after the save (two reads "
-                "differed); what the save caused can't be told yet"
+                "the database was still changing after the save (no two reads "
+                f"in a row matched in {tries} attempt(s)); what the save "
+                "caused can't be told yet"
             ),
             attribution=spec.attribution.kind if spec.attribution else "none",
+            database=dict(db.evidence),
         )
     if db is not None and db.blind:
         return FrameVerdict(
@@ -880,6 +1244,12 @@ def judge_run_frame(
         for route in routes.values():
             route.extend(t for t, surface in db_views.items() if surface in route)
         slices.update(db.slices)
+        if spec.database is not None and db.row_key is not None:
+            for table, surface in spec.database.judged_by.items():
+                if table in db.slices and surface in slices:
+                    declared_rows[table] = _declared_by_surface(
+                        table, surface, slices[surface], bound_effects, routes, db
+                    )
         identities = {name: KEY for name in db.slices}
     audit_before: Optional[list[dict[str, Any]]] = None
     audit_after: Optional[list[dict[str, Any]]] = None
@@ -888,38 +1258,57 @@ def judge_run_frame(
         if isinstance(before.detail, dict)
         else None
     )
-    if isinstance(stored, dict) and stored.get("reachable"):
+    entries_now: Optional[list[dict[str, Any]]] = None
+    #: A change a later write's window covers that may be what refuted it.
+    disputed: list[bool] = []
+    if isinstance(stored, dict):
         entries_now = (
             db.audit_after
             if db is not None and db.audit_after is not None
             else _read_audit(audit_verifier)
         )
+    if isinstance(stored, dict) and stored.get("reachable"):
         if entries_now is not None:
             if "ids" in stored:
                 # The window: entries now that the baseline didn't hold.
                 seen = set(stored["ids"])
                 audit_before = []
-                audit_after = [
-                    e
-                    for e, h in zip(entries_now, _audit_ids_each(entries_now, salt))
-                    if h not in seen
-                ]
+                audit_after = []
+                for e, h in zip(entries_now, _audit_ids_each(entries_now, salt)):
+                    if h in seen:
+                        continue
+                    status = _later_status([w.entry(e) for w in later])
+                    if status == "disputed":
+                        disputed.append(True)
+                    if status is None:
+                        audit_after.append(e)
             else:
                 audit_before = list(stored.get("records", []))
                 audit_after = entries_now
-    if db is not None and audit_after is not None and spec.attribution is not None:
-        # Other users who wrote in the window: their own per-user state is
-        # their work (the profile's own_rows rules only).
-        a = spec.attribution
-        writes = set(a.write_events)
-        mine = set(_self_names(cfg)) | {str(x) for x in run_actors}
-        active = {
-            str(e.get(a.actor_field))
-            for e in audit_after
-            if (not writes or str(e.get(a.event_field or "")) in writes)
-            and e.get(a.actor_field) not in (None, "")
-        } - mine
-        db.colleagues = (active, {db.users_map[n] for n in active if n in db.users_map})
+    excuse = None if db is None else db.excuse
+    if db is not None and later and spec.database is not None:
+        from openadapt_flow.runtime.effects.db_snapshot import KEY
+
+        db_spec = spec.database
+        profile_excuse = db.excuse
+
+        old_tables = db.old.tables if db.old is not None else {}
+
+        def excuse(name: str, before: Any, after: Any, fields: list[str]) -> Any:
+            skip = db_spec.ignore_columns_for(name)
+            table = old_tables.get(name)
+            links = table.links if table is not None else {}
+            status = _later_status(
+                [w.row(name, before, after, skip, links) for w in later]
+            )
+            if status == "disputed":
+                disputed.append(True)
+            if status is not None:
+                return [late_write.LATER_WRITE_RULE]
+            if profile_excuse is None:
+                return None
+            return profile_excuse(name, before, after, fields)
+
     verdict = judge_frame(
         spec,
         bound_effects,
@@ -932,16 +1321,48 @@ def judge_run_frame(
         identities=identities,
         new_row_defaults=None if db is None else db.defaults,
         unread_changes=() if db is None else db.unread,
+        no_record_inserts=() if db is None else db.no_record_inserts,
+        no_record_values=() if db is None else db.no_record_values,
         hashers=None if db is None else db.hashers,
         clock=("", "") if db is None else db.clock,
         database_evidence=None if db is None else db.evidence,
-        excuse=None if db is None else db.excuse,
+        excuse=excuse,
+        user_ids=None if db is None else db.users_map,
+        declared_rows=declared_rows,
     )
     profile = db.evidence.get("profile") if db is not None else None
     if profile is not None:
         # The rules that actually excused something: unconditional ones seen
         # in the snapshots, conditional ones as the judge applied them.
-        profile["rules_used"] = sorted(set(profile["rules_used"]) | verdict.excused_by)
+        profile["rules_used"] = sorted(
+            (set(profile["rules_used"]) | verdict.excused_by)
+            - {late_write.LATER_WRITE_RULE}
+        )
+    if disputed:
+        verdict.excused_by.add(late_write.LATER_WRITE_DISPUTED)
+    database = spec.database
+    if (
+        db is not None
+        and db.post is not None
+        and database is not None
+        and database.recheck_after_s is not None
+    ):
+        # What a later recheck compares with (and, for a later write, what
+        # its own window covered): MACs and keyed hashes only.
+        verdict.post_state = {
+            "snapshot": db.post.to_json(),
+            "read_at": db.post_read_at,
+            # What this run's frame reported, as row key MACs and keyed
+            # entry hashes: a later recheck of an earlier write can tell a
+            # change this run was refuted for from one it explained.
+            "collateral": _collateral_record(verdict, db, salt),
+            "audit": None
+            if not isinstance(stored, dict)
+            else {
+                "reachable": entries_now is not None,
+                "ids": _audit_ids(entries_now or [], salt),
+            },
+        }
     return verdict
 
 
@@ -1146,6 +1567,13 @@ def capture_baseline(
     execution_id = _new_execution_id()
     _tag_reads(verifier, execution_id)
     salt = secrets.token_bytes(32)
+    # The versions first: a save between this read and the record read is
+    # then in the record baseline too, never hidden in the versions one.
+    versions_rows = (
+        _read_versions(cfg, params)
+        if cfg.frame is not None and cfg.frame.versions is not None
+        else None
+    )
     state = verifier.capture_pre_state()
     if not isinstance(state, EffectState):
         raise VerifyRunError("verifier returned no readable baseline")
@@ -1153,10 +1581,13 @@ def capture_baseline(
     entries: Optional[list[dict[str, Any]]] = None
     snapshot = None
     if cfg.frame is not None and cfg.frame.database is not None:
-        snapshot = _read_database(cfg, salt)
+        why: list[str] = []
+        snapshot = _read_database(cfg, salt, errors=why)
         if snapshot is not None:
             detail[FRAME_DB_DETAIL] = snapshot.to_json()
             entries = snapshot.extra.get("audit")
+        else:
+            detail[FRAME_DB_ERROR] = why[0] if why else "not read"
     audit_verifier = _audit_verifier(cfg, params)
     if audit_verifier is not None:
         if entries is None:
@@ -1166,6 +1597,12 @@ def capture_baseline(
             "reachable": entries is not None,
             "ids": _audit_ids(entries or [], salt),
         }
+    if cfg.frame is not None and cfg.frame.versions is not None:
+        from openadapt_flow.runtime.effects.versions import seal_versions
+
+        detail[FRAME_VERSIONS_DETAIL] = seal_versions(
+            cfg.frame.versions, versions_rows, _mac_key(salt)
+        )
     if detail:
         state = state.model_copy(update={"detail": {**state.detail, **detail}})
     state = _seal_state(cfg, state, salt)
@@ -1423,6 +1860,7 @@ def verify_run(
     provenance: Optional[Any] = None,
     documents: Optional[Mapping[str, Any]] = None,
     second_extractor: Optional[Any] = None,
+    post_state_out: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Read the system of record and return ``{"receipt", "evidence"}``.
 
@@ -1441,6 +1879,12 @@ def verify_run(
     guarded save sets it after its commit step). Then a store that shows
     nothing is ``reconciliation_required``, not ``halted_before_effect``: the
     write may still land, so it must not be retried.
+
+    With ``frame.database.recheck_after_s``, a verified run's evidence says a
+    recheck is due (``evidence.frame.recheck``), and ``post_state_out`` (a
+    dict the caller passes) receives what the recheck compares with: the
+    settled post-save snapshot as keyed MACs. It is private, like the
+    baseline (``runtime/effects/late_write.py``, :func:`recheck_run`).
     """
 
     from openadapt_types.execute import (
@@ -1588,6 +2032,9 @@ def verify_run(
             # The executor's own id is this run, never "another user".
             run_actors=[str(run_record.get("executor_id") or "")],
             salt=salt,
+        )
+        frame = _judge_versions(
+            cfg, frame, before, bound_effects, verdicts, params, salt
         )
     else:
         frame = FrameVerdict(
@@ -1751,6 +2198,28 @@ def verify_run(
         },
         "effect_verdict": effect_verdict,
     }
+    database_spec = frame_spec.database
+    recheck_due_at: Optional[str] = None
+    if (
+        frame.post_state is not None
+        and database_spec is not None
+        and database_spec.recheck_after_s is not None
+    ):
+        # A write that lands after the settled read lands after this verdict:
+        # say when the database is read again (a verified write only), and
+        # bind what it compares with. A write of any outcome binds its
+        # post-save state, so a recheck of an earlier write can tell what
+        # this one's own window covered.
+        schedule = late_write.schedule(
+            frame.post_state,
+            database_spec.recheck_after_s,
+            salted_digest(salt, late_write.POST_STATE_LABEL, frame.post_state),
+            due=verified,
+        )
+        cast(dict[str, Any], evidence["frame"])[late_write.EVIDENCE_KEY] = schedule
+        recheck_due_at = schedule["due_at"]
+        if post_state_out is not None:
+            post_state_out.update(frame.post_state)
     contracts = ExecuteEvidenceContractV1(
         # A reference was bound and the approver is not the executor;
         # verify-run did not evaluate a policy (evidence.authorization says so).
@@ -1798,6 +2267,8 @@ def verify_run(
         receipt["remediates"] = remediates
     if correlation_id is not None:
         receipt["correlation_id"] = correlation_id
+    if recheck_due_at is not None:
+        receipt[RECHECK_RECEIPT_FIELD] = recheck_due_at
     problem = receipt_problem(receipt) or evidence_problem(evidence, receipt)
     if problem is not None:  # pragma: no cover - a producer bug, never input
         raise VerifyRunError(f"verify-run built an invalid receipt: {problem}")
@@ -1806,6 +2277,273 @@ def verify_run(
         "receipt": receipt,
         "evidence": evidence,
     }
+
+
+# -- late writes ----------------------------------------------------------------
+
+
+def recheck_state(
+    baseline: Mapping[str, Any],
+    result: Mapping[str, Any],
+    post_state: Mapping[str, Any],
+) -> Optional[dict[str, Any]]:
+    """The private recheck state of a run, or None when its evidence binds
+    no post-save state (the contract sets no ``recheck_after_s``, or the
+    database didn't settle after the save). ``baseline`` is the payload
+    :func:`capture_baseline` wrote, ``result`` what :func:`verify_run`
+    returned, ``post_state`` its ``post_state_out``.
+
+    A verified run's state is what its recheck compares with. Any run's
+    state can excuse its own window in an earlier write's recheck."""
+
+    evidence = dict(result["evidence"])
+    if not post_state or late_write.EVIDENCE_KEY not in (evidence.get("frame") or {}):
+        return None
+    return {
+        "schema_version": late_write.RECHECK_SCHEMA,
+        "execution_id": str(baseline["execution_id"]),
+        "salt": str(baseline["salt"]),
+        "verifier_identity": str(baseline["verifier_identity"]),
+        "baseline": {k: baseline[k] for k in _BASELINE_BOUND_KEYS},
+        "receipt": dict(result["receipt"]),
+        "evidence": evidence,
+        "post_state": dict(post_state),
+    }
+
+
+def recheck_problem(
+    cfg: VerifyConfig,
+    state: Any,
+    *,
+    params: Mapping[str, object],
+    run_record: Mapping[str, Any],
+    verified: bool = True,
+) -> Optional[str]:
+    """A plain sentence when ``state`` can't be used as this contract's
+    write by this executor with these params; None when it can.
+    ``verified``: the write must also have been verified (the write being
+    rechecked; a later write that excuses its window may have any outcome).
+
+    Everything the recheck relies on is bound to the receipt: the receipt
+    and its evidence agree, the salt is the one the evidence commits to, the
+    baseline and the post-save state are the ones their digests name, and
+    the contract, the read, the executor and each bound parameter are the
+    ones the receipt was issued for.
+    """
+
+    problem = late_write.state_problem(state)
+    if problem is not None:
+        return problem
+    receipt, evidence = dict(state["receipt"]), dict(state["evidence"])
+    if receipt_problem(receipt) or evidence_problem(evidence, receipt):
+        return "the recheck state's receipt and evidence don't match"
+    if verified and receipt.get("outcome") != "verified":
+        return "the write was not verified, so there is nothing to recheck"
+    if receipt.get("execution_id") != state["execution_id"]:
+        return "the recheck state belongs to another run"
+    salt = bytes.fromhex(str(state["salt"]))
+    if (evidence.get("salting") or {}).get("salt_commitment") != salt_commitment(salt):
+        return "the recheck state's salt is not the one its receipt commits to"
+    readback = evidence.get("readback") or {}
+    baseline = dict(state["baseline"])
+    if set(baseline) != set(_BASELINE_BOUND_KEYS) or readback.get(
+        "baseline_sha256"
+    ) != baseline_digest(baseline, salt):
+        return "the recheck state's baseline is not the one its receipt names"
+    frame = evidence.get("frame") or {}
+    schedule = frame.get(late_write.EVIDENCE_KEY)
+    database = cfg.frame.database if cfg.frame is not None else None
+    if not isinstance(schedule, Mapping) or database is None:
+        return "the receipt binds no post-save state"
+    post = dict(state["post_state"])
+    digest = salted_digest(salt, late_write.POST_STATE_LABEL, post)
+    if schedule.get("post_state_sha256") != digest:
+        return "the recheck state is not the post-save state its receipt names"
+    is_verified = receipt.get("outcome") == "verified"
+    if database.recheck_after_s is None or dict(schedule) != late_write.schedule(
+        post, database.recheck_after_s, digest, due=is_verified
+    ):
+        return (
+            "the contract's recheck_after_s is not the one the receipt was issued under"
+        )
+    try:
+        verifier = _build_verifier(cfg, params)
+        identity = verifier_identity(verifier)
+        executor_kind, executor_ref, _build = _executor(run_record)
+    except (VerifyRunError, KeyError, ValueError) as exc:
+        return f"the contract can't be bound for the recheck: {exc}"
+    if (
+        identity != state["verifier_identity"]
+        or identity != readback.get("verifier_identity")
+        or identity != baseline.get("verifier_identity")
+    ):
+        return "the recheck state was taken by a different verifier"
+    contract = evidence.get("contract") or {}
+    if (
+        contract.get("contract_sha256")
+        != verify_config_sha256(identity, list(cfg.effects))
+        or frame.get("frame_sha256") != (cfg.frame or FrameSpec()).digest()
+    ):
+        return "the recheck state was taken under a different contract"
+    if (
+        receipt.get("executor_kind") != executor_kind
+        or receipt.get("executor_ref_sha256") != executor_ref
+    ):
+        return "the recheck state's write was made by a different actor"
+    rows = readback.get("effects") or []
+    if len(rows) != len(cfg.effects):
+        return "the recheck state was taken under a different contract"
+    for effect, row in zip(cfg.effects, rows):
+        try:
+            salted = {
+                name: _salted_hex(salt, f"effect_param:{name}", params[name])
+                for name in sorted(effect.referenced_params())
+            }
+            effect_digest = effect.resolved_contract_hash(
+                {}, opaque_param_sha256=salted
+            )
+        except (KeyError, ValueError):
+            return "the params don't bind the contract"
+        if (
+            not isinstance(row, Mapping)
+            or row.get("effect_contract_hash") != effect_digest
+        ):
+            return "the params are not the ones the write was verified with"
+    return None
+
+
+def _entry_id(entry: Mapping[str, Any], key: bytes) -> str:
+    from openadapt_flow.runtime.effects.effect import stable_id
+
+    return hmac.new(
+        key, repr(stable_id(dict(entry))).encode(), hashlib.sha256
+    ).hexdigest()
+
+
+def _later_window(state: Mapping[str, Any]) -> Optional[Any]:
+    """A later write's own window, when its frame judged it (held or
+    refuted); None when its frame wasn't checked, so nothing in its window
+    was reported and nothing there is excused."""
+
+    evidence = state["evidence"]
+    frame = (evidence.get("frame") or {}).get("status")
+    if frame not in ("held", "refuted"):
+        return None
+    record = state["post_state"].get("collateral")
+    if not isinstance(record, Mapping):
+        return None
+    detail = (state["baseline"].get("state") or {}).get("detail") or {}
+    snapshot = detail.get(FRAME_DB_DETAIL)
+    if not isinstance(snapshot, dict):
+        return None
+    post = state["post_state"]
+    before_audit = detail.get(FRAME_AUDIT_DETAIL)
+    after_audit = post.get("audit")
+    readable = bool(
+        isinstance(before_audit, Mapping)
+        and before_audit.get("reachable")
+        and isinstance(after_audit, Mapping)
+        and after_audit.get("reachable")
+    )
+    ids_before = set(before_audit["ids"]) if readable and before_audit else None
+    ids_after = set(after_audit["ids"]) if readable and after_audit else None
+    try:
+        return late_write.LaterWindow(
+            _mac_key(bytes.fromhex(str(state["salt"]))),
+            snapshot,
+            post["snapshot"],
+            verified=state["receipt"].get("outcome") == "verified",
+            delta_held=(evidence.get("checked") or {}).get("delta") == "held",
+            collateral_rows={(str(t), str(k)) for t, k in record.get("rows") or []},
+            collateral_entries={str(h) for h in record.get("entries") or []},
+            unmapped=bool(record.get("unmapped", True)),
+            audit_before=ids_before,
+            audit_after=ids_after,
+            entry_id=_entry_id,
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def recheck_run(
+    cfg: VerifyConfig,
+    state: Mapping[str, Any],
+    *,
+    params: Mapping[str, object],
+    run_record: Mapping[str, Any],
+    excused: Sequence[tuple[Mapping[str, Any], Mapping[str, object]]] = (),
+) -> tuple[FrameVerdict, str]:
+    """Judge every change since a verified write's post-save read.
+
+    ``state`` must have passed :func:`recheck_problem`. ``excused``: the
+    recheck states and params of later writes under this contract by this
+    executor, of any outcome, each begun after ``state``'s post-save read
+    (each is checked here as ``state`` was). Where a later write's frame
+    was judged (held or refuted), each row and audit entry that changed in
+    its own window, between its baseline and its post-save read, and still
+    holds what that read saw, is accounted for by it
+    (``late_write.LaterWindow``): its declared effects and side rows as they
+    landed then, never a row matching its selector that lands later. A
+    change that may be what refuted that later write is ``disputed``: the
+    verdict's ``excused_by`` then holds ``LATER_WRITE_DISPUTED``. A later
+    write whose frame wasn't judged excuses nothing; when the verdict is
+    refuted with one in ``excused``, ``excused_by`` holds
+    ``LATER_WRITE_UNJUDGED``, since the change may be that write's. The
+    database is read twice, ``settle_s`` apart, as after the save. Returns
+    the frame verdict and when the database was read.
+
+    Raises :class:`VerifyRunError` for an excuse that doesn't qualify.
+    """
+
+    post = dict(state["post_state"])
+    since = late_write.parse_time(str(post["read_at"]))
+    windows: list[Any] = []
+    unjudged = 0
+    for i, (other, other_params) in enumerate(excused):
+        problem = recheck_problem(
+            cfg, other, params=other_params, run_record=run_record, verified=False
+        )
+        if problem is not None:
+            raise VerifyRunError(f"excused_by[{i}] is not a later write: {problem}")
+        if other["execution_id"] == state["execution_id"]:
+            raise VerifyRunError(f"excused_by[{i}] is the write being rechecked")
+        started = other["baseline"].get("baseline_read_at")
+        try:
+            later = late_write.parse_time(str(started)) >= since
+        except ValueError:
+            later = False
+        if not later:
+            raise VerifyRunError(
+                f"excused_by[{i}] started before this write's post-save read"
+            )
+        window = _later_window(other)
+        if window is not None:
+            windows.append(window)
+        else:
+            unjudged += 1
+    salt = bytes.fromhex(str(state["salt"]))
+    detail: dict[str, Any] = {FRAME_DB_DETAIL: dict(post["snapshot"])}
+    if post.get("audit") is not None:
+        detail[FRAME_AUDIT_DETAIL] = dict(post["audit"])
+    before = EffectState(substrate="database", reachable=True, detail=detail)
+    verifier = _build_verifier(cfg, params)
+    verdict = judge_run_frame(
+        cfg,
+        verifier,
+        before,
+        [],  # no declared delta: only the later writes' windows excuse rows
+        params,
+        audit_verifier=_audit_verifier(cfg, params),
+        run_actors=[str(run_record.get("executor_id") or "")],
+        salt=salt,
+        database_only=True,
+        later=windows,
+    )
+    if unjudged and verdict.status == "refuted":
+        # A later write whose frame wasn't judged excuses nothing, so what
+        # refuted this write may be that write's own change.
+        verdict.excused_by.add(late_write.LATER_WRITE_UNJUDGED)
+    return verdict, _now()
 
 
 def write_result(result: Mapping[str, Any], out_dir: Path) -> Path:
@@ -1832,7 +2570,7 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
         v1_names
         | set(_NEW_RECEIPT_FIELDS)
         | set(_OPTIONAL_RECEIPT_FIELDS)
-        | {"checked_how", "checked"}
+        | {"checked_how", "checked", RECHECK_RECEIPT_FIELD}
     )
     if set(receipt) - allowed:
         return "unknown_field"
@@ -1861,6 +2599,11 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
     for name in _OPTIONAL_RECEIPT_FIELDS:
         if name in receipt and not _OPAQUE.match(str(receipt[name])):
             return name
+    if RECHECK_RECEIPT_FIELD in receipt and (
+        receipt.get("outcome") != "verified"
+        or not _ISO_SECONDS.match(str(receipt[RECHECK_RECEIPT_FIELD]))
+    ):
+        return RECHECK_RECEIPT_FIELD
     # Optional: receipts issued before RFC-0002 open question 5 lack it.
     if "checked_how" in receipt and (
         receipt["checked_how"] not in CHECKED_HOW_VALUES
@@ -1940,6 +2683,12 @@ def evidence_problem(
         not isinstance(frame, Mapping)
         or frame.get("status") != receipt["checked"].get("frame")
     ):
+        return "evidence_mismatch"
+    schedule = (
+        frame.get(late_write.EVIDENCE_KEY) if isinstance(frame, Mapping) else None
+    )
+    due = schedule.get("due_at") if isinstance(schedule, Mapping) else None
+    if receipt.get(RECHECK_RECEIPT_FIELD) != due:
         return "evidence_mismatch"
     if salting.get("scheme") != SALT_SCHEME or not _DIGEST.match(
         str(salting.get("salt_commitment", ""))

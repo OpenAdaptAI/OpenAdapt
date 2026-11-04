@@ -44,7 +44,7 @@ FLOW_BIN = "openadapt-flow"
 #: The exact Flow release Desktop is built and tested against. It equals the
 #: ``openadapt-flow`` pin in the ``build`` extra of pyproject.toml, which the
 #: native installer freezes (tests/test_engine/test_flow_bridge.py checks).
-REQUIRED_FLOW_VERSION = "2.4.0"
+REQUIRED_FLOW_VERSION = "2.4.1"
 #: A developer who runs another Flow (a source checkout, say) names it here.
 #: The signed installer ignores it.
 FLOW_OVERRIDE_ENV = "OPENADAPT_DESKTOP_FLOW_BIN"
@@ -549,7 +549,12 @@ def _subprocess_env() -> dict[str, str]:
     # commands from --approver-root. Drop any inherited value so no Flow
     # version or helper can read one.
     env.pop("OPENADAPT_APPROVER_ROOT", None)
-    return env
+    # Flow encrypts at rest by default; Desktop's own encryption covers
+    # certified workflows, so Flow runs under its recorded opt-out here, and
+    # each plaintext write it records shows as a notice in the window.
+    from openadapt_desktop.at_rest_notice import flow_env
+
+    return flow_env(env)
 
 
 def _safe_command_for_log(cmd: list[str]) -> str:

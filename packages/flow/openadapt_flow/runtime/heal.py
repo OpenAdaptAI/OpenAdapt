@@ -302,10 +302,13 @@ def persist_heal(
     # Heal artifacts (crop + full frame) are embedded by relative path into the
     # shareable REPORT.md. Redact PII/PHI when opt-in image redaction is on
     # (OPENADAPT_FLOW_SCRUB_IMAGES=1); no-op otherwise (see openadapt_flow.privacy).
-    (heal_dir / _HEAL_TEMPLATE_NAME).write_bytes(_scrub_png(crop_png))
-    (heal_dir / _HEAL_SCREEN_NAME).write_bytes(_scrub_png(frame_png))
+    # Through the sealed-set helpers, so a sealed run keeps them encrypted.
+    from openadapt_flow import sealed_set
+
+    sealed_set.write_bytes(heal_dir / _HEAL_TEMPLATE_NAME, _scrub_png(crop_png))
+    sealed_set.write_bytes(heal_dir / _HEAL_SCREEN_NAME, _scrub_png(frame_png))
     event.screenshot = f"heals/{event.step_id}/{_HEAL_SCREEN_NAME}"
-    (heal_dir / _HEAL_JSON_NAME).write_text(event.model_dump_json(indent=2))
+    sealed_set.write_text(heal_dir / _HEAL_JSON_NAME, event.model_dump_json(indent=2))
     return heal_dir
 
 
@@ -334,6 +337,9 @@ def write_healed_bundle(
     """
     src = Path(src_bundle_dir)
     dest = Path(dest_bundle_dir)
+    from openadapt_flow import at_rest as _at_rest
+
+    _at_rest.unsealed_write("a healed bundle (--save-healed-to)", dest, refuse=False)
     dest.mkdir(parents=True, exist_ok=True)
     (dest / "templates").mkdir(parents=True, exist_ok=True)
 

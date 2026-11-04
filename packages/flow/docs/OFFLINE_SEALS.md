@@ -557,14 +557,38 @@ In this mode:
 - Each refusal is one JSON line in `OPENADAPT_NO_OUTBOUND_LOG` (event, host,
   port, pid, time; never payload bytes).
 
-What the hook does not cover: child processes such as FreeRDP or `curl`, and
-native code that opens sockets without Python's `socket` module. For those,
-use the on-prem service's outbound-traffic audit (`openadapt-flow service
-egress-audit`, see [`ON_PREM.md`](ON_PREM.md)), and rely on the site
-firewall, which remains the primary control.
+### Child processes
+
+In strict mode Flow starts a child process (`subprocess`, `os.exec*`,
+`os.posix_spawn`, `os.spawn*`, `os.system`) when one of these holds:
+
+- The child is a Python interpreter or the `openadapt-flow` command, and its
+  environment keeps `OPENADAPT_NO_OUTBOUND`. Importing `openadapt_flow`
+  installs the same hook in the child.
+- The child is one of the local system tools the on-prem service runs (`ps`,
+  `lsof`, `stat`, `sysctl`, `launchctl`, `pfctl`, `sw_vers`, `uname`).
+- `OPENADAPT_NO_OUTBOUND_CHILDREN` names what contains every child at the
+  kernel or site level: `pf`, `systemd-ipaddressdeny`, `windows-firewall`,
+  `site-firewall` or `sandbox`. An unknown value stops startup.
+
+Any other child raises `OutboundBlocked` before it starts, and the refusal is
+logged like a refused connection. A run on the web backend (which starts a
+browser) or the RDP backend (which starts FreeRDP) names its containment. The
+on-prem service names `pf` itself when the macOS installer recorded its
+firewall rules.
+
+### The firewall and the audit
+
+The site firewall is the network control; strict mode and the audit sit on
+top of it. The on-prem service's outbound-traffic audit (`openadapt-flow
+service egress-audit`, see [`ON_PREM.md`](ON_PREM.md)) samples the sockets of
+the service's whole process tree from the operating system's socket table,
+and the macOS `pf` rules apply to every process the service account runs.
 
 `tests/test_no_outbound.py` runs each check in a fresh interpreter: public
 connect, UDP send, DNS lookups and an HTTPS client call are refused and
 logged; loopback and allow-listed LAN addresses still work, other LAN
 addresses are refused; the hook stays on
-after the environment changes; and the CLI refuses `attach-seal`.
+after the environment changes; the CLI refuses `attach-seal`; `curl`, a
+shell and `os.system` are refused while `ps` and a strict-mode Python child
+start; and a named containment lets every child start.

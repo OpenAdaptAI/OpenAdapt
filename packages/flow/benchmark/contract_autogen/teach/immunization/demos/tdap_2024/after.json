@@ -1,0 +1,26 @@
+[
+ {
+  "resourceType": "Immunization",
+  "status": "completed",
+  "vaccineCode": {
+   "coding": [
+    {
+     "system": "http://hl7.org/fhir/sid/cvx",
+     "code": "115",
+     "display": "Tdap"
+    }
+   ]
+  },
+  "patient": {
+   "reference": "Patient/1aae5d67-27a8-4ba8-9c09-f692466ef5c3"
+  },
+  "occurrenceDateTime": "2024-03-02",
+  "primarySource": false,
+  "lotNumber": "AC52B031BA",
+  "id": "698ddeb4-388c-49b0-8a67-029e5369599a",
+  "meta": {
+   "versionId": "2c15201d-26fa-4e9c-95d2-550e17f269a9",
+   "lastUpdated": "2026-10-29T20:38:45.745Z"
+  }
+ }
+]

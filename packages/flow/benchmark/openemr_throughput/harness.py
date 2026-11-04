@@ -237,7 +237,7 @@ def _demo_module() -> Any:
 def build_worker(user: str, opts: dict[str, Any]) -> Any:
     """One worker signed in as ``user``. Module-level so a child process can
     build it (``ProcessWorker``); ``opts`` holds only plain values."""
-    from openadapt_flow.benchmark.openemr_local import (
+    from benchmark.harness.openemr_local import (
         OpenEMRPatientOracle,
         SyntheticPatientSpec,
     )
@@ -374,7 +374,7 @@ def build_worker(user: str, opts: dict[str, Any]) -> Any:
 
 def run(a: argparse.Namespace) -> dict[str, Any]:
     from openadapt_flow._browser_setup import ensure_chromium_installed
-    from openadapt_flow.benchmark.openemr_local import (
+    from benchmark.harness.openemr_local import (
         SyntheticPatientSpec,
     )
     from openadapt_flow.ir import Workflow

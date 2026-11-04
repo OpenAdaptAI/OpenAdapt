@@ -1,0 +1,113 @@
+resource_type: AllergyIntolerance
+demos:
+- name: noor_91936005
+  seed:
+  - as: patient
+    resource:
+      resourceType: Patient
+      name:
+      - given:
+        - Noor
+        family: Haddad
+      birthDate: '1972-03-09'
+      gender: female
+  params:
+    patient:
+      ref: patient
+    code_system: http://snomed.info/sct
+    code: '91936005'
+    criticality: high
+    clinical_status: active
+    verification_status: confirmed
+  resource:
+    resourceType: AllergyIntolerance
+    patient:
+      ref: patient
+    code:
+      coding:
+      - system: http://snomed.info/sct
+        code: '91936005'
+        display: Allergy to penicillin
+    criticality: high
+    clinicalStatus:
+      coding:
+      - system: http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical
+        code: active
+    verificationStatus:
+      coding:
+      - system: http://terminology.hl7.org/CodeSystem/allergyintolerance-verification
+        code: confirmed
+- name: elias_300916003
+  seed:
+  - as: patient
+    resource:
+      resourceType: Patient
+      name:
+      - given:
+        - Elias
+        family: Brandt
+      birthDate: '1985-12-01'
+      gender: male
+  params:
+    patient:
+      ref: patient
+    code_system: http://snomed.info/sct
+    code: '300916003'
+    criticality: low
+    clinical_status: active
+    verification_status: confirmed
+  resource:
+    resourceType: AllergyIntolerance
+    patient:
+      ref: patient
+    code:
+      coding:
+      - system: http://snomed.info/sct
+        code: '300916003'
+        display: Latex allergy
+    criticality: low
+    clinicalStatus:
+      coding:
+      - system: http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical
+        code: active
+    verificationStatus:
+      coding:
+      - system: http://terminology.hl7.org/CodeSystem/allergyintolerance-verification
+        code: confirmed
+- name: mei_418689008
+  seed:
+  - as: patient
+    resource:
+      resourceType: Patient
+      name:
+      - given:
+        - Mei
+        family: Tanaka
+      birthDate: '1958-07-27'
+      gender: female
+  params:
+    patient:
+      ref: patient
+    code_system: http://snomed.info/sct
+    code: '418689008'
+    criticality: low
+    clinical_status: active
+    verification_status: confirmed
+  resource:
+    resourceType: AllergyIntolerance
+    patient:
+      ref: patient
+    code:
+      coding:
+      - system: http://snomed.info/sct
+        code: '418689008'
+        display: Allergy to grass pollen
+    criticality: low
+    clinicalStatus:
+      coding:
+      - system: http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical
+        code: active
+    verificationStatus:
+      coding:
+      - system: http://terminology.hl7.org/CodeSystem/allergyintolerance-verification
+        code: confirmed

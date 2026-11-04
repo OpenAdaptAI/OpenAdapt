@@ -1272,7 +1272,15 @@ export interface StopCardsResponse {
   ok: boolean;
   cards: StopCard[];
   error?: string;
-  approver_key?: { ready: boolean; in_app: boolean; touch_id: boolean };
+  approver_key?: {
+    ready: boolean;
+    in_app: boolean;
+    touch_id: boolean;
+    /** A root is pinned (else no person's answer counts). */
+    pinned?: boolean;
+    /** An administrator pinned it (``openadapt-desktop approver-pin``). */
+    anchored?: boolean;
+  };
 }
 
 export interface StopAnswer {

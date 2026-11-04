@@ -26,7 +26,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Callable, Literal, Mapping, Optional
+from typing import Any, Callable, Final, Literal, Mapping, Optional
 
 from pydantic import (
     BaseModel,
@@ -50,6 +50,7 @@ from openadapt_flow.runtime.effects.auth import AuthRef, ResolvedSecrets
 from openadapt_flow.runtime.effects.deferred_report import DeferredReportSpec
 from openadapt_flow.runtime.effects.desktop_readback import DesktopReadbackSpec
 from openadapt_flow.runtime.effects.effect import Region, ValueExpr
+from openadapt_flow.runtime.effects.frame import FrameAttribution, FrameDatabase
 from openadapt_flow.runtime.effects.fresh_session import FreshSessionSpec
 from openadapt_flow.runtime.effects.smart_auth import SmartBackendConfig
 from openadapt_flow.runtime.effects.ui_readback import UiReadbackSpec
@@ -383,9 +384,11 @@ class EffectsConfig(BaseModel):
     #: ``runtime/effects/fresh_session.py`` and ``docs/READBACK_LADDER.md``.
     fresh_session: Optional[FreshSessionSpec] = None
 
-    # -- rest (JSON REST system of record, e.g. MockMed /api/db) -------------
+    # -- rest (JSON REST system of record) -----------------------------------
     base_url: Optional[str] = None
-    records_path: str = "/api/db"
+    #: ``rest`` only, and required there: the path whose GET returns the
+    #: records. Every app keeps them somewhere else, so there is no default.
+    records_path: Optional[str] = None
     records_key: Optional[str] = "records"
     #: ``rest`` only: dotted path in the response body to the next page's URL
     #: (``links.next``). Set, the read follows every page on the same origin
@@ -444,8 +447,10 @@ class EffectsConfig(BaseModel):
     #: Allowlist variant: when set, every evidence field NOT named is redacted.
     evidence_keep_fields: Optional[list[str]] = None
 
-    # -- fhir (FHIR R4 search, e.g. OpenEMR) ---------------------------------
-    resource_type: str = "Observation"
+    # -- fhir (FHIR R4 search) -----------------------------------------------
+    #: ``fhir`` only, and required there with ``field_paths``: which resource
+    #: the app keeps the write in, and where each field lives in it.
+    resource_type: Optional[str] = None
     search_params: dict[str, str] = Field(default_factory=dict)
     field_paths: Optional[dict[str, str]] = None
     #: OAuth2 bearer token literal. DEPRECATED for committed configs — prefer
@@ -544,7 +549,7 @@ class EffectsConfig(BaseModel):
             if not isinstance(env_name, str) or not _ENV_VAR_NAME.fullmatch(env_name):
                 raise ValueError(
                     f"effects.secret_env[{slot!r}] must be the NAME of an "
-                    "environment variable (for example OPENEMR_READER_PASSWORD), "
+                    "environment variable (for example APP_READER_PASSWORD), "
                     "never the credential itself"
                 )
         return v
@@ -626,6 +631,8 @@ class EffectsConfig(BaseModel):
             "deferred_report",
             "records_next_path",
             "records_total_path",
+            "records_path",
+            "resource_type",
         ):
             if data.get(added, "") is None:
                 data.pop(added, None)
@@ -1011,8 +1018,95 @@ class ProbeCopySection(BaseModel):
     reward_contract: Optional[str] = None
 
 
+class RollbackSection(BaseModel):
+    """Compensating rollback after a stop (docs/ROLLBACK.md).
+
+    Off unless ``enabled``. When on, the run reads the system of record before
+    it starts; after a stop it runs the compensation a person approved for
+    each change, latest first, and reads the store again. It is
+    ``ROLLED_BACK`` only when that read matches the first one.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    #: Read every table but ``allow_tables`` (same shape as
+    #: ``frame.database`` in ``verify.yaml``). Without it, the rollback reads
+    #: the one collection the ``effects`` verifier reads.
+    database: Optional[FrameDatabase] = None
+    #: A compensation that hard-deletes a record runs only when this is true.
+    #: Many record systems forbid deleting a chart for audit or legal reasons:
+    #: prefer a ``void`` compensation there.
+    allow_delete: bool = False
+    #: The app's versioned bookkeeping profile, by name (``openemr``;
+    #: ``openadapt_flow.app_profiles``), shared with the verifier's frame and
+    #: the RL grader: which tables move on their own and how (append-only,
+    #: session state, named columns). Never patient data. Applies to
+    #: ``database`` reads; without it, every changed row counts.
+    profile: Optional[str] = None
+    #: The sign-in names the run acts as, for the profile's own-row rules
+    #: (its own session and login rows). Another user's rows still count.
+    actor_names: list[str] = Field(default_factory=list)
+    #: The deployment's target is a declared test copy (``test_copy``) that
+    #: only this run writes: compensations then run without attribution. Off
+    #: by default; a shared QA copy where testers also write must not set it.
+    exclusive: bool = False
+    #: Who changed a row: the app's audit log (``frame.attribution`` in
+    #: ``verify.yaml``, ``kind: audit_read``). A compensation runs only while
+    #: every changed row is positively the run's own by it. Without it,
+    #: nothing is compensated. A last-writer field (``record_field``) is
+    #: refused: it can't show another user's edit between two of the run's
+    #: writes.
+    attribution: Optional[FrameAttribution] = None
+
+    @model_validator(mode="after")
+    def _audit_log_only(self) -> "RollbackSection":
+        if self.attribution is not None and self.attribution.kind != "audit_read":
+            raise ValueError(
+                "rollback.attribution must be the app's audit log (kind: "
+                "audit_read); a last-writer field can't show which changes are "
+                "the run's own (docs/ROLLBACK.md, Other users)"
+            )
+        return self
+
+
 #: Sentinel written by ``config init`` for fields the operator must fill.
 UNRESOLVED = "UNRESOLVED"
+
+
+class RepairSessionSpec(BaseModel):
+    """How self-repair opens a fresh app session outside a browser.
+
+    A probe, each fault probe and the resumed run each need the app freshly
+    started; the halted session stays as it is. Each command is an argv run
+    on the machine Flow runs on, with no shell. It must keep running while the
+    app is up and own (it, or a process of its group) the one window
+    ``backend:`` binds to; Flow checks that, and ends the group afterwards. A
+    backend whose window is not on this machine (Windows over its agent,
+    FreeRDP) can't show that, so repair there is refused for now.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Starts the app for a probe or the resumed run.
+    command: list[str] = Field(min_length=1)
+    #: Name -> argv that starts the app showing a fault the repaired run must
+    #: stop before the save (another patient's chart, a missing record).
+    fault_commands: dict[str, list[str]] = Field(default_factory=dict)
+    #: Runs after Flow ends the app's process group, to clean up what the app
+    #: left (a lock file, a server-side session). A non-zero exit is refused.
+    close_command: list[str] = Field(default_factory=list)
+    #: Seconds to wait for the window before binding the backend.
+    ready_s: float = Field(default=2.0, ge=0.0, le=120.0)
+
+    @model_validator(mode="after")
+    def _argvs(self) -> "RepairSessionSpec":
+        for name, argv in self.fault_commands.items():
+            if not name or not argv:
+                raise ValueError(
+                    "each repair.session fault command needs a name and an argv"
+                )
+        return self
 
 
 class RepairSection(BaseModel):
@@ -1047,6 +1141,9 @@ class RepairSection(BaseModel):
     #: bundle accepts it (openadapt_flow/repair/readmission.py).
     requalify: Optional[str] = None
     requalify_trials: int = Field(default=1, ge=1, le=10)
+    #: Outside a browser: how each probe, fault probe and the resumed run open
+    #: a fresh app session. Required to repair a desktop, RDP or Citrix run.
+    session: Optional[RepairSessionSpec] = None
 
 
 class ApproversSection(BaseModel):
@@ -1096,6 +1193,9 @@ class DeploymentConfig(BaseModel):
     #: Declares the target a resettable test copy (``induce --probe-on``
     #: only). None (and omitted when serialized) otherwise.
     test_copy: Optional[ProbeCopySection] = None
+    #: Compensating rollback after a stop. None (and omitted when serialized)
+    #: otherwise.
+    rollback: Optional[RollbackSection] = None
     #: The pinned approver root (approval_mode/approver_roster.py). None (and
     #: omitted when serialized) means the run names it some other way.
     approvers: Optional[ApproversSection] = None
@@ -1131,6 +1231,8 @@ class DeploymentConfig(BaseModel):
             data.pop("worklist", None)
         if self.test_copy is None:
             data.pop("test_copy", None)
+        if self.rollback is None:
+            data.pop("rollback", None)
         if self.approvers is None:
             data.pop("approvers", None)
         if self.repair == RepairSection():
@@ -1947,6 +2049,38 @@ def build_effect_verifier(
 _PLUGIN_ONLY_FIELDS = ("options", "option_params", "secret_env")
 
 
+#: What these fields held when they still had defaults. Verifier identities
+#: and check digests issued before then hashed these values, so for hashing
+#: only, an unset field still reads as its old value. Never used to read a
+#: store: a read without its own records_path or resource_type is refused.
+LEGACY_HASHED_DEFAULTS: Final[dict[str, str]] = {
+    "records_path": "/api/db",
+    "resource_type": "Observation",
+}
+
+
+def legacy_hash_dump(dumped: dict[str, Any], *, defaults_excluded: bool) -> None:
+    """Make a config dump hash as it did when those fields had defaults.
+
+    ``defaults_excluded``: the dump left defaults out (``exclude_defaults``),
+    so a field holding its old default is dropped; otherwise an unset field
+    takes its old default.
+    """
+
+    for name, legacy in LEGACY_HASHED_DEFAULTS.items():
+        if defaults_excluded:
+            if dumped.get(name) == legacy:
+                dumped.pop(name)
+        elif dumped.get(name) is None:
+            dumped[name] = legacy
+    for item in dumped.get("candidates") or []:
+        if isinstance(item, dict):
+            legacy_hash_dump(item, defaults_excluded=defaults_excluded)
+    for item in (dumped.get("surfaces") or {}).values():
+        if isinstance(item, dict):
+            legacy_hash_dump(item, defaults_excluded=defaults_excluded)
+
+
 def _identity_config_dump(cfg: EffectsConfig) -> dict[str, Any]:
     """Serialize ``cfg`` for the verifier identity.
 
@@ -1955,6 +2089,7 @@ def _identity_config_dump(cfg: EffectsConfig) -> dict[str, Any]:
     """
 
     def prune(dumped: dict[str, Any]) -> dict[str, Any]:
+        legacy_hash_dump(dumped, defaults_excluded=False)
         for name in _PLUGIN_ONLY_FIELDS:
             if not dumped.get(name):
                 dumped.pop(name, None)
@@ -2127,6 +2262,11 @@ def _build_effect_verifier_unredacted(
     if kind == "rest":
         if not cfg.base_url:
             raise ValueError("effects.kind 'rest' requires effects.base_url")
+        if not cfg.records_path:
+            raise ValueError(
+                "effects.kind 'rest' requires effects.records_path (the path "
+                "whose GET returns the app's records)"
+            )
         from openadapt_flow.runtime.effects import RestRecordVerifier
 
         headers = cfg.auth.resolve_headers() if cfg.auth is not None else None
@@ -2162,6 +2302,12 @@ def _build_effect_verifier_unredacted(
     if kind == "fhir":
         if not cfg.base_url:
             raise ValueError("effects.kind 'fhir' requires effects.base_url")
+        if not cfg.resource_type or not cfg.field_paths:
+            raise ValueError(
+                "effects.kind 'fhir' requires effects.resource_type and "
+                "effects.field_paths (which resource the app keeps the write "
+                "in, and where each field lives in it)"
+            )
         from openadapt_flow.runtime.effects import FhirEffectVerifier
 
         access_token = cfg.access_token

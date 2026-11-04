@@ -1,0 +1,8 @@
+{
+  "agent_cannot_write_audit": true,
+  "audit_lag_max_s": 0.049,
+  "audit_logs_writes": true,
+  "audit_names_actor": true,
+  "history_lists_versions": true,
+  "meta_author_returned": false
+}

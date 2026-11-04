@@ -267,7 +267,10 @@ def cmd_jit(
                 authority.load_encrypted_key(args.key), _keys(args), policy=policy_doc
             )
             decision = lifecycle.admit_with_key(
-                program, principal=principal, key_dir=_keys(args)
+                program,
+                principal=principal,
+                key_dir=_keys(args),
+                approver_root=getattr(args, "approver_root", None),
             )
             if decision["outcome"] == "needs_person":
                 print(
@@ -293,6 +296,7 @@ def cmd_jit(
                 confirm=confirm(f"Admit as {args.principal}?"),
                 key_dir=_key_dir(args),
                 require_distinct_reviewer_and_admitter=args.require_distinct,
+                approver_root=getattr(args, "approver_root", None),
             )
             print(
                 f"ADMITTED by {manifest['admitted_by_principal_id']} at "
@@ -402,6 +406,12 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         "--require-distinct",
         action="store_true",
         help="Refuse if you also reviewed the draft",
+    )
+    p.add_argument(
+        "--approver-root",
+        default=None,
+        help="The approver root the draft's teach authorization is checked "
+        "under (default OPENADAPT_APPROVER_ROOT)",
     )
     p = verbs.add_parser("reject", help="Set the draft aside")
     common(p)

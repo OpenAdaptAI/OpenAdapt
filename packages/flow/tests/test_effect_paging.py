@@ -310,6 +310,66 @@ def test_fhir_included_resources_are_not_matches(serve) -> None:
     assert len(_read(_fhir(holder["url"])) or []) == 6
 
 
+def _empty_with_outcome(severity: str) -> dict:
+    """Epic's empty search: no matches and an OperationOutcome entry."""
+
+    return {
+        "resourceType": "Bundle",
+        "type": "searchset",
+        "total": 0,
+        "entry": [
+            {
+                "resource": {
+                    "resourceType": "OperationOutcome",
+                    "issue": [{"severity": severity, "code": "processing"}],
+                },
+                "search": {"mode": "outcome"},
+            }
+        ],
+    }
+
+
+def test_fhir_a_warning_outcome_is_not_a_record(serve) -> None:
+    """Counted as a record, the outcome vanished once the patient was
+    created, and the frame refused a clean write as a removed record."""
+
+    url = serve(lambda path, n: (200, _empty_with_outcome("warning")))
+    assert _read(_fhir(url)) == []
+
+
+def test_fhir_an_error_outcome_is_unreadable(serve) -> None:
+    url = serve(lambda path, n: (200, _empty_with_outcome("error")))
+    state = _fhir(url).capture_pre_state()
+    assert not state.reachable
+    assert state.detail["read_problem"] == "the search returned an error outcome"
+
+
+def test_fhir_an_outcome_without_a_mode_is_not_a_record(serve) -> None:
+    def page(path: str, n: int) -> tuple:
+        bundle = _empty_with_outcome("information")
+        bundle["entry"][0].pop("search")
+        return 200, bundle
+
+    assert _read(_fhir(serve(page))) == []
+
+
+def test_fhir_an_outcome_beside_matches_on_a_later_page(serve) -> None:
+    """Matches, a warning outcome on page two, and a total that counts only
+    the matches: every match is read, the outcome is not."""
+
+    holder: dict = {}
+
+    def page(path: str, n: int) -> tuple:
+        bundle = _bundle(holder["url"], n, per=3, total=5)
+        if n == 1:
+            bundle["entry"] += _empty_with_outcome("warning")["entry"]
+        return 200, bundle
+
+    holder["url"] = serve(page)
+    records = _read(_fhir(holder["url"]))
+    assert [r["id"] for r in records or []] == ["1", "2", "3", "4", "5"]
+
+
 def test_fhir_next_origin_is_named(serve) -> None:
     url = serve(lambda path, n: (200, _bundle("http://203.0.113.9", n)))
     state = _fhir(url).capture_pre_state()

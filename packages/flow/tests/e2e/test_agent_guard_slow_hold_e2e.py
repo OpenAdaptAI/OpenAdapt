@@ -8,6 +8,16 @@ read-back: step_005: record_written is placeholder". This test holds every
 guarded save for two seconds, in the guard's own process, and requires the
 recording, the admission and the canary to come out as they do with a fast
 hold. tests/test_recorder_waits_for_writes.py checks the recorder's wait alone.
+
+It runs nightly (all of tests/e2e), not in flow-critical. On CI (run
+40803574135) the recorder once refused its run 1: "more than one logical
+browser action arrived before Flow could retain an exact intermediate frame".
+The same refusal hit test_agent_guard_e2e under load, and reproduced locally
+with two plain clicks once the scripted agent stopped thinking between
+actions: the agent acted before the recorder had kept its last click. The
+agent now waits for the guard's "recording kept N browser events" line before
+each action. It returns to flow-critical once a nightly run passes with that
+wait.
 """
 
 from __future__ import annotations

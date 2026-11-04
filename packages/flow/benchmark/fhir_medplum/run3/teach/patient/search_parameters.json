@@ -1,0 +1,1378 @@
+[
+ {
+  "resourceType": "SearchParameter",
+  "id": "95ccc602-a61a-4e04-8aca-fea6663e4b0e",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Patient-active",
+  "version": "4.0.1",
+  "name": "active",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Whether the patient record is active",
+  "code": "active",
+  "base": [
+   "Patient"
+  ],
+  "type": "token",
+  "expression": "Patient.active",
+  "xpath": "f:Patient/f:active",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "47243488-c679-4530-8bd9-13a8202d02a0",
+   "lastUpdated": "2026-10-30T02:05:37.718Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "78f0f06d-f9a3-4b08-b4fd-89dd614a6d69",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/individual-address",
+  "version": "4.0.1",
+  "name": "address",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [Patient](patient.html): A server defined search that may match any of the string fields in the Address, including line, city, district, state, country, postalCode, and/or text\r\n* [Person](person.html): A server defined search that may match any of the string fields in the Address, including line, city, district, state, country, postalCode, and/or text\r\n* [Practitioner](practitioner.html): A server defined search that may match any of the string fields in the Address, including line, city, district, state, country, postalCode, and/or text\r\n* [RelatedPerson](relatedperson.html): A server defined search that may match any of the string fields in the Address, including line, city, district, state, country, postalCode, and/or text\r\n",
+  "code": "address",
+  "base": [
+   "Patient",
+   "Person",
+   "Practitioner",
+   "RelatedPerson"
+  ],
+  "type": "string",
+  "expression": "Patient.address | Person.address | Practitioner.address | RelatedPerson.address",
+  "xpath": "f:Patient/f:address | f:Person/f:address | f:Practitioner/f:address | f:RelatedPerson/f:address",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "9a897391-b8ac-4fc6-8793-12dca456a9dc",
+   "lastUpdated": "2026-10-30T02:05:37.719Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "a7e3cadd-2fa3-46db-b938-35b33f0de0a0",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/individual-address-city",
+  "version": "4.0.1",
+  "name": "address-city",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [Patient](patient.html): A city specified in an address\r\n* [Person](person.html): A city specified in an address\r\n* [Practitioner](practitioner.html): A city specified in an address\r\n* [RelatedPerson](relatedperson.html): A city specified in an address\r\n",
+  "code": "address-city",
+  "base": [
+   "Patient",
+   "Person",
+   "Practitioner",
+   "RelatedPerson"
+  ],
+  "type": "string",
+  "expression": "Patient.address.city | Person.address.city | Practitioner.address.city | RelatedPerson.address.city",
+  "xpath": "f:Patient/f:address/f:city | f:Person/f:address/f:city | f:Practitioner/f:address/f:city | f:RelatedPerson/f:address/f:city",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "36ce3546-d8c8-4206-8166-8789a5922e3d",
+   "lastUpdated": "2026-10-30T02:05:37.719Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "f3838cf0-c05c-4297-8785-f3d4959f43ff",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/individual-address-country",
+  "version": "4.0.1",
+  "name": "address-country",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [Patient](patient.html): A country specified in an address\r\n* [Person](person.html): A country specified in an address\r\n* [Practitioner](practitioner.html): A country specified in an address\r\n* [RelatedPerson](relatedperson.html): A country specified in an address\r\n",
+  "code": "address-country",
+  "base": [
+   "Patient",
+   "Person",
+   "Practitioner",
+   "RelatedPerson"
+  ],
+  "type": "string",
+  "expression": "Patient.address.country | Person.address.country | Practitioner.address.country | RelatedPerson.address.country",
+  "xpath": "f:Patient/f:address/f:country | f:Person/f:address/f:country | f:Practitioner/f:address/f:country | f:RelatedPerson/f:address/f:country",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "a07b3abb-b0f9-4cb9-bdc8-0f9b171bc7a9",
+   "lastUpdated": "2026-10-30T02:05:37.720Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "1cecdfd5-c645-4279-9c69-b84044d5ec4a",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/individual-address-postalcode",
+  "version": "4.0.1",
+  "name": "address-postalcode",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [Patient](patient.html): A postalCode specified in an address\r\n* [Person](person.html): A postal code specified in an address\r\n* [Practitioner](practitioner.html): A postalCode specified in an address\r\n* [RelatedPerson](relatedperson.html): A postal code specified in an address\r\n",
+  "code": "address-postalcode",
+  "base": [
+   "Patient",
+   "Person",
+   "Practitioner",
+   "RelatedPerson"
+  ],
+  "type": "string",
+  "expression": "Patient.address.postalCode | Person.address.postalCode | Practitioner.address.postalCode | RelatedPerson.address.postalCode",
+  "xpath": "f:Patient/f:address/f:postalCode | f:Person/f:address/f:postalCode | f:Practitioner/f:address/f:postalCode | f:RelatedPerson/f:address/f:postalCode",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "a8e6ca64-67fb-4026-8ad7-57554d03fccf",
+   "lastUpdated": "2026-10-30T02:05:37.722Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "d060a3b0-7322-4931-812e-5fe4747ac265",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/individual-address-state",
+  "version": "4.0.1",
+  "name": "address-state",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [Patient](patient.html): A state specified in an address\r\n* [Person](person.html): A state specified in an address\r\n* [Practitioner](practitioner.html): A state specified in an address\r\n* [RelatedPerson](relatedperson.html): A state specified in an address\r\n",
+  "code": "address-state",
+  "base": [
+   "Patient",
+   "Person",
+   "Practitioner",
+   "RelatedPerson"
+  ],
+  "type": "string",
+  "expression": "Patient.address.state | Person.address.state | Practitioner.address.state | RelatedPerson.address.state",
+  "xpath": "f:Patient/f:address/f:state | f:Person/f:address/f:state | f:Practitioner/f:address/f:state | f:RelatedPerson/f:address/f:state",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "db1c5a2b-ecf6-42ca-8062-647f16c0719f",
+   "lastUpdated": "2026-10-30T02:05:37.722Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "2b854f19-08fc-4f05-857a-403afe707af4",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/individual-address-use",
+  "version": "4.0.1",
+  "name": "address-use",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [Patient](patient.html): A use code specified in an address\r\n* [Person](person.html): A use code specified in an address\r\n* [Practitioner](practitioner.html): A use code specified in an address\r\n* [RelatedPerson](relatedperson.html): A use code specified in an address\r\n",
+  "code": "address-use",
+  "base": [
+   "Patient",
+   "Person",
+   "Practitioner",
+   "RelatedPerson"
+  ],
+  "type": "token",
+  "expression": "Patient.address.use | Person.address.use | Practitioner.address.use | RelatedPerson.address.use",
+  "xpath": "f:Patient/f:address/f:use | f:Person/f:address/f:use | f:Practitioner/f:address/f:use | f:RelatedPerson/f:address/f:use",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "40dace60-8566-4a50-a1be-cfbfbe03f7a2",
+   "lastUpdated": "2026-10-30T02:05:37.723Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "73955af2-694d-4cb2-b0ca-633a2febba0e",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/individual-birthdate",
+  "version": "4.0.1",
+  "name": "birthdate",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [Patient](patient.html): The patient's date of birth\r\n* [Person](person.html): The person's date of birth\r\n* [RelatedPerson](relatedperson.html): The Related Person's date of birth\r\n",
+  "code": "birthdate",
+  "base": [
+   "Patient",
+   "Person",
+   "RelatedPerson"
+  ],
+  "type": "date",
+  "expression": "Patient.birthDate | Person.birthDate | RelatedPerson.birthDate",
+  "xpath": "f:Patient/f:birthDate | f:Person/f:birthDate | f:RelatedPerson/f:birthDate",
+  "xpathUsage": "normal",
+  "comparator": [
+   "eq",
+   "ne",
+   "gt",
+   "ge",
+   "lt",
+   "le",
+   "sa",
+   "eb",
+   "ap"
+  ],
+  "meta": {
+   "versionId": "78bc3dfe-46cb-4cd3-aa84-d4f54dec3e0e",
+   "lastUpdated": "2026-10-30T02:05:37.724Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "1039c073-b5ed-44cd-9278-4c872100d593",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Patient-death-date",
+  "version": "4.0.1",
+  "name": "death-date",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "The date of death has been provided and satisfies this search value",
+  "code": "death-date",
+  "base": [
+   "Patient"
+  ],
+  "type": "date",
+  "expression": "(Patient.deceased.ofType(dateTime))",
+  "xpath": "f:Patient/f:deceasedDateTime",
+  "xpathUsage": "normal",
+  "comparator": [
+   "eq",
+   "ne",
+   "gt",
+   "ge",
+   "lt",
+   "le",
+   "sa",
+   "eb",
+   "ap"
+  ],
+  "meta": {
+   "versionId": "d5a7f32f-dc71-4a90-bd94-1eff5d284232",
+   "lastUpdated": "2026-10-30T02:05:37.725Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "daa78b20-a5e5-43ac-9785-2bbd5ed4bc3e",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Patient-deceased",
+  "version": "4.0.1",
+  "name": "deceased",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "This patient has been marked as deceased, or as a death date entered",
+  "code": "deceased",
+  "base": [
+   "Patient"
+  ],
+  "type": "token",
+  "expression": "Patient.deceased.exists() and Patient.deceased != false",
+  "xpath": "f:Patient/f:deceasedBoolean | f:Patient/f:deceasedDateTime",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "48229ffd-84fb-4d54-942f-cac5eca95444",
+   "lastUpdated": "2026-10-30T02:05:37.726Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "b28549f1-e1a8-471f-9196-e7d8e36a2d9c",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/individual-email",
+  "version": "4.0.1",
+  "name": "email",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [Patient](patient.html): A value in an email contact\r\n* [Person](person.html): A value in an email contact\r\n* [Practitioner](practitioner.html): A value in an email contact\r\n* [PractitionerRole](practitionerrole.html): A value in an email contact\r\n* [RelatedPerson](relatedperson.html): A value in an email contact\r\n",
+  "code": "email",
+  "base": [
+   "Patient",
+   "Person",
+   "Practitioner",
+   "PractitionerRole",
+   "RelatedPerson"
+  ],
+  "type": "token",
+  "expression": "Patient.telecom.where(system='email') | Person.telecom.where(system='email') | Practitioner.telecom.where(system='email') | PractitionerRole.telecom.where(system='email') | RelatedPerson.telecom.where(system='email')",
+  "xpath": "f:Patient/f:telecom[system/@value='email'] | f:Person/f:telecom[system/@value='email'] | f:Practitioner/f:telecom[system/@value='email'] | f:PractitionerRole/f:telecom[system/@value='email'] | f:RelatedPerson/f:telecom[system/@value='email']",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "0fbc125c-1060-4a82-8d2e-435feab6f607",
+   "lastUpdated": "2026-10-30T02:05:37.727Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "39fa5303-40bb-4ac0-8458-7f7bee16b640",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/individual-family",
+  "version": "4.0.1",
+  "name": "family",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [Patient](patient.html): A portion of the family name of the patient\r\n* [Practitioner](practitioner.html): A portion of the family name\r\n",
+  "code": "family",
+  "base": [
+   "Patient",
+   "Practitioner"
+  ],
+  "type": "string",
+  "expression": "Patient.name.family | Practitioner.name.family",
+  "xpath": "f:Patient/f:name/f:family | f:Practitioner/f:name/f:family",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "f495d364-d8b8-451d-bd62-f5abb8a7aa42",
+   "lastUpdated": "2026-10-30T02:05:37.728Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "8146375a-42cc-4fa3-8618-b37ed1546397",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/individual-gender",
+  "version": "4.0.1",
+  "name": "gender",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [Patient](patient.html): Gender of the patient\r\n* [Person](person.html): The gender of the person\r\n* [Practitioner](practitioner.html): Gender of the practitioner\r\n* [RelatedPerson](relatedperson.html): Gender of the related person\r\n",
+  "code": "gender",
+  "base": [
+   "Patient",
+   "Person",
+   "Practitioner",
+   "RelatedPerson"
+  ],
+  "type": "token",
+  "expression": "Patient.gender | Person.gender | Practitioner.gender | RelatedPerson.gender",
+  "xpath": "f:Patient/f:gender | f:Person/f:gender | f:Practitioner/f:gender | f:RelatedPerson/f:gender",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "e922151e-87e4-4254-9bba-196c63807eb3",
+   "lastUpdated": "2026-10-30T02:05:37.729Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "af7e78e1-7f75-49a1-94a1-5879ab4fe301",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Patient-general-practitioner",
+  "version": "4.0.1",
+  "name": "general-practitioner",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Patient's nominated general practitioner, not the organization that manages the record",
+  "code": "general-practitioner",
+  "base": [
+   "Patient"
+  ],
+  "type": "reference",
+  "expression": "Patient.generalPractitioner",
+  "xpath": "f:Patient/f:generalPractitioner",
+  "xpathUsage": "normal",
+  "target": [
+   "Practitioner",
+   "Organization",
+   "PractitionerRole"
+  ],
+  "meta": {
+   "versionId": "315371ed-a273-4cfd-8b66-5559b5407556",
+   "lastUpdated": "2026-10-30T02:05:37.730Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "9b5affe2-37ab-42fc-b913-586aa1f2b920",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/individual-given",
+  "version": "4.0.1",
+  "name": "given",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [Patient](patient.html): A portion of the given name of the patient\r\n* [Practitioner](practitioner.html): A portion of the given name\r\n",
+  "code": "given",
+  "base": [
+   "Patient",
+   "Practitioner"
+  ],
+  "type": "string",
+  "expression": "Patient.name.given | Practitioner.name.given",
+  "xpath": "f:Patient/f:name/f:given | f:Practitioner/f:name/f:given",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "899f91ed-75b0-4f93-9344-47859955b7c8",
+   "lastUpdated": "2026-10-30T02:05:37.731Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "5c0013f3-3c23-4dab-b92f-51d43a939cd4",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Patient-identifier",
+  "version": "4.0.1",
+  "name": "identifier",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "A patient identifier",
+  "code": "identifier",
+  "base": [
+   "Patient"
+  ],
+  "type": "token",
+  "expression": "Patient.identifier",
+  "xpath": "f:Patient/f:identifier",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "73f92634-7c94-4ee1-b4fe-bb219364ea83",
+   "lastUpdated": "2026-10-30T02:05:37.732Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "b7a74cc6-a79a-4d2b-b46c-ea4c6bcba60d",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Patient-language",
+  "version": "4.0.1",
+  "name": "language",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Language code (irrespective of use value)",
+  "code": "language",
+  "base": [
+   "Patient"
+  ],
+  "type": "token",
+  "expression": "Patient.communication.language",
+  "xpath": "f:Patient/f:communication/f:language",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "71c2395d-dc09-4365-888a-3787e756d2db",
+   "lastUpdated": "2026-10-30T02:05:37.733Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "70a5ee16-2bf9-4ade-aed7-1b650fe5a010",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Patient-link",
+  "version": "4.0.1",
+  "name": "link",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "All patients linked to the given patient",
+  "code": "link",
+  "base": [
+   "Patient"
+  ],
+  "type": "reference",
+  "expression": "Patient.link.other",
+  "xpath": "f:Patient/f:link/f:other",
+  "xpathUsage": "normal",
+  "target": [
+   "Patient",
+   "RelatedPerson"
+  ],
+  "meta": {
+   "versionId": "f40155a6-806e-40ea-9dbd-b4ffe8075ce6",
+   "lastUpdated": "2026-10-30T02:05:37.734Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "4d69f610-04bc-462f-8028-53f476994b74",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Patient-name",
+  "version": "4.0.1",
+  "name": "name",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "A server defined search that may match any of the string fields in the HumanName, including family, give, prefix, suffix, suffix, and/or text",
+  "code": "name",
+  "base": [
+   "Patient"
+  ],
+  "type": "string",
+  "expression": "Patient.name",
+  "xpath": "f:Patient/f:name",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "2c66111a-6c3e-421f-9c7b-55175466edfe",
+   "lastUpdated": "2026-10-30T02:05:37.735Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "ad836ba8-8f93-4f30-b9b6-6f3171a71fa4",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Patient-organization",
+  "version": "4.0.1",
+  "name": "organization",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "The organization that is the custodian of the patient record",
+  "code": "organization",
+  "base": [
+   "Patient"
+  ],
+  "type": "reference",
+  "expression": "Patient.managingOrganization",
+  "xpath": "f:Patient/f:managingOrganization",
+  "xpathUsage": "normal",
+  "target": [
+   "Organization"
+  ],
+  "meta": {
+   "versionId": "df84f7d9-0061-4da8-a33d-3ae0e6019335",
+   "lastUpdated": "2026-10-30T02:05:37.735Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "ddafdb6e-d4a9-49f0-bf5f-aed966f5a019",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/individual-phone",
+  "version": "4.0.1",
+  "name": "phone",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [Patient](patient.html): A value in a phone contact\r\n* [Person](person.html): A value in a phone contact\r\n* [Practitioner](practitioner.html): A value in a phone contact\r\n* [PractitionerRole](practitionerrole.html): A value in a phone contact\r\n* [RelatedPerson](relatedperson.html): A value in a phone contact\r\n",
+  "code": "phone",
+  "base": [
+   "Patient",
+   "Person",
+   "Practitioner",
+   "PractitionerRole",
+   "RelatedPerson"
+  ],
+  "type": "token",
+  "expression": "Patient.telecom.where(system='phone') | Person.telecom.where(system='phone') | Practitioner.telecom.where(system='phone') | PractitionerRole.telecom.where(system='phone') | RelatedPerson.telecom.where(system='phone')",
+  "xpath": "f:Patient/f:telecom[system/@value='phone'] | f:Person/f:telecom[system/@value='phone'] | f:Practitioner/f:telecom[system/@value='phone'] | f:PractitionerRole/f:telecom[system/@value='phone'] | f:RelatedPerson/f:telecom[system/@value='phone']",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "1418311f-a2f4-4157-8059-99fe1c370076",
+   "lastUpdated": "2026-10-30T02:05:37.736Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "fac75fad-f96a-4f89-9af2-1478b9e8a9ba",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/individual-phonetic",
+  "version": "4.0.1",
+  "name": "phonetic",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [Patient](patient.html): A portion of either family or given name using some kind of phonetic matching algorithm\r\n* [Person](person.html): A portion of name using some kind of phonetic matching algorithm\r\n* [Practitioner](practitioner.html): A portion of either family or given name using some kind of phonetic matching algorithm\r\n* [RelatedPerson](relatedperson.html): A portion of name using some kind of phonetic matching algorithm\r\n",
+  "code": "phonetic",
+  "base": [
+   "Patient",
+   "Person",
+   "Practitioner",
+   "RelatedPerson"
+  ],
+  "type": "string",
+  "expression": "Patient.name | Person.name | Practitioner.name | RelatedPerson.name",
+  "xpath": "f:Patient/f:name | f:Person/f:name | f:Practitioner/f:name | f:RelatedPerson/f:name",
+  "xpathUsage": "phonetic",
+  "meta": {
+   "versionId": "6f32e7e5-6047-4180-a990-ec463dc4f2d7",
+   "lastUpdated": "2026-10-30T02:05:37.737Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "3abd4008-9b91-4ef1-9ecc-6d727e7ce39a",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/individual-telecom",
+  "version": "4.0.1",
+  "name": "telecom",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [Patient](patient.html): The value in any kind of telecom details of the patient\r\n* [Person](person.html): The value in any kind of contact\r\n* [Practitioner](practitioner.html): The value in any kind of contact\r\n* [PractitionerRole](practitionerrole.html): The value in any kind of contact\r\n* [RelatedPerson](relatedperson.html): The value in any kind of contact\r\n",
+  "code": "telecom",
+  "base": [
+   "Patient",
+   "Person",
+   "Practitioner",
+   "PractitionerRole",
+   "RelatedPerson"
+  ],
+  "type": "token",
+  "expression": "Patient.telecom | Person.telecom | Practitioner.telecom | PractitionerRole.telecom | RelatedPerson.telecom",
+  "xpath": "f:Patient/f:telecom | f:Person/f:telecom | f:Practitioner/f:telecom | f:PractitionerRole/f:telecom | f:RelatedPerson/f:telecom",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "12f2f267-425f-4231-8341-9b144a2d2d40",
+   "lastUpdated": "2026-10-30T02:05:37.738Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "85f9324e-ac71-441b-bcfb-1529633e005f",
+  "url": "http://hl7.org/fhir/us/core/SearchParameter/us-core-ethnicity",
+  "version": "5.0.1",
+  "name": "USCoreEthnicity",
+  "status": "active",
+  "date": "2022-04-14",
+  "publisher": "HL7 International - Cross-Group Projects",
+  "contact": [
+   {
+    "name": "HL7 International - Cross-Group Projects",
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/cgp"
+     },
+     {
+      "system": "email",
+      "value": "cgp@lists.HL7.org"
+     }
+    ]
+   }
+  ],
+  "description": "Returns patients with an ethnicity extension matching the specified code.",
+  "jurisdiction": [
+   {
+    "coding": [
+     {
+      "system": "urn:iso:std:iso:3166",
+      "code": "US"
+     }
+    ]
+   }
+  ],
+  "code": "ethnicity",
+  "base": [
+   "Patient"
+  ],
+  "type": "token",
+  "expression": "Patient.extension.where(url = 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity').extension.value.code",
+  "xpath": "f:Patient/f:extension[@url='http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity']/f:extension/f:valueCoding/f:code/@value",
+  "xpathUsage": "normal",
+  "multipleOr": true,
+  "_multipleOr": {
+   "extension": [
+    {
+     "url": "http://hl7.org/fhir/StructureDefinition/capabilitystatement-expectation",
+     "valueCode": "MAY"
+    }
+   ]
+  },
+  "multipleAnd": true,
+  "_multipleAnd": {
+   "extension": [
+    {
+     "url": "http://hl7.org/fhir/StructureDefinition/capabilitystatement-expectation",
+     "valueCode": "MAY"
+    }
+   ]
+  },
+  "meta": {
+   "versionId": "10907ca7-bd3c-4367-b19a-ddd5190de2b2",
+   "lastUpdated": "2026-10-30T02:05:38.249Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "df4586f6-abe6-4d03-afb2-b2b6ca85fe1e",
+  "url": "http://hl7.org/fhir/us/core/SearchParameter/us-core-patient-gender-identity",
+  "version": "5.0.1",
+  "name": "USCorePatientGenderIdentity",
+  "status": "active",
+  "date": "2022-04-14",
+  "publisher": "HL7 International - Cross-Group Projects",
+  "contact": [
+   {
+    "name": "HL7 International - Cross-Group Projects",
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/cgp"
+     },
+     {
+      "system": "email",
+      "value": "cgp@lists.HL7.org"
+     }
+    ]
+   }
+  ],
+  "description": "Returns patients with an gender-identity extension matching the specified code.",
+  "jurisdiction": [
+   {
+    "coding": [
+     {
+      "system": "urn:iso:std:iso:3166",
+      "code": "US"
+     }
+    ]
+   }
+  ],
+  "code": "gender-identity",
+  "base": [
+   "Patient"
+  ],
+  "type": "token",
+  "expression": "Patient.extension.where(url='http://hl7.org/fhir/us/core/StructureDefinition/us-core-genderIdentity').value.coding.code",
+  "xpath": "f:Patient/f:extension[@url='http://hl7.org/fhir/StructureDefinition/patient-genderIdentity']/f:extension/f:valueCoding/f:code/@value xpathUsage: normal",
+  "xpathUsage": "normal",
+  "multipleOr": true,
+  "_multipleOr": {
+   "extension": [
+    {
+     "url": "http://hl7.org/fhir/StructureDefinition/capabilitystatement-expectation",
+     "valueCode": "MAY"
+    }
+   ]
+  },
+  "multipleAnd": true,
+  "_multipleAnd": {
+   "extension": [
+    {
+     "url": "http://hl7.org/fhir/StructureDefinition/capabilitystatement-expectation",
+     "valueCode": "MAY"
+    }
+   ]
+  },
+  "meta": {
+   "versionId": "93d2ef83-f05b-49b6-9827-a53636fb3404",
+   "lastUpdated": "2026-10-30T02:05:38.251Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "64431fa0-9ab3-4709-81b5-d6fdabc173f8",
+  "url": "http://hl7.org/fhir/us/core/SearchParameter/us-core-race",
+  "version": "5.0.1",
+  "name": "USCoreRace",
+  "status": "active",
+  "date": "2022-04-14",
+  "publisher": "HL7 International - Cross-Group Projects",
+  "contact": [
+   {
+    "name": "HL7 International - Cross-Group Projects",
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/cgp"
+     },
+     {
+      "system": "email",
+      "value": "cgp@lists.HL7.org"
+     }
+    ]
+   }
+  ],
+  "description": "Returns patients with a race extension matching the specified code.",
+  "jurisdiction": [
+   {
+    "coding": [
+     {
+      "system": "urn:iso:std:iso:3166",
+      "code": "US"
+     }
+    ]
+   }
+  ],
+  "code": "race",
+  "base": [
+   "Patient"
+  ],
+  "type": "token",
+  "expression": "Patient.extension.where(url = 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-race').extension.value.code",
+  "xpath": "f:Patient/f:extension[@url='http://hl7.org/fhir/us/core/StructureDefinition/us-core-race']/f:extension/f:valueCoding/f:code/@value",
+  "xpathUsage": "normal",
+  "multipleOr": true,
+  "_multipleOr": {
+   "extension": [
+    {
+     "url": "http://hl7.org/fhir/StructureDefinition/capabilitystatement-expectation",
+     "valueCode": "MAY"
+    }
+   ]
+  },
+  "multipleAnd": true,
+  "_multipleAnd": {
+   "extension": [
+    {
+     "url": "http://hl7.org/fhir/StructureDefinition/capabilitystatement-expectation",
+     "valueCode": "MAY"
+    }
+   ]
+  },
+  "meta": {
+   "versionId": "ee98b065-9e6d-4674-a941-7bc48386d0b4",
+   "lastUpdated": "2026-10-30T02:05:38.252Z"
+  }
+ }
+]

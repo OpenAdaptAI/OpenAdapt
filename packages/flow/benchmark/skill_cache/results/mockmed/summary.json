@@ -1,0 +1,43 @@
+{
+  "app": "mockmed",
+  "trials": 3,
+  "model": "claude-sonnet-5-5",
+  "engine_commit": [
+    "7c7f36b1a2"
+  ],
+  "run1": {
+    "runs": 3,
+    "admitted": 3,
+    "verified": 3,
+    "model_calls_median": 6,
+    "cost_usd_median": 0.022,
+    "cost_usd_each": [
+      0.02243,
+      0.02241,
+      0.02232
+    ],
+    "agent_seconds_median": 8.348,
+    "seconds_median": 23.515,
+    "seconds_each": [
+      24.612,
+      23.515,
+      23.37
+    ]
+  },
+  "later": {
+    "runs": 27,
+    "verified": 27,
+    "receipt_verified": 27,
+    "store_shows_record": 27,
+    "model_calls_total": 0,
+    "cost_usd_total": 0.0,
+    "seconds_median": 7.775,
+    "seconds_min": 6.855,
+    "seconds_max": 11.464,
+    "program_seconds_median": 6.886
+  },
+  "host_load_1m": [
+    14.3,
+    34.0
+  ]
+}
