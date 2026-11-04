@@ -140,6 +140,8 @@ def is_encrypted(data: bytes) -> bool:
     """
     if data[: len(SET_FILE_MAGIC)] == SET_FILE_MAGIC:
         return True
+    if data[: len(SALTED_FILE_MAGIC)] == SALTED_FILE_MAGIC:
+        return True
     try:
         obj = json.loads(data)
     except (ValueError, TypeError):
@@ -273,6 +275,25 @@ class SetKey:
                 "decryption failed: wrong key, or the file was tampered with, "
                 "renamed or moved from another sealed set. Nothing was loaded."
             ) from exc
+
+
+#: Prefix of a container sealed under a key derived once per run (see
+#: :mod:`openadapt_flow.runtime.durable.attended_state`): this prefix, the
+#: run's 16-byte salt, a random 96-bit nonce, then the AES-256-GCM ciphertext.
+SALTED_FILE_MAGIC: Final[bytes] = b"OAFLOW-SALTED-1\n"
+SALT_LEN: Final[int] = _SALT_LEN
+NONCE_LEN: Final[int] = _NONCE_LEN
+
+
+def derive_data_key(passphrase: str, salt: bytes) -> bytes:
+    """The 256-bit scrypt key for ``passphrase`` and ``salt``, at the work
+    factors new containers record. A caller that derives once and caches the
+    key must keep it in memory only."""
+    if not passphrase:
+        raise MissingKeyError("no encryption passphrase configured")
+    if len(salt) != _SALT_LEN:
+        raise CryptoError("a data-key salt must be 16 bytes")
+    return _derive(passphrase, salt, n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P)
 
 
 def kdf_parameters() -> dict[str, int]:
