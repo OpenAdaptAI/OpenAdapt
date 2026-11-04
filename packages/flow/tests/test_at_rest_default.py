@@ -608,7 +608,7 @@ def test_strict_seals_plaintext_input_with_seal(
     _sealed, plain = _sealed_and_plain(tmp_path)
     monkeypatch.setenv(at_rest.MODE_ENV, "strict")
     cli._unsealed_output_check(
-        argparse.Namespace(func=cli._cmd_seal, bundle=str(plain), out="out")
+        argparse.Namespace(func=cli._cmd_seal, source=str(plain), out="out")
     )
 
 

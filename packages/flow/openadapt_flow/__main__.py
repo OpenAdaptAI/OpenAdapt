@@ -12688,6 +12688,12 @@ def _plaintext_directories_in(args: argparse.Namespace) -> list[Path]:
                 candidates.append(text.split("=", 1)[1])
             for candidate in candidates:
                 path = Path(candidate)
+                if path.is_symlink() and not path.is_dir():
+                    # A link that resolves to nothing (broken, a loop) could
+                    # be pointed at plaintext after this check.
+                    if path not in found:
+                        found.append(path)
+                    continue
                 if not path.is_dir():
                     continue
                 if _inside_sealed_set(path):
@@ -12706,18 +12712,48 @@ def _inside_sealed_set(path: Path) -> bool:
     """Whether ``path`` really is, or is inside, a sealed set.
 
     Symlinks are resolved first, so a link inside a set to a directory
-    elsewhere is judged by where it points. A directory that holds a
-    plaintext workflow, event log or report is plaintext even when it sits
-    inside a set's directory.
+    elsewhere is judged by where it points. The set's header must read, and
+    the path must be part of the set: with a key, the set's authenticated
+    index must open (it refuses any file it doesn't list) and contain the
+    path; without one, every file under the path must be ciphertext or a
+    structural file. A plaintext workflow, event log or report inside a set's
+    directory is plaintext.
     """
     import os
 
-    from openadapt_flow import sealed_set
+    from openadapt_flow import crypto, sealed_set
 
     real = Path(os.path.realpath(path))
-    if not (sealed_set.is_sealed(real) or sealed_set.sealed_root(real)):
+    root = real if sealed_set.is_sealed(real) else sealed_set.sealed_root(real)
+    if root is None:
         return False
-    return not any((real / name).is_file() for name in _PLAINTEXT_ARTIFACT_MARKERS)
+    if any((real / name).exists() for name in _PLAINTEXT_ARTIFACT_MARKERS):
+        return False
+    try:
+        kind = str(sealed_set.read_header(root)["kind"])
+    except (sealed_set.SealedSetError, KeyError):
+        return False
+    rel = Path(os.path.relpath(real, root)).as_posix()
+    key = (
+        os.environ.get(sealed_set.RECORDING_ENV_KEY) if kind == "recording" else None
+    ) or crypto.resolve_read_key(None)
+    if key:
+        try:
+            files = sealed_set.open_set(root, key).files("")
+        except (sealed_set.SealedSetError, crypto.CryptoError):
+            return False
+        return rel == "." or any(f == rel or f.startswith(rel + "/") for f in files)
+    for current, _dirs, names in os.walk(real):
+        for name in names:
+            if not (
+                name.endswith(sealed_set.SEALED_SUFFIX)
+                or name == sealed_set.HEADER
+                or name == "manifest.json"
+                or name.endswith(".lock")
+                or name.startswith(".")
+            ):
+                return False
+    return True
 
 
 def _unsealed_output_check(args: argparse.Namespace) -> None:
