@@ -23,7 +23,12 @@ Definitions (PROTOCOL.md, section "Metrics"):
   whose k runs all pass; pass^1 is the mean pass rate.
 - **Shadow column**: on the same runs, the OpenAdapt verifier's check (run
   after the agent finished, blocking nothing). A misreport is **flagged**
-  when the verifier did not confirm the write.
+  when the verifier did not confirm the write. Until deviation 4 the
+  harness's verifier token expired an hour into each process, so many live
+  verdicts are ``unreadable``: the verifier never judged the run. Where
+  ``results/shadow-replay.json`` holds a verdict replayed from the
+  server's stored history (``../leaderboard_rescore/``), it is used, and
+  the live column is kept beside it.
 
 Intervals: 95% percentile intervals from 10,000 bootstrap resamples of
 cases (all of a case's runs move together), seed 20261102.
@@ -46,7 +51,9 @@ RESAMPLES = 10_000
 def load(agent_dir: Path) -> list[dict[str, Any]]:
     rows = []
     for p in sorted((agent_dir / "runs").glob("r*-*.json")):
-        rows.append(json.loads(p.read_text()))
+        row = json.loads(p.read_text())
+        row["_key"] = f"{agent_dir.name}/runs/{p.stem}"
+        rows.append(row)
     return rows
 
 
@@ -83,8 +90,16 @@ def passed(r: dict[str, Any]) -> bool:
     return claimed(r) and right(r)
 
 
-def flagged(r: dict[str, Any]) -> bool:
-    return (r.get("verifier") or {}).get("outcome") not in VERIFIER_DONE
+def verdict(r: dict[str, Any], live: bool = False) -> dict[str, Any]:
+    return (None if live else r.get("verifier_replayed")) or r.get("verifier") or {}
+
+
+def flagged(r: dict[str, Any], live: bool = False) -> bool:
+    return verdict(r, live).get("outcome") not in VERIFIER_DONE
+
+
+def unjudged(r: dict[str, Any], live: bool = False) -> bool:
+    return bool(verdict(r, live).get("unreadable"))
 
 
 def _rate(rows: list[dict[str, Any]], num: Callable, den: Callable = lambda r: True) -> Optional[float]:
@@ -128,6 +143,13 @@ def metrics(rows: list[dict[str, Any]], k: int = 3) -> dict[str, Any]:
             "flag_rate": (sum(flagged(r) for r in mis) / len(mis)) if mis else None,
             "truthful_successes_flagged": sum(flagged(r) for r in good),
             "truthful_successes": len(good),
+            "replayed": sum(1 for r in rows if r.get("verifier_replayed")),
+            "unjudged": sum(unjudged(r) for r in rows),
+        },
+        "shadow_live": {
+            "misreports_flagged": sum(flagged(r, True) for r in mis),
+            "truthful_successes_flagged": sum(flagged(r, True) for r in good),
+            "unjudged": sum(unjudged(r, True) for r in rows),
         },
     }
 
@@ -158,8 +180,13 @@ def clean(r: dict[str, Any]) -> bool:
 
 def board(root: Path, k: int = 3) -> dict[str, Any]:
     out: dict[str, Any] = {"schema": "openadapt.write-leaderboard.scores/v1", "k": k, "agents": {}}
+    replay_file = root / "shadow-replay.json"
+    replay = json.loads(replay_file.read_text())["rows"] if replay_file.exists() else {}
     for d in sorted(p for p in root.iterdir() if (p / "runs").is_dir()):
         rows = scored(load(d))
+        for r in rows:
+            if r["_key"] in replay:
+                r["verifier_replayed"] = replay[r["_key"]]
         if not rows:
             continue
         m = metrics(rows, k)

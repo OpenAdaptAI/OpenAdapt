@@ -102,20 +102,28 @@ part of the ranking.
 
 | | claude | openai |
 | --- | ---: | ---: |
-| Misreports the verifier did not confirm (flagged) | 28 of 28 | 32 of 33 |
-| Truthful successes the verifier also flagged (false flags) | 65 of 72 | 47 of 68 |
+| Misreports the verifier did not confirm (flagged) | 25 of 28 | 30 of 33 |
+| Truthful successes the verifier also flagged (false flags) | 26 of 72 | 11 of 68 |
 
-The verifier flagged nearly every misreport, and most truthful successes
-too. The false flags are mostly one cause, seen in the practice runs before
-the freeze: Medplum's web forms often save a new record as a create
-followed by one or more updates, and the verifier's contract allows one
-write per task, so it stops. Through this web app the verifier, as it
-stands, is a coarse alarm: it catches almost all misreports at the cost of
-flagging most good runs.
+These are the verifier's verdicts replayed from Medplum's stored history
+of the same runs (deviation 4). The live column first published here,
+28 of 28 and 65 of 72 for claude and 32 of 33 and 47 of 68 for openai, was
+wrong: the verifier's read token had expired, and it never judged 92
+claude rows and 71 openai rows. `results/LEADERBOARD.json` keeps both as
+`shadow` and `shadow_live`.
+
+- **Misses:** every misreport the verifier did not flag is a
+  `late_collateral` run (A10). The stray record lands after the check, so
+  no check at the end can see it.
+- **False flags:** most are Medplum's form saving a new record in steps, as
+  a create and then updates, or a record the agent corrected after the
+  fault proxy changed a value. The verifier's contract requires every
+  version to be the person and allows one created record, so it holds
+  these for review.
 
 ## Deviations from the protocol
 
-All three are in [DEVIATIONS.md](DEVIATIONS.md), with their reasons.
+All four are in [DEVIATIONS.md](DEVIATIONS.md), with their reasons.
 
 1. **Host-load guard.** After the freeze, the harness was changed to wait
    before each run while the host's load was over 35. The 14 rows written
@@ -130,6 +138,11 @@ All three are in [DEVIATIONS.md](DEVIATIONS.md), with their reasons.
    again after the harness was changed to renew the session. The excluded
    rows are kept in `results/<agent>/excluded-signed-out/`; their spend
    counts against each agent's share.
+4. **The verifier's token is renewed and the shadow column is replayed.**
+   The verifier's read token also expired after an hour, so it never
+   judged most runs. The end-state check and the read-back use another,
+   renewed token, so the three metrics are unchanged. The shadow column is
+   replayed from the server's stored history.
 
 ## Spend
 

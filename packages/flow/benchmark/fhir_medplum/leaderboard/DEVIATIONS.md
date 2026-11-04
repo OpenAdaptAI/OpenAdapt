@@ -60,3 +60,31 @@ which ran across the expiry. The excluded rows and their evidence are kept
 in `results/<agent>/excluded-signed-out/` and listed in
 `results/excluded-signed-out.json`; none is scored. Their spend stays in
 the spend ledger and counts against each agent's share.
+
+## 4. The verifier's token is renewed; the shadow column is replayed (2026-11-03, about 20:00 EST)
+
+**What happened:** the harness set the verifier's read token
+(`BENCH_RECORD_TOKEN`) once per process, and Medplum's tokens last an
+hour. Deviation 3 renewed the browser's session but not this token. From
+about an hour into each process the verifier's reads were refused (HTTP
+401). Failing closed, it reported `needs_review` on 92 of 111 claude rows
+and 71 of 111 openai rows without judging them, and those rows counted as
+flagged in the shadow column.
+
+**Not affected:** the end-state check and the read-back. They read with the
+harness's admin token, which is renewed every 10 minutes. No row's
+end-state or read-back read was refused, so the three pre-registered
+metrics are unchanged.
+
+**What changed:** `public/run.py` renews the verifier's token before its
+baseline and before its check. For the 222 claude and openai runs, the
+shadow column now uses the verifier's verdicts replayed from Medplum's
+stored history of the same runs, with the same contracts (session
+verifier-specificity, `../leaderboard_rescore/`, column "main", per-row
+in `results/shadow-replay.json`). The replay reproduces all 59 live
+verdicts the verifier did judge. `score.py` uses a replayed verdict where
+one exists and keeps the live column (`shadow_live`) beside it.
+
+**Fara:** its first process (P01-A06) ran before the fix, and its shadow
+column is replayed the same way. Its second process (A07-AP12) runs with
+the fix.
