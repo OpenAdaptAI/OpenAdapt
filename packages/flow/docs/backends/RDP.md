@@ -167,6 +167,13 @@ desktop scale (100, 140 or 180), DPI, lossless codec, font smoothing,
 wallpaper, themes, clipboard and keyboard layout. `profile.sha256` identifies
 the profile, so a recording and a replay can prove they used the same one.
 
+`SessionProfile(lossless=False, avc444=True)` asks for the H.264/AVC444
+graphics pipeline that production Windows hosts use. It needs a FreeRDP built
+with H.264 (Debian's packages are; Ubuntu's are not). The host decides
+whether AVC444 is used: its
+`Microsoft-Windows-RemoteDesktopServices-RdpCoreTS/Operational` log shows
+event 162 with `AVC available: 1, Initial profile: 2048` when it is.
+
 The password is requested once at connect through a callable and written to
 the client's standard input (`/from-stdin:force`). It never appears on the
 command line or in a log, and the transport doesn't keep it.

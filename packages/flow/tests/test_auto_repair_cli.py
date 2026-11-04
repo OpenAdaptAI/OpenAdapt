@@ -41,6 +41,7 @@ def _config(tmp_path: Path, base_url: str, *, auto: bool = True) -> Path:
     config = tmp_path / "deploy.yaml"
     config.write_text(
         f"effects:\n  kind: rest\n  base_url: {base_url}\n"
+        "  records_path: /api/db\n  records_key: records\n"
         "policy:\n  policy: clinical-write\n"
         f"{approvers_yaml()}"
         "repair:\n"
