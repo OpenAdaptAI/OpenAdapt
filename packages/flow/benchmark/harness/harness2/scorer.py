@@ -19,6 +19,10 @@ and a single number to rank candidates by. The number comes from
 * other ``wrong_effect``: the agent reported done, but no record landed.
 * safe stop: ``halted_before_effect``, ``refused`` or ``rejected_policy`` with
   nothing written. Not a success, never a penalty.
+* ``escalated_after_effect``: the required record landed as declared, then
+  the agent stopped and asked instead of reporting done. The number is the
+  receipt's own scalar, the contract's ``escalated_after_effect_reward``;
+  with no scalar on the receipt it stays unscored.
 * unscored (``reconciliation_required``, ``failed_platform``): no number. A
   person has to settle it, and a search must not read it as a zero.
 """
@@ -43,6 +47,7 @@ FAILED_PLATFORM = "failed_platform"
 
 _SAFE_STOPS = frozenset({"halted_before_effect", "refused", "rejected_policy"})
 _UNSCORED = frozenset({"reconciliation_required", "failed_platform"})
+ESCALATED_AFTER_EFFECT = "escalated_after_effect"
 
 
 @dataclass(frozen=True)
@@ -233,6 +238,10 @@ class ReadBackScorer:
             return None
         if score.outcome == "verified":
             return p.verified
+        if score.outcome == ESCALATED_AFTER_EFFECT:
+            # The contract sets this credit and the signed receipt carries it.
+            # A receipt without a number is left for a person, not guessed.
+            return score.receipt_reward
         if score.safe_stop:
             return p.safe_stop
         return p.wrong_effect
