@@ -69,7 +69,25 @@ chmod 0700 "$(dirname "$AUDIT_LOG")" 2>/dev/null || true
 # interleaving, but without this lock two writers can both chain to the same
 # parent and produce a structurally broken audit log.
 lock_dir="${AUDIT_LOG}.lock"
+break_dir="${AUDIT_LOG}.lock-break"
 lock_acquired=0
+
+# Remove a lock whose owner has exited. Between reading the owner and removing
+# the lock, that owner can release it and another writer can take it, so the
+# removal happens only under a second lock that serializes breakers, and only
+# if the lock still names the same dead owner. Without this, a breaker could
+# delete a live writer's lock and let two writers chain to the same parent.
+break_stale_lock() {
+  local stale="$1" current=""
+  mkdir "$break_dir" 2>/dev/null || return 0
+  current="$(cat "$lock_dir/pid" 2>/dev/null || true)"
+  if [[ "$current" == "$stale" ]] && ! kill -0 "$stale" 2>/dev/null; then
+    rm -f "$lock_dir/pid" 2>/dev/null || true
+    rmdir "$lock_dir" 2>/dev/null || true
+  fi
+  rmdir "$break_dir" 2>/dev/null || true
+}
+
 for ((attempt = 0; attempt < 200; attempt++)); do
   if mkdir "$lock_dir" 2>/dev/null; then
     printf '%s\n' "$$" > "$lock_dir/pid"
@@ -81,8 +99,7 @@ for ((attempt = 0; attempt < 200; attempt++)); do
     owner="$(cat "$lock_dir/pid" 2>/dev/null || true)"
   fi
   if [[ -n "$owner" && "$owner" =~ ^[0-9]+$ ]] && ! kill -0 "$owner" 2>/dev/null; then
-    rm -f "$lock_dir/pid" 2>/dev/null || true
-    rmdir "$lock_dir" 2>/dev/null || true
+    break_stale_lock "$owner"
     continue
   fi
   sleep 0.05

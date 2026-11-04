@@ -290,7 +290,49 @@ if grep -q 'audit chain intact' <<< "$audit_output"; then
   pass "concurrent audit writers preserve one hash chain"
 else
   fail "concurrent audit writers preserve one hash chain"
+  printf '%s\n' "$audit_output" | sed 's/^/    /'
 fi
+
+# A writer that finds a lock owned by an exited process may break it. Force the
+# race where, between that writer reading the dead owner and breaking the
+# lock, the owner releases and a live writer takes the lock: a shimmed cat
+# returns the dead owner once, then hands the lock to a live process. The
+# breaker must leave the live writer's lock alone.
+RACE="$WORK/stale-race"
+mkdir -p "$RACE/shim"
+RACE_LOG="$RACE/audit.log"
+bash -c 'exit 0' &
+dead_pid=$!
+wait "$dead_pid"
+sleep 30 &
+live_pid=$!
+mkdir "$RACE_LOG.lock"
+printf '%s\n' "$dead_pid" > "$RACE_LOG.lock/pid"
+REAL_CAT="$(command -v cat)"
+cat > "$RACE/shim/cat" <<SHIM_EOF
+#!/usr/bin/env bash
+if [[ "\${1:-}" == "$RACE_LOG.lock/pid" && ! -e "$RACE/handed-over" ]]; then
+  "$REAL_CAT" "\$1"
+  : > "$RACE/handed-over"
+  printf '%s\n' "$live_pid" > "$RACE_LOG.lock/pid"
+  exit 0
+fi
+exec "$REAL_CAT" "\$@"
+SHIM_EOF
+chmod +x "$RACE/shim/cat"
+OPENADAPT_ONPREM_AUDIT_LOG="$RACE_LOG" PATH="$RACE/shim:$PATH" \
+  bash "$OPENADAPT_ONPREM_AUDIT_BIN" started stale-race --note test >/dev/null 2>&1 &
+race_writer=$!
+sleep 2
+race_owner="$(cat "$RACE_LOG.lock/pid" 2>/dev/null || echo none)"
+assert_eq "stale-lock breaker leaves a live writer's lock alone" "$live_pid" "$race_owner"
+rm -f "$RACE_LOG.lock/pid"
+rmdir "$RACE_LOG.lock" 2>/dev/null || true
+kill "$live_pid" 2>/dev/null || true
+wait "$live_pid" 2>/dev/null || true
+wait "$race_writer"
+assert_eq "writer appends once the live lock is released" 0 "$?"
+assert_eq "writer appends exactly one record" 1 "$(wc -l < "$RACE_LOG" | tr -d ' ')"
 if ! grep -q 'identity evidence' "$OPENADAPT_ONPREM_AUDIT_LOG"; then
   pass "release audit remains PHI-free"
 else
