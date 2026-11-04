@@ -109,7 +109,7 @@ def encounter_authorization_spec(
             "identity": {"patient_id": {"value": patient_id}},
             "fields": {"type": {"value": encounter_type}, "note": {"input": "note"}},
             "expected_rows": 1,
-            "write_adapter": "openadapt_flow.mockmed.teach_scope:EncounterWrites",
+            "write_adapter": "tests._teach_scope:EncounterWrites",
         },
         "forbidden": {
             "actions": [
