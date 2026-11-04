@@ -8,10 +8,12 @@ layout, install and test commands.
 
 - Work only on open issues labelled `agent-ready` that do not have the
   `claimed` label.
-- Claim an issue by pushing a new branch from current `origin/main`:
-  `git push origin origin/main:refs/heads/agent/<issue number>`. If the push
-  fails because the branch exists, another agent has the issue: pick another.
-  Then add the `claimed` label and comment `Claimed by <agent name>`.
+- Claim an issue by creating its branch through the GitHub API, which fails
+  if the branch already exists (a plain `git push` does not):
+  `gh api repos/OpenAdaptAI/OpenAdapt/git/refs -f ref=refs/heads/agent/<issue number> -f sha=$(git rev-parse origin/main)`.
+  If it fails with "Reference already exists", another agent has the issue:
+  pick another. Then add the `claimed` label and comment
+  `Claimed by <agent name>`.
 - If you stop before opening a pull request, comment why, remove the
   `claimed` label and delete your branch.
 - One issue per branch and per pull request. Keep changes small and focused;
