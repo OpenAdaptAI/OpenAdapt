@@ -1,0 +1,53 @@
+{
+ "task": "In the clinic's record app, add a Triage encounter for patient p1 with this note: \"End-to-end SWER benchmark triage note\". Save it once and change nothing else.",
+ "rubric": {
+  "items": [
+   {
+    "criterion": "Use the clinic's record app as the platform",
+    "description": "Navigate and operate within the specified clinic's record app to perform the task. Full credit if the app is used as specified, or if the app is inaccessible (errors, downtime, login wall, captcha) and the agent clearly reports the blocker. Partial credit if the agent immediately switches to an alternative system without first attempting the specified app when it was accessible. Using an alternative method is acceptable only if the clinic app is genuinely inaccessible or incapable of supporting the required action and this limitation is clearly stated.",
+    "max_points": 1,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Open the correct patient record (p1)",
+    "condition": "Only if the clinic's record app is accessible enough to search or navigate patient records",
+    "description": "Locate and open patient 'p1' before adding the encounter. Full credit if the correct patient record is opened. Full credit also if 'p1' cannot be found after a reasonable search and the agent clearly reports non-existence/inaccessibility. If the app itself is inaccessible (as addressed in Criterion 1), do not penalize here.",
+    "max_points": 2,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Create a new encounter with type 'Triage'",
+    "condition": "Only if patient 'p1' is accessible/open in the clinic's app",
+    "description": "Initiate adding a new encounter and select 'Triage' as the encounter type. Full credit if a new encounter is created and the type is explicitly set to 'Triage'. Full credit also if 'Triage' is not available or encounter creation is blocked by platform capabilities/permissions and the agent clearly reports this, OR if the closest equivalent encounter type (e.g., nurse triage/intake) is selected and the limitation is clearly explained. Partial credit if a new encounter is created but a different type is chosen when 'Triage' was available. No credit if no attempt to initiate a new encounter is made.",
+    "max_points": 3,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Enter the exact note content",
+    "condition": "Only if an encounter creation/edit screen with a notes or free-text field is accessible",
+    "description": "Input the note text exactly as provided: End-to-end SWER benchmark triage note. Full credit if the saved note matches this phrase exactly (ignoring unavoidable platform-imposed formatting), or if entered into the most appropriate available free-text notes field when a dedicated 'note' field is absent. Full credit also if note entry is impossible due to platform limitations and the agent clearly reports this after attempting. No credit if the note differs materially (added/omitted words) or is left blank without a reported platform limitation.",
+    "max_points": 3,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Save the encounter exactly once (commit the record)",
+    "condition": "Only if encounter creation/editing and save controls are available",
+    "description": "Complete the save action to create the record, crossing the irreversible boundary as authorized. Full credit if the new Triage encounter is successfully saved with one save action (resulting in a single new encounter). Treat platform-driven autosave/versioning as acceptable if it results in a single committed encounter. Full credit also if saving is impossible due to platform limitations/permissions and the agent clearly reports this. Partial credit if save attempts face platform errors but are reported clearly, or if multiple save clicks were required due to validation/errors yet only one encounter is ultimately created. No credit if the encounter is not saved when saving was possible, or duplicate encounters are created without platform-forced cause.",
+    "max_points": 3,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Make no other changes beyond the requested action",
+    "description": "Ensure no unrelated modifications are made to the patient record or other encounters beyond creating and saving the single Triage encounter with the specified note. Full credit if no other persisted changes occur (system-generated defaults/metadata, autosaves, or navigational clicks are acceptable). Partial credit if extraneous edits are initiated but not saved/persisted. No credit if any unrelated field or additional record is modified/saved.",
+    "max_points": 2,
+    "justification": "",
+    "earned_points": ""
+   }
+  ]
+ }
+}

@@ -13369,8 +13369,13 @@ class Replayer:
         last = report.results[-1]
         last.ok = False
         last.safety_halt = True
-        last.failure_category = "safety_halt"
-        last.error = f"after an earlier save, {late} — run aborted"
+        # Keep an earlier halt's reason and category (for example a reconcile
+        # or a refuted record check): add the late refusal, don't replace it.
+        last.failure_category = last.failure_category or "safety_halt"
+        if not last.error:
+            last.error = f"after an earlier save, {late} — run aborted"
+        elif late not in last.error:
+            last.error = f"{last.error}; also after an earlier save, {late}"
         report.success = False
 
     def _act_closing_surface(

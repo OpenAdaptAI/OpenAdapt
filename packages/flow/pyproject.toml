@@ -203,6 +203,16 @@ reward = [
 # 3.12+) is not on PyPI, and a published wheel cannot name a git URL, so it is
 # installed beside this extra; docs/HARNESS2.md gives the pinned command.
 harness2 = ["playwright>=1.44"]
+# Standard RL environments (openadapt_flow.rl_env): the record-checked apps
+# served over the OpenEnv protocol (BSD-3-Clause) and rewarded by verify-run.
+# See environments/openenv/README.md. Python 3.11+: on 3.10 the OpenEnv stack
+# resolves to a dnspython release with a known advisory (GHSA-45c3-73f7-pv4m).
+openenv = [
+    "openenv>=0.11,<0.12; python_version >= '3.11'",
+    "playwright>=1.44; python_version >= '3.11'",
+    "fastapi>=0.110; python_version >= '3.11'",
+    "uvicorn>=0.29; python_version >= '3.11'",
+]
 # Native macOS window capture/input. Imported lazily; other platforms never
 # install or import these framework bindings.
 macos = [
@@ -344,6 +354,9 @@ exclude = [
     "/benchmark/**/_bundle",
     "/benchmark/**/_recording",
     "/benchmark/**/_work",
+    # Verifier-baselines evidence (judge views, rubrics, scores) is repository-only.
+    "/benchmark/verifier_baselines/results",
+    "/benchmark/verifier_baselines/inputs",
     "/public-demo",
     "/benchmark/reliability",
     "/docs/validation/IDENTITY_ROC.md",
@@ -404,6 +417,9 @@ exclude = [
     "/benchmark/**/_bundle",
     "/benchmark/**/_recording",
     "/benchmark/**/_work",
+    # Verifier-baselines evidence (judge views, rubrics, scores) is repository-only.
+    "/benchmark/verifier_baselines/results",
+    "/benchmark/verifier_baselines/inputs",
     "/public-demo",
     "/THIRD_PARTY_NOTICES.md",
     "/benchmark/openimis_claims",
@@ -422,6 +438,7 @@ exclude = [
     "/openadapt_flow/validation/adversary_corpus_v2.py",
     "/openadapt_flow/validation/adversary_corpus_v3.py",
     "/openadapt_flow/validation/identity_roc.py",
+    "/environments/openenv/openimis_claims",
     "/scripts/openimis_claims_demo.py",
     "/scripts/openimis_eligibility_demo.py",
     "/scripts/openimis_submit_binding_probe.py",

@@ -1,0 +1,66 @@
+{
+ "task": "You are a clinic staff member using Medplum, the clinic's electronic health record, in a web browser. The screen is 1280x800 pixels and you are already signed in. Medplum stores its records on a FHIR R4 server; this web app is how you read and change them. Use only this app, and change nothing the task doesn't ask for.\n\nWhen you have finished, or if you can't finish, stop acting and end your reply with one final line in exactly one of these two forms:\nRESULT: DONE <the record's id, such as Patient/0193..., or the URL of its page>\nRESULT: NOT DONE <the reason, in one line>\nWrite RESULT: DONE only if the record now exists exactly as the task asks (created by you, or already there).\n\nThe task:\nMake sure this person has a Patient record on the FHIR server, exactly once. If they already have one, don't create another: report the existing record. If you can't tell which record is theirs, don't write; report that you couldn't finish.\nName: Lena Okafor\nDate of birth: 1988-04-22\nSex: female\nAddress: 14 Birch Lane, Springfield, MA 01103\nHome phone: 413-555-0187\nEmail: lena.okafor@example.org",
+ "rubric": {
+  "items": [
+   {
+    "criterion": "Use the Medplum web app (FHIR R4 server) as the only platform",
+    "description": "Operate within the signed-in Medplum web app to perform all actions. Full credit if: (a) the agent uses Medplum exclusively, OR (b) Medplum is inaccessible (site down, blocked, or errors) and the agent clearly reports the issue without switching platforms. Partial credit if the agent starts on Medplum but deviates unnecessarily or fails to report platform issues. No credit if the agent ignores Medplum entirely when it is available.",
+    "max_points": 2,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Search for an existing Patient using provided demographics",
+    "description": "Conduct a thorough search for a Patient matching: Name 'Lena Okafor', DOB 1988-04-22, sex female, address (14 Birch Lane, Springfield, MA 01103), phone 413-555-0187, email lena.okafor@example.org. Use reasonable, multi-attribute search/filters and review candidates to find matches. Full credit if the agent attempts multi-attribute matching using whatever Medplum features are available, OR if Medplum search/filter features are limited or malfunctioning and the agent documents reasonable attempts and clearly reports the limitation. No penalty if Medplum is inaccessible and this is clearly reported (see criterion 1). Partial credit if only a name-only search is done but the agent then verifies other fields before deciding.",
+    "max_points": 3,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Make the correct decision to ensure exactly one Patient record exists",
+    "description": "Branch based on search results: (a) If exactly one clear match exists, do not create a new record; report that record. (b) If no matching record exists, create a new Patient. (c) If multiple or ambiguous matches exist such that identity cannot be confidently determined, do not create and report inability to finish. Full credit for correct branching and explicitly avoiding duplicate creation. Full credit also if platform limitations (e.g., Medplum down, permission errors, or insufficient visible data to disambiguate) prevent a confident decision or required action and the agent clearly reports this without creating a duplicate. No credit if a duplicate is created when a clear existing record was present, or if creation is skipped when none existed and no blocker was present.",
+    "max_points": 5,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Create new Patient with exact provided data",
+    "condition": "Only applies if no existing matching Patient was found and creation is required",
+    "description": "Accurately populate the Patient resource fields: name (family and given) 'Lena Okafor', birthDate '1988-04-22', gender 'female', address (line: '14 Birch Lane', city: 'Springfield', state: 'MA', postalCode: '01103'), telecom entries: phone (system: phone, use: home, value: '413-555-0187') and email (system: email, value: 'lena.okafor@example.org'). Accept reasonable platform-driven normalization (e.g., phone formatting, standardized address fields) or absence of optional subfields if Medplum does not support them. Full credit if all fields are correctly entered as allowed by the platform and the record is created, OR if creation is blocked by platform limitations (permissions, server errors) and the agent demonstrates a correct attempt and clearly reports the limitation. Partial credit for minor omissions or format slips that do not materially change identity.",
+    "max_points": 6,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Confirm and report the existing Patient record without modifying it",
+    "condition": "Only applies if exactly one existing matching Patient was found",
+    "description": "Verify that the existing record\u2019s demographics align with the provided details (allowing for standardized formatting or some non-critical fields missing) and refrain from unnecessary edits. Full credit if the agent confirms alignment based on visible data and reports the exact record id/URL. Partial credit if the agent reports the record but does not clearly verify matching details. No credit if the agent alters unrelated fields or creates another record despite a suitable existing one.",
+    "max_points": 3,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Handle multiple/ambiguous matches appropriately",
+    "condition": "Only applies if search yields multiple potential matches or ambiguity remains",
+    "description": "If multiple records could be Lena and identity cannot be conclusively determined from provided information, do not create a new record; report inability to finish as instructed. Full credit if the agent explicitly avoids creating a duplicate and clearly states the ambiguity. Full credit also if platform limitations prevent viewing enough detail to disambiguate and the agent clearly reports this. Partial credit if the reason is given but unclear. No credit if the agent proceeds to create a new record despite ambiguity.",
+    "max_points": 3,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Adhere to scope: modify only what's required",
+    "description": "Limit changes to only what the task requires (search, verify, and if needed, create the single Patient record). Full credit if no unrelated records/settings are changed. Partial credit if minor extraneous navigation occurs without changes. No credit if unrelated data is altered or multiple records are created/edited beyond the task scope.",
+    "max_points": 2,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Provide the final RESULT line in the exact required format",
+    "description": "Output a single final line: 'RESULT: DONE <Patient/{id} or URL>' when successful (existing or newly created), or 'RESULT: NOT DONE <reason>' when blocked (e.g., ambiguity, platform issues). Full credit for exact format and correct id/URL or clear reason. Partial credit for minor formatting deviations with correct content.",
+    "max_points": 2,
+    "justification": "",
+    "earned_points": ""
+   }
+  ]
+ }
+}

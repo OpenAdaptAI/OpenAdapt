@@ -203,7 +203,10 @@ def test_real_backends_have_the_expected_kind() -> None:
     from openadapt_flow.backends.rdp_backend import FreeRDPBackend
     from openadapt_flow.backends.remote_display import RemoteDisplayBackend
 
+    from openadapt_flow.backends.linux_backend import LinuxBackend
+
     assert callable(getattr(MacOSBackend, "element_identity_at", None))
+    assert callable(getattr(LinuxBackend, "element_identity_at", None))
     for backend in (FreeRDPBackend, RemoteDisplayBackend):
         for name in ("element_identity_at", "page", *_TREE_READS):
             assert not hasattr(backend, name), (backend, name)

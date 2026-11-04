@@ -466,6 +466,10 @@ def roll_back(
     attributor: Optional[Attributor] = None,
     allow_delete: bool = False,
     exclusive: bool = False,
+    journal: Any = None,
+    after_stop: Optional[Snapshot] = None,
+    restarted: frozenset[str] = frozenset(),
+    compensated: frozenset[str] = frozenset(),
 ) -> Optional[RollbackRecord]:
     """Undo what a stopped run left, then prove the run's changes are gone.
 
@@ -492,6 +496,16 @@ def roll_back(
     compensation; those end as ``not_rolled_back`` with the reason.
     ``assume_stopped`` treats a finished run as stopped there (``rollback
     qualify`` stops runs on purpose).
+
+    ``journal`` (``rollback_durable.SealedRollback``) keeps the read after
+    the stop and which compensations started, so a rollback a crash
+    interrupted can run again. That later attempt passes the first attempt's
+    stop read as ``after_stop``, the steps whose compensation it finished as
+    ``compensated`` and those it only started as ``restarted``. The run's
+    changes are judged by that read, and the store must since have changed
+    only in the run's own rows. No compensation runs twice: a finished one is
+    left to the reads, and a started one is skipped when a fresh read shows
+    the change gone, otherwise the rollback stops.
     """
     if report.success and not assume_stopped:
         return None
@@ -532,10 +546,21 @@ def roll_back(
             "is compared and no compensation runs",
         )
     record.before_sha256 = snapshot_sha256(before)
-    try:
-        after_stop = reader.read(before=before)
-    except StateUnreadable as exc:
-        return finish("not_rolled_back", f"after the stop, {exc}; nothing ran")
+    resumed = after_stop is not None
+    if after_stop is None:
+        try:
+            after_stop = reader.read(before=before)
+        except StateUnreadable as exc:
+            return finish("not_rolled_back", f"after the stop, {exc}; nothing ran")
+        if journal is not None:
+            try:
+                journal.stop_read(after_stop)
+            except Exception as exc:  # noqa: BLE001 - no record, no compensation
+                return finish(
+                    "not_rolled_back",
+                    f"the read after the stop couldn't be kept ({type(exc).__name__}); "
+                    "nothing ran",
+                )
     record.after_stop_sha256 = snapshot_sha256(after_stop)
     landed = diff_states(before, after_stop, excuse=_excuser(reader, after_stop))
     params = dict(report.params)
@@ -682,6 +707,34 @@ def roll_back(
     at_stop = {c[:2]: c[3] for c in run_changes}
     #: The latest read: after the stop, then after each compensation.
     last = after_stop
+    if resumed:
+        # An earlier attempt may have undone some of the run's rows since its
+        # read after the stop: nothing else may have changed since.
+        try:
+            last = reader.read(before=before)
+        except StateUnreadable as exc:
+            return finish(
+                "not_rolled_back",
+                f"the read before continuing the rollback failed ({exc}); nothing ran",
+                landed,
+            )
+        since_stop = [
+            c
+            for c in changes(
+                diff_states(after_stop, last, excuse=_excuser(reader, last))
+            )
+            if c[:2] not in run_keys
+        ]
+        others = not_own(diff_states(before, last, excuse=_excuser(reader, last)), last)
+        if since_stop or others:
+            record.conflicts = len(since_stop) + len(others)
+            return finish(
+                "not_rolled_back",
+                f"since the stop, {record.conflicts} row(s) changed that the run "
+                "didn't write or that aren't positively its own; nothing more was "
+                "compensated. Different now: " + landed.describe(),
+                landed,
+            )
 
     #: Rows a compensation took that the run didn't write: born and gone
     #: between two reads, so the final read can't show them.
@@ -738,6 +791,36 @@ def roll_back(
             stop_reason = f"step {entry.step_id}: {step_record.reason}"
             break
         step_record.undo_id = undo.id
+        if entry.step_id in compensated:
+            # An earlier attempt finished it: never run twice. The reads judge.
+            step_record.decision = "compensated"
+            step_record.reason = "an earlier attempt compensated it"
+            continue
+        if entry.step_id in restarted:
+            # An earlier attempt started it and may have finished it: run
+            # nothing; only a fresh read showing the change gone settles it.
+            presence, why = fresh_presence(
+                entry,
+                undo,
+                workflow,
+                run_dir=run_dir,
+                params=params,
+                read_records=read_records,
+            )
+            step_record.fresh_read = presence  # type: ignore[assignment]
+            if presence == "absent":
+                step_record.decision = "not_needed"
+                step_record.reason = (
+                    "an earlier attempt started its compensation, and a fresh "
+                    f"read shows nothing left to undo: {why}"
+                )
+                continue
+            step_record.reason = (
+                "an earlier attempt started its compensation and may have "
+                f"finished it ({why}); not run twice"
+            )
+            stop_reason = f"step {entry.step_id}: {step_record.reason}"
+            break
         if entry.attempt_state == "delivery_uncertain" or entry.status != "confirmed":
             presence, why = fresh_presence(
                 entry,
@@ -791,6 +874,15 @@ def roll_back(
         # From here the store may change: the run can't be resumed.
         (run_dir / COMPENSATED_MARKER).touch()
         try:
+            if journal is not None:
+                journal.step(entry.step_id, "started")
+        except Exception as exc:  # noqa: BLE001 - no record, no compensation
+            step_record.reason = (
+                f"the rollback journal couldn't be written ({type(exc).__name__})"
+            )
+            stop_reason = f"step {entry.step_id}: {step_record.reason}"
+            break
+        try:
             undo_report = runner.run(
                 undo_workflow(workflow, undo),
                 bundle_dir=bundle_dir,
@@ -815,6 +907,11 @@ def roll_back(
             break
         step_record.decision = "compensated"
         step_record.reason = judged
+        if journal is not None:
+            try:
+                journal.step(entry.step_id, "compensated")
+            except Exception:  # noqa: BLE001 - "started" already makes a rerun re-read
+                pass
         if kind == "void" and undo.locate is not None:
             located = str(undo_params.get(undo.locate.param, ""))
             retained |= {(table, undo.locate.field, located) for table in undo.retains}
@@ -1140,25 +1237,184 @@ def web_fresh_session(
     return reset
 
 
+#: How long a desktop start check looks for its screen before refusing.
+START_CHECK_TIMEOUT_S = 10.0
+
+
+def _same_control(locator: Any, identity: Optional[dict[str, Any]]) -> bool:
+    """Is ``identity`` (``element_identity_at``) the control ``locator`` names?
+    Its automation id when the locator has one, otherwise its name; and its
+    role when both have one."""
+    if not identity or locator is None:
+        return False
+    if locator.automation_id:
+        if identity.get("automation_id") != locator.automation_id:
+            return False
+    elif not locator.name or identity.get("name") != locator.name:
+        return False
+    role = identity.get("role")
+    return not (locator.role and role and role != locator.role)
+
+
+def _start_screen_missing(
+    backend: Any,
+    replayer: Any,
+    workflow: Workflow,
+    predicate: Any,
+    *,
+    bundle_dir: Path,
+    evidence: Optional[Path] = None,
+    timeout_s: float = START_CHECK_TIMEOUT_S,
+) -> Optional[str]:
+    """None when ``predicate``'s anchor shows on the live screen, else why not.
+
+    It resolves through the same ladder a step uses. A structural hit (UI
+    Automation, AT-SPI, AX) proves only that the control exists: a dialog or
+    another app may cover it. So it counts only when a screen-wide hit test
+    at its point names the same control (a backend with
+    ``hit_test_sees_every_window``), and otherwise only when the pixels show
+    it too (the visual ladder). A pixel-only backend (RDP, Citrix) uses the
+    visual ladder alone. With ``evidence``, the last frame and verdict are
+    kept there. Never raises.
+    """
+    import time
+
+    from openadapt_flow.backend import StructuralResolutionRefused
+    from openadapt_flow.runtime.replayer import _frame_viewport
+    from openadapt_flow.runtime.resolver import resolve
+
+    anchor = getattr(predicate, "anchor", None)
+    if anchor is None:
+        return "the start screen has no anchor to look for"
+    structural = (
+        backend if callable(getattr(backend, "locate_structural", None)) else None
+    )
+    hit_test = getattr(backend, "element_identity_at", None)
+    screen_wide = bool(getattr(backend, "hit_test_sees_every_window", False))
+    intent = getattr(predicate, "intent", "") or ""
+    deadline = time.monotonic() + timeout_s
+    why: Optional[str] = "the start screen isn't showing"
+    frame: Optional[bytes] = None
+    rung: Optional[str] = None
+    while True:
+        try:
+            frame = backend.screenshot()
+            template = (
+                replayer._asset_bytes(bundle_dir, anchor.template, workflow=workflow)
+                if anchor.template
+                else None
+            )
+            viewport = _frame_viewport(frame)
+            found = resolve(
+                anchor,
+                frame,
+                replayer.vision,
+                None,
+                intent,
+                template_png=template,
+                viewport=viewport,
+                structural=structural,
+            )
+            rung = found[0].rung if found else None
+            if found is None:
+                why = "the start screen isn't showing"
+            elif rung != "structural":
+                why = None
+            elif screen_wide and callable(hit_test):
+                point = found[0].point
+                why = (
+                    None
+                    if _same_control(anchor.structural, hit_test(*point))
+                    else "something else is over its control"
+                )
+            elif resolve(
+                anchor,
+                frame,
+                replayer.vision,
+                None,
+                intent,
+                template_png=template,
+                viewport=viewport,
+            ):
+                why = None
+            else:
+                why = "its control exists, but the screen doesn't show it"
+        except StructuralResolutionRefused as exc:
+            why = f"its control is there but not usable ({str(exc)[:160]})"
+        except Exception as exc:  # noqa: BLE001 - a failed check is a refusal
+            why = f"the start check failed ({type(exc).__name__})"
+        if why is None or time.monotonic() >= deadline:
+            break
+        time.sleep(0.5)
+    if evidence is not None:
+        try:
+            _write_private(
+                evidence.with_suffix(".json"),
+                {"intent": intent, "rung": rung, "shows": why is None, "why": why},
+            )
+            if frame:
+                evidence.with_suffix(".png").write_bytes(frame)
+        except OSError:
+            pass
+    return why
+
+
+def _check_start(
+    backend: Any,
+    replayer: Any,
+    workflow: Workflow,
+    predicate: Any,
+    *,
+    bundle_dir: Path,
+    where: Path,
+) -> Optional[str]:
+    """None when the start screen ``predicate`` names shows. An anchor goes
+    through ``_start_screen_missing``; any other kind (text on the screen, a
+    combination) through the halt cleanup's own guard, as before."""
+    from openadapt_flow import halt_cleanup
+    from openadapt_flow.ir import HaltCleanup, PredicateKind
+    from openadapt_flow.runtime import Replayer
+
+    if predicate is not None and predicate.kind == PredicateKind.ANCHOR_RESOLVES:
+        return _start_screen_missing(
+            backend,
+            replayer,
+            workflow,
+            predicate,
+            bundle_dir=bundle_dir,
+            evidence=where,
+        )
+    return halt_cleanup.check_start(
+        lambda: Replayer(backend, use_structural=True),
+        workflow,
+        HaltCleanup(steps=[], start_state=predicate, source="declared"),
+        bundle_dir=bundle_dir,
+        run_dir=where,
+    )
+
+
 def screen_fresh_session(
     backend: Any, workflow: Workflow, *, bundle_dir: Path, run_dir: Path
 ) -> Optional[Callable[..., None]]:
     """Check that any backend (a desktop app, a remote display) is back at a
     start screen before a GUI compensation runs.
 
-    It runs the run's halt cleanup (``halt_cleanup.runnable_cleanup``: the
-    bundle's cleanup steps only when their qualification matches, otherwise
-    none) and checks the run's start screen. Then it checks the
-    compensation's own start screen: its first anchored step's anchor. A
-    screen that doesn't show either refuses the compensation, and so does a
-    compensation with no anchored step. Unlike a web session, nothing here
-    signs out or navigates: without a qualified cleanup it only checks.
-    Nothing here proves an undo: the whole-store reads before and after each
-    compensation cover whatever the cleanup does too. None when the workflow
-    has no start screen to check.
+    It runs the run's halt cleanup steps when their qualification matches
+    (``halt_cleanup.runnable_cleanup``), then checks the run's start screen
+    and the compensation's own (its first anchored step's anchor), keeping
+    each check's frame and verdict under ``rollback/.fresh-session-N``. An
+    anchor is looked for through the step resolver, and a control found
+    structurally counts only when nothing is over it (``_start_screen_missing``);
+    any other start state through the halt cleanup's guard. A screen that
+    doesn't show either refuses the compensation, and so does a compensation
+    with no anchored step. Unlike a web session, nothing here signs out or
+    navigates: without a qualified cleanup it only checks. Nothing here
+    proves an undo: the whole-store reads before and after each compensation
+    cover whatever the cleanup does too. None when the workflow has no start
+    screen to check.
     """
+
     from openadapt_flow import halt_cleanup
-    from openadapt_flow.ir import HaltCleanup
 
     cleanup = halt_cleanup.runnable_cleanup(workflow)
     if cleanup is None:
@@ -1168,20 +1424,32 @@ def screen_fresh_session(
     def reset(compensation: Optional[Workflow] = None) -> None:
         from openadapt_flow.runtime import Replayer
 
-        def replayer() -> Any:
-            return Replayer(backend, use_structural=True)
-
         resets[0] += 1
         # Undo ids can't start with a dot: no collision with their run dirs.
         where = run_dir / ROLLBACK_DIRNAME / f".fresh-session-{resets[0]}"
-        result = halt_cleanup.run_cleanup(
-            replayer, workflow, cleanup, bundle_dir=bundle_dir, run_dir=where
-        )
-        if not result.clean:
-            raise CompensationRefused(
-                "the run's start screen isn't showing "
-                f"({result.dirty or result.record_changed})"
+        if cleanup.steps:
+            steps = halt_cleanup.cleanup_workflow(workflow, cleanup).model_copy(
+                update={"steps": [s.model_copy(deep=True) for s in cleanup.steps]}
             )
+            try:
+                Replayer(backend, use_structural=True).run(
+                    steps, params={}, bundle_dir=bundle_dir, run_dir=where / "steps"
+                )
+            except Exception as exc:  # noqa: BLE001 - a failed cleanup refuses
+                raise CompensationRefused(
+                    f"the halt cleanup raised {type(exc).__name__}"
+                ) from exc
+        checker = Replayer(backend, use_structural=True)
+        why = _check_start(
+            backend,
+            checker,
+            workflow,
+            cleanup.start_state,
+            bundle_dir=bundle_dir,
+            where=where / "start",
+        )
+        if why is not None:
+            raise CompensationRefused(f"the run's start screen isn't showing ({why})")
         if compensation is None:
             return
         start = halt_cleanup.start_state_of(compensation)
@@ -1190,12 +1458,13 @@ def screen_fresh_session(
                 "the compensation has no anchored step, so its start screen "
                 "can't be checked"
             )
-        why = halt_cleanup.check_start(
-            replayer,
+        why = _check_start(
+            backend,
+            checker,
             compensation,
-            HaltCleanup(steps=[], start_state=start, source="declared"),
+            start,
             bundle_dir=bundle_dir,
-            run_dir=where / "compensation",
+            where=where / "compensation",
         )
         if why is not None:
             raise CompensationRefused(
@@ -1299,6 +1568,63 @@ class RollbackPlan:
         except StateUnreadable:
             return None
 
+    def settings(self) -> dict[str, Any]:
+        """What decides whose rows a rollback may touch: a later process must
+        roll back under the same settings the run was armed with."""
+        return {
+            "exclusive": bool(self.exclusive),
+            "allow_delete": bool(self.allow_delete),
+            "attribution": (
+                self.attribution.model_dump(mode="json")
+                if self.attribution is not None
+                else None
+            ),
+            "scope": getattr(self.reader, "scope", None),
+            "allow_tables": sorted(getattr(self.reader, "allow_tables", ()) or ()),
+            "profile_id": getattr(self.reader, "profile_id", None),
+        }
+
+    def seal(
+        self,
+        sealed: Any,
+        before: Snapshot,
+        params: dict[str, Any],
+        *,
+        bundle_version: Optional[str] = None,
+    ) -> None:
+        """Keep the read from before the run, encrypted, for a rollback in a
+        later process (``rollback_durable.SealedRollback``)."""
+        sealed.save_armed(
+            before=before,
+            reader_key=self.reader.key,  # type: ignore[attr-defined]
+            audit_before=(
+                self.attributor._before if self.attributor is not None else None
+            ),
+            params=dict(params),
+            settings=self.settings(),
+            bundle_version=bundle_version,
+        )
+
+    def restore(self, armed: dict[str, Any]) -> Optional[Snapshot]:
+        """The read from before the run, from sealed state (``seal``), with the
+        reader's row digests and the audit log as they were then; None when
+        attribution can't be rebuilt from it, or the deployment's rollback
+        settings changed since the run was armed."""
+        if armed.get("settings") != self.settings():
+            return None
+        self.reader.key = armed["reader_key"]  # type: ignore[attr-defined]
+        if self.attribution is not None:
+            self.attributor = Attributor.from_spec(
+                self.attribution, armed["params"], self.audit_read
+            )
+            if self.attributor is None:
+                return None
+            self.attributor._before = armed["audit_before"]
+            if self.attribution.kind == "audit_read" and armed["audit_before"] is None:
+                return None
+        before: Snapshot = armed["before"]
+        return before
+
     def finish(
         self,
         report: RunReport,
@@ -1308,6 +1634,10 @@ class RollbackPlan:
         run_dir: Path,
         bundle_dir: Path,
         runner: CompensationRunner,
+        journal: Any = None,
+        after_stop: Optional[Snapshot] = None,
+        restarted: frozenset[str] = frozenset(),
+        compensated: frozenset[str] = frozenset(),
     ) -> RunReport:
         record = roll_back(
             report,
@@ -1321,7 +1651,16 @@ class RollbackPlan:
             attributor=self.attributor,
             allow_delete=self.allow_delete,
             exclusive=self.exclusive,
+            journal=journal,
+            after_stop=after_stop,
+            restarted=restarted,
+            compensated=compensated,
         )
+        if journal is not None and record is not None:
+            try:
+                journal.mark_finished(record.status)
+            except Exception:  # noqa: BLE001 - the verdict stands; a rerun re-reads
+                pass
         return apply_rollback(report, workflow, record, run_dir)
 
 
