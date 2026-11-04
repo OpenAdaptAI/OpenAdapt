@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+import select
 import subprocess
 from pathlib import Path
 from typing import Any, Optional, Sequence
@@ -87,6 +88,7 @@ class AppWorldTarget:
         appworld_root: str,
         references: str,
         cache: Optional[str] = None,
+        timeout: str = "1800",
     ) -> None:
         self.appworld_root = appworld_root
         self.references = Path(references)
@@ -94,11 +96,15 @@ class AppWorldTarget:
         cache_dir = cache or str(
             Path(appworld_root) / "experiments" / "verifier_audit_seed_cache"
         )
+        self.timeout = float(timeout)
+        self._next_id = 0
+        Path(cache_dir).mkdir(parents=True, exist_ok=True)
+        self._log = open(Path(cache_dir) / "worker.log", "a")  # noqa: SIM115
         self._proc = subprocess.Popen(
             [python, "-I", str(WORKER), appworld_root, cache_dir],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=self._log,
             text=True,
             bufsize=1,
         )
@@ -133,7 +139,9 @@ class AppWorldTarget:
             or any(c.kind is CallKind.WRITE for c in calls[claim + 1 :])
         ):
             claim = None
+        self._next_id += 1
         req = {
+            "id": self._next_id,
             "task": task,
             "calls": [to_raw(c) for c in calls],
             "claim_index": claim,
@@ -142,10 +150,7 @@ class AppWorldTarget:
         assert self._proc.stdin and self._proc.stdout
         self._proc.stdin.write(json.dumps(req) + "\n")
         self._proc.stdin.flush()
-        line = self._proc.stdout.readline()
-        if not line:
-            raise RuntimeError("AppWorld worker exited")
-        resp = json.loads(line)
+        resp = self._read(self._next_id)
         return Episode(
             final_effect=canonical_effect(resp["final_rows"]),
             claim_effect=canonical_effect(resp["claim_rows"])
@@ -156,10 +161,33 @@ class AppWorldTarget:
             scorer_detail=resp["detail"],
         )
 
+    def _read(self, want: int) -> dict[str, Any]:
+        """Read the response to request ``want``. Lines that are not this
+        request's JSON response are skipped, so stray output cannot shift
+        later responses onto the wrong request."""
+        assert self._proc.stdout
+        while True:
+            ready, _, _ = select.select([self._proc.stdout], [], [], self.timeout)
+            if not ready:
+                self._proc.kill()
+                raise TimeoutError(f"AppWorld worker gave no answer in {self.timeout}s")
+            line = self._proc.stdout.readline()
+            if not line:
+                raise RuntimeError(
+                    "AppWorld worker exited; see worker.log in the cache"
+                )
+            try:
+                resp = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(resp, dict) and resp.get("id") == want:
+                return resp
+
     def close(self) -> None:
         if self._proc.stdin:
             self._proc.stdin.close()
         self._proc.wait(timeout=60)
+        self._log.close()
 
 
 def make_target(**kwargs: Any) -> AppWorldTarget:

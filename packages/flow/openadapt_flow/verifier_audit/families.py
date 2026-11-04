@@ -257,16 +257,20 @@ def partial_write(ctx: FamilyContext) -> Union[list[Candidate], Refusal]:
     first, last = writes[0], writes[-1]
     keep_first = [c for j, c in enumerate(ref) if j not in set(writes[1:])]
     drop_last = ref[:last] + ref[last + 1 :]
-    return [
+    out = [
         Candidate(
             tuple(keep_first),
             f"only the first of {len(writes)} writes is sent (call {first})",
-        ),
-        Candidate(
-            tuple(drop_last),
-            f"the last of {len(writes)} writes (call {last}) is dropped",
-        ),
+        )
     ]
+    if drop_last != keep_first:  # the same edit when there are two writes
+        out.append(
+            Candidate(
+                tuple(drop_last),
+                f"the last of {len(writes)} writes (call {last}) is dropped",
+            )
+        )
+    return out
 
 
 def late_write(ctx: FamilyContext) -> Union[list[Candidate], Refusal]:

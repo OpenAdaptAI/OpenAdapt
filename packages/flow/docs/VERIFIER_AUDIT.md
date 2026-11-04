@@ -89,13 +89,17 @@ python -m openadapt_flow.verifier_audit run \
 ```
 
 The output directory holds `cells.jsonl` (an append-only ledger; a rerun
-resumes and does not rescore finished cells), `report.json` and `REPORT.md`.
+resumes and does not rescore finished cells, but retries harness and scorer
+errors), `ledger.json` (the target, kit version, families and redaction mode;
+a rerun with a different target or mode refuses), `report.json` and
+`REPORT.md`.
 Rates are per family, with Wilson 95% intervals, and are not pooled. The report
 also gives the share of tasks with at least one false accept.
 
 Use `--redact` when a target's task data may not be redistributed in the clear.
 AppWorld's protected data, for example, may be shared only encrypted. Redaction
-replaces call arguments and effect rows with digests.
+replaces call arguments, effect rows, edit descriptions and error text with
+digests and drops scorer details. Task ids and family names stay readable.
 
 ## What a result does and does not show
 

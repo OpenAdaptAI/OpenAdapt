@@ -11,6 +11,8 @@ from openadapt_flow.verifier_audit import (
     AuditConfig,
     Call,
     CallKind,
+    Episode,
+    Verdict,
     families_spec,
     run_audit,
     wilson_interval,
@@ -132,10 +134,59 @@ def test_single_replay_halves_scored_replays_and_keeps_verdicts():
     assert scored.count(False) == 3  # only the reference reproducibility replays
 
 
-def test_redaction_digests_arguments_and_effects():
-    report = run_audit(ToyPayments(), AuditConfig(redact=True))
-    text = json.dumps(report["cells"])
-    assert "lunch" not in text and "sha256:" in text
+def test_redaction_digests_arguments_effects_and_edit_text(tmp_path):
+    report = run_audit(ToyPayments(), AuditConfig(redact=True, out_dir=tmp_path))
+    text = json.dumps(report) + (tmp_path / "REPORT.md").read_text()
+    text += (tmp_path / "cells.jsonl").read_text()
+    for task in ToyPayments().tasks():  # task ids are kept on purpose
+        text = text.replace(task, "<task>")
+    for value in ("lunch", "alice", "bob", "carol", "dave"):
+        assert value not in text, value
+    assert "sha256:" in text
+
+
+def test_ledger_refuses_another_target_or_redaction_mode(tmp_path):
+    run_audit(ToyPayments(), AuditConfig(out_dir=tmp_path, tasks=["pay-bob"]))
+    with pytest.raises(ValueError):
+        run_audit(ToyPayments(), AuditConfig(out_dir=tmp_path, redact=True))
+
+    class Other(ToyPayments):
+        name = "other"
+
+    with pytest.raises(ValueError):
+        run_audit(Other(), AuditConfig(out_dir=tmp_path))
+
+
+def test_crashed_replay_is_skipped_not_taken_as_an_effect(tmp_path):
+    class Crashing(ToyPayments):
+        crashes = 0
+
+        def run(self, task, calls_, *, score):
+            if list(calls_) != self.reference(task) and self.crashes < 1:
+                self.crashes += 1
+                return Episode(
+                    final_effect=(), verdict=Verdict.ERROR, scorer_detail="boom"
+                )
+            return super().run(task, calls_, score=score)
+
+    target = Crashing()
+    report = run_audit(target, AuditConfig(tasks=["pay-bob"], out_dir=tmp_path))
+    first = next(c for c in report["cells"] if c.get("census_attempts"))
+    assert first["census_attempts"][0] == {
+        "edit": first["census_attempts"][0]["edit"],
+        "harness_error": True,
+    }
+    assert first["status"] != "EFFECT_NOT_REPRODUCIBLE"
+
+
+def test_resume_retries_harness_errors(tmp_path):
+    run_audit(ToyPayments(), AuditConfig(out_dir=tmp_path, tasks=["pay-bob"]))
+    ledger = tmp_path / "cells.jsonl"
+    rows = [json.loads(line) for line in ledger.read_text().splitlines()]
+    rows[0]["status"] = "HARNESS_ERROR"
+    ledger.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    again = run_audit(ToyPayments(), AuditConfig(out_dir=tmp_path, tasks=["pay-bob"]))
+    assert all(c["status"] != "HARNESS_ERROR" for c in again["cells"])
 
 
 @pytest.mark.parametrize(

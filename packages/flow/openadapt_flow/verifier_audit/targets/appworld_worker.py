@@ -202,13 +202,18 @@ class Worker:
 def main() -> int:
     appworld_root, cache = sys.argv[1], Path(sys.argv[2])
     cache.mkdir(parents=True, exist_ok=True)
+    # Keep the protocol channel clean: responses go to a private copy of fd 1,
+    # and fd 1 itself (Python and C-level prints alike) goes to stderr.
+    real_stdout = os.fdopen(os.dup(1), "w")
+    os.dup2(2, 1)
+    sys.stdout = sys.stderr
     worker = Worker(appworld_root, cache)
-    real_stdout = sys.stdout
-    sys.stdout = sys.stderr  # AppWorld prints; keep the protocol channel clean
     for line in sys.stdin:
         if not line.strip():
             continue
-        resp = worker.handle(json.loads(line))
+        req = json.loads(line)
+        resp = worker.handle(req)
+        resp["id"] = req.get("id")
         real_stdout.write(json.dumps(resp, default=str) + "\n")
         real_stdout.flush()
     return 0

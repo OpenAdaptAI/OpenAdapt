@@ -148,6 +148,11 @@ def _audit_family(
                 verdict=None,
             )
         census = target.run(task, cand.calls, score=cfg.single_replay)
+        if census.verdict is Verdict.ERROR:
+            # A replay that crashed has no effect to compare; an empty one
+            # would look like a real change.
+            attempts.append({"edit": cand.description, "harness_error": True})
+            continue
         ok, differs = _edited_calls_ok(census, cand), _differs(census, control, cand)
         attempts.append(
             {
@@ -188,10 +193,12 @@ def _audit_family(
             scorer_detail=ep.scorer_detail,
             census_attempts=attempts,
         )
-    if (
+    if attempts and all(a.get("harness_error") for a in attempts):
+        status = "HARNESS_ERROR"
+    elif (
         attempts
-        and all(a["edited_call_accepted"] for a in attempts)
-        and not any(a["effect_differs"] for a in attempts)
+        and all(a.get("edited_call_accepted") for a in attempts)
+        and not any(a.get("effect_differs") for a in attempts)
     ):
         status = "DEGENERATE"
     else:
@@ -199,6 +206,35 @@ def _audit_family(
     return _cell(
         task, family, status, edit=None, verdict=None, census_attempts=attempts
     )
+
+
+_RETRY = ("HARNESS_ERROR", "SCORER_ERROR")
+
+
+def _check_fingerprint(out_dir: Path, target: AuditTarget, cfg: AuditConfig) -> None:
+    """Refuse to resume a ledger written for another target, family set or
+    redaction mode: its cells are keyed only by (task, family)."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    fingerprint: dict[str, Any] = {
+        "kit_version": KIT_VERSION,
+        "target": target.name,
+        "families": sorted(f.id for f in cfg.families),
+        "redact": cfg.redact,
+    }
+    path = out_dir / "ledger.json"
+    if path.is_file():
+        found = json.loads(path.read_text())
+        found_families = set(found.get("families", []))
+        same = {k: v for k, v in found.items() if k != "families"} == {
+            k: v for k, v in fingerprint.items() if k != "families"
+        }
+        if not same:
+            raise ValueError(f"{out_dir} holds a ledger for {found}; use another --out")
+        # Adding families to an existing ledger is fine; keep the union.
+        fingerprint["families"] = sorted(found_families | set(fingerprint["families"]))
+    elif (out_dir / "cells.jsonl").is_file():
+        raise ValueError(f"{out_dir}/cells.jsonl has no ledger.json; use another --out")
+    path.write_text(json.dumps(fingerprint, indent=2, sort_keys=True) + "\n")
 
 
 def _value_named(
@@ -219,13 +255,27 @@ def _value_named(
             if after["args"].get(key) != value and isinstance(value, (str, int, float)):
                 needle = str(value).lower().strip()
                 if len(needle) < 3:
-                    return False
+                    return None  # too short to tell from a substring
                 return re.search(rf"(?<!\w){re.escape(needle)}(?!\w)", text) is not None
     return False
 
 
 def _redact(cell: dict[str, Any]) -> dict[str, Any]:
+    """Digest everything that can carry task data: arguments, effects, edit
+    descriptions (they quote retarget values), call and harness errors (they
+    can echo a request) and scorer details."""
     cell = dict(cell)
+    for key in ("edit", "error"):
+        if isinstance(cell.get(key), str):
+            cell[key] = _digest(cell[key])
+    if cell.get("call_errors"):
+        cell["call_errors"] = {
+            k: _digest(str(v)) for k, v in cell["call_errors"].items()
+        }
+    if cell.get("census_attempts"):
+        cell["census_attempts"] = [
+            {**a, "edit": _digest(a["edit"])} for a in cell["census_attempts"]
+        ]
     if "calls" in cell:
         cell["calls"] = [
             {
@@ -251,13 +301,17 @@ def run_audit(target: AuditTarget, cfg: Optional[AuditConfig] = None) -> dict[st
     tasks = list(cfg.tasks or target.tasks())
     ledger_path = cfg.out_dir / "cells.jsonl" if cfg.out_dir else None
     done: dict[tuple[str, str], dict[str, Any]] = {}
+    if cfg.out_dir:
+        _check_fingerprint(cfg.out_dir, target, cfg)
     if ledger_path and ledger_path.is_file():
         for line in ledger_path.read_text().splitlines():
             if line.strip():
                 cell = json.loads(line)
-                done[(cell["task"], cell["family"])] = cell
-    if cfg.out_dir:
-        cfg.out_dir.mkdir(parents=True, exist_ok=True)
+                key = (cell["task"], cell["family"])
+                if cell.get("status") in _RETRY:
+                    done.pop(key, None)  # a later run may get past it
+                else:
+                    done[key] = cell
 
     refs = {task: target.reference(task) for task in tasks}
     pool = _identity_pool(target, tasks, refs)
@@ -297,8 +351,9 @@ def run_audit(target: AuditTarget, cfg: Optional[AuditConfig] = None) -> dict[st
                 "task": task,
                 "family": "__control__",
                 "reason": reason,
-                "scorer_detail": control.scorer_detail,
             }
+            if not cfg.redact:
+                row["scorer_detail"] = control.scorer_detail
             excluded.append(row)
             if ledger_path:
                 with ledger_path.open("a") as fh:
