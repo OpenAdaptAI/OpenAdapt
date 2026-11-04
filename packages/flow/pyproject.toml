@@ -205,12 +205,13 @@ reward = [
 harness2 = ["playwright>=1.44"]
 # Standard RL environments (openadapt_flow.rl_env): the record-checked apps
 # served over the OpenEnv protocol (BSD-3-Clause) and rewarded by verify-run.
-# See environments/openenv/README.md.
+# See environments/openenv/README.md. Python 3.11+: on 3.10 the OpenEnv stack
+# resolves to a dnspython release with a known advisory (GHSA-45c3-73f7-pv4m).
 openenv = [
-    "openenv>=0.11,<0.12",
-    "playwright>=1.44",
-    "fastapi>=0.110",
-    "uvicorn>=0.29",
+    "openenv>=0.11,<0.12; python_version >= '3.11'",
+    "playwright>=1.44; python_version >= '3.11'",
+    "fastapi>=0.110; python_version >= '3.11'",
+    "uvicorn>=0.29; python_version >= '3.11'",
 ]
 # Native macOS window capture/input. Imported lazily; other platforms never
 # install or import these framework bindings.
