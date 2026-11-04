@@ -1059,6 +1059,33 @@ _FOCUSED_PLAIN_TEXT_JS = r"""() => {
     return ['text', 'email', 'tel', 'search', 'url'].includes(t);
 }"""
 
+#: An ISO calendar date, the value a native ``<input type=date>`` holds.
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+_IS_DATE_INPUT_JS = "e => e.tagName === 'INPUT' && e.type === 'date'"
+_FOCUSED_DATE_INPUT_JS = (
+    "() => { const e = document.activeElement;"
+    " return !!e && e.tagName === 'INPUT' && e.type === 'date'; }"
+)
+
+
+def _fill_iso_date(locator: Any, text: str, is_date_input: Callable[[], bool]) -> bool:
+    """Set an ISO date (``YYYY-MM-DD``) into a native ``<input type=date>``.
+
+    Chromium splits a date input into locale-ordered segments that a typed
+    string can't fill: ``-`` doesn't move to the next segment, and the year
+    segment takes six digits. ``fill`` takes the ISO value whatever the locale
+    and fires ``input`` and ``change`` as typing does. Returns ``False``, with
+    nothing delivered, when ``text`` isn't an ISO date or the element isn't a
+    date input; once it is, a failed ``fill`` raises rather than falling back
+    to typing.
+    """
+
+    if not (_ISO_DATE.fullmatch(text or "") and is_date_input()):
+        return False
+    locator.fill(text, timeout=1000)
+    return True
+
+
 _TEXT_AT_POINT_JS = r"""([px, py, target]) => {
     // Recorded texts come from OCR, which drops spaces and misreads
     // punctuation ("October-2026-" for "October 2026"): keep letters and
@@ -4207,7 +4234,14 @@ class PlaywrightBackend:
             operation="guarded_dom_type",
             # Keys go through the leased element itself, never the page
             # keyboard, so delivery stays bound to the checked target.
-            deliver=lambda locator: locator.press_sequentially(text, timeout=1000),
+            deliver=lambda locator: (
+                _fill_iso_date(
+                    locator,
+                    text,
+                    lambda: locator.evaluate(_IS_DATE_INPUT_JS) is True,
+                )
+                or locator.press_sequentially(text, timeout=1000)
+            ),
         )
         self._snapshot_focused_field(text)
         return receipt
@@ -4770,11 +4804,20 @@ class PlaywrightBackend:
         except Exception:
             return False
 
+    def _focused_date_input(self) -> bool:
+        try:
+            return self.page.evaluate(_FOCUSED_DATE_INPUT_JS) is True
+        except Exception:
+            return False
+
     def _deliver_text(self, text: str, per_key: Callable[[], None]) -> None:
         """Insert ``text`` at the caret in one call when the focused element
         is an ordinary text field (native fill: the field's ``input`` event
         fires, and ``change`` on blur, as for typing); otherwise ``per_key``
-        types it key by key."""
+        types it key by key. An ISO date into a native date input is set
+        with ``fill`` (see :func:`_fill_iso_date`)."""
+        if _fill_iso_date(self.page.locator(":focus"), text, self._focused_date_input):
+            return
         if self.native_fill and text and self._focused_plain_text_field():
             self.page.keyboard.insert_text(text)
             return
