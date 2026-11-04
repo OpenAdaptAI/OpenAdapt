@@ -16,7 +16,7 @@ class _LaunchGuard:
         self.item: Any = None
 
     def options(self, options: dict[str, Any]) -> dict[str, Any]:
-        if os.environ.get("CI"):
+        if os.environ.get("CI", "").strip().lower() in {"true", "1"}:
             return options
         ignored = options.get("ignore_default_args") or []
         removes_headless = ignored is True or any(
@@ -26,6 +26,7 @@ class _LaunchGuard:
             options.get("headless") is False
             or options.get("devtools") is True
             or removes_headless
+            or bool(os.environ.get("PWDEBUG"))
         )
         allowed = (
             self.item is not None

@@ -19,6 +19,7 @@ from tests.headless_guard import _LaunchGuard
 @pytest.fixture
 def launches(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("PWDEBUG", raising=False)
     monkeypatch.delenv("OPENADAPT_ALLOW_HEADED", raising=False)
     calls: list[dict[str, Any]] = []
 
@@ -152,3 +153,39 @@ def test_harmless_ignored_arguments_keep_headless_mode(launches):
         "ignore_default_args": ["--mute-audio"],
         "headless": True,
     }
+
+
+@pytest.mark.parametrize("value", ["false", "0", "no", "FALSE"])
+def test_false_like_ci_values_keep_the_local_guard(launches, monkeypatch, value):
+    _, browsers, calls = launches
+    monkeypatch.setenv("CI", value)
+    with pytest.raises(pytest.fail.Exception, match="headed Playwright launch refused"):
+        browsers[0].launch(headless=False)
+    assert calls == []
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("persistent", [False, True])
+@pytest.mark.parametrize("value", ["1", "console", "0"])
+def test_debug_environment_requires_both_opt_ins(
+    launches, monkeypatch, asynchronous, persistent, value
+):
+    guard, browsers, calls = launches
+    monkeypatch.setenv("PWDEBUG", value)
+    with pytest.raises(pytest.fail.Exception, match="headed Playwright launch refused"):
+        _launch(
+            browsers[asynchronous],
+            asynchronous=asynchronous,
+            persistent=persistent,
+            headless=True,
+        )
+    assert calls == []
+    guard.item = SimpleNamespace(get_closest_marker=lambda name: object())
+    monkeypatch.setenv("OPENADAPT_ALLOW_HEADED", "1")
+    _launch(
+        browsers[asynchronous],
+        asynchronous=asynchronous,
+        persistent=persistent,
+        headless=True,
+    )
+    assert len(calls) == 1

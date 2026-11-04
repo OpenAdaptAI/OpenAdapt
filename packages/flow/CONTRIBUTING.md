@@ -198,3 +198,9 @@ See [SECURITY.md](SECURITY.md) — do not file security problems as public issue
 ## Code of Conduct
 
 This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
+
+The local guard also refuses launches when `PWDEBUG` is set unless both headed
+opt-ins are present: Playwright's inspector can override `headless=True`.
+Only `CI=true` or `CI=1` disables the local guard. Processes started outside
+Playwright (including browsers reached through `connect_over_cdp`) must pass
+the browser's headless flag themselves.
