@@ -524,7 +524,7 @@ def _judge_versions(
     window that isn't the agent's own refutes it; one that can't be read or
     attributed leaves it not checked."""
 
-    from openadapt_flow.runtime.effects.versions import judge_versions
+    from openadapt_flow.runtime.effects.versions import VersionVerdict, judge_versions
 
     spec = cfg.frame.versions if cfg.frame is not None else None
     if spec is None:
@@ -557,13 +557,21 @@ def _judge_versions(
             return index(rows) if isinstance(rows, list) else None
         return index(before.records) if before.reachable else None
 
+    def writes_a_target(effect: Effect) -> bool:
+        """A write effect whose records can be targets. A guard ("nothing
+        here", ``record_written`` with ``expected_count`` 0) never is."""
+
+        if effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS):
+            return False
+        return not (
+            effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count == 0
+        )
+
     ignored = set(cfg.frame.ignore_fields)  # type: ignore[union-attr]
     targets: list[tuple[Optional[str], bool, bool]] = []
     for effect, verdict in zip(effects, verdicts):
-        if effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS):
+        if not writes_a_target(effect):
             continue
-        if effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count == 0:
-            continue  # a guard: "nothing here"
         if not verdict.confirmed:
             continue
         if (
@@ -588,14 +596,27 @@ def _judge_versions(
             )
             targets.append((text, existed, changed))
     stored = (before.detail or {}).get(FRAME_VERSIONS_DETAIL)
-    result = judge_versions(
-        spec,
-        stored if isinstance(stored, Mapping) else {},
-        _read_versions(cfg, params),
-        targets,
-        _mac_key(salt),
-        params,
-    )
+    if spec.target_surface is not None and not any(
+        writes_a_target(e) and surface_of(e) == spec.target_surface for e in effects
+    ):
+        # A surface no write target is read from (a typo in a hand-written
+        # contract, or a surface only a guard reads) would leave no target,
+        # and no target holds.
+        result = VersionVerdict(
+            "not_checked",
+            "unknown_surface",
+            reason="frame.versions.target_surface names a surface no write "
+            "target is read from, so no target's versions can be judged",
+        )
+    else:
+        result = judge_versions(
+            spec,
+            stored if isinstance(stored, Mapping) else {},
+            _read_versions(cfg, params),
+            targets,
+            _mac_key(salt),
+            params,
+        )
     frame.versions = result
     if result.status == "refuted":
         frame.status = "refuted"
@@ -788,6 +809,8 @@ class _DatabaseFrame:
     #: Append-only tables in both reads whose profile rule excuses the acting
     #: user's insert entries that name no record.
     no_record_inserts: list[str] = field(default_factory=list)
+    #: The profile's record-field values that name no record.
+    no_record_values: list[str] = field(default_factory=list)
     #: The settled read after the save, and when it was taken: what a later
     #: recheck compares with (``recheck_after_s``).
     post: Any = None
@@ -939,6 +962,7 @@ def _database_frame(
 
     profile = database.loaded_profile()
     no_record = profile.no_record_insert_tables() if profile is not None else set()
+    out.no_record_values = list(profile.no_record_values) if profile is not None else []
     for name in sorted(set(old.tables) | set(new.tables)):
         a, b = old.tables.get(name), new.tables.get(name)
         try:
@@ -1011,6 +1035,12 @@ def _database_frame(
         }
 
         def excuse(name: str, before: Any, after: Any, fields: list[str]) -> Any:
+            from openadapt_flow.runtime.effects.db_snapshot import every_cell_hashed
+
+            tables = (old.tables.get(name), new.tables.get(name))
+            if any(t is not None and not every_cell_hashed(t) for t in tables):
+                # A column no cell MAC shows may have moved: no rule judges it.
+                return False
             return profile.excuse(
                 name, before, after, fields, hashers[name], names, ids
             )
@@ -1292,6 +1322,7 @@ def judge_run_frame(
         new_row_defaults=None if db is None else db.defaults,
         unread_changes=() if db is None else db.unread,
         no_record_inserts=() if db is None else db.no_record_inserts,
+        no_record_values=() if db is None else db.no_record_values,
         hashers=None if db is None else db.hashers,
         clock=("", "") if db is None else db.clock,
         database_evidence=None if db is None else db.evidence,

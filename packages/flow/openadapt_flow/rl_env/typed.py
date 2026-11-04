@@ -30,21 +30,25 @@ def computer_state(
     for i, el in enumerate(elements):
         w, h = int(el.get("w", 0)), int(el.get("h", 0))
         nodes.append(
-            UINode(
-                node_id=f"n{i}",
-                role=str(el.get("type") or el.get("tag") or "generic"),
-                name=el.get("label") or None,
-                css_selector=el.get("selector"),
-                bbox=BoundingBox(
-                    x=max(0, int(el["x"] - w / 2)),
-                    y=max(0, int(el["y"] - h / 2)),
-                    width=w,
-                    height=h,
-                ),
-                is_editable=el.get("tag") in ("input", "textarea", "select"),
+            UINode.model_validate(
+                {
+                    "node_id": f"n{i}",
+                    "role": str(el.get("type") or el.get("tag") or "generic"),
+                    "name": el.get("label") or None,
+                    "css_selector": el.get("selector"),
+                    "bbox": BoundingBox(
+                        x=max(0, int(el["x"] - w / 2)),
+                        y=max(0, int(el["y"] - h / 2)),
+                        width=w,
+                        height=h,
+                    ),
+                    "is_editable": el.get("tag") in ("input", "textarea", "select"),
+                }
             )
         )
-    state = ComputerState(url=url, viewport=viewport, nodes=nodes)
+    state = ComputerState.model_validate(
+        {"url": url, "viewport": viewport, "nodes": nodes}
+    )
     return state.model_dump(mode="json", exclude_none=True)
 
 
@@ -74,7 +78,8 @@ def native_action(
             x, y = x * viewport[0], y * viewport[1]
         out["x"], out["y"] = int(x), int(y)
     kind = action.type
-    if kind in (ActionType.CLICK, ActionType.DOUBLE_CLICK):
+    # A double click is not a click: refuse it rather than send one click.
+    if kind == ActionType.CLICK:
         return {"kind": "click", **out}
     if kind == ActionType.TYPE:
         if "selector" in out:
@@ -88,6 +93,11 @@ def native_action(
         keys = [*(action.modifiers or []), action.key or "Enter"]
         return {"kind": "press", "text": "+".join(keys)}
     if kind == ActionType.SCROLL:
+        if action.scroll_direction not in (None, "up", "down"):
+            raise ValueError(
+                f"scroll direction {action.scroll_direction!r} is not available"
+                " in this environment"
+            )
         amount = action.scroll_amount or SCROLL_STEP
         return {
             "kind": "scroll",
@@ -105,8 +115,8 @@ def native_action(
 
 
 def action_result(error: Optional[str], duration_ms: int) -> dict[str, Any]:
-    return ActionResult(
-        success=error is None, error=error, duration_ms=duration_ms
+    return ActionResult.model_validate(
+        {"success": error is None, "error": error, "duration_ms": duration_ms}
     ).model_dump(mode="json", exclude_none=True)
 
 

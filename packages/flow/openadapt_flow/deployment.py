@@ -26,7 +26,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Callable, Literal, Mapping, Optional
+from typing import Any, Callable, Final, Literal, Mapping, Optional
 
 from pydantic import (
     BaseModel,
@@ -384,9 +384,11 @@ class EffectsConfig(BaseModel):
     #: ``runtime/effects/fresh_session.py`` and ``docs/READBACK_LADDER.md``.
     fresh_session: Optional[FreshSessionSpec] = None
 
-    # -- rest (JSON REST system of record, e.g. MockMed /api/db) -------------
+    # -- rest (JSON REST system of record) -----------------------------------
     base_url: Optional[str] = None
-    records_path: str = "/api/db"
+    #: ``rest`` only, and required there: the path whose GET returns the
+    #: records. Every app keeps them somewhere else, so there is no default.
+    records_path: Optional[str] = None
     records_key: Optional[str] = "records"
     #: ``rest`` only: dotted path in the response body to the next page's URL
     #: (``links.next``). Set, the read follows every page on the same origin
@@ -445,8 +447,10 @@ class EffectsConfig(BaseModel):
     #: Allowlist variant: when set, every evidence field NOT named is redacted.
     evidence_keep_fields: Optional[list[str]] = None
 
-    # -- fhir (FHIR R4 search, e.g. OpenEMR) ---------------------------------
-    resource_type: str = "Observation"
+    # -- fhir (FHIR R4 search) -----------------------------------------------
+    #: ``fhir`` only, and required there with ``field_paths``: which resource
+    #: the app keeps the write in, and where each field lives in it.
+    resource_type: Optional[str] = None
     search_params: dict[str, str] = Field(default_factory=dict)
     field_paths: Optional[dict[str, str]] = None
     #: OAuth2 bearer token literal. DEPRECATED for committed configs — prefer
@@ -545,7 +549,7 @@ class EffectsConfig(BaseModel):
             if not isinstance(env_name, str) or not _ENV_VAR_NAME.fullmatch(env_name):
                 raise ValueError(
                     f"effects.secret_env[{slot!r}] must be the NAME of an "
-                    "environment variable (for example OPENEMR_READER_PASSWORD), "
+                    "environment variable (for example APP_READER_PASSWORD), "
                     "never the credential itself"
                 )
         return v
@@ -627,6 +631,8 @@ class EffectsConfig(BaseModel):
             "deferred_report",
             "records_next_path",
             "records_total_path",
+            "records_path",
+            "resource_type",
         ):
             if data.get(added, "") is None:
                 data.pop(added, None)
@@ -2043,6 +2049,38 @@ def build_effect_verifier(
 _PLUGIN_ONLY_FIELDS = ("options", "option_params", "secret_env")
 
 
+#: What these fields held when they still had defaults. Verifier identities
+#: and check digests issued before then hashed these values, so for hashing
+#: only, an unset field still reads as its old value. Never used to read a
+#: store: a read without its own records_path or resource_type is refused.
+LEGACY_HASHED_DEFAULTS: Final[dict[str, str]] = {
+    "records_path": "/api/db",
+    "resource_type": "Observation",
+}
+
+
+def legacy_hash_dump(dumped: dict[str, Any], *, defaults_excluded: bool) -> None:
+    """Make a config dump hash as it did when those fields had defaults.
+
+    ``defaults_excluded``: the dump left defaults out (``exclude_defaults``),
+    so a field holding its old default is dropped; otherwise an unset field
+    takes its old default.
+    """
+
+    for name, legacy in LEGACY_HASHED_DEFAULTS.items():
+        if defaults_excluded:
+            if dumped.get(name) == legacy:
+                dumped.pop(name)
+        elif dumped.get(name) is None:
+            dumped[name] = legacy
+    for item in dumped.get("candidates") or []:
+        if isinstance(item, dict):
+            legacy_hash_dump(item, defaults_excluded=defaults_excluded)
+    for item in (dumped.get("surfaces") or {}).values():
+        if isinstance(item, dict):
+            legacy_hash_dump(item, defaults_excluded=defaults_excluded)
+
+
 def _identity_config_dump(cfg: EffectsConfig) -> dict[str, Any]:
     """Serialize ``cfg`` for the verifier identity.
 
@@ -2051,6 +2089,7 @@ def _identity_config_dump(cfg: EffectsConfig) -> dict[str, Any]:
     """
 
     def prune(dumped: dict[str, Any]) -> dict[str, Any]:
+        legacy_hash_dump(dumped, defaults_excluded=False)
         for name in _PLUGIN_ONLY_FIELDS:
             if not dumped.get(name):
                 dumped.pop(name, None)
@@ -2223,6 +2262,11 @@ def _build_effect_verifier_unredacted(
     if kind == "rest":
         if not cfg.base_url:
             raise ValueError("effects.kind 'rest' requires effects.base_url")
+        if not cfg.records_path:
+            raise ValueError(
+                "effects.kind 'rest' requires effects.records_path (the path "
+                "whose GET returns the app's records)"
+            )
         from openadapt_flow.runtime.effects import RestRecordVerifier
 
         headers = cfg.auth.resolve_headers() if cfg.auth is not None else None
@@ -2258,6 +2302,12 @@ def _build_effect_verifier_unredacted(
     if kind == "fhir":
         if not cfg.base_url:
             raise ValueError("effects.kind 'fhir' requires effects.base_url")
+        if not cfg.resource_type or not cfg.field_paths:
+            raise ValueError(
+                "effects.kind 'fhir' requires effects.resource_type and "
+                "effects.field_paths (which resource the app keeps the write "
+                "in, and where each field lives in it)"
+            )
         from openadapt_flow.runtime.effects import FhirEffectVerifier
 
         access_token = cfg.access_token

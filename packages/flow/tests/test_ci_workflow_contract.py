@@ -14,6 +14,7 @@ QUICKSTART = ROOT / ".github/workflows/quickstart-lifecycle.yml"
 VALIDATE_CLAIMS = ROOT / ".github/workflows/validate-claims.yml"
 PIXEL_E2E = ROOT / "tests/e2e/test_citrix_pixel_e2e.py"
 DESKTOP_E2E = ROOT / "tests/e2e/test_parallels_desktop_e2e.py"
+ROOT_PACKAGES = ROOT.parents[1] / ".github/workflows/packages.yml"
 
 
 def test_lint_job_rejects_a_stale_dependency_lock() -> None:
@@ -191,30 +192,45 @@ def test_windows_required_job_proves_retained_installer_job_object() -> None:
     )
 
 
-def test_required_linux_atspi_qualification_is_bounded() -> None:
-    workflow = CI.read_text(encoding="utf-8")
-    linux_start = workflow.index("\n  linux-atspi-x11:")
-    matrix_start = workflow.index("\n  test-matrix:")
-    linux_job = workflow[linux_start:matrix_start]
+def test_root_ci_runs_the_linux_atspi_qualification() -> None:
+    """The monorepo runs packages/flow/.github only through the root workflows.
 
-    assert "runs-on: ubuntu-24.04\n    timeout-minutes: 30" in linux_job
+    The Linux AT-SPI job lives in the root packages.yml, runs both real-app
+    qualifications under Xvfb, uploads their results, and packages-gate
+    requires it on the post-merge tier.
+    """
+    workflow = ROOT_PACKAGES.read_text(encoding="utf-8")
+    start = workflow.index("\n  flow-linux-atspi:")
+    end = workflow.index("\n  capture-linux:", start)
+    job = workflow[start:end]
+
+    assert "runs-on: ubuntu-24.04\n    timeout-minutes: 30" in job
+    assert "needs.scope.outputs.flow == 'true'" in job
     step_limits = (
-        ("Install isolated X11, D-Bus, GTK3, and AT-SPI", 15),
-        ("Qualify GTK workflow on real AT-SPI", 10),
+        ("Install X11, D-Bus, GTK3 and AT-SPI", 15),
+        ("Qualify LinuxBackend on the GTK3 fixture", 10),
+        ("Record, compile, run and repair on a GTK3 app with SQLite", 15),
         ("Upload Linux AT-SPI qualification evidence", 2),
     )
     for step_name, timeout_minutes in step_limits:
-        step_start = linux_job.index(f"- name: {step_name}")
-        step_end = linux_job.index("\n\n", step_start)
-        step = linux_job[step_start:step_end]
-        assert f"timeout-minutes: {timeout_minutes}" in step
-
-    assert sum(timeout for _name, timeout in step_limits) <= 30
-    assert linux_job.index("sudo apt-get update") < linux_job.index(
+        step_start = job.index(f"- name: {step_name}")
+        step_end = job.find("\n      - ", step_start + 1)
+        step = job[step_start : step_end if step_end != -1 else len(job)]
+        assert f"timeout-minutes: {timeout_minutes}" in step, step_name
+    assert job.index("sudo apt-get update") < job.index(
         "scripts/qualify_linux_atspi.py"
     )
-    assert "--output runs/linux-atspi/results.json" in linux_job
-    assert "if-no-files-found: error" in linux_job
+    assert "xvfb-run -a" in job and "dbus-run-session --" in job
+    assert job.index("xvfb-run -a") < job.index("dbus-run-session --")
+    assert "openbox" in job
+    assert "--output runs/linux-atspi/results.json" in job
+    assert "benchmark/repair_every_backend/qualify_linux.py" in job
+    assert "if-no-files-found: error" in job
+
+    gate = workflow[workflow.index("\n  packages-gate:") :]
+    assert "      - flow-linux-atspi\n" in gate
+    assert '"flow-linux-atspi": "flow"' in gate
+    assert '"flow-linux-atspi",' in gate[gate.index("post_merge_only") :]
 
 
 def test_docs_only_classifier_skips_markdown_and_fails_closed() -> None:

@@ -78,6 +78,21 @@ def test_unknown_node_and_unsupported_action_are_errors() -> None:
         typed.native_action({"type": "open_app", "app_name": "x"}, ELEMENTS, VIEWPORT)
 
 
+@pytest.mark.parametrize(
+    "raw",
+    [
+        {"type": "double_click", "target": {"node_id": "n1"}},
+        {"type": "scroll", "scroll_direction": "left"},
+        {"type": "scroll", "scroll_direction": "right"},
+    ],
+)
+def test_actions_this_environment_cannot_take_exactly_are_refused(raw) -> None:
+    # Sending one click for a double click, or scrolling down for a
+    # sideways scroll, would report success for an action never taken.
+    with pytest.raises(ValueError, match="not available"):
+        typed.native_action(raw, ELEMENTS, VIEWPORT)
+
+
 def test_mcp_tools_cover_every_action_kind() -> None:
     from typing import get_args
 

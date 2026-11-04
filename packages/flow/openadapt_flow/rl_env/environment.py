@@ -227,7 +227,7 @@ def _norm(value: str) -> str:
 def _scalars(body: str) -> set[str]:
     """Every scalar value in a JSON or form body, as text.
 
-    A form field holding JSON (as Frappe sends ``doc=...``) is read through.
+    A form field holding JSON (such as ``doc=...``) is read through.
     """
     from urllib.parse import parse_qsl
 
@@ -328,6 +328,11 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
     def __init__(self, env_dir: str | Path, *, screenshots: bool = False) -> None:
         super().__init__()
         self.env: EnvDirectory = load_environment(env_dir)
+        if self.env.manifest.app.kind == "desktop":
+            raise TaskError(
+                "a desktop environment runs in openadapt_flow.rl_env.desktop, "
+                "not the browser environment"
+            )
         self.screenshots = screenshots
         self._state = WebState(env_name=self.env.manifest.name)
         self._task: Optional[Task] = None
@@ -598,6 +603,8 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             return self._call_tool(action)
         if self._task is None or self._page is None:
             raise RuntimeError("call reset() before step()")
+        if self._state.done:
+            return self._observe(reward=0.0, done=True, error="episode is over")
         if action.computer_action is not None:
             try:
                 native = typed.native_action(
@@ -606,11 +613,12 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
                     (VIEWPORT["width"], VIEWPORT["height"]),
                 )
             except ValueError as exc:
+                # An action this environment can't take still spends a step.
                 self._state.step_count += 1
+                if self._state.step_count >= self.env.manifest.agent.max_steps:
+                    return self._finish(None, error=str(exc))
                 return self._observe(reward=0.0, done=False, error=str(exc))
             action = WebAction(**native)
-        if self._state.done:
-            return self._observe(reward=0.0, done=True, error="episode is over")
         self._state.step_count += 1
         if action.kind == "done":
             return self._finish(action.claim)
@@ -663,7 +671,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             lambda: self._pw and self._pw.stop(),
             lambda: self._app_stop and self._app_stop(),
             lambda: self._records_stop and self._records_stop(),
-            lambda: self._judge and self._judge.close(),
+            lambda: self._judge.close() if self._judge else None,
         ):
             try:
                 closer()
@@ -837,7 +845,8 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
     ) -> WebObservation:
         assert self._task is not None
         page = self._page
-        text, title, url, elements, shot = "", "", "", [], None
+        elements: list[Any] = []
+        text, title, url, shot = "", "", "", None
         try:
             url = _redact(page.url)
             title = page.title()

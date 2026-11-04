@@ -159,11 +159,14 @@ def verifier_factory(config: VerifyConfig) -> Callable[[Mapping[str, object]], A
 
         if not cfg.base_url:
             raise QualifyConfigError("verifier.base_url is required for kind: rest")
+        if not cfg.records_path:
+            raise QualifyConfigError("verifier.records_path is required for kind: rest")
+        records_path = cfg.records_path
 
         def build_rest(params: Mapping[str, object]) -> Any:
             return RestRecordVerifier(
                 cfg.base_url.rstrip("/"),  # type: ignore[union-attr]
-                records_path=cfg.records_path,
+                records_path=records_path,
                 records_key=cfg.records_key,
                 session=hook(config),
                 timeout_s=10.0,

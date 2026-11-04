@@ -38,6 +38,7 @@ from openadapt_flow.compile_agent import (
 from openadapt_flow.jit.keys import CustomerModelKey
 from openadapt_flow.mockmed.fault_server import serve
 from openadapt_flow.tutorial import _http_json, _records
+from tests._teach_authorization_support import mockmed_note
 
 PROMPT = (
     "Open the referral for Jane Sample, start a Triage encounter, and save "
@@ -74,6 +75,32 @@ def _verify_yaml(tmp_path: Path, base: str) -> Path:
         "  poll_interval_s: 0.05\n"
     )
     return path
+
+
+class _ImageScrubber:
+    """Redacts nothing. The model here is scripted, so no screenshot leaves
+    the machine, but compile-agent redacts every screenshot it would send
+    and refuses without a scrubber (agents._image)."""
+
+    def __init__(self) -> None:
+        self.images = 0
+
+    def scrub_text(self, text: str, is_separated: bool = False) -> str:
+        return text
+
+    def scrub_image(self, image: Any, fill_color: Any = None) -> Any:
+        self.images += 1
+        return image
+
+
+@pytest.fixture(autouse=True)
+def _scrubber() -> Any:
+    from openadapt_flow import privacy
+
+    scrubber = _ImageScrubber()
+    privacy.set_text_scrubber(scrubber)
+    yield scrubber
+    privacy.reset_scrubbers()
 
 
 def _policy_agent(key_dir: Path, base: str, monkeypatch: pytest.MonkeyPatch) -> Any:
@@ -204,11 +231,21 @@ def _common(tmp_path: Path, base: str) -> dict[str, Any]:
         model_key=TEST_KEY,
         reset=_reset(base),
         on_warning=lambda text: None,
+        # A person signed what run 1 may do.
+        teach_authorization=mockmed_note(
+            tmp_path / "keys",
+            tmp_path / "teach-authorization",
+            "mockmed.compile_agent_note",
+            base,
+            note=NOTE,
+            record=EXPECT,
+            constants=ON_SCREEN,
+        ),
     )
 
 
 def test_compile_agent_then_replay_with_no_model_calls(
-    mockmed: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    mockmed: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _scrubber: Any
 ) -> None:
     admitter = _policy_agent(tmp_path / "keys", mockmed, monkeypatch)
     fake = FakeClaude("Jane Sample", NOTE)
@@ -232,6 +269,7 @@ def test_compile_agent_then_replay_with_no_model_calls(
     # Selective vision: no screenshot asked for; one at the save gate.
     assert harness["screenshots_requested"] == 0
     assert harness["screenshots_at_gate"] == 1
+    assert _scrubber.images == 1  # the gate screenshot was redacted first
     assert harness["screenshots_every_turn"] == 0
     assert harness["gate_checks"] == 1 and harness["gate_refusals"] == 0
     assert result.run1["gates"][0]["decision"] == "passed_no_hold"
@@ -388,6 +426,18 @@ def test_cli_scripted_agent_person_confirms_key_admits(
         "--canary-param",
         "note=Canary test note",
         "--json",
+        "--teach-authorization",
+        str(
+            mockmed_note(
+                key_dir,
+                tmp_path / "teach-authorization",
+                "mockmed.compile_agent_cli",
+                mockmed,
+                note=NOTE,
+                record={"patient_id": "p1"},
+                constants=["Jane Sample", "MRN P1"],
+            ).statement
+        ),
     ]
     # No terminal: run 1 passes, and the checks wait for a person.
     args = build_parser().parse_args(argv)
