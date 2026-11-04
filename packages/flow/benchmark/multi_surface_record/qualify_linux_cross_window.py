@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import sqlite3
 import subprocess
 import sys
@@ -250,6 +251,8 @@ def record(root: Path, desk: Desk, db: Path) -> dict[str, Any]:
     person = Person()
     done = root / "DONE"
     rec = root / "recording"
+    log_path = root / "record.log"
+    log = log_path.open("w")
     proc = subprocess.Popen(
         [
             sys.executable,
@@ -266,9 +269,10 @@ def record(root: Path, desk: Desk, db: Path) -> dict[str, Any]:
             f"test -f {done}",
         ],
         cwd=str(FLOW),
-        stdout=subprocess.PIPE,
+        # A file, never a pipe: capture logs enough to fill a pipe and block.
+        stdout=log,
         stderr=subprocess.STDOUT,
-        text=True,
+        start_new_session=True,
     )
     error = None
     out = ""
@@ -288,13 +292,15 @@ def record(root: Path, desk: Desk, db: Path) -> dict[str, Any]:
         person.click(*geo["sent"])  # back to the browser
         time.sleep(3.0)
         done.touch()
-        out, _ = proc.communicate(timeout=300)
+        proc.wait(timeout=300)
     except Exception as exc:  # keep the recorder's own output as evidence
         error = f"{type(exc).__name__}: {exc}"
-        if proc.poll() is None:
-            proc.kill()
-        out = proc.communicate()[0] or ""
     finally:
+        if proc.poll() is None:
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait(timeout=30)
+        log.close()
+        out = log_path.read_text(errors="replace")
         chart.close()
     events = []
     if (rec / "events.jsonl").exists():

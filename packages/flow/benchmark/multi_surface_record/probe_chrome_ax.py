@@ -73,7 +73,9 @@ def main():
     )
     time.sleep(3)
     result["points_after_manual"] = grid(pid, bounds)
-    result["set_enhanced"] = AX.AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface", True)
+    result["set_enhanced"] = AX.AXUIElementSetAttributeValue(
+        app, "AXEnhancedUserInterface", True
+    )
     time.sleep(3)
     result["points_after_enhanced"] = grid(pid, bounds)
     AX.AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface", False)

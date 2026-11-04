@@ -11,10 +11,7 @@ usage: python probe_chromium_uia.py OUT.json  (the browser is already open)
 """
 
 import json
-import os
-import subprocess
 import sys
-import tempfile
 import time
 
 import uiautomation as auto
@@ -108,10 +105,11 @@ def _windows(title_part):
 
 def msaa_request(hwnds):
     """AccessibleObjectFromWindow(OBJID_CLIENT) and read its child count."""
+    import ctypes
+
     import comtypes.client  # noqa: F401
     from comtypes import POINTER
     from comtypes.automation import VARIANT  # noqa: F401
-    import ctypes
 
     out = []
     try:
