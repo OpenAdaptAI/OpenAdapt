@@ -616,7 +616,19 @@ def record_multi_surface(
         session = load_capture(cap_dir)
         try:
             started_at = float(session.started_at)
-            timeline = window_timeline(list(session.window_events()))
+            rows = getattr(session, "window_events", None)
+            if not callable(rows):
+                raise MultiSurfaceRecordError(
+                    "this openadapt-capture keeps no active-window timeline, "
+                    "so actions cannot be placed on their windows; install "
+                    "openadapt-capture 1.3.0 or later"
+                )
+            timeline = window_timeline(list(rows()))
+            if not timeline:
+                raise MultiSurfaceRecordError(
+                    "capture recorded no active window, so actions cannot be "
+                    "placed on their windows"
+                )
             desktop = getattr(session, "desktop_capture", None) or {}
             origin_raw = desktop.get("origin") or [0, 0]
             origin = (int(origin_raw[0]), int(origin_raw[1]))
