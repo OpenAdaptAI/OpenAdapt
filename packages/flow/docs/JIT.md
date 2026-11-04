@@ -307,8 +307,12 @@ it. Pass `teach_scope=` to `compile_agent` to fix what the recording run may
 do before the agent reads a page: the app origins, the record, the fields and
 exact values the save may write, and any other text it may type.
 
+The example uses MockMed's write adapter, a test fixture in the source
+checkout (`packages/flow/tests/_teach_scope.py`); write the same few lines for
+your app.
+
 ```python
-from openadapt_flow.mockmed.teach_scope import encounter_scope
+from tests._teach_scope import encounter_scope
 
 jit = compile_agent(
     agent,

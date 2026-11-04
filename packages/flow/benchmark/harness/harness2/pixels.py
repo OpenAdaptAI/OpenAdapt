@@ -26,7 +26,7 @@ import hashlib
 import time
 from typing import Any, Callable, Optional
 
-from openadapt_flow.integrations.harness2.agent import Element, Observation
+from benchmark.harness.harness2.agent import Element, Observation
 
 #: Seconds between frames while waiting for the screen to stop changing.
 _FRAME_GAP_S = 0.25

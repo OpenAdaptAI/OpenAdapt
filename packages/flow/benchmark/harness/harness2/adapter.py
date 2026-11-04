@@ -7,8 +7,9 @@ scorer exists, so selection is a model's judgement and the true score is
 only measured afterwards. This adapter gives it one: every rollout is scored
 by the reward worker reading the system of record of a fresh app copy.
 
-This module imports Harness²; it copies none of it. Install it beside
-``openadapt-flow[harness2]`` (it is not on PyPI)::
+This module imports Harness²; it copies none of it. It lives in the source
+checkout (run from ``packages/flow``). Install Harness² beside
+``openadapt-flow[browser]`` (it is not on PyPI)::
 
     pip install 'harness2 @ git+https://github.com/google-research/harness2@1cfe254e8d25b15f37048c3730134686abe60335'
 
@@ -19,7 +20,7 @@ comparison in ``docs/HARNESS2.md``:
   This is Harness² as published, with no scorer.
 * ``readback``: each trajectory and report also carries what the system of
   record shows after the run (which records were added, whose they are, the
-  outcome). With :func:`~openadapt_flow.integrations.harness2.selection.reward_selection`
+  outcome). With :func:`~benchmark.harness.harness2.selection.reward_selection`
   the final is chosen by the read-back reward instead of a model.
 
 In both modes ``score()`` is the read-back. Harness² calls it only after
@@ -34,17 +35,17 @@ from typing import Any, Callable, Iterable, Optional
 from harness2.core.spec import BenchPrompts, BenchSpec, ChannelSpec
 from harness2.core.tree import SurfaceSpec, read_tree, write_tree
 
-from openadapt_flow.integrations.harness2.agent import GuiAgent
-from openadapt_flow.integrations.harness2.apps import AppTarget, default_targets
-from openadapt_flow.integrations.harness2.rollout import (
+from benchmark.harness.harness2.agent import GuiAgent
+from benchmark.harness.harness2.apps import AppTarget, default_targets
+from benchmark.harness.harness2.rollout import (
     REPORT_FILE,
     load_run,
     load_score,
     load_steps,
     run_rollout,
 )
-from openadapt_flow.integrations.harness2.scorer import EpisodeScore, Penalties
-from openadapt_flow.integrations.harness2.tasks import MOCKMED_PATIENTS, GuiTask
+from benchmark.harness.harness2.scorer import EpisodeScore, Penalties
+from benchmark.harness.harness2.tasks import MOCKMED_PATIENTS, GuiTask
 
 EVIDENCE_MODES = ("screen", "readback")
 
@@ -307,7 +308,7 @@ class OpenAdaptGuiAdapter:
         if self.evidence == "readback" and run.get("task_id") in self._tasks:
             # OpenAdapt's identity check at each write: was the record on
             # screen the requested one? Part of the read-back evidence.
-            from openadapt_flow.integrations.harness2.traces import from_rollout
+            from benchmark.harness.harness2.traces import from_rollout
 
             trace = from_rollout(run_dir, self._tasks[run["task_id"]])
             identity = {s.index: s.identity for s in trace.steps if s.identity}

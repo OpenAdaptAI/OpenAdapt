@@ -27,7 +27,7 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Optional, Protocol, runtime_checkable
 
-from openadapt_flow.integrations.harness2.llm import ChatModel
+from benchmark.harness.harness2.llm import ChatModel
 
 #: The final report statuses and the runtime signal each maps to.
 STATUS_SIGNAL = {"saved": "completed", "stopped": "halted_before_effect"}

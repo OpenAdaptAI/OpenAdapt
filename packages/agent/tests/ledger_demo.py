@@ -1,8 +1,9 @@
 """A scripted agent works a 30-item synthetic MockMed worklist, with and without the task ledger.
 
-Run it::
+It lives beside the test that uses it (``test_ledger.py``). Run it from the
+repository root::
 
-    python -m openadapt_flow.agent.ledger_demo [--out results.json]
+    python packages/agent/tests/ledger_demo.py [--out results.json]
 
 Everything is synthetic and local: the referrals, the patients, the app (an
 in-memory record store behind the real ``run_workflow`` service) and the

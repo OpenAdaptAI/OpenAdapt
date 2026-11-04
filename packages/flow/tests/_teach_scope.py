@@ -1,5 +1,7 @@
 """MockMed's write adapter for a teach scope (:mod:`openadapt_flow.teach_scope`).
 
+A test fixture: it lives in the source checkout, outside the wheel.
+
 MockMed's fault server (:mod:`openadapt_flow.mockmed.fault_server`) takes one
 kind of record write: ``POST /api/encounter`` with a JSON body naming the
 patient, the encounter type and the note. :class:`EncounterWrites` reads that
@@ -107,7 +109,7 @@ def encounter_authorization_spec(
             "identity": {"patient_id": {"value": patient_id}},
             "fields": {"type": {"value": encounter_type}, "note": {"input": "note"}},
             "expected_rows": 1,
-            "write_adapter": "openadapt_flow.mockmed.teach_scope:EncounterWrites",
+            "write_adapter": "tests._teach_scope:EncounterWrites",
         },
         "forbidden": {
             "actions": [

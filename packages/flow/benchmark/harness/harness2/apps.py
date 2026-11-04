@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Any, Callable, Optional, Protocol, runtime_checkable
 from urllib.parse import urlencode
 
-from openadapt_flow.integrations.harness2.tasks import MOCKMED_PATIENTS, GuiTask
+from benchmark.harness.harness2.tasks import MOCKMED_PATIENTS, GuiTask
 
 
 @runtime_checkable

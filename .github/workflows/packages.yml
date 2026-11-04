@@ -460,7 +460,7 @@ jobs:
           python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,capture,agent]' --lock packages/capture
           --editable packages/types --editable packages/capture --editable packages/flow
       - name: Install Harness² for the integration tests
-        # Not on PyPI. Pinned to the commit openadapt_flow.integrations.harness2
+        # Not on PyPI. Pinned to the commit benchmark.harness.harness2
         # is written against; it has no runtime dependencies.
         run: >-
           uv pip install --system --no-deps
