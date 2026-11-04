@@ -93,6 +93,17 @@ READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 #: Longest gap between reads while waiting for a lagging view.
 _MAX_POLL_S = 2.0
 
+#: HTTP statuses that mean the fetch failed in transit (a proxy or gateway),
+#: retried a few times with backoff before the page counts as unreadable.
+_TRANSIENT = frozenset({502, 503, 504})
+_LOAD_ATTEMPTS = 3
+_SIGN_IN_ATTEMPTS = 3
+
+
+def _backoff(attempt: int) -> float:
+    return min(0.5 * (2 ** (attempt - 1)), 4.0)
+
+
 #: Displayed values that end with one of these are treated as shortened.
 DEFAULT_TRUNCATION_MARKERS: tuple[str, ...] = ("…", "...")
 
@@ -635,6 +646,9 @@ class _PlaywrightSession:
         self._page: Any = None
         self._phase = "sign_in"
         self._blocked = 0
+        self._blocked_elsewhere = 0
+        #: The URL of the page being read (None outside a read).
+        self._reading: Optional[str] = None
         self._loaded: Optional[str] = None
         self.facts = SessionFacts(
             own_browser=True, fresh_context=False, signed_in=False
@@ -668,12 +682,24 @@ class _PlaywrightSession:
             fresh = fresh and self._page.evaluate(_EMPTY_CLIENT_STORE_SCRIPT)
             if not fresh:
                 raise ReadbackSessionError("the read-back context was not empty")
-            self._page.fill(spec.sign_in.username_selector, self._username)
-            self._page.fill(spec.sign_in.password_selector, self._password)
-            self._page.click(spec.sign_in.submit_selector)
-            self._page.wait_for_selector(
-                spec.sign_in.signed_in_selector, state="attached"
-            )
+            # A sign-in that fails on a transient network error (a gateway
+            # error, a timeout) is tried again, in the same fresh context,
+            # before the session gives up. It reads nothing about the record.
+            for attempt in range(_SIGN_IN_ATTEMPTS):
+                try:
+                    if attempt:
+                        time.sleep(_backoff(attempt))
+                        self._page.goto(spec.sign_in.url, wait_until="domcontentloaded")
+                    self._page.fill(spec.sign_in.username_selector, self._username)
+                    self._page.fill(spec.sign_in.password_selector, self._password)
+                    self._page.click(spec.sign_in.submit_selector)
+                    self._page.wait_for_selector(
+                        spec.sign_in.signed_in_selector, state="attached"
+                    )
+                    break
+                except Exception:  # noqa: BLE001 - retried, then fails below
+                    if attempt == _SIGN_IN_ATTEMPTS - 1:
+                        raise
             # From here on the session is read-only. The network guard
             # (``_guard``) refuses every non-read request; the init script
             # refuses them inside each page before they are sent.
@@ -742,21 +768,49 @@ class _PlaywrightSession:
         ):
             route.continue_()
             return
-        self._blocked += 1
+        # Always refused. It counts against the page being read only when
+        # that page sent it: a timer on a page the session already left
+        # (a landing page polling a counter) says nothing about the record.
+        if self._from_reading_page(request):
+            self._blocked += 1
+        else:
+            self._blocked_elsewhere += 1
         route.abort("blockedbyclient")
+
+    def _from_reading_page(self, request: Any) -> bool:
+        if self._reading is None:
+            return True
+        try:
+            frame_url = str(request.frame.url)
+        except Exception:  # noqa: BLE001 - unknown origin counts against the page
+            return True
+        here = urlsplit(self._reading)
+        there = urlsplit(frame_url)
+        if not there.scheme.startswith("http"):
+            return True
+        return (there.netloc, there.path) == (here.netloc, here.path)
 
     # -- reading ------------------------------------------------------------------
     def _load(self, url: str) -> Optional[bool]:
         """Open ``url`` (reload it when it is already open); say whether the
         document came over the network."""
 
-        if self._loaded == url:
-            response = self._page.reload(wait_until="domcontentloaded")
-        else:
-            response = self._page.goto(url, wait_until="domcontentloaded")
-            self._loaded = url
+        self._reading = url
+        for attempt in range(_LOAD_ATTEMPTS):
+            if attempt:
+                time.sleep(_backoff(attempt))
+            if self._loaded == url:
+                response = self._page.reload(wait_until="domcontentloaded")
+            else:
+                response = self._page.goto(url, wait_until="domcontentloaded")
+                self._loaded = url
+            # A gateway error is a failed fetch, not a page: load it again.
+            if response is None or int(response.status) not in _TRANSIENT:
+                break
         if response is None:
             return None
+        if int(response.status) in _TRANSIENT:
+            raise ReadbackSessionError("the page kept answering with a gateway error")
         try:
             from_worker = bool(response.from_service_worker)
         except Exception:  # noqa: BLE001 - older drivers lack the property

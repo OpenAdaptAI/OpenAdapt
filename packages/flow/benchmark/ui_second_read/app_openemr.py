@@ -11,6 +11,8 @@ copy of the patient is counted. The history view is the audit log
 
 from __future__ import annotations
 
+import os
+
 import subprocess
 import time
 from typing import Any
@@ -102,6 +104,8 @@ def spec(**extra: Any) -> UiReadbackSpec:
         },
         "identity": {"reader": {"selector": "title"}, "value": "Patient Finder"},
         "navigation_timeout_s": 30.0,
+        # From calibrate.py for the active network profile (PREREG.md).
+        "index_lag_s": float(os.environ.get("UI2R_INDEX_LAG_S", "0")),
         **extra,
     }
     if "history" in data and data["history"]:

@@ -9,6 +9,8 @@ compared; the list reformats phone numbers, so they aren't read.
 
 from __future__ import annotations
 
+import os
+
 import time
 from typing import Any
 
@@ -52,6 +54,8 @@ def spec(**extra: Any) -> UiReadbackSpec:
             "value": {"param": "name"},
         },
         "navigation_timeout_s": 30.0,
+        # From calibrate.py for the active network profile (PREREG.md).
+        "index_lag_s": float(os.environ.get("UI2R_INDEX_LAG_S", "0")),
         **extra,
     }
     return UiReadbackSpec.model_validate(data)
