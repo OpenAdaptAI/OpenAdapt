@@ -788,6 +788,8 @@ class _DatabaseFrame:
     #: Append-only tables in both reads whose profile rule excuses the acting
     #: user's insert entries that name no record.
     no_record_inserts: list[str] = field(default_factory=list)
+    #: The profile's record-field values that name no record.
+    no_record_values: list[str] = field(default_factory=list)
     #: The settled read after the save, and when it was taken: what a later
     #: recheck compares with (``recheck_after_s``).
     post: Any = None
@@ -939,6 +941,7 @@ def _database_frame(
 
     profile = database.loaded_profile()
     no_record = profile.no_record_insert_tables() if profile is not None else set()
+    out.no_record_values = list(profile.no_record_values) if profile is not None else []
     for name in sorted(set(old.tables) | set(new.tables)):
         a, b = old.tables.get(name), new.tables.get(name)
         try:
@@ -1298,6 +1301,7 @@ def judge_run_frame(
         new_row_defaults=None if db is None else db.defaults,
         unread_changes=() if db is None else db.unread,
         no_record_inserts=() if db is None else db.no_record_inserts,
+        no_record_values=() if db is None else db.no_record_values,
         hashers=None if db is None else db.hashers,
         clock=("", "") if db is None else db.clock,
         database_evidence=None if db is None else db.evidence,

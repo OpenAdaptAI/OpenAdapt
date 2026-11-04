@@ -206,7 +206,7 @@ def _deployment(
     *, verifier: bool = True, policy: str = "clinical-write"
 ) -> DeploymentConfig:
     effects = (
-        EffectsConfig(kind="rest", base_url="http://sor.local")
+        EffectsConfig(kind="rest", records_path="/api/db", base_url="http://sor.local")
         if verifier
         else EffectsConfig(kind="none")
     )
@@ -810,6 +810,8 @@ def test_cli_run_dry_run_reports_without_executing(tmp_path, monkeypatch, capsys
             "clinical-write",
             "--effects-kind",
             "rest",
+            "--effects-records-path",
+            "/api/db",
             "--effects-base-url",
             "http://sor.local",
             "--dry-run",
@@ -953,6 +955,8 @@ def test_qualification_run_case_derives_exact_standard_authorization(
             str(tmp_path / "case-run"),
             "--effects-kind",
             "rest",
+            "--effects-records-path",
+            "/api/db",
             "--effects-base-url",
             "http://sor.local",
             "--backend",
@@ -1022,6 +1026,8 @@ def test_qualification_run_case_tightens_owned_legacy_state_root(tmp_path, monke
                 str(tmp_path / "case-run"),
                 "--effects-kind",
                 "rest",
+                "--effects-records-path",
+                "/api/db",
                 "--effects-base-url",
                 "http://sor.local",
                 "--backend",
@@ -1063,6 +1069,8 @@ def test_qualification_run_case_refuses_changed_inputs_and_duplicate_attempt(
         str(tmp_path / "case-run"),
         "--effects-kind",
         "rest",
+        "--effects-records-path",
+        "/api/db",
         "--effects-base-url",
         "http://sor.local",
         "--backend",
@@ -1144,6 +1152,8 @@ def test_qualification_run_case_constructs_a_durable_replayer(tmp_path, monkeypa
         "http://127.0.0.1:5001",
         "--effects-kind",
         "rest",
+        "--effects-records-path",
+        "/api/db",
         "--effects-base-url",
         "http://sor.local",
     ]
@@ -1471,6 +1481,8 @@ def test_cli_run_encryption_key_required_for_encrypted_bundle(
             "clinical-write",
             "--effects-kind",
             "rest",
+            "--effects-records-path",
+            "/api/db",
             "--effects-base-url",
             "http://sor.local",
             "--allow-unencrypted",  # isolate the KEY-at-load behavior from gate 6

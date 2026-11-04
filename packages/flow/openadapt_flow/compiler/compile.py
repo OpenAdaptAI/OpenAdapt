@@ -8,6 +8,7 @@ Input is a recording directory (``meta.json`` + ``events.jsonl`` +
 
 from __future__ import annotations
 
+import dataclasses
 import difflib
 import hashlib
 import json
@@ -30,6 +31,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from openadapt_flow.compiler.annotate import StepAnnotator
+    from openadapt_flow.compiler.binding_admission import AdmissionFixture
 
 import numpy as np
 
@@ -74,6 +76,7 @@ from openadapt_flow.risk import (
     opener_explanation,
     presumed_commit_step_ids,
 )
+from openadapt_flow.runtime.effects.effect import DEFAULT_IDEMPOTENCY_KEY_FIELD
 from openadapt_flow.runtime.identity import (
     band_region,
     context_from_lines,
@@ -2117,7 +2120,8 @@ def _compile_recording(
     secret_param_steps: Optional[Iterable[str]] = None,
     mine_effects: bool = False,
     admit_api_bindings: bool = False,
-    admission_fixture_url: Optional[str] = None,
+    admission_fixture: Optional["AdmissionFixture"] = None,
+    idempotency_key_field: Optional[str] = DEFAULT_IDEMPOTENCY_KEY_FIELD,
     skill_library_root: Optional[Path | str] = None,
     annotate: bool = False,
     annotator: Optional["StepAnnotator"] = None,
@@ -2216,13 +2220,20 @@ def _compile_recording(
             consequential write whose Effect was mined from an observed
             system-of-record delta, propose a REST binding and copy it onto
             the step only if the same Effect CONFIRMs on the held-out
-            fixture at ``admission_fixture_url``. A refused proposal leaves
+            ``admission_fixture``. A refused proposal leaves
             the step on the GUI ladder. FHIR / MCP / tool bindings are not
             synthesized. Default False keeps the bundle byte-identical.
-        admission_fixture_url: Base URL of the held-out REST fixture
-            (MockMed ``fault_server`` in tests). Required when
-            ``admit_api_bindings`` is True; without it the compiler logs
-            and leaves every step on the GUI ladder.
+        idempotency_key_field: With ``mine_effects``, the record field that
+            carries this app's at-most-once key (from its contract or
+            deployment config). Defaults to the ``key`` convention
+            (:data:`~openadapt_flow.compiler.effect_mining.DEFAULT_IDEMPOTENCY_KEY_FIELD`);
+            ``None``: no key is mined.
+        admission_fixture: The held-out REST fixture
+            (:class:`~openadapt_flow.compiler.binding_admission.AdmissionFixture`:
+            base URL, and the app's own read and write paths). Required when
+            ``admit_api_bindings`` is True; without it the compiler logs and
+            leaves every step on the GUI ladder. Its ``params`` default to the
+            recording's.
         skill_library_root: Optional
             :class:`~openadapt_flow.learning.library.SkillLibrary` root.
             When a binding is admitted, the lifted program is stored with
@@ -3419,6 +3430,7 @@ def _compile_recording(
                 param_bindings=bindings or None,
                 store_unchanged=unchanged,
                 write_requests=write_requests,
+                idempotency_key_field=idempotency_key_field,
             )
             if mined.effects:
                 step.effects = mined.effects
@@ -3472,15 +3484,14 @@ def _compile_recording(
 
     if admit_api_bindings:
         from openadapt_flow.compiler.binding_admission import (
-            AdmissionFixture,
             certify_steps_on_fixture,
         )
         from openadapt_flow.learning.library import SkillLibrary
 
-        if not admission_fixture_url:
+        if admission_fixture is None:
             logger.info(
-                "admit_api_bindings requested but admission_fixture_url is "
-                "empty -- leaving every step on the GUI ladder"
+                "admit_api_bindings requested but admission_fixture is "
+                "unset -- leaving every step on the GUI ladder"
             )
         else:
             library = (
@@ -3491,9 +3502,10 @@ def _compile_recording(
             decisions = certify_steps_on_fixture(
                 steps,
                 [event for _step, _sb, _sa, event in pending],
-                fixture=AdmissionFixture(
-                    base_url=admission_fixture_url,
-                    params=dict(params),
+                fixture=(
+                    admission_fixture
+                    if admission_fixture.params
+                    else dataclasses.replace(admission_fixture, params=dict(params))
                 ),
                 exclude_texts=exclude_texts,
                 params=dict(params),
@@ -3586,7 +3598,9 @@ def _compile_recording(
         ),
         "mine_effects": mine_effects,
         "admit_api_bindings": admit_api_bindings,
-        "admission_fixture_url": admission_fixture_url,
+        "admission_fixture_url": (
+            admission_fixture.base_url if admission_fixture is not None else None
+        ),
         "name": name,
         "param_overrides": dict(sorted((param_overrides or {}).items())),
         "risk_overrides": dict(sorted((risk_overrides or {}).items())),
@@ -3596,6 +3610,21 @@ def _compile_recording(
     if bind_effect_params:
         # Recorded only when set, so every existing compile keeps its digest.
         compiler_config["bind_effect_params"] = True
+    if idempotency_key_field != DEFAULT_IDEMPOTENCY_KEY_FIELD:
+        # Recorded only when not the default, so every existing compile keeps
+        # its digest.
+        compiler_config["idempotency_key_field"] = idempotency_key_field
+    if admission_fixture is not None:
+        # Added only when set, so a compile without one hashes as before.
+        admission: dict[str, Any] = {
+            "records_path": admission_fixture.records_path,
+            "records_key": admission_fixture.records_key,
+            "write_path": admission_fixture.write_path,
+            "write_method": admission_fixture.write_method,
+            "server_fields": sorted(admission_fixture.server_fields),
+            "idempotency_key_field": admission_fixture.idempotency_key_field,
+        }
+        compiler_config["admission_fixture"] = admission
     compiler_config_sha256 = hashlib.sha256(
         json.dumps(
             compiler_config,
