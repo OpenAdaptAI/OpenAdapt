@@ -108,8 +108,12 @@ def _audit_family(
     if family.polarity is Polarity.LEGITIMATE:
         cand = built[0]
         ep = target.run(task, cand.calls, score=True)
-        status = {Verdict.PASS: "ACCEPTED", Verdict.FAIL: "FALSE_REJECT"}.get(
-            ep.verdict, "SCORER_ERROR"
+        status = (
+            {Verdict.PASS: "ACCEPTED", Verdict.FAIL: "FALSE_REJECT"}.get(
+                ep.verdict, "SCORER_ERROR"
+            )
+            if ep.verdict
+            else "SCORER_ERROR"
         )
         return _cell(
             task,
@@ -164,8 +168,12 @@ def _audit_family(
         if not reproducible:
             status = "EFFECT_NOT_REPRODUCIBLE"
         else:
-            status = {Verdict.PASS: "FALSE_ACCEPT", Verdict.FAIL: "CAUGHT"}.get(
-                ep.verdict, "SCORER_ERROR"
+            status = (
+                {Verdict.PASS: "FALSE_ACCEPT", Verdict.FAIL: "CAUGHT"}.get(
+                    ep.verdict, "SCORER_ERROR"
+                )
+                if ep.verdict
+                else "SCORER_ERROR"
             )
         return _cell(
             task,

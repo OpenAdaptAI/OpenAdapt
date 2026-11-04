@@ -32,8 +32,12 @@ def _shim_icecream() -> None:
         import icecream  # noqa: F401
     except ModuleNotFoundError:
         module = types.ModuleType("icecream")
-        module.ic = lambda *a: a[0] if len(a) == 1 else (a or None)
-        module.ic.configureOutput = lambda *a, **k: None
+
+        def ic(*a):
+            return a[0] if len(a) == 1 else (a or None)
+
+        ic.configureOutput = lambda *a, **k: None  # type: ignore[attr-defined]
+        setattr(module, "ic", ic)
         sys.modules["icecream"] = module
 
 

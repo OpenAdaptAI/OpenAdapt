@@ -49,7 +49,8 @@ def to_call(raw: dict[str, Any]) -> Call:
         raw["method"].lower(),
         raw["url"] if raw["url"].startswith("/") else "/" + raw["url"],
     )
-    parts, args = [], {}
+    parts: list[str] = []
+    args: dict[str, Any] = {}
     for part in url.split("/"):
         if _SEGMENT_ID.match(part):
             args[f"_path_{len(args)}"] = part
