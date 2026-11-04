@@ -11,6 +11,7 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import Optional
 from urllib.parse import urlparse
 
 import pytest
@@ -333,11 +334,91 @@ def test_private_splits_need_the_salt(
     salt_file = tmp_path / "salt"
     salt_file.write_bytes(b"x" * 40)
     monkeypatch.setenv(secret.SALT_ENV, str(salt_file))
+    secret.write_check(tmp_path / "check.json")
+    monkeypatch.setenv(secret.SALT_CHECK_ENV, str(tmp_path / "check.json"))
     salt = secret.load_salt("heldout")
     name = "app-v1-create-control-adv-1001"
     assert secret.seed(salt, name, 1001) != 1001
     assert secret.task_id(salt, name, "app") != secret.task_id(None, name, "app")
     assert secret.load_salt("public") is None
+
+
+def _throwaway_salt(tmp_path: Path, name: str, byte: bytes) -> Path:
+    # A throwaway salt for tests only; the real salt never enters a test.
+    path = tmp_path / name
+    path.write_bytes(byte * 40)
+    return path
+
+
+def test_a_wrong_salt_is_refused_not_used(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A salt that doesn't match the private check file fails instead of
+    silently seeding a different split."""
+
+    from openadapt_flow.taskgen import secret
+    from openadapt_flow.taskgen.generate import write_pack
+
+    right = _throwaway_salt(tmp_path, "right", b"r")
+    wrong = _throwaway_salt(tmp_path, "wrong", b"w")
+    check = tmp_path / "check.json"
+    monkeypatch.setenv(secret.SALT_ENV, str(right))
+    assert secret.main(["--write-check", str(check)]) == 0
+    written = check.read_text()
+    assert "r" * 40 not in written  # only the HMAC is stored
+    assert json.loads(written) == {
+        "schema": secret.CHECK_SCHEMA,
+        "hmac_sha256": secret.fingerprint(b"r" * 40),
+    }
+    monkeypatch.setenv(secret.SALT_CHECK_ENV, str(check))
+    assert secret.load_salt("heldout") == b"r" * 40
+
+    monkeypatch.setenv(secret.SALT_ENV, str(wrong))
+    with pytest.raises(secret.SaltMismatch, match="does not match"):
+        secret.load_salt("heldout")
+    out = tmp_path / "out"
+    with pytest.raises(secret.SaltMismatch):
+        write_pack(
+            load_profile(PROFILES[0]),
+            tmp_path / "m.yaml",
+            out,
+            per_cell=1,
+            seed=1,
+            split="heldout",
+        )
+    assert not out.exists()  # nothing was written with the wrong salt
+    assert secret.load_salt("public") is None  # the public split needs no salt
+
+
+@pytest.mark.parametrize(
+    "check",
+    [
+        None,
+        "missing",
+        "not json",
+        '{"hmac_sha256": "%s"}' % ("0" * 64),
+        '{"schema": "openadapt.taskgen-salt-check/v1", "hmac_sha256": "abc"}',
+        '{"schema": "openadapt.taskgen-salt-check/v1", "hmac_sha256": 7}',
+        "[]",
+    ],
+)
+def test_an_unchecked_salt_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, check: Optional[str]
+) -> None:
+    """With no usable check file a private split refuses (fail closed)."""
+
+    from openadapt_flow.taskgen import secret
+
+    monkeypatch.setenv(secret.SALT_ENV, str(_throwaway_salt(tmp_path, "s", b"s")))
+    if check is None:
+        monkeypatch.delenv(secret.SALT_CHECK_ENV, raising=False)
+    else:
+        path = tmp_path / "check.json"
+        if check != "missing":
+            path.write_text(check)
+        monkeypatch.setenv(secret.SALT_CHECK_ENV, str(path))
+    with pytest.raises(secret.SaltMismatch):
+        secret.load_salt("heldout")
 
 
 def test_public_split_refuses_unbundled_profiles(tmp_path: Path) -> None:

@@ -108,6 +108,11 @@ it. Every other split is seeded by a salt kept privately:
 - `TASKGEN_SALT_FILE` names a file of at least 32 random bytes. Each
   task's seed and id are HMACs of its name under that salt. Without the
   salt, the generator refuses to write a non-public split.
+- `TASKGEN_SALT_CHECK_FILE` names a private file that holds an HMAC of a
+  fixed label under the salt, not the salt. The generator refuses a
+  non-public split when this file is missing or doesn't match, so a wrong
+  salt can't silently produce a different split. Write it once with
+  `python -m openadapt_flow.taskgen.secret --write-check PATH`.
 - `TASKGEN_PROFILE_PATH` adds directories of private profiles.
 - `TASKGEN_FAMILIES` names a private Python file that adds families with
   `families.register`.
