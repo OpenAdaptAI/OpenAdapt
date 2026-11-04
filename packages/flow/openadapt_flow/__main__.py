@@ -13339,35 +13339,71 @@ def _unsealed_output_check(args: argparse.Namespace) -> None:
     at_rest.unsealed_write(artifact, target)
 
 
-def _sealed_paths_in(args: argparse.Namespace) -> list[Path]:
-    from openadapt_flow import sealed_set
+class _UnclassifiedArgument(ValueError):
+    """An argument value that is neither a path, a scalar nor a container."""
 
+
+def _sealed_paths_in(args: argparse.Namespace) -> list[Path]:
+    """The sealed roots named anywhere in the command's arguments.
+
+    Values are walked at any depth (lists, tuples, sets, mappings, nested
+    pairs such as teach-branch's ``--example RUN FIX``). A value that is not
+    a path, a known scalar or a container raises ``_UnclassifiedArgument``;
+    ``_private_input`` treats that as private.
+    """
     found: list[Path] = []
+    unclassified: list[str] = []
     for name, value in vars(args).items():
         if name == "func":
             continue
-        values = value if isinstance(value, (list, tuple)) else [value]
-        for item in values:
-            if not isinstance(item, (str, Path)) or not str(item):
-                continue
-            text = str(item)
-            if "://" in text or "\n" in text or len(text) > 4096:
-                continue
-            # NAME=PATH arguments (--child, --admission, --variant) name a
-            # path after the first "="; check both readings.
-            candidates = [text]
-            if isinstance(item, str) and "=" in text:
-                candidates.append(text.split("=", 1)[1])
-            for candidate in candidates:
-                if not candidate:
-                    continue
-                path = Path(candidate)
-                root = (
-                    path if sealed_set.is_sealed(path) else sealed_set.sealed_root(path)
-                )
-                if root is not None and root not in found:
-                    found.append(root)
+        # Attributes named "_..." are set by the code (handlers, run state),
+        # not typed by the user: their paths are still read, but an object
+        # among them does not make the run private.
+        internal = name.startswith("_")
+        _collect_sealed(value, name, found, [] if internal else unclassified)
+    if unclassified:
+        raise _UnclassifiedArgument(
+            f"cannot tell whether {unclassified[0]} names sealed input"
+        )
     return found
+
+
+def _collect_sealed(
+    value: object, name: str, found: list[Path], unclassified: list[str]
+) -> None:
+    import enum
+
+    from openadapt_flow import sealed_set
+
+    if value is None or isinstance(value, (bool, int, float, enum.Enum)):
+        return
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            _collect_sealed(key, name, found, unclassified)
+            _collect_sealed(item, name, found, unclassified)
+        return
+    if isinstance(value, (list, tuple, set, frozenset)):
+        for item in value:
+            _collect_sealed(item, name, found, unclassified)
+        return
+    if not isinstance(value, (str, Path)):
+        unclassified.append(f"--{name.replace('_', '-')}")
+        return
+    text = str(value)
+    if not text or "://" in text or "\n" in text or len(text) > 4096:
+        return
+    # NAME=PATH arguments (--child, --admission, --variant) name a path after
+    # the first "="; check both readings.
+    candidates = [text]
+    if isinstance(value, str) and "=" in text:
+        candidates.append(text.split("=", 1)[1])
+    for candidate in candidates:
+        if not candidate:
+            continue
+        path = Path(candidate)
+        root = path if sealed_set.is_sealed(path) else sealed_set.sealed_root(path)
+        if root is not None and root not in found:
+            found.append(root)
 
 
 def _refusal_text(args: argparse.Namespace, error: BaseException) -> str:
@@ -13480,7 +13516,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         refusal = _sealed_input_refusal(args)
-    except sealed_set.SealedSetError as exc:
+    except (sealed_set.SealedSetError, _UnclassifiedArgument) as exc:
         refusal = str(exc)
     if refusal is not None:
         print(f"REFUSED: {safe_errors.message(refusal)}", file=sys.stderr)

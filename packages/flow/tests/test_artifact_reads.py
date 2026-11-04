@@ -1153,3 +1153,53 @@ def test_push_failure_of_its_own_is_withheld_only_for_private_input(
         assert "push failed: the input was refused (HostedError)" in captured.out
     else:
         assert f"push failed: cannot read {_MARKER}/steps.json" in captured.out
+
+
+def test_teach_branch_with_a_sealed_example_is_refused_before_it_runs(
+    sealed: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd, caplog
+) -> None:
+    """--example RUN FIX arrives as a list of pairs; a sealed RUN inside it
+    is still found, so teach-branch is refused before it reads anything."""
+    from openadapt_flow.learning import branch_teach
+
+    calls: list[object] = []
+
+    def refuse(*args, **kwargs):
+        calls.append(args)
+        raise branch_teach.TeachError(f"workflow {_MARKER!r} did not stop here")
+
+    monkeypatch.setattr(branch_teach, "teach_branch", refuse)
+    base = _plain_bundle(tmp_path / "base")
+    fix = tmp_path / "fix"
+    fix.mkdir()
+    capfd.readouterr()
+    caplog.set_level("DEBUG")
+    examples = ["--example", str(sealed), str(fix)] * 2
+    out = str(tmp_path / "out")
+    args = ["teach-branch", *examples, "--bundle", str(base), "--out", out]
+    assert main(args) == 2
+    printed = capfd.readouterr()
+    for text in (printed.out, printed.err, caplog.text):
+        assert _MARKER not in text
+    assert "REFUSED" in printed.err and "does not read encrypted input" in printed.err
+    assert not calls
+
+
+def test_sealed_paths_are_found_at_any_depth_and_unknown_values_are_private(
+    sealed: Path, tmp_path: Path
+) -> None:
+    import argparse
+
+    from openadapt_flow.__main__ import _private_input, _sealed_paths_in
+
+    plain = str(tmp_path / "plain")
+    nested = argparse.Namespace(
+        example=[[plain, plain], (plain, {"fix": [str(sealed)]})], out=plain
+    )
+    assert _sealed_paths_in(nested) == [sealed]
+    assert _private_input(nested)
+    assert not _private_input(argparse.Namespace(example=[[plain, plain]]))
+    # A value that is neither a path, a scalar nor a container: fail closed.
+    assert _private_input(argparse.Namespace(example=[[plain, object()]]))
+    # Objects the code sets on the namespace do not make the run private.
+    assert not _private_input(argparse.Namespace(_handler=object(), out=plain))
