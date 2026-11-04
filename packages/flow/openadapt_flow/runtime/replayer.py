@@ -1335,6 +1335,7 @@ class Replayer:
                 raise ValueError("approval_gate must be an approval_mode ApprovalGate")
         self.approval_gate = approval_gate
         self._approval_report: Optional[RunReport] = None
+        self._approval_form_step_id: Optional[str] = None
         self._approval_run_dir: Optional[Path] = None
         self._approval_refusal: Optional[str] = None
         self._qualification_fault_mutations: list[FaultMutationReceipt] = []
@@ -1634,6 +1635,11 @@ class Replayer:
         before they are written, and durable checkpoints use the same key.
         No plaintext of the bundle or of the live screen reaches the disk.
         """
+        # Windows captured by an earlier run on this backend name no step of
+        # this one (step ids repeat across workflows).
+        forget = getattr(self.backend, "clear_verified_windows", None)
+        if callable(forget):
+            forget()
         bundle_path = Path(bundle_dir)
         if (
             not (
@@ -12943,6 +12949,7 @@ class Replayer:
 
         gate = self.approval_gate
         assert gate is not None
+        self._approval_form_step_id = step.id
         report = self._approval_report
         run_dir = self._approval_run_dir
 
@@ -13063,9 +13070,61 @@ class Replayer:
         from openadapt_flow.approval_mode.form_state import capture_form_state
 
         try:
-            return capture_form_state(self.backend, self.vision, frame_png)
+            return capture_form_state(
+                self.backend,
+                self.vision,
+                frame_png,
+                self._approval_form_regions(frame_png),
+            )
         except Exception:  # noqa: BLE001 - unreadable is never "unchanged"
             return None
+
+    def _approval_form_regions(
+        self, frame_png: Optional[bytes]
+    ) -> Optional[list[tuple[int, int, int, int]]]:
+        """The app window's part of the frame, for a screen-text form state.
+
+        A backend that knows the window this item's verified steps were in
+        (``approval_form_region``) bounds the read to that window, so the
+        whole form the person saw is read, and the clock or a notification
+        outside it is not. The save step is left out, so the approval
+        request (taken before the save resolves) and the recheck after the
+        answer ask about the same window; its frame is part of the digest, so
+        a moved or resized window halts the save. The earlier steps' points
+        let a resumed run, which verified nothing in this process yet, name
+        the same window. None, and the whole screen is read, when the backend
+        cannot say.
+        """
+
+        region_of = getattr(self.backend, "approval_form_region", None)
+        if not callable(region_of) or frame_png is None:
+            return None
+        save_step = self._approval_form_step_id
+        report = self._approval_report
+        points = [
+            (int(prior.resolution.point[0]), int(prior.resolution.point[1]))
+            for prior in (report.results if report is not None else ())
+            if prior.step_id != save_step and prior.resolution is not None
+        ]
+        try:
+            region = region_of(save_step, points)
+        except Exception:  # noqa: BLE001 - no window means the whole screen
+            return None
+        if region is None:
+            return None
+        try:
+            from PIL import Image
+
+            with Image.open(io.BytesIO(frame_png)) as image:
+                width, height = image.size
+        except Exception:  # noqa: BLE001 - no size means the whole screen
+            return None
+        x, y, w, h = (int(v) for v in region)
+        left, top = max(0, x), max(0, y)
+        right, bottom = min(width, x + w), min(height, y + h)
+        if right <= left or bottom <= top:
+            return None
+        return [(left, top, right - left, bottom - top)]
 
     def _is_qualification_fault_step(self, step: Step) -> bool:
         """Whether ``step`` is the fault step of the fault case this run is.
@@ -13100,6 +13159,7 @@ class Replayer:
         """
 
         gate = self.approval_gate
+        self._approval_form_step_id = step.id
         assert gate is not None
         authorization = self.governed_authorization
         drill_fault_step = self._is_qualification_fault_step(step)

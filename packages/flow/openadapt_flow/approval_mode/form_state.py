@@ -11,7 +11,10 @@ the pause halts the item before the save").
   Password fields contribute only whether they're empty.
 - Elsewhere it reads the text on the screen with the engine's local OCR,
   as a sorted list of words, so a cursor blink or hover doesn't count as a
-  change but a changed value does.
+  change but a changed value does. When the run knows where the item's
+  fields are (the rows of the steps it has already resolved), only those
+  rows are read, so text elsewhere on the screen that changes by itself (a
+  clock in a taskbar, a notification) is not mistaken for an edited form.
 
 Only a digest leaves this module. The digest stays in the run directory; it
 never enters the report or anything sent to Cloud.
@@ -22,10 +25,12 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 #: (kind, "sha256:<hex>")
 FormState = tuple[str, str]
+#: x, y, width, height in frame pixels.
+Region = tuple[int, int, int, int]
 
 _DOM_FORM_STATE_JS = """() => {
   const rows = [];
@@ -99,30 +104,65 @@ def dom_form_state(backend: Any) -> Optional[FormState]:
     return _digest("dom", payload)
 
 
-def screen_text_state(vision: Any, frame_png: bytes) -> Optional[FormState]:
-    """Sorted words on the screen, or ``None`` when OCR found nothing."""
-
-    try:
-        lines = vision.ocr(frame_png)
-    except Exception:  # noqa: BLE001 - unreadable is not "unchanged"
-        return None
+def _words(vision: Any, png: bytes) -> list[str]:
+    lines = vision.ocr(png)
     words: list[str] = []
     for line in lines or []:
         text = str(getattr(line, "text", "") or "")
         words.extend(word.casefold() for word in _WORD.findall(text))
-    if not words:
+    return words
+
+
+def _crop(png: bytes, region: Region) -> bytes:
+    import io
+
+    from PIL import Image
+
+    x, y, w, h = region
+    with Image.open(io.BytesIO(png)) as image:
+        out = io.BytesIO()
+        image.crop((x, y, x + w, y + h)).save(out, format="PNG")
+    return out.getvalue()
+
+
+def screen_text_state(
+    vision: Any, frame_png: bytes, regions: Optional[Sequence[Region]] = None
+) -> Optional[FormState]:
+    """Sorted words on the screen, or ``None`` when OCR found nothing.
+
+    With ``regions`` (the app's window), only those parts of the frame are
+    read, and the words keep their reading order, so swapped values change
+    the digest. The regions are part of the digest.
+    """
+
+    try:
+        if not regions:
+            words = _words(vision, frame_png)
+            if not words:
+                return None
+            return _digest("screen_text", sorted(words))
+        rows = [
+            [list(region), _words(vision, _crop(frame_png, region))]
+            for region in regions
+        ]
+    except Exception:  # noqa: BLE001 - unreadable is not "unchanged"
         return None
-    return _digest("screen_text", sorted(words))
+    if not any(words for _region, words in rows):
+        return None
+    return _digest("screen_text", {"rows": rows})
 
 
 def capture_form_state(
-    backend: Any, vision: Any, frame_png: Optional[bytes] = None
+    backend: Any,
+    vision: Any,
+    frame_png: Optional[bytes] = None,
+    regions: Optional[Sequence[Region]] = None,
 ) -> Optional[FormState]:
     """The best available field state for this backend, or ``None``.
 
     A backend may provide ``form_state()`` returning JSON-serializable data;
     a browser backend is read through its page; any other backend falls back
-    to the words on the screen.
+    to the words on the screen, in ``regions`` when they are given.
     """
 
     custom = getattr(backend, "form_state", None)
@@ -138,7 +178,7 @@ def capture_form_state(
             frame_png = backend.screenshot()
         except Exception:  # noqa: BLE001
             return None
-    return screen_text_state(vision, frame_png)
+    return screen_text_state(vision, frame_png, regions)
 
 
 __all__ = [
