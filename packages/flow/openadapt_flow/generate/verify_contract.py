@@ -2025,11 +2025,10 @@ def build_contract(
             _anchor_roles(schema, plan, variant, settings.actor_params),
             settings.strict_pins,
         )
-        for col, role in sorted(roles.items()):
-            if flavor == "found":
-                role = _found_role(role)
-                if role is None:
-                    continue
+        for col, full in sorted(roles.items()):
+            role = _found_role(full) if flavor == "found" else full
+            if role is None:
+                continue
             _pin(
                 b,
                 main,
@@ -2158,13 +2157,12 @@ def build_contract(
                     m[key] = {"literal": "1"}
                 else:
                     m[key] = _value_expr(pname, loc.rule)
-            for col, role in sorted(_strict(g.roles, settings.strict_pins).items()):
-                if role.role == "link":
+            for col, full in sorted(_strict(g.roles, settings.strict_pins).items()):
+                if full.role == "link":
                     continue
-                if found:
-                    role = _found_role(role)
-                    if role is None:
-                        continue
+                role = _found_role(full) if found else full
+                if role is None:
+                    continue
                 _pin(
                     b,
                     surf,

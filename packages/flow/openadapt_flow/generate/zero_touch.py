@@ -792,8 +792,10 @@ def faults(
         new = plant_value(sb, t, col, op.row.get(col))
         name = f"{cls}:{op.table}.{col}"
         if new is None:
+            c = t.column(col)
+            kind = c.data_type if c is not None else "?"
             out.append(Case(name, cls, [], unplantable=f"no value of type "
-                            f"{t.column(col).data_type if t.column(col) else '?'} can be planted"))  # fmt: skip
+                            f"{kind} can be planted"))  # fmt: skip
             return
         row = dict(op.row)
         row[col] = new
@@ -823,8 +825,8 @@ def faults(
             # A new row's own key, when the store doesn't fill it (a code,
             # a user name): a wrong one is planted like any other value.
             for col in t.primary_key:
-                c = t.column(col)
-                if c is None or c.auto:
+                pk = t.column(col)
+                if pk is None or pk.auto:
                     continue
                 new = plant_value(sb, t, col, op.row.get(col))
                 cls = (
@@ -864,23 +866,23 @@ def faults(
             other = next((r for r in sb.rows(op.table, 20)
                           if store.row_key(t, r) != store.row_key(t, op.key)), None)  # fmt: skip
             if other is None:
-                key = _new_key(sb, t, before)
-                other = _copy_row(t, before, key) if key is not None else None
+                copy_key = _new_key(sb, t, before)
+                other = _copy_row(t, before, copy_key) if copy_key is not None else None
             if other is not None:
                 moved = dict(other)
-                for c in changed:
-                    moved[c] = op.row.get(c)
+                for col in changed:
+                    moved[col] = op.row.get(col)
                 out.append(Case(f"wrong_record:{op.table}", "wrong_record",
                                 write[:i] + write[i + 1 :] + [Op(op.table, other, moved)]))  # fmt: skip
                 # The same change on another row: an excuse must hold only
                 # on the rows the write declares.
-                for c in changed:
-                    v = edit_value(sb, t, c, other.get(c), op.row.get(c))
-                    if v is None or other.get(c) == v:
+                for col in changed:
+                    v = edit_value(sb, t, col, other.get(col), op.row.get(col))
+                    if v is None or other.get(col) == v:
                         continue
                     edit = dict(other)
-                    edit[c] = v
-                    out.append(Case(f"unrelated_edit:{op.table}.{c}", "unrelated_edit",
+                    edit[col] = v
+                    out.append(Case(f"unrelated_edit:{op.table}.{col}", "unrelated_edit",
                                     write + [Op(op.table, other, edit)]))  # fmt: skip
             # A late change to the target itself: its first changed column.
             if changed:
@@ -891,16 +893,16 @@ def faults(
                     out.append(Case(f"delayed:{op.table}.{changed[0]}", "delayed",
                                     list(write), late=[Op(op.table, op.key, late)]))  # fmt: skip
         if is_new:
-            key = _new_key(sb, t, op.row)
-            if key is None:
+            dup_key = _new_key(sb, t, op.row)
+            if dup_key is None:
                 out.append(Case(f"duplicate:{op.table}", "duplicate", [],
                                 unplantable="no new key can be made for a copy"))  # fmt: skip
             else:
-                dup = _copy_row(t, op.row, key)
+                dup = _copy_row(t, op.row, dup_key)
                 # A unique value the app makes (an invoice or ticket number)
                 # is made again for a second submit: plant a fresh one, so
                 # the copy is a duplicate the store accepts.
-                for col in unique_columns(sb, op.table) - set(key):
+                for col in unique_columns(sb, op.table) - set(dup_key):
                     if (op.table, col) not in (bound or set()):
                         v = fresh_value(sb, t, col, dup.get(col))
                         if v is not None:
@@ -909,13 +911,13 @@ def faults(
                 # parameters (bindings, never a value that happens to match).
                 given = {c for c in op.row if (op.table, c) in (bound or set())}
                 out.append(Case(f"duplicate:{op.table}", "duplicate",
-                                write + [Op(op.table, key, dup)],
+                                write + [Op(op.table, dup_key, dup)],
                                 copy_of=(op.table, dict(op.row), dup, given)))  # fmt: skip
             # The values land on an existing look-alike instead.
             for other in sb.rows(op.table, 20):
                 look = dict(op.row)
-                for c in t.primary_key:
-                    look[c] = other.get(c)
+                for col in t.primary_key:
+                    look[col] = other.get(col)
                 out.append(Case(f"look_alike:{op.table}", "look_alike",
                                 write[:i] + write[i + 1 :] + [Op(op.table, other, look)]))  # fmt: skip
                 break
@@ -945,16 +947,16 @@ def faults(
     for name in sorted(set(schema.tables) - touched):
         t = schema.tables[name]
         sample = sb.rows(name, 1)
-        key = _new_key(sb, t, sample[0]) if sample else None
-        if key is None:
+        new_key = _new_key(sb, t, sample[0]) if sample else None
+        if new_key is None:
             continue
-        row = _copy_row(t, sample[0], key)
-        for col in unique_columns(sb, name) - set(key):
+        row = _copy_row(t, sample[0], new_key)
+        for col in unique_columns(sb, name) - set(new_key):
             v = fresh_value(sb, t, col, row.get(col))
             if v is not None:
                 row[col] = v  # a copied unique code would be refused
         out.append(Case(f"other_table:{name}", "other_table",
-                        write + [Op(name, key, row)]))  # fmt: skip
+                        write + [Op(name, new_key, row)]))  # fmt: skip
         planted += 1
         if planted >= 2:
             break
