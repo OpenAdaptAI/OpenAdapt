@@ -74,6 +74,9 @@ from typing import Any, Literal, Optional
 Dialect = Literal["sqlite", "mysql", "postgresql"]
 TableMode = Literal["compare", "append_only", "skip"]
 
+#: Maximum data rows per snapshot, including auxiliary audit reads.
+DEFAULT_READ_ROW_BUDGET = 100_000
+
 #: Columns per JSON object call: SQLite caps a function at 127 arguments.
 _CHUNK = 50
 #: The synthetic identity field of a database slice's records.
@@ -91,6 +94,13 @@ MAC_HEX = 32
 
 class SnapshotError(RuntimeError):
     """The database can't be snapshotted as the frame needs."""
+
+
+class SnapshotTooLarge(SnapshotError):
+    """The read exceeded its budget. No partial snapshot may be used."""
+
+    def __init__(self, budget: int) -> None:
+        super().__init__(f"frame too large: row read budget of {budget} exceeded")
 
 
 # -- keys and MACs ------------------------------------------------------------
@@ -567,8 +577,17 @@ class _Session:
         else:
             self.cur.execute("BEGIN")
 
-    def rows(self, sql: str) -> list[tuple[Any, ...]]:
-        self.cur.execute(sql)
+    @staticmethod
+    def _limited(sql: str, limit: Optional[int]) -> str:
+        if limit is None:
+            return sql
+        # Bound the result on the server: DB-API drivers can buffer it during
+        # execute(), before fetchmany() could enforce a client-side limit.
+        query = sql.strip().removesuffix(";")
+        return f"SELECT * FROM ({query}) AS frame_read_rows LIMIT {limit}"
+
+    def rows(self, sql: str, *, limit: Optional[int] = None) -> list[tuple[Any, ...]]:
+        self.cur.execute(self._limited(sql, limit))
         # A dict cursor (``pymysql.cursors.DictCursor``) yields mappings in
         # column order; a plain one yields tuples.
         return [
@@ -576,8 +595,8 @@ class _Session:
             for r in self.cur.fetchall()
         ]
 
-    def dicts(self, sql: str) -> list[dict[str, Any]]:
-        self.cur.execute(sql)
+    def dicts(self, sql: str, *, limit: Optional[int] = None) -> list[dict[str, Any]]:
+        self.cur.execute(self._limited(sql, limit))
         names = [d[0] for d in self.cur.description or []]
         return [
             dict(r) if isinstance(r, Mapping) else dict(zip(names, r))
@@ -795,12 +814,14 @@ def _row_json(dialect: Dialect, d: _Def) -> list[str]:
 
 
 def _read_rows(
-    s: _Session, name: str, d: _Def, where: str = ""
+    s: _Session, name: str, d: _Def, where: str = "", *, limit: Optional[int] = None
 ) -> list[dict[str, Any]]:
     parts = _row_json(s.dialect, d)
     cells = ", ".join(f"{c} AS r{i}" for i, c in enumerate(parts))
     out = []
-    for chunks in s.rows(f"SELECT {cells} FROM {_quote(s.dialect, name)} {where}"):
+    for chunks in s.rows(
+        f"SELECT {cells} FROM {_quote(s.dialect, name)} {where}", limit=limit
+    ):
         row: dict[str, Any] = {}
         for chunk in chunks:
             if chunk is not None:
@@ -1428,10 +1449,12 @@ def _pg_large_objects() -> _Def:
     )
 
 
-def _read_rows_pg(s: _Session, d: _Def) -> list[dict[str, Any]]:
+def _read_rows_pg(
+    s: _Session, d: _Def, *, limit: Optional[int] = None
+) -> list[dict[str, Any]]:
     if d.select:
         try:
-            rows = s.rows(d.select)
+            rows = s.rows(d.select, limit=limit)
         except Exception as exc:  # noqa: BLE001 - e.g. no SELECT on an object
             raise SnapshotError(
                 f"large objects can't be read ({exc}); grant the read account "
@@ -1442,7 +1465,7 @@ def _read_rows_pg(s: _Session, d: _Def) -> list[dict[str, Any]]:
     cells = ", ".join(_pg_cell(c, d.encode[c]) for c in d.columns) or "NULL"
     return [
         {c: _pg_value(d.encode[c], v) for c, v in zip(d.columns, r)}
-        for r in s.rows(f"SELECT {cells} FROM ONLY {d.relation}")
+        for r in s.rows(f"SELECT {cells} FROM ONLY {d.relation}", limit=limit)
     ]
 
 
@@ -1496,6 +1519,7 @@ def take_snapshot(
     key: bytes,
     modes: Mapping[str, TableMode] = {},
     max_rows: int = 2000,
+    read_row_budget: int = DEFAULT_READ_ROW_BUDGET,
     before: Optional[Snapshot] = None,
     extra_queries: Mapping[str, str] = {},
     ignore: Mapping[str, Sequence[str]] = {},
@@ -1513,6 +1537,10 @@ def take_snapshot(
             every other table is compared.
         max_rows: Over this many rows, a table keeps cell MACs only for
             ``ref_columns`` (and a contents MAC for every row).
+        read_row_budget: Maximum data rows across non-skipped tables and
+            auxiliary queries combined. Refuse before fetching table contents
+            when counts exceed it; never return a truncated snapshot. This
+            bounds rows, not query time or the size of an individual cell.
         before: The baseline, when this is a read after the save: plain
             values are kept for the rows that differ from it.
         extra_queries: Name -> a SELECT to run in the same transaction (the
@@ -1532,6 +1560,8 @@ def take_snapshot(
         SnapshotError: the database can't be read as the frame needs it.
     """
 
+    if read_row_budget < 1:
+        raise SnapshotError("read_row_budget must be at least 1")
     if dialect != "postgresql":
         # Before any connection: only PostgreSQL has schemas to skip.
         wildcards = sorted(t for t in (*modes, *optional_modes) if t.endswith(".*"))
@@ -1556,6 +1586,7 @@ def take_snapshot(
             schemas,
             optional_modes,
             link_key() if links else None,
+            read_row_budget,
         )
     except SnapshotError:
         raise
@@ -1577,6 +1608,7 @@ def _snapshot(
     schemas: Sequence[str],
     optional_modes: Mapping[str, TableMode] = {},
     links: Optional[bytes] = None,
+    read_row_budget: int = DEFAULT_READ_ROW_BUDGET,
 ) -> Snapshot:
     dialect = s.dialect
     counters: dict[str, int] = {}
@@ -1647,8 +1679,6 @@ def _snapshot(
                 str(n): int(v)
                 for n, v in s.rows("SELECT name, seq FROM sqlite_sequence")
             }
-    for name, sql in extra_queries.items():
-        snap.extra[name] = s.dicts(sql)
     unknown = sorted(set(modes) - set(defs))
     modes = {**{t: m for t, m in optional_modes.items() if t in defs}, **modes}
     if unknown:
@@ -1666,8 +1696,6 @@ def _snapshot(
             + "; ".join(refused)
             + ". Skip a table only by allow-listing it with mode skip and a reason"
         )
-    if not names:
-        return snap
 
     def rel(t: str) -> str:
         return defs[t].relation or _quote(dialect, t)
@@ -1683,6 +1711,17 @@ def _snapshot(
                 )
             )
         )
+    counted = sum(counts.values())
+    if counted > read_row_budget:
+        raise SnapshotTooLarge(read_row_budget)
+    extra_count = 0
+    for name, sql in extra_queries.items():
+        remaining = read_row_budget - counted - extra_count
+        rows = s.dicts(sql, limit=remaining + 1)
+        if len(rows) > remaining:
+            raise SnapshotTooLarge(read_row_budget)
+        extra_count += len(rows)
+        snap.extra[name] = rows
     numbered = [t for t in names if defs[t].auto_column]
     maxes = (
         {
@@ -1699,6 +1738,7 @@ def _snapshot(
         else {}
     )
     refs = set(ref_columns)
+    read_count = extra_count
     for t in names:
         d = defs[t]
         mode: TableMode = "append_only" if modes.get(t) == "append_only" else "compare"
@@ -1734,9 +1774,12 @@ def _snapshot(
         elif not table.count:
             read = []
         elif dialect == "postgresql":
-            read = _read_rows_pg(s, d)
+            read = _read_rows_pg(s, d, limit=read_row_budget - read_count + 1)
         else:
-            read = _read_rows(s, t, d)
+            read = _read_rows(s, t, d, limit=read_row_budget - read_count + 1)
+        read_count += len(read)
+        if read_count > read_row_budget:
+            raise SnapshotTooLarge(read_row_budget)
         for row in read:
             text = _row_key(d, row, seen_keys, skip)
             k = row_key_hash(key, text, t)

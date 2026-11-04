@@ -2785,6 +2785,7 @@ def dry_read(path: Path, params: Mapping[str, Any], mysql: bool) -> Optional[str
                     key=mac_key(b"0" * 32),
                     modes=database.modes(),
                     max_rows=database.max_rows,
+                    read_row_budget=database.read_row_budget,
                     extra_queries=_audit_sql(contract.config),
                     ignore=database.all_ignore_columns(),
                     ref_columns=_ref_columns(contract.config),

@@ -257,6 +257,23 @@ row added, changed or removed anywhere is collateral unless a declared
 effect, a declared side record, an attributed concurrent write or an
 allow-listed bookkeeping table explains it.
 
+Each snapshot has a `frame.database.read_row_budget` of 100,000 data rows
+by default. It counts all non-skipped tables, including append-only logs,
+and auxiliary audit-query results. If table counts exceed the budget, their
+contents are not fetched. Audit queries have a server-side result limit;
+one row beyond the remaining budget refuses the entire snapshot. A baseline,
+post-save, settling or recheck read over budget makes the frame
+`not_checked` with a `frame too large` reason. It can never verify from a
+partial read. Set a different positive budget in the contract when needed;
+that change is bound by the contract's digest. The default is omitted from
+serialization so existing contract digests stay unchanged.
+
+This is a row limit, not a deadline or a byte limit. Counting and reading
+large cells can still be expensive. `max_rows` is a separate setting: it
+limits retained cell hashes, not rows read. Within the read budget, every
+row is still compared, so edits and deletions of old audit rows remain
+visible. Logged agent writes to audit tables still require an explanation.
+
 An app that writes on every request (the acting user's `last_login`, a
 token's `last_seen`) moves rows in every window. `frame.learned` excuses
 exactly those moves on the acting user's own rows (never the written row),
