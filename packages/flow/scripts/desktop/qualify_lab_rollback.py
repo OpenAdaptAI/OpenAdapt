@@ -118,7 +118,7 @@ def _fresh_app(
     )
     lab.launch_interactive(
         f"powershell.exe -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File {APP} "
-        f'-Python "{py}"',
+        f'-Python "{py}" -DbCli "{GUEST}\\pn_db.py"',
         name="OAFlowApp",
     )
     time.sleep(settle_s)
@@ -133,13 +133,42 @@ def _cover_app(lab: winrm_lab.WinRMLab) -> None:
     time.sleep(8)
 
 
+#: Each harness UIA lookup: the locator, how many tries, the slowest single
+#: call and the total, so a miss shows a slow UIA tree apart from a wrong
+#: locator (the call returns quickly with nothing).
+LOOKUPS: list[dict[str, Any]] = []
+
+
 def _locate(agent, locator, *, timeout_s: float = 45.0):
-    deadline = time.monotonic() + timeout_s
-    while True:
-        handle = agent.locate_structural(locator)
-        if handle is not None or time.monotonic() >= deadline:
-            return handle
-        time.sleep(0.25)
+    started = time.monotonic()
+    deadline = started + timeout_s
+    tries, slowest, handle, error = 0, 0.0, None, None
+    try:
+        while True:
+            call = time.monotonic()
+            try:
+                handle = agent.locate_structural(locator)
+            finally:
+                tries += 1
+                slowest = max(slowest, time.monotonic() - call)
+            if handle is not None or time.monotonic() >= deadline:
+                return handle
+            time.sleep(0.25)
+    except Exception as exc:  # noqa: BLE001 - recorded, then raised
+        error = type(exc).__name__
+        raise
+    finally:
+        LOOKUPS.append(
+            {
+                "automation_id": locator.automation_id,
+                "name": locator.name,
+                "found": handle is not None,
+                "tries": tries,
+                "slowest_call_s": round(slowest, 2),
+                "total_s": round(time.monotonic() - started, 2),
+                "error": error,
+            }
+        )
 
 
 def _points(agent) -> dict[str, tuple[int, int]]:
@@ -257,17 +286,102 @@ def build_bundle(run_rec: Path, undo_rec: Path, bundle: Path):
             "manifest": None,
         }
     )
+    REVIEWED.extend(_review_selection_keys(workflow))
     workflow.save(bundle)
     return Workflow.load(bundle)
 
 
-def _rdp_backend():
+#: Steps the lab operator reviewed (``set_action_classification``).
+REVIEWED: list[dict[str, str]] = []
+#: Text navigation and selection keys: they move the caret or the selection
+#: in a field and never submit.
+SELECTION_KEYS = {"end", "home", "left", "right", "up", "down"}
+REVIEW_RULE = (
+    "a key or hotkey the compiler asked a person to review, among End, Home "
+    "and the arrows, with no modifier but Shift or Ctrl, on a step that "
+    "declares no effect"
+)
+
+
+def _review_selection_keys(workflow) -> list[dict[str, str]]:
+    """The operator's risk review of the demonstrations' text-selection keys.
+
+    The compiler asks a person to review every special key, and until then
+    the run's change ledger counts it as a possible write that rollback can't
+    vouch for without an audit log. The lab operator reviews only keys that
+    move the caret or the selection (End, Home, arrows, with Shift or Ctrl),
+    through the same qualification API a deployment uses, and records each
+    one. Any other key stays unreviewed.
+    """
+    from openadapt_flow.ir import ActionKind
+    from openadapt_flow.qualification import (
+        ActionRiskClass,
+        ActionRiskClassification,
+        EnvironmentBoundary,
+        init_project,
+        set_action_classification,
+    )
+
+    init_project(
+        workflow,
+        environment=EnvironmentBoundary(
+            target_kind="windows",
+            application="Patient Notes lab",
+            application_version="lab",
+            environment_digest="0" * 64,
+            runtime_version="lab",
+        ),
+    )
+    reviewed = []
+    for step in workflow.steps:
+        modifiers = {m.lower() for m in step.modifiers or []}
+        if (
+            step.risk_review_required
+            and step.action in (ActionKind.KEY, ActionKind.HOTKEY)
+            and (step.key or "").lower() in SELECTION_KEYS
+            and modifiers <= {"shift", "ctrl"}
+            and not step.effects
+        ):
+            set_action_classification(
+                workflow,
+                ActionRiskClassification(
+                    step_id=step.id,
+                    classification=ActionRiskClass.STATE_CHANGING,
+                    explanation="moves the caret or selection in a text field",
+                    operator_confirmed=True,
+                ),
+            )
+            reviewed.append(
+                {
+                    "step": step.id,
+                    "key": "+".join([*sorted(modifiers), step.key or ""]),
+                    "rule": REVIEW_RULE,
+                    "classification": "state_changing (runtime risk reversible)",
+                }
+            )
+    # The review is on the steps; the lab runs no qualification campaign.
+    workflow.qualification = None
+    return reviewed
+
+
+def _use_host(lab: winrm_lab.WinRMLab) -> str:
+    """Point the guest paths at the lab host's profile; its env prefix."""
+    global GUEST, APP, DB
+    profile = getattr(lab, "profile", None)
+    if profile is None:  # a lab module without host profiles: the ARM VM
+        return "OAFLOW_WINLAB_"
+    GUEST = profile.guest_dir
+    APP, DB = rf"{GUEST}\patient_notes.ps1", rf"{GUEST}\patients.db"
+    return str(profile.prefix)
+
+
+def _rdp_backend(prefix: str):
     from openadapt_flow.backends.rdp_backend import AardwolfTransport, FreeRDPBackend
 
     transport = AardwolfTransport.from_credentials(
-        os.environ["OAFLOW_WINLAB_HOST"],
-        os.environ["OAFLOW_WINLAB_USER"],
-        os.environ["OAFLOW_WINLAB_PASSWORD"],
+        os.environ[prefix + "HOST"],
+        os.environ[prefix + "USER"],
+        os.environ[prefix + "PASSWORD"],
         width=WIDTH,
         height=HEIGHT,
     )
@@ -364,17 +478,19 @@ def run_trial(transport: str, out: Path, row: dict[str, Any]) -> None:
         }
     )
     lab = winrm_lab.WinRMLab()
+    prefix = _use_host(lab)
+    row["host"] = prefix.split("_")[1].lower()  # winlab | winlap
     tools = Path(winrm_lab.__file__).resolve().parent
     for name in ("pn_db.py", "patient_notes.ps1", "foreign_window.ps1"):
         local = next(p for p in (HERE / name, tools / name) if p.exists())
         lab.push_file(local, rf"{GUEST}\{name}")
-    rdp = _rdp_backend() if transport == "rdp" else None
+    rdp = _rdp_backend(prefix) if transport == "rdp" else None
     if rdp is not None:
         rdp.screenshot()
         time.sleep(8)  # the session moves from the console to RDP
-    endpoint = lab.launch_agent(token=os.environ["OAFLOW_WINLAB_AGENT_TOKEN"])
+    endpoint = lab.launch_agent(token=os.environ[prefix + "AGENT_TOKEN"])
     agent = endpoint.backend()
-    (Path.home() / "oa/scratch/winlab/agent_pin.txt").write_text(
+    (Path.home() / "oa/scratch" / row["host"] / "agent_pin.txt").write_text(
         endpoint.pin_fingerprint or ""
     )
     backend = rdp if rdp is not None else agent
@@ -471,6 +587,8 @@ def main() -> int:
         row["accepted"] = False
         row["failure"] = f"{type(exc).__name__}: {str(exc)[:400]}"
         (args.out / "traceback.txt").write_text(traceback.format_exc())
+    row["uia_lookups"] = LOOKUPS
+    row["operator_reviewed_steps"] = REVIEWED
     row["completed_at"] = datetime.now(timezone.utc).isoformat()
     rows = json.loads(args.evidence.read_text()) if args.evidence.exists() else []
     rows.append(row)

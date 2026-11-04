@@ -70,7 +70,7 @@ Each backend fills it from what it reads:
 | --- | --- | --- | --- |
 | macOS AX (built) | `AXRole`, title or description | `AXParent` up to the `AXWindow`, sheets and dialogs included | window title, app pid |
 | Windows UIA ([#1707](https://github.com/OpenAdaptAI/OpenAdapt/pull/1707)) | `ControlType`, `Name`, `AutomationId` | `GetParentControl` up to the outermost window; an unmapped role is empty | outermost window name (an owned dialog's owner), process name or none |
-| Linux AT-SPI (later) | role, accessible name, accessible id | parent chain up to the frame | frame name, application |
+| Linux AT-SPI (built) | mapped role, accessible name, accessible id | raw AT-SPI role and name of each parent up to the pinned window, which must match by title, bounds and process | window title, application name |
 | Browser | not used for admission | | |
 
 The browser keeps its current rule unchanged: a new click must sit inside the
@@ -224,7 +224,8 @@ In this change:
 
 - `openadapt_flow.repair.element_identity`: the identity record, the backend
   kind, the record-check cover and the click admission.
-- `MacOSBackend.element_identity_at`, from the AX tree.
+- `MacOSBackend.element_identity_at`, from the AX tree, and
+  `LinuxBackend.element_identity_at`, from the AT-SPI tree.
 - Self-repair admits bridge clicks by the rules above and gives the new step
   its dialog band. The browser rule is unchanged.
 - The repair hold answers `element_identity`, and agent teach takes the
@@ -249,6 +250,17 @@ because of the caret
 ([#1713](https://github.com/OpenAdaptAI/OpenAdapt/issues/1713)). Under
 `demo`, and with no verifier, the click is refused and nothing is written.
 
+On Linux, through `LinuxBackend` on a GTK3 chart app with a SQLite database
+(`tests/native_apps/chart_gtk.py`, Xvfb with openbox; scripted repair agent
+and approver; live AT-SPI, screen, input and database): the run stops at the
+"Update available" notice before any save, the "Later" click is admitted on
+`element_and_record_check` with its AT-SPI identity (role, name, ancestry up
+to the window, process), the probe and the fault campaign pass, one scripted
+approval is signed, and the resumed run is `VERIFIED` with exactly one new
+row. Under `demo`, and with no verifier, the click is refused and nothing is
+written. The `flow-linux-atspi` CI job runs it
+([benchmark/repair_every_backend](../benchmark/repair_every_backend/README.md)).
+
 The pixel-only path doesn't reach repair yet: a remote click whose next
 screen differs counts as an uncertain delivery
 ([#1712](https://github.com/OpenAdaptAI/OpenAdapt/issues/1712)).
@@ -263,4 +275,3 @@ screen differs counts as an uncertain delivery
 - Input to a Windows app's owned dialog windows. On macOS, the pinned
   window's own AppKit sheet is accepted (#1711); any other window is still
   refused.
-- Linux AT-SPI.

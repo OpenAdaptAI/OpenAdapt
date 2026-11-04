@@ -90,7 +90,7 @@ def test_rule_ids_are_unique_and_cases_must_name_a_rule() -> None:
 
 
 def test_the_openemr_verify_yaml_declares_the_existing_duplicate_rule() -> None:
-    from openadapt_flow.benchmark.openemr_local import SyntheticPatientSpec
+    from benchmark.harness.openemr_local import SyntheticPatientSpec
     from openadapt_flow.qualify import load_verify_config
 
     config = load_verify_config(FLOW / "benchmark/openemr_local/verify.yaml", env={})

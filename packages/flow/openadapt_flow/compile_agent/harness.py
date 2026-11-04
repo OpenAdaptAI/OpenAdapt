@@ -508,12 +508,12 @@ class Harness:
         """A screenshot for the agent's context. ``why`` is ``requested``,
         ``gate`` or ``every_turn``; each is counted."""
 
-        from openadapt_flow.privacy import scrub_image_bytes
-
         counter = _SCREENSHOT_COUNTERS[why]
         png = self.computer.screenshot()
         setattr(self.stats, counter, getattr(self.stats, counter) + 1)
-        return scrub_image_bytes(png)
+        # Raw here: the model-facing agent redacts what it sends off the
+        # machine (compile_agent.agents._image).
+        return png
 
     # -- actions on refs (selective vision) -----------------------------------------
 
@@ -969,12 +969,12 @@ class SurfaceHarness:
         return self._last
 
     def screenshot(self, why: str = "requested") -> bytes:
-        from openadapt_flow.privacy import scrub_image_bytes
-
         counter = _SCREENSHOT_COUNTERS[why]
         png = self.computer.screenshot()
         setattr(self.stats, counter, getattr(self.stats, counter) + 1)
-        return scrub_image_bytes(png)
+        # Raw here: the model-facing agent redacts what it sends off the
+        # machine (compile_agent.agents._image).
+        return png
 
     # -- actions --------------------------------------------------------------------
 

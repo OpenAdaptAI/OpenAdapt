@@ -1662,15 +1662,6 @@ def test_one_logged_insert_never_vouches_for_two_rows(tmp_path):
     ).fetchone() == (1,)
 
 
-def test_rollback_refuses_a_durable_run():
-    from openadapt_flow.__main__ import _refuse_rollback_durable
-
-    with pytest.raises(SystemExit, match="durable"):
-        _refuse_rollback_durable(object(), True)
-    _refuse_rollback_durable(None, True)
-    _refuse_rollback_durable(object(), False)
-
-
 def test_a_step_with_no_declared_effect_is_judged_by_the_reads_and_the_log(tmp_path):
     # OpenEMR, live: pressing Enter in a form field is a ledger entry that
     # stays unconfirmed (no effect declared, no compensation). A whole-
@@ -1980,18 +1971,11 @@ def test_an_unreadable_audit_log_at_the_end_is_never_rolled_back(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _cleanup_result(dirty=None, record_changed=None):
-    from openadapt_flow.halt_cleanup import CleanupResult
-
-    result = CleanupResult()
-    result.dirty, result.record_changed = dirty, record_changed
-    return result
-
-
 def test_a_screen_backend_gets_a_fresh_session_from_the_start_screen_check(
     tmp_path, monkeypatch
 ):
     from openadapt_flow import halt_cleanup
+    from openadapt_flow import rollback as rollback_module
     from openadapt_flow.ir import HaltCleanup, Predicate, PredicateKind
     from openadapt_flow.rollback import screen_fresh_session
 
@@ -2010,15 +1994,14 @@ def test_a_screen_backend_gets_a_fresh_session_from_the_start_screen_check(
         source="declared",
     )
     monkeypatch.setattr(halt_cleanup, "runnable_cleanup", lambda wf: start)
-    seen: list[Path] = []
-    results = [_cleanup_result(), _cleanup_result(dirty="the start screen isn't up")]
+    answers = [None, "it isn't there"]
+    checked: list[Any] = []
 
-    def run_cleanup(factory, wf, cleanup, *, bundle_dir, run_dir):
-        assert cleanup is start
-        seen.append(run_dir)
-        return results.pop(0)
+    def missing(backend, replayer, wf, predicate, *, bundle_dir, where):
+        checked.append(predicate)
+        return answers.pop(0)
 
-    monkeypatch.setattr(halt_cleanup, "run_cleanup", run_cleanup)
+    monkeypatch.setattr(rollback_module, "_check_start", missing)
     reset = screen_fresh_session(
         FakeBackend(), workflow, bundle_dir=tmp_path, run_dir=tmp_path
     )
@@ -2026,15 +2009,14 @@ def test_a_screen_backend_gets_a_fresh_session_from_the_start_screen_check(
     reset()  # back at the start screen
     with pytest.raises(CompensationRefused, match="run's start screen"):
         reset()
-    # Undo ids can't start with a dot: no collision with a compensation's dir.
-    assert [p.name for p in seen] == [".fresh-session-1", ".fresh-session-2"]
-    assert all(p.parent == tmp_path / "rollback" for p in seen)
+    assert checked == [start.start_state, start.start_state]
 
 
 def test_a_screen_compensation_checks_its_own_start_screen(tmp_path, monkeypatch):
     # The run's start screen can show (a menu bar every screen has) while the
     # compensation's own first screen doesn't: nothing runs.
     from openadapt_flow import halt_cleanup
+    from openadapt_flow import rollback as rollback_module
     from openadapt_flow.ir import HaltCleanup, Predicate, PredicateKind
     from openadapt_flow.rollback import screen_fresh_session
 
@@ -2044,16 +2026,13 @@ def test_a_screen_compensation_checks_its_own_start_screen(tmp_path, monkeypatch
         source="declared",
     )
     monkeypatch.setattr(halt_cleanup, "runnable_cleanup", lambda wf: start)
-    monkeypatch.setattr(halt_cleanup, "run_cleanup", lambda *a, **k: _cleanup_result())
     compensation_start = Predicate(kind=PredicateKind.TEXT_PRESENT, text="Patient")
     monkeypatch.setattr(halt_cleanup, "start_state_of", lambda wf: compensation_start)
-    checked: list[Any] = []
 
-    def check_start(factory, wf, cleanup, *, bundle_dir, run_dir):
-        checked.append(cleanup.start_state)
-        return "the start screen isn't showing"
+    def missing(backend, replayer, wf, predicate, *, bundle_dir, where):
+        return None if predicate is start.start_state else "it isn't there"
 
-    monkeypatch.setattr(halt_cleanup, "check_start", check_start)
+    monkeypatch.setattr(rollback_module, "_check_start", missing)
     reset = screen_fresh_session(
         FakeBackend(), _clinic_workflow(), bundle_dir=tmp_path, run_dir=tmp_path
     )
@@ -2061,11 +2040,160 @@ def test_a_screen_compensation_checks_its_own_start_screen(tmp_path, monkeypatch
     runner = ReplayerRunner(lambda: pytest.fail("nothing may run"), reset)
     with pytest.raises(CompensationRefused, match="compensation's start screen"):
         runner.run(undo, bundle_dir=tmp_path, run_dir=tmp_path, params={})
-    assert checked == [compensation_start]
     # A compensation with no anchored step can't be checked: refused too.
     monkeypatch.setattr(halt_cleanup, "start_state_of", lambda wf: None)
     with pytest.raises(CompensationRefused, match="no anchored step"):
         runner.run(undo, bundle_dir=tmp_path, run_dir=tmp_path, params={})
+
+
+class _StructuralScreen(FakeBackend):
+    """A desktop app whose start control UI Automation finds. ``top`` is what
+    a screen-wide hit test names at its point (None: the backend has no such
+    hit test)."""
+
+    def __init__(self, state: str, top: Optional[str] = None) -> None:
+        super().__init__(viewport=(300, 200))
+        self.state = state
+        if top is not None:
+            self.hit_test_sees_every_window = True
+            self.element_identity_at = lambda x, y: {
+                "automation_id": top,
+                "role": "textbox" if top == "searchBox" else "button",
+            }
+
+    def locate_structural(self, locator):
+        from openadapt_flow.backend import StructuralResolutionRefused
+        from openadapt_flow.ir import StructuralHandle
+
+        if self.state == "ambiguous":
+            raise StructuralResolutionRefused("two windows hold it")
+        if self.state == "missing":
+            return None
+        return StructuralHandle(
+            point=(40, 20), region=(30, 15, 20, 10), target_fingerprint="f" * 64
+        )
+
+
+def _search_box_start() -> Any:
+    from openadapt_flow.ir import Anchor, Predicate, PredicateKind, StructuralLocator
+
+    return Predicate(
+        kind=PredicateKind.ANCHOR_RESOLVES,
+        anchor=Anchor(
+            template="templates/search.png",
+            region=(30, 15, 20, 10),
+            click_point=(40, 20),
+            structural=StructuralLocator(automation_id="searchBox", role="textbox"),
+        ),
+        intent="the start screen (click the search box)",
+    )
+
+
+@pytest.mark.parametrize(
+    ("state", "top", "pixels", "missing"),
+    [
+        # Windows: the field now holds text (no crop match), but the control
+        # on top at its point is the search box itself.
+        ("present", "searchBox", False, None),
+        # Windows: UI Automation finds the box behind a dialog's Yes button.
+        ("present", "yesButton", False, "something else is over"),
+        # Linux/macOS: no screen-wide hit test, so the pixels must show it.
+        ("present", None, False, "screen doesn't show it"),
+        ("present", None, True, None),
+        ("missing", None, False, "isn't showing"),
+        ("ambiguous", "searchBox", True, "not usable"),
+    ],
+)
+def test_the_desktop_start_check_counts_a_control_only_when_nothing_covers_it(
+    tmp_path, state, top, pixels, missing
+):
+    import json as _json
+
+    from openadapt_flow.rollback import _start_screen_missing
+    from tests.test_replayer import Match
+
+    backend = _StructuralScreen(state, top)
+    vision = FakeVision()
+    if pixels:
+        hit = Match(point=(40, 20), region=(30, 15, 20, 10), confidence=0.95)
+        vision.template_results = [hit] * 4
+    replayer = Replayer(backend, vision=vision, use_structural=True)
+    (tmp_path / "templates").mkdir()
+    (tmp_path / "templates" / "search.png").write_bytes(backend.screenshot())
+    why = _start_screen_missing(
+        backend,
+        replayer,
+        _clinic_workflow(),
+        _search_box_start(),
+        bundle_dir=tmp_path,
+        evidence=tmp_path / "check",
+        timeout_s=0,
+    )
+    if missing is None:
+        assert why is None
+    else:
+        assert why is not None and missing in why, why
+    kept = _json.loads((tmp_path / "check.json").read_text())
+    assert kept["shows"] is (missing is None)
+    assert (tmp_path / "check.png").exists()
+
+
+def test_a_start_state_that_isnt_an_anchor_keeps_the_cleanup_guard(
+    tmp_path, monkeypatch
+):
+    from openadapt_flow import halt_cleanup
+    from openadapt_flow.ir import Predicate, PredicateKind
+    from openadapt_flow.rollback import _check_start
+
+    seen: list[Any] = []
+
+    def check_start(factory, wf, cleanup, *, bundle_dir, run_dir):
+        seen.append((cleanup.start_state, run_dir))
+        return None
+
+    monkeypatch.setattr(halt_cleanup, "check_start", check_start)
+    text = Predicate(kind=PredicateKind.TEXT_PRESENT, text="Patients")
+    assert (
+        _check_start(
+            FakeBackend(),
+            None,
+            _clinic_workflow(),
+            text,
+            bundle_dir=tmp_path,
+            where=tmp_path / "start",
+        )
+        is None
+    )
+    assert seen == [(text, tmp_path / "start")]
+
+
+def test_a_cleanup_that_raises_refuses_before_any_check(tmp_path, monkeypatch):
+    from openadapt_flow import halt_cleanup
+    from openadapt_flow import rollback as rollback_module
+    from openadapt_flow.ir import HaltCleanup, Predicate, PredicateKind
+    from openadapt_flow.rollback import screen_fresh_session
+
+    cleanup = HaltCleanup(
+        steps=[_key_step("esc", "close the dialog", "Escape")],
+        start_state=Predicate(kind=PredicateKind.TEXT_PRESENT, text="Home"),
+        source="declared",
+    )
+    monkeypatch.setattr(halt_cleanup, "runnable_cleanup", lambda wf: cleanup)
+    checks: list[Any] = []
+    monkeypatch.setattr(
+        rollback_module, "_check_start", lambda *a, **k: checks.append(a) or None
+    )
+
+    def boom(self, *args, **kwargs):
+        raise RuntimeError("the agent went away")
+
+    monkeypatch.setattr(Replayer, "run", boom)
+    reset = screen_fresh_session(
+        FakeBackend(), _clinic_workflow(), bundle_dir=tmp_path, run_dir=tmp_path
+    )
+    with pytest.raises(CompensationRefused, match="halt cleanup raised"):
+        reset()
+    assert checks == []
 
 
 def test_a_desktop_gui_undo_counts_only_with_a_qualified_cleanup(monkeypatch):
@@ -2182,3 +2310,406 @@ def test_a_compensation_the_app_reports_done_but_never_wrote_is_not_a_rollback(
     assert conn.execute(
         "SELECT COUNT(*) FROM patients WHERE name = 'Ada Synthetic'"
     ).fetchone() == (1,)
+
+
+# ---------------------------------------------------------------------------
+# Durable runs and a rollback a crash interrupted (#1699)
+# ---------------------------------------------------------------------------
+
+_SEAL_KEY = "rollback-test-passphrase"
+_SETTINGS = {"exclusive": True}
+
+
+def _clinic_reader(db: Path) -> DatabaseReader:
+    return DatabaseReader(
+        dialect="sqlite",
+        read_config={"sqlite_database": str(db)},
+        allow_tables=["log"],
+    )
+
+
+def _arm(sealed, reader, params=None):
+    before = reader.read()
+    sealed.save_armed(
+        before=before,
+        reader_key=reader.key,
+        audit_before=None,
+        params=params or {},
+        settings=_SETTINGS,
+        bundle_version="v1",
+    )
+    return before
+
+
+def test_sealed_state_round_trips_only_with_its_key(tmp_path):
+    import stat
+
+    from openadapt_flow.rollback_durable import SealedRollback, SealedStateError
+
+    db = tmp_path / "clinic.db"
+    _make_db(db)
+    reader = _clinic_reader(db)
+    sealed = SealedRollback(tmp_path / "run", _SEAL_KEY)
+    assert sealed.load_armed() is None and sealed.finished() is None
+    before = _arm(sealed, reader, {"name": "Ada Synthetic"})
+    rollback_dir = tmp_path / "run" / "rollback"
+    for name in ("armed.json.enc", "journal.json.enc"):
+        assert stat.S_IMODE((rollback_dir / name).stat().st_mode) == 0o600
+        # Nothing readable on disk: no names, no row digests in the clear.
+        assert b"Ada" not in (rollback_dir / name).read_bytes()
+    armed = sealed.load_armed()
+    assert armed["reader_key"] == reader.key
+    assert armed["params"] == {"name": "Ada Synthetic"}
+    assert armed["run_id"] is None and armed["settings"] == _SETTINGS
+    sealed.bind_run("run-1")
+    assert sealed.load_armed()["run_id"] == "run-1"
+    with pytest.raises(SealedStateError, match="another run"):
+        sealed.bind_run("run-2")
+    # The same key reads the store the same way: no change.
+    again = _clinic_reader(db)
+    again.key = reader.key
+    assert diff_states(before, again.read()).empty
+    with pytest.raises(SealedStateError):
+        SealedRollback(tmp_path / "run", "another key").load_armed()
+    sealed.step("create_patient", "started")
+    assert sealed.started_steps() == {"create_patient"}
+    assert sealed.compensated_steps() == frozenset()
+    sealed.step("create_patient", "compensated")
+    assert sealed.started_steps() == frozenset()
+    assert sealed.compensated_steps() == {"create_patient"}
+    sealed.mark_finished("rolled_back")
+    assert sealed.finished() == "rolled_back"
+    assert sealed.load_armed() is None
+
+
+def test_sealed_files_from_another_run_or_a_missing_journal_are_refused(tmp_path):
+    import shutil
+
+    from openadapt_flow.rollback_durable import SealedRollback, SealedStateError
+
+    db = tmp_path / "clinic.db"
+    _make_db(db)
+    reader = _clinic_reader(db)
+    other = SealedRollback(tmp_path / "other", _SEAL_KEY)
+    _arm(other, reader)
+    other.stop_read(reader.read())
+    mine = SealedRollback(tmp_path / "run", _SEAL_KEY)
+    _arm(mine, reader)
+    # Another run's stop read, copied in, isn't this arming's.
+    shutil.copy(other.dir / "stop.json.enc", mine.dir / "stop.json.enc")
+    with pytest.raises(SealedStateError, match="another run"):
+        mine.load_stop()
+    # A removed journal would drop a started compensation: refused.
+    (mine.dir / "journal.json.enc").unlink()
+    with pytest.raises(SealedStateError, match="missing"):
+        mine.started_steps()
+    # Arming again starts clean: an earlier arming's stop read goes.
+    _arm(mine, reader)
+    assert mine.load_stop() is None
+
+
+def test_two_rollbacks_of_one_run_dont_run_at_once(tmp_path):
+    from openadapt_flow.rollback_durable import SealedRollback, SealedStateError
+
+    sealed = SealedRollback(tmp_path / "run", _SEAL_KEY)
+    with sealed.lock():
+        with pytest.raises(SealedStateError, match="another rollback"):
+            with SealedRollback(tmp_path / "run", _SEAL_KEY).lock():
+                pass
+
+
+class _Crash(BaseException):
+    """The process dies: nothing in roll_back catches it."""
+
+
+def _durable_clinic(tmp_path):
+    from openadapt_flow.after_stop import records_reader
+    from openadapt_flow.rollback_durable import SealedRollback
+
+    db = tmp_path / "clinic.db"
+    _make_db(db)
+    bundle = tmp_path / "bundle"
+    _clinic_workflow().save(bundle)
+    workflow = Workflow.load(bundle)
+    params = {"name": "Ada Synthetic"}
+
+    def replayer() -> Replayer:
+        return Replayer(
+            ClinicBackend(db, thorough=True, mode="delete"),
+            vision=_vision(),
+            effect_verifier=_sql_verifier(db),
+            poll_interval_s=0.01,
+        )
+
+    def plan() -> RollbackPlan:
+        return RollbackPlan(
+            _clinic_reader(db),
+            read_records=records_reader(_sql_verifier(db)),
+            allow_delete=True,
+            exclusive=True,
+        )
+
+    run_dir = tmp_path / "run"
+    sealed = SealedRollback(run_dir, _SEAL_KEY)
+    first = plan()
+    before = first.arm(params)
+    first.seal(sealed, before, params, bundle_version="v1")
+    report = replayer().run(workflow, bundle_dir=bundle, run_dir=run_dir, params=params)
+    assert not report.success
+    return db, bundle, workflow, replayer, plan, run_dir, first, before, report
+
+
+def _continue(plan, run_dir, report, workflow, bundle, runner):
+    """A new process continues from the sealed state alone."""
+    from openadapt_flow.rollback_durable import SealedRollback
+
+    later = plan()
+    state = SealedRollback(run_dir, _SEAL_KEY)
+    restored = later.restore(state.load_armed())
+    assert restored is not None
+    return later.finish(
+        report,
+        workflow,
+        before=restored,
+        run_dir=run_dir,
+        bundle_dir=bundle,
+        runner=runner,
+        journal=state,
+        after_stop=state.load_stop(),
+        restarted=state.started_steps(),
+        compensated=state.compensated_steps(),
+    )
+
+
+def test_a_rollback_a_crash_interrupted_continues_from_the_sealed_state(tmp_path):
+    from openadapt_flow.rollback_durable import SealedRollback
+
+    _db, bundle, workflow, replayer, plan, run_dir, first, before, report = (
+        _durable_clinic(tmp_path)
+    )
+
+    class CrashAfterCompensating(ReplayerRunner):
+        def run(self, *args, **kwargs):
+            super().run(*args, **kwargs)
+            raise _Crash()
+
+    with pytest.raises(_Crash):
+        first.finish(
+            report,
+            workflow,
+            before=before,
+            run_dir=run_dir,
+            bundle_dir=bundle,
+            runner=CrashAfterCompensating(replayer, fresh_session=lambda: None),
+            journal=SealedRollback(run_dir, _SEAL_KEY),
+        )
+    runner = RecordingRunner()
+    final = _continue(plan, run_dir, report, workflow, bundle, runner)
+    rollback = final.rollback
+    assert rollback.status == "rolled_back", rollback.reason
+    # Started, not finished: the fresh read showed the patient gone, so
+    # nothing ran again.
+    assert runner.runs == []
+    [step] = rollback.steps
+    assert step.decision == "not_needed" and step.fresh_read == "absent"
+    assert final.transaction_outcome == "ROLLED_BACK"
+    # It ended: no attempt runs again, and the reads are gone.
+    assert SealedRollback(run_dir, _SEAL_KEY).finished() == "rolled_back"
+    assert SealedRollback(run_dir, _SEAL_KEY).load_armed() is None
+
+
+def test_a_finished_compensation_is_never_run_twice(tmp_path):
+    from openadapt_flow.rollback_durable import SealedRollback
+
+    _db, bundle, workflow, replayer, plan, run_dir, first, before, report = (
+        _durable_clinic(tmp_path)
+    )
+
+    class CrashBeforeTheVerdict(SealedRollback):
+        def mark_finished(self, status):
+            raise _Crash()
+
+    # The compensation ran and was journaled; the process died before the
+    # verdict was kept.
+    sealed = CrashBeforeTheVerdict(run_dir, _SEAL_KEY)
+    with pytest.raises(_Crash):
+        try:
+            first.finish(
+                report,
+                workflow,
+                before=before,
+                run_dir=run_dir,
+                bundle_dir=bundle,
+                runner=ReplayerRunner(replayer, fresh_session=lambda: None),
+                journal=sealed,
+            )
+        except Exception:  # noqa: BLE001 - finish swallows journal errors
+            pass
+        raise _Crash()
+    assert SealedRollback(run_dir, _SEAL_KEY).compensated_steps() == {"create_patient"}
+    runner = RecordingRunner()
+    final = _continue(plan, run_dir, report, workflow, bundle, runner)
+    assert runner.runs == []
+    [step] = final.rollback.steps
+    assert step.decision == "compensated"
+    # The final read still decides.
+    assert final.rollback.status == "rolled_back", final.rollback.reason
+
+
+def test_a_started_compensation_whose_change_is_still_there_isnt_run_again(
+    tmp_path,
+):
+    # The earlier attempt may have finished it (a void leaves the record, so
+    # the read can't tell): a person decides.
+    from openadapt_flow.rollback_durable import SealedRollback
+
+    db, bundle, workflow, replayer, plan, run_dir, first, before, report = (
+        _durable_clinic(tmp_path)
+    )
+    sealed = SealedRollback(run_dir, _SEAL_KEY)
+    sealed.stop_read(first.reader.read(before=before))
+    sealed.step("create_patient", "started")
+    runner = RecordingRunner()
+    final = _continue(plan, run_dir, report, workflow, bundle, runner)
+    assert runner.runs == []
+    assert final.rollback.status == "not_rolled_back"
+    assert "not run twice" in final.rollback.reason
+    assert final.transaction_outcome == "RECONCILIATION_REQUIRED"
+
+
+def test_a_continued_rollback_stops_when_someone_else_wrote_since_the_stop(
+    tmp_path,
+):
+    from openadapt_flow.rollback_durable import SealedRollback
+
+    db, bundle, workflow, replayer, plan, run_dir, first, before, report = (
+        _durable_clinic(tmp_path)
+    )
+    SealedRollback(run_dir, _SEAL_KEY).stop_read(first.reader.read(before=before))
+    conn = sqlite3.connect(db)
+    conn.execute("INSERT INTO notes (patient_id, body) VALUES (1, 'a new note')")
+    conn.commit()
+    conn.close()
+    runner = RecordingRunner()
+    final = _continue(plan, run_dir, report, workflow, bundle, runner)
+    assert final.rollback.status == "not_rolled_back"
+    assert "since the stop, 1 row(s)" in final.rollback.reason
+    assert runner.runs == []
+    assert final.transaction_outcome == "RECONCILIATION_REQUIRED"
+
+
+def test_changed_rollback_settings_refuse_the_sealed_state(tmp_path):
+    db = tmp_path / "clinic.db"
+    _make_db(db)
+    armed_with = RollbackPlan(_clinic_reader(db), exclusive=False)
+    settings = armed_with.settings()
+    # The deployment turned ``exclusive`` on during the pause: another user's
+    # rows would no longer stop a compensation.
+    later = RollbackPlan(_clinic_reader(db), exclusive=True)
+    assert later.restore({"settings": settings, "reader_key": b"k"}) is None
+    same = RollbackPlan(_clinic_reader(db), exclusive=False)
+    assert (
+        same.restore(
+            {"settings": settings, "reader_key": b"k", "before": "B", "params": {}}
+        )
+        == "B"
+    )
+
+
+def test_a_durable_run_with_rollback_needs_a_key_to_seal_its_state(
+    tmp_path, monkeypatch
+):
+    from openadapt_flow.__main__ import _rollback_seal
+    from openadapt_flow.rollback_durable import SealedRollback
+
+    plan = RollbackPlan(DatabaseReader(dialect="sqlite"))
+    monkeypatch.delenv("OPENADAPT_BUNDLE_KEY", raising=False)
+    with pytest.raises(SystemExit, match="OPENADAPT_BUNDLE_KEY"):
+        _rollback_seal(plan, True, tmp_path)
+    assert _rollback_seal(None, True, tmp_path) is None
+    monkeypatch.setenv("OPENADAPT_BUNDLE_KEY", _SEAL_KEY)
+    assert isinstance(_rollback_seal(plan, True, tmp_path), SealedRollback)
+    # Another run keeps its state in memory, key or not.
+    assert _rollback_seal(plan, False, tmp_path) is None
+
+
+def test_a_durable_pause_waits_for_a_person(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from openadapt_flow import __main__ as cli
+    from openadapt_flow.runtime.durable import checkpoint
+
+    seen: list[Any] = []
+
+    def read_pending(self):
+        return seen[0] if seen else None
+
+    monkeypatch.setattr(checkpoint.CheckpointStore, "read_pending", read_pending)
+    assert not cli._paused_for_a_person(tmp_path)
+    seen.append(SimpleNamespace(category="effect_unverifiable", status="pending"))
+    assert cli._paused_for_a_person(tmp_path)
+    seen[0] = SimpleNamespace(category="item_declined", status="pending")
+    assert not cli._paused_for_a_person(tmp_path)
+    seen[0] = SimpleNamespace(category="item_approval", status="rejected")
+    assert not cli._paused_for_a_person(tmp_path)
+
+
+def test_the_sealed_state_is_bound_to_the_durable_run(tmp_path, monkeypatch):
+    # A terminal stop rolls back in the same process; if that crashes,
+    # --roll-back continues it only for state bound to the manifest's run id.
+    from types import SimpleNamespace
+
+    from openadapt_flow import __main__ as cli
+    from openadapt_flow.rollback_durable import SealedRollback
+    from openadapt_flow.runtime.durable import checkpoint
+
+    db = tmp_path / "clinic.db"
+    _make_db(db)
+    sealed = SealedRollback(tmp_path / "run", _SEAL_KEY)
+    _arm(sealed, _clinic_reader(db))
+    monkeypatch.setenv("OPENADAPT_BUNDLE_KEY", _SEAL_KEY)
+    monkeypatch.setattr(
+        checkpoint.CheckpointStore,
+        "read_manifest",
+        lambda self: SimpleNamespace(run_id="run-7"),
+    )
+    cli._bind_sealed_run(sealed, tmp_path / "run")
+    assert sealed.load_armed()["run_id"] == "run-7"
+
+
+def test_an_audit_entry_names_exactly_one_snapshot_table():
+    # #1793 item 2: a snapshot keys the read's own schema's tables
+    # unqualified and any other schema's as schema.table. An unqualified
+    # entry (the own schema) never names another schema's same-named table.
+    from openadapt_flow.rollback_state import _same_table
+
+    assert _same_table("patient_data", "patient_data")
+    assert _same_table("PATIENT_DATA", "patient_data")
+    assert not _same_table("patient_data", "archive.patient_data")
+    assert _same_table("archive.patient_data", "archive.patient_data")
+    assert not _same_table("archive.patient_data", "patient_data")
+    assert not _same_table("", "patient_data")
+    assert not _same_table("patient_data", None)
+
+
+def test_another_schemas_row_is_never_credited_to_the_runs_entry():
+    from openadapt_flow.runtime.effects.frame import FrameAttribution
+
+    spec = FrameAttribution(
+        kind="audit_read",
+        actor_field="actor",
+        self=["bot"],
+        record_field="record",
+        record_key="pid",
+        event_field="event",
+        write_events=["insert", "update"],
+        insert_events=["insert"],
+        table_field="tbl",
+        read={"kind": "in_memory"},
+    )
+    attributor = Attributor.from_spec(spec, {})
+    window = [{"actor": "bot", "event": "update", "tbl": "patient_data", "record": "7"}]
+    own = ("patient_data", "k1", {"pid": 7, "x": 1}, {"pid": 7, "x": 2})
+    elsewhere = ("archive.patient_data", "k1", {"pid": 7, "x": 1}, {"pid": 7, "x": 2})
+    assert attributor.attribute(own, window) == "self"
+    assert attributor.attribute(elsewhere, window) != "self"

@@ -627,3 +627,85 @@ def test_a_form_submit_in_another_frame_is_seen(app_page):
     result = _evaluate(app, page, submitter_requests=("GET /side.php",))
     assert result.status == "unevaluable" and "form submit in" in result.reason
     assert app.writes == []
+
+
+class _DupSearch(dict):
+    """Pages, where the duplicate search finds the record once the page's
+    draft write has reached the server."""
+
+    def __init__(self, app: _App) -> None:
+        super().__init__(app.pages)
+        self.app = app
+
+    def __contains__(self, path: object) -> bool:
+        return path == "/dup.php" or super().__contains__(path)
+
+    def __getitem__(self, path: str) -> str:
+        if path != "/dup.php":
+            return super().__getitem__(path)
+        if "/draft.php" in self.app.writes:
+            return "<html><body><p>Marsh 1979-06-14</p></body></html>"
+        return "<html><body><p>No matches were found.</p></body></html>"
+
+
+def test_a_step_write_that_changes_the_search_result_stops_the_save(app_page):
+    """The span sends a step write (the page's draft) after the duplicate
+    search was read and before the save. The GUI checks its empty-result
+    guard after that write, right before the save; so must the API step."""
+
+    from openadapt_flow.ir import ApiBinding, WebFormPrecheck, WebFormWrite
+    from openadapt_flow.runtime.actuators import ActuationStatus
+
+    app, page = app_page
+    app.form(
+        script="document.forms[0].lname.addEventListener('change', e => fetch('/draft.php', {"
+        " method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'},"
+        " body: 'lname=' + encodeURIComponent(e.target.value) }));"
+    )
+    app.pages = _DupSearch(app)
+    html = app.pages["/new.php"].replace("{n}", "1")
+    names = ["csrf", "lname", "dob", "state"]
+    spec = WebFormSpec(
+        form_path="/new.php",
+        fields=[
+            WebFormField(name="csrf", source="session"),
+            WebFormField(name="lname", source="param", param="lname"),
+            WebFormField(name="dob", source="param", param="dob"),
+            WebFormField(name="state", source="select_label", param="state_label"),
+        ],
+        controls=sorted(names),
+        client_scripts=page_scripts(html, "/save.php", names, None),
+        submitter="button[type=submit]",
+        prechecks=[
+            WebFormPrecheck(
+                path="/dup.php",
+                query=[("lname", "{lname}")],
+                require_text=["No matches were found."],
+                from_step="s0",
+            )
+        ],
+        writes=[
+            WebFormWrite(
+                role="step",
+                method="POST",
+                path="/draft.php",
+                from_step="s1",
+                fields=[WebFormField(name="lname", source="param", param="lname")],
+                expected_status=[200],
+            )
+        ],
+        replaces_steps=["s0", "s1", "s2"],
+        folded_checks_digest="sha256:" + "0" * 64,
+    )
+    binding = ApiBinding(
+        kind="web_form", method="POST", url_template="/save.php", web_form=spec
+    )
+    actuator = WebFormActuator(PlaywrightSessionTransport(page))
+    out = actuator.actuate(binding, RUN)
+    # The draft went out, as under the GUI steps; the search then finds the
+    # record, so the save never leaves.
+    assert app.writes == ["/draft.php"], app.writes
+    assert out.status is ActuationStatus.HALT, out.reason
+    assert "after the 1 step write(s) were accepted" in out.reason
+    assert "No matches were found." in out.reason
+    assert [e["stage"] for e in actuator.log][-3:] == ["precheck", "write", "precheck"]

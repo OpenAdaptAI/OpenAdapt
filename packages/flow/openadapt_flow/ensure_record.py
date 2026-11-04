@@ -124,6 +124,88 @@ class ChangeFeed(BaseModel):
         return self
 
 
+Between = Literal["person", "consistent", "either"]
+
+
+class CorrectionOp(BaseModel):
+    """The agent's own updates of the record it just created (#1655)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: With ``accept_corrections``: both must be true for a correction to count.
+    accept: bool = True
+    #: What every version of the record in the window must be. ``person``:
+    #: the person, by the identity rules. ``consistent``: it holds only the
+    #: task's values, any of them possibly still missing (a form that saves a
+    #: new record in steps), and nothing else. A version that held a value
+    #: the task didn't give, such as another person's birth date, is refused
+    #: either way: a search no audit event names may have shown it.
+    #: ``either``: the person, or ``consistent``; never stricter than
+    #: ``person`` (#1655's rule, which accepts a corrected non-identity
+    #: value), and also accepting a record saved in steps.
+    between: Between = "person"
+
+
+class CardinalityOp(BaseModel):
+    """How many records of the contract's type the agent may leave created."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: A record of the contract's type that the agent created and deleted
+    #: again in the window (a double submit it cleaned up) counts as not
+    #: created, when every version of it held only the task's values (as
+    #: ``consistent``), every write of it is the agent's and logged, and no
+    #: other actor read it by id. Off by default: any second create refuses.
+    own_transient: bool = False
+
+
+class BookkeepingRule(BaseModel):
+    """Elements the server or the app keeps on another record of one type."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Never the contract's own type: another record of that type may be
+    #: the person, and its identity elements are never bookkeeping.
+    resource_type: str = Field(min_length=1)
+    #: Only a version counter, a time stamp or one extension named by its
+    #: exact url: ``meta.versionId``, ``meta.lastUpdated``,
+    #: ``extension[url=<url>]``. Any other element (``meta.security``,
+    #: ``meta.account``, ``active``, ``link``, a bare ``extension``) can hide a
+    #: record, move it or change a clinical fact, so it can't be named.
+    paths: list[str] = Field(min_length=1)
+    #: A temporal rule, as the whole-database generator's bookkeeping answer
+    #: has it (``now_checks``): every time stamp these elements change to
+    #: must lie within ``now_within_s`` of the version's own server-set
+    #: ``meta.lastUpdated``. A planted or replayed time refuses.
+    now_checks: bool = False
+    now_within_s: float = Field(default=60.0, gt=0, le=3600)
+
+
+class Operations(BaseModel):
+    """``operations:``: what one write may also do, as data.
+
+    Every default keeps the rule as it was, so a contract without this
+    section judges exactly as before. Nothing here excuses a change on the
+    record the task writes, or on any record that is the person: their
+    every version is judged.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    correction: CorrectionOp = Field(default_factory=CorrectionOp)
+    cardinality: CardinalityOp = Field(default_factory=CardinalityOp)
+    #: Updates by the agent's actor to *other* records that change only these
+    #: elements (a version counter, a timestamp, an app's own extension) are
+    #: the save's bookkeeping, not a write. Each rule names one resource type
+    #: and exact element paths: no wildcard, no whole type.
+    bookkeeping: list[BookkeepingRule] = Field(default_factory=list)
+
+
+#: The only element paths a bookkeeping rule may name.
+_BOOK_META = ("meta.versionId", "meta.lastUpdated")
+_BOOK_EXTENSION = re.compile(r"extension\[url=([^\[\]\s]+)\]")
+
+
 class EnsureContract(BaseModel):
     """``openadapt.ensure-record/v1``: what one ensure-record write must do."""
 
@@ -172,6 +254,8 @@ class EnsureContract(BaseModel):
     #: ``correction_refused``). The result says it was corrected. False sends
     #: any change after the create to review.
     accept_corrections: bool = True
+    #: Correction, cardinality and bookkeeping rules (:class:`Operations`).
+    operations: Operations = Field(default_factory=Operations)
 
     @model_validator(mode="after")
     def _bound(self) -> "EnsureContract":
@@ -190,7 +274,113 @@ class EnsureContract(BaseModel):
             path, value = _void_entry(entry)
             if _bare(path) in identity_paths:
                 raise ValueError(f"void entry {entry!r} names an identity field")
+        for book in self.operations.bookkeeping:
+            if book.resource_type == self.resource_type:
+                raise ValueError(
+                    f"a bookkeeping rule can't name the contract's own type "
+                    f"{book.resource_type}: another record of it may be the person"
+                )
+            for path in book.paths:
+                if path not in _BOOK_META and not _BOOK_EXTENSION.fullmatch(path):
+                    raise ValueError(
+                        f"bookkeeping path {path!r} can't be excused: only "
+                        "meta.versionId, meta.lastUpdated and extension[url=...]"
+                    )
         return self
+
+    @property
+    def corrections(self) -> bool:
+        """Whether a correction may count: both switches must say so."""
+
+        return self.accept_corrections and self.operations.correction.accept
+
+
+class AppSemantics(BaseModel):
+    """``openadapt.app-semantics/v1``: one application's operation rules.
+
+    Written once per application and version, and used by every task's
+    contract on it: what one save may also do, per resource type, and the
+    bookkeeping the app keeps on other records. A contract pins it by path
+    and version (``semantics: {path, app, version}``); a spec for a real
+    customer system is private (``source-policy.yaml``), the format public.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["openadapt.app-semantics/v1"]
+    app: str = Field(min_length=1)
+    version: int = Field(ge=1)
+    #: Resource type -> its correction and cardinality rules.
+    resources: dict[str, Operations] = Field(default_factory=dict)
+    bookkeeping: list[BookkeepingRule] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _flat(self) -> "AppSemantics":
+        for rtype, ops in self.resources.items():
+            if ops.bookkeeping:
+                raise ValueError(f"{rtype}: bookkeeping goes in the spec's own list")
+        return self
+
+    def operations_for(self, resource_type: str) -> Operations:
+        """A contract's operations: its type's rules, and the app's
+        bookkeeping on every *other* type."""
+
+        ops = self.resources.get(resource_type, Operations())
+        book = [b for b in self.bookkeeping if b.resource_type != resource_type]
+        return ops.model_copy(update={"bookkeeping": book})
+
+
+def load_semantics(path: str | Path) -> AppSemantics:
+    import yaml
+
+    source = Path(path)
+    try:
+        data = yaml.safe_load(source.read_text(encoding="utf-8")) or {}
+        return AppSemantics.model_validate(data)
+    except Exception as exc:  # noqa: BLE001 - any bad spec is a load error
+        raise EnsureRecordError(f"invalid semantics {source}: {exc}") from exc
+
+
+def _apply_semantics(data: dict[str, Any], source: Path) -> dict[str, Any]:
+    """Resolve ``semantics: {path, app, version, sha256}`` into ``operations``.
+
+    The pin names the spec's exact bytes: a spec edited in place, without a
+    new version and a new pin, doesn't load. The path is relative to the
+    contract; an absolute one is refused.
+    """
+
+    import hashlib
+
+    pin = data.pop("semantics", None)
+    if pin is None:
+        return data
+    if "operations" in data:
+        raise EnsureRecordError(f"{source}: give operations or semantics, not both")
+    if not isinstance(pin, dict) or set(pin) != {"path", "app", "version", "sha256"}:
+        raise EnsureRecordError(
+            f"{source}: semantics needs path, app, version and sha256"
+        )
+    rel = Path(str(pin["path"]))
+    if rel.is_absolute():
+        raise EnsureRecordError(f"{source}: the semantics path must be relative")
+    where = (source.parent / rel).resolve()
+    try:
+        digest = hashlib.sha256(where.read_bytes()).hexdigest()
+    except OSError as exc:
+        raise EnsureRecordError(f"cannot read semantics {where}: {exc}") from exc
+    if digest != str(pin["sha256"]):
+        raise EnsureRecordError(
+            f"{source}: semantics {rel} is not the pinned file (sha256 {digest})"
+        )
+    spec = load_semantics(where)
+    if (spec.app, spec.version) != (pin["app"], pin["version"]):
+        raise EnsureRecordError(
+            f"{source}: semantics pins {pin['app']} v{pin['version']}, "
+            f"the file is {spec.app} v{spec.version}"
+        )
+    rtype = str(data.get("resource_type", ""))
+    data["operations"] = spec.operations_for(rtype).model_dump()
+    return data
 
 
 def load_contract(path: str | Path) -> EnsureContract:
@@ -209,6 +399,7 @@ def load_contract(path: str | Path) -> EnsureContract:
         raise EnsureRecordError(
             "environment variable(s) not set: " + ", ".join(sorted(set(missing)))
         )
+    data = _apply_semantics(data, source)
     try:
         return EnsureContract.model_validate(data)
     except Exception as exc:
@@ -471,6 +662,175 @@ def extra_elements(
     return sorted((have - _expected_leaves(contract, params)).elements())
 
 
+def holds_only_task_values(
+    contract: EnsureContract, resource: Mapping[str, Any], params: Mapping[str, Any]
+) -> bool:
+    """True when every value the version holds is the task's (``consistent``).
+
+    A value may still be missing; none may differ, none may be one the task
+    didn't give, and on a ``closed`` contract nothing else may be held. Every
+    element counts (a second given name that isn't the task's refuses), and
+    a void version is never consistent.
+    """
+
+    if is_void(contract, resource):
+        return False
+    for name, rule in contract.fields.items():
+        held = [v for v in extract_all(resource, rule.path) if v not in (None, "")]
+        if not held:
+            continue
+        if params.get(name) in (None, ""):
+            return False
+        if not all(same(contract, name, v, params[name]) for v in held):
+            return False
+    # On any contract, open or closed: a version in between may hold nothing
+    # the task didn't give (another person's identifier, an address).
+    return not extra_elements(contract, resource, params)
+
+
+def _between_ok(
+    contract: EnsureContract, version: Mapping[str, Any], params: Mapping[str, Any]
+) -> bool:
+    mode = contract.operations.correction.between
+    if mode == "consistent":
+        return holds_only_task_values(contract, version, params)
+    if mode == "either":
+        return is_person(contract, version, params) or holds_only_task_values(
+            contract, version, params
+        )
+    return is_person(contract, version, params)
+
+
+def _strip(node: Any, path: str) -> Any:
+    """``node`` without the element a bookkeeping path names."""
+
+    out = dict(node)
+    m = _BOOK_EXTENSION.fullmatch(path)
+    if m:
+        kept = [
+            e
+            for e in out.get("extension") or []
+            if not (isinstance(e, dict) and e.get("url") == m.group(1))
+        ]
+        if kept:
+            out["extension"] = kept
+        else:
+            out.pop("extension", None)
+        return out
+    head, _, leaf = path.partition(".")
+    if isinstance(out.get(head), dict):
+        inner = {k: v for k, v in out[head].items() if k != leaf}
+        if inner:
+            out[head] = inner
+        else:
+            del out[head]
+    return out
+
+
+def _same_outside(a: Mapping[str, Any], b: Mapping[str, Any], paths: list[str]) -> bool:
+    left, right = dict(a), dict(b)
+    for path in paths:
+        left, right = _strip(left, path), _strip(right, path)
+    return json.dumps(left, sort_keys=True) == json.dumps(right, sort_keys=True)
+
+
+def bookkeeping_only(
+    contract: EnsureContract,
+    change: "Change",
+    protected: Collection[str],
+    selfs: Collection[str] = (),
+) -> bool:
+    """True when ``change`` is the agent's update of another record that moved
+    only the elements a ``bookkeeping`` rule names for its type.
+
+    Fail-closed: the record must not be ``protected`` (the record the task
+    writes, or any record that is the person); every write of it in the
+    window must be an attributed, logged update with a time; ``_history``
+    must give as many versions as the trail gives writes, and the version
+    before the window; each version must differ from the one before only
+    in the named elements.
+    """
+
+    rtype = change.ref.split("/", 1)[0]
+    paths = [
+        p
+        for r in contract.operations.bookkeeping
+        if r.resource_type == rtype
+        for p in r.paths
+    ]
+    if not paths or change.ref in protected:
+        return False
+    if change.actions != {"U"} or not change.attributed or change.unlogged:
+        return False
+    if not change.events or any(when is None for when, _, _ in change.events):
+        return False
+    if any(not who or set(who) - set(selfs) for _, _, who in change.events):
+        return False  # only the agent's own updates can be its bookkeeping
+    if change.versions is None or change.prior is None:
+        return False
+    if change.versions != len(change.events) or not change.bodies:
+        return False
+    if any(not (b.get("meta") or {}).get("lastUpdated") for b in change.bodies):
+        return False  # a version with no time can't be put in order
+    chain = [
+        change.prior,
+        *sorted(change.bodies, key=lambda v: str(v["meta"]["lastUpdated"])),
+    ]
+    if not all(_same_outside(a, b, paths) for a, b in zip(chain, chain[1:])):
+        return False
+    timed = [
+        r
+        for r in contract.operations.bookkeeping
+        if r.resource_type == rtype and r.now_checks
+    ]
+    for rule in timed:
+        for a, b in zip(chain, chain[1:]):
+            if not _times_near_now(a, b, rule):
+                return False
+    return True
+
+
+def _times_near_now(
+    before: Mapping[str, Any], after: Mapping[str, Any], rule: BookkeepingRule
+) -> bool:
+    """Every time stamp or date ``rule``'s extensions changed to is near
+    ``after``'s own ``meta.lastUpdated``; a version with no readable time
+    refuses. A value counts as unchanged only at the same path."""
+
+    now = _when((after.get("meta") or {}).get("lastUpdated"))
+    if now is None:
+        return False
+    for path in rule.paths:
+        m = _BOOK_EXTENSION.fullmatch(path)
+        if not m:
+            continue  # meta.lastUpdated is the server's own clock
+
+        def values(res: Mapping[str, Any], url: str = m.group(1)) -> list[str]:
+            return sorted(
+                str(v)
+                for e in res.get("extension") or []
+                if isinstance(e, dict) and e.get("url") == url
+                for _, v in leaves(e)
+            )
+
+        if values(before) == values(after):
+            continue
+        for value in values(after):
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+                if value != now.date().isoformat():
+                    return False
+                continue
+            if not re.match(r"\d{4}-\d{2}-\d{2}T", value):
+                continue  # the extension's url or a non-time value
+            try:
+                when = _when(value)
+            except Unreadable:
+                return False
+            if when is None or abs((when - now).total_seconds()) > rule.now_within_s:
+                return False
+    return True
+
+
 # -- the read path ---------------------------------------------------------------
 
 Getter = Callable[
@@ -679,6 +1039,8 @@ class Change:
     versions: Optional[int] = None
     #: Those versions as the server returned them.
     bodies: list[dict[str, Any]] = field(default_factory=list)
+    #: The last version before the window (None: none, or history not read).
+    prior: Optional[dict[str, Any]] = None
     #: The audit trail's reads of it by id: (time, actors).
     reads: list[tuple[Optional[datetime], frozenset[str]]] = field(default_factory=list)
 
@@ -805,7 +1167,14 @@ def read_changes(
                         # the window; skipping it would hide it from the
                         # version count and the checks on each version.
                         raise Unreadable(f"a version of {ref} has no lastUpdated")
-                    if when < since or (until and when > until):
+                    if when < since:
+                        last = _when(
+                            ((change.prior or {}).get("meta") or {}).get("lastUpdated")
+                        )
+                        if last is None or when > last:
+                            change.prior = version
+                        continue
+                    if until and when > until:
                         continue
                     change.versions += 1
                     change.bodies.append(version)
@@ -871,12 +1240,23 @@ def judge(
     """
 
     selfs = {_ref(a) for a in contract.self_actors}
+    own_type = contract.resource_type
     mine = {
         ref: c
         for ref, c in changes.items()
         if not c.attributed or not c.authors or c.authors & selfs
     }
     others = {ref: c for ref, c in changes.items() if ref not in mine}
+    booked: list[str] = []
+    if contract.operations.bookkeeping:
+        protected = {f"{own_type}/{i}" for i in (*baseline.matches, *after_matches)}
+        protected |= {r for r, c in mine.items() if "C" in c.actions}
+        booked = sorted(
+            r
+            for r, c in mine.items()
+            if bookkeeping_only(contract, c, protected, selfs)
+        )
+        mine = {r: c for r, c in mine.items() if r not in booked}
     evidence: dict[str, Any] = {
         "before_matches": len(baseline.matches),
         "after_matches": len(after_matches),
@@ -888,7 +1268,8 @@ def judge(
         "unlogged_writes": sum(1 for c in changes.values() if c.unlogged),
         "agent_write_types": sorted({r.split("/")[0] for r in mine}),
     }
-    own_type = contract.resource_type
+    if booked:
+        evidence["bookkeeping_writes"] = len(booked)
     if not mine:
         if len(baseline.matches) == 1:
             (rid,) = baseline.matches
@@ -929,13 +1310,24 @@ def judge(
     creates = [
         r for r, c in mine.items() if r.startswith(own_type + "/") and "C" in c.actions
     ]
+    transient: list[str] = []
+    if contract.operations.cardinality.own_transient:
+        transient = [
+            r
+            for r in creates
+            if r.split("/", 1)[1] not in after_matches
+            and transient_ok(contract, mine[r], selfs, params, changes)
+        ]
+        creates = [r for r in creates if r not in transient]
+        if transient:
+            evidence["transient_records"] = len(transient)
     if len(creates) != 1:
         reasons.append(f"the agent created {len(creates)} {own_type} records, not one")
     unexplained = [r for r, c in mine.items() if not c.attributed or not c.authors]
     if unexplained:
         reasons.append(f"{len(unexplained)} write(s) no source attributes")
     target = creates[0] if len(creates) == 1 else None
-    extra = sorted(r for r in mine if r != target)
+    extra = sorted(r for r in mine if r != target and r not in transient)
     if extra:
         types = sorted({r.split("/")[0] for r in extra})
         reasons.append(
@@ -970,6 +1362,12 @@ def judge(
         if tid not in after_matches and created is not None:
             reasons.append("the created record does not come back from a search")
         if not reasons:
+            removed = (
+                f"; it also deleted {len(transient)} record(s) it had created by "
+                "mistake, each holding only the task's values and read by no one else"
+                if transient
+                else ""
+            )
             if corrected:
                 writes = len(mine[target].events)
                 evidence["corrected"] = True
@@ -980,14 +1378,14 @@ def judge(
                     [
                         f"created once and corrected by the agent ({writes} writes, "
                         "no other actor read or wrote it between them), every "
-                        "value read back"
+                        f"value read back{removed}"
                     ],
                     evidence,
                 )
             return EnsureResult(
                 "created_verified",
                 tid,
-                ["created once, every value read back"],
+                [f"created once, every value read back{removed}"],
                 evidence,
             )
     return _review(reasons, evidence)
@@ -1012,7 +1410,7 @@ def correction_refused(
     """
 
     changed = "the agent changed or deleted the record after creating it"
-    if not contract.accept_corrections:
+    if not contract.corrections:
         return changed
     if set(change.actions) != {"C", "U"}:
         return changed
@@ -1027,9 +1425,13 @@ def correction_refused(
         return f"{changed}, and with settle_s under 1 s its reads can't be told apart"
     if change.versions is None:
         return f"{changed}, and without _history its versions can't be counted"
-    if any(not is_person(contract, body, params) for body in change.bodies):
+    if any(not _between_ok(contract, body, params) for body in change.bodies):
         # A version that was someone else (or no one) may have been found by
         # a search no audit event names, and acted on.
+        if contract.operations.correction.between != "person":
+            return (
+                f"{changed}, and a version in between held a value the task didn't give"
+            )
         return f"{changed}, and a version in between was not the person"
     if change.versions != len(change.events):
         # A write the trail didn't log may be someone else's.
@@ -1057,6 +1459,68 @@ def correction_refused(
         if start <= read_at and (not who or who - selfs):
             return "another actor read the record between the agent's writes"
     return None
+
+
+def _refers_to(resource: Mapping[str, Any], ref: str) -> bool:
+    """True when any string in ``resource`` is a reference to ``ref``
+    (relative, absolute or versioned: ``Patient/y``, ``http://x/Patient/y``,
+    ``Patient/y/_history/2``)."""
+
+    return any(
+        isinstance(value, str) and "/" in value and _ref(value) == ref
+        for _, value in leaves(dict(resource))
+    )
+
+
+def transient_ok(
+    contract: EnsureContract,
+    change: Change,
+    selfs: set[str],
+    params: Mapping[str, Any],
+    changes: Mapping[str, Change] = {},
+) -> bool:
+    """True when ``change`` is a record the agent created and deleted again
+    that ``cardinality.own_transient`` lets count as not created.
+
+    Every write of it is the agent's, timed and logged, the create first and
+    the delete last; ``_history`` shows as many versions as the trail shows
+    creates and updates; every version holds only the task's values; and no
+    other actor read it by id. Its ``_history`` must be read, and the trail
+    must log reads by id (the verifier's heartbeat).
+    """
+
+    audit = contract.change_feed.audit
+    if audit is None or not audit.heartbeat or contract.settle_s < 1:
+        return False  # "no one else read it" needs a trail that logs reads
+    if not contract.change_feed.history:
+        return False
+    # Nobody may have used it: no version of any other write in the window
+    # may refer to it (an Encounter, an Observation filed on the duplicate).
+    for ref, other in changes.items():
+        if ref == change.ref:
+            continue
+        if other.versions is None:
+            return False
+        if any(_refers_to(b, change.ref) for b in other.bodies):
+            return False
+    if change.actions not in ({"C", "D"}, {"C", "U", "D"}):
+        return False
+    if not change.attributed or not change.events or change.versions is None:
+        return False
+    if any(when is None or not who or who - selfs for when, _, who in change.events):
+        return False
+    timed = sorted(
+        (when, action) for when, action, _ in change.events if when is not None
+    )
+    if [a for _, a in timed].count("C") != 1 or timed[0][1] != "C":
+        return False
+    if [a for _, a in timed].count("D") != 1 or timed[-1][1] != "D":
+        return False
+    if change.versions != sum(1 for _, a in timed if a in ("C", "U")):
+        return False
+    if not all(holds_only_task_values(contract, b, params) for b in change.bodies):
+        return False
+    return not any(when is None or not who or who - selfs for when, who in change.reads)
 
 
 def _hear_own_read(
@@ -1167,6 +1631,12 @@ def verify_ensure(
             and (not c.authors or c.authors & selfs or not c.attributed)
         ]
         created = None
+        removed = []
+        if contract.operations.cardinality.own_transient and len(own) > 1:
+            # A record the agent deleted again may count as not created
+            # (judged in ``judge``); the record the task wrote is the one left.
+            removed = [r for r in own if "D" in changes[r].actions]
+            own = [r for r in own if r not in removed]
         if len(own) == 1:
             try:
                 _, created = reader.fetch(f"{reader.base_url}/{own[0]}")
@@ -1175,7 +1645,7 @@ def verify_ensure(
             audit = contract.change_feed.audit
             if (
                 created is not None
-                and "U" in changes[own[0]].actions
+                and ("U" in changes[own[0]].actions or removed)
                 and audit is not None
                 and audit.heartbeat
             ):
@@ -1216,6 +1686,7 @@ def verify_ensure(
 
 
 __all__ = [
+    "AppSemantics",
     "Baseline",
     "Change",
     "EnsureContract",
@@ -1228,6 +1699,7 @@ __all__ = [
     "is_void",
     "judge",
     "load_contract",
+    "load_semantics",
     "read_changes",
     "verify_ensure",
 ]
