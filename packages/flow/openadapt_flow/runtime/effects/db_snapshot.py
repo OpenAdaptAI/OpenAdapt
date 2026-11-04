@@ -46,8 +46,10 @@ What a snapshot holds, and why:
   its stored text), and numbers parse as ``Decimal``. On PostgreSQL each
   column is read as text by a rule for its type (:func:`_pg_rule`), in a
   session pinned to UTC and to exact float output; a type without a rule
-  makes the table unreadable. :func:`canonical` gives each value one exact
-  text form.
+  makes the table unreadable. On SQLite each column is read as the driver
+  returns it (a ``REAL`` as a double, a ``BLOB`` as its hex), with its storage
+  class (:class:`SqliteValue`), which the row MAC keeps. :func:`canonical`
+  gives each value one exact text form.
 
 Read-only: SQLite files open with ``mode=ro``; a driver connection should use
 an account with SELECT (and, on MySQL, TRIGGER and SHOW VIEW; on PostgreSQL,
@@ -61,6 +63,7 @@ from __future__ import annotations
 import datetime
 import hashlib
 import json
+import math
 import os
 import re
 import secrets
@@ -203,6 +206,38 @@ class StoredNumber(Decimal):
     stored: str
 
 
+class SqliteValue:
+    """A SQLite value's storage class. A column with no type, ``BLOB`` or
+    ``NUMERIC`` can hold ``1`` (an integer), ``1.0`` (a real), ``'1'`` (a
+    text) and ``x'31'`` (a blob), and ``1`` and ``'1'`` have one text form.
+    The value still compares and prints by its text, so selectors and cell
+    MACs are as before; :func:`row_hash` adds the class, so a change of class
+    alone still shows. An integer stays a plain ``int``."""
+
+    storage: str = ""
+
+
+class SqliteText(SqliteValue, str):
+    storage = "text"
+
+
+class SqliteBlob(SqliteValue, str):
+    """A blob as the upper-case hex of its bytes, as SQLite's ``hex()``."""
+
+    storage = "blob"
+
+
+class SqliteReal(SqliteValue, Decimal):
+    storage = "real"
+
+
+def _plain(number: Decimal) -> Decimal:
+    """A finite number in plain notation (``10``, not ``1E+1``), still exact,
+    so ``str()`` matches the text a person writes and :func:`canonical`."""
+
+    return Decimal(canonical(number))
+
+
 def _stored_number(text: str) -> StoredNumber:
     number = Decimal(text)
     exact = Context(prec=max(len(number.as_tuple().digits), 1))
@@ -276,7 +311,13 @@ def row_hash(
 
     skip = set(ignore)
     body = json.dumps(
-        sorted((c, canonical(v)) for c, v in row.items() if c not in skip),
+        sorted(
+            (c, canonical(v), v.storage)
+            if isinstance(v, SqliteValue)
+            else (c, canonical(v))
+            for c, v in row.items()
+            if c not in skip
+        ),
         separators=(",", ":"),
     )
     return _mac(key, f"r\x1f{table}\x1f{body}")
@@ -764,27 +805,18 @@ def _mysql_encoding(data_type: str) -> str:
 
 def _cell(dialect: Dialect, column: str, how: str = "") -> str:
     q = _quote(dialect, column)
-    if dialect == "mysql":
-        if how == "hex":
-            return f"HEX({q})"
-        if how == "double":
-            return f"CAST({q} AS DOUBLE)"
-        if how == "text":
-            return f"CONCAT({q})"
-        return q
-    # SQLite's json_object prints a REAL with 15 digits, so two doubles can
-    # print the same. Printed with 17 they can't; json() keeps it a number.
-    return (
-        f"CASE WHEN typeof({q}) = 'blob' THEN hex({q}) "
-        f"WHEN typeof({q}) = 'real' THEN json(printf('%!.17g', {q})) ELSE {q} END"
-    )
+    if how == "hex":
+        return f"HEX({q})"
+    if how == "double":
+        return f"CAST({q} AS DOUBLE)"
+    if how == "text":
+        return f"CONCAT({q})"
+    return q
 
 
 def _row_json(dialect: Dialect, d: _Def) -> list[str]:
-    obj = "JSON_OBJECT" if dialect == "mysql" else "json_object"
     return [
-        obj
-        + "("
+        "JSON_OBJECT("
         + ", ".join(
             f"{_literal(c)}, {_cell(dialect, c, d.encode.get(c, ''))}"
             for c in d.columns[i : i + _CHUNK]
@@ -809,15 +841,56 @@ def _read_rows(
     return out
 
 
+def _read_rows_sqlite(
+    s: _Session, name: str, d: _Def, where: str = ""
+) -> list[dict[str, Any]]:
+    """A SQLite table's rows, each column as the driver returns it.
+
+    Not through ``json_object``: before SQLite 3.53 its text for a double is
+    not exact at the ends of the range (above about 1e120, below about
+    1e-90), and it loses the storage class.
+    """
+
+    cells = ", ".join(_quote("sqlite", c) for c in d.columns)
+    return [
+        {c: _sqlite_value(name, c, v) for c, v in zip(d.columns, r)}
+        for r in s.rows(f"SELECT {cells} FROM {_quote('sqlite', name)} {where}")
+    ]
+
+
+def _sqlite_value(table: str, column: str, value: Any) -> Any:
+    if value is None or type(value) is int:
+        return value
+    if type(value) is float:
+        if not math.isfinite(value):
+            return SqliteReal(repr(value))
+        # The shortest text that reads back as the same double, in plain
+        # notation: 0.3, not 0.29999999999999999; 10, not 10.0.
+        return SqliteReal(canonical(Decimal(repr(value))))
+    if type(value) is str:
+        return SqliteText(value)
+    if type(value) is bytes:
+        return SqliteBlob(value.hex().upper())
+    # A connection with converters (detect_types) or a text_factory returns
+    # other types, whose storage class can't be told: unreadable.
+    raise SnapshotError(
+        f"{table}.{column}: the driver returned a {type(value).__name__}; "
+        "connect without converters or a text_factory"
+    )
+
+
 def _float32_text(value: Decimal) -> Decimal:
     """The shortest decimal that reads back as the same 32-bit float."""
 
     single = struct.unpack("f", struct.pack("f", float(value)))[0]
+    if not math.isfinite(single):
+        return Decimal(repr(single))
     for digits in range(1, 10):
         text = f"{single:.{digits}g}"
         if struct.unpack("f", struct.pack("f", float(text)))[0] == single:
-            return Decimal(text)
-    return Decimal(repr(single))  # pragma: no cover - 9 digits always do
+            # %g prints 10 as 1e+01: plain, so a selector "10" matches.
+            return _plain(Decimal(text))
+    return _plain(Decimal(repr(single)))  # pragma: no cover - 9 digits do
 
 
 def _plain_numbers(dialect: Dialect, d: _Def, row: dict[str, Any]) -> dict[str, Any]:
@@ -826,8 +899,6 @@ def _plain_numbers(dialect: Dialect, d: _Def, row: dict[str, Any]) -> dict[str, 
     A row's numbers parse as ``Decimal`` so no digit is lost; the plain form
     is what selectors and parameters compare with (``str()``):
 
-    - a SQLite ``REAL`` (read with 17 digits) as the shortest text that reads
-      back as the same double (``0.3``, not ``0.29999999999999999``);
     - a MySQL ``FLOAT`` (read widened to ``DOUBLE``) as the shortest text that
       reads back as the same 32-bit float (``1.1``, not
       ``1.100000023841858``);
@@ -840,9 +911,7 @@ def _plain_numbers(dialect: Dialect, d: _Def, row: dict[str, Any]) -> dict[str, 
     for column, value in row.items():
         if not isinstance(value, Decimal) or not value.is_finite():
             continue
-        if dialect == "sqlite":
-            row[column] = Decimal(repr(float(value)))
-        elif d.encode.get(column) == "double":
+        if d.encode.get(column) == "double":
             row[column] = _float32_text(value)
         else:
             exact = Context(prec=max(len(value.as_tuple().digits), 1))
@@ -1059,7 +1128,7 @@ def _pg_value(rule: str, text: Optional[str]) -> Any:
         if rule == "float4":
             return _float32_text(number)
         if rule == "float8":
-            return Decimal(repr(float(number)))
+            return _plain(Decimal(repr(float(number))))
         exact = Context(prec=max(len(number.as_tuple().digits), 1))
         return Decimal(format(number.normalize(exact), "f"))
     return str(text)
@@ -1735,6 +1804,8 @@ def _snapshot(
             read = []
         elif dialect == "postgresql":
             read = _read_rows_pg(s, d)
+        elif dialect == "sqlite":
+            read = _read_rows_sqlite(s, t, d)
         else:
             read = _read_rows(s, t, d)
         for row in read:
