@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Riverside Clinic - Scheduling</title>
+<!--
+  A scheduling screen of the kind a hospital publishes through Citrix or RDP.
+  The benchmark reads it only as pixels: no DOM, no accessibility tree reaches
+  the replayer. Every icon below is drawn here with plain SVG shapes.
+
+  Query string: ?order=0,1,2,... reorders the worklist rows.
+  Rendering conditions (zoom, font size, theme) are applied by the harness
+  through window.applyCondition().
+-->
+<style>
+  :root {
+    --bg: #eef1f5; --panel: #ffffff; --ink: #1d2733; --muted: #5b6b7d;
+    --line: #c9d2dc; --bar: #24466e; --bar-ink: #ffffff; --accent: #2d6fd8;
+    --accent-ink: #ffffff; --grey: #7b8794; --row-alt: #f6f8fb; --sel: #dbe8fb;
+    --base-font: 14px;
+  }
+  body.dark {
+    --bg: #15191f; --panel: #1f252d; --ink: #e3e8ee; --muted: #9aa8b8;
+    --line: #3a4552; --bar: #0f1d2e; --bar-ink: #dfe7f1; --accent: #5b9bff;
+    --accent-ink: #0d1520; --grey: #8d99a6; --row-alt: #242b34; --sel: #2c3f5c;
+  }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: "DejaVu Sans", Verdana, Arial, sans-serif;
+    font-size: var(--base-font); width: 1280px; height: 800px; overflow: hidden;
+  }
+  .titlebar {
+    height: 44px; background: var(--bar); color: var(--bar-ink);
+    display: flex; align-items: center; padding: 0 12px; gap: 8px;
+  }
+  .titlebar .app { font-weight: bold; font-size: 1.15em; margin-right: 24px; }
+  .tool {
+    width: 34px; height: 34px; border: 1px solid transparent; border-radius: 4px;
+    background: transparent; color: var(--bar-ink); padding: 0; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .tool svg { width: 22px; height: 22px; }
+  .titlebar .spacer { flex: 1; }
+  .titlebar .user { font-size: 0.95em; }
+  .main { display: flex; gap: 16px; padding: 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; }
+  .worklist { width: 640px; }
+  .panel h2 { font-size: 1.05em; margin: 0; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: normal; font-size: 0.9em; }
+  tr:nth-child(even) td { background: var(--row-alt); }
+  tr.active td { background: var(--sel); }
+  .rowicon {
+    width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 4px;
+    background: var(--panel); color: var(--ink); padding: 0; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .rowicon svg { width: 16px; height: 16px; }
+  .form { flex: 1; padding-bottom: 12px; }
+  .banner { margin: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 4px; font-weight: bold; }
+  .field { margin: 10px 12px; }
+  .field label { display: block; color: var(--muted); font-size: 0.9em; margin-bottom: 4px; }
+  .field input, .field textarea {
+    width: 520px; font: inherit; color: var(--ink); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 3px; padding: 6px 8px;
+  }
+  .field textarea { height: 70px; resize: none; }
+  .actions { display: flex; gap: 10px; margin: 14px 12px; align-items: center; }
+  .iconbtn {
+    width: 48px; height: 40px; border: 1px solid var(--line); border-radius: 4px;
+    padding: 0; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  }
+  .iconbtn svg { width: 24px; height: 24px; }
+  .iconbtn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .iconbtn.plain { background: var(--panel); color: var(--grey); }
+  .textbtn {
+    font: inherit; padding: 8px 16px; border-radius: 4px; cursor: pointer;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+  }
+  .flag { margin: 0 12px; color: var(--muted); font-size: 0.9em; }
+  .status { margin: 6px 12px; color: var(--muted); min-height: 1.3em; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M19 8 A8 8 0 1 0 20 13" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M20 3 v6 h-6" fill="none" stroke="currentColor" stroke-width="2.4"/></symbol>
+    <symbol id="i-print" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="6" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="9" width="18" height="8" rx="1" fill="currentColor"/><rect x="7" y="14" width="10" height="7" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24"><path d="M8 13 V6 a4 4 0 0 1 8 0 v10 a6 6 0 0 1 -12 0 V8" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 7 v9" stroke="currentColor" stroke-width="2.2"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l3 3M16 16l3 3M19 5l-3 3M8 16l-3 3" stroke="currentColor" stroke-width="2.4"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20 l1-5 L16 4 l4 4 L9 19 Z" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M14 6 l4 4" stroke="currentColor" stroke-width="2.2"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 6h16M9 6V3h6v3" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M6 6 l1 15 h10 l1-15" fill="none" stroke="currentColor" stroke-width="2.2"/></symbol>
+    <symbol id="i-disk" viewBox="0 0 24 24"><path d="M3 3 h14 l4 4 v14 H3 Z" fill="none" stroke="currentColor" stroke-width="2.2"/><rect x="7" y="3" width="9" height="6" fill="currentColor"/><rect x="6" y="13" width="12" height="6" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-cross" viewBox="0 0 24 24"><path d="M5 5 L19 19 M19 5 L5 19" stroke="currentColor" stroke-width="2.6"/></symbol>
+  </defs>
+</svg>
+<div class="titlebar">
+  <span class="app">Riverside Clinic</span>
+  <button class="tool" id="tb-refresh" title="Refresh"><svg><use href="#i-refresh"/></svg></button>
+  <button class="tool" id="tb-print" title="Print"><svg><use href="#i-print"/></svg></button>
+  <button class="tool" id="tb-attach" title="Attach summary"><svg><use href="#i-clip"/></svg></button>
+  <button class="tool" id="tb-settings" title="Settings"><svg><use href="#i-gear"/></svg></button>
+  <span class="spacer"></span>
+  <span class="user">Front desk 2</span>
+</div>
+<div class="main">
+  <div class="panel worklist">
+    <h2>Today's worklist</h2>
+    <table>
+      <thead><tr><th>Patient</th><th>MRN</th><th>Time</th><th></th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <div class="panel form">
+    <h2>Appointment</h2>
+    <div class="banner" id="banner">No record selected</div>
+    <div class="field"><label for="visit">Visit type</label><input id="visit" autocomplete="off"></div>
+    <div class="field"><label for="note">Note</label><textarea id="note"></textarea></div>
+    <div class="flag" id="attach-flag">Summary attached: no</div>
+    <div class="actions">
+      <button class="iconbtn primary" id="save" title="Save appointment"><svg><use href="#i-disk"/></svg></button>
+      <button class="iconbtn plain" id="draft" title="Save draft"><svg><use href="#i-disk"/></svg></button>
+      <button class="iconbtn plain" id="clear" title="Clear form"><svg><use href="#i-cross"/></svg></button>
+      <button class="textbtn" id="sign">Sign note</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+</div>
+<script>
+  const PATIENTS = [
+    ["Grace Hopper", "MRN 48213", "08:30"],
+    ["Alan Turing", "MRN 57390", "08:45"],
+    ["Ada Lovelace", "MRN 36428", "09:00"],
+    ["Edsger Dijkstra", "MRN 92147", "09:15"],
+    ["Barbara Liskov", "MRN 61834", "09:30"],
+    ["Donald Knuth", "MRN 70562", "09:45"],
+    ["Frances Allen", "MRN 25976", "10:00"],
+    ["John Backus", "MRN 83651", "10:15"],
+  ];
+  const params = new URLSearchParams(location.search);
+  const order = params.get("order") ? params.get("order").split(",").map(Number) : PATIENTS.map((_, i) => i);
+  window.__clicks = []; window.__saved = []; window.__drafts = [];
+  let active = null, attached = false;
+  const rows = document.getElementById("rows");
+  order.forEach((p) => {
+    const [name, mrn, time] = PATIENTS[p];
+    const tr = document.createElement("tr");
+    tr.dataset.patient = String(p);
+    tr.innerHTML = `<td>${name}</td><td>${mrn}</td><td>${time}</td>` +
+      `<td><button class="rowicon" id="edit-${p}" title="Open ${name}"><svg><use href="#i-pencil"/></svg></button></td>` +
+      `<td><button class="rowicon" id="del-${p}" title="Cancel visit"><svg><use href="#i-trash"/></svg></button></td>`;
+    rows.appendChild(tr);
+  });
+  function select(p) {
+    active = p;
+    document.querySelectorAll("tr[data-patient]").forEach((tr) => tr.classList.toggle("active", Number(tr.dataset.patient) === p));
+    document.getElementById("banner").textContent = `Active record: ${PATIENTS[p][0]}  ${PATIENTS[p][1]}`;
+  }
+  window.selectPatient = select;
+  function record() {
+    return { patient: active === null ? null : PATIENTS[active][0], mrn: active === null ? null : PATIENTS[active][1],
+             visit: document.getElementById("visit").value, note: document.getElementById("note").value, attached };
+  }
+  // Every pointer press: the control it landed on (null on plain text or
+  // background) and the worklist row it landed in (null outside the list).
+  document.addEventListener("mousedown", (ev) => {
+    const el = ev.target.closest("button, input, textarea");
+    const tr = ev.target.closest("tr[data-patient]");
+    window.__clicks.push({ control: el ? el.id : null, row: tr ? Number(tr.dataset.patient) : null });
+  }, true);
+  document.addEventListener("click", (ev) => {
+    const el = ev.target.closest("button");
+    if (!el) return;
+    if (el.id.startsWith("edit-")) select(Number(el.id.slice(5)));
+    else if (el.id.startsWith("del-")) document.getElementById("status").textContent = "Visit cancelled";
+    else if (el.id === "tb-attach") { attached = !attached; document.getElementById("attach-flag").textContent = `Summary attached: ${attached ? "yes" : "no"}`; }
+    else if (el.id === "save" && active !== null) { window.__saved.push(record()); document.getElementById("status").textContent = "Appointment saved"; }
+    else if (el.id === "draft") { window.__drafts.push(record()); document.getElementById("status").textContent = "Draft saved"; }
+    else if (el.id === "clear") { document.getElementById("visit").value = ""; document.getElementById("note").value = ""; }
+  });
+  window.applyCondition = (c) => {
+    document.body.classList.toggle("dark", !!c.dark);
+    document.documentElement.style.setProperty("--base-font", `${14 + (c.font_delta_px || 0)}px`);
+    document.body.style.zoom = c.zoom ? String(c.zoom) : "";
+  };
+</script>
+</body>
+</html>

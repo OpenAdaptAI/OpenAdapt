@@ -1,0 +1,13 @@
+qualify REFUSED: REFUSE: workflow 'odoo-new-contact' under 'standard' profile vs policy 'clinical-write'
+  [PASS] Execution profile: standard (production); durability required and enabled; settled-state detection required and enabled
+  [REFUSE] Certification: bundle is NOT certified under 'clinical-write': 5 policy violation(s) (e.g. prohibit_unarmed_clicks: identity-applicable step is UNARMED — would act with no identity verification (row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)))
+         steps: step_005, step_009, step_013
+  [REFUSE] Identity coverage: 2/8 entity-sensitive/consequential action(s) are UNARMED -- would act with no verified target identity
+         steps: step_005, step_009
+  [PASS] Effect coverage: 1/1 consequential write(s) declare the required postcondition and confirmed system-of-record effect contracts
+  [PASS] Approval fallback: a verifier satisfying the required evidence tier is configured; 1 declared write(s) are covered
+  [PASS] Interstitial admission: no automatic interstitial actions declared
+  [WARN] Encrypted bundle: workflow.json plaintext (not required); WARNING: 18 template/screenshot asset(s) are unsealed (plaintext at rest) -- protect via disk encryption or run with --strict-templates to refuse
+         steps: templates/identifiers/step_003.png, templates/identifiers/step_007.png, templates/identifiers/step_011.png, templates/layout_fingerprint.json, templates/step_000.png, templates/step_000_expect.png, templates/step_001.png, templates/step_001_expect.png, ... (+10 more)
+  [PASS] Sealed manifest + version pin: integrity-sealed manifest re-verified (digest 3750eaac9ddb9659..., compiler 2.4.0)
+  -> RUN REFUSED (fail-closed): Certification, Identity coverage. Nothing was executed.

@@ -533,6 +533,13 @@ def test_identity_must_stand_on_its_own() -> None:
     assert not _shows_identity("REQ-4815-01", "REQ-4815")
     assert not _shows_identity("A.123", "123")
     assert not _shows_identity("123/2", "123")
+    # A longer value is another record: a suffix, a prefix, or a comma.
+    assert _shows_identity("Ann Smith", "Ann Smith")
+    assert _shows_identity("[Ann Smith] | MRN 12", "Ann Smith")
+    assert not _shows_identity("Ann Smith Jr", "Ann Smith")
+    assert not _shows_identity("Dr Ann Smith", "Ann Smith")
+    assert not _shows_identity("Patient: Ann Smith, Jr", "Ann Smith")
+    assert not _shows_identity("Ann Smithers", "Ann Smith")
 
 
 def test_markers_and_identity_need_text_not_only_a_region() -> None:

@@ -1,0 +1,93 @@
+# Arm B's operator contract for run 2 (PREREGISTRATION_2.md): run 1's contract,
+# plus the late recheck (frame.database.recheck_after_s, #1639) and the run-2
+# audit view (audit_query_2.sql: entries that name no patient too, so another
+# user's own settings are attributed by owner, #1637).
+#
+# Calibrated on clean referrals outside the stream before faultset 7 is read;
+# its sha256 is committed before the fault ops are written.
+schema_version: openadapt.verify/v1
+environment_id: openemr-incremental-value-fixture
+minimum_effect_strength: independent_system_of_record
+
+# The record, read back through OpenEMR's REST API with a separate read-only
+# OAuth client.
+verifier:
+  kind: rest
+  base_url: ${OPENEMR_UI_URL}
+  records_path: /apis/default/api/patient?_limit=1000
+  records_key: data
+  # A read-only (user/patient.rs) token of the fixture's oracle client,
+  # refreshed by the runner before each read.
+  auth: {bearer_env: INCREMENTAL_VALUE_REST_TOKEN}
+
+record:
+  name: patient
+  match: [email, lname]
+  duplicate_key: email
+  fields:
+    email: email
+    lname: lname
+    title: title
+    fname: fname
+    DOB: DOB
+    sex: sex
+    street: street
+    city: city
+    state: {literal: MA}
+    postal_code: postal_code
+    phone_home: phone_home
+    country_code: country_code
+    # The referral names no provider: the clinic's unassigned value.
+    providerID: {literal: "0"}
+    ref_providerID: {literal: "0"}
+
+frame:
+  identity_field: pid
+  # The New Patient form writes one history_data row for the new chart.
+  side_records:
+    - {surface: history_data, link_field: pid, of_surface: patient_data, of_field: pid}
+  # Other users' writes are told apart through OpenEMR's own audit log, read
+  # as a SELECT-only database user.
+  attribution:
+    kind: audit_read
+    actor_field: user
+    self: [openadapt_actor]
+    record_field: patient_id
+    record_key: pid
+    event_field: ev
+    write_events: [insert, update, delete]
+    insert_events: [insert]
+    delete_events: [delete]
+    table_field: tbl
+    read:
+      kind: sql
+      sql_driver: incremental_value.exec_mariadb
+      sql_connect_args: {container: openadapt-openemr-iv2-db-1, user: oa_iv_reader, database: openemr}
+      sql_password_env: INCREMENTAL_VALUE_READER_PASSWORD
+      # The query lives in a view (audit_query.sql, created at seed time):
+      # the read-only guard refuses the word INSERT even inside literals.
+      sql_query: "SELECT id, user, patient_id, ev, tbl FROM oa_audit.writes"
+  # Diff the whole database, with OpenEMR's reviewed bookkeeping profile.
+  database:
+    dialect: mysql
+    read:
+      sql_driver: incremental_value.exec_mariadb
+      sql_connect_args: {container: openadapt-openemr-iv2-db-1, user: oa_iv_reader, database: openemr}
+      sql_password_env: INCREMENTAL_VALUE_READER_PASSWORD
+    profile: openemr
+    profile_sha256: "sha256:470d41d92b4771923f2d62c16313d8e764d5f0af2a70026586ed1d2a1ff01f0b"
+    schemas: [openemr]
+    views: {patient_data: ""}
+    new_row_fields:
+      # Columns the New Patient form fills on every clean save (empty strings
+      # where the default is NULL), measured on the calibration saves.
+      # providerID and ref_providerID are pinned in record.fields instead.
+      patient_data: [billing_note, birth_fname, birth_lname, birth_mname, care_team_status, completed_ad, created_by, date, dupscore, financial_review, gender_identity, guardianaddress, guardiancity, guardiancountry, guardianemail, guardianphone, guardianpostalcode, guardianrelationship, guardiansex, guardiansname, guardianstate, guardianworkphone, hipaa_allowemail, hipaa_allowsms, id, imm_reg_status, industry, interpreter_needed, last_updated, nationality_country, occupation, patient_groups, pid, preferred_name, pricelevel, pronoun, protect_indicator, publicity_code, pubpid, regdate, sex_identified, sexual_orientation, street_line_2, suffix, tribal_affiliations, updated_by, uuid]
+      history_data: [id, pid, uuid, date, created_by]
+    settle_s: 2
+    # A live OpenEMR moves on its own (UI polling, background ticks): retry the
+    # paired read up to 10 times, a 20 s budget, until two reads match (#1639).
+    settle_attempts: 10
+    # Two of OpenEMR 8.0.0.3's shortest active background-service intervals
+    # (Email_Service, 2 min): a job the save triggers runs by the next tick.
+    recheck_after_s: 240

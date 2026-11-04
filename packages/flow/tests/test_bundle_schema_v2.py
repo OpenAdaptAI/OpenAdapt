@@ -145,6 +145,14 @@ def _structural_payload(content: dict, shape: str) -> dict:
     return content["program"]["states"]["s1"]["step"]["anchor"]["structural"]
 
 
+def _anchor_payload(content: dict, shape: str) -> dict:
+    """Return the exact Anchor JSON object in either IR shape."""
+
+    if shape == "linear":
+        return content["steps"][0]["anchor"]
+    return content["program"]["states"]["s1"]["step"]["anchor"]
+
+
 def _step_payloads(content: dict, shape: str) -> list[dict]:
     """The exact Step JSON objects in either IR shape (linear or program)."""
 
@@ -180,6 +188,8 @@ def _pre_frame_path_content(wf: Workflow, shape: str) -> dict:
     content.pop("interstitials", None)  # pre-existing reviewed v2 omission
     locator = _structural_payload(content, shape)
     assert locator.pop("frame_path") in (None, [])
+    # Reviewed v2 omission: create-form identity postdates these seals.
+    assert _anchor_payload(content, shape).pop("form_identity") is None
     for step in _step_payloads(content, shape):
         # Reviewed v2 omission: field_label evidence postdates these seals.
         assert step.pop("field_label") is None
@@ -255,6 +265,7 @@ def _write_synthetic_pre_field_bundle(
     raw = wf.model_dump(mode="json")
     # The historical workflow JSON itself did not contain the fields either.
     assert _structural_payload(raw, shape).pop("frame_path") in (None, [])
+    assert _anchor_payload(raw, shape).pop("form_identity") is None
     for step in _step_payloads(raw, shape):
         assert step.pop("field_label") is None
         assert step.pop("selection_commit_key") is None

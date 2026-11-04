@@ -98,6 +98,13 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install uv
+        if: steps.scope.outputs.run == 'true'
+        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: .github/ci-tools/uv.lock
+
       # Cheapest decisive check first: structure, signature honesty, and
       # repo agreement need no network and cannot be flaky.
       - name: Validate platform manifest structure (offline)
@@ -117,7 +124,7 @@ jobs:
         # remote drift probe, so scheduled checks stay fast and network-light.
         if: steps.scope.outputs.run == 'true' && (github.event_name == 'pull_request' || github.event_name == 'push')
         run: |
-          python -m pip install --quiet 'pytest>=8.0.0'
+          python scripts/ci/locked_install.py --lock .github/ci-tools:test
           python -m pytest \
             tests/test_platform_manifest_drift.py \
             tests/test_platform_version_display.py -q
@@ -167,6 +174,12 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: .github/ci-tools/uv.lock
+
       # The guard reads its rules from source-policy.public.json (rendered from
       # the canonical private manifest) and fails closed when that file is
       # missing or incomplete. Stdlib only: no dependency install.
@@ -178,5 +191,5 @@ jobs:
       - name: Prove the boundary guard fails when it should
         if: github.event_name == 'pull_request' || github.event_name == 'push'
         run: |
-          python -m pip install --quiet 'pytest>=8.0.0'
+          python scripts/ci/locked_install.py --lock .github/ci-tools:test
           python -m pytest tests/test_source_boundary.py -q

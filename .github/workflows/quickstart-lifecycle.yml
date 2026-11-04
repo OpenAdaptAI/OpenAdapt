@@ -28,12 +28,17 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-          cache: pip
-          cache-dependency-path: pyproject.toml
 
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: .github/ci-tools/uv.lock
+
+      # build comes from the CI tools lock. The quickstart itself installs the
+      # wheel into a clean environment from PyPI, as a user would.
       - name: Build launcher wheel
         run: |
-          python -m pip install build
+          python scripts/ci/locked_install.py --lock .github/ci-tools:build
           python -m build --wheel --outdir lifecycle-dist
 
       - name: Run the public quickstart from a clean environment

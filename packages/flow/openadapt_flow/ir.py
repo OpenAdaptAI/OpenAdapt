@@ -340,6 +340,15 @@ class IdentityTemplate(BaseModel):
             "(unknown) is treated as a row."
         ),
     )
+    teach_ambiguous: bool = Field(
+        default=False,
+        description=(
+            "Teach time saw another shown row with the same identity and no "
+            "record id between them. Replay halts before a consequential "
+            "write: a twin that later scrolls out of view would otherwise "
+            "pass the text check."
+        ),
+    )
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -362,7 +371,54 @@ class IdentityTemplate(BaseModel):
             data.pop("record_key", None)
         if self.structured_row is None:
             data.pop("structured_row", None)
+        if not getattr(self, "structured_ambiguous", None):
+            data.pop("structured_ambiguous", None)
+        if not getattr(self, "teach_ambiguous", False):
+            data.pop("teach_ambiguous", None)
         return data
+
+
+class FormIdentity(BaseModel):
+    """Record identity of a save on a create-new form: the form it submits is
+    the demonstrated form, holding exactly what this run typed.
+
+    A form that creates a record shows no existing record next to its save
+    button: the record is the one the run is entering. So the save's identity
+    is the form itself, all of it. The recorder observes, right before the
+    demonstrated click on a labelled submit button, that the button submits
+    the one HTML form owning every field typed into since the last save (not
+    in a table row or a single field's own widget), and fingerprints that
+    form. Before the click at run time, the replayer requires:
+
+    - the button is still that form's submit button, and the form owns
+      exactly ``filled_fields`` fields this run typed into, each holding
+      exactly what the run typed;
+    - the form submits to the same origin and path (``action_sha256``) with
+      the same ``method``, and would send the same set of control names and
+      types (``controls_sha256``), hidden ones included;
+    - every control the run did not type into (a hidden record or parent id,
+      a select left on its default, a checked box) holds the demonstrated
+      value: salted digests in ``value_digests``, under ``value_salt`` (the
+      identity-template scheme). Hidden tokens are not compared (``exempt``):
+      ones named like a token, and ones that changed while the demonstration
+      was typed.
+
+    Anything else halts before the click. A submit event from any other form
+    or control during the click is cancelled and halts the run.
+
+    Counts, tokens, names and digests only; no field text or value.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    filled_fields: int = Field(ge=1, le=10_000)
+    submit_role: Literal["form_submit"]
+    action_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    method: Literal["get", "post", "dialog"]
+    controls_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    value_salt: str = Field(default="", max_length=128)
+    value_digests: dict[str, str] = Field(default_factory=dict)
+    exempt: tuple[str, ...] = ()
 
 
 class Anchor(BaseModel):
@@ -436,6 +492,14 @@ class Anchor(BaseModel):
             "time only; moved to ``identity_template.structured_row``)."
         ),
     )
+    structured_ambiguous: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Whether teach time saw another row read the same with no record "
+            "id between them (compile-time only; moved to "
+            "``identity_template.teach_ambiguous``)."
+        ),
+    )
     identity_template: Optional[IdentityTemplate] = Field(
         default=None,
         description=(
@@ -481,6 +545,14 @@ class Anchor(BaseModel):
             " tiers compare like-for-like. Set iff `identifier_crop` is set."
         ),
     )
+    form_identity: Optional[FormIdentity] = Field(
+        default=None,
+        description=(
+            "A labelled save on a create-new form: before the click, its form"
+            " must hold exactly the fields this run typed, with the values"
+            " typed. See FormIdentity. None everywhere else."
+        ),
+    )
     landmarks: list[Landmark] = Field(default_factory=list)
     search_pad: int = Field(
         default=80,
@@ -495,6 +567,10 @@ class Anchor(BaseModel):
             data.pop("record_key", None)
         if self.structured_row is None:
             data.pop("structured_row", None)
+        if not getattr(self, "structured_ambiguous", None):
+            data.pop("structured_ambiguous", None)
+        if not getattr(self, "teach_ambiguous", False):
+            data.pop("teach_ambiguous", None)
         return data
 
 
@@ -528,6 +604,16 @@ class PostconditionKind(str, Enum):
     # shown, so a list that has not loaded yet never passes. Unreadable rows
     # fail the check.
     NO_DUPLICATE_CANDIDATE = "no_duplicate_candidate"
+    # A key press that moves the focus and changes nothing visible (a Tab
+    # onto an icon button, an ArrowDown that highlights an option): after the
+    # step the focused element has a specific identity, ``focus_by`` (a
+    # ``testid``, an ``id``, or a ``role_name``: a role and a non-empty
+    # accessible name), and no other element on the page has it. With
+    # ``focus_active_option`` an option of the focused control is active
+    # (``aria-activedescendant``, or ``aria-selected`` in the listbox it
+    # controls). Unobservable focus, or no specific identity, fails the check
+    # (:func:`focus_identity_is_specific`).
+    FOCUS_ON = "focus_on"
 
 
 class Postcondition(BaseModel):
@@ -555,11 +641,31 @@ class Postcondition(BaseModel):
     candidate_rows: Optional[str] = Field(default=None, min_length=1, max_length=256)
     #: NO_DUPLICATE_CANDIDATE: the frame chain the list is in (outermost first).
     candidate_frame_path: Optional[tuple[str, ...]] = Field(default=None, max_length=8)
+    #: FOCUS_ON: how the focused element is identified.
+    focus_by: Optional[Literal["testid", "id", "role_name"]] = None
+    #: FOCUS_ON: the ``data-testid`` or ``id`` (``focus_by`` testid / id).
+    focus_value: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    #: FOCUS_ON: the ARIA role and accessible name (``focus_by`` role_name;
+    #: with a testid or id too, when the element had them, and then both must
+    #: hold at replay).
+    focus_role: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    focus_name: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    #: FOCUS_ON: an option of the focused control must be active.
+    focus_active_option: bool = False
+    #: FOCUS_ON: the frame chain the focused element is in (outermost first;
+    #: empty in the top document). A testid or id is unique within its frame.
+    focus_frame_path: Optional[tuple[str, ...]] = Field(default=None, max_length=8)
     #: NO_DUPLICATE_CANDIDATE: parameters whose value in any row makes it a
     #: real candidate.
     candidate_params: Optional[tuple[str, ...]] = Field(
         default=None, min_length=1, max_length=8
     )
+    #: TEXT_PRESENT: ``text`` must be read exactly once, as a whole line or
+    #: wrapped lines equal to it after case, spaces and punctuation drop; never
+    #: the fuzzy OCR match. Set on the empty-result checks the compiler mines
+    #: (``compiler.empty_result_guard``), where "2 matches were found" must
+    #: not pass for "No matches were found.".
+    exact: bool = False
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -567,14 +673,59 @@ class Postcondition(BaseModel):
         postcondition (and bundle digest) serializes exactly as before."""
 
         data: dict[str, Any] = handler(self)
+        if not self.exact:
+            data.pop("exact", None)
         if self.field_selector is None:
             data.pop("field_selector", None)
         if self.param is None:
             data.pop("param", None)
-        for name in ("candidate_rows", "candidate_frame_path", "candidate_params"):
+        for name in (
+            "candidate_rows",
+            "candidate_frame_path",
+            "candidate_params",
+            "focus_by",
+            "focus_value",
+            "focus_role",
+            "focus_name",
+            "focus_frame_path",
+        ):
             if getattr(self, name) is None:
                 data.pop(name, None)
+        if not self.focus_active_option:
+            data.pop("focus_active_option", None)
         return data
+
+
+def focus_identity_is_specific(pc: "Postcondition") -> bool:
+    """Whether a FOCUS_ON postcondition names one element, not a kind of element.
+
+    A role with a non-empty accessible name, alone or with a ``testid`` or an
+    ``id``. A tag, a role with no name, or an id or testid without a role and
+    name names no element: such a postcondition asserts nothing and never
+    passes.
+    """
+
+    if pc.kind is not PostconditionKind.FOCUS_ON:
+        return False
+    if pc.focus_by in ("testid", "id"):
+        # An id or testid names one element only together with its role and
+        # name: an id alone can move to another element between renders.
+        return bool(
+            pc.focus_value
+            and pc.focus_value.strip()
+            and pc.focus_role
+            and pc.focus_role.strip()
+            and pc.focus_name
+            and pc.focus_name.strip()
+        )
+    if pc.focus_by == "role_name":
+        return bool(
+            pc.focus_role
+            and pc.focus_role.strip()
+            and pc.focus_name
+            and pc.focus_name.strip()
+        )
+    return False
 
 
 IdentitySignalKeyValue = Literal[
@@ -676,6 +827,45 @@ class WebFormPrecheck(BaseModel):
     from_step: Optional[str] = None
 
 
+class WebFormWrite(BaseModel):
+    """A request, other than the save, that wrote while the replaced steps ran.
+
+    The API step's span is a declared, ordered sequence: these writes in the
+    order they were recorded, then the save. Each is one of two roles:
+
+    - ``ambient``: the page sent it on its own. It came from a script of
+      another document than the form, one that was loaded before the form
+      opened (for example an app's tab shell that posts
+      ``execute_background_services.php`` on a timer), and the form page's
+      source doesn't name it. No replaced step caused it, so the API step
+      neither sends nor waits for it; the live page goes on as it does under
+      the GUI steps. Listed for the person who admits the step.
+    - ``step``: a replaced step caused it. The API step sends it, rebuilt
+      from ``fields`` the same way as the save, in its recorded place before
+      the save. Its read-back is the record check declared on ``from_step``,
+      which the binding's record check includes; admission refuses a step
+      write whose step has none. A write that fails, or whose response is
+      outside ``expected_status``, stops the run with nothing after it sent,
+      nothing retried and nothing redone through the GUI, and the run
+      reconciles by reading the records back.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["ambient", "step"]
+    method: str = Field(min_length=1)
+    path: str = Field(min_length=1)
+    #: Path of the document whose script or form sent it.
+    sent_by: str = ""
+    #: The replaced step during which it was sent (``step`` writes).
+    from_step: Optional[str] = None
+    #: How to rebuild the body (``step`` writes): same sources as the save.
+    fields: list[WebFormField] = Field(default_factory=list)
+    expected_status: list[int] = Field(default_factory=list)
+    #: Why it has this role, in words, from the capture.
+    evidence: str = ""
+
+
 class WebFormSpec(BaseModel):
     """How to repeat a recorded browser form save as one HTTP request.
 
@@ -693,15 +883,41 @@ class WebFormSpec(BaseModel):
     fields: list[WebFormField] = Field(min_length=1)
     controls: list[str] = Field(default_factory=list)
     client_rules: Optional[dict[str, Any]] = None
+    #: Page script the browser runs on this save that the API step can't
+    #: evaluate by reading the form: the form's ``on*`` handlers, the ``on*``
+    #: handlers of the fields it sends, a page script listening for submit,
+    #: and validate.js rule kinds such as a ``pastDate`` rule. Before each
+    #: save the runtime runs that script itself, in a scratch page of the live
+    #: session with every write blocked, on the run's values, and sends only
+    #: when the page would submit exactly the body the API step built. When
+    #: it can't run the script, the GUI steps run. The live form must list the
+    #: same script, or the API step doesn't run.
+    client_scripts: list[str] = Field(default_factory=list)
+    #: The control in the form the person clicked to start the save (a CSS
+    #: selector from the recording), and the requests that click made
+    #: (``METHOD /path``). Running the page's script clicks it, as the person
+    #: did, and the page must then submit the form or make one of those
+    #: requests.
+    submitter: Optional[str] = None
+    submitter_requests: list[str] = Field(default_factory=list)
+    #: The control the person clicked to confirm the save when it isn't the
+    #: submitter (for example a ``#confirmCreate`` button in a duplicate
+    #: check dialog). Running the page's script clicks it too, in whichever
+    #: frame has it, and the page must then submit the form.
+    confirm: Optional[str] = None
     prechecks: list[WebFormPrecheck] = Field(default_factory=list)
     #: Regular expression the save response must match to count as accepted.
     success_pattern: Optional[str] = None
     #: GUI steps the API step stands in for, in order. The last one is the save.
     replaces_steps: list[str] = Field(min_length=1)
-    #: Other non-GET requests seen while the recorded steps ran. A proposal
-    #: with any is refused, and so are its admission and its run (a binding
-    #: proposed before that rule existed may still list some).
+    #: Other non-GET requests seen while the recorded steps ran that no
+    #: declared write accounts for. A binding with any is refused at
+    #: admission and at run time (bindings proposed before ``writes``
+    #: existed may list some).
     other_writes_seen: list[str] = Field(default_factory=list)
+    #: Every other write seen while the replaced steps ran, in recorded
+    #: order, each with its role (WebFormWrite). The save comes after them.
+    writes: list[WebFormWrite] = Field(default_factory=list)
     #: On-screen checks of folded steps that caused no request (screen-only,
     #: not repeated), listed for the person admitting the step.
     screen_only_checks: list[str] = Field(default_factory=list)
@@ -977,6 +1193,19 @@ class Predicate(BaseModel):
         description="wait_until bound: how long the replayer polls this "
         "predicate before HALTing (fail-safe; never proceed-anyway).",
     )
+    #: TEXT_PRESENT: ``text`` must be read exactly once (see
+    #: ``Postcondition.exact``), never by the fuzzy OCR match.
+    exact: bool = False
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Leave ``exact`` out when unset, so every existing predicate (and its
+        contract digest) serializes exactly as before."""
+
+        data: dict[str, Any] = handler(self)
+        if not self.exact:
+            data.pop("exact", None)
+        return data
 
 
 class Guard(BaseModel):
@@ -1031,6 +1260,80 @@ def predicate_contract_sha256(predicate: Optional[Predicate]) -> str:
         "utf-8"
     )
     return hashlib.sha256(canonical).hexdigest()
+
+
+class HaltCleanupQualification(BaseModel):
+    """The test-copy evidence that a halt cleanup reaches the start screen."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    test_copy: str = Field(min_length=1)
+    #: Halt points tried (one fresh session each) and how many reached the
+    #: start screen after the cleanup.
+    halt_points: int = Field(ge=1)
+    passed: int = Field(ge=0)
+    qualified_at: str
+    #: SHA-256 of the cleanup it qualified (steps and start state).
+    cleanup_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class HaltCleanup(BaseModel):
+    """What a stopped item does to the app's screen before the next item.
+
+    A halted item can leave a dialog open, a form half filled or another page
+    in front. Before the next item runs on the same session, the cleanup's
+    ``steps`` run (each one only when its control is on screen), and then the
+    ``start_state`` must hold. If it doesn't, the session is dirty and takes
+    no more items (docs/HALT_CLEANUP.md).
+
+    Navigation only: no step may save, declare an effect, call an API or type
+    text. A record the item saved is rollback's job, not this one's.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Close, cancel and discard actions, in order. Each click is guarded to
+    #: run only when its control is on screen.
+    steps: list[Step] = Field(default_factory=list)
+    #: The screen each item starts on.
+    start_state: Predicate
+    #: ``recording``: derived from the recordings. ``declared``: written by an
+    #: author.
+    source: Literal["recording", "declared"] = "recording"
+    qualification: Optional[HaltCleanupQualification] = None
+
+    @model_validator(mode="after")
+    def _navigation_only(self) -> "HaltCleanup":
+        allowed = {
+            ActionKind.CLICK,
+            ActionKind.DOUBLE_CLICK,
+            ActionKind.KEY,
+            ActionKind.HOTKEY,
+            ActionKind.WAIT,
+            ActionKind.SCROLL,
+        }
+        for step in self.steps:
+            if step.action not in allowed:
+                raise ValueError(
+                    f"cleanup step {step.id!r} {step.action.value}s; a cleanup only "
+                    "closes, cancels, discards and navigates"
+                )
+            if (
+                step.effects
+                or step.api_binding is not None
+                or step.risk == "irreversible"
+            ):
+                raise ValueError(
+                    f"cleanup step {step.id!r} could save; a cleanup only navigates"
+                )
+            if step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK) and (
+                step.guard is None or step.guard.on_unmet != "skip"
+            ):
+                raise ValueError(
+                    f"cleanup click {step.id!r} needs a guard that skips it when "
+                    "its control isn't on screen"
+                )
+        return self
 
 
 class Interstitial(BaseModel):
@@ -2147,6 +2450,17 @@ class UndoStep(BaseModel):
     #: Set by ``undo propose``: verified on a test copy, waiting for (or
     #: holding) a person's one-time approval. None for a declared undo.
     proposal: Optional[UndoProposal] = None
+    #: What the compensation does, least destructive first: ``discard_draft``
+    #: (drops an unsaved draft), ``restore`` (writes old values back),
+    #: ``void`` (marks the record void, cancelled or inactive; it stays),
+    #: ``delete`` (removes it). None is treated as ``delete``. A rollback runs
+    #: a ``delete`` only when the deployment allows hard deletes
+    #: (``rollback.allow_delete``). See docs/ROLLBACK.md.
+    kind: Optional[Literal["discard_draft", "restore", "void", "delete"]] = None
+    #: ``void`` only: the tables or collections where the voided record stays.
+    #: A rollback accepts the run's own record there, by its id, and nothing
+    #: else.
+    retains: list[str] = Field(default_factory=list)
 
     @property
     def awaiting_approval(self) -> bool:
@@ -2157,9 +2471,11 @@ class UndoStep(BaseModel):
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         """Keep declared undos byte-identical (the bundle digest covers them)."""
         data: dict[str, Any] = handler(self)
-        for name in ("locate", "restore", "proposal"):
+        for name in ("locate", "restore", "proposal", "kind"):
             if getattr(self, name) is None:
                 data.pop(name, None)
+        if not self.retains:
+            data.pop("retains", None)
         return data
 
     @model_validator(mode="after")
@@ -2688,6 +3004,31 @@ class BundleProvenance(BaseModel):
     )
 
 
+class RegistryOrigin(BaseModel):
+    """Where a bundle pulled from the skills registry came from.
+
+    Part of the workflow content, so the content digest covers it: a bundle
+    that says it came from the registry runs only with a certification bound
+    to its own digest and environment (``openadapt_flow.skills``). Removing
+    it makes a different, unverified local bundle.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=3, max_length=200)
+    version: Optional[str] = Field(default=None, max_length=64)
+    index_url: str = Field(max_length=2048)
+    #: SHA-256 of the signed entry statement (``registry.entry_statement``).
+    entry_sha256: str = Field(pattern="^[a-f0-9]{64}$")
+    #: Who attested the index: the release workflow's certificate identity,
+    #: ``test:...`` for the local test signer, or None for a local index with
+    #: no attestation.
+    signed_by: Optional[str] = Field(default=None, max_length=256)
+    #: The bundle's content digest as the registry published it.
+    published_digest: str = Field(pattern="^[a-f0-9]{64}$")
+    pulled_at: str
+
+
 class BundleManifest(BaseModel):
     """Integrity + provenance manifest for a compiled bundle (schema v2).
 
@@ -2971,6 +3312,8 @@ class Workflow(BaseModel):
     # review, canary or admission pins. None for every other bundle, and
     # omitted from its serialized bytes.
     origin: Optional[Literal["agent_run"]] = None
+    #: Set by ``openadapt-flow pull``: the registry entry this bundle came from.
+    registry: Optional[RegistryOrigin] = None
     # Narration that suggested a certified guard, keyed by the program state
     # (or step) id the guard sits on. Explanation only: the runtime never reads
     # it. Empty for every bundle without narrated guards, and then omitted
@@ -2981,6 +3324,9 @@ class Workflow(BaseModel):
     # content digest when present; omitted from the serialized bytes when
     # empty, so a bundle that declares none keeps its digest.
     undo_steps: list[UndoStep] = Field(default_factory=list)
+    #: What a halted item does to the screen before the next item on the same
+    #: session (docs/HALT_CLEANUP.md). None (and omitted) otherwise.
+    halt_cleanup: Optional[HaltCleanup] = None
     # -- schema v2 integrity + provenance manifest --------------------------
     # Sealed on ``save`` (per-asset hashes, a whole-bundle content digest, the
     # compiler version, and -- for a certified bundle -- the certifying policy +
@@ -3025,10 +3371,14 @@ class Workflow(BaseModel):
             data.pop("surfaces", None)
         if self.origin is None:
             data.pop("origin", None)
+        if self.registry is None:
+            data.pop("registry", None)
         if not self.guard_sources:
             data.pop("guard_sources", None)
         if not self.undo_steps:
             data.pop("undo_steps", None)
+        if self.halt_cleanup is None:
+            data.pop("halt_cleanup", None)
         return data
 
     @model_validator(mode="after")
@@ -3162,13 +3512,16 @@ class Workflow(BaseModel):
             _seal_template_assets(bundle, key, self._decrypted_templates)
             path = encrypted_path
         else:
-            plaintext_path.write_text(serialized)
+            # Bytes, not write_text: the platform default codec (cp1252 on
+            # Windows) cannot encode every character OCR records, and text
+            # mode would turn newlines into CRLF and change the bundle digest.
+            plaintext_path.write_bytes(serialized.encode("utf-8"))
             if encrypted_path.exists():
                 encrypted_path.unlink()
             path = plaintext_path
         if self.manifest is not None:
-            (bundle / "manifest.json").write_text(
-                self.manifest.model_dump_json(indent=2)
+            (bundle / "manifest.json").write_bytes(
+                self.manifest.model_dump_json(indent=2).encode("utf-8")
             )
         return path
 
@@ -3275,7 +3628,7 @@ class Workflow(BaseModel):
             )
             raw = json.loads(decrypted)
         else:
-            raw = json.loads(plaintext_path.read_text())
+            raw = json.loads(plaintext_path.read_bytes())
         raw = _bv.migrate_bundle_dict(raw)
         # A manifest may be embedded in workflow.json OR sit in a sidecar; the
         # embedded one wins, else the sidecar, else it is computed fresh.
@@ -3336,6 +3689,13 @@ class Workflow(BaseModel):
             report = _bv.validate_workflow(wf)
             report.raise_if(categories=("structure",))
 
+        if not bundle_encrypted and wf.encrypted:
+            # The flag is authoritative only with an encrypted envelope on
+            # disk: a plaintext copy (for example a decrypted upload) that
+            # still says encrypted is plaintext, and loads as plaintext.
+            wf.encrypted = False
+            if wf.manifest is not None:
+                wf.manifest = wf.manifest.model_copy(update={"encrypted": False})
         return wf
 
     def stamp_certification(
@@ -3415,6 +3775,9 @@ class Resolution(BaseModel):
     elapsed_ms: float
     structural_handle: Optional[StructuralHandle] = None
     visual_evidence: Optional["VisualResolutionEvidence"] = None
+    # "local" when the grounder rung was resolved by the in-process local
+    # grounding model, which sends nothing off the box. Absent otherwise.
+    grounder_model: Optional[Literal["local"]] = None
     resolution_evidence_regions: tuple[Region, ...] = Field(
         default_factory=tuple,
         exclude=True,
@@ -3430,6 +3793,8 @@ class Resolution(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.visual_evidence is None:
             data.pop("visual_evidence", None)
+        if self.grounder_model is None:
+            data.pop("grounder_model", None)
         return data
 
 
@@ -3730,6 +4095,7 @@ class IdentityCheck(BaseModel):
         "vlm",
         "signal_quorum",
         "hover",
+        "form",
     ] = "context"
     coverage: float = 0.0
     expected: str = ""
@@ -4238,6 +4604,7 @@ class SafetyRefusalEvidence(BaseModel):
     ]
     code: Literal[
         "target_ambiguous",
+        "target_not_actionable",
         "identity_conflict",
         "identity_unverifiable",
         "actuation_observation_changed",
@@ -4979,6 +5346,80 @@ def managed_result_loss_idempotency_sha256(idempotency_key: str) -> str:
     ).hexdigest()
 
 
+class RollbackStepRecord(BaseModel):
+    """What the rollback did about one change in the ledger."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    step_id: str
+    position: int = Field(ge=1)
+    undo_id: Optional[str] = None
+    #: ``compensated``: the compensation ran and its own check confirmed it.
+    #: ``not_needed``: a fresh read showed the step's change isn't there.
+    #: ``refused``: nothing ran for this step (no approved compensation, an
+    #: uncertain write a fresh read couldn't settle, a value that couldn't
+    #: be found). ``failed``: the compensation ran and wasn't confirmed.
+    decision: Literal["compensated", "not_needed", "refused", "failed"]
+    reason: str
+    #: For an uncertain or unconfirmed write, what a fresh read showed.
+    fresh_read: Optional[Literal["present", "absent", "unknown"]] = None
+    undo_outcome: Optional[str] = None
+
+
+class RollbackRecord(BaseModel):
+    """A compensating rollback after a stop (docs/ROLLBACK.md).
+
+    PHI-free: table and column names, counts and digests. The rows a person
+    needs to repair the record are in ``diff_path`` (owner-only).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: ``rolled_back``: compensations ran and the store matches the read from
+    #: before the run. ``nothing_landed``: the store already matched it after
+    #: the stop. ``not_rolled_back``: it doesn't match; a person repairs it
+    #: from the diff. ``unarmed``: the store couldn't be read before the run,
+    #: so no rollback was attempted.
+    status: Literal["rolled_back", "nothing_landed", "not_rolled_back", "unarmed"]
+    reason: str
+    #: ``database``: every table but ``allow_tables``. ``collection``: one
+    #: collection read through the effect verifier.
+    scope: Literal["database", "collection"]
+    allow_tables: list[str] = Field(default_factory=list)
+    before_sha256: Optional[str] = None
+    after_stop_sha256: Optional[str] = None
+    final_sha256: Optional[str] = None
+    #: What the stop left, against the read from before the run.
+    after_stop_diff: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    #: What still differs at the end, or what the read that stopped the
+    #: rollback showed (empty when rolled back).
+    remaining_diff: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    #: Rows that stopped the rollback: changed and not positively the run's.
+    conflicts: int = 0
+    #: Voided records left in place by a ``void`` compensation.
+    retained_rows: int = 0
+    #: The app's bookkeeping profile the reads applied (``rollback.profile``),
+    #: as ``app/version``.
+    profile_id: Optional[str] = None
+    #: The verifier's own whole-database diff (``openadapt_flow.verifier``)
+    #: agreed with the final check. None when it wasn't available or didn't
+    #: apply (a collection read, attribution, or voided rows).
+    cross_checked: Optional[bool] = None
+    #: Run-directory-relative path of the full diff, when anything remains.
+    diff_path: Optional[str] = None
+    #: Rows another user wrote while the rollback ran, as the stop left them
+    #: (their write itself may be gone with the row): an owner-only file
+    #: beside ``diff_path``.
+    late_diff_path: Optional[str] = None
+    steps: list[RollbackStepRecord] = Field(default_factory=list)
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+
+    @property
+    def store_proven_unchanged(self) -> bool:
+        return self.status in ("rolled_back", "nothing_landed")
+
+
 class ManagedResultLossEvidence(BaseModel):
     """Sealed PHI-free evidence that a managed child result was lost.
 
@@ -5407,6 +5848,14 @@ class RunReport(BaseModel):
             "See docs/AFTER_A_STOP.md."
         ),
     )
+    rollback: Optional[RollbackRecord] = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description=(
+            "The compensating rollback after a stop, when the deployment "
+            "turned it on. See docs/ROLLBACK.md."
+        ),
+    )
     managed_result_loss: Optional[ManagedResultLossEvidence] = Field(
         default=None,
         exclude_if=lambda value: value is None,
@@ -5648,6 +6097,10 @@ class RunReport(BaseModel):
     render_scale: Optional[dict[str, Any]] = None
     heal_count: int = 0
     model_calls: int = 0
+    # Steps resolved by the in-process local grounding model. Counted apart
+    # from ``model_calls`` because they make no outbound call and cost
+    # nothing per query; written only when nonzero.
+    local_model_calls: int = Field(default=0, ge=0, exclude_if=lambda value: value == 0)
     external_network_calls: Literal["none", "observed", "unknown"] = "unknown"
     est_model_cost_usd: float = 0.0
     total_ms: float = 0.0

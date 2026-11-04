@@ -1,0 +1,62 @@
+[
+ {
+  "address.city": "Lowell",
+  "address.line": "9 Elm Row",
+  "address.postalCode": "01852",
+  "address.state": "MA",
+  "birthDate": "1962-04-18",
+  "gender": "female",
+  "id": "b4edf81c-f6ef-40aa-afd9-34e91d5705f5",
+  "meta.versionId": "37734fcc-9135-4617-b40c-286d4a7a92f5",
+  "name.family": "Paley",
+  "name.given": "Imogen",
+  "resourceType": "Patient",
+  "telecom.system": "phone",
+  "telecom.value": "978-555-0101"
+ },
+ {
+  "address.city": "Worcester",
+  "address.line": "41 Quarry Lane",
+  "address.postalCode": "01609",
+  "address.state": "MA",
+  "birthDate": "1979-11-23",
+  "gender": "female",
+  "id": "ac7dca35-f69d-4811-a0ef-30c383af811e",
+  "meta.versionId": "b5057f11-61fa-4d6c-991a-055ce774c573",
+  "name.family": "Achterberg",
+  "name.given": "Rowan",
+  "resourceType": "Patient",
+  "telecom.system": "phone",
+  "telecom.value": "508-555-0147"
+ },
+ {
+  "address.city": "Gloucester",
+  "address.line": "7 Harbor View Rd",
+  "address.postalCode": "01930",
+  "address.state": "MA",
+  "birthDate": "1991-02-05",
+  "gender": "male",
+  "id": "0f1af51f-0eeb-4621-bdcf-d3274208e5c9",
+  "meta.versionId": "d0295f7c-9461-4673-a2e8-323e7410d512",
+  "name.family": "Okonkwo-Reyes",
+  "name.given": "Tobias",
+  "resourceType": "Patient",
+  "telecom.system": "phone",
+  "telecom.value": "978-555-0163"
+ },
+ {
+  "address.city": "Brookline",
+  "address.line": "1200 Beacon St Apt 3",
+  "address.postalCode": "02446",
+  "address.state": "MA",
+  "birthDate": "2004-08-30",
+  "gender": "female",
+  "id": "68c6b3c0-742c-4c12-97ed-ed74436d71e5",
+  "meta.versionId": "f0939f2a-0364-46fe-8d89-9c288957d026",
+  "name.family": "Lindqvist",
+  "name.given": "Mei",
+  "resourceType": "Patient",
+  "telecom.system": "phone",
+  "telecom.value": "617-555-0188"
+ }
+]

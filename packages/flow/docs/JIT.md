@@ -11,7 +11,10 @@ the system of record before the run reports `VERIFIED`.
 
 ```python
 from openadapt_flow.jit import (
-    TaskSignature, WebApp, compile_agent, load_customer_model_key,
+    TaskSignature,
+    WebApp,
+    compile_agent,
+    load_customer_model_key,
 )
 from openadapt_flow.runtime.effects import RestRecordVerifier
 
@@ -29,11 +32,13 @@ jit = compile_agent(
     model_key=load_customer_model_key("anthropic"),  # your key, not OpenAdapt's
 )
 
-first = jit.run(note="Follow up in two weeks")   # status: needs_human_admit (DRAFT)
-confirmed = jit.confirm_params(principal_id="dana@clinic.example",
-                               accept_params=["note"], confirm="ok")
-jit.review(principal_id="dana@clinic.example", reviewed_steps=confirmed["steps"],
-           confirm="ok")
+first = jit.run(note="Follow up in two weeks")  # status: needs_human_admit (DRAFT)
+confirmed = jit.confirm_params(
+    principal_id="dana@clinic.example", accept_params=["note"], confirm="ok"
+)
+jit.review(
+    principal_id="dana@clinic.example", reviewed_steps=confirmed["steps"], confirm="ok"
+)
 jit.canary(principal_id="dana@clinic.example", note="Canary test note")
 jit.admit(principal_id="dana@clinic.example", confirm="ok")  # at a terminal
 # Headless (CI): jit.admit_with_key(principal_from_key(load_encrypted_key(...), key_dir))
@@ -182,8 +187,14 @@ To keep the loop in your own code, leave out the agent and use
 `recording()` as a context manager:
 
 ```python
-jit = compile_agent(task=..., app=..., verifier=..., policy="clinical-write",
-                    dialect="anthropic", model_key=load_customer_model_key("anthropic"))
+jit = compile_agent(
+    task=...,
+    app=...,
+    verifier=...,
+    policy="clinical-write",
+    dialect="anthropic",
+    model_key=load_customer_model_key("anthropic"),
+)
 with jit.recording(note="Follow up in two weeks") as rec:
     my_cua_loop(rec.request.instruction, rec.computer.execute)
 print(rec.result.status)  # needs_human_admit, unsupported, or capture_failed
@@ -281,7 +292,13 @@ input identifies a record; the person confirming names it:
 parameter that the mined record check already selects the saved record by.
 That check then counts the records that carry the run's value and refuses
 more than one. Name it only when the app keeps that value unique, such as a
-claim number. `status()` lists the keys the program carries.
+claim number. When a record is unique only by several values together, name
+them all: `idempotency_key=["lname", "fname", "DOB"]`, or repeat
+`--idempotency-key`. The check then refuses when more than one record carries
+all of them, counting records that were already there. A one-item list,
+`idempotency_key=["mrn"]`, also counts records that were already there; the
+plain string form counts only the records the run added. `status()` lists the
+keys the program carries.
 
 ## A declared scope for the agent's run
 
@@ -290,11 +307,19 @@ it. Pass `teach_scope=` to `compile_agent` to fix what the recording run may
 do before the agent reads a page: the app origins, the record, the fields and
 exact values the save may write, and any other text it may type.
 
+The example uses MockMed's write adapter, a test fixture in the source
+checkout (`packages/flow/tests/_teach_scope.py`); write the same few lines for
+your app.
+
 ```python
-from openadapt_flow.mockmed.teach_scope import encounter_scope
+from tests._teach_scope import encounter_scope
 
 jit = compile_agent(
-    agent, task=task, app=app, verifier=verifier, policy="clinical-write",
+    agent,
+    task=task,
+    app=app,
+    verifier=verifier,
+    policy="clinical-write",
     teach_scope=lambda params: encounter_scope(
         base_url, patient_id="p1", note=params["note"]
     ),

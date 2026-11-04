@@ -77,6 +77,9 @@ jobs:
             --offline --include-fragments --no-progress
             ${{ steps.targets.outputs.paths }}
           jobSummary: false
+          # A pull request whose changed Markdown holds no links has nothing
+          # to check; that is not a failure.
+          failIfEmpty: false
 
   external:
     name: External links

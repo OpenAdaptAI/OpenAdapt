@@ -32,7 +32,15 @@ Qualify adds what a campaign needs on top:
   deployment ``surface`` it will run on in production);
 - ``save_step``: the irreversible step, or ``auto`` to detect it;
 - ``inputs``: the test inputs for the cases;
-- ``campaign``: trials per case, cases, and the default certification policy.
+- ``campaign``: trials per case, cases, and the default certification policy;
+- ``business_rules``: cases for a rule the application itself enforces (an
+  existing record the save must not duplicate, for example). Each names a
+  ``seed`` step that creates the conflicting record after the reset, the
+  run ``params`` that trigger the rule, the required outcome
+  (``HALTED_BEFORE_EFFECT``) and the read-back (``no_mutation``: no new or
+  changed record). Certification runs each one on every trial, on the
+  certified bundle, and is refused unless all pass. Their case ids are
+  ``rule-<id>``.
 
 ``${NAME}`` in any string is replaced by the environment variable ``NAME``
 when the file is loaded (``${NAME:-default}`` gives a default); an unset
@@ -115,8 +123,8 @@ class ResetConfig(BaseModel):
     @model_validator(mode="after")
     def _one(self) -> "ResetConfig":
         if sum(x is not None for x in (self.command, self.http, self.python)) != 1:
-            raise ValueError("app.reset needs exactly one of command, http, python")
-        _check_hook(self.python, "app.reset.python")
+            raise ValueError("needs exactly one of command, http, python")
+        _check_hook(self.python, "python")
         return self
 
 
@@ -204,6 +212,86 @@ class SystemOfRecordConfig(BaseModel):
 
 FieldValue = Union[str, ValueExpr]
 
+#: REST query parameters that page or order a read rather than filter it.
+_REST_PAGING = {
+    "_limit",
+    "limit",
+    "_offset",
+    "offset",
+    "page",
+    "_page",
+    "per_page",
+    "page_size",
+    "pagesize",
+    "_count",
+    "count",
+    "_sort",
+    "sort",
+    "order",
+}
+#: Of those, the ones that cap how many records one response returns.
+_REST_LIMITS = {"_limit", "limit", "per_page", "page_size", "pagesize", "_count"}
+_PLACEHOLDER = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
+_SQL_BINDS = re.compile(r"(?<![:\w]):([A-Za-z_]\w*)|%\(([A-Za-z_]\w*)\)s")
+_SQL_LIMIT = re.compile(r"\b(LIMIT|TOP|FETCH\s+FIRST|ROWNUM)\b", re.IGNORECASE)
+
+
+def composite_key_read_problems(fields: list[str], verifier: Any) -> list[str]:
+    """Why the verifier's read may miss a record that carries the key.
+
+    A composite duplicate key counts records that were already there, so the
+    read must contain every record that could carry it. That holds when the
+    read is filtered by key fields only and is complete. This refuses a REST
+    path or SQL query that filters on another field (a pre-existing chart
+    with another email would be dropped), and a row limit without a way to
+    read every page (REST ``records_total_path`` or ``records_next_path``;
+    SQL has none, so no ``LIMIT``). A literal condition inside a SQL
+    ``WHERE`` cannot be told apart here and is the author's responsibility;
+    other verifier kinds are not checked.
+    """
+
+    from urllib.parse import parse_qsl, urlsplit
+
+    keys = set(fields)
+    problems: list[str] = []
+    kind = getattr(verifier, "kind", None)
+    if kind == "rest":
+        parts = urlsplit(verifier.records_path)
+        names = [name for name, _ in parse_qsl(parts.query, keep_blank_values=True)]
+        filters = sorted(
+            {n for n in names if n not in keys and n.lower() not in _REST_PAGING}
+            | {p for p in _PLACEHOLDER.findall(parts.path) if p not in keys}
+        )
+        if filters:
+            problems.append(
+                "a list record.duplicate_key needs a read filtered by key fields "
+                f"only; verifier.records_path also filters by {filters}, which "
+                "drops an existing record with the same key"
+            )
+        limited = sorted(n for n in names if n.lower() in _REST_LIMITS)
+        if limited and not (verifier.records_total_path or verifier.records_next_path):
+            problems.append(
+                "a list record.duplicate_key needs the whole read; "
+                f"verifier.records_path sets {limited} without "
+                "records_total_path or records_next_path"
+            )
+    elif kind == "sql" and verifier.sql_query:
+        binds = {a or b for a, b in _SQL_BINDS.findall(verifier.sql_query)}
+        binds |= set(verifier.sql_query_params)
+        filters = sorted(binds - keys)
+        if filters:
+            problems.append(
+                "a list record.duplicate_key needs a read filtered by key fields "
+                f"only; verifier.sql_query also filters by {filters}, which "
+                "drops an existing record with the same key"
+            )
+        if _SQL_LIMIT.search(verifier.sql_query):
+            problems.append(
+                "a list record.duplicate_key needs the whole read; "
+                "verifier.sql_query limits its rows"
+            )
+    return problems
+
 
 class RecordConfig(BaseModel):
     """What the save writes, mapped onto the run's inputs.
@@ -219,8 +307,12 @@ class RecordConfig(BaseModel):
     #: Record fields whose values select the written record.
     match: list[str] = Field(default_factory=list)
     fields: dict[str, FieldValue] = Field(default_factory=dict)
-    #: The record field that must be unique per write (idempotency key).
-    duplicate_key: Optional[str] = None
+    #: The record field that must be unique per write (idempotency key), or a
+    #: list of fields that are unique together, such as OpenEMR's
+    #: ``[lname, fname, DOB]``. A list (even of one field) is a composite key:
+    #: it also counts records that were already there, so the verifier's read
+    #: must cover the key (see :func:`composite_key_read_problems`).
+    duplicate_key: Optional[Union[str, list[str]]] = None
     expected_count: int = Field(default=1, ge=1)
     timeout_s: float = Field(default=5.0, gt=0)
     #: Also check that the save added exactly this record and nothing else:
@@ -235,6 +327,37 @@ class RecordConfig(BaseModel):
     #: The other surfaces are read for the frame (writes elsewhere) and side
     #: records. Unset: the verifier's single read.
     surface: Optional[str] = Field(default=None, pattern=r"^[A-Za-z0-9_.-]{1,64}$")
+
+    @field_validator("duplicate_key")
+    @classmethod
+    def _duplicate_key_shape(
+        cls, value: Optional[Union[str, list[str]]]
+    ) -> Optional[Union[str, list[str]]]:
+        if not isinstance(value, list):
+            return value
+        if not value or any(not name.strip() for name in value):
+            raise ValueError("record.duplicate_key must name at least one field")
+        if len(set(value)) != len(value):
+            raise ValueError("record.duplicate_key names a field twice")
+        return list(value)
+
+    @model_validator(mode="after")
+    def _composite_key_count(self) -> "RecordConfig":
+        if isinstance(self.duplicate_key, list) and self.expected_count > 1:
+            raise ValueError(
+                "a list record.duplicate_key identifies one record; it cannot "
+                f"be combined with expected_count {self.expected_count}"
+            )
+        return self
+
+    @property
+    def duplicate_key_fields(self) -> list[str]:
+        """The duplicate key's fields (empty without one)."""
+        if self.duplicate_key is None:
+            return []
+        if isinstance(self.duplicate_key, str):
+            return [self.duplicate_key]
+        return list(self.duplicate_key)
 
     def expr(self, field: str) -> ValueExpr:
         value = self.fields[field]
@@ -264,6 +387,59 @@ class InputsConfig(BaseModel):
         return self
 
 
+RULE_CASE_PREFIX = "rule-"
+
+
+class BusinessRuleCase(BaseModel):
+    """A rule the application enforces, which the workflow must not break.
+
+    The fault cases inject faults into the run. This case injects nothing:
+    after the reset, ``seed`` creates a record the save would conflict with
+    (for a registration, an existing record for the same person), and the run
+    uses ``params`` that trigger the application's rule. The workflow must
+    stop before the save (``HALTED_BEFORE_EFFECT``), and the read-back must
+    show no new or changed record (``no_mutation``). A bundle that clicks
+    through the application's warning saves a record and fails the case.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: The case is ``rule-<id>``.
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,62}$")
+    description: str = Field(min_length=1, max_length=512)
+    #: Creates the conflicting record, after the reset and before the run.
+    seed: ResetConfig
+    #: Run inputs that trigger the rule. Values given here replace the
+    #: campaign's inputs; the rest are the campaign's.
+    params: dict[str, str] = Field(min_length=1)
+    #: The only outcome a rule case accepts: halted before the save.
+    expect: Literal["HALTED_BEFORE_EFFECT"]
+    #: The only read-back a rule case accepts: no new or changed record.
+    readback: Literal["no_mutation"] = "no_mutation"
+    #: Where the run must stop. ``empty_result_guard`` (the default): at a
+    #: step that checks a dialog's empty search result the compiler mined
+    #: (the opener's check or the Confirm click's guard). ``before_save``: at
+    #: any step before the save, with ``halt_reason`` in the halt. Or a step
+    #: id. A halt anywhere else fails the trial: the run did not stop for the
+    #: application's rule.
+    halt_at: str = Field(
+        default="empty_result_guard",
+        pattern=r"^(empty_result_guard|before_save|[A-Za-z0-9_.-]{1,128})$",
+    )
+    #: Text the halt reason must contain (required with ``before_save``).
+    halt_reason: Optional[str] = Field(default=None, min_length=1, max_length=256)
+
+    @model_validator(mode="after")
+    def _halt(self) -> "BusinessRuleCase":
+        if self.halt_at == "before_save" and not self.halt_reason:
+            raise ValueError("halt_at: before_save needs the halt_reason it names")
+        return self
+
+    @property
+    def case_id(self) -> str:
+        return f"{RULE_CASE_PREFIX}{self.id}"
+
+
 class CampaignConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -276,7 +452,12 @@ class CampaignConfig(BaseModel):
     @field_validator("cases")
     @classmethod
     def _cases(cls, value: list[str]) -> list[str]:
-        unknown = [case for case in value if case not in CASE_IDS]
+        # ``rule-<id>`` names a business-rule case; VerifyConfig checks it.
+        unknown = [
+            case
+            for case in value
+            if case not in CASE_IDS and not case.startswith(RULE_CASE_PREFIX)
+        ]
         if unknown:
             raise ValueError(f"unknown case(s) {unknown}; known: {list(CASE_IDS)}")
         if not value:
@@ -305,6 +486,7 @@ class VerifyConfig(BaseModel):
     save_step: str = "auto"
     inputs: InputsConfig = Field(default_factory=InputsConfig)
     campaign: CampaignConfig = Field(default_factory=CampaignConfig)
+    business_rules: list[BusinessRuleCase] = Field(default_factory=list)
     #: Where relative paths in the file resolve (set by the loader).
     base_dir: Optional[str] = Field(default=None, exclude=True)
 
@@ -371,13 +553,36 @@ class VerifyConfig(BaseModel):
             )
         if record.fields and not record.match:
             raise ValueError("record.match must name the fields that select the record")
-        if (
-            record.duplicate_key is not None
-            and record.fields
-            and record.duplicate_key not in record.fields
+        if record.fields and any(
+            name not in record.fields for name in record.duplicate_key_fields
         ):
-            raise ValueError("record.duplicate_key must be one of record.fields")
+            raise ValueError("record.duplicate_key must name fields in record.fields")
+        if isinstance(record.duplicate_key, list):
+            problems = composite_key_read_problems(
+                record.duplicate_key, self.verifier.verifier
+            )
+            if problems:
+                raise ValueError("; ".join(problems))
         return self
+
+    @model_validator(mode="after")
+    def _business_rules(self) -> "VerifyConfig":
+        ids = [rule.case_id for rule in self.business_rules]
+        if len(ids) != len(set(ids)):
+            raise ValueError("business_rules ids must be unique")
+        unknown = [
+            case
+            for case in self.campaign.cases
+            if case.startswith(RULE_CASE_PREFIX) and case not in ids
+        ]
+        if unknown:
+            raise ValueError(f"campaign.cases names no business rule: {unknown}")
+        return self
+
+    def all_case_ids(self) -> list[str]:
+        """The six cases, then every business-rule case."""
+
+        return [*CASE_IDS, *(rule.case_id for rule in self.business_rules)]
 
     def resolve_path(self, value: str) -> Path:
         path = Path(value).expanduser()
@@ -472,7 +677,9 @@ def verify_config_schema() -> dict[str, Any]:
 
 __all__ = [
     "CASE_IDS",
+    "RULE_CASE_PREFIX",
     "AppConfig",
+    "BusinessRuleCase",
     "CampaignConfig",
     "InputsConfig",
     "QualifyConfigError",

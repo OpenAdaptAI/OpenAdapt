@@ -166,6 +166,7 @@ def _has_identity_evidence(step: Step) -> bool:
             or anchor.structured_identity
             or anchor.identity_template
             or anchor.identifier_crop
+            or anchor.form_identity
         )
     )
 
@@ -350,7 +351,10 @@ def write_compile_notes(bundle_dir: Path, notes: list[dict[str, Any]]) -> None:
                 "note": (
                     "Changes the default compiler passes made to demonstrated "
                     "gestures. Each replaces a gesture that asserted nothing "
-                    "with an equivalent one that carries its own check."
+                    "with an equivalent one that carries its own check, or "
+                    "adds a check the demonstration showed (empty_result_guard). "
+                    "An entry with a warning is a check the compiler could not "
+                    "add."
                 ),
                 "changes": notes,
             },
@@ -360,9 +364,24 @@ def write_compile_notes(bundle_dir: Path, notes: list[dict[str, Any]]) -> None:
     )
 
 
+def read_compile_notes(bundle_dir: Path) -> list[dict[str, Any]]:
+    """The entries of a bundle's ``compile_notes.json`` (none when absent)."""
+
+    import json
+
+    from openadapt_flow import sealed_set
+
+    path = Path(bundle_dir) / COMPILE_NOTES_FILE
+    if not sealed_set.is_file(path):
+        return []
+    changes = json.loads(sealed_set.read_text(path)).get("changes")
+    return [note for note in changes or [] if isinstance(note, dict)]
+
+
 __all__ = [
     "COMPILE_NOTES_FILE",
     "apply_fixup_passes",
+    "read_compile_notes",
     "is_select_all",
     "region_unchanged",
     "write_compile_notes",

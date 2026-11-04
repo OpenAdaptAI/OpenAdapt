@@ -1,0 +1,954 @@
+[
+ {
+  "resourceType": "SearchParameter",
+  "id": "0a48efc6-863c-457b-af46-3a0e26e202f1",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/clinical-patient",
+  "version": "4.0.1",
+  "name": "patient",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Care)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/patientcare/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [AllergyIntolerance](allergyintolerance.html): Who the sensitivity is for\r\n* [CarePlan](careplan.html): Who the care plan is for\r\n* [CareTeam](careteam.html): Who care team is for\r\n* [ClinicalImpression](clinicalimpression.html): Patient or group assessed\r\n* [Composition](composition.html): Who and/or what the composition is about\r\n* [Condition](condition.html): Who has the condition?\r\n* [Consent](consent.html): Who the consent applies to\r\n* [DetectedIssue](detectedissue.html): Associated patient\r\n* [DeviceRequest](devicerequest.html): Individual the service is ordered for\r\n* [DeviceUseStatement](deviceusestatement.html): Search by subject - a patient\r\n* [DiagnosticReport](diagnosticreport.html): The subject of the report if a patient\r\n* [DocumentManifest](documentmanifest.html): The subject of the set of documents\r\n* [DocumentReference](documentreference.html): Who/what is the subject of the document\r\n* [Encounter](encounter.html): The patient or group present at the encounter\r\n* [EpisodeOfCare](episodeofcare.html): The patient who is the focus of this episode of care\r\n* [FamilyMemberHistory](familymemberhistory.html): The identity of a subject to list family member history items for\r\n* [Flag](flag.html): The identity of a subject to list flags for\r\n* [Goal](goal.html): Who this goal is intended for\r\n* [ImagingStudy](imagingstudy.html): Who the study is about\r\n* [Immunization](immunization.html): The patient for the vaccination record\r\n* [List](list.html): If all resources have the same subject\r\n* [MedicationAdministration](medicationadministration.html): The identity of a patient to list administrations  for\r\n* [MedicationDispense](medicationdispense.html): The identity of a patient to list dispenses  for\r\n* [MedicationRequest](medicationrequest.html): Returns prescriptions for a specific patient\r\n* [MedicationStatement](medicationstatement.html): Returns statements for a specific patient.\r\n* [NutritionOrder](nutritionorder.html): The identity of the person who requires the diet, formula or nutritional supplement\r\n* [Observation](observation.html): The subject that the observation is about (if patient)\r\n* [Procedure](procedure.html): Search by subject - a patient\r\n* [RiskAssessment](riskassessment.html): Who/what does assessment apply to?\r\n* [ServiceRequest](servicerequest.html): Search by subject - a patient\r\n* [SupplyDelivery](supplydelivery.html): Patient for whom the item is supplied\r\n* [VisionPrescription](visionprescription.html): The identity of a patient to list dispenses for\r\n",
+  "code": "patient",
+  "base": [
+   "AllergyIntolerance",
+   "CarePlan",
+   "CareTeam",
+   "ClinicalImpression",
+   "Composition",
+   "Condition",
+   "Consent",
+   "DetectedIssue",
+   "DeviceRequest",
+   "DeviceUseStatement",
+   "DiagnosticReport",
+   "DocumentManifest",
+   "DocumentReference",
+   "Encounter",
+   "EpisodeOfCare",
+   "FamilyMemberHistory",
+   "Flag",
+   "Goal",
+   "ImagingStudy",
+   "Immunization",
+   "List",
+   "MedicationAdministration",
+   "MedicationDispense",
+   "MedicationRequest",
+   "MedicationStatement",
+   "NutritionOrder",
+   "Observation",
+   "Procedure",
+   "RiskAssessment",
+   "ServiceRequest",
+   "SupplyDelivery",
+   "VisionPrescription"
+  ],
+  "type": "reference",
+  "expression": "AllergyIntolerance.patient | CarePlan.subject.where(resolve() is Patient) | CareTeam.subject.where(resolve() is Patient) | ClinicalImpression.subject.where(resolve() is Patient) | Composition.subject.where(resolve() is Patient) | Condition.subject.where(resolve() is Patient) | Consent.patient | DetectedIssue.patient | DeviceRequest.subject.where(resolve() is Patient) | DeviceUseStatement.subject | DiagnosticReport.subject.where(resolve() is Patient) | DocumentManifest.subject.where(resolve() is Patient) | DocumentReference.subject.where(resolve() is Patient) | Encounter.subject.where(resolve() is Patient) | EpisodeOfCare.patient | FamilyMemberHistory.patient | Flag.subject.where(resolve() is Patient) | Goal.subject.where(resolve() is Patient) | ImagingStudy.subject.where(resolve() is Patient) | Immunization.patient | List.subject.where(resolve() is Patient) | MedicationAdministration.subject.where(resolve() is Patient) | MedicationDispense.subject.where(resolve() is Patient) | MedicationRequest.subject.where(resolve() is Patient) | MedicationStatement.subject.where(resolve() is Patient) | NutritionOrder.patient | Observation.subject.where(resolve() is Patient) | Procedure.subject.where(resolve() is Patient) | RiskAssessment.subject.where(resolve() is Patient) | ServiceRequest.subject.where(resolve() is Patient) | SupplyDelivery.patient | VisionPrescription.patient",
+  "xpath": "f:AllergyIntolerance/f:patient | f:CarePlan/f:subject | f:CareTeam/f:subject | f:ClinicalImpression/f:subject | f:Composition/f:subject | f:Condition/f:subject | f:Consent/f:patient | f:DetectedIssue/f:patient | f:DeviceRequest/f:subject | f:DeviceUseStatement/f:subject | f:DiagnosticReport/f:subject | f:DocumentManifest/f:subject | f:DocumentReference/f:subject | f:Encounter/f:subject | f:EpisodeOfCare/f:patient | f:FamilyMemberHistory/f:patient | f:Flag/f:subject | f:Goal/f:subject | f:ImagingStudy/f:subject | f:Immunization/f:patient | f:List/f:subject | f:MedicationAdministration/f:subject | f:MedicationDispense/f:subject | f:MedicationRequest/f:subject | f:MedicationStatement/f:subject | f:NutritionOrder/f:patient | f:Observation/f:subject | f:Procedure/f:subject | f:RiskAssessment/f:subject | f:ServiceRequest/f:subject | f:SupplyDelivery/f:patient | f:VisionPrescription/f:patient",
+  "xpathUsage": "normal",
+  "target": [
+   "Patient"
+  ],
+  "meta": {
+   "versionId": "903d342e-7572-41fd-b7b6-d947ec49a2f3",
+   "lastUpdated": "2026-10-29T20:37:54.375Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "0effe67d-cf78-4d25-bd42-4353ac359c74",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/clinical-date",
+  "version": "4.0.1",
+  "name": "date",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Care)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/patientcare/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [AllergyIntolerance](allergyintolerance.html): Date first version of the resource instance was recorded\r\n* [CarePlan](careplan.html): Time period plan covers\r\n* [CareTeam](careteam.html): Time period team covers\r\n* [ClinicalImpression](clinicalimpression.html): When the assessment was documented\r\n* [Composition](composition.html): Composition editing time\r\n* [Consent](consent.html): When this Consent was created or indexed\r\n* [DiagnosticReport](diagnosticreport.html): The clinically relevant time of the report\r\n* [Encounter](encounter.html): A date within the period the Encounter lasted\r\n* [EpisodeOfCare](episodeofcare.html): The provided date search value falls within the episode of care's period\r\n* [FamilyMemberHistory](familymemberhistory.html): When history was recorded or last updated\r\n* [Flag](flag.html): Time period when flag is active\r\n* [Immunization](immunization.html): Vaccination  (non)-Administration Date\r\n* [List](list.html): When the list was prepared\r\n* [Observation](observation.html): Obtained date/time. If the obtained element is a period, a date that falls in the period\r\n* [Procedure](procedure.html): When the procedure was performed\r\n* [RiskAssessment](riskassessment.html): When was assessment made?\r\n* [SupplyRequest](supplyrequest.html): When the request was made\r\n",
+  "code": "date",
+  "base": [
+   "AllergyIntolerance",
+   "CarePlan",
+   "CareTeam",
+   "ClinicalImpression",
+   "Composition",
+   "Consent",
+   "DiagnosticReport",
+   "Encounter",
+   "EpisodeOfCare",
+   "FamilyMemberHistory",
+   "Flag",
+   "Immunization",
+   "List",
+   "Observation",
+   "Procedure",
+   "RiskAssessment",
+   "SupplyRequest"
+  ],
+  "type": "date",
+  "expression": "AllergyIntolerance.recordedDate | CarePlan.period | CareTeam.period | ClinicalImpression.date | Composition.date | Consent.dateTime | DiagnosticReport.effective | Encounter.period | EpisodeOfCare.period | FamilyMemberHistory.date | Flag.period | Immunization.occurrence | List.date | Observation.effective | Procedure.performed | (RiskAssessment.occurrence.ofType(dateTime)) | SupplyRequest.authoredOn",
+  "xpath": "f:AllergyIntolerance/f:recordedDate | f:CarePlan/f:period | f:CareTeam/f:period | f:ClinicalImpression/f:date | f:Composition/f:date | f:Consent/f:dateTime | f:DiagnosticReport/f:effectiveDateTime | f:DiagnosticReport/f:effectivePeriod | f:Encounter/f:period | f:EpisodeOfCare/f:period | f:FamilyMemberHistory/f:date | f:Flag/f:period | f:Immunization/f:occurrenceDateTime | f:Immunization/f:occurrenceString | f:List/f:date | f:Observation/f:effectiveDateTime | f:Observation/f:effectivePeriod | f:Observation/f:effectiveTiming | f:Observation/f:effectiveInstant | f:Procedure/f:performedDateTime | f:Procedure/f:performedPeriod | f:Procedure/f:performedString | f:Procedure/f:performedAge | f:Procedure/f:performedRange | f:RiskAssessment/f:occurrenceDateTime | f:SupplyRequest/f:authoredOn",
+  "xpathUsage": "normal",
+  "comparator": [
+   "eq",
+   "ne",
+   "gt",
+   "ge",
+   "lt",
+   "le",
+   "sa",
+   "eb",
+   "ap"
+  ],
+  "meta": {
+   "versionId": "be5ef60e-a1f4-4ca1-97ff-cd0e6273e20a",
+   "lastUpdated": "2026-10-29T20:37:54.371Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "5bb589e1-5737-4411-a4d0-0c6538254bb5",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/clinical-identifier",
+  "version": "4.0.1",
+  "name": "identifier",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Care)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/patientcare/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [AllergyIntolerance](allergyintolerance.html): External ids for this item\r\n* [CarePlan](careplan.html): External Ids for this plan\r\n* [CareTeam](careteam.html): External Ids for this team\r\n* [Composition](composition.html): Version-independent identifier for the Composition\r\n* [Condition](condition.html): A unique identifier of the condition record\r\n* [Consent](consent.html): Identifier for this record (external references)\r\n* [DetectedIssue](detectedissue.html): Unique id for the detected issue\r\n* [DeviceRequest](devicerequest.html): Business identifier for request/order\r\n* [DiagnosticReport](diagnosticreport.html): An identifier for the report\r\n* [DocumentManifest](documentmanifest.html): Unique Identifier for the set of documents\r\n* [DocumentReference](documentreference.html): Master Version Specific Identifier\r\n* [Encounter](encounter.html): Identifier(s) by which this encounter is known\r\n* [EpisodeOfCare](episodeofcare.html): Business Identifier(s) relevant for this EpisodeOfCare\r\n* [FamilyMemberHistory](familymemberhistory.html): A search by a record identifier\r\n* [Goal](goal.html): External Ids for this goal\r\n* [ImagingStudy](imagingstudy.html): Identifiers for the Study, such as DICOM Study Instance UID and Accession number\r\n* [Immunization](immunization.html): Business identifier\r\n* [List](list.html): Business identifier\r\n* [MedicationAdministration](medicationadministration.html): Return administrations with this external identifier\r\n* [MedicationDispense](medicationdispense.html): Returns dispenses with this external identifier\r\n* [MedicationRequest](medicationrequest.html): Return prescriptions with this external identifier\r\n* [MedicationStatement](medicationstatement.html): Return statements with this external identifier\r\n* [NutritionOrder](nutritionorder.html): Return nutrition orders with this external identifier\r\n* [Observation](observation.html): The unique id for a particular observation\r\n* [Procedure](procedure.html): A unique identifier for a procedure\r\n* [RiskAssessment](riskassessment.html): Unique identifier for the assessment\r\n* [ServiceRequest](servicerequest.html): Identifiers assigned to this order\r\n* [SupplyDelivery](supplydelivery.html): External identifier\r\n* [SupplyRequest](supplyrequest.html): Business Identifier for SupplyRequest\r\n* [VisionPrescription](visionprescription.html): Return prescriptions with this external identifier\r\n",
+  "code": "identifier",
+  "base": [
+   "AllergyIntolerance",
+   "CarePlan",
+   "CareTeam",
+   "Composition",
+   "Condition",
+   "Consent",
+   "DetectedIssue",
+   "DeviceRequest",
+   "DiagnosticReport",
+   "DocumentManifest",
+   "DocumentReference",
+   "Encounter",
+   "EpisodeOfCare",
+   "FamilyMemberHistory",
+   "Goal",
+   "ImagingStudy",
+   "Immunization",
+   "List",
+   "MedicationAdministration",
+   "MedicationDispense",
+   "MedicationRequest",
+   "MedicationStatement",
+   "NutritionOrder",
+   "Observation",
+   "Procedure",
+   "RiskAssessment",
+   "ServiceRequest",
+   "SupplyDelivery",
+   "SupplyRequest",
+   "VisionPrescription"
+  ],
+  "type": "token",
+  "expression": "AllergyIntolerance.identifier | CarePlan.identifier | CareTeam.identifier | Composition.identifier | Condition.identifier | Consent.identifier | DetectedIssue.identifier | DeviceRequest.identifier | DiagnosticReport.identifier | DocumentManifest.masterIdentifier | DocumentManifest.identifier | DocumentReference.masterIdentifier | DocumentReference.identifier | Encounter.identifier | EpisodeOfCare.identifier | FamilyMemberHistory.identifier | Goal.identifier | ImagingStudy.identifier | Immunization.identifier | List.identifier | MedicationAdministration.identifier | MedicationDispense.identifier | MedicationRequest.identifier | MedicationStatement.identifier | NutritionOrder.identifier | Observation.identifier | Procedure.identifier | RiskAssessment.identifier | ServiceRequest.identifier | SupplyDelivery.identifier | SupplyRequest.identifier | VisionPrescription.identifier",
+  "xpath": "f:AllergyIntolerance/f:identifier | f:CarePlan/f:identifier | f:CareTeam/f:identifier | f:Composition/f:identifier | f:Condition/f:identifier | f:Consent/f:identifier | f:DetectedIssue/f:identifier | f:DeviceRequest/f:identifier | f:DiagnosticReport/f:identifier | f:DocumentManifest/f:masterIdentifier | f:DocumentManifest/f:identifier | f:DocumentReference/f:masterIdentifier | f:DocumentReference/f:identifier | f:Encounter/f:identifier | f:EpisodeOfCare/f:identifier | f:FamilyMemberHistory/f:identifier | f:Goal/f:identifier | f:ImagingStudy/f:identifier | f:Immunization/f:identifier | f:List/f:identifier | f:MedicationAdministration/f:identifier | f:MedicationDispense/f:identifier | f:MedicationRequest/f:identifier | f:MedicationStatement/f:identifier | f:NutritionOrder/f:identifier | f:Observation/f:identifier | f:Procedure/f:identifier | f:RiskAssessment/f:identifier | f:ServiceRequest/f:identifier | f:SupplyDelivery/f:identifier | f:SupplyRequest/f:identifier | f:VisionPrescription/f:identifier",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "27f54761-d758-4be8-88e7-ad9bf68ad435",
+   "lastUpdated": "2026-10-29T20:37:54.372Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "f12f74c7-da5f-4423-bcf0-4ab115fbc8a4",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Immunization-location",
+  "version": "4.0.1",
+  "name": "location",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Public Health and Emergency Response)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pher/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "The service delivery location or facility in which the vaccine was / was to be administered",
+  "code": "location",
+  "base": [
+   "Immunization"
+  ],
+  "type": "reference",
+  "expression": "Immunization.location",
+  "xpath": "f:Immunization/f:location",
+  "xpathUsage": "normal",
+  "target": [
+   "Location"
+  ],
+  "meta": {
+   "versionId": "05e45f98-9cc6-45d4-8987-891b3ab3c745",
+   "lastUpdated": "2026-10-29T20:37:54.835Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "b9280d2a-81af-41c4-8ec6-bdbe34bae75c",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Immunization-lot-number",
+  "version": "4.0.1",
+  "name": "lot-number",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Public Health and Emergency Response)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pher/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Vaccine Lot Number",
+  "code": "lot-number",
+  "base": [
+   "Immunization"
+  ],
+  "type": "string",
+  "expression": "Immunization.lotNumber",
+  "xpath": "f:Immunization/f:lotNumber",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "e13b66a5-600b-40cb-bcb6-bb3aeeab1d99",
+   "lastUpdated": "2026-10-29T20:37:54.835Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "1d8fc9b6-a1b0-4819-9ecf-244389d24f49",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Immunization-manufacturer",
+  "version": "4.0.1",
+  "name": "manufacturer",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Public Health and Emergency Response)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pher/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Vaccine Manufacturer",
+  "code": "manufacturer",
+  "base": [
+   "Immunization"
+  ],
+  "type": "reference",
+  "expression": "Immunization.manufacturer",
+  "xpath": "f:Immunization/f:manufacturer",
+  "xpathUsage": "normal",
+  "target": [
+   "Organization"
+  ],
+  "meta": {
+   "versionId": "1b93799a-bd8f-46b1-ac36-f8fd9cc6b9ee",
+   "lastUpdated": "2026-10-29T20:37:54.836Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "795ef9a2-ccdc-43f4-b59f-81f02ab5f308",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Immunization-performer",
+  "version": "4.0.1",
+  "name": "performer",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Public Health and Emergency Response)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pher/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "The practitioner or organization who played a role in the vaccination",
+  "code": "performer",
+  "base": [
+   "Immunization"
+  ],
+  "type": "reference",
+  "expression": "Immunization.performer.actor",
+  "xpath": "f:Immunization/f:performer/f:actor",
+  "xpathUsage": "normal",
+  "target": [
+   "Practitioner",
+   "Organization",
+   "PractitionerRole"
+  ],
+  "meta": {
+   "versionId": "f5ae91ea-d7fc-48ff-b4c2-375e5d7c283b",
+   "lastUpdated": "2026-10-29T20:37:54.837Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "8afd28ff-307d-42f4-8a7d-e721a4b10c8c",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Immunization-reaction",
+  "version": "4.0.1",
+  "name": "reaction",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Public Health and Emergency Response)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pher/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Additional information on reaction",
+  "code": "reaction",
+  "base": [
+   "Immunization"
+  ],
+  "type": "reference",
+  "expression": "Immunization.reaction.detail",
+  "xpath": "f:Immunization/f:reaction/f:detail",
+  "xpathUsage": "normal",
+  "target": [
+   "Observation"
+  ],
+  "meta": {
+   "versionId": "0aecc90f-ffd6-4662-839a-447b32948103",
+   "lastUpdated": "2026-10-29T20:37:54.838Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "44643172-5d58-48a6-9cd8-e6b967db803a",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Immunization-reaction-date",
+  "version": "4.0.1",
+  "name": "reaction-date",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Public Health and Emergency Response)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pher/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "When reaction started",
+  "code": "reaction-date",
+  "base": [
+   "Immunization"
+  ],
+  "type": "date",
+  "expression": "Immunization.reaction.date",
+  "xpath": "f:Immunization/f:reaction/f:date",
+  "xpathUsage": "normal",
+  "comparator": [
+   "eq",
+   "ne",
+   "gt",
+   "ge",
+   "lt",
+   "le",
+   "sa",
+   "eb",
+   "ap"
+  ],
+  "meta": {
+   "versionId": "ff25d73a-fc2b-4d33-b213-b75f3dd38899",
+   "lastUpdated": "2026-10-29T20:37:54.838Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "16ffeca5-02e9-4023-b302-1a6a5d9e6e93",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Immunization-reason-code",
+  "version": "4.0.1",
+  "name": "reason-code",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Public Health and Emergency Response)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pher/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Reason why the vaccine was administered",
+  "code": "reason-code",
+  "base": [
+   "Immunization"
+  ],
+  "type": "token",
+  "expression": "Immunization.reasonCode",
+  "xpath": "f:Immunization/f:reasonCode",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "7997c1dd-f865-4488-9fab-42bf2a44d1ae",
+   "lastUpdated": "2026-10-29T20:37:54.839Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "4ea001ab-2805-4ae4-89e2-760eab4f63c6",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Immunization-reason-reference",
+  "version": "4.0.1",
+  "name": "reason-reference",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Public Health and Emergency Response)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pher/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Why immunization occurred",
+  "code": "reason-reference",
+  "base": [
+   "Immunization"
+  ],
+  "type": "reference",
+  "expression": "Immunization.reasonReference",
+  "xpath": "f:Immunization/f:reasonReference",
+  "xpathUsage": "normal",
+  "target": [
+   "Condition",
+   "Observation",
+   "DiagnosticReport"
+  ],
+  "meta": {
+   "versionId": "bfe4fee7-6435-422d-b6c6-db4b57c19f20",
+   "lastUpdated": "2026-10-29T20:37:54.840Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "8ea746d1-337f-4ff3-8919-3c387e24f62f",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Immunization-series",
+  "version": "4.0.1",
+  "name": "series",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Public Health and Emergency Response)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pher/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "The series being followed by the provider",
+  "code": "series",
+  "base": [
+   "Immunization"
+  ],
+  "type": "string",
+  "expression": "Immunization.protocolApplied.series",
+  "xpath": "f:Immunization/f:protocolApplied/f:series",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "1485bb6e-868b-419c-a19f-eac0b92b5430",
+   "lastUpdated": "2026-10-29T20:37:54.841Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "282dd8a6-da20-438a-abbd-930d657cbe22",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Immunization-status",
+  "version": "4.0.1",
+  "name": "status",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Public Health and Emergency Response)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pher/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Immunization event status",
+  "code": "status",
+  "base": [
+   "Immunization"
+  ],
+  "type": "token",
+  "expression": "Immunization.status",
+  "xpath": "f:Immunization/f:status",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "82301f6b-37a8-429f-8956-77b8d11180e6",
+   "lastUpdated": "2026-10-29T20:37:54.841Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "39c9c61a-fadf-42c1-af6e-07b322217dd9",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Immunization-status-reason",
+  "version": "4.0.1",
+  "name": "status-reason",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Public Health and Emergency Response)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pher/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Reason why the vaccine was not administered",
+  "code": "status-reason",
+  "base": [
+   "Immunization"
+  ],
+  "type": "token",
+  "expression": "Immunization.statusReason",
+  "xpath": "f:Immunization/f:statusReason",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "14be382e-15c3-462e-885c-2fbb0bcfbe4f",
+   "lastUpdated": "2026-10-29T20:37:54.842Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "89ea8dd9-5779-4ed1-8611-c00c0f76407d",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Immunization-target-disease",
+  "version": "4.0.1",
+  "name": "target-disease",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Public Health and Emergency Response)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pher/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "The target disease the dose is being administered against",
+  "code": "target-disease",
+  "base": [
+   "Immunization"
+  ],
+  "type": "token",
+  "expression": "Immunization.protocolApplied.targetDisease",
+  "xpath": "f:Immunization/f:protocolApplied/f:targetDisease",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "b8f3766b-812c-4f73-b7e4-6dbc58ca3c61",
+   "lastUpdated": "2026-10-29T20:37:54.843Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "8d939ea7-df30-4612-8587-32eb0c9ebb61",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Immunization-vaccine-code",
+  "version": "4.0.1",
+  "name": "vaccine-code",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Public Health and Emergency Response)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pher/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Vaccine Product Administered",
+  "code": "vaccine-code",
+  "base": [
+   "Immunization"
+  ],
+  "type": "token",
+  "expression": "Immunization.vaccineCode",
+  "xpath": "f:Immunization/f:vaccineCode",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "04a5aa3a-1265-4572-a0b3-3082b9b6e6f7",
+   "lastUpdated": "2026-10-29T20:37:54.843Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "401e8dec-8d6e-4648-b658-1cd080273c35",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   },
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-wg",
+    "valueCode": "pher"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Immunization-encounter",
+  "version": "6.0.0-ballot3",
+  "name": "encounter",
+  "status": "draft",
+  "experimental": false,
+  "date": "2025-04-01T12:16:37+11:00",
+  "publisher": "HL7 International / Public Health",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/fiwg"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pher"
+     }
+    ]
+   }
+  ],
+  "description": "The Encounter this Immunization was part of",
+  "jurisdiction": [
+   {
+    "coding": [
+     {
+      "system": "http://unstats.un.org/unsd/methods/m49/m49.htm",
+      "code": "001",
+      "display": "World"
+     }
+    ]
+   }
+  ],
+  "code": "encounter",
+  "base": [
+   "Immunization"
+  ],
+  "type": "reference",
+  "expression": "Immunization.encounter",
+  "target": [
+   "Encounter"
+  ],
+  "meta": {
+   "versionId": "1670f308-6d46-428c-afa7-9048811e0cc4",
+   "lastUpdated": "2026-10-29T20:37:55.469Z"
+  }
+ }
+]

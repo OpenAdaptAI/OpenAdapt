@@ -9,7 +9,7 @@
 // Keys: 1-9 answer the current card, J/K or the arrow keys move, X adds the
 // card to a batch of similar stops, Shift+1-9 answers the whole batch, Esc
 // clears the batch, ? shows the keys.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CMD, engineInvoke, engineTry } from "../lib/engine";
 import type {
   AttentionScreenshot,
@@ -326,7 +326,7 @@ export function Stops({
     [backend, busy, list, refresh],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     function onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
@@ -408,6 +408,12 @@ export function Stops({
             Set it up once in Settings &gt; Approver key. Until then, nothing here changes.
           </Callout>
         )
+      )}
+      {keyReady && keyReady.ready && keyReady.pinned === false && list.length > 0 && (
+        <Callout tone="warn" title="No approver root is pinned on this computer">
+          Answers here won't count until an administrator pins the root with{" "}
+          <code>openadapt-desktop approver-pin</code>.
+        </Callout>
       )}
       {help && (
         <Callout tone="info" title="Keys">

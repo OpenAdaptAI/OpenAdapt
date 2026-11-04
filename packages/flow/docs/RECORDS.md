@@ -104,8 +104,12 @@ is derived from it:
 
 ```python
 ChannelRead(channel="export", raw="AC-1042", source_kind="live_session")
-ChannelRead(channel="export", raw="AC-1042", session="independent",
-            source_kind="committed_store")
+ChannelRead(
+    channel="export",
+    raw="AC-1042",
+    session="independent",
+    source_kind="committed_store",
+)
 ```
 
 A workflow can use either kind. A write step that needs `system_of_record` values
@@ -247,8 +251,13 @@ In a workflow, set `read_gate` on the writing step. Replay checks it against
 the values read so far in the run and halts before the step acts:
 
 ```python
-Step(id="post", intent="post amount", action=ActionKind.CLICK, anchor=save,
-     read_gate=GradeGate(min_grade="same_screen", fields=("amount_due",)))
+Step(
+    id="post",
+    intent="post amount",
+    action=ActionKind.CLICK,
+    anchor=save,
+    read_gate=GradeGate(min_grade="same_screen", fields=("amount_due",)),
+)
 ```
 
 These grades describe how a read value was checked. Write checks keep their

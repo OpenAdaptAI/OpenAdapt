@@ -207,7 +207,7 @@ $0.0967), and `a` = the agent-only mean cost per run
 ## Reproduce
 
 ```
-.venv/bin/python -m openadapt_flow.benchmark.hybrid_benchmark --out benchmark/hybrid
+.venv/bin/python -m benchmark.harness.hybrid_benchmark --out benchmark/hybrid
 ```
 
 Requires `ANTHROPIC_API_KEY` (or `~/.anthropic/api_key`). The paid arms

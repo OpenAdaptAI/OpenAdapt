@@ -194,3 +194,35 @@ it("puts the item next to each possible match, field by field", async () => {
   expect(screen.getByText("Different").closest("td")?.className).toBe("stop-differs");
   expect(screen.getByText("Same").closest("td")?.className).toBe("stop-same");
 });
+
+it("says answers won't count while no approver root is pinned", async () => {
+  vi.mocked(engineTry).mockImplementation(async (cmd) =>
+    cmd === CMD.LIST_STOP_CARDS
+      ? {
+          ok: true,
+          cards: [card("a", "Fairwick")],
+          approver_key: { ready: true, in_app: true, touch_id: true, pinned: false },
+        }
+      : null,
+  );
+  render(<Stops />);
+  expect(await screen.findByText("No approver root is pinned on this computer")).toBeTruthy();
+});
+
+it("answers the newly displayed stop when a navigation key is followed by a choice", async () => {
+  vi.mocked(engineInvoke).mockResolvedValue({ ok: true, changed: 1 });
+  render(<Stops />);
+  await screen.findByRole("heading", { name: "Same person?" });
+
+  fireEvent.keyDown(window, { key: "j", code: "KeyJ" });
+  await screen.findByText("2 of 2 · New patient referral · Caldley referral");
+  fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+
+  await waitFor(() =>
+    expect(engineInvoke).toHaveBeenCalledWith(
+      CMD.ANSWER_STOP_CARDS,
+      expect.objectContaining({ card_ids: ["sha256:b"], choice: "same" }),
+    ),
+  );
+  expect(engineInvoke).toHaveBeenCalledTimes(1);
+});
