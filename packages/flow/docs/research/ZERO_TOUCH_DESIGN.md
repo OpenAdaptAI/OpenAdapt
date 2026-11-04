@@ -109,6 +109,31 @@ or the recheck). A plant the store rejects, a case that errors, a fault
 with no contract and an unplantable column all count as not stopped, so the
 kind is not admitted.
 
+**A failed read is not a verdict.** An `UNCERTAIN` that came from a read
+the verifier couldn't make (a timeout, a lost connection, rows still
+moving) is run again, up to three times; if the read keeps failing, the
+case is `READ_FAILED` and doesn't count as stopped.
+
+**A duplicate the store forbids.** A `duplicate` the store refuses counts
+as not applicable only when the refusal is a unique violation of an index
+the catalog declares unique (not the primary key) and every column of that
+index holds the same value in the copy as in the row copied. Any other
+refusal is a failure. A kind whose every duplicate is refused this way
+records "duplicates impossible by constraint" with the index names instead
+of a planted duplicate. Other plants avoid declared unique indexes, so the
+store takes them.
+
+**Only validated field sets.** A zero-touch manifest lists only the field
+sets a held-out write validated (built during setup when needed) and builds
+none at run time: a task with another field set stops.
+
+**Two readings, both checked.** The setup answers `strict_pins: true`, so a
+new-row column two readings fit in every demonstration (a constant and a
+copy, the acting user and a copy, or one demonstration's one value) is
+checked both ways instead of refusing the kind. A `found` contract (the
+record is already there) keeps only the constant half: who made the record
+may differ.
+
 **Required classes.** A kind is admitted only if its held-out writes
 produced `missing`, `unrelated_edit`, `delayed` and `other_table` faults,
 plus `duplicate` and `look_alike` for a create and `wrong_record` for an
