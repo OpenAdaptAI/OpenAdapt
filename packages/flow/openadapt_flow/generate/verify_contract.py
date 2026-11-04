@@ -3900,6 +3900,19 @@ def _questions_md(
                 + ". A task that gives one is stopped: record a demonstration "
                 "that gives it now, before tasks need it."
             )
+        if (
+            rep["mode"] == "update"
+            and "versions" in rep
+            and rep["versions"] is None
+            and not rep["refused"]
+        ):
+            lines.append(
+                "  - No version check: the main table has no version column and "
+                "no audit trail names the record and the acting user in every "
+                "demonstration, so another user's save to the same record in the "
+                "window (a lost update) is not seen. Write `frame.versions` by "
+                "hand if the app keeps versions somewhere else."
+            )
         for r in rep["refused"]:
             lines.append(f"  - Refused: {r}")
         for r in rep["rejected"][:5]:
