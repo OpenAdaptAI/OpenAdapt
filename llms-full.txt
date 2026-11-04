@@ -2284,6 +2284,9 @@ refuses a write when the record or its outcome cannot be established.
 
 ### Upgrade notes
 
+- A differing record identifier now counts as a contradiction, even when most
+  of the identity band matches. Runs may refuse some same-record pairs they
+  accepted before. Check the stopped record before retrying.
 - Agent-taught drafts now need a signed teach authorization in every admission
   mode. The authorization also covers self-repair and approval of an agent's
   fix. Browser teach no longer teaches or runs write tools. See
@@ -2341,6 +2344,10 @@ refuses a write when the record or its outcome cannot be established.
 
 ### Fixes
 
+- A versions check with an unknown `target_surface` reports `not_checked`
+  with `unknown_surface`. A surface read only by a zero-count guard cannot
+  supply a write target. Generated setup questions now show a missing version
+  check instead of leaving it unnoticed.
 - Typed input must match the complete field value. Native and pixel-only runs
   stop when delivery cannot be confirmed. Windows input checks the foreground
   window throughout delivery and reports when focus changes may leave partial
@@ -2383,6 +2390,8 @@ refuses a write when the record or its outcome cannot be established.
 
 ### Evaluation and packaging
 
+- The threat model explains which verification layer provides each guarantee.
+  Additional adversarial tests exercise exact read-back and capture ambiguity.
 - Verification benchmarks include operation semantics, model-judge and API
   read-back baselines, and revised public leaderboard scores. These reports
   retain their stated task and evaluation scope.
