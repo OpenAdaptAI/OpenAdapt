@@ -199,6 +199,21 @@ def _setting(key: str, *, required: bool = False) -> Optional[str]:
     return value
 
 
+def _required_setting(key: str) -> str:
+    """A setting that must be present and non-empty, else a clear error."""
+    value = _setting(key, required=True)
+    if not value:
+        raise GuestError(f"the Windows guest's {key} setting is empty")
+    return value
+
+
+def _nonempty(name: str, value: Optional[str]) -> str:
+    """``value``, refused when missing or blank: it goes into PowerShell."""
+    if value is None or not value.strip():
+        raise GuestError(f"the Windows guest's {name} is not set")
+    return value
+
+
 # PowerShell also ends a single-quoted string at these.
 _QUOTES = ("'", "\u2018", "\u2019", "\u201a", "\u201b")
 
@@ -260,8 +275,8 @@ class WindowsGuest:
         python: Optional[str],
         ssh_key: Optional[str],
     ) -> None:
-        self.host = host or _setting("HOST", required=True)
-        self.user = user or _setting("USER", required=True)
+        self.host: str = _nonempty("host", host) if host else _required_setting("HOST")
+        self.user: str = _nonempty("user", user) if user else _required_setting("USER")
         key = ssh_key or _setting("SSH_KEY")
         # SSH with a key when one is configured (no password handled), else
         # WinRM over HTTP with NTLM message encryption.
@@ -269,7 +284,9 @@ class WindowsGuest:
         secret = password or _setting("PASSWORD", required=self._ssh_key is None)
         # The account signed in to the desktop (apps, agent, RDP). A separate
         # standard account is safest; by default it is the control account.
-        self.desktop_user = os.environ.get("OPENADAPT_WINENV_DESKTOP_USER") or self.user
+        self.desktop_user: str = (
+            os.environ.get("OPENADAPT_WINENV_DESKTOP_USER") or self.user
+        )
         self._desktop_secret = (
             os.environ.get("OPENADAPT_WINENV_DESKTOP_PASSWORD")
             if self.desktop_user != self.user
@@ -281,7 +298,7 @@ class WindowsGuest:
 
             self._session = winrm.Session(
                 f"http://{self.host}:{port}/wsman",
-                auth=(self.user, secret),
+                auth=(self.user, _nonempty("password", secret)),
                 transport="ntlm",
                 message_encryption="always",
             )

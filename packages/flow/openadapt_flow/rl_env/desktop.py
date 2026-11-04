@@ -211,6 +211,7 @@ def _rdp_backend(spec: RdpSpec, guest: Any) -> Any:
     transport_kind = os.environ.get("OPENADAPT_WINENV_RDP_TRANSPORT", spec.transport)
     if transport_kind not in ("aardwolf", "xfreerdp"):
         raise TaskError("OPENADAPT_WINENV_RDP_TRANSPORT is aardwolf or xfreerdp")
+    transport: Any
     if transport_kind == "aardwolf":
         host, port = guest.rdp_address()
         transport = AardwolfTransport.from_credentials(
@@ -443,14 +444,16 @@ class OpenAdaptDesktopEnvironment(
         return self._state
 
     def close(self) -> None:
-        for closer in (
-            lambda: self._judge and self._judge.close(),
-            lambda: self._records_stop and self._records_stop(),
-            lambda: self._guest and self._guest.stop_app(),
-            lambda: (
-                self.surface == "rdp_pixels" and self._surface and self._surface.close()
-            ),
-        ):
+        closers: list[Callable[[], Any]] = []
+        if self._judge is not None:
+            closers.append(self._judge.close)
+        if self._records_stop is not None:
+            closers.append(self._records_stop)
+        if self._guest is not None:
+            closers.append(self._guest.stop_app)
+        if self.surface == "rdp_pixels" and self._surface is not None:
+            closers.append(self._surface.close)
+        for closer in closers:
             try:
                 closer()
             except Exception:  # noqa: BLE001 - best-effort teardown

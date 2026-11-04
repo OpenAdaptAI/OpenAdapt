@@ -329,7 +329,7 @@ def validate(
         env.close()
     summary = summarize(tasks, rows, leaks)
     summary["env"] = env.env.manifest.name
-    summary["surface"] = env.spec.surface
+    summary["surface"] = env.surface
     summary["run"] = {
         "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(started)),
         "wall_s": round(time.time() - started, 1),
