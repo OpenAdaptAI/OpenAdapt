@@ -87,12 +87,14 @@ def step_id_for_event(index: int) -> str:
 
 
 def read_events(recording_dir: Path) -> list[dict[str, Any]]:
+    from openadapt_flow import artifacts
+
     path = Path(recording_dir) / "events.jsonl"
-    if not path.is_file():
+    if not artifacts.is_file(path):
         raise FileNotFoundError(f"no events.jsonl in {recording_dir}")
     return [
         json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
+        for line in artifacts.read_text(path).splitlines()
         if line.strip()
     ]
 
@@ -158,10 +160,12 @@ def write_narration(directory: Path, narration: Narration) -> Path:
 
 def load_narration(path: Path | str) -> Optional[Narration]:
     """Read ``narration.json`` from a recording or bundle directory, or None."""
+    from openadapt_flow import artifacts
+
     file = Path(path) / NARRATION_FILE
-    if not file.is_file():
+    if not artifacts.is_file(file):
         return None
-    data = json.loads(file.read_text(encoding="utf-8"))
+    data = json.loads(artifacts.read_text(file))
     if data.get("schema") != NARRATION_SCHEMA:
         raise NarrationRefused(f"{file} is not a narration file")
     if data.get("scrubbed") is not True:

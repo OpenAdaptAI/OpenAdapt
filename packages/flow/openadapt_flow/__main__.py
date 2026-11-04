@@ -1505,17 +1505,12 @@ def _cmd_record(args: argparse.Namespace) -> int:
     if code == 0 and (Path(args.out) / "events.jsonl").is_file():
         _propose_lookup_check(args, from_lookup=from_lookup)
     if code == 0 and with_check:
-        from openadapt_flow import sealed_set
+        from openadapt_flow import artifacts
         from openadapt_flow.cli_check import guided_check
         from openadapt_flow.cli_hints import command
 
         recording = Path(args.out)
-        if sealed_set.is_sealed(recording):
-            print(
-                "record --with-check: marking a check in an encrypted recording "
-                "is not available yet; nothing was marked."
-            )
-        elif not (recording / "events.jsonl").is_file():
+        if not artifacts.is_file(recording / "events.jsonl"):
             print("record: no events.jsonl to mark a check in; skipped")
         elif not sys.stdin.isatty():
             mark = command(
@@ -2519,8 +2514,9 @@ def _cmd_narration_show(args: argparse.Namespace) -> int:
 
 
 def _cmd_for_each(args: argparse.Namespace) -> int:
-    import shutil
+    import os
 
+    from openadapt_flow import artifacts, sealed_set
     from openadapt_flow.compiler.loop_authoring import (
         LoopAuthoringError,
         author_data_driven_loop,
@@ -2528,9 +2524,8 @@ def _cmd_for_each(args: argparse.Namespace) -> int:
     from openadapt_flow.ir import Workflow
 
     src = Path(args.bundle)
-    if (
-        not (src / "workflow.json").is_file()
-        and not (src / "workflow.json.enc").is_file()
+    if not artifacts.is_file(src / "workflow.json") and not artifacts.is_file(
+        src / "workflow.json.enc"
     ):
         raise SystemExit(f"{src} is not a workflow bundle (no workflow.json)")
     body = Workflow.load(src)
@@ -2566,23 +2561,38 @@ def _cmd_for_each(args: argparse.Namespace) -> int:
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    # Copy the demonstrated body's templates so the looped bundle is a complete,
-    # self-verifying artifact (the loop body reuses the body's anchors/crops).
-    src_templates = src / "templates"
-    if src_templates.is_dir():
-        shutil.copytree(src_templates, out / "templates", dirs_exist_ok=True)
-    looped.save(out)
-    # The body's named sections (display metadata) follow it into the loop:
-    # its recorded form structure and review edits apply to the same steps.
     from openadapt_flow import sections as program_sections
 
     body_sections = program_sections.load(src, body)
-    program_sections.write(
-        out,
-        program_sections.build(
-            looped, context=body_sections.context, edits=body_sections.edits
-        ),
-    )
+
+    def write_looped() -> None:
+        # Copy the demonstrated body's templates so the looped bundle is a
+        # complete, self-verifying artifact (the loop body reuses its crops).
+        templates = Path(os.path.abspath(src / "templates"))
+        for template in artifacts.list_files(templates):
+            target = out / "templates" / template.relative_to(templates)
+            if not sealed_set.is_sealed_path(out):
+                target.parent.mkdir(parents=True, exist_ok=True)
+            sealed_set.write_bytes(target, artifacts.open_read(template))
+        looped.save(out)
+        # The body's named sections (display metadata) follow it into the
+        # loop: its recorded form structure and review edits apply to the
+        # same steps.
+        program_sections.write(
+            out,
+            program_sections.build(
+                looped, context=body_sections.context, edits=body_sections.edits
+            ),
+        )
+
+    if artifacts.is_sealed(src):
+        # A sealed body makes a sealed loop: nothing it holds lands in plaintext.
+        passphrase = sealed_set.output_bundle_key()
+        assert passphrase is not None  # resolves to the local key by default
+        with sealed_set.writing(out, "bundle", passphrase):
+            write_looped()
+    else:
+        write_looped()
 
     relation = args.relation
     rel = looped.data_sources[relation]
@@ -13109,6 +13119,13 @@ _SEALED_READY_COMMANDS: frozenset[str] = frozenset(
         "openadapt_flow.__main__:_cmd_resume",
         "openadapt_flow.__main__:_cmd_approve",
         "openadapt_flow.__main__:_cmd_qualify",
+        # Read through openadapt_flow.artifacts (tests/test_artifact_reads.py).
+        "openadapt_flow.__main__:_cmd_visualize",
+        "openadapt_flow.__main__:_cmd_explain",
+        "openadapt_flow.__main__:_cmd_emit_skill",
+        "openadapt_flow.__main__:_cmd_for_each",
+        "openadapt_flow.cli_sections:cmd_sections",
+        "openadapt_flow.cli_check:cmd_check_mark",
         "openadapt_flow.cli_admit:cmd_admit_run",
         "openadapt_flow.cli_admit:cmd_admit_decide",
         "openadapt_flow.cli_admit:cmd_admit_status",
@@ -13222,6 +13239,12 @@ def _plaintext_directories_in(args: argparse.Namespace) -> list[Path]:
     return found
 
 
+#: Commands that write a new bundle sealed when their input bundle is sealed.
+_SEALED_OUTPUT_FROM_SEALED_INPUT: frozenset[str] = frozenset(
+    {"openadapt_flow.__main__:_cmd_for_each"}
+)
+
+
 def _unsealed_output_check(args: argparse.Namespace) -> None:
     """Warn and record, or refuse in strict mode, a command whose output
     can't be encrypted yet. Strict mode runs only the sealed-ready and
@@ -13272,6 +13295,12 @@ def _unsealed_output_check(args: argparse.Namespace) -> None:
     artifact = _UNSEALED_OUTPUT_COMMANDS.get(command)
     if artifact is None:
         return
+    if command in _SEALED_OUTPUT_FROM_SEALED_INPUT:
+        from openadapt_flow import sealed_set
+
+        source = getattr(args, "bundle", None)
+        if source and sealed_set.is_sealed_path(source):
+            return  # a sealed input makes a sealed output
     target = next(
         (
             getattr(args, name)
@@ -13322,7 +13351,8 @@ def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
             "encrypted input yet. Flow will not decrypt it to disk for this "
             "command. Commands that read sealed input: record, compile, "
             "induce, scaffold-verifier, seal, certify, qualify, admit, run, "
-            "replay, approve, resume and undo."
+            "replay, approve, resume, undo, visualize, explain, emit-skill, "
+            "for-each, sections and check mark."
         )
     for root in sealed:
         kind = sealed_set.header_kind(root)
