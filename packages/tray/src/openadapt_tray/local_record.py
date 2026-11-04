@@ -29,14 +29,38 @@ _BACKENDS = {"darwin": "macos"}
 # Outcomes of LocalRun.stop_within.
 STOP_RECORDER_STOPPED = "recorder_stopped"  # the recorder stopped capturing
 STOP_EXITED = "exited"
-STOP_TERMINATED = "terminated"  # ignored Ctrl-C; SIGTERM ended it
-STOP_KILLED = "killed"  # ignored SIGTERM too; SIGKILL ended it
+STOP_TERMINATED = "terminated"  # ignored Ctrl-C; terminate() ended it
+STOP_KILLED = "killed"  # ignored terminate() too; kill() ended it
 STOP_STILL_RUNNING = "still_running"
 STOP_NOT_RUNNING = "not_running"
 
 
 class LocalRecordError(RuntimeError):
     """``openadapt-flow record`` could not be started or stopped."""
+
+
+def interrupt_signal(platform: str = sys.platform) -> int:
+    """Return the Ctrl-C equivalent for a child in its own process group.
+
+    POSIX: SIGINT. Windows has no SIGINT delivery to another console process
+    group; CTRL_BREAK_EVENT is the documented one, and it needs
+    ``CREATE_NEW_PROCESS_GROUP`` (see :func:`spawn_options`).
+    """
+    if platform == "win32":
+        return getattr(signal, "CTRL_BREAK_EVENT", signal.SIGINT)
+    return signal.SIGINT
+
+
+def spawn_options(platform: str = sys.platform) -> dict[str, Any]:
+    """Return Popen options that detach the child from the tray's own group.
+
+    The child must not receive the tray's own Ctrl-C, and the tray must be
+    able to signal it on its own.
+    """
+    if platform == "win32":
+        # subprocess.CREATE_NEW_PROCESS_GROUP is 0x200 on Windows.
+        return {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200)}
+    return {"start_new_session": True}
 
 
 @dataclass
@@ -49,18 +73,20 @@ class LocalRun:
     log: IO[bytes] | None = field(default=None, repr=False)
     # Set by the tray when the watcher reports this run's capture as saved.
     capture_saved: bool = False
+    # Sent by interrupt(); see interrupt_signal().
+    interrupt_with: int = signal.SIGINT
     interrupted: bool = False
     _interrupt_lock: threading.Lock = field(
         default_factory=threading.Lock, repr=False, compare=False
     )
 
     def interrupt(self) -> bool:
-        """Send SIGINT once. A second Ctrl-C could cut finalization short."""
+        """Send Ctrl-C once. A second one could cut finalization short."""
         with self._interrupt_lock:
             if self.interrupted or not self.is_running():
                 return False
             try:
-                self.process.send_signal(signal.SIGINT)
+                self.process.send_signal(self.interrupt_with)
             except OSError:
                 return False
             self.interrupted = True
@@ -86,8 +112,9 @@ class LocalRun:
 
         Ctrl-C (SIGINT) first. That succeeds once the recorder reports it
         stopped capturing, or the process exits. Finalizing and converting may
-        then take as long as they need. Past the deadline, SIGTERM, then
-        SIGKILL: a recorder that ignores Ctrl-C must not keep capturing.
+        then take as long as they need. Past the deadline, terminate, then
+        kill (SIGTERM and SIGKILL on POSIX, TerminateProcess on Windows): a
+        recorder that ignores Ctrl-C must not keep capturing.
 
         Returns:
             One of the ``STOP_*`` outcomes.
@@ -103,9 +130,14 @@ class LocalRun:
             sleep,
         ):
             return STOP_RECORDER_STOPPED if self.is_running() else STOP_EXITED
-        for sig, outcome in ((signal.SIGTERM, STOP_TERMINATED), (signal.SIGKILL, None)):
+        # Popen.terminate()/kill() are SIGTERM/SIGKILL on POSIX and
+        # TerminateProcess on Windows, which has no signal.SIGKILL.
+        for force, outcome in (
+            (self.process.terminate, STOP_TERMINATED),
+            (self.process.kill, STOP_KILLED),
+        ):
             try:
-                self.process.send_signal(sig)
+                force()
             except OSError:
                 pass
             if self._wait_until(
@@ -115,7 +147,7 @@ class LocalRun:
                 clock,
                 sleep,
             ):
-                return outcome or STOP_KILLED
+                return outcome
         return STOP_STILL_RUNNING
 
     @staticmethod
@@ -195,6 +227,7 @@ class LocalRecorder:
             which: Executable lookup (injectable for tests).
             popen: Process factory (injectable for tests).
         """
+        self._platform = platform
         self._backend = _BACKENDS.get(platform)
         self._which = which
         self._popen = popen
@@ -246,7 +279,9 @@ class LocalRecorder:
             "--task",
             name,
         ]
-        # The log holds recorder output, so only this user may read it.
+        # The log holds recorder output, so only this user may read it. On
+        # Windows the mode sets only the read-only bit; the file inherits the
+        # captures folder's ACL, which is in the user's own profile.
         flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
@@ -257,13 +292,17 @@ class LocalRecorder:
                 stdin=subprocess.DEVNULL,
                 stdout=log,
                 stderr=subprocess.STDOUT,
-                start_new_session=True,
+                **spawn_options(self._platform),
             )
         except OSError as e:
             log.close()
             raise LocalRecordError(f"Could not start openadapt-flow: {e}") from e
         self.current = LocalRun(
-            process=process, output_dir=output_dir, log_path=log_path, log=log
+            process=process,
+            output_dir=output_dir,
+            log_path=log_path,
+            log=log,
+            interrupt_with=interrupt_signal(self._platform),
         )
         return self.current
 

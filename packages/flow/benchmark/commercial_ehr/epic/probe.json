@@ -1,0 +1,74 @@
+{
+ "allergy_confirmed_status": 422,
+ "allergy_read_by_location": 200,
+ "allergy_search_codes": [
+  "1631000175102"
+ ],
+ "allergy_search_lists_created": false,
+ "allergy_unconfirmed_status": 201,
+ "auditevent_search_status": 404,
+ "create_status": 201,
+ "create_without_ssn_status": 400,
+ "created_patient_provenance": [
+  {
+   "agents": [
+    "Author",
+    "Transmitter"
+   ],
+   "recorded_present": true
+  }
+ ],
+ "elements_added_by_epic": [
+  "active",
+  "deceasedBoolean",
+  "extension"
+ ],
+ "empty_search_outcome_severity": [
+  "warning"
+ ],
+ "granted_scopes": [
+  "system/AllergyIntolerance.read",
+  "system/AllergyIntolerance.write",
+  "system/Appointment.read",
+  "system/Observation.read",
+  "system/Observation.write",
+  "system/Patient.read",
+  "system/Patient.write",
+  "system/Provenance.read"
+ ],
+ "meta_security_added": [
+  "PATRPT",
+  "UNCERTREL"
+ ],
+ "metadata_date_header": true,
+ "name_entries_stored": [
+  "official",
+  "usual"
+ ],
+ "observation_create_without_encounter": {
+  "missing": [
+   "encounter"
+  ],
+  "status": 400
+ },
+ "observation_lastupdated_future_matches": 266,
+ "patient_history_status": 404,
+ "patient_lastupdated_status": 400,
+ "patient_meta_returned": false,
+ "patient_search_one_value_matches": 0,
+ "revinclude_auditevent": [
+  "match:Patient"
+ ],
+ "revinclude_provenance": [
+  "include:Provenance",
+  "match:Patient"
+ ],
+ "same_person_new_ssn_create": {
+  "same_location": true,
+  "status": 201
+ },
+ "sandbox_calls": 21,
+ "telecom_systems_stored": [
+  "email"
+ ]
+}

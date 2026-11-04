@@ -291,6 +291,10 @@ def prepare_admission(
     """
 
     from openadapt_flow.compiler import compile_recording
+    from openadapt_flow.compiler.fixup_passes import (
+        read_compile_notes,
+        write_compile_notes,
+    )
     from openadapt_flow.compiler.induction import induce_program
     from openadapt_flow.ir import Workflow
     from openadapt_flow.qualification_proposal import (
@@ -366,10 +370,14 @@ def prepare_admission(
 
     bundle_dir = target / BUNDLE_DIR
     induced = False
+    guard_notes: list[dict[str, str]] = []
     if len(compiled) == 1:
         workflow = Workflow.load(compiled[0])
     else:
-        result = induce_program([Workflow.load(p) for p in compiled])
+        result = induce_program(
+            [Workflow.load(p) for p in compiled],
+            compile_notes=[read_compile_notes(p) for p in compiled],
+        )
         if not result.certified or result.workflow is None:
             return stop(
                 "halted",
@@ -381,14 +389,17 @@ def prepare_admission(
             )
         workflow = result.workflow
         induced = True
+        guard_notes = list(result.guard_notes)
     workflow = workflow.model_copy(update={"name": name})
-    from openadapt_flow import sealed_set
+    from openadapt_flow import at_rest, sealed_set
 
-    sealed = any(sealed_set.is_sealed(path) for path in compiled)
+    sealed = any(sealed_set.is_sealed(path) for path in compiled) or at_rest.seal_new(
+        "an admitted bundle", bundle_dir
+    )
     if sealed:
         # Encrypted recordings or bundles admit into a sealed bundle: the
         # crops are merged in memory and never copied out as plaintext.
-        passphrase = sealed_set.passphrase_for("bundle") or sealed_set.recording_key()
+        passphrase = sealed_set.output_bundle_key()
         if not passphrase:
             raise AdmissionError(sealed_set.missing_key_message(compiled[0], "bundle"))
         templates: dict[str, bytes] = {}
@@ -398,9 +409,12 @@ def prepare_admission(
                 templates.setdefault(rel, sealed_set.read_bytes(item))
         workflow._decrypted_templates = templates
         with sealed_set.writing(bundle_dir, "bundle", passphrase):
+            write_compile_notes(bundle_dir, guard_notes)
             workflow.save(bundle_dir)
     else:
         _copy_templates(compiled, bundle_dir)
+        # Induction's dialog-check decisions, as a compile's own notes.
+        write_compile_notes(bundle_dir, guard_notes)
         workflow.save(bundle_dir)
     workflow = Workflow.load(bundle_dir)
 

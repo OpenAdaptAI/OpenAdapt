@@ -2388,11 +2388,27 @@ class FakeDesktop:
     Selectors match case-insensitive substrings and refuse more than one
     match. A ``window_id`` lookup returns that exact window and ignores the
     title, as the macOS, Windows and X11 resolvers do.
+
+    It is also the scope's focus probe, so these identity tests never ask
+    the real display who has input: the first window opened has keyboard
+    focus, and the last window opened is topmost at a point.
     """
 
     def __init__(self) -> None:
         self.windows: dict[int, TargetWindow] = {}
         self.lookups: list[WindowTarget] = []
+
+    def keyboard_focus(self, *, at_receipt: bool = False) -> FocusOwner | None:
+        del at_receipt
+        first = next(iter(self.windows.values()), None)
+        return FocusOwner(window_id=first.window_id, pid=first.pid) if first else None
+
+    def window_at(self, x: float, y: float) -> FocusOwner | None:
+        for window in reversed(list(self.windows.values())):
+            left, top, width, height = window.bounds
+            if left <= x < left + width and top <= y < top + height:
+                return FocusOwner(window_id=window.window_id, pid=window.pid)
+        return None
 
     def open(self, window_id: int, title: str, *, pid: int = 1234, start: float = 50.0):
         self.windows[window_id] = TargetWindow(
@@ -2445,6 +2461,7 @@ class TestPinnedWindowIdentity:
             WindowTarget(owner="Chrome", title="Spike Login"),
             resolver=desktop.resolver,
             capturer=desktop.capturer,
+            focus_probe=desktop,
         )
         scope.bind_display_topology(
             {
@@ -2542,6 +2559,7 @@ class TestPinnedWindowIdentity:
             WindowTarget(owner="Chrome", title="Spike Login"),
             resolver=desktop.resolver,
             capturer=desktop.capturer,
+            focus_probe=desktop,
         )
 
         with pytest.raises(WindowCaptureAmbiguousError):

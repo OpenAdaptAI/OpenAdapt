@@ -87,7 +87,10 @@ from openadapt_flow.runtime.effects.effect import (
     ValueExpr,
     is_agent_identity,
 )
-from openadapt_flow.runtime.effects.readback_values import ValueKind, infer_value_kind
+from openadapt_flow.runtime.effects.readback_values import (
+    ReadbackKind,
+    infer_value_kind,
+)
 
 __all__ = [
     "CHECK_FILE",
@@ -163,7 +166,7 @@ class MarkedField(BaseModel):
     structure_matched: bool = False
     #: How to compare the field: ``text``, ``code``, ``date`` or ``currency``.
     #: Unset, the compiler infers it from the typed value.
-    value_kind: Optional[ValueKind] = None
+    value_kind: Optional[ReadbackKind] = None
     #: ``date`` only: ``dmy`` or ``mdy`` for a numeric date.
     date_order: Optional[Literal["dmy", "mdy"]] = None
 
@@ -316,10 +319,20 @@ def _norm(text: str) -> str:
     return " ".join(text.lower().split())
 
 
-def _shows(region_text: str, value: str) -> bool:
-    from openadapt_flow.runtime.effects.onscreen import value_matches
+def _shows(region_text: str, value: str, field: MarkedField) -> str:
+    """How the marked box shows the typed value, compared as the read-back
+    will compare it: ``"match"`` (the box is the value), ``"ambiguous"`` (the
+    value among other text, such as its label, or a read OCR can't settle)
+    or ``"mismatch"``."""
+    from openadapt_flow.runtime.effects.readback_values import compare_value
 
-    return value_matches(_norm(region_text), value)
+    return compare_value(
+        _norm(region_text),
+        value,
+        kind=field.value_kind or infer_value_kind(value),
+        date_order=field.date_order,
+        exact=False,
+    )
 
 
 def _marked_frame(recording_dir: Path, marks: CheckMarks, n_events: int) -> Path:
@@ -429,7 +442,16 @@ def apply_check(
             continue  # checked against the live page when it was marked
         lines = vision.ocr(png, region=field.region)
         text = " ".join(line.text for line in lines)
-        if not _shows(text, str(params[field.param])):
+        shown = _shows(text, str(params[field.param]), field)
+        if shown == "ambiguous":
+            # A read-back confirms only a box that is the value, so a box
+            # that also takes in a label or a neighbour would never confirm.
+            raise CheckError(
+                f"the box marked for {field.param!r} doesn't show exactly the "
+                "value typed for it: it shows it among other text, such as its "
+                "label, or OCR can't read it for certain. Mark only the value"
+            )
+        if shown != "match":
             raise CheckError(
                 f"the box marked for {field.param!r} doesn't show the value "
                 "typed for it. Mark the field that shows it"

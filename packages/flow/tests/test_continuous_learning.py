@@ -25,6 +25,11 @@ from typing import Optional
 
 import pytest
 
+from benchmark.harness.synth_stream import (
+    Drift,
+    generate_stream,
+    mockmed_base_program,
+)
 from openadapt_flow.ir import (
     ProgramGraph,
     StateKind,
@@ -38,13 +43,8 @@ from openadapt_flow.learning import (
     program_regression_gate,
     program_reproduces,
 )
+from openadapt_flow.learning.induce import StructuralDiffInducer
 from openadapt_flow.learning.loop import Inducer
-from openadapt_flow.learning.synth_stream import (
-    Drift,
-    StructuralDiffInducer,
-    generate_stream,
-    mockmed_base_program,
-)
 from openadapt_flow.runtime.identity_template import build_identity_template
 
 # -- stub inducers ------------------------------------------------------------

@@ -274,3 +274,7 @@ def test_a_run_that_raises_before_the_pause_still_releases_the_check(
     closer.start()
     closer.join(timeout=30)
     assert not closer.is_alive()
+
+
+# Every person in these tests signs with a registered approver key.
+pytestmark = pytest.mark.usefixtures("approver")

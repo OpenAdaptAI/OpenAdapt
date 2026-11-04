@@ -118,7 +118,9 @@ def test_grade_ladder_with_add_read() -> None:
         CODE, first, channel_read(CODE, "clipboard", "AC-1042", session="reopened")
     )
     assert reopened.grade == "reopened"
-    by_database = add_read(CODE, reopened, channel_read(CODE, "database", "AC1042"))
+    by_database = add_read(
+        CODE, reopened, channel_read(CODE, "database", "AC1042", record_count=1)
+    )
     assert by_database.grade == "system_of_record"
     assert by_database.value == "AC1042"  # the database read is preferred
 
@@ -134,7 +136,9 @@ def test_disagreeing_independent_read_demotes_to_review() -> None:
     later = add_read(
         CODE,
         first,
-        channel_read(CODE, "export", "AC-1043", source_kind="committed_store"),
+        channel_read(
+            CODE, "export", "AC-1043", source_kind="committed_store", record_count=1
+        ),
     )
     assert later.grade == "unchecked"
     assert later.needs_review
@@ -275,7 +279,9 @@ def test_export_reads_grade_by_source() -> None:
     saved = add_read(
         CODE,
         first,
-        channel_read(CODE, "export", "AC1042", source_kind="committed_store"),
+        channel_read(
+            CODE, "export", "AC1042", source_kind="committed_store", record_count=1
+        ),
     )
     assert saved.reads[-1].session == "independent"
     assert saved.grade == "system_of_record"
@@ -286,13 +292,13 @@ def test_export_reads_grade_by_source() -> None:
 
 def test_codes_split_in_different_places_disagree() -> None:
     clip = channel_read(CODE, "clipboard", "12-345")
-    db = channel_read(CODE, "database", "123-45")
+    db = channel_read(CODE, "database", "123-45", record_count=1)
     field = combine_reads(CODE, [clip, db])
     assert field.agreement == "disagree"
     assert field.grade == "unchecked"
     assert field.needs_review
     # Formatting added on one side only is still the same code.
-    plain = channel_read(CODE, "database", "AC1042")
+    plain = channel_read(CODE, "database", "AC1042", record_count=1)
     shown = channel_read(CODE, "clipboard", "AC-1042")
     assert combine_reads(CODE, [shown, plain]).grade == "system_of_record"
 
@@ -304,3 +310,35 @@ def test_unparsed_optional_field_goes_to_review() -> None:
     assert field.needs_review
     empty = combine_reads(count, [channel_read(count, "ocr", "")])
     assert not empty.needs_review
+
+
+def test_an_independent_read_must_be_of_exactly_one_record() -> None:
+    reopened = add_read(
+        CODE,
+        combine_reads(CODE, [channel_read(CODE, "clipboard", "AC-1042")]),
+        channel_read(CODE, "clipboard", "AC-1042", session="reopened"),
+    )
+    two = add_read(
+        CODE, reopened, channel_read(CODE, "database", "AC1042", record_count=2)
+    )
+    assert two.grade == "unchecked" and two.needs_review and two.value is None
+    assert "matched 2 records" in (two.review_reason or "")
+    unstated = add_read(CODE, reopened, channel_read(CODE, "database", "AC1042"))
+    assert unstated.grade == "unchecked" and unstated.needs_review
+    one = add_read(
+        CODE, reopened, channel_read(CODE, "database", "AC1042", record_count=1)
+    )
+    assert one.grade == "system_of_record" and not one.needs_review
+
+
+def test_reads_of_different_records_disagree() -> None:
+    first = combine_reads(
+        CODE, [channel_read(CODE, "clipboard", "AC-1042", record_id="pid-7")]
+    )
+    other = add_read(
+        CODE,
+        first,
+        channel_read(CODE, "database", "AC1042", record_count=1, record_id="pid-8"),
+    )
+    assert other.agreement == "disagree" and other.grade == "unchecked"
+    assert "different records" in (other.review_reason or "")

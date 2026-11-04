@@ -3,7 +3,49 @@
 Many registration forms run a duplicate search before they save. OpenEMR's New
 Patient form, for example, opens a list of existing charts that might be the
 same person. A recorded program usually expects the empty list ("No matches
-were found."), so any listed chart stops the item before the save.
+were found."), so any listed chart stops the item before the save. The
+compiler mines that check from the recording: the dialog's empty result is an
+exact check on the click that opens the dialog and again before Confirm
+(`compiler/empty_result_guard.py`).
+
+The compiler knows an English vocabulary for that statement. A statement in
+other words ("Keine Treffer gefunden.") is mined from two or more
+demonstrations instead. The dialog must be named, and it must add exactly one
+line besides its title and button row. That line must read the same in every
+demonstration although every value typed before the dialog differs. Then
+induction checks it the same way. The line is not mined when:
+
+- it changes with the search;
+- it carries a typed value, a number other than 0, or an email address;
+- it is a question ("Wirklich speichern?");
+- it comes from one demonstration only.
+
+The PHI check on the line runs only when the optional privacy scrubber is
+installed. The compile notes of each recording, and of a bundle `admit`
+induces, say why a line was not mined.
+When the demonstrations disagree on a mined check, induction refuses
+(`ambiguous_guard`). It never copies the first recording's check, and it
+never drops the check quietly.
+
+A check mined this way was chosen because the demonstrations agree, not
+because of what its words say. So qualification needs a `business_rules` case
+that halts at it.
+
+Limits:
+
+- The dialog's title comes from the browser recorder (its accessible name),
+  so desktop recordings use the vocabulary only.
+- Agreement alone can't tell the statement from other fixed text that is the
+  dialog's only line, such as an empty table's single header or an
+  instruction. That needs a recording where the search found rows, and there
+  is no such contrast check yet. The business-rule run is what catches it,
+  and the qualification campaign reads linear bundles only, so an induced
+  bundle that carries such a check can't be qualified yet.
+- Only typed and selected values count as the search. A record chosen by
+  clicking a list row is not seen: the same row clicked in every
+  demonstration doesn't stop the line from being mined.
+- The confirmation pair itself is still found from English button labels
+  ("Confirm", "Yes").
 
 OpenEMR lists a chart that shares only a first name with the new patient. On
 the lifecycle soak's synthetic worklist, most of those stops were false: the

@@ -4,7 +4,8 @@ A request is what the person sees; an answer is what they decided. These
 tests pin the file contract Desktop's Run it relies on, and every way an
 answer is refused: a non-human or non-Desktop decider, a different request,
 an answer from before the request or after it expired, a second answer, a
-reused approval, a malformed or redirected file.
+reused approval, a malformed or redirected file, a claimed Cloud sign-in.
+The person signs with a registered Desktop approver key (``approver``).
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from openadapt_flow.approval_mode.human_attestation import ANSWER_DOMAIN
 from openadapt_flow.approval_mode.item_approval import (
     ItemApprovalAnswer,
     ItemApprovalRefused,
@@ -49,13 +51,24 @@ def _open(store: ItemApprovalStore, **overrides):
     return store.open_request(**fields)
 
 
-def _approve(request, **overrides):
+@pytest.fixture(autouse=True)
+def _signer(approver):
+    global SIGNER
+    SIGNER = approver[1]
+
+
+SIGNER = None
+
+
+def _approve(store, request, **overrides):
     fields = dict(
         decision="approve",
         decided_by="human",
         route="desktop_run_it",
-        approver_id=APPROVER,
-        auth_method="cloud_aal2",
+        approver_id=None,
+        auth_method="none",
+        policy=store.context(),
+        signer=SIGNER,
     )
     fields.update(overrides)
     return make_answer(request, **fields)
@@ -84,12 +97,12 @@ def test_a_request_is_two_private_files_and_waits(tmp_path):
 def test_an_approval_is_recorded_once_and_used_once(tmp_path):
     store = ItemApprovalStore(tmp_path / "run")
     request = _open(store)
-    answer = _approve(request)
+    answer = _approve(store, request)
     store.write_answer(answer)
     assert store.status(request) == "approved"
 
     with pytest.raises(ItemApprovalRefused) as second:
-        store.write_answer(_approve(request))
+        store.write_answer(_approve(store, request))
     assert second.value.code == "already_answered"
 
     assert store.consume(request.request_id) is True
@@ -97,7 +110,9 @@ def test_an_approval_is_recorded_once_and_used_once(tmp_path):
     assert store.status(request) == "used"
     rows = store.consumed_approvals("run-0001")
     assert len(rows) == 1 and isinstance(rows[0], ItemApprovalRef)
-    assert rows[0].approver_id == APPROVER
+    assert rows[0].approver_id is None
+    assert answer.attestation is not None
+    assert answer.attestation.signer == SIGNER.principal_id
     assert rows[0].decided_by == "human"
     assert rows[0].answer_sha256 == answer.digest()
 
@@ -111,9 +126,15 @@ def test_an_approval_is_recorded_once_and_used_once(tmp_path):
         ({"route": "local_console"}, "route_not_allowed"),
         (
             {"approver_id": None, "auth_method": "cloud_aal2"},
-            "answer_fields_inconsistent",
+            "auth_method_unverified",
         ),
-        ({"auth_method": "none"}, "answer_fields_inconsistent"),
+        ({"approver_id": APPROVER}, "answer_fields_inconsistent"),
+        # A claimed Cloud sign-in can't be verified here, so it is refused.
+        (
+            {"approver_id": APPROVER, "auth_method": "cloud_aal2"},
+            "auth_method_unverified",
+        ),
+        ({"signer": None}, "human_answer_unsigned"),
         ({"decision": "decline"}, "answer_fields_inconsistent"),
         ({"decline_reason": "wrong_values"}, "answer_fields_inconsistent"),
         ({"decided_by": "a robot"}, "answer_fields_invalid"),
@@ -123,14 +144,14 @@ def test_only_a_person_in_desktop_run_it_can_answer(tmp_path, overrides, code):
     store = ItemApprovalStore(tmp_path / "run")
     request = _open(store)
     with pytest.raises(ItemApprovalRefused) as refused:
-        _approve(request, **overrides)
+        _approve(store, request, **overrides)
     assert refused.value.code == code
 
 
 def test_an_unauthenticated_approval_names_nobody(tmp_path):
     store = ItemApprovalStore(tmp_path / "run")
     request = _open(store)
-    answer = _approve(request, approver_id=None, auth_method="none")
+    answer = _approve(store, request, approver_id=None, auth_method="none")
     ref = answer.reference(request)
     assert ref.approver_kind == "unauthenticated"
     assert ref.approver_id is None
@@ -139,31 +160,47 @@ def test_an_unauthenticated_approval_names_nobody(tmp_path):
 def test_a_decline_needs_one_closed_reason(tmp_path):
     store = ItemApprovalStore(tmp_path / "run")
     request = _open(store)
-    answer = _approve(request, decision="decline", decline_reason="wrong_record")
+    answer = _approve(store, request, decision="decline", decline_reason="wrong_record")
     store.write_answer(answer)
     assert store.status(request) == "declined"
     with pytest.raises(ItemApprovalRefused):
-        _approve(request, decision="decline", decline_reason="other")
+        _approve(store, request, decision="decline", decline_reason="other")
 
 
 def test_an_answer_for_another_request_or_out_of_time_is_refused(tmp_path):
     store = ItemApprovalStore(tmp_path / "run")
     request = _open(store)
     other = _open(store)
-    answer = _approve(other)
+    answer = _approve(store, other)
     assert answer_refusal(request, answer) == "request_mismatch"
     forged = answer.model_copy(update={"request_id": request.request_id})
     assert answer_refusal(request, forged) == "request_digest_mismatch"
 
     created = datetime.fromisoformat(request.created_at)
-    early = _approve(request).model_copy(
+    early = _approve(store, request).model_copy(
         update={"answered_at": (created - timedelta(seconds=5)).isoformat()}
     )
-    assert answer_refusal(request, early) == "answer_predates_request"
+    # Changing a signed answer breaks its signature; re-signed, it is still
+    # refused for when it was given.
+    assert answer_refusal(request, early, policy=store.context()) == (
+        "human_answer_signature_invalid"
+    )
+    early = early.model_copy(
+        update={"attestation": SIGNER.attest(ANSWER_DOMAIN, early.signed_payload())}
+    )
+    assert (
+        answer_refusal(request, early, policy=store.context())
+        == "answer_predates_request"
+    )
     late_now = datetime.fromisoformat(request.expires_at) + timedelta(seconds=1)
-    assert answer_refusal(request, _approve(request), now=late_now) == "request_expired"
+    assert (
+        answer_refusal(
+            request, _approve(store, request), now=late_now, policy=store.context()
+        )
+        == "request_expired"
+    )
     with pytest.raises(ItemApprovalRefused) as expired:
-        _approve(request, now=late_now)
+        _approve(store, request, now=late_now)
     assert expired.value.code in {"answer_after_expiry", "request_expired"}
 
 
@@ -190,7 +227,7 @@ def test_waiting_returns_the_answer_the_person_gives(tmp_path):
     def sleep(seconds):
         clock[0] += seconds
         if clock[0] >= 2 and store.status(request) == "waiting":
-            store.write_answer(_approve(request))
+            store.write_answer(_approve(store, request))
 
     answer, code = wait_for_answer(
         store, request, timeout_s=60, poll_s=1, monotonic=lambda: clock[0], sleep=sleep
@@ -207,7 +244,7 @@ def test_a_malformed_or_non_human_answer_file_ends_the_wait(tmp_path):
     assert store.status(request) == "invalid_answer"
 
     second = _open(store)
-    payload = _approve(second).model_dump(mode="json")
+    payload = _approve(store, second).model_dump(mode="json")
     payload["decided_by"] = "automation"
     (store.dir / f"answer-{second.request_id}.json").write_text(json.dumps(payload))
     answer, code = wait_for_answer(store, second, timeout_s=5, poll_s=1)
@@ -219,7 +256,7 @@ def test_a_redirected_answer_file_is_never_followed(tmp_path):
     store = ItemApprovalStore(tmp_path / "run")
     request = _open(store)
     outside = tmp_path / "outside.json"
-    outside.write_text(_approve(request).model_dump_json())
+    outside.write_text(_approve(store, request).model_dump_json())
     os.symlink(outside, store.dir / f"answer-{request.request_id}.json")
     with pytest.raises(ItemApprovalRefused) as refused:
         store.read_answer(request.request_id)
@@ -242,7 +279,7 @@ def test_a_redirected_approval_folder_is_refused(tmp_path):
 def test_a_resumed_run_uses_only_the_newest_unused_approval(tmp_path):
     store = ItemApprovalStore(tmp_path / "run")
     older = _open(store)
-    store.write_answer(_approve(older))
+    store.write_answer(_approve(store, older))
     newer = _open(store)
     # The person approved the older request, but the newest request for the
     # same save is the one they last saw; an older answer can't stand in.
@@ -250,7 +287,7 @@ def test_a_resumed_run_uses_only_the_newest_unused_approval(tmp_path):
         store.find_unused_approval(run_id="run-0001", step_id="save", step_index=3)
         is None
     )
-    store.write_answer(_approve(newer))
+    store.write_answer(_approve(store, newer))
     found = store.find_unused_approval(run_id="run-0001", step_id="save", step_index=3)
     assert found is not None and found[0].request_id == newer.request_id
     assert store.consume(newer.request_id)
@@ -275,7 +312,7 @@ def test_unknown_or_traversing_request_ids_are_refused(tmp_path):
 def test_the_answer_model_rejects_unknown_fields(tmp_path):
     store = ItemApprovalStore(tmp_path / "run")
     request = _open(store)
-    payload = _approve(request).model_dump(mode="json")
+    payload = _approve(store, request).model_dump(mode="json")
     payload["note"] = "free text is not allowed"
     with pytest.raises(ValueError):
         ItemApprovalAnswer.model_validate(payload)

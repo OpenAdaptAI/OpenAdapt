@@ -1,0 +1,12 @@
+{
+ "given": "Elias",
+ "family": "Brandt",
+ "birthDate": "1985-12-01",
+ "gender": "male",
+ "line": "220 Pine St",
+ "city": "Albany",
+ "state": "NY",
+ "postalCode": "12207",
+ "phone": "518-555-0164",
+ "email": "elias.brandt@example.org"
+}

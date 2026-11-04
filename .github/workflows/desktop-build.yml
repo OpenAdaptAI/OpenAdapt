@@ -78,8 +78,9 @@ jobs:
             --event "${EVENT_NAME}" \
             --paths-file "${changed_paths}" \
             --github-output "${GITHUB_OUTPUT}"
-          # A pull request builds the Linux installer only; main and dispatches
-          # build every platform.
+          # Native installers are post-merge tier: main and dispatches build
+          # every platform; a pull request and the merge queue build none (the
+          # native-installers job is skipped on both).
           python - "${EVENT_NAME}" >> "${GITHUB_OUTPUT}" <<'PY'
           import json, sys
           native = [
@@ -96,8 +97,6 @@ jobs:
                "architecture": "x86_64", "target": "x86_64-unknown-linux-gnu",
                "bundles": "deb,appimage", "signing": "unsigned"},
           ]
-          if sys.argv[1] == "pull_request":
-              native = [entry for entry in native if entry["platform"] == "linux"]
           print("native_matrix=" + json.dumps(native))
           PY
 
@@ -147,7 +146,7 @@ jobs:
         run: uv build --wheel --sdist
 
       - name: Inspect the built Python archives
-        run: uv run python scripts/verify_build_artifact.py python-distribution
+        run: uv run --locked python scripts/verify_build_artifact.py python-distribution
 
       - name: Enforce the public source boundary
         run: python scripts/check_source_boundary.py --require-dist
@@ -163,14 +162,16 @@ jobs:
   python-sidecar:
     name: Python sidecar (${{ matrix.os }})
     needs: artifact-scope
-    if: needs.artifact-scope.outputs.run_sidecar == 'true'
+    # PR and post-merge tiers. The merge queue skips it: the pull request
+    # already froze and smoke-tested the Linux sidecar on its merge with main.
+    if: needs.artifact-scope.outputs.run_sidecar == 'true' && github.event_name != 'merge_group'
     strategy:
       fail-fast: false
       matrix:
-        # PRs prove the frozen-engine contract on Linux. The merge queue and
-        # main add macOS (which freezes the PyObjC wheels, whose license
-        # notices the build must find) and Windows. Immutable native release
-        # tags rebuild every supported OS.
+        # PRs prove the frozen-engine contract on Linux. Main and dispatch
+        # add macOS (which freezes the PyObjC wheels, whose license notices
+        # the build must find) and Windows. Immutable native release tags
+        # rebuild every supported OS.
         os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-22.04"]' || '["ubuntu-22.04", "macos-14", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
@@ -189,21 +190,21 @@ jobs:
         run: python scripts/sync_frozen_dependencies.py
 
       - name: Build platform-native sidecar
-        run: uv run python scripts/build_frozen_engine.py
+        run: uv run --locked python scripts/build_frozen_engine.py
 
       - name: Smoke-test sidecar executable
-        run: uv run python scripts/verify_build_artifact.py sidecar
+        run: uv run --locked python scripts/verify_build_artifact.py sidecar
 
       - name: Install Linux Chromium runtime libraries
         if: runner.os == 'Linux'
-        run: uv run python -m playwright install-deps chromium
+        run: uv run --locked python -m playwright install-deps chromium
 
       - name: Alias lowercase X11 names for Flow 1.34.0
         if: runner.os == 'Linux'
         run: sudo python scripts/alias_lowercase_x11_sonames.py
 
       - name: Prove frozen browser record, compile, and replay
-        run: uv run python scripts/smoke_test_frozen_flow.py
+        run: uv run --locked python scripts/smoke_test_frozen_flow.py
 
       - name: Upload sidecar executable
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -216,18 +217,20 @@ jobs:
   native-installers:
     name: Native installer (${{ matrix.label }})
     needs: artifact-scope
-    # Main runs this evidence for dependency, toolchain, packaging, and native
-    # changes, and a pull request that changes the native shell builds the
-    # Linux installer. Application-only merges already pass the PR checks and the
-    # exact-main frontend, distribution, and cross-platform test jobs. Every
-    # immutable desktop-v* release tag rebuilds and tests all installers in the
-    # separate Native Installer Release workflow.
-    if: needs.artifact-scope.outputs.run_native == 'true'
+    # Main runs this evidence for dependency, toolchain, packaging, and
+    # native changes; a pull request and the merge queue do not.
+    # Application-only merges already pass the PR checks and the exact-main
+    # frontend, distribution, and cross-platform test jobs. Every immutable
+    # desktop-v* release tag rebuilds and tests all installers in the separate
+    # Native Installer Release workflow, and desktop-release.yml starts only
+    # from a push-to-main Packages run that includes this job.
+    # Post-merge tier: macOS arm64 and Intel, Windows and the Linux bundles
+    # build on main and on dispatch, never for a pull request or a queue group.
+    if: needs.artifact-scope.outputs.run_native == 'true' && github.event_name != 'pull_request' && github.event_name != 'merge_group'
     strategy:
       fail-fast: false
       matrix:
-        # Built by the artifact-scope job: every platform on main and dispatch,
-        # Linux only on a pull request that changes the native shell.
+        # Built by the artifact-scope job: every platform.
         include: ${{ fromJSON(needs.artifact-scope.outputs.native_matrix) }}
     runs-on: ${{ matrix.os }}
     steps:
@@ -309,8 +312,8 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/sync_frozen_dependencies.py
-          uv run python scripts/build_frozen_engine.py
-          uv run python scripts/verify_build_artifact.py sidecar
+          uv run --locked python scripts/build_frozen_engine.py
+          uv run --locked python scripts/verify_build_artifact.py sidecar
           mkdir -p src-tauri/binaries
           ext=""
           if [ "${RUNNER_OS}" = "Windows" ]; then ext=".exe"; fi

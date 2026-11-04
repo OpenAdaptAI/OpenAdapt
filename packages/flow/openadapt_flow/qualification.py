@@ -3134,6 +3134,7 @@ def _case_run_report_integrity_error(
         allowed_receipts = {
             ("uia", ActionKind.CLICK): {
                 ("uia_invoke", True),
+                ("win32_bm_click", True),
                 ("uia_focus", True),
                 ("uia_toggle", True),
                 ("uia_select", True),

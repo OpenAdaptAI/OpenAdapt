@@ -276,6 +276,52 @@ def test_a_bot_log_entry_on_an_undeclared_record_is_collateral() -> None:
     assert [c.audit_only for c in verdict.collateral] == [True]
 
 
+@pytest.mark.parametrize(
+    ("read", "entry", "status"),
+    [
+        # Both reads read uuid_registry as append-only, and the profile marks
+        # it: the bot's insert there, filed under no chart, is bookkeeping.
+        (["openemr.uuid_registry"], {}, "held"),
+        # An empty record field names no record in any app.
+        (["openemr.uuid_registry"], {"record": None, "values": ()}, "held"),
+        (["openemr.uuid_registry"], {"record": "", "values": ()}, "held"),
+        # Record 0 names no record only where the app profile says so; in an
+        # app whose profile doesn't, 0 is a record id and the entry counts.
+        (["openemr.uuid_registry"], {"values": ()}, "refuted"),
+        # No read of it, or a read of another table: the entry still refutes.
+        ([], {}, "refuted"),
+        (["openemr.log"], {}, "refuted"),
+        # An update or delete entry, or one that names a record, still counts.
+        (["openemr.uuid_registry"], {"ev": "update"}, "refuted"),
+        (["openemr.uuid_registry"], {"ev": "delete"}, "refuted"),
+        (["openemr.uuid_registry"], {"record": 1}, "refuted"),
+    ],
+)
+def test_a_bot_insert_entry_naming_no_record_needs_that_table_read(
+    read: list[str], entry: dict, status: str
+) -> None:
+    entry = dict(entry)
+    # OpenEMR's profile: an entry filed under patient 0 names no chart.
+    values = entry.pop("values", ("0",))
+    spec = _audit_spec()
+    assert spec.attribution is not None
+    spec.attribution.table_field = "tbl"
+    spec.attribution.event_field = "ev"
+    spec.attribution.insert_events = ["insert"]
+    logged = {"id": 101, "user": "bot", "record": 0, "tbl": "uuid_registry"}
+    logged.update({"ev": "insert", **entry})
+    verdict = _judge(
+        _state(OTHER),
+        [dict(OTHER), dict(TARGET)],
+        spec=spec,
+        audit_before=[],
+        audit_after=[logged],
+        no_record_inserts=read,
+        no_record_values=values,
+    )
+    assert verdict.status == status, verdict.reason
+
+
 def test_an_unreadable_log_attributes_nothing() -> None:
     edited = {**OTHER, "phone_home": "555-0199"}
     verdict = _judge(

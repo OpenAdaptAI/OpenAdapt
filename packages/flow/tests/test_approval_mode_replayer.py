@@ -433,6 +433,7 @@ def test_outcome_words_are_identical_with_and_without_the_gate(tmp_path, answer)
     assert with_gate.execution_outcome == without.execution_outcome
 
 
+@pytest.mark.usefixtures("approver")
 def test_a_switched_off_mode_asks_a_person_when_an_approval_store_is_wired(tmp_path):
     """Switched off, problems_only waits for a person as each_item does.
 
