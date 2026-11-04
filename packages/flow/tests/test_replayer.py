@@ -3911,6 +3911,37 @@ def test_type_verification_prefers_exact_structural_field_region() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "rendered,verified",
+    [
+        ([(20, "7")], True),
+        ([(20, "X"), (900, "7")], False),
+        ([(900, "7"), (1400, "X")], False),
+    ],
+)
+def test_visual_input_readback_cannot_hide_text_outside_a_centered_crop(
+    rendered, verified
+):
+    before = make_png((1600, 800))
+    after = make_png((1600, 800), color=(220, 220, 220))
+
+    class CroppedVision(FakeVision):
+        def ocr(self, png, *, region=None):
+            if png == before or region is None:
+                return []
+            x, _y, width, _height = region
+            text = "".join(value for left, value in rendered if x <= left < x + width)
+            return [OcrLine(text)] if text else []
+
+    backend = FakeBackend(frame=after, viewport=(1600, 800), text_value_supported=False)
+    landed, changed = Replayer(backend, vision=CroppedVision())._typed_input_landed(
+        "7", (900, 500), before
+    )
+    assert landed is verified
+    assert changed is True
+    assert backend.actions == []
+
+
 def test_type_verification_refocuses_and_retypes_once(bundle, run_dir):
     """Focus theft: the first attempt lands nowhere visible; the retry
     re-clicks the field, selects all (replace, never append), retypes, and

@@ -397,13 +397,11 @@ PC_TEMPLATE_THRESHOLD = 0.9
 # modal at 0.24, leaving a deliberate margin on both sides.
 PC_STRUCTURAL_TEMPLATE_THRESHOLD = 0.8
 
-# Typed-input verification: size of the "field region" diffed/OCRed around
-# the focusing click point after a TYPE action. Generous on purpose — the
-# typed text renders at the field's own left edge / first line, not at the
-# click point — and clamped to the viewport. When no focusing click is
-# known (keyboard-only focus moves, e.g. Tab between fields), the whole
-# frame is used instead.
-FIELD_REGION_SIZE = (640, 240)
+# Typed-input verification: height of the visual readback band around the
+# focusing click after TYPE. Without structural field bounds, read the full
+# viewport width: a centered crop can hide the value's beginning or suffix.
+# With no focusing click (e.g. Tab between fields), use the whole frame.
+FIELD_REGION_HEIGHT = 240
 FIELD_REGION_PAD = 16
 
 # Typed-input verification, secret-only diff acceptance: when a SECRET typed
@@ -17470,11 +17468,9 @@ class Replayer:
                 return (x, y, right - x, bottom - y)
         if field_point is None:
             return None
-        w = min(FIELD_REGION_SIZE[0], vw)
-        h = min(FIELD_REGION_SIZE[1], vh)
-        x = min(max(0, field_point[0] - w // 2), max(0, vw - w))
+        h = min(FIELD_REGION_HEIGHT, vh)
         y = min(max(0, field_point[1] - h // 2), max(0, vh - h))
-        return (x, y, w, h)
+        return (0, y, vw, h)
 
     def _ocr_squashed(self, png: bytes, region: Optional[Region]) -> str:
         """Squashed OCR text of a (region of a) frame."""
