@@ -49,6 +49,7 @@ import threading
 import time
 import uuid
 from collections import Counter
+from contextlib import ExitStack
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -96,6 +97,7 @@ from openadapt_flow.identity_signals import (
     normalize_signal_text,
     parameterize_identity_text,
 )
+from openadapt_flow.interruptions import dismiss_label
 from openadapt_flow.ir import (
     ActionDeliveryUncertainty,
     ActionKind,
@@ -188,6 +190,7 @@ from openadapt_flow.runtime.durable.program_checkpoint import (
 from openadapt_flow.runtime.durable.program_checkpoint import (
     history_hash as _history_hash,
 )
+from openadapt_flow.runtime.effect_watch import EffectWatchReport, watch_effects
 from openadapt_flow.runtime.effects import (
     Effect,
     EffectState,
@@ -15116,6 +15119,7 @@ class Replayer:
             # unreported key/click attempt. The event carries the exact admitted
             # policy and expected visual outcome.
             event = InterstitialActionResult(
+                control_label=dismiss_label(it),
                 interstitial=it.name,
                 action=action,
                 key=it.dismiss_key,
@@ -15148,76 +15152,117 @@ class Replayer:
                         f"durable continuation was preempted before delivery: {exc}"
                     )
                     return before_png, event.error
-            try:
-                if it.dismiss_key is not None:
-                    self._require_qualification_environment_current()
-                    self._deliver_backend_call(
-                        result, lambda: self.backend.press(it.dismiss_key or "Escape")
+            watch_stack = ExitStack()
+            watch: Optional[EffectWatchReport] = None
+            if it.effect_watch:
+                # An interruption class is cleared only when the dismissal is
+                # proven write-free: every watcher this run has is up around
+                # it, or nothing is sent.
+                watched: list[EffectWatchReport] = []
+
+                def _record_watch() -> None:
+                    # Registered first, so it runs after the watchers close
+                    # on every exit, a failed delivery included.
+                    if watched:
+                        event.effect_watchers = list(watched[0].watchers)
+                        event.write_attempts = list(watched[0].attempts)
+
+                watch_stack.callback(_record_watch)
+                watch = watch_stack.enter_context(
+                    watch_effects(self.backend, self.effect_verifier)
+                )
+                watched.append(watch)
+                if watch.refusal is not None:
+                    watch_stack.close()
+                    event.error = f"dismissal not watched: {watch.refusal}"
+                    return before_png, (
+                        f"Interruption '{it.name}' can't be cleared: "
+                        f"{watch.refusal} - refusing to act beneath it; run "
+                        "aborted."
                     )
-                else:
-                    assert resolution is not None
-                    assert it.dismiss_anchor is not None
-                    if resolution.rung == "structural":
-                        native_act = getattr(self.backend, "act_structural", None)
-                        structural_anchor = it.dismiss_anchor.structural
-                        if (
-                            not callable(native_act)
-                            or resolution.structural_handle is None
-                            or structural_anchor is None
-                        ):
-                            raise StructuralResolutionRefused(
-                                "structural dismissal cannot be delivered "
-                                "natively without a stable element handle"
-                            )
+            with watch_stack:
+                try:
+                    if it.dismiss_key is not None:
                         self._require_qualification_environment_current()
                         self._deliver_backend_call(
                             result,
-                            lambda: native_act(
-                                structural_anchor,
-                                resolution.structural_handle,
-                            ),
+                            lambda: self.backend.press(it.dismiss_key or "Escape"),
                         )
                     else:
-                        self._require_qualification_environment_current()
-                        self._deliver_backend_call(
-                            result,
-                            lambda: self.backend.click(
-                                int(resolution.point[0]), int(resolution.point[1])
-                            ),
-                        )
-                event.delivered = True
-            except Exception as exc:
-                if not isinstance(
-                    exc, (FreshActuationRequired, StructuralResolutionRefused)
-                ):
-                    target_fingerprint = None
-                    if (
-                        resolution is not None
-                        and resolution.structural_handle is not None
+                        assert resolution is not None
+                        assert it.dismiss_anchor is not None
+                        if resolution.rung == "structural":
+                            native_act = getattr(self.backend, "act_structural", None)
+                            structural_anchor = it.dismiss_anchor.structural
+                            if (
+                                not callable(native_act)
+                                or resolution.structural_handle is None
+                                or structural_anchor is None
+                            ):
+                                raise StructuralResolutionRefused(
+                                    "structural dismissal cannot be delivered "
+                                    "natively without a stable element handle"
+                                )
+                            self._require_qualification_environment_current()
+                            self._deliver_backend_call(
+                                result,
+                                lambda: native_act(
+                                    structural_anchor,
+                                    resolution.structural_handle,
+                                ),
+                            )
+                        else:
+                            self._require_qualification_environment_current()
+                            self._deliver_backend_call(
+                                result,
+                                lambda: self.backend.click(
+                                    int(resolution.point[0]), int(resolution.point[1])
+                                ),
+                            )
+                    event.delivered = True
+                except Exception as exc:
+                    if not isinstance(
+                        exc, (FreshActuationRequired, StructuralResolutionRefused)
                     ):
-                        target_fingerprint = (
-                            resolution.structural_handle.target_fingerprint
+                        target_fingerprint = None
+                        if (
+                            resolution is not None
+                            and resolution.structural_handle is not None
+                        ):
+                            target_fingerprint = (
+                                resolution.structural_handle.target_fingerprint
+                            )
+                        result.delivery_uncertainty = ActionDeliveryUncertainty(
+                            operation="interstitial_dismiss",
+                            native=(
+                                resolution is not None
+                                and resolution.rung == "structural"
+                            ),
+                            target_fingerprint=target_fingerprint,
+                            observed_at=datetime.now(timezone.utc).isoformat(),
+                            cause_type=type(exc).__name__,
                         )
-                    result.delivery_uncertainty = ActionDeliveryUncertainty(
-                        operation="interstitial_dismiss",
-                        native=(
-                            resolution is not None and resolution.rung == "structural"
-                        ),
-                        target_fingerprint=target_fingerprint,
-                        observed_at=datetime.now(timezone.utc).isoformat(),
-                        cause_type=type(exc).__name__,
+                    event.error = (
+                        "dismissal delivery failed "
+                        f"({type(exc).__name__}); outcome is unknown"
                     )
-                event.error = (
-                    "dismissal delivery failed "
-                    f"({type(exc).__name__}); outcome is unknown"
-                )
-                return before_png, (
-                    f"Interstitial '{it.name}' dismissal delivery failed "
-                    f"({type(exc).__name__}) - refusing to act beneath it; run "
-                    "aborted."
-                )
+                    return before_png, (
+                        f"Interstitial '{it.name}' dismissal delivery failed "
+                        f"({type(exc).__name__}) - refusing to act beneath it; run "
+                        "aborted."
+                    )
 
-            before_png, settle_error = self._resettle_after_interstitial(before_png)
+                before_png, settle_error = self._resettle_after_interstitial(before_png)
+            if watch is not None:
+                if watch.attempts:
+                    event.after_frame_sha256 = hashlib.sha256(before_png).hexdigest()
+                    event.error = "the dismissal tried to write"
+                    result.safety_halt = True
+                    return before_png, (
+                        f"Interruption '{it.name}': its dismissal tried to "
+                        f"write ({'; '.join(watch.attempts)}) - it is not a "
+                        "benign interruption; refusing to continue; run aborted."
+                    )
             event.after_frame_sha256 = hashlib.sha256(before_png).hexdigest()
             if settle_error is not None:
                 event.error = settle_error

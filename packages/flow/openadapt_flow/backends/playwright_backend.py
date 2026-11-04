@@ -8,6 +8,7 @@ deviceScaleFactor=1 so CSS pixels equal screenshot pixels.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import hmac
 import json
@@ -18,7 +19,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Literal, Optional
 from urllib.parse import urlsplit
 
 from openadapt_flow.backends._page_quiescence import PageQuiescence
@@ -2652,7 +2653,9 @@ class PlaywrightBackend:
 
     # -- the wire check (openadapt_flow.wire_check) --------------------------
 
-    def _arm_wire_check(self, submission: ExpectedSubmission) -> Optional[str]:
+    def _arm_wire_check(
+        self, submission: Optional[ExpectedSubmission], *, check: Any = None
+    ) -> Optional[str]:
         """Hold the save's request at the network to the checked form.
 
         Until it is disarmed, every write request from any page of this
@@ -2704,7 +2707,8 @@ class PlaywrightBackend:
         if workers:
             # A worker's WebSockets skip the page's guard and its routes.
             return "a worker runs on this page, and its WebSockets can't be held"
-        check = WireCheck(submission=submission)
+        if check is None:
+            check = WireCheck(submission=submission)
 
         def handler(route: Any) -> None:
             check.handle(route, proceed=route.fallback)
@@ -2966,6 +2970,36 @@ class PlaywrightBackend:
             pass
         self._form_wire = None
         return reasons
+
+    @contextlib.contextmanager
+    def write_fence(self) -> Iterator["WriteFenceReport"]:
+        """Run the ``with`` body while nothing on the page can write.
+
+        The same hold as a checked save (:meth:`_arm_wire_check`), with no
+        submission allowed: every write request from any page of the context
+        is aborted before it leaves, and a WebSocket, worker or message sent
+        meanwhile is refused in the page. Each is reported. A fence that
+        can't go up sets ``refusal`` and the body must not act. Used around
+        the dismissal of an interruption
+        (:mod:`openadapt_flow.runtime.effect_watch`).
+        """
+
+        report = WriteFenceReport()
+        if self._form_wire is not None:
+            report.refusal = "a save is already held on this page"
+            yield report
+            return
+        refusal = self._arm_wire_check(None, check=WireCheck())
+        if refusal is not None:
+            report.refusal = refusal
+            yield report
+            return
+        try:
+            yield report
+            # Let anything the action queued reach the hold while it is up.
+            self.wait_form_submit_guard(WRITE_FENCE_TAIL_MS)
+        finally:
+            report.attempts.extend(self._disarm_wire_check())
 
     def wait_form_submit_guard(self, ms: int) -> None:
         """Let the page and the wire check run for ``ms`` milliseconds."""
@@ -5272,6 +5306,26 @@ def _ws_guard_secrets(target: Any) -> tuple[str, str, str]:
     except Exception:  # noqa: BLE001 - a stand-in context; holding refuses
         pass
     return secrets
+
+
+#: How long a write fence stays up after its action, so a request the action
+#: queued just before the fence comes down is still caught.
+WRITE_FENCE_TAIL_MS = 500
+
+
+@dataclass
+class WriteFenceReport:
+    """What a write fence saw. ``refusal`` set means it never went up."""
+
+    refusal: Optional[str] = None
+    #: Each write the fence stopped, and how.
+    attempts: list[str] = field(default_factory=list)
+
+    @property
+    def held(self) -> bool:
+        """The fence was up for the whole action and nothing tried to write."""
+
+        return self.refusal is None and not self.attempts
 
 
 def _wire_reasons(check: WireCheck, notes: list[str]) -> list[str]:

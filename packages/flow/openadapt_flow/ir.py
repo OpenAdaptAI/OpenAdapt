@@ -1401,6 +1401,26 @@ class Interstitial(BaseModel):
         description="Expected visual postcondition after dismissal. It must hold "
         "and the detection predicate must no longer hold before replay continues.",
     )
+    effect_watch: Optional[bool] = Field(
+        default=None,
+        description="Dismiss only under the run's write watchers "
+        "(openadapt_flow.runtime.effect_watch): the browser's write fence and "
+        "the system-of-record read-back. A run that can't watch, or any write "
+        "a watcher sees, halts the run. Set on every interruption class "
+        "(openadapt_flow.interruptions), declared or learned; it also limits "
+        "the dismissal to Escape or a control whose label is a closed "
+        "non-committing one (close, dismiss, not now, continue session).",
+    )
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Leave ``effect_watch`` out when unset, so every existing
+        interstitial (and bundle digest) serializes exactly as before."""
+
+        data: dict[str, Any] = handler(self)
+        if self.effect_watch is None:
+            data.pop("effect_watch", None)
+        return data
 
     @model_validator(mode="after")
     def _validate_safe_detection_and_dismissal(self) -> "Interstitial":
@@ -1493,6 +1513,12 @@ class Interstitial(BaseModel):
                 "interstitial clearance must be a visual postcondition; "
                 "parameter-only predicates cannot verify a UI dismissal"
             )
+        if self.effect_watch:
+            from openadapt_flow.interruptions import interruption_class_error
+
+            error = interruption_class_error(self)
+            if error is not None:
+                raise ValueError(error)
         return self
 
 
@@ -4235,6 +4261,24 @@ class InterstitialActionResult(BaseModel):
     before_frame_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     after_frame_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     error: Optional[str] = None
+    #: The write watchers that were up around the dismissal (``"network"``,
+    #: ``"record"``); empty when the interstitial declares no effect watch.
+    effect_watchers: list[str] = Field(default_factory=list)
+    #: Each write a watcher saw. Non-empty halts the run.
+    write_attempts: list[str] = Field(default_factory=list)
+    #: The dismiss control's label, for the receipt.
+    control_label: Optional[str] = None
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Leave the effect-watch fields out when unused, so reports of
+        existing interstitials serialize exactly as before."""
+
+        data: dict[str, Any] = handler(self)
+        for key in ("effect_watchers", "write_attempts", "control_label"):
+            if not data.get(key):
+                data.pop(key, None)
+        return data
 
 
 class ProgramExecutionScopeFrame(BaseModel):

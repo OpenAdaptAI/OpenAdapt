@@ -17,6 +17,10 @@
 
 ## Unreleased
 
+### Features
+
+- Interruption classes: a run clears a known interruption, such as a session warning, a banner or a tour, by itself, but only when the dismissal is provably read-only. The class must match by its text and control, the control's label must be in a closed non-committing set, and no write watcher may see a write. On the web the watcher is the browser write fence; on any backend, including desktop and RDP, it is the system-of-record read-back. Afterwards the step's normal identity check must pass. Classes are per-app data (`runtime.interruptions_path`) or learned from a halt (`learn_interruption`). Each dismissal is in the run report. See `docs/INTERRUPTION_RECOVERY.md`.
+
 ### Fixes
 
 - The OpenEMR contracts (`benchmark/lifecycle_proof/verify.yaml`, `benchmark/openemr_local/verify.yaml`) now declare how the New Patient form stores what was typed: street and city in capitals, names with each word capitalized. Without it the exact record check refuted 19 of 20 correct saves on the stand-in suites (#1811). A contract value's `stored` form gains `capitalize_words` (OpenEMR's "C" fields); the set stays closed and the check stays exact.
