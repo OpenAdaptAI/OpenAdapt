@@ -61,13 +61,14 @@ A model-backed inducer wires in behind the same
 from __future__ import annotations
 
 import difflib
+import os
 import re
-import shutil
 from pathlib import Path
 from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from openadapt_flow import artifacts, sealed_set
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
@@ -101,7 +102,15 @@ from openadapt_flow.runtime.authorization import runtime_params_for_gui
 class TeachError(Exception):
     """A teach cannot even be attempted (bad inputs), as distinct from a
     governed REFUSAL to promote a correction (which is a normal, reported
-    outcome -- see :attr:`TeachResult.promoted`)."""
+    outcome -- see :attr:`TeachResult.promoted`).
+
+    ``public`` marks a message built only from the command line (the paths
+    it was given). Any other message may quote what teach read, so the CLI
+    withholds it when the input is sealed or strict mode is on."""
+
+    def __init__(self, message: str, *, public: bool = False) -> None:
+        super().__init__(message)
+        self.public = public
 
 
 # -- fix demonstration: a scripted correction spec ---------------------------
@@ -146,12 +155,12 @@ def load_halt_report(run_dir: Path | str) -> RunReport:
     """
     run = Path(run_dir)
     report_path = run / "report.json"
-    if not report_path.is_file():
+    if not artifacts.is_file(report_path):
         raise TeachError(
             f"no run report at {report_path} -- teach needs the directory of a "
             "run that HALTED (holding report.json)"
         )
-    report = RunReport.model_validate_json(report_path.read_text(encoding="utf-8"))
+    report = RunReport.model_validate_json(artifacts.read_text(report_path))
     if report.halt is None:
         raise TeachError(
             f"the run at {run} did not halt (report.json has no halt observation) "
@@ -168,7 +177,9 @@ def load_base_program(bundle_dir: Path | str) -> tuple[Workflow, ProgramGraph]:
     same governed learn path applies to both.
     """
     bundle = Path(bundle_dir)
-    if not (bundle / "workflow.json").is_file():
+    if not artifacts.is_file(bundle / "workflow.json") and not artifacts.is_file(
+        bundle / "workflow.json.enc"
+    ):
         raise TeachError(
             f"no bundle at {bundle} -- teach needs the base bundle that halted "
             "(the one whose replay produced the run report), via --bundle"
@@ -185,22 +196,34 @@ def check_provenance(
     *,
     run_dir: Path | str,
     bundle_dir: Path | str,
+    private: bool = False,
 ) -> None:
     """Require that the halted run came from the bundle passed as ``--bundle``.
 
     A mismatched pair can't be taught: the correction would be spliced into a
     program that never ran, and the learn loop would only report a generic
     refusal. Raises :class:`TeachError` before anything is written.
+
+    With ``private`` (sealed input or strict mode) the message names only the
+    paths on the command line, never a state id, workflow name or step intent
+    read from the encrypted report, so the CLI may print it.
     """
+    halt = report.halt
+    assert halt is not None  # guaranteed by load_halt_report
+    stale = TeachError(
+        f"the run at {run_dir} did not stop in a program --bundle {bundle_dir} "
+        "holds. Pass the bundle whose replay stopped.",
+        public=True,
+    )
     if report.workflow_name != base_workflow.name:
+        if private:
+            raise stale
         raise TeachError(
             f"the run at {run_dir} came from the workflow "
             f"{report.workflow_name!r}, but --bundle {bundle_dir} is the "
             f"workflow {base_workflow.name!r}. Pass the bundle whose replay "
             "stopped."
         )
-    halt = report.halt
-    assert halt is not None  # guaranteed by load_halt_report
     graphs = [program, *base_workflow.subflows.values()]
     if any(halt.state_id in graph.states for graph in graphs):
         return
@@ -212,6 +235,8 @@ def check_provenance(
         for state in graph.states.values()
     ):
         return
+    if private:
+        raise stale
     raise TeachError(
         f"the step where the run at {run_dir} stopped ({halt.intent!r}) is not "
         f"in --bundle {bundle_dir}. Pass the bundle whose replay stopped."
@@ -413,7 +438,7 @@ def _texts_seen_before_halt(
         completed = result.ok and not result.skipped
         if completed or (delivered and result is halted):
             frames.append(run_dir / result.before_png)
-    readable = [frame for frame in frames if frame.is_file()]
+    readable = [frame for frame in frames if artifacts.is_file(frame)]
     if not readable:
         return None
     try:
@@ -422,7 +447,7 @@ def _texts_seen_before_halt(
 
         seen: list[str] = []
         for frame in readable:
-            for line in ocr(frame.read_bytes()):
+            for line in ocr(artifacts.open_read(frame)):
                 text = (scrub_text(line.text) or "").strip()
                 if text:
                     seen.append(text)
@@ -485,8 +510,12 @@ def _plan_correction(
     *,
     run_dir: Path,
     recorded: dict[str, Step],
+    private: bool = False,
 ) -> _Plan:
     """Build the ``(correction, baseline)`` traces, or a refusal reason.
+
+    With ``private`` a refusal names the halted step by its state id, never
+    by the intent read from the encrypted report.
 
     Places the fix where the obstruction appeared. ``tail`` is the halted step
     and the remainder of the program.
@@ -511,6 +540,7 @@ def _plan_correction(
         )
     halt = report.halt
     assert halt is not None
+    step = f"halt {halt.state_id!r}" if private else repr(halt.intent)
     halted = _halted_result(report)
     delivered = _was_delivered(halted)
     halted_step = _halted_step(program, report)
@@ -537,7 +567,7 @@ def _plan_correction(
         if halted_step is None:
             return _Plan(
                 refusal=(
-                    f"the run stopped after {halt.intent!r} acted, and teach "
+                    f"the run stopped after {step} acted, and teach "
                     "can't find that step in --bundle, so it can't place the "
                     "fix after it"
                 )
@@ -545,7 +575,7 @@ def _plan_correction(
         if repeats_halted and _can_write(halted_step):
             return _Plan(
                 refusal=(
-                    f"the run stopped after {halt.intent!r} was delivered, and "
+                    f"the run stopped after {step} was delivered, and "
                     "that step can write to the record. The fix repeats it, "
                     "and nothing shows that the first delivery wrote nothing, "
                     "so the learned workflow could save twice. Check the "
@@ -555,7 +585,7 @@ def _plan_correction(
         if not repeats_halted and halted_step.effects:
             return _Plan(
                 refusal=(
-                    f"the run stopped after {halt.intent!r} was delivered, and "
+                    f"the run stopped after {step} was delivered, and "
                     "its write is checked against the system of record only "
                     "when its screen check passes. After the fix nothing would "
                     "check that write, so teach won't learn this fix"
@@ -680,12 +710,14 @@ def _spec_from_recording(
     from openadapt_flow.compiler.compile import compile_recording
 
     recording = Path(recording_dir)
-    if not (recording / "events.jsonl").is_file():
+    if not artifacts.is_file(recording / "events.jsonl"):
         raise TeachError(
             f"{recording} is not a recording directory (no events.jsonl). Pass a "
             "recording produced by `openadapt-flow record`, or a .json "
             "correction spec."
         )
+    # Inside an encrypted recording this is a sealed bundle of its own, which
+    # the recording's set skips (compile_recording seals it).
     compiled_dir = recording / "_teach_compiled"
     compiled = compile_recording(
         recording, compiled_dir, name=f"{report.workflow_name}-fix"
@@ -737,6 +769,10 @@ class TeachResult(BaseModel):
     promoted: bool
     outcome: LearnOutcome
     out_bundle: Optional[Path] = None
+    #: Sealed input or strict mode: the summary withholds what the learn loop
+    #: read (the skill id, which defaults to the workflow name, the reason,
+    #: clusters and gate failures).
+    private: bool = False
 
     @property
     def refused(self) -> bool:
@@ -745,11 +781,17 @@ class TeachResult(BaseModel):
     def summary(self) -> str:
         """A short operator-facing verdict (what it learned / why it refused)."""
         verdict = "LEARNED" if self.promoted else "REFUSED"
-        lines = [
-            f"{verdict}: {self.outcome.action} (skill {self.skill_id!r})",
-            f"  reason: {self.outcome.reason}",
-        ]
-        if self.outcome.clusters:
+        from openadapt_flow import safe_errors
+
+        skill = safe_errors.label(self.skill_id, private=self.private)
+        lines = [f"{verdict}: {self.outcome.action} (skill {skill})"]
+        if self.private:
+            lines.append(
+                "  reason: withheld because the input is sealed or strict mode is on"
+            )
+        else:
+            lines.append(f"  reason: {self.outcome.reason}")
+        if self.outcome.clusters and not self.private:
             lines.append(f"  clusters: {self.outcome.clusters}")
         if self.outcome.action != _NOT_ATTEMPTED:
             lines.append(
@@ -760,8 +802,12 @@ class TeachResult(BaseModel):
         if self.outcome.gate is not None:
             gate = "passed" if self.outcome.gate.passed else "FAILED"
             lines.append(f"  regression gate: {gate}")
-            for failure in self.outcome.gate.failures:
-                lines.append(f"    - {failure}")
+            if self.private and self.outcome.gate.failures:
+                count = len(self.outcome.gate.failures)
+                lines.append(f"    {count} failure(s), details withheld")
+            elif not self.private:
+                for failure in self.outcome.gate.failures:
+                    lines.append(f"    - {failure}")
         if self.promoted and self.out_bundle is not None:
             lines.append(f"  updated bundle written to {self.out_bundle}")
             lines.append(
@@ -778,9 +824,10 @@ class TeachResult(BaseModel):
 _NOT_ATTEMPTED = "not_attempted"
 
 
-def _refusal(skill_id: str, reason: str) -> TeachResult:
+def _refusal(skill_id: str, reason: str, *, private: bool = False) -> TeachResult:
     return TeachResult(
         skill_id=skill_id,
+        private=private,
         promoted=False,
         outcome=LearnOutcome(
             skill_id=skill_id,
@@ -838,7 +885,7 @@ def _real_target_canary(bundle_dir: Path, carried: dict[str, Path]) -> ProgramCa
                         continue
                     if anchor is not None and (
                         anchor.template in carried
-                        or (bundle_dir / anchor.template).is_file()
+                        or artifacts.is_file(bundle_dir / anchor.template)
                     ):
                         continue
                     return False, (
@@ -852,24 +899,119 @@ def _real_target_canary(bundle_dir: Path, carried: dict[str, Path]) -> ProgramCa
     return canary
 
 
+def _write_crop(destination: Path, data: bytes) -> None:
+    """Write a crop into the taught bundle: encrypted when it is being sealed."""
+    if not sealed_set.is_sealed_path(destination):
+        destination.parent.mkdir(parents=True, exist_ok=True)
+    sealed_set.write_bytes(destination, data)
+
+
 def _copy_templates(src_bundle: Path, out_bundle: Path) -> None:
     """Carry the base bundle's template crops (subfolders included, such as
     identifier crops) into the updated bundle so the promoted program can
-    resolve its anchors on re-run."""
-    src_templates = src_bundle / "templates"
-    if not src_templates.is_dir():
-        return
-    shutil.copytree(src_templates, out_bundle / "templates", dirs_exist_ok=True)
+    resolve its anchors on re-run. Sealed crops are decrypted in memory."""
+    src_templates = Path(os.path.abspath(src_bundle / "templates"))
+    for template in artifacts.list_files(src_templates):
+        _write_crop(
+            out_bundle / "templates" / template.relative_to(src_templates),
+            artifacts.open_read(template),
+        )
 
 
 def _copy_carried(carried: dict[str, Path], out_bundle: Path) -> None:
     """Copy the fix recording's crops to the paths the spliced step uses."""
     for rel, source in carried.items():
-        if not source.is_file():
+        if not artifacts.is_file(source):
             raise TeachError(f"the fix recording's crop {source} is missing")
-        destination = out_bundle / rel
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
+        _write_crop(out_bundle / rel, artifacts.open_read(source))
+
+
+def _seal_outputs(*inputs: Path | str) -> bool:
+    """Whether teach writes its library and bundle sealed: any input is sealed,
+    or strict mode (docs/phi_at_rest.md)."""
+    from openadapt_flow import at_rest
+
+    return at_rest.strict() or any(artifacts.is_sealed(p) for p in inputs)
+
+
+def _check_sealed_out(out_bundle: Path) -> None:
+    """A sealed taught bundle goes into a new or sealed directory, never over
+    a plaintext one."""
+    if sealed_set.is_sealed(out_bundle):
+        return
+    if out_bundle.is_dir() and any(out_bundle.iterdir()):
+        raise TeachError(
+            f"--out {out_bundle} already holds an unencrypted bundle; pass a new "
+            "directory so the taught bundle stays encrypted"
+        )
+
+
+def _overlap(a: Path, b: Path) -> bool:
+    """Is ``a`` the same path as ``b`` (through symlinks, or the same inode),
+    or inside it, or around it?"""
+    ra, rb = Path(os.path.realpath(a)), Path(os.path.realpath(b))
+    if ra == rb or ra.is_relative_to(rb) or rb.is_relative_to(ra):
+        return True
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
+def check_out_is_new(
+    out: Path | str, *, library: Optional[Path | str] = None, **inputs: Path | str
+) -> None:
+    """Refuse an ``--out`` (or its skill library) that is, holds or sits
+    inside an input: the base bundle, the halted run or the fix. Teach writes
+    the taught bundle there, so the base program would be overwritten. Checked
+    before anything is read or written; a symlink alias counts as the input."""
+    out_path = Path(out)
+    lib = (
+        Path(library)
+        if library is not None
+        else out_path.parent / f"{out_path.name}.skills"
+    )
+    for target, flag in ((out_path, "--out"), (lib, "the skill library")):
+        for name, path in inputs.items():
+            if _overlap(target, Path(path)):
+                raise TeachError(
+                    f"{flag} {target} is or overlaps the {name} input {path}. "
+                    "Pass a new directory: teach never writes over its inputs",
+                    public=True,
+                )
+
+
+def _write_taught_bundle(
+    updated: Workflow,
+    bundle: Path,
+    out_bundle: Path,
+    carried: dict[str, Path],
+    run_dir: Path | str,
+) -> None:
+    # Crops go in first: saving seals a manifest over the files present.
+    _copy_templates(bundle, out_bundle)
+    _copy_carried(carried, out_bundle)
+    updated.save(out_bundle)
+    # Governed repair promotion (Section 9): the taught bundle is a lifecycle
+    # CANDIDATE, never an implicitly active bundle. A detached
+    # repair/candidate.json is written into it; promotion to active requires
+    # the explicit lifecycle (campaigns, human approval, staged canary) via
+    # `openadapt-flow repair`. Registration failure fails CLOSED by absence:
+    # without the record the taught bundle cannot enter the lifecycle at all.
+    from openadapt_flow.repair.registration import register_bundle_candidate
+
+    try:
+        register_bundle_candidate(
+            bundle,
+            out_bundle,
+            source="teach",
+            evidence_run_dir=Path(run_dir),
+        )
+    except Exception as exc:
+        print(
+            "repair candidate registration failed (the taught bundle stays "
+            f"ungoverned and non-promotable): {exc}"
+        )
 
 
 def teach(
@@ -908,9 +1050,24 @@ def teach(
             fix, a run that did not come from ``bundle``, or a library at
             ``library_dir`` seeded from a different bundle).
     """
+    check_out_is_new(
+        out,
+        library=library_dir,
+        **{"halted run": run_dir, "fix": fix, "base bundle": bundle},
+    )
+    seal = _seal_outputs(run_dir, fix, bundle)
+    if seal:
+        _check_sealed_out(Path(out))
     report = load_halt_report(run_dir)
     base_workflow, program = load_base_program(bundle)
-    check_provenance(report, base_workflow, program, run_dir=run_dir, bundle_dir=bundle)
+    check_provenance(
+        report,
+        base_workflow,
+        program,
+        run_dir=run_dir,
+        bundle_dir=bundle,
+        private=seal,
+    )
     sid = skill_id or report.workflow_name
 
     spec = _load_fix(fix)
@@ -919,11 +1076,11 @@ def teach(
     if spec is None:
         spec, recorded, carried = _spec_from_recording(Path(fix), report)
     plan = _plan_correction(
-        spec, program, report, run_dir=Path(run_dir), recorded=recorded
+        spec, program, report, run_dir=Path(run_dir), recorded=recorded, private=seal
     )
     if plan.refusal:
         # Refused before learning: nothing is written, not even a library.
-        return _refusal(sid, plan.refusal)
+        return _refusal(sid, plan.refusal, private=seal)
     assert plan.correction is not None and plan.baseline is not None
 
     lib_root = (
@@ -931,7 +1088,12 @@ def teach(
         if library_dir is not None
         else Path(out).parent / f"{Path(out).name}.skills"
     )
-    library = SkillLibrary(lib_root)
+    try:
+        library = SkillLibrary(lib_root, seal=seal)
+    except sealed_set.SealedSetError as exc:
+        # Opening the library names only its directory (``--library`` or the
+        # one beside ``--out``) and the key it needs.
+        raise TeachError(str(exc), public=True) from exc
     _seed_or_check_library(
         library, sid, program, dict(base_workflow.subflows), bundle_dir=bundle
     )
@@ -950,7 +1112,7 @@ def teach(
         # Governed refusal: leave the bundle untouched -- the workflow stays
         # halting exactly as before the teach was attempted.
         return TeachResult(
-            skill_id=sid, promoted=False, outcome=outcome, out_bundle=None
+            skill_id=sid, promoted=False, outcome=outcome, out_bundle=None, private=seal
         )
 
     updated = promoted_workflow(library, sid, name=base_workflow.name)
@@ -964,30 +1126,25 @@ def teach(
         }
     )
     out_bundle = Path(out)
-    # Crops go in first: saving seals a manifest over the files present.
-    _copy_templates(Path(bundle), out_bundle)
-    _copy_carried(carried, out_bundle)
-    updated.save(out_bundle)
-    # Governed repair promotion (Section 9): the taught bundle is a lifecycle
-    # CANDIDATE, never an implicitly active bundle. A detached
-    # repair/candidate.json is written into it; promotion to active requires
-    # the explicit lifecycle (campaigns, human approval, staged canary) via
-    # `openadapt-flow repair`. Registration failure fails CLOSED by absence:
-    # without the record the taught bundle cannot enter the lifecycle at all.
-    from openadapt_flow.repair.registration import register_bundle_candidate
-
-    try:
-        register_bundle_candidate(
-            Path(bundle),
+    if seal:
+        # Every crop, the program and the candidate record are encrypted
+        # before they reach the disk (the same key rules as compile).
+        passphrase = sealed_set.output_bundle_key()
+        if not passphrase:
+            raise TeachError(sealed_set.missing_key_message(out_bundle, "bundle"))
+        with sealed_set.writing(
             out_bundle,
-            source="teach",
-            evidence_run_dir=Path(run_dir),
-        )
-    except Exception as exc:
-        print(
-            "repair candidate registration failed (the taught bundle stays "
-            f"ungoverned and non-promotable): {exc}"
-        )
+            "bundle",
+            passphrase,
+            resume=sealed_set.is_sealed(out_bundle),
+        ):
+            _write_taught_bundle(updated, Path(bundle), out_bundle, carried, run_dir)
+    else:
+        _write_taught_bundle(updated, Path(bundle), out_bundle, carried, run_dir)
     return TeachResult(
-        skill_id=sid, promoted=True, outcome=outcome, out_bundle=out_bundle
+        skill_id=sid,
+        promoted=True,
+        outcome=outcome,
+        out_bundle=out_bundle,
+        private=seal,
     )
