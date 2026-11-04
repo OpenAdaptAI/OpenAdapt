@@ -55,7 +55,9 @@ def test_matrix_qualifies_a_compensation_for_every_save_on_mockmed(tmp_path, moc
         Workflow.load(bundle),
         bundle_dir=bundle,
         target=target,
-        reader=VerifierReader(RestRecordVerifier(mockmed)),
+        reader=VerifierReader(
+            RestRecordVerifier(mockmed, records_path="/api/db", records_key="records")
+        ),
         sources=Sources(network_lines=_network()),
         work_dir=tmp_path / "work",
         allow_delete=True,

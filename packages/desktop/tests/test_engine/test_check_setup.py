@@ -279,7 +279,9 @@ def test_fixed_values_are_the_recorded_ones_and_follow_the_sealed_version(tmp_pa
     with pytest.raises(CheckSetupError, match="Unknown value"):
         answer_values(dispatcher, "wf1", ["member_id"], answered_by="person")
 
-    store.write_record_check_config("wf1", {"kind": "rest", "base_url": BASE})
+    store.write_record_check_config(
+        "wf1", {"kind": "rest", "records_path": "/api/db", "base_url": BASE}
+    )
     saved = store.load("wf1")
     saved["record_check_config"] = str(store.root / "wf1.record-check.yaml")
     store.save("wf1", saved)

@@ -23,6 +23,8 @@ Each lab host is a *profile*: a set of environment variables with the prefix
 * ``PASSWORD``: the WinRM password, used only when ``SSH_KEY`` is unset.
 * ``PYTHON``: the host's ``pythonw.exe`` (optional; found on the host
   when unset).
+* ``APP_PYTHON``: the console ``python.exe`` that test apps and their
+  helper scripts run under (optional; the ``python.exe`` beside ``PYTHON``).
 * ``GUEST_DIR``: where the agent and its certificate go (default ``C:\\oa``).
 
 ``WinRMLab()`` uses the profile named by ``OAFLOW_LAB_PROFILE`` (default
@@ -92,6 +94,7 @@ class HostProfile:
     user: str
     ssh_key: Optional[str] = None
     python: Optional[str] = None
+    app_python: Optional[str] = None
     guest_dir: str = r"C:\oa"
 
     @property
@@ -118,6 +121,7 @@ class HostProfile:
             user=os.environ[prefix + "USER"],
             ssh_key=os.path.expanduser(key) if key else None,
             python=os.environ.get(prefix + "PYTHON") or None,
+            app_python=os.environ.get(prefix + "APP_PYTHON") or None,
             guest_dir=os.environ.get(prefix + "GUEST_DIR") or r"C:\oa",
         )
 
@@ -172,6 +176,7 @@ class WinRMLab:
                 user=user or base.user,
                 ssh_key=base.ssh_key,
                 python=base.python,
+                app_python=base.app_python,
                 guest_dir=base.guest_dir,
             )
         self.host = self.profile.host
@@ -342,6 +347,19 @@ $found
                 f"no Python 3.12 on {self.host}; set {self.profile.prefix}PYTHON"
             )
         return path
+
+    def resolve_app_python(self) -> str:
+        """The host's console ``python.exe`` for test apps and helper scripts.
+
+        Harnesses call this instead of naming an interpreter path, which
+        differs between hosts (an ARM VM's ``Python312-arm64``, an x64 PC's
+        ``C:\\Python312``).
+        """
+        if self.profile.app_python:
+            return self.profile.app_python
+        pythonw = self.resolve_python()
+        folder, _, name = pythonw.rpartition("\\")
+        return f"{folder}\\python.exe" if name.lower() == "pythonw.exe" else pythonw
 
     def launch_interactive(self, command_line: str, *, name: str = "OAFlowLab") -> None:
         """Start ``command_line`` on the signed-in user's desktop.

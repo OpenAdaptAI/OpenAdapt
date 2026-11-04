@@ -63,7 +63,11 @@ from the PR and queue tiers runs in the post-merge tier and nightly.
 | `dependency-review` | dependency-review.yml | runs | runs |
 
 The `ci` job needs Packages, the launcher CI and the smoke test. It fails
-unless each one passed. Inside Packages, `packages-gate` still requires every
+unless each one passed. When all three passed it is skipped instead of run:
+GitHub counts a skipped required check as passing, so a green run doesn't
+wait for a runner just to report. On 2026-11-03 these reporter jobs did no
+work but each waited 15 to 30 minutes for a runner. The two legacy names
+below follow the same rule. Inside Packages, `packages-gate` still requires every
 job the change selects to run and pass, except on a tier where that job
 doesn't run:
 
@@ -78,7 +82,7 @@ queue themselves. ci.yml calls them, so each job runs once per pull request.
 
 **Switching branch protection.** Until branch protection names `ci`, ci.yml
 also reports the two old required names, `run-ci (ubuntu-latest, 3.12)` and
-`packages-gate`, with `ci`'s result. CodeQL keeps reporting
+`packages-gate`, by the same rule as `ci`. CodeQL keeps reporting
 `Analyze (python)` from codeql.yml, as a non-required check after the
 switch. An admin switches it with:
 
@@ -100,7 +104,7 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 | packages.yml | `types`, `agent` | Python 3.12 | Python 3.12 | Python 3.10 and 3.12 |
 | packages.yml | `flow-lint`, `flow-critical` | yes | yes | yes |
 | ci.yml | `smoke`, `ci` | yes | yes | no |
-| packages.yml | `flow-unit` | 4 xdist shards, fast lane (without `nightly_only.txt`) | no | 2 xdist shards |
+| packages.yml | `flow-unit` | 3 shards packed by measured time, fast lane (without `nightly_only.txt`) | no | 2 shards |
 | packages.yml | `flow-native-census` | no | no | Windows and macOS |
 | packages.yml | `capture-linux` | Python 3.12 | Python 3.12 | Python 3.10 (ubuntu-22.04), 3.11, 3.12 |
 | packages.yml | `capture-macos`, `capture-windows` | no | no | yes |
@@ -126,9 +130,15 @@ packages.yml jobs run only for the packages a change touches. The `scope` job
 decides from the PR diff, the queue group's diff against its base commit, or
 the push's diff against the previous main.
 
-Flow's unit shards run `pytest -n auto --dist loadfile`: four xdist workers
-per runner, one test file per worker at a time, each worker with its own
-`--basetemp` directory. A test file that can't share the runner with others
+Flow's unit shards run `pytest -n logical --dist loadfile`: one xdist worker
+per vCPU (four on ubuntu-latest; `-n auto` counted physical cores and started
+two), one test file per worker at a time, each worker with its own
+`--basetemp` directory. `scripts/ci/flow_shards.py` packs the files into
+shards by their run time in `scripts/ci/flow_test_durations.json`, longest
+first, so the shards end together. A file with no recorded time counts as
+the median. Refresh the times from a run's shard logs with
+`python scripts/ci/flow_shards.py --from-logs <logs>` when the shards drift
+apart by more than a minute or two. A test file that can't share the runner with others
 should get its own serial step rather than turning xdist off.
 
 ## Releases

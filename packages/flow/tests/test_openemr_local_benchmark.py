@@ -26,6 +26,7 @@ from benchmark.openemr_local.fixture import (
 from benchmark.harness.openemr_local import (
     ARMS,
     CONDITIONS,
+    PATIENT_DUPLICATE_KEY,
     OpenEMRPatientOracle,
     PrimaryOutcome,
     SyntheticPatientSpec,
@@ -353,6 +354,39 @@ def test_effects_and_api_binding_cover_same_synthetic_fields() -> None:
     assert binding.body_template["city"] == "{city}"
     assert spec.params()["state_label"] == "Massachusetts"
     assert "state" not in spec.params()
+
+
+def test_compiled_save_check_carries_the_duplicate_key_qualification_adds() -> None:
+    """A fresh compile and qualification describe the save the same way (#1534)."""
+    from openadapt_flow.ir import ActionKind, Step
+    from openadapt_flow.policy import effect_has_idempotency_key
+    from openadapt_flow.qualify.campaign import record_effects
+    from openadapt_flow.qualify.config import load_verify_config
+
+    written = patient_effects()[0]
+    assert written.kind is EffectKind.RECORD_WRITTEN
+    assert written.idempotency_key is not None
+    assert written.idempotency_key.param == PATIENT_DUPLICATE_KEY
+    assert written.key_field == PATIENT_DUPLICATE_KEY
+    resolved = patient_effects(SyntheticPatientSpec(), resolved=True)[0]
+    assert str(resolved.idempotency_key) == SyntheticPatientSpec().email
+
+    save = Step(
+        id="step_040",
+        intent="save the new patient",
+        action=ActionKind.CLICK,
+        effects=patient_effects(),
+    )
+    assert effect_has_idempotency_key(save)
+
+    config = load_verify_config(
+        Path(__file__).resolve().parents[1] / "benchmark/openemr_local/verify.yaml"
+    )
+    assert config.record.duplicate_key == PATIENT_DUPLICATE_KEY
+    qualified = record_effects(config)[0]
+    assert qualified.kind is EffectKind.RECORD_WRITTEN
+    assert qualified.key_field == written.key_field
+    assert qualified.idempotency_key == written.idempotency_key
 
 
 def test_oracle_filters_reserved_identity_through_read_only_record_shape() -> None:

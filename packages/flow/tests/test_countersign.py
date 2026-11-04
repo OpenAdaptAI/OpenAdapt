@@ -426,12 +426,20 @@ def test_openssl_accepts_local_tsa_tokens(tsa, tmp_path):
 
 
 def _countersigned(
-    issuer, tsa, *, doc=None, fields=None, baseline=None, countersign=True
+    issuer,
+    tsa,
+    *,
+    doc=None,
+    fields=None,
+    baseline=None,
+    countersign=True,
+    field_random_bytes=None,
 ):
     doc = doc or _effect_doc(issuer)
     block = kept = None
     if fields:
-        block, kept = C.commit_fields(fields)
+        options = {"random_bytes": field_random_bytes} if field_random_bytes else {}
+        block, kept = C.commit_fields(fields, **options)
     out = countersign_document(
         doc,
         tsa=tsa,
@@ -443,17 +451,234 @@ def _countersigned(
     return out, block, kept
 
 
-def test_countersigning_leaves_the_receipt_and_its_seal_untouched(issuer, tsa):
+def _assert_no_plaintext_fields(document, certificate_pem):
+    """Check every new metadata field by default; exempt only proven crypto data."""
+    extension_path = ("extensions", EXTENSION_KEY)
+    binary_paths = {
+        ("receipt", "seal_signature", "signature"),
+        extension_path + ("countersignature", "seal_signature", "signature"),
+        extension_path + ("receipt_timestamp", "token"),
+        extension_path + ("receipt_timestamp", "tsa_certificates_pem"),
+    }
+
+    def decode_crypto(value):
+        assert isinstance(value, str)
+        try:
+            decoded = base64.b64decode(value, validate=True)
+        except ValueError as error:
+            raise AssertionError("invalid opaque crypto field") from error
+        assert base64.b64encode(decoded).decode("ascii") == value
+        return decoded
+
+    extension = document["extensions"][EXTENSION_KEY]
+    attestation = extension["countersignature"]["attestation"]
+    # These two hashes change with the random TSA token. Recompute them before
+    # exempting them, so plaintext disguised as a hash still fails.
+    digest_values = {
+        extension_path
+        + (
+            "countersignature",
+            "attestation",
+            "receipt_timestamp_token_sha256",
+        ): hashlib.sha256(
+            decode_crypto(extension["receipt_timestamp"]["token"])
+        ).hexdigest(),
+        extension_path
+        + ("countersignature", "seal_signature", "receipt_sha256"): hashlib.sha256(
+            _canon(attestation)
+        ).hexdigest(),
+    }
+
+    def check_text(text):
+        for private in ("mrn", "004217"):
+            assert private not in text, f"plaintext field leaked: {private}"
+
+    def walk(value, path=()):
+        if path in binary_paths:
+            assert isinstance(value, str)
+            if path[-1] == "tsa_certificates_pem":
+                assert value == certificate_pem
+            else:
+                decode_crypto(value)
+            return
+        if path in digest_values:
+            assert value == digest_values[path]
+            return
+        if isinstance(value, dict):
+            for key, child in value.items():
+                check_text(str(key))
+                walk(child, path + (key,))
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                walk(child, path + (index,))
+        else:
+            check_text(value if isinstance(value, str) else json.dumps(value))
+
+    walk(document)
+
+
+@pytest.mark.parametrize("signature_contains_mrn", [False, True])
+def test_countersigning_leaves_the_receipt_and_its_seal_untouched(
+    issuer, tsa, signature_contains_mrn
+):
+    if signature_contains_mrn:
+        # Synthetic seed chosen to put "mrn" in a valid base64 signature.
+        issuer = LocalCountersignIssuer(
+            Ed25519PrivateKey.from_private_bytes(
+                bytes.fromhex(
+                    "fd6077da65c531d6c10f284909885a3040a07f07495a60d71d01f19b8b0fe4c3"
+                )
+            ),
+            clock=_clock(T0),
+        )
     doc = _effect_doc(issuer)
-    out, _, _ = _countersigned(issuer, tsa, doc=doc, fields={"mrn": "004217"})
+    if signature_contains_mrn:
+        assert "mrn" in doc["receipt"]["seal_signature"]["signature"]
+    out, _, kept = _countersigned(
+        issuer,
+        tsa,
+        doc=doc,
+        fields={"mrn": "004217"},
+        field_random_bytes=lambda length: b"\x08" * length,
+    )
     assert out["receipt"] == doc["receipt"] and out["evidence"] == doc["evidence"]
     keys = parse_key_registry([issuer.registry_entry()])
     assert verify_sealed_receipt(
         out["receipt"], keys
     ).ok  # the existing verifier, unchanged
-    assert "004217" not in json.dumps(out) and "mrn" not in json.dumps(out)
+    # Only the opaque label and salted digest may leave the local vault.
+    # Substrings of valid base64 signatures and timestamp tokens are random.
+    assert set(out) == set(doc) | {"extensions"}
+    assert set(out["extensions"]) == {EXTENSION_KEY}
+    extension = out["extensions"][EXTENSION_KEY]
+    assert set(extension) == {
+        "schema",
+        "statement",
+        "commitments",
+        "receipt_timestamp",
+        "countersignature",
+    }
+    assert len(kept) == 1
+    secret = kept[0]
+    assert extension["commitments"] == {
+        "schema": C.COMMITMENTS_SCHEMA,
+        "algorithm": "sha256-salted-256",
+        "fields": {
+            secret.label: C.field_commitment(
+                secret.label, "mrn", "004217", base64.b64decode(secret.salt)
+            )
+        },
+    }
+    checked = verify_countersigned(
+        out,
+        registry=[issuer.registry_entry()],
+        tsa_certificates=[tsa.certificate],
+        accept_non_flow=True,
+    )
+    assert checked.exit_code == 0, checked.problems
+    _assert_no_plaintext_fields(out, tsa.certificate_pem().decode("ascii"))
     with pytest.raises(CountersignError):
         countersign_document(out, tsa=tsa)
+
+
+@pytest.mark.parametrize(
+    "location", ["statement", "countersignature", "timestamp", "signature"]
+)
+@pytest.mark.parametrize(
+    "leak", [{"leak": "mrn=004217"}, {"mrn": "redacted"}, {"leak": "004217"}]
+)
+def test_privacy_check_rejects_plaintext_in_nested_metadata(
+    issuer, tsa, monkeypatch, location, leak
+):
+    from openadapt_flow.countersign import document as module
+
+    if location == "statement":
+        original = module.build_statement
+
+        def leaking_statement(*args, **kwargs):
+            return {**original(*args, **kwargs), **leak}
+
+        monkeypatch.setattr(module, "build_statement", leaking_statement)
+    out, _, _ = _countersigned(
+        issuer,
+        tsa,
+        fields={"mrn": "004217"},
+        field_random_bytes=lambda length: b"\x08" * length,
+    )
+    extension = out["extensions"][EXTENSION_KEY]
+    if location == "countersignature":
+        extension["countersignature"].update(leak)
+    elif location == "timestamp":
+        extension["receipt_timestamp"].update(leak)
+    elif location == "signature":
+        extension["countersignature"]["seal_signature"].update(leak)
+    checked = verify_countersigned(
+        out,
+        registry=[issuer.registry_entry()],
+        tsa_certificates=[tsa.certificate],
+        accept_non_flow=True,
+    )
+    if location == "signature":
+        # Signature envelopes already reject unknown fields. The other
+        # containers still verify, so they need the independent privacy walk.
+        assert "countersignature_malformed" in checked.problems
+    else:
+        assert checked.exit_code == 0, checked.problems
+    with pytest.raises(AssertionError, match="plaintext field leaked"):
+        _assert_no_plaintext_fields(out, tsa.certificate_pem().decode("ascii"))
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("receipt", "seal_signature", "signature"),
+        ("extensions", EXTENSION_KEY, "receipt_timestamp", "token"),
+        ("extensions", EXTENSION_KEY, "receipt_timestamp", "tsa_certificates_pem"),
+        (
+            "extensions",
+            EXTENSION_KEY,
+            "countersignature",
+            "seal_signature",
+            "signature",
+        ),
+    ],
+)
+def test_opaque_field_exception_rejects_appended_plaintext(issuer, tsa, path):
+    out, _, _ = _countersigned(
+        issuer,
+        tsa,
+        fields={"mrn": "004217"},
+        field_random_bytes=lambda length: b"\x08" * length,
+    )
+    parent = out
+    for component in path[:-1]:
+        parent = parent[component]
+    parent[path[-1]] += "mrn=004217"
+    with pytest.raises(AssertionError):
+        _assert_no_plaintext_fields(out, tsa.certificate_pem().decode("ascii"))
+
+
+@pytest.mark.parametrize(
+    "section,field",
+    [
+        ("attestation", "receipt_timestamp_token_sha256"),
+        ("seal_signature", "receipt_sha256"),
+    ],
+)
+def test_digest_exception_requires_the_independently_recomputed_hash(
+    issuer, tsa, section, field
+):
+    out, _, _ = _countersigned(
+        issuer,
+        tsa,
+        fields={"mrn": "004217"},
+        field_random_bytes=lambda length: b"\x08" * length,
+    )
+    out["extensions"][EXTENSION_KEY]["countersignature"][section][field] = (
+        "004217" + "0" * 58
+    )
+    with pytest.raises(AssertionError):
+        _assert_no_plaintext_fields(out, tsa.certificate_pem().decode("ascii"))
 
 
 def test_agent_receipt_never_reads_like_a_flow_replay(issuer, tsa):
