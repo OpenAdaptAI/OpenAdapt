@@ -13124,6 +13124,11 @@ _SEALED_READY_COMMANDS: frozenset[str] = frozenset(
         "openadapt_flow.__main__:_cmd_explain",
         "openadapt_flow.__main__:_cmd_emit_skill",
         "openadapt_flow.__main__:_cmd_for_each",
+        "openadapt_flow.__main__:_cmd_visualize_process",
+        "openadapt_flow.__main__:_cmd_compose",
+        "openadapt_flow.__main__:_cmd_process",
+        "openadapt_flow.__main__:_cmd_variants",
+        "openadapt_flow.__main__:_cmd_route",
         "openadapt_flow.cli_sections:cmd_sections",
         "openadapt_flow.cli_check:cmd_check_mark",
         "openadapt_flow.cli_admit:cmd_admit_run",
@@ -13352,7 +13357,8 @@ def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
             "command. Commands that read sealed input: record, compile, "
             "induce, scaffold-verifier, seal, certify, qualify, admit, run, "
             "replay, approve, resume, undo, visualize, explain, emit-skill, "
-            "for-each, sections and check mark."
+            "for-each, sections, check mark, compose, process, variants and "
+            "route."
         )
     for root in sealed:
         kind = sealed_set.header_kind(root)

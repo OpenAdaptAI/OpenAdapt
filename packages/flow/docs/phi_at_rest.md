@@ -223,10 +223,11 @@ takes tens to hundreds of milliseconds, so encryption adds about 1% or less.
 
 `record` (including `--with-check`), `compile`, `induce`,
 `scaffold-verifier`, `seal`, `certify`, `qualify`, `admit`, `run`, `replay`,
-`approve`, `resume`, `undo`, `visualize`, `explain`, `emit-skill`,
-`for-each`, `sections` and `check mark` read sealed bundles, run directories
-and encrypted recordings in memory, given the key, and keep what they write
-inside a sealed set sealed. Each reads artifact files through one reader,
+`approve`, `resume`, `undo`, `visualize` (including a process contract),
+`explain`, `emit-skill`, `for-each`, `sections`, `check mark`, `compose`,
+`process`, `variants` and `route` read sealed bundles, run directories and
+encrypted recordings in memory, given the key, and keep what they write inside
+a sealed set sealed. Each reads artifact files through one reader,
 `openadapt_flow.artifacts`:
 
 - `compile` of an encrypted recording writes a sealed bundle, under
@@ -254,6 +255,12 @@ inside a sealed set sealed. Each reads artifact files through one reader,
   mode refuses them before they run.
 - `sections` and `check mark` write `sections.json` and `check.json` back
   into the sealed bundle or recording, encrypted.
+- `compose` copies sealed child bundles into the composition as ciphertext.
+  `process`, `variants` and `route` read sealed child bundles and their
+  admission envelopes in place. The parent file each writes
+  (`composition.json`, `process-contract.json`, `variant-set.json`) holds
+  names, digests and pointers; by default it is named on stderr and in the
+  ledger, and strict mode refuses the command before it runs.
 
 Without the key, each of these refuses before it reads anything and names the
 variable to set. Any other command given a sealed path refuses with a message

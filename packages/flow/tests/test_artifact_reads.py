@@ -55,7 +55,36 @@ CONVERTED: dict[str, tuple[str, ...]] = {
     "narration.py": ("read_events", "load_narration"),
     "cli_sections.py": ("cmd_sections",),
     "cli_check.py": ("cmd_check_mark", "guided_check"),
+    # compose, process, variants, route and visualize of a process contract.
+    "cli_compose.py": ("cmd_compose",),
+    "compiler/compose_authoring.py": ("author_composition",),
+    "cli_process.py": ("cmd_process",),
+    "cli_variants.py": ("cmd_variants", "cmd_route", "first_screen_probe"),
+    "variants.py": (
+        "load",
+        "is_variant_set_artifact",
+        "_admitted_spec",
+        "_repair_candidate",
+        "_check_lineage",
+        "author_variant_set",
+    ),
+    "runtime/variant_router.py": ("route_variant", "_admitted_variant"),
+    "visualize/admitted_composition.py": ("build_process_graph",),
 }
+CONVERTED["__main__.py"] += (
+    "_cmd_visualize_process",
+    "_cmd_compose",
+    "_cmd_process",
+    "_cmd_variants",
+    "_cmd_route",
+)
+CONVERTED["composition.py"] += ("load",)
+CONVERTED["admitted_composition.py"] += (
+    "load",
+    "load_child_envelope",
+    "_load_admitted_bundle",
+    "author_process_contract",
+)
 
 #: Receivers whose reads are sealed-aware.
 _READERS = frozenset({"artifacts", "_artifacts", "sealed_set", "_sealed"})
@@ -68,6 +97,37 @@ ALLOWED: dict[tuple[str, str, str], str] = {
         "_cmd_record",
         '(Path(args.out) / "events.jsonl").is_file()',
     ): "gates the look-up proposal, which runs on plaintext recordings only",
+    (
+        "compiler/compose_authoring.py",
+        "author_composition",
+        "out_dir.exists()",
+    ): "the new composition directory, not an artifact",
+    (
+        "admitted_composition.py",
+        "author_process_contract",
+        "out_dir.exists()",
+    ): "the new process-contract directory, not an artifact",
+    (
+        "variants.py",
+        "author_variant_set",
+        "out_dir.exists()",
+    ): "the new variant-set directory, not an artifact",
+    (
+        "cli_process.py",
+        "cmd_process",
+        'Path(spec_path).read_text(encoding="utf-8")',
+    ): "the v1 contract spec a person passes in",
+    ("cli_process.py", "cmd_process", "output.exists()"): "the new output directory",
+    (
+        "cli_variants.py",
+        "cmd_variants",
+        'spec_path.read_text(encoding="utf-8")',
+    ): "the variant spec a person passes in",
+    (
+        "cli_variants.py",
+        "first_screen_probe",
+        "Path(explicit).read_bytes()",
+    ): "the --first-screen PNG a person passes in",
 }
 
 
@@ -237,3 +297,135 @@ def test_record_with_check_marks_a_sealed_recording(
     assert any("type" in line for line in shown)
     _assert_ciphertext_only(rec)
     assert load_check(rec) is not None
+
+
+# -- compose, process, variants and route over sealed children ----------------
+
+
+def _sealed_admitted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, same_surface: bool = False
+) -> dict[str, tuple[Path, Path]]:
+    """Two sealed child bundles, each with its admission envelope beside it."""
+    from openadapt_flow.admitted_composition import live_bundle_content_digest
+    from openadapt_flow.qualification_admission import sign_qualification_admission
+    from tests.test_admitted_composition_authoring import (
+        INTAKE_ADMISSION,
+        INTAKE_VERSION,
+        POSTING_ADMISSION,
+        POSTING_VERSION,
+        _reader,
+        _save,
+        _writer,
+    )
+    from tests.test_qualification_admission import _payload, _private_key
+
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    children: dict[str, tuple[Path, Path]] = {}
+    for name, workflow, admission, version in (
+        ("intake", _writer(), INTAKE_ADMISSION, INTAKE_VERSION),
+        (
+            "posting",
+            _writer("posting") if same_surface else _reader(),
+            POSTING_ADMISSION,
+            POSTING_VERSION,
+        ),
+    ):
+        plain = _save(tmp_path, workflow, f"{name}-plain")
+        bundle = tmp_path / name
+        assert main(["seal", str(plain), "--out", str(bundle)]) == 0
+        digest = live_bundle_content_digest(Workflow.load(bundle), bundle)
+        envelope = sign_qualification_admission(
+            _payload(
+                admission_id=admission,
+                workflow_version_id=version,
+                bundle_content_digest=digest,
+            ),
+            _private_key(),
+        )
+        path = tmp_path / f"{name}.admission.json"
+        path.write_text(envelope.model_dump_json(indent=2), encoding="utf-8")
+        children[name] = (bundle, path)
+    return children
+
+
+def test_compose_copies_sealed_children_sealed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow.composition import Composition, child_bundle_path
+
+    _ready("openadapt_flow.__main__:_cmd_compose")
+    children = _sealed_admitted(tmp_path, monkeypatch)
+    before = {name: _files(bundle) for name, (bundle, _) in children.items()}
+    out = tmp_path / "composed"
+    args = ["compose", "--out", str(out)]
+    for name, (bundle, _) in children.items():
+        args += ["--child", f"{name}={bundle}"]
+    args += ["--handoff", "intake.patient_id=posting.patient_id"]
+    assert main(args) == 0
+    composition = Composition.load(out)
+    for child in composition.children:
+        copy = child_bundle_path(out, child)
+        assert sealed_set.is_sealed(copy)
+        _assert_ciphertext_only(copy)
+        assert Workflow.load(copy, key=KEY).name == child.name
+    assert {name: _files(b) for name, (b, _) in children.items()} == before
+
+
+def test_process_and_its_visualization_read_sealed_children(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow.admitted_composition import ProcessContract
+
+    _ready("openadapt_flow.__main__:_cmd_process")
+    _ready("openadapt_flow.__main__:_cmd_visualize_process")
+    children = _sealed_admitted(tmp_path, monkeypatch)
+    out = tmp_path / "process"
+    args = ["process", "--out", str(out), "--name", "two-step"]
+    for name, (bundle, envelope) in children.items():
+        args += ["--child", f"{name}={bundle}", "--admission", f"{name}={envelope}"]
+    args += ["--handoff", "intake.patient_id=posting.patient_id"]
+    assert main(args) == 0
+    assert [c.name for c in ProcessContract.load(out).children] == [
+        "intake",
+        "posting",
+    ]
+    graph = tmp_path / "process.json"
+    assert main(["visualize", str(out), "--format", "json", "--out", str(graph)]) == 0
+    assert "two-step" in graph.read_text()
+    for bundle, _ in children.values():
+        _assert_ciphertext_only(bundle)
+
+
+def test_variants_and_route_read_sealed_variants(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _ready("openadapt_flow.__main__:_cmd_variants")
+    _ready("openadapt_flow.__main__:_cmd_route")
+    children = _sealed_admitted(tmp_path, monkeypatch, same_surface=True)
+    payers = {"intake": "commercial", "posting": "medicare"}
+    spec = tmp_path / "variants.json"
+    spec.write_text(
+        json.dumps(
+            {
+                "name": "by-payer",
+                "variants": [
+                    {
+                        "name": name,
+                        "bundle": str(bundle),
+                        "admission": str(envelope),
+                        "when": {"inputs": {"payer": [payers[name]]}},
+                    }
+                    for name, (bundle, envelope) in children.items()
+                ],
+            }
+        )
+    )
+    out = tmp_path / "set"
+    assert main(["variants", "author", "--spec", str(spec), "--out", str(out)]) == 0
+    capsys.readouterr()
+    assert main(["route", str(out), "--param", "payer=medicare"]) == 0
+    assert json.loads(capsys.readouterr().out)["variant"] == "posting"
+    for bundle, _ in children.values():
+        _assert_ciphertext_only(bundle)
