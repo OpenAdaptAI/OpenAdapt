@@ -1011,6 +1011,12 @@ def _database_frame(
         }
 
         def excuse(name: str, before: Any, after: Any, fields: list[str]) -> Any:
+            from openadapt_flow.runtime.effects.db_snapshot import every_cell_hashed
+
+            tables = (old.tables.get(name), new.tables.get(name))
+            if any(t is not None and not every_cell_hashed(t) for t in tables):
+                # A column no cell MAC shows may have moved: no rule judges it.
+                return False
             return profile.excuse(
                 name, before, after, fields, hashers[name], names, ids
             )
