@@ -5,9 +5,10 @@
 # pack_db.py (SQLite); the oracle reads the database outside the session. The
 # app never reads the planted fault and always reports the save as done.
 #
-# UI knobs come from C:\oa\pack\claims_desk_ui.json, written at reset:
+# UI knobs come from C:\oa\pack\data\claims_desk_ui.json, written at reset:
 #   banner : text in a yellow strip at the top (a misleading notice).
-#   window : "maximized" (default) or "windowed"; size "WxH" forces windowed.
+#   window : "maximized" (default: full screen over the taskbar) or
+#            "windowed"; size "WxH" forces windowed.
 #
 # Usage:  powershell -STA -ExecutionPolicy Bypass -File claims_desk.ps1
 
@@ -23,7 +24,7 @@ Add-Type -AssemblyName WindowsBase
 if (-not $Python) { $Python = (Get-Content "C:\oa\pack\python.txt" -Raw).Trim() }
 
 $cfg = @{ banner = ""; window = "maximized"; size = "" }
-$cfgPath = "C:\oa\pack\claims_desk_ui.json"
+$cfgPath = "C:\oa\pack\data\claims_desk_ui.json"
 if (Test-Path $cfgPath) {
     try {
         $j = Get-Content $cfgPath -Raw | ConvertFrom-Json
@@ -114,7 +115,13 @@ if ([string]$cfg["banner"]) {
     $c.noticeBanner.Text = [string]$cfg["banner"]
     $c.noticeBanner.Visibility = "Visible"
 }
-if ([string]$cfg["window"] -ne "windowed" -and -not [string]$cfg["size"]) { $window.WindowState = "Maximized" }
+# Full screen by default: no chrome and maximized, so the window covers the
+# taskbar and an agent's clicks cannot reach the Start menu or another app.
+if ([string]$cfg["window"] -ne "windowed" -and -not [string]$cfg["size"]) {
+    $window.WindowStyle = "None"
+    $window.ResizeMode = "NoResize"
+    $window.WindowState = "Maximized"
+}
 if ([string]$cfg["size"]) {
     $wh = ([string]$cfg["size"]) -split 'x'
     $window.Width = [int]$wh[0]; $window.Height = [int]$wh[1]

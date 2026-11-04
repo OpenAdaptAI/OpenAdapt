@@ -201,6 +201,9 @@ class SimGuest:
     host = "sim-guest"
     user = "lab"
 
+    def rdp_password(self) -> str:
+        return "unused"
+
     def __init__(self, tmp: Path, *, leak: bool = False) -> None:
         self.db = _pack_db(tmp)
         self.app = "patient_chart"
@@ -349,8 +352,71 @@ def test_uia_surface_lists_elements_and_refuses_the_windows_key(tmp_path: Path) 
         assert {"searchBox", "noteBox", "saveButton"} <= ids
         assert base64.b64decode(obs.screenshot_png_b64)[:4] == b"\x89PNG"
         assert "fault" not in obs.instruction.lower()
-        for chord in ("win", "win+r", "ctrl+esc", "ctrl+shift+esc"):
+        for chord in (
+            "win",
+            "win+r",
+            "cmd+r",
+            "command",
+            "Meta",
+            "ctrl+esc",
+            "control+escape",
+            "shift+ctrl+esc",
+            "ctrl+win",
+            "alt+tab",
+            "alt+f4",
+            "f1",
+            "ctrl+r",
+            "ctrl+shift+n",
+        ):
             out = env.step(DesktopAction(kind="press", text=chord))
-            assert "not allowed" in (out.last_action_error or "")
+            assert "not allowed" in (out.last_action_error or ""), chord
+        for chord in (
+            "enter",
+            "Tab",
+            "shift+tab",
+            "ctrl+a",
+            "control+v",
+            "ArrowDown",
+            "x",
+        ):
+            out = env.step(DesktopAction(kind="press", text=chord))
+            assert out.last_action_error is None, chord
     finally:
         env.close()
+
+
+def test_a_failed_reset_leaves_no_episode_to_act_on(
+    tmp_path: Path, reference: None
+) -> None:
+    guest = SimGuest(tmp_path)
+    env = OpenAdaptDesktopEnvironment(ROOT / "win-patient-chart", guest=guest)
+    env.env.manifest.agent.settle_s = 0.0
+    env.finish_settle_s = 0.0
+    try:
+        env.reset(task_id=env.env.tasks[0].id)
+
+        def broken(*_: Any, **__: Any) -> dict:
+            raise RuntimeError("guest went away")
+
+        guest.reset = broken  # type: ignore[method-assign]
+        with pytest.raises(RuntimeError):
+            env.reset(task_id=env.env.tasks[1].id)
+        assert env.state.done is True
+        with pytest.raises(RuntimeError, match="did not finish"):
+            env.step(DesktopAction(kind="done", claim="success"))
+    finally:
+        env.close()
+
+
+def test_guest_scripts_take_only_plain_identifiers_and_escape_quotes() -> None:
+    from openadapt_flow.rl_env import windows_guest as wg
+
+    assert wg._safe("fault", "wrong_row") == "wrong_row"
+    for bad in ("x'; Remove-Item C:\\", "drop\u2019", "", "A"):
+        with pytest.raises(wg.GuestError):
+            wg._safe("fault", bad)
+    assert wg._ps_quote("it's \u2018x\u2019") == "it''s \u2018\u2018x\u2019\u2019"
+    assert (
+        wg.PACK_DB_SHA256
+        == __import__("hashlib").sha256(desktop.PACK_DB.read_bytes()).hexdigest()
+    )

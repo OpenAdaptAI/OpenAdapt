@@ -7,10 +7,18 @@
 #   1. turns on WinRM (the environment server's control channel: reset and
 #      the database read-out) and Remote Desktop (the pixels-only surface);
 #   2. sets the Remote Desktop host to prefer H.264/AVC444 graphics, as a
-#      production session host would;
+#      production session host would, and keeps the desktop session inside
+#      the app (machine shell policies);
 #   3. installs CPython (official, signature-checked) and the in-guest UI
 #      Automation agent's packages;
-#   4. creates C:\oa\pack for the apps (the server copies them in).
+#   4. creates C:\oa\pack for the apps (the server copies them in and makes
+#      the code read-only to the desktop account; only C:\oa\pack\data is
+#      writable by it).
+#
+# The desktop account must be a standard user, or an administrator with UAC
+# on, so its desktop session cannot rewrite the code the oracle runs; the
+# server checks this and refuses the guest otherwise. The WinRM account must
+# be an administrator.
 #
 # Usage (elevated PowerShell):
 #   powershell -ExecutionPolicy Bypass -File setup_guest.ps1 -User <desktop account>
@@ -41,6 +49,19 @@ New-Item -Path $ts -Force | Out-Null
 Set-ItemProperty $ts -Name AVC444ModePreferred -Value 1 -Type DWord
 Set-ItemProperty $ts -Name AVCHardwareEncodePreferred -Value 1 -Type DWord
 
+# 2b. Keep the desktop session inside the app. The apps run full screen over
+#     the taskbar and the environment refuses the Windows key, Alt and the
+#     function keys; these machine policies close the remaining exits (Win
+#     key shortcuts, Run, Task Manager). Use a machine dedicated to the
+#     environments: they apply to every account.
+$ex = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"
+$sy = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System"
+New-Item -Path $ex -Force | Out-Null
+New-Item -Path $sy -Force | Out-Null
+Set-ItemProperty $ex -Name NoWinKeys -Value 1 -Type DWord
+Set-ItemProperty $ex -Name NoRun -Value 1 -Type DWord
+Set-ItemProperty $sy -Name DisableTaskMgr -Value 1 -Type DWord
+
 # 3. CPython for this machine's architecture, and the agent's packages.
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
 $dir = "C:\Program Files\Python312-$arch"
@@ -57,11 +78,8 @@ if (-not (Test-Path $py)) {
 }
 & $py -m pip install --disable-pip-version-check -q "uiautomation==2.0.29" "comtypes==1.4.17" "pyautogui==0.9.54" "pillow==13.0.0" "mss==10.2.0"
 
-# 4. The pack directory, writable by the desktop account.
-New-Item -ItemType Directory -Force C:\oa\pack | Out-Null
-$acl = Get-Acl C:\oa\pack
-$acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($User, "Modify", "ContainerInherit,ObjectInherit", "None", "Allow")))
-Set-Acl C:\oa\pack $acl
+# 4. The pack directory. The server sets its permissions at deploy.
+New-Item -ItemType Directory -Force C:\oa\pack\data | Out-Null
 Set-Content -Encoding ascii -Path C:\oa\pack\python.txt -Value $py
 
 Write-Output "ready: python=$py; set OPENADAPT_WINENV_PYTHON to this path on the server"
