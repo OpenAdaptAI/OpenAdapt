@@ -6,14 +6,14 @@ layout, install and test commands.
 
 ## Taking work
 
-- Work only on open issues labelled `agent-ready`. Prefer issues also labelled
-  for you (`for:codex`, `for:grok`).
-- Skip an issue that already has a `claimed` label or a branch named
-  `agent/*/<issue number>`.
-- To claim an issue, add the `claimed` label and a comment
-  `Claimed by <agent name>`, then push a branch named
-  `agent/<agent name>/<issue number>`. If you stop before opening a pull
-  request, remove the label and say why in a comment.
+- Work only on open issues labelled `agent-ready` that do not have the
+  `claimed` label.
+- Claim an issue by pushing a new branch from current `origin/main`:
+  `git push origin origin/main:refs/heads/agent/<issue number>`. If the push
+  fails because the branch exists, another agent has the issue: pick another.
+  Then add the `claimed` label and comment `Claimed by <agent name>`.
+- If you stop before opening a pull request, comment why, remove the
+  `claimed` label and delete your branch.
 - One issue per branch and per pull request. Keep changes small and focused;
   if the work is bigger than the issue describes, comment and stop.
 
