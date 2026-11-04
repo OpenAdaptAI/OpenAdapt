@@ -533,9 +533,11 @@ only a whole-number version's value is kept, to count steps. The receipt's
 `evidence.frame.versions` holds counts and a problem code (`another_author`,
 `extra_steps`, `went_back`, `no_author`, `not_a_number`, `null_version`,
 `duplicate_version`, `no_new_version`, `history_changed`, `missing`,
-`no_target_id`, `unreadable`, `self_unresolved`), never ids or values. A
-refuted check refutes the frame (`checked.frame: refuted`); one that can't be
-judged leaves the frame `not_checked`.
+`no_target_id`, `unreadable`, `self_unresolved`, `unknown_surface`), never
+ids or values. A refuted check refutes the frame (`checked.frame: refuted`);
+one that can't be judged leaves the frame `not_checked`. A `target_surface`
+that no write effect reads is `unknown_surface`: with no target there is
+nothing to hold.
 
 ## What the receipt says was checked
 
