@@ -1,11 +1,13 @@
 # Multi-surface workflows: tabs, popups, and backend switches
 
 Status, from the tests and runs named under "Tests": the scripted recorder,
-the interactive and attach-mode web recorders (popups and tabs), one
-`record --surface` session across a browser and declared desktop or remote
-windows, the compiler, IR, replayer, CLI binding, governed, qualified and
-durable runs, resume by identity, and managed dispatch. This page is the
-design and its limits. The audit that motivated it is at the end.
+the interactive and attach-mode web recorders (popups and tabs), the
+compiler, IR, replayer, CLI binding, governed, qualified and durable runs,
+resume by identity, and managed dispatch. Recording across windows in one
+`record` session (automatic or `--surface`) is covered by unit tests of
+surface discovery and merging; its real-app run is in progress (see
+"Tests"). This page is the design and its limits. The audit that motivated
+it is at the end.
 
 A bundle used to run on exactly one surface: one browser tab, one desktop app,
 or one remote-desktop window. Real tasks cross that boundary. A referral opens
@@ -295,12 +297,32 @@ A click in a new page within the first poll tick after it loads can arrive
 before the listener is installed and is not recorded. Replay then halts at the
 next step rather than skipping it silently.
 
-### Recording across windows (`record --surface`)
+### Recording across windows (`record`)
 
 A person's task often moves between a web app, a native app and a remote
 window. One `record` session records it while they switch windows
-themselves. Declare each desktop or remote window once; the browser is
-`--url`:
+themselves.
+
+**Automatic (the default).** `record` with no `--backend` or `--url`
+follows the person. Each application they act in becomes one surface, found
+from the process that owns the window the action went to (the
+accessibility reading capture takes at each action carries it):
+
+- a remote-desktop client (Remote Desktop, Windows App, FreeRDP, Remmina,
+  Citrix Workspace) becomes an `rdp` or `citrix` surface;
+- every other application, including the person's own Chrome, Edge or
+  Brave, becomes a native surface of this computer's kind;
+- the terminal running `record` is not part of the task: the keys that stop
+  the recording are dropped, and any earlier action there refuses it.
+
+When the recording stops, it lists each surface with its step count and
+asks before keeping it. A browser page is read through the OS
+accessibility tree, the same way as a native app (see "The person's own
+browser"). macOS and Linux readings now compile to structural locators
+(role and accessible name) as Windows readings do.
+
+**Declared.** To name the windows yourself, declare each desktop or remote
+window once; the browser is `--url`:
 
 ```bash
 openadapt-flow record --url https://portal.example \
@@ -357,6 +379,25 @@ from the CLI"):
 openadapt-flow replay referral-bundle --url https://portal.example \
   --surface chart=linux:chart --surface rdp_1=rdp:10.0.0.5
 ```
+
+### The person's own browser
+
+Chromium builds its page's accessibility tree only when it believes an
+assistive tool is present. Measured on a Chrome the person opened
+themselves, read through the point query the recorder makes at each click
+(`benchmark/multi_surface_record/results/chrome-accessibility-probe-2026-11-04.md`):
+
+- Windows: the page's controls (role, name), the page and the address bar
+  are readable on the first query. Nothing to set.
+- macOS: readable after `record` sets `AXEnhancedUserInterface` on the
+  browser while it records; it restores the previous value afterwards.
+- Linux: no switch works while Chrome runs. `openadapt-flow
+  browser-accessibility --enable` adds `--force-renderer-accessibility` to
+  the browser's launcher entries in the person's own
+  `~/.local/share/applications` (never system files), says what it wrote,
+  and `--disable` removes exactly that. It applies from the next browser
+  start. A click on a page that is still unreadable refuses the recording
+  with that one-line fix, never pixels.
 
 A capture session cannot be encrypted by Flow yet, so a cross-window
 recording follows the desktop recording rule: it is written in plaintext
@@ -586,6 +627,10 @@ backend surface bound here.
 - Re-binding a page is vision first, so two pages that look the same and share
   every structured attribute halt as ambiguous. Two report tabs for the same
   record are the example. This is by design.
+- Automatic recording reads the owning process from each action's
+  accessibility reading; an action with none (a keystroke in a window with
+  no readable focus) is placed only when the active window did not change,
+  and refused otherwise.
 - `record --surface` launches its own browser; attach mode (`--cdp`) and a
   window-scoped capture (`--window`) do not combine with it. Its desktop
   side has the limits of desktop recording: no `--secret` redaction of a
@@ -613,8 +658,12 @@ backend surface bound here.
 - `benchmark/multi_surface_record/qualify_linux_cross_window.py`: on real
   apps in Xvfb, physical input (XTest) in a Chromium page, the GTK3 chart app
   (SQLite) and the page again, recorded by one `record --url ... --surface`
-  session, compiled and replayed through the CLI; results in
-  `benchmark/multi_surface_record/results/`.
+  session, then compiled and replayed through the CLI. Latest result
+  (`results/linux-cross-window-20261104-200106.json`): the person's actions
+  reach both apps and the chart saves the note; the recording is refused
+  while converting, because capture's Linux input observer cannot name
+  synthetic (XTest) keystrokes in that container, so compile and replay
+  have not run on it yet.
 
 - `tests/test_multi_surface_e2e.py`: a local app that opens a popup
   (`window.open`) and a `target=_blank` tab. It records, compiles, and replays

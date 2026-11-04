@@ -20,7 +20,7 @@ is written there.
 Usage::
 
     benchmark/linux_container/run.sh build
-    benchmark/linux_container/run.sh bash \
+    OA_LINUX_SCREEN=2400x1000x24 benchmark/linux_container/run.sh bash \
         benchmark/multi_surface_record/linux_setup.sh \
         python benchmark/multi_surface_record/qualify_linux_cross_window.py
 
@@ -74,12 +74,15 @@ function go(what) {
 function geo() {
   const ox = window.screenX + (window.outerWidth - window.innerWidth);
   const oy = window.screenY + (window.outerHeight - window.innerHeight);
+  window.__oaGeo = [window.screenX, window.screenY, window.outerWidth,
+                    window.innerWidth, window.outerHeight, window.innerHeight];
   const out = {};
   for (const id of ['start', 'sent']) {
     const r = document.getElementById(id).getBoundingClientRect();
     out[id] = [Math.round(ox + r.left + r.width / 2),
                Math.round(oy + r.top + r.height / 2)];
   }
+  out.raw = window.__oaGeo;
   fetch('/geo', {method: 'POST', body: JSON.stringify(out)});
 }
 window.addEventListener('load', () => setTimeout(geo, 500));
@@ -123,7 +126,7 @@ class Desk:
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}/"
 
-    def wait_geo(self, timeout: float = 60.0) -> dict[str, list[int]]:
+    def wait_geo(self, timeout: float = 180.0) -> dict[str, list[int]]:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if self.geo:
@@ -143,6 +146,26 @@ class Chart:
             [sys.executable, str(APP_SOURCE), str(db), TITLE, *patient, "normal"],
             env=env,
         )
+
+    def place(self, x: int, y: int, timeout: float = 20.0) -> None:
+        """Put the chart window beside the browser, as a person arranges it."""
+        from Xlib import X, display
+
+        d = display.Display()
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            for w in d.screen().root.query_tree().children:
+                for win in [w, *w.query_tree().children]:
+                    try:
+                        if win.get_wm_name() == TITLE:
+                            top = w if w != win else win
+                            top.configure(x=x, y=y)
+                            d.sync()
+                            return
+                    except Exception:
+                        continue
+            time.sleep(0.3)
+        raise RuntimeError("the chart window never appeared")
 
     def close(self) -> None:
         self.proc.kill()
@@ -217,6 +240,7 @@ def _chart_point(name: str, role: str, timeout: float = 20.0) -> tuple[int, int]
         return None
 
     deadline = time.monotonic() + timeout
+    seen: list[Any] = []
     while time.monotonic() < deadline:
         desktop = Atspi.get_desktop(0)
         for i in range(desktop.get_child_count()):
@@ -226,10 +250,12 @@ def _chart_point(name: str, role: str, timeout: float = 20.0) -> tuple[int, int]
             node = walk(app)
             if node is not None:
                 ext = node.get_extents(Atspi.CoordType.SCREEN)
-                if ext.width > 0 and ext.height > 0:
-                    return (ext.x + ext.width // 2, ext.y + ext.height // 2)
+                x, y = ext.x + ext.width // 2, ext.y + ext.height // 2
+                seen.append([ext.x, ext.y, ext.width, ext.height])
+                if ext.width > 0 and ext.height > 0 and 0 <= x < 4096 and 0 <= y < 4096:
+                    return (x, y)
         time.sleep(0.3)
-    raise RuntimeError(f"no {role} {name!r} in the chart window")
+    raise RuntimeError(f"no on-screen {role} {name!r} in the chart window: {seen[-3:]}")
 
 
 def _flow(*args: str, timeout: float = 600) -> subprocess.CompletedProcess:
@@ -248,6 +274,7 @@ def _tail(text: str, n: int = 25) -> list[str]:
 
 def record(root: Path, desk: Desk, db: Path) -> dict[str, Any]:
     chart = Chart(db, PATIENT)
+    chart.place(1400, 100)
     person = Person()
     done = root / "DONE"
     rec = root / "recording"
@@ -294,7 +321,7 @@ def record(root: Path, desk: Desk, db: Path) -> dict[str, Any]:
         done.touch()
         proc.wait(timeout=300)
     except Exception as exc:  # keep the recorder's own output as evidence
-        error = f"{type(exc).__name__}: {exc}"
+        error = f"{type(exc).__name__}: {exc}; page geometry {desk.geo}"
     finally:
         if proc.poll() is None:
             os.killpg(proc.pid, signal.SIGKILL)
@@ -332,6 +359,7 @@ def replay(
         "    linux_allow_physical_input: true\n"
     )
     chart = Chart(db, patient)
+    chart.place(1400, 100)
     time.sleep(3.0)
     before_rows, before_counts = _rows(db), dict(desk.counts)
     run_dir = root / f"run-{name}"

@@ -788,7 +788,9 @@ def record_multi_surface(
         raise SystemExit(f"record: {out_dir} is not empty. Nothing was recorded.")
     if recorder_factory is None:
         _require_capture_extra()
-        recorder_factory = functools.partial(_default_recorder_factory, window=None)
+        recorder_factory = functools.partial(
+            _default_recorder_factory, window=None, window_timeline=True
+        )
     work = Path(tempfile.mkdtemp(prefix=".record-", dir=str(out_dir.parent)))
     try:
         cap_dir = work / "capture"
