@@ -53,6 +53,35 @@ def test_a_marked_example_comment_passes(check, tmp_path: Path) -> None:
     assert check.scan(engine) == {"b.py": {"openemr": [1]}, "c.py": {"openemr": [1]}}
 
 
+def test_a_name_inside_an_identifier_is_a_hit(check, tmp_path: Path) -> None:
+    engine = _engine(
+        tmp_path,
+        {
+            "a.py": "def _openemr_fixup():\n    pass\n",
+            "b.py": "APP_OPENEMR = 1\n",
+            "c.py": "isOpenEMR = True\n",
+            "d.py": "def to_stedi_body():\n    pass\n",
+            "e.py": "EPIC_BASE = 1\n",
+            "f.py": "row = 'tabLoanApplication'\n",
+            # A name only stops at a letter or digit beside it.
+            "g.py": "reopenemrs = 1\n",
+        },
+    )
+    assert check.scan(engine) == {
+        "a.py": {"openemr": [1]},
+        "b.py": {"openemr": [1]},
+        "c.py": {"openemr": [1]},
+        "d.py": {"stedi": [1]},
+        "e.py": {"epic": [1]},
+        "f.py": {"frappe-table": [1]},
+    }
+
+
+def test_the_marker_must_open_the_comment(check, tmp_path: Path) -> None:
+    engine = _engine(tmp_path, {"a.py": "# OpenEMR-only hack # example: no\n"})
+    assert check.scan(engine) == {"a.py": {"openemr": [1]}}
+
+
 def test_app_profiles_are_data(check, tmp_path: Path) -> None:
     engine = _engine(tmp_path, {"app_profiles/openemr.yaml": "app: openemr\n"})
     assert check.scan(engine) == {}

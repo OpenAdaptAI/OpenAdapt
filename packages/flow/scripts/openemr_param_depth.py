@@ -66,9 +66,7 @@ BUNDLE_DIR = WORK / "bundle"
 RUNS_DIR = WORK / "runs"
 
 RECORDED_PATIENT = "Phil"  # demonstrated value; unique match "Belford, Phil"
-RECORDED_NOTE = (
-    "Validation baseline: reviewed home readings, plan unchanged today."
-)
+RECORDED_NOTE = "Validation baseline: reviewed home readings, plan unchanged today."
 
 PACING_S = 30.0  # public-demo courtesy between browser sessions
 
@@ -99,9 +97,7 @@ def record() -> Path:
         page.wait_for_timeout(3000)
 
         finder = _frame(page, "dynamic_finder")
-        recorder.click(
-            *_center(finder.locator("a", has_text=RECORDED_PATIENT).first)
-        )
+        recorder.click(*_center(finder.locator("a", has_text=RECORDED_PATIENT).first))
         page.wait_for_timeout(4000)
 
         demographics = _frame(page, "demographics.php")
@@ -118,14 +114,13 @@ def record() -> Path:
         recorder.click(*_center(pencil))
         page.wait_for_timeout(3000)
         pnotes = _frame(page, "pnotes_full")
-        recorder.click(*_center(
-            pnotes.locator("button, a").filter(has_text="Add").first
-        ))
+        recorder.click(
+            *_center(pnotes.locator("button, a").filter(has_text="Add").first)
+        )
         page.wait_for_timeout(2000)
         recorder.click(*_center(_locate_any_frame(page, "textarea#note")))
         recorder.type_text(RECORDED_NOTE, param="note")
-        recorder.click(*_center(_locate_any_frame(
-            page, "text=Save as new message")))
+        recorder.click(*_center(_locate_any_frame(page, "text=Save as new message")))
         page.wait_for_timeout(3000)
         return recorder.finish()
     finally:
@@ -137,9 +132,7 @@ def compile_bundle() -> None:
 
     if BUNDLE_DIR.exists():
         shutil.rmtree(BUNDLE_DIR)
-    wf = compile_recording(
-        RECORDING_DIR, BUNDLE_DIR, name="openemr-param-depth"
-    )
+    wf = compile_recording(RECORDING_DIR, BUNDLE_DIR, name="openemr-param-depth")
     print(f"compiled {len(wf.steps)} steps -> {BUNDLE_DIR}")
     for step in wf.steps:
         texts = [pc.text for pc in step.expect if pc.text]
@@ -172,9 +165,7 @@ def _replay_one(label: str, params: dict[str, str], url: str) -> dict:
 
     note = params["note"]
     note_check = verify_note_saved(final_png, note)
-    final_text = normalize_text(
-        " ".join(line.text for line in ocr(final_png))
-    )
+    final_text = normalize_text(" ".join(line.text for line in ocr(final_png)))
     failed = [r for r in report.results if not r.ok]
     row = {
         "label": label,
@@ -192,7 +183,8 @@ def _replay_one(label: str, params: dict[str, str], url: str) -> dict:
         "underwood_on_final": "underwood" in final_text,
         "first_failure": (
             {"step": failed[0].step_id, "error": (failed[0].error or "")[:300]}
-            if failed else None
+            if failed
+            else None
         ),
     }
     print(json.dumps(row))
@@ -203,14 +195,22 @@ def replay() -> None:
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     rows = []
     plan = [
-        ("phil-control", {
-            "patient": "Phil",
-            "note": "Param depth control: confirmed refill pickup scheduled.",
-        }, DEMO_URL),
-        ("susan-drift", {
-            "patient": "Susan",
-            "note": "Param depth drift: dietary counseling summary delivered.",
-        }, DEMO_URL),
+        (
+            "phil-control",
+            {
+                "patient": "Phil",
+                "note": "Param depth control: confirmed refill pickup scheduled.",
+            },
+            DEMO_URL,
+        ),
+        (
+            "susan-drift",
+            {
+                "patient": "Susan",
+                "note": "Param depth drift: dietary counseling summary delivered.",
+            },
+            DEMO_URL,
+        ),
     ]
     for i, (label, params, url) in enumerate(plan):
         if i:

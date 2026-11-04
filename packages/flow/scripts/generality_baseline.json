@@ -1,6 +1,6 @@
 {
   "__main__.py": {
-    "mockmed": 38,
+    "mockmed": 43,
     "textedit": 1
   },
   "agent/ledger_demo.py": {
@@ -63,23 +63,32 @@
     "openemr": 2,
     "textedit": 1
   },
+  "eligibility/__init__.py": {
+    "stedi": 6
+  },
   "eligibility/client.py": {
-    "stedi": 16
+    "stedi": 28
   },
   "eligibility/payer_routes.yaml": {
-    "stedi": 3
+    "stedi": 5
   },
   "eligibility/waterfall.py": {
-    "stedi": 2
+    "stedi": 9
   },
   "ensure_record.py": {
     "medplum": 3
   },
+  "execute/app.py": {
+    "mockmed": 4
+  },
   "execute/dispatch.py": {
-    "mockmed": 7
+    "mockmed": 10
   },
   "execute/registry.py": {
-    "mockmed": 18
+    "mockmed": 19
+  },
+  "execute/service.py": {
+    "mockmed": 4
   },
   "execution_profiles.py": {
     "mockmed": 1
@@ -90,6 +99,9 @@
   },
   "generate/demo_analysis.py": {
     "redmine": 1
+  },
+  "generate/ensure_contract.py": {
+    "medplum": 2
   },
   "generate/verify_contract.py": {
     "dolibarr": 1,
@@ -115,7 +127,7 @@
     "mockmed-records": 1
   },
   "integrations/harness2/tasks.py": {
-    "mockmed": 24
+    "mockmed": 26
   },
   "ir.py": {
     "token_main": 1
@@ -167,7 +179,7 @@
     "mockmed": 1
   },
   "qualification_oracle_gate.py": {
-    "mockmed": 6,
+    "mockmed": 8,
     "mockmed-records": 2,
     "mockmed-write": 1
   },
@@ -188,7 +200,7 @@
     "openemr": 1
   },
   "record_check_proof.py": {
-    "mockmed": 8,
+    "mockmed": 12,
     "mockmed-records": 1,
     "mockmed-write": 1
   },
@@ -206,7 +218,7 @@
     "mockmed-records": 1
   },
   "reward/seed.py": {
-    "mockmed": 33
+    "mockmed": 39
   },
   "risk.py": {
     "openemr": 1,
@@ -278,7 +290,8 @@
   },
   "validation/dense_surface.py": {
     "mockmed": 1,
-    "openemr": 2
+    "openemr": 2,
+    "textedit": 1
   },
   "verifier.py": {
     "openemr": 1

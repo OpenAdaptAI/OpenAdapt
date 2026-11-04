@@ -86,8 +86,13 @@ def seed(drift: str = "none") -> None:
 
 
 def _patient_dict(r: sqlite3.Row) -> dict:
-    return {"id": r["id"], "first": r["first"], "last": r["last"],
-            "dob": r["dob"], "note": r["note"] or ""}
+    return {
+        "id": r["id"],
+        "first": r["first"],
+        "last": r["last"],
+        "dob": r["dob"],
+        "note": r["note"] or "",
+    }
 
 
 def list_patients(filt: str = "") -> None:
@@ -125,8 +130,10 @@ def get(pid: int) -> None:
 
 def dump_all() -> None:
     con = _conn()
-    rows = [_patient_dict(r) for r in
-            con.execute("SELECT * FROM patients ORDER BY id").fetchall()]
+    rows = [
+        _patient_dict(r)
+        for r in con.execute("SELECT * FROM patients ORDER BY id").fetchall()
+    ]
     con.close()
     print(json.dumps(rows))
 

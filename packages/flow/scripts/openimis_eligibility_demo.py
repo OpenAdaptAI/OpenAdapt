@@ -212,6 +212,7 @@ class OpenIMISEligibilityBackend(PlaywrightBackend):
             context["insurance_no"] = dialogs[0][0]
         return json.dumps(context, separators=(",", ":"))
 
+
 def eligibility_effects() -> list[Any]:
     """The eligibility outcome bound to the run's ``insurance_no``.
 

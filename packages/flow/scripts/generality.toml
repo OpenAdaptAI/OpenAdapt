@@ -3,34 +3,36 @@
 # The engine (openadapt_flow/) must not name a specific application. Add a term
 # here when a new application is qualified or a new app-specific identifier is
 # found. Patterns are Python regular expressions, matched case-insensitively
-# unless they turn that off with (?-i:...).
+# unless they turn that off with (?-i:...). A name matches inside an
+# identifier too (`_openemr_base`, `isOpenEMR`, `to_stedi_body`): only a letter
+# or digit next to it stops a match.
 
 [names]
-openemr = '\bopen[ _-]?emr'
-openimis = '\bopen[ _-]?imis'
-medplum = '\bmedplum'
-dolibarr = '\bdolibarr'
-espocrm = '\bespo[ _-]?crm'
-redmine = '\bredmine'
-snipe-it = '\bsnipe[ _-]?it\b'
-inventree = '\binventree'
-kimai = '\bkimai'
-openmrs = '\bopen[ _-]?mrs'
-gitea = '\bgitea'
-firefly-iii = '\bfirefly[ _-]?(iii|3)\b'
-vikunja = '\bvikunja'
-zammad = '\bzammad'
-open-dental = '\bopen[ _-]?dental'
-odoo = '\bodoo'
-frappe = '\b(frappe|erpnext)'
-patient-notes = '\bpatient[ _-]notes\b'
-epic = '(?-i:\bEpic\b)'
-cerner = '\bcerner'
-stedi = '\bstedi\b'
-textedit = '\btextedit'
-notepad = '\bnotepad\b'
-mockmed = '\bmock[ _-]?med'
-mockloan = '\bmock[ _-]?loan'
+openemr = '(?<![a-z0-9])open[ _-]?emr'
+openimis = '(?<![a-z0-9])open[ _-]?imis'
+medplum = '(?<![a-z0-9])medplum'
+dolibarr = '(?<![a-z0-9])dolibarr'
+espocrm = '(?<![a-z0-9])espo[ _-]?crm'
+redmine = '(?<![a-z0-9])redmine'
+snipe-it = '(?<![a-z0-9])snipe[ _-]?it(?![a-z0-9])'
+inventree = '(?<![a-z0-9])inven[ _-]?tree'
+kimai = '(?<![a-z0-9])kimai'
+openmrs = '(?<![a-z0-9])open[ _-]?mrs'
+gitea = '(?<![a-z0-9])gitea'
+firefly-iii = '(?<![a-z0-9])firefly[ _-]?(iii|3)(?![a-z0-9])'
+vikunja = '(?<![a-z0-9])vikunja'
+zammad = '(?<![a-z0-9])zammad'
+open-dental = '(?<![a-z0-9])open[ _-]?dental'
+odoo = '(?<![a-z0-9])odoo'
+frappe = '(?<![a-z0-9])(frappe|erpnext)'
+patient-notes = '(?<![a-z0-9])patient[ _-]notes(?![a-z0-9])'
+epic = '(?-i:(?<![A-Za-z0-9])(Epic|EPIC)(?![a-z0-9]))'
+cerner = '(?<![a-z0-9])cerner'
+stedi = '(?<![a-z0-9])stedi(?![a-z0-9])'
+textedit = '(?<![a-z0-9])text[ _-]?edit(?![a-z0-9])'
+notepad = '(?<![a-z0-9])notepad(?![a-z0-9])'
+mockmed = '(?<![a-z0-9])mock[ _-]?med'
+mockloan = '(?<![a-z0-9])mock[ _-]?loan'
 
 [identifiers]
 # OpenEMR
@@ -42,7 +44,7 @@ patient_data = '\bpatient_data\b'
 uuid_registry = '\buuid_registry\b'
 openemr-fhir-path = '/apis/default/fhir'
 # Frappe and Dolibarr table prefixes
-frappe-table = '\btabLoan\b'
+frappe-table = '\btabLoan'
 dolibarr-table = '\bllx_[a-z]'
 # MockMed's REST shape
 mockmed-records = '/api/db\b'

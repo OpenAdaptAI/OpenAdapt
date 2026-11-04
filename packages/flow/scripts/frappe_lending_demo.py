@@ -347,9 +347,7 @@ def record(fixture: FrappeFixture, out_dir: Path, *, headed: bool) -> Path:
         _preauthenticate_browser(backend, fixture)
         page = backend.page
         before_counts = fixture.table_counts()
-        before_non_target_loan_sha256 = (
-            fixture.non_target_loan_applications_sha256()
-        )
+        before_non_target_loan_sha256 = fixture.non_target_loan_applications_sha256()
         recorder = Recorder(
             backend,
             out_dir,
@@ -451,9 +449,7 @@ def record(fixture: FrappeFixture, out_dir: Path, *, headed: bool) -> Path:
             "primary_outcome": verdict.primary_outcome.value,
             "rest_records_sha256": _safe_records_sha256(evidence.rest_records),
             "db_records_sha256": _safe_records_sha256(evidence.db_records),
-            "before_non_target_loan_sha256": (
-                evidence.before_non_target_loan_sha256
-            ),
+            "before_non_target_loan_sha256": (evidence.before_non_target_loan_sha256),
             "after_non_target_loan_sha256": evidence.after_non_target_loan_sha256,
             "all_table_deltas": evidence.all_table_deltas,
             "delta_violations": evidence.delta_violations,
@@ -585,9 +581,7 @@ def _capture_post_evidence(
         errors.append("pre-write non-target Loan Application digest unavailable")
     else:
         try:
-            after_non_target_loan_sha256 = (
-                fixture.non_target_loan_applications_sha256()
-            )
+            after_non_target_loan_sha256 = fixture.non_target_loan_applications_sha256()
             if after_non_target_loan_sha256 != before_non_target_loan_sha256:
                 violations.append("tabLoan Application:non-target-content-changed")
         except Exception as exc:  # noqa: BLE001 - unreadable is not clean
@@ -826,9 +820,7 @@ def _persist_evidence(
             "before_table_counts": evidence.before_table_counts,
             "after_table_counts": evidence.after_table_counts,
             "all_table_deltas": evidence.all_table_deltas,
-            "before_non_target_loan_sha256": (
-                evidence.before_non_target_loan_sha256
-            ),
+            "before_non_target_loan_sha256": (evidence.before_non_target_loan_sha256),
             "after_non_target_loan_sha256": evidence.after_non_target_loan_sha256,
             "delta_violations": evidence.delta_violations,
             "oracle_errors": evidence.errors,
@@ -1064,9 +1056,7 @@ def run_compiled_trial(
         # Authentication/form navigation are declared unmeasured setup; take
         # the collateral-delta baseline only after they finish.
         before_counts = fixture.table_counts()
-        before_non_target_loan_sha256 = (
-            fixture.non_target_loan_applications_sha256()
-        )
+        before_non_target_loan_sha256 = fixture.non_target_loan_applications_sha256()
         start = time.monotonic()
         report = Replayer(backend, effect_verifier=oracle.verifier).run(
             Workflow.load(bundle_dir),
@@ -1155,9 +1145,7 @@ def run_agent_trial(
         _preauthenticate_browser(backend, fixture)
         _apply_condition(backend, condition)
         before_counts = fixture.table_counts()
-        before_non_target_loan_sha256 = (
-            fixture.non_target_loan_applications_sha256()
-        )
+        before_non_target_loan_sha256 = fixture.non_target_loan_applications_sha256()
         start = time.monotonic()
         result = agent_baseline.run_agent(
             backend,

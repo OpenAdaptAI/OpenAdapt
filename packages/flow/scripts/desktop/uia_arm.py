@@ -35,8 +35,13 @@ import json
 import time
 from typing import Optional
 
-WORKFLOW_TARGET_IDS = ["searchBox", "searchButton", "patientGrid",
-                       "noteBox", "saveButton"]
+WORKFLOW_TARGET_IDS = [
+    "searchBox",
+    "searchButton",
+    "patientGrid",
+    "noteBox",
+    "saveButton",
+]
 # The patient ROW is the identity-critical target and has NO usable id.
 IDENTITY_TARGET = "patient_row"
 
@@ -149,15 +154,18 @@ def run(search: str, first: str, last: str, note: str, mode: str) -> dict:
         if rows:
             _select_row(rows[0].get("_cell"))
             selected_index = rows[0]["row_index"]
-            selected_name = f"{rows[0].get('first','')} {rows[0].get('last','')}".strip()
+            selected_name = (
+                f"{rows[0].get('first', '')} {rows[0].get('last', '')}".strip()
+            )
     else:  # identity: exact match on rendered first AND last name text
         for row in rows:
-            if (row.get("first", "").strip().lower() == first.strip().lower()
-                    and row.get("last", "").strip().lower()
-                    == last.strip().lower()):
+            if (
+                row.get("first", "").strip().lower() == first.strip().lower()
+                and row.get("last", "").strip().lower() == last.strip().lower()
+            ):
                 _select_row(row.get("_cell"))
                 selected_index = row["row_index"]
-                selected_name = f"{row.get('first','')} {row.get('last','')}".strip()
+                selected_name = f"{row.get('first', '')} {row.get('last', '')}".strip()
                 break
 
     # 3. note + 4. save
@@ -182,16 +190,14 @@ def main() -> None:
     ap.add_argument("--first", required=True)
     ap.add_argument("--last", required=True)
     ap.add_argument("--note", required=True)
-    ap.add_argument("--mode", choices=["positional", "identity"],
-                    default="identity")
+    ap.add_argument("--mode", choices=["positional", "identity"], default="identity")
     args = ap.parse_args()
     try:
         out = run(args.search, args.first, args.last, args.note, args.mode)
     except Exception as e:  # noqa: BLE001
         import traceback
 
-        out = {"status": "error", "error": str(e),
-               "trace": traceback.format_exc()}
+        out = {"status": "error", "error": str(e), "trace": traceback.format_exc()}
     print(json.dumps(out))
 
 

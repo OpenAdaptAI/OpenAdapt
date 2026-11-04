@@ -29,7 +29,10 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10
+    import tomli as tomllib
 
 HERE = Path(__file__).resolve().parent
 FLOW = HERE.parent
@@ -40,18 +43,24 @@ BASELINE = HERE / "generality_baseline.json"
 #: Engine files that hold text: code and the data shipped with it.
 SUFFIXES = {".py", ".js", ".html", ".css", ".json", ".yaml", ".yml", ".toml", ".txt"}
 
+#: The marker opens the comment: ``# example: ...`` or ``#: example: ...``.
 EXAMPLE_MARKER = re.compile(r"#:?\s*example:", re.IGNORECASE)
+
+#: A lower-case letter or digit followed by a capital: where a camelCase word
+#: splits, so ``isOpenEMR`` reads as ``is Open EMR`` for the name patterns.
+_CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 
 
 def load_config(path: Path = CONFIG) -> dict:
     return tomllib.loads(path.read_text(encoding="utf-8"))
 
 
-def _term_patterns(config: dict) -> dict[str, re.Pattern[str]]:
-    terms: dict[str, re.Pattern[str]] = {}
+def _term_patterns(config: dict) -> dict[str, tuple[re.Pattern[str], bool]]:
+    """``{term: (pattern, is_name)}``; names also match inside camelCase words."""
+    terms: dict[str, tuple[re.Pattern[str], bool]] = {}
     for section in ("names", "identifiers"):
         for term, pattern in config[section].items():
-            terms[term] = re.compile(pattern, re.IGNORECASE)
+            terms[term] = (re.compile(pattern, re.IGNORECASE), section == "names")
     return terms
 
 
@@ -86,10 +95,12 @@ def scan(
             continue
         for number, line in enumerate(text.splitlines(), start=1):
             stripped = line.lstrip()
-            if stripped.startswith("#") and EXAMPLE_MARKER.search(stripped):
+            if EXAMPLE_MARKER.match(stripped):
                 continue
-            for term, pattern in terms.items():
-                if pattern.search(line) and not _allowed(rel, term, config):
+            split = _CAMEL_BOUNDARY.sub(" ", line)
+            for term, (pattern, is_name) in terms.items():
+                found = pattern.search(split if is_name else line)
+                if found and not _allowed(rel, term, config):
                     hits.setdefault(rel, {}).setdefault(term, []).append(number)
     return hits
 

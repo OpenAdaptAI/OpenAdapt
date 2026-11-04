@@ -75,12 +75,8 @@ def _panel(draw, img, shot: Path, x: int, label: str, label_color):
     if shot.is_file():
         panel = Image.open(shot).convert("RGB").resize((PANEL_W, PANEL_H))
         img.paste(panel, (x, y))
-    draw.rectangle(
-        [x - 1, y - 1, x + PANEL_W, y + PANEL_H], outline=(60, 60, 90)
-    )
-    _text_center(
-        draw, (x + PANEL_W / 2, y + PANEL_H + 10), label, F_BODY, label_color
-    )
+    draw.rectangle([x - 1, y - 1, x + PANEL_W, y + PANEL_H], outline=(60, 60, 90))
+    _text_center(draw, (x + PANEL_W / 2, y + PANEL_H + 10), label, F_BODY, label_color)
 
 
 _PLAIN_RUNG = {
@@ -134,30 +130,43 @@ def build(
             continue
         img, draw = _frame()
         _text_center(
-            draw, (CANVAS_W / 2, 8),
+            draw,
+            (CANVAS_W / 2, 8),
             "Left: the theme it was recorded on.   Right: a dark theme it never saw.",
-            F_SMALL, DIM,
+            F_SMALL,
+            DIM,
         )
         _text_center(
-            draw, (CANVAS_W / 2, 32),
+            draw,
+            (CANVAS_W / 2, 32),
             f"Step {number} of {len(results)}: {_plain_intent(res_b['intent'])}",
-            F_BODY, FG,
+            F_BODY,
+            FG,
         )
         cap_b, col_b = _step_caption(res_b, healed=False)
         cap_d, col_d = _step_caption(res_d, healed=res_d.get("heal") is not None)
         _panel(
-            draw, img, baseline_dir / res_b["after_png"], MARGIN,
-            f"Recorded theme: {cap_b}", col_b,
+            draw,
+            img,
+            baseline_dir / res_b["after_png"],
+            MARGIN,
+            f"Recorded theme: {cap_b}",
+            col_b,
         )
         _panel(
-            draw, img, drift_dir / res_d["after_png"],
+            draw,
+            img,
+            drift_dir / res_d["after_png"],
             MARGIN + PANEL_W + GUTTER,
-            f"Dark theme: {cap_d}", col_d,
+            f"Dark theme: {cap_d}",
+            col_d,
         )
         _text_center(
-            draw, (CANVAS_W / 2, CANVAS_H - FOOTER_H + 12),
+            draw,
+            (CANVAS_W / 2, CANVAS_H - FOOTER_H + 12),
             "One recording, replayed on two themes. No model calls.",
-            F_SMALL, DIM,
+            F_SMALL,
+            DIM,
         )
         frames.append(img)
         durations.append(1400 if res_d.get("heal") else 1000)
