@@ -948,7 +948,12 @@ class MacOSBackend(RemoteDisplayBackend):
         sx, sy, sw, sh = rect
         x, y, w, h = (int(v) for v in region)
         if sx < x + w and x < sx + sw and sy < y + h and y < sy + sh:
-            return {"kind": "sheet", "window_id": sheet[0], "pid": window.pid}
+            return {
+                "kind": "sheet",
+                "window_id": sheet[0],
+                "pid": window.pid,
+                "region": [int(sx), int(sy), int(sw), int(sh)],
+            }
         return None
 
     def _attached_sheet(
