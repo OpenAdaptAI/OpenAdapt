@@ -1144,6 +1144,21 @@ def web_fresh_session(
 START_CHECK_TIMEOUT_S = 10.0
 
 
+def _same_control(locator: Any, identity: Optional[dict[str, Any]]) -> bool:
+    """Is ``identity`` (``element_identity_at``) the control ``locator`` names?
+    Its automation id when the locator has one, otherwise its name; and its
+    role when both have one."""
+    if not identity or locator is None:
+        return False
+    if locator.automation_id:
+        if identity.get("automation_id") != locator.automation_id:
+            return False
+    elif not locator.name or identity.get("name") != locator.name:
+        return False
+    role = identity.get("role")
+    return not (locator.role and role and role != locator.role)
+
+
 def _start_screen_missing(
     backend: Any,
     replayer: Any,
@@ -1151,15 +1166,19 @@ def _start_screen_missing(
     predicate: Any,
     *,
     bundle_dir: Path,
+    evidence: Optional[Path] = None,
     timeout_s: float = START_CHECK_TIMEOUT_S,
 ) -> Optional[str]:
-    """None when ``predicate``'s anchor resolves on the live screen through
-    the same ladder a step uses, else why not.
+    """None when ``predicate``'s anchor shows on the live screen, else why not.
 
-    On a backend that re-finds elements (UI Automation, AT-SPI) the structural
-    rung runs first and refuses a control that is covered or off screen, so a
-    field that now holds text still counts as the same control. A pixel-only
-    backend (RDP, Citrix) uses the visual ladder. Never raises.
+    It resolves through the same ladder a step uses. A structural hit (UI
+    Automation, AT-SPI, AX) proves only that the control exists: a dialog or
+    another app may cover it. So it counts only when a screen-wide hit test
+    at its point names the same control (a backend with
+    ``hit_test_sees_every_window``), and otherwise only when the pixels show
+    it too (the visual ladder). A pixel-only backend (RDP, Citrix) uses the
+    visual ladder alone. With ``evidence``, the last frame and verdict are
+    kept there. Never raises.
     """
     import time
 
@@ -1173,8 +1192,13 @@ def _start_screen_missing(
     structural = (
         backend if callable(getattr(backend, "locate_structural", None)) else None
     )
+    hit_test = getattr(backend, "element_identity_at", None)
+    screen_wide = bool(getattr(backend, "hit_test_sees_every_window", False))
+    intent = getattr(predicate, "intent", "") or ""
     deadline = time.monotonic() + timeout_s
-    why = "the start screen isn't showing"
+    why: Optional[str] = "the start screen isn't showing"
+    frame: Optional[bytes] = None
+    rung: Optional[str] = None
     while True:
         try:
             frame = backend.screenshot()
@@ -1183,24 +1207,93 @@ def _start_screen_missing(
                 if anchor.template
                 else None
             )
-            if resolve(
+            viewport = _frame_viewport(frame)
+            found = resolve(
                 anchor,
                 frame,
                 replayer.vision,
                 None,
-                getattr(predicate, "intent", "") or "",
+                intent,
                 template_png=template,
-                viewport=_frame_viewport(frame),
+                viewport=viewport,
                 structural=structural,
+            )
+            rung = found[0].rung if found else None
+            if found is None:
+                why = "the start screen isn't showing"
+            elif rung != "structural":
+                why = None
+            elif screen_wide and callable(hit_test):
+                point = found[0].point
+                why = (
+                    None
+                    if _same_control(anchor.structural, hit_test(*point))
+                    else "something else is over its control"
+                )
+            elif resolve(
+                anchor,
+                frame,
+                replayer.vision,
+                None,
+                intent,
+                template_png=template,
+                viewport=viewport,
             ):
-                return None
+                why = None
+            else:
+                why = "its control exists, but the screen doesn't show it"
         except StructuralResolutionRefused as exc:
             why = f"its control is there but not usable ({str(exc)[:160]})"
         except Exception as exc:  # noqa: BLE001 - a failed check is a refusal
             why = f"the start check failed ({type(exc).__name__})"
-        if time.monotonic() >= deadline:
-            return why
+        if why is None or time.monotonic() >= deadline:
+            break
         time.sleep(0.5)
+    if evidence is not None:
+        try:
+            _write_private(
+                evidence.with_suffix(".json"),
+                {"intent": intent, "rung": rung, "shows": why is None, "why": why},
+            )
+            if frame:
+                evidence.with_suffix(".png").write_bytes(frame)
+        except OSError:
+            pass
+    return why
+
+
+def _check_start(
+    backend: Any,
+    replayer: Any,
+    workflow: Workflow,
+    predicate: Any,
+    *,
+    bundle_dir: Path,
+    where: Path,
+) -> Optional[str]:
+    """None when the start screen ``predicate`` names shows. An anchor goes
+    through ``_start_screen_missing``; any other kind (text on the screen, a
+    combination) through the halt cleanup's own guard, as before."""
+    from openadapt_flow import halt_cleanup
+    from openadapt_flow.ir import HaltCleanup, PredicateKind
+    from openadapt_flow.runtime import Replayer
+
+    if predicate is not None and predicate.kind == PredicateKind.ANCHOR_RESOLVES:
+        return _start_screen_missing(
+            backend,
+            replayer,
+            workflow,
+            predicate,
+            bundle_dir=bundle_dir,
+            evidence=where,
+        )
+    return halt_cleanup.check_start(
+        lambda: Replayer(backend, use_structural=True),
+        workflow,
+        HaltCleanup(steps=[], start_state=predicate, source="declared"),
+        bundle_dir=bundle_dir,
+        run_dir=where,
+    )
 
 
 def screen_fresh_session(
@@ -1211,15 +1304,19 @@ def screen_fresh_session(
 
     It runs the run's halt cleanup steps when their qualification matches
     (``halt_cleanup.runnable_cleanup``), then checks the run's start screen
-    and the compensation's own (its first anchored step's anchor) through the
-    step resolver (``_start_screen_missing``). A screen that doesn't show
-    either refuses the compensation, and so does a compensation with no
-    anchored step. Unlike a web session, nothing here signs out or
+    and the compensation's own (its first anchored step's anchor), keeping
+    each check's frame and verdict under ``rollback/.fresh-session-N``. An
+    anchor is looked for through the step resolver, and a control found
+    structurally counts only when nothing is over it (``_start_screen_missing``);
+    any other start state through the halt cleanup's guard. A screen that
+    doesn't show either refuses the compensation, and so does a compensation
+    with no anchored step. Unlike a web session, nothing here signs out or
     navigates: without a qualified cleanup it only checks. Nothing here
     proves an undo: the whole-store reads before and after each compensation
     cover whatever the cleanup does too. None when the workflow has no start
     screen to check.
     """
+
     from openadapt_flow import halt_cleanup
 
     cleanup = halt_cleanup.runnable_cleanup(workflow)
@@ -1246,8 +1343,13 @@ def screen_fresh_session(
                     f"the halt cleanup raised {type(exc).__name__}"
                 ) from exc
         checker = Replayer(backend, use_structural=True)
-        why = _start_screen_missing(
-            backend, checker, workflow, cleanup.start_state, bundle_dir=bundle_dir
+        why = _check_start(
+            backend,
+            checker,
+            workflow,
+            cleanup.start_state,
+            bundle_dir=bundle_dir,
+            where=where / "start",
         )
         if why is not None:
             raise CompensationRefused(f"the run's start screen isn't showing ({why})")
@@ -1259,8 +1361,13 @@ def screen_fresh_session(
                 "the compensation has no anchored step, so its start screen "
                 "can't be checked"
             )
-        why = _start_screen_missing(
-            backend, checker, compensation, start, bundle_dir=bundle_dir
+        why = _check_start(
+            backend,
+            checker,
+            compensation,
+            start,
+            bundle_dir=bundle_dir,
+            where=where / "compensation",
         )
         if why is not None:
             raise CompensationRefused(

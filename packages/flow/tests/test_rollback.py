@@ -2006,11 +2006,11 @@ def test_a_screen_backend_gets_a_fresh_session_from_the_start_screen_check(
     answers = [None, "it isn't there"]
     checked: list[Any] = []
 
-    def missing(backend, replayer, wf, predicate, *, bundle_dir):
+    def missing(backend, replayer, wf, predicate, *, bundle_dir, where):
         checked.append(predicate)
         return answers.pop(0)
 
-    monkeypatch.setattr(rollback_module, "_start_screen_missing", missing)
+    monkeypatch.setattr(rollback_module, "_check_start", missing)
     reset = screen_fresh_session(
         FakeBackend(), workflow, bundle_dir=tmp_path, run_dir=tmp_path
     )
@@ -2038,10 +2038,10 @@ def test_a_screen_compensation_checks_its_own_start_screen(tmp_path, monkeypatch
     compensation_start = Predicate(kind=PredicateKind.TEXT_PRESENT, text="Patient")
     monkeypatch.setattr(halt_cleanup, "start_state_of", lambda wf: compensation_start)
 
-    def missing(backend, replayer, wf, predicate, *, bundle_dir):
+    def missing(backend, replayer, wf, predicate, *, bundle_dir, where):
         return None if predicate is start.start_state else "it isn't there"
 
-    monkeypatch.setattr(rollback_module, "_start_screen_missing", missing)
+    monkeypatch.setattr(rollback_module, "_check_start", missing)
     reset = screen_fresh_session(
         FakeBackend(), _clinic_workflow(), bundle_dir=tmp_path, run_dir=tmp_path
     )
@@ -2056,19 +2056,26 @@ def test_a_screen_compensation_checks_its_own_start_screen(tmp_path, monkeypatch
 
 
 class _StructuralScreen(FakeBackend):
-    """A desktop app whose start control is found by UI Automation: present,
-    missing, or there but covered by another window."""
+    """A desktop app whose start control UI Automation finds. ``top`` is what
+    a screen-wide hit test names at its point (None: the backend has no such
+    hit test)."""
 
-    def __init__(self, state: str) -> None:
+    def __init__(self, state: str, top: Optional[str] = None) -> None:
         super().__init__(viewport=(300, 200))
         self.state = state
+        if top is not None:
+            self.hit_test_sees_every_window = True
+            self.element_identity_at = lambda x, y: {
+                "automation_id": top,
+                "role": "textbox" if top == "searchBox" else "button",
+            }
 
     def locate_structural(self, locator):
-        from openadapt_flow.backend import StructuralElementNotActionable
+        from openadapt_flow.backend import StructuralResolutionRefused
         from openadapt_flow.ir import StructuralHandle
 
-        if self.state == "covered":
-            raise StructuralElementNotActionable("another window covers it")
+        if self.state == "ambiguous":
+            raise StructuralResolutionRefused("two windows hold it")
         if self.state == "missing":
             return None
         return StructuralHandle(
@@ -2085,38 +2092,117 @@ def _search_box_start() -> Any:
             template="templates/search.png",
             region=(30, 15, 20, 10),
             click_point=(40, 20),
-            structural=StructuralLocator(automation_id="searchBox"),
+            structural=StructuralLocator(automation_id="searchBox", role="textbox"),
         ),
         intent="the start screen (click the search box)",
     )
 
 
 @pytest.mark.parametrize(
-    ("state", "missing"),
-    [("present", None), ("missing", "isn't showing"), ("covered", "not usable")],
+    ("state", "top", "pixels", "missing"),
+    [
+        # Windows: the field now holds text (no crop match), but the control
+        # on top at its point is the search box itself.
+        ("present", "searchBox", False, None),
+        # Windows: UI Automation finds the box behind a dialog's Yes button.
+        ("present", "yesButton", False, "something else is over"),
+        # Linux/macOS: no screen-wide hit test, so the pixels must show it.
+        ("present", None, False, "screen doesn't show it"),
+        ("present", None, True, None),
+        ("missing", None, False, "isn't showing"),
+        ("ambiguous", "searchBox", True, "not usable"),
+    ],
 )
-def test_the_desktop_start_check_finds_its_control_as_a_step_would(
-    tmp_path, state, missing
+def test_the_desktop_start_check_counts_a_control_only_when_nothing_covers_it(
+    tmp_path, state, top, pixels, missing
 ):
-    # After the run the search box holds text, so its recorded crop no longer
-    # matches (the fake vision finds no template). The control is still the
-    # same one UI Automation finds; covered by another window it isn't usable.
-    from openadapt_flow.rollback import _start_screen_missing
+    import json as _json
 
-    backend = _StructuralScreen(state)
-    replayer = Replayer(backend, vision=FakeVision(), use_structural=True)
+    from openadapt_flow.rollback import _start_screen_missing
+    from tests.test_replayer import Match
+
+    backend = _StructuralScreen(state, top)
+    vision = FakeVision()
+    if pixels:
+        hit = Match(point=(40, 20), region=(30, 15, 20, 10), confidence=0.95)
+        vision.template_results = [hit] * 4
+    replayer = Replayer(backend, vision=vision, use_structural=True)
+    (tmp_path / "templates").mkdir()
+    (tmp_path / "templates" / "search.png").write_bytes(backend.screenshot())
     why = _start_screen_missing(
         backend,
         replayer,
         _clinic_workflow(),
         _search_box_start(),
         bundle_dir=tmp_path,
+        evidence=tmp_path / "check",
         timeout_s=0,
     )
     if missing is None:
         assert why is None
     else:
-        assert why is not None and missing in why
+        assert why is not None and missing in why, why
+    kept = _json.loads((tmp_path / "check.json").read_text())
+    assert kept["shows"] is (missing is None)
+    assert (tmp_path / "check.png").exists()
+
+
+def test_a_start_state_that_isnt_an_anchor_keeps_the_cleanup_guard(
+    tmp_path, monkeypatch
+):
+    from openadapt_flow import halt_cleanup
+    from openadapt_flow.ir import Predicate, PredicateKind
+    from openadapt_flow.rollback import _check_start
+
+    seen: list[Any] = []
+
+    def check_start(factory, wf, cleanup, *, bundle_dir, run_dir):
+        seen.append((cleanup.start_state, run_dir))
+        return None
+
+    monkeypatch.setattr(halt_cleanup, "check_start", check_start)
+    text = Predicate(kind=PredicateKind.TEXT_PRESENT, text="Patients")
+    assert (
+        _check_start(
+            FakeBackend(),
+            None,
+            _clinic_workflow(),
+            text,
+            bundle_dir=tmp_path,
+            where=tmp_path / "start",
+        )
+        is None
+    )
+    assert seen == [(text, tmp_path / "start")]
+
+
+def test_a_cleanup_that_raises_refuses_before_any_check(tmp_path, monkeypatch):
+    from openadapt_flow import halt_cleanup
+    from openadapt_flow import rollback as rollback_module
+    from openadapt_flow.ir import HaltCleanup, Predicate, PredicateKind
+    from openadapt_flow.rollback import screen_fresh_session
+
+    cleanup = HaltCleanup(
+        steps=[_key_step("esc", "close the dialog", "Escape")],
+        start_state=Predicate(kind=PredicateKind.TEXT_PRESENT, text="Home"),
+        source="declared",
+    )
+    monkeypatch.setattr(halt_cleanup, "runnable_cleanup", lambda wf: cleanup)
+    checks: list[Any] = []
+    monkeypatch.setattr(
+        rollback_module, "_check_start", lambda *a, **k: checks.append(a) or None
+    )
+
+    def boom(self, *args, **kwargs):
+        raise RuntimeError("the agent went away")
+
+    monkeypatch.setattr(Replayer, "run", boom)
+    reset = screen_fresh_session(
+        FakeBackend(), _clinic_workflow(), bundle_dir=tmp_path, run_dir=tmp_path
+    )
+    with pytest.raises(CompensationRefused, match="halt cleanup raised"):
+        reset()
+    assert checks == []
 
 
 def test_a_desktop_gui_undo_counts_only_with_a_qualified_cleanup(monkeypatch):
