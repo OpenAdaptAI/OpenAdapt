@@ -3141,6 +3141,7 @@ class Replayer:
             runtime_worklists=self._outcome_worklists,
             transition_evidence_root=run_dir,
             transition_predicate_vision=self.vision,
+            transition_evidence_key=self.checkpoint_key,
         )
 
     def _begin_control_overlay(self, profile: Optional[str]) -> None:

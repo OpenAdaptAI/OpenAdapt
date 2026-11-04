@@ -188,7 +188,14 @@ version still resumes, and its first encrypted write converts them.
 The key is stretched with scrypt once per run, under a random salt kept in the
 run's `.attended_state.encrypted` marker, and each file and journal row gets
 its own nonce under keys derived from it, so the cost doesn't grow with the
-number of files or journal rows. Once a run's attended state is encrypted,
+number of files or journal rows. Each file names the salt it was sealed
+under, and a file whose salt is not the one in the run's marker is refused, so
+a file copied in from another run under the same key does not read. If two
+processes convert the same run at once, the one that loses the race to write
+the marker reseals its files under the winner's salt. The replayer classifies
+a run's outcome with its own checkpoint key, so a run whose key was passed in
+code rather than through the environment still reads its sealed evidence.
+Once a run's attended state is encrypted,
 `OPENADAPT_FLOW_PLAINTEXT_AT_REST` does not turn it back to plaintext: a write
 with no key is refused. Containers written by the earlier per-file format
 still read.

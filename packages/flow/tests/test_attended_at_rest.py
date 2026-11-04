@@ -487,3 +487,79 @@ def test_older_plaintext_run_converts_under_one_salt(tmp_path, counted_scrypt):
             f'{{"p":{index}}}'.encode()
         )
     assert len(counted_scrypt) == 1
+
+
+def test_salted_file_from_another_run_is_refused(tmp_path, counted_scrypt):
+    """Same key and relative path, but another run's salt: refused."""
+    run_a, run_b = tmp_path / "a", tmp_path / "b"
+    name = ".attended_program_receipts/r.json"
+    for root, body in ((run_a, b'{"run":"a"}'), (run_b, b'{"run":"b"}')):
+        (root / ".attended_program_receipts").mkdir(parents=True)
+        attended_state.write_bytes(root, root / name, body, SYNTHETIC_KEY, _write)
+    shutil.copyfile(
+        attended_state.enc_path(run_a / name), attended_state.enc_path(run_b / name)
+    )
+    with pytest.raises(attended_state.AttendedStateUnreadable, match="this run"):
+        attended_state.read_bytes(run_b, run_b / name, SYNTHETIC_KEY)
+    with pytest.raises(attended_state.AttendedStateUnreadable, match="this run"):
+        attended_state.digest_bytes(run_b, run_b / name, SYNTHETIC_KEY)
+    assert attended_state.read_bytes(run_a, run_a / name, SYNTHETIC_KEY) == (
+        b'{"run":"a"}'
+    )
+    # A salted file whose run lost its marker is refused too.
+    (run_a / attended_state.MARKER_FILENAME).unlink()
+    with pytest.raises(attended_state.AttendedStateUnreadable, match="this run"):
+        attended_state.read_bytes(run_a, run_a / name, SYNTHETIC_KEY)
+
+
+def test_conversion_that_loses_the_marker_race_reseals_under_the_run_salt(
+    tmp_path, counted_scrypt, monkeypatch
+):
+    root = tmp_path / "run"
+    receipts = root / ".attended_program_receipts"
+    receipts.mkdir(parents=True)
+    old = receipts / "old.json"
+    old.write_bytes(b'{"older":"plaintext"}')
+    winner_salt = crypto.SetKey.new_salt()
+    original = attended_state._link_new
+    marker = root / attended_state.MARKER_FILENAME
+
+    def link_new(path, data):
+        # Another writer creates the marker just before this one does.
+        if path == marker and not marker.exists():
+            original(path, attended_state._marker_payload(winner_salt))
+        original(path, data)
+
+    monkeypatch.setattr(attended_state, "_link_new", link_new)
+    attended_state.write_bytes(
+        root, receipts / "new.json", b'{"new":1}', SYNTHETIC_KEY, _write
+    )
+    assert attended_state._read_marker(root) == (True, winner_salt)
+    assert attended_state.read_bytes(root, old, SYNTHETIC_KEY) == (
+        b'{"older":"plaintext"}'
+    )
+    assert attended_state.read_bytes(root, receipts / "new.json", SYNTHETIC_KEY) == (
+        b'{"new":1}'
+    )
+
+
+def test_replayer_classifies_with_its_own_checkpoint_key(monkeypatch, tmp_path):
+    """The outcome reader opens attended evidence with the key the run sealed
+    it under, not only the environment's key."""
+    from types import SimpleNamespace
+
+    from openadapt_flow import execution_profiles
+
+    seen: dict = {}
+
+    def stamp(report, workflow, profile, **kwargs):
+        seen.update(kwargs)
+
+    monkeypatch.setattr(execution_profiles, "stamp_execution_outcome", stamp)
+    replayer = Replayer(FakeBackend(), vision=FakeVision(), checkpoint_key="k-run")
+    replayer._outcome_worklists = None
+    replayer._stamp_execution_outcome(
+        SimpleNamespace(execution_profile="standard"), object(), tmp_path
+    )
+    assert seen["transition_evidence_key"] == "k-run"
+    assert seen["transition_evidence_root"] == tmp_path

@@ -230,10 +230,24 @@ def open_file(root: Path, path: Path, container: bytes, key: Optional[str]) -> b
     format, or raise :class:`AttendedStateUnreadable`."""
     key = _require_key(key)
     if container.startswith(_crypto.SALTED_FILE_MAGIC):
+        _refuse_other_run(root, container)
         return _open_salted(
             container, key, file_aad(root, path, FILE_AAD_PREFIX_V2), journal=False
         )
     return open_sealed(container, key, file_aad(root, path))
+
+
+def _refuse_other_run(root: Path, container: bytes) -> None:
+    """A salted file belongs to the run whose marker holds its salt. One
+    copied in from another run under the same key and relative path would
+    otherwise decrypt, so it is refused, as is a salted file whose run has no
+    salted marker."""
+    _present, run_salt = _read_marker(root)
+    if run_salt is None or _split_salted(container)[0] != run_salt:
+        raise AttendedStateUnreadable(
+            "attended state was not sealed for this run: its salt does not "
+            "match the run's marker"
+        )
 
 
 def open_sealed(container: bytes, key: Optional[str], aad: bytes) -> bytes:
@@ -384,29 +398,43 @@ def _ensure_encrypted(root: Path, key: str) -> bytes:
         directory = root / dirname
         if directory.is_dir() and not directory.is_symlink():
             candidates.extend(directory / name for name in logical_names(directory))
+    converted: list[tuple[Path, Path, bytes, bytes]] = []
     for path in candidates:
         if path.is_symlink() or not path.is_file():
             continue
         enc = enc_path(path)
         if not enc.exists():
-            _link_new(
-                enc,
-                _seal_salted(
-                    file_key,
-                    new_salt,
-                    path.read_bytes(),
-                    file_aad(root, path, FILE_AAD_PREFIX_V2),
-                ),
+            plaintext = path.read_bytes()
+            container = _seal_salted(
+                file_key,
+                new_salt,
+                plaintext,
+                file_aad(root, path, FILE_AAD_PREFIX_V2),
             )
+            _link_new(enc, container)
+            converted.append((path, enc, plaintext, container))
         path.unlink(missing_ok=True)
     root.mkdir(parents=True, exist_ok=True)
     _link_new(marker, _marker_payload(new_salt))
     # A concurrent first write may have created the marker first; its salt
-    # is the run's. Files sealed under ours still open (each container carries
-    # its salt).
+    # is the run's. Files this call sealed under its own salt are sealed
+    # again under the run's, unless another writer has replaced them since.
     present, salt = _read_marker(root)
     if salt is None:
         raise AttendedStateUnreadable("the attended-state marker is invalid")
+    if salt != new_salt:
+        run_key = _run_keys(key, salt)[0]
+        for path, enc, plaintext, container in converted:
+            if enc.is_symlink() or not enc.is_file() or enc.read_bytes() != container:
+                continue
+            tmp = enc.with_name(f".{enc.name}.{secrets.token_hex(8)}.tmp")
+            _link_new(
+                tmp,
+                _seal_salted(
+                    run_key, salt, plaintext, file_aad(root, path, FILE_AAD_PREFIX_V2)
+                ),
+            )
+            os.replace(tmp, enc)
     return salt
 
 
