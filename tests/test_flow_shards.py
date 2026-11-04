@@ -89,6 +89,41 @@ def test_durations_come_from_job_logs(tmp_path: Path) -> None:
     }
 
 
+def test_gh_run_view_lines_and_colour_codes_parse(tmp_path: Path) -> None:
+    log = tmp_path / "view.log"
+    log.write_text(
+        "unit\tTest\t2026-11-03T22:00:00.0000000Z [gw0] [  0%] "
+        "\x1b[32mPASSED\x1b[0m tests/test_a.py::t1\n"
+        "unit\tTest\t2026-11-03T22:00:05.0000000Z [gw0] [ 50%] "
+        "\x1b[32mPASSED\x1b[0m tests/test_b.py::t1\n",
+        encoding="utf-8",
+    )
+    assert flow_shards.from_logs([log]) == {
+        "tests/test_a.py": 0.0,
+        "tests/test_b.py": 5.0,
+    }
+
+
+def test_a_log_with_no_results_leaves_the_durations_alone(tmp_path: Path) -> None:
+    durations = tmp_path / "d.json"
+    durations.write_text('{"seconds": {"tests/test_a.py": 3.0}}', encoding="utf-8")
+    log = tmp_path / "empty.log"
+    log.write_text("nothing here\n", encoding="utf-8")
+    code = flow_shards.main(["--from-logs", str(log), "--durations", str(durations)])
+    assert code == 1
+    assert flow_shards.load(durations) == {"tests/test_a.py": 3.0}
+
+
+def test_an_empty_shard_prints_nothing(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import io
+
+    monkeypatch.setattr("sys.stdin", io.StringIO("tests/test_a.py\n"))
+    assert flow_shards.main(["--shard", "2", "--of", "3"]) == 0
+    assert capsys.readouterr().out == ""
+
+
 def test_the_workflow_shards_with_this_script() -> None:
     text = (ROOT / ".github" / "workflows" / "packages.yml").read_text(encoding="utf-8")
     assert "scripts/ci/flow_shards.py --shard" in text

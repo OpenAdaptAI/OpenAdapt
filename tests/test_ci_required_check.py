@@ -70,7 +70,9 @@ def test_ci_requires_every_job_and_always_reports() -> None:
     for key, name in REPORTERS.items():
         job = CI["jobs"][key]
         assert job["name"] == name
-        assert set(job["needs"]) == {"packages", "launcher", "smoke"}, key
+        # Every other job in ci.yml, so a new one can't go ungated.
+        others = set(CI["jobs"]) - set(REPORTERS)
+        assert set(job["needs"]) == others == {"packages", "launcher", "smoke"}, key
         script = next(
             step["run"] for step in job["steps"] if "RESULTS" in step.get("env", {})
         )
