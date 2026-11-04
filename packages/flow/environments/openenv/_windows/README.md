@@ -83,6 +83,15 @@ coordinates, `type`, `press` and `done` with a claim. The Windows key and the
 Ctrl+Esc and Ctrl+Shift+Esc chords are refused. The agent has no network
 action.
 
+## Results
+
+On a Windows 11 Pro x64 laptop (2026-11-04), all four environments passed every check:
+- every reference solution earned 1, and every feasible task earned 0 with a write fault planted;
+- random actions earned 0, and an agent trusting the "saved" message earned exactly the feasible half;
+- no state carried between episodes.
+
+Median reset was 6.6–7.3 s on the UI Automation surface and 3.2–3.3 s over Remote Desktop with AVC444. Details, the full episode logs and one earlier failed run are in [`results/zenbook-2026-11-04/`](results/zenbook-2026-11-04/README.md).
+
 ## Validate
 
 ```bash
