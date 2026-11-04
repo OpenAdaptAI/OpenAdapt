@@ -173,6 +173,7 @@ def run_probe(n: int = 21, *, headless: bool = True) -> dict:
         targets = []
         structural_ok = 0
         visual_ok = 0
+        visual_wrong = 0
         for i in range(n):
             correct_box = _bbox(backend, f"#open-p{i}")
 
@@ -202,6 +203,7 @@ def run_probe(n: int = 21, *, headless: bool = True) -> dict:
 
             structural_ok += int(s_ok)
             visual_ok += int(v_ok)
+            visual_wrong += int(res is not None and not v_ok)
             targets.append(
                 {
                     "id": f"open-p{i}",
@@ -209,6 +211,8 @@ def run_probe(n: int = 21, *, headless: bool = True) -> dict:
                     "structural_ok": bool(s_ok),
                     "structural_rung": handle is not None,
                     "visual_ok": bool(v_ok),
+                    # Resolved, but to a point outside the correct button.
+                    "visual_wrong": res is not None and not v_ok,
                     "visual_rung": (res[0].rung if res else None),
                 }
             )
@@ -219,6 +223,7 @@ def run_probe(n: int = 21, *, headless: bool = True) -> dict:
             "visual_ok": visual_ok,
             "structural_ratio": f"{structural_ok}/{n}",
             "visual_ratio": f"{visual_ok}/{n}",
+            "visual_wrong": visual_wrong,
             "targets": targets,
         }
     finally:

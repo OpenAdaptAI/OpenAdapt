@@ -210,6 +210,28 @@ def test_one_look_alike_that_every_landmark_contradicts_refuses():
         _resolve(anchor, model, vision)
 
 
+def test_one_moved_look_alike_whose_landmarks_are_all_missing_abstains():
+    """A checked radio button's crop matches the checked neighbour after a
+    toggle. Its label landmark is not found, so the move cannot be checked."""
+    anchor = _icon_anchor(
+        landmarks=[
+            Landmark(
+                relation="right_of",
+                ocr_text="Morning",
+                distance_px=40,
+                dx_px=-40,
+                dy_px=0,
+            )
+        ]
+    )
+    moved = _Model([_Candidate((100, 130, 40, 40), 1.0, 0.95)])
+    assert _resolve(anchor, moved) is None
+    # At its recorded spot, the same look-alike still resolves.
+    in_place = _Model([_Candidate((100, 100, 40, 40), 1.0, 0.95)])
+    resolution, _region = _resolve(anchor, in_place)
+    assert resolution.rung == "grounder" and resolution.point == (120, 120)
+
+
 def test_a_text_labelled_target_is_left_to_ocr():
     model = _Model([_Candidate((200, 150, 60, 60), 1.5, 0.93)])
     assert _resolve(_icon_anchor(ocr_text="Save note"), model) is None

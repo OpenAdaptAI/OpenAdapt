@@ -102,6 +102,29 @@ MAX_PEAKS = 16
 # lone crisp decoy is refused. A refusal here falls through to the ocr/geometry/
 # grounder rungs (stronger POSITION evidence), never to a silent click.
 AMBIGUITY_SUSPICION_SCORE = 0.7
+# A peak within this distance of the expected centre (px, or this share of the
+# template's short side when larger) is the recorded spot itself, redrawn with
+# codec or sub-pixel jitter. Farther than that, inside the locality radius, it
+# may be a neighbouring row's copy of the widget.
+SAME_SPOT_MIN_PX = 6
+SAME_SPOT_SHARE = 0.25
+
+
+def _repeated_on_frame(
+    screen: np.ndarray, template: np.ndarray, tw: int, th: int
+) -> bool:
+    """Whether two or more distinct places on the whole frame look like the
+    template (at the matched size), i.e. the widget is repeated."""
+    sh, sw = screen.shape[:2]
+    if tw > sw or th > sh:
+        return False
+    scaled = (
+        template
+        if template.shape[1] == tw and template.shape[0] == th
+        else imgops.resize_area(template, tw, th)
+    )
+    result = imgops.match_template_ccoeff_normed(screen, scaled)
+    return len(_peaks_above(result, AMBIGUITY_SUSPICION_SCORE, tw, th)) >= 2
 
 
 def _peaks_above(
@@ -218,6 +241,15 @@ def _find_template_arrays(
             # A degraded/occluded TRUE target at the expected spot beats a
             # cleaner look-alike elsewhere.
             score, mx, my = min(near, key=_center_dist)
+            # The locality radius is wider than the pitch of a dense list
+            # (48 px against 30-40 px rows), so the nearest peak can be the
+            # NEXT row's identical widget when the target itself moved away.
+            # A peak off the recorded spot is kept only when nothing else on
+            # the whole frame looks like the template.
+            if _center_dist((score, mx, my)) > max(
+                SAME_SPOT_MIN_PX, SAME_SPOT_SHARE * min(mw, mh)
+            ) and _repeated_on_frame(screen, template, mw, mh):
+                return None
         elif len(peaks) >= 2:
             # Multiple look-alikes, none where expected: not uniquely present.
             return None

@@ -871,3 +871,6 @@ def test_playwright_structural_survives_drift_where_visual_fails() -> None:
     assert drifted, "probe must include drifted targets"
     assert all(t["structural_ok"] for t in drifted)
     assert not any(t["visual_ok"] for t in drifted)
+    # Screen only, the drifted buttons are identical to one another: the
+    # ladder must refuse them, never click a neighbouring row's button.
+    assert not any(t["visual_wrong"] for t in report["targets"])

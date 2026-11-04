@@ -1,0 +1,42 @@
+{
+  "schema": "openadapt.local-grounding-latency.v1",
+  "generated_at": "2026-11-04T21:22:07+00:00",
+  "host": {
+    "machine": "AMD64",
+    "system": "Windows",
+    "processor": "AMD64 Family 25 Model 80 Stepping 0, AuthenticAMD",
+    "cpu_count": 16,
+    "load_1m": null
+  },
+  "onnxruntime": "1.31.1",
+  "provider": "CPUExecutionProvider",
+  "threads": 4,
+  "repeats": 5,
+  "weights_sha256": "dfce54a839b491f395c516350ebb4a78f947e9170a6beac0f2bc5638e0f09d61",
+  "summary": {
+    "controls": {
+      "queries": 85,
+      "frame_sizes": [
+        [
+          1920,
+          1080
+        ]
+      ],
+      "p50_ms": 537.3,
+      "p95_ms": 1143.6,
+      "mean_ms": 753.3
+    },
+    "avc444": {
+      "queries": 405,
+      "frame_sizes": [
+        [
+          1280,
+          800
+        ]
+      ],
+      "p50_ms": 318.4,
+      "p95_ms": 362.8,
+      "mean_ms": 318.6
+    }
+  }
+}
