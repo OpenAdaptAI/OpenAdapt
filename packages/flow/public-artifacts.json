@@ -531,6 +531,8 @@
     "docs/showcase-process/program-graph.png",
     "docs/validation/decision_triage_synthetic.json",
     "docs/verification.json",
+    "environments/openenv/cloud/last-run.json",
+    "environments/openenv/cloud/last-run.meta.json",
     "environments/openenv/frappe_lending/env.yaml",
     "environments/openenv/frappe_lending/verify.yaml",
     "environments/openenv/mockloan/env.yaml",
