@@ -4,7 +4,7 @@
   "heldout": {
     "feasible": 12,
     "file": "claims_desk.heldout.jsonl",
-    "location": "private (OpenAdaptAI/openadapt-corpus)",
+    "location": "private",
     "sha256": "00f816fd4735be2905b2b9c545b41035a14a22bfc85fa9e01a92ccdb286ff297",
     "tasks": 24
   },

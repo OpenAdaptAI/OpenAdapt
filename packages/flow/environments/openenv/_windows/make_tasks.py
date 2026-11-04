@@ -383,7 +383,7 @@ def main(argv: list[str] | None = None) -> int:
                     "feasible": sum(t["feasible"] for t in sets["public"]),
                 },
                 "heldout": {
-                    "location": "private (OpenAdaptAI/openadapt-corpus)",
+                    "location": "private",
                     "file": heldout.name,
                     "sha256": _sha(heldout),
                     "tasks": len(sets["heldout"]),

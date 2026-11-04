@@ -4,7 +4,7 @@
   "heldout": {
     "feasible": 12,
     "file": "patient_chart.heldout.jsonl",
-    "location": "private (OpenAdaptAI/openadapt-corpus)",
+    "location": "private",
     "sha256": "cf1ec6991b9ea864125e1c7c2ab3aad0cdbd9676579dadea0c0e57b9e43c3026",
     "tasks": 24
   },

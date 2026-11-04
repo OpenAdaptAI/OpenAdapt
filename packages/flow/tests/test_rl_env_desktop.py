@@ -473,11 +473,11 @@ def test_guest_settings_fall_back_to_the_lab_profile(
 
     for key in ("HOST", "USER", "SSH_KEY", "PASSWORD"):
         monkeypatch.delenv(f"OPENADAPT_WINENV_{key}", raising=False)
-    monkeypatch.setenv("OAFLOW_LAB_PROFILE", "winlap")
-    monkeypatch.setenv("OAFLOW_WINLAP_HOST", "10.9.8.7")
-    monkeypatch.setenv("OAFLOW_WINLAP_USER", "lab")
-    monkeypatch.setenv("OAFLOW_WINLAP_SSH_KEY", "~/.ssh/lab_key")
-    monkeypatch.setenv("OAFLOW_WINLAP_PYTHON", r"C:\Python312\pythonw.exe")
+    monkeypatch.setenv("OAFLOW_LAB_PROFILE", "labhost")
+    monkeypatch.setenv("OAFLOW_LABHOST_HOST", "10.9.8.7")
+    monkeypatch.setenv("OAFLOW_LABHOST_USER", "lab")
+    monkeypatch.setenv("OAFLOW_LABHOST_SSH_KEY", "~/.ssh/lab_key")
+    monkeypatch.setenv("OAFLOW_LABHOST_PYTHON", r"C:\Python312\pythonw.exe")
     guest = wg.WindowsGuest()
     assert (guest.host, guest.user, guest._session) == ("10.9.8.7", "lab", None)
     assert guest.python == r"C:\Python312\python.exe"
