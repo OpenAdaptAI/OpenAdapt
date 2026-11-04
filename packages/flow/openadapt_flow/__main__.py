@@ -981,9 +981,11 @@ def _build_and_run_replayer(
             # A person resumes the paused run or rolls it back; the read from
             # before the run waits for either, sealed and bound to this run.
             _bind_sealed_run(sealed, Path(run_dir))
+            from openadapt_flow.cli_hints import command
+
             print(
                 "Rollback is armed for this paused run. Resume it, or roll it "
-                f"back: openadapt-flow resume {run_dir} --roll-back",
+                f"back: {command(f'resume {run_dir} --roll-back')}",
                 file=sys.stderr,
             )
             return report
@@ -4918,9 +4920,11 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             if armed:
                 _bind_sealed_run(sealed, run_dir)
             if armed:
+                from openadapt_flow.cli_hints import command
+
                 print(
                     "Rollback is armed for this run. Resume it again, or roll it "
-                    f"back: openadapt-flow resume {run_dir} --roll-back"
+                    f"back: {command(f'resume {run_dir} --roll-back')}"
                 )
     report_md = render_run_report(run_dir)
     execution_outcome = getattr(report, "execution_outcome", None)
