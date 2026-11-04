@@ -172,6 +172,22 @@ step with them.
 The approved archive beside it (`<name>.approved.zip`) is one AES-256-GCM
 container under the same key.
 
+### Durable checkpoints and attended state
+
+In the default mode, under the configured or local key, the durable store
+writes its checkpoints, pauses and approvals as `<name>.enc` AES-256-GCM
+containers. The attended store does the same for the pause capability and its
+history, the decision log (operator and message), program and reconciliation
+receipts, and program-transition control frames. Each file's associated data
+names its run-relative path, so a file copied over another path does not
+decrypt, and once a run's attended state is encrypted a plaintext file in its
+place is refused. The external attended journal stores each decision-log
+snapshot encrypted and bound to its run and sequence; its hash chain and HMAC
+cover the plaintext. A run whose attended files are plaintext from an earlier
+version still resumes, and its first encrypted write converts them.
+`tests/test_attended_at_rest.py` runs attended decisions under the same disk
+audit hook and checks that no attended file or journal row holds plaintext.
+
 ### Run directory of a sealed bundle
 
 Every file is encrypted except these structural ones: `.durable_run.claim`
