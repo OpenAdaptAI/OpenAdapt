@@ -26,16 +26,13 @@ record:
   duplicate_key: email
   fields:
     email: email
-    # OpenEMR's New Patient form saves what was typed transformed, when the
-    # field changes: each word of a name capitalized ("C"), street and city
-    # in capitals ("U"). The check expects exactly that stored form.
-    lname: {param: lname, stored: capitalize_words}
+    lname: lname
     title: title
-    fname: {param: fname, stored: capitalize_words}
+    fname: fname
     DOB: DOB
     sex: sex
-    street: {param: street, stored: upper}
-    city: {param: city, stored: upper}
+    street: street
+    city: city
     state: {literal: MA}
     postal_code: postal_code
     phone_home: phone_home
