@@ -140,3 +140,52 @@ def test_trl_adapter_over_a_live_server_reads_the_record_reward() -> None:
     finally:
         server.terminate()
         server.wait(timeout=30)
+
+
+def test_a_stuck_step_that_wakes_later_cannot_touch_the_next_episode(
+    monkeypatch,
+) -> None:
+    import os
+    import threading
+    import time
+
+    import httpx
+
+    from openadapt_flow.rl_env import environment as E
+
+    env = OpenAdaptWebEnvironment(MOCKMED)
+    try:
+        env.reset(task_id="mockmed-01")
+        old_url, driver = env._app_url, env._driver_pid
+        assert driver is not None
+        task = env.env.task("mockmed-01")
+        woke = threading.Event()
+
+        def stuck_then_late_write(*_a, **_k):
+            time.sleep(2)  # past the watchdog, then the "browser" finally saves
+            try:
+                httpx.post(
+                    f"{old_url}/api/encounter?fault=ok", json=task.params, timeout=2
+                )
+            except httpx.HTTPError:
+                pass
+            woke.set()
+
+        monkeypatch.setattr(E, "STEP_TIMEOUT_S", 0.5)
+        env._step = stuck_then_late_write  # type: ignore[method-assign]
+        obs = env.step(WebAction(kind="wait", seconds=1))
+        assert (obs.done, obs.reward, obs.verdict) == (True, 0.0, "INDETERMINATE")
+        with pytest.raises(ProcessLookupError):
+            os.kill(driver, 0)  # the stuck browser's driver is gone
+        del env._step
+        monkeypatch.undo()  # the new episode runs under the normal watchdog
+
+        env.reset(task_id="mockmed-01")
+        assert env._app_url != old_url  # a fresh app copy and store
+        assert woke.wait(10)
+        assert httpx.get(env._app_url + "/api/db").json()["records"] == []
+        for action in task.solution:
+            obs = env.step(WebAction(**action))
+        assert (obs.verdict, obs.reward) == ("CONFIRMED", 1.0)
+    finally:
+        env.close()
