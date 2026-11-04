@@ -1,1 +1,1 @@
-With `admit TASK_DIR`, a person confirms and admits a waiting draft, such as one an agent taught over MCP (`openadapt-agent serve --teach`).
+With `--config DEPLOY_YAML`, the agent drives a desktop, RDP or Citrix app built by `build_backend`. With `admit TASK_DIR`, a person confirms and admits a waiting draft, such as one an agent taught over MCP (`openadapt-agent serve --teach`).
