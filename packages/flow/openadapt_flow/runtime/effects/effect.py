@@ -169,7 +169,7 @@ def number_matches(stored: Any, want: Any, *, text_numbers: bool) -> Optional[bo
 
 
 def _capitalize_word(word: str) -> str:
-    """One word as OpenEMR's ``capitalizeMe`` stores it:
+    """One word as a form's JavaScript capitalize step stores it:
     ``charAt(0).toUpperCase() + substring(1)``. Split on the space character
     only, the rest keeps its case ("McDonald" stays "McDonald"). ``charAt``
     takes one UTF-16 code unit, so a first letter outside the BMP (Adlam,
@@ -220,7 +220,7 @@ class ValueExpr(BaseModel):
     #: as the browser's ``toUpperCase()`` does for OpenEMR's "U" fields
     #: ("Peña" is stored "PEÑA", "Straße" "STRASSE"). ``capitalize_words``
     #: puts the first letter of each space-separated word in capitals and
-    #: drops extra spaces, as OpenEMR's "C" fields do (``capitalizeMe``:
+    #: drops extra spaces, as an app's capitalize-on-save fields do (JavaScript:
     #: " ada  lovelace" is stored "Ada Lovelace"). A closed set, declared per
     #: field: the check stays exact, so it expects the stored form, not any
     #: casing, and a different value is still refuted.
