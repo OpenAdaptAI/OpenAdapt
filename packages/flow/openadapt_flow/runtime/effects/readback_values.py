@@ -8,8 +8,9 @@ answers:
 - ``match``: the read shows the expected value;
 - ``mismatch``: the read is legible and shows another value;
 - ``ambiguous``: the read differs from the expected value only in characters
-  OCR can't tell apart (``O``/``0``, ``l``/``1``/``I``), or a date that reads
-  two ways. The verifier turns this into ``INDETERMINATE``, never a pass.
+  OCR can't tell apart (``O``/``0``, ``l``/``1``/``I``), is a date that reads
+  two ways, or holds the expected value among other text. The verifier turns
+  this into ``INDETERMINATE``, never a pass.
 
 Values are compared after normalizing by kind:
 
@@ -19,7 +20,26 @@ Values are compared after normalizing by kind:
 - ``date``: both sides are parsed to a calendar date. ``03/04/2026`` is
   ambiguous unless the field declares the order (``date_order``);
 - ``currency``: both sides are parsed to a decimal amount, ignoring the
-  currency symbol, thousands separators and a trailing ``.00``.
+  currency symbol, valid thousands separators and a trailing ``.00``. Two
+  amounts that name different currencies (``€250``, ``$250``) differ; ``$``
+  is ``USD``;
+- ``number`` (declared only, never guessed): both sides must be plain
+  numbers, compared by value (``1,250.00`` is ``1250``). A value with a
+  leading zero (``007``) is an identifier, compared as written. A ``text``
+  field is compared as text even when it holds digits: ``250.0`` is not
+  ``250.00`` (two different codes).
+
+The comparison is of the whole field, never by substring, prefix or
+similarity: ``Ann Smithers`` is not ``Ann Smith`` and ``$1,250.00`` is not
+``250``. Numbers parse strictly (valid thousands grouping, or a decimal comma
+with two places), and two codes split by separators in different places
+(``12-345``, ``123-45``) are different codes.
+
+``exact=False`` is for a read that may hold more than the field (an OCR
+region that also shows a label). It never confirms more than ``exact=True``
+does: a value found inside a longer read, as whole tokens, is ``ambiguous``
+(it locates the value but doesn't prove the field holds only that value), and
+anything else that isn't the whole field is ``mismatch``.
 
 Glyph confusions are only considered for OCR. Structure and accessibility
 reads return the real characters, so a ``0`` that should be an ``O`` there is
@@ -43,11 +63,12 @@ __all__ = [
     "compare_value",
     "infer_value_kind",
     "normalize_value",
+    "token_occurrences",
 ]
 
-ValueKind = Literal["text", "code", "date", "currency", "phone", "email"]
+ValueKind = Literal["text", "code", "date", "currency", "number", "phone", "email"]
 #: The kinds an on-screen read-back field compares in (``ReadbackField``).
-ReadbackKind = Literal["text", "code", "date", "currency"]
+ReadbackKind = Literal["text", "code", "date", "currency", "number"]
 Comparison = Literal["match", "mismatch", "ambiguous"]
 ReadSource = Literal["ocr", "structure"]
 
@@ -56,7 +77,20 @@ ReadSource = Literal["ocr", "structure"]
 OCR_CONFUSABLE = str.maketrans({"o": "0", "l": "1", "i": "1", "|": "1"})
 
 _CODE_SEPARATORS = re.compile(r"[\s\-./]+")
-_CURRENCY = re.compile(r"^[^\d\-(]*\(?(-?)\s*([\d.,\s]+)\)?[^\d]*$")
+#: A well-formed amount: an optional currency symbol or code, an optional
+#: sign or parentheses, and digits with valid thousands grouping and decimals,
+#: or a decimal comma with two places. ``1,2,5`` and ``12 50`` don't parse.
+_STRICT_AMOUNT = re.compile(
+    r"^(?P<pre>[$€£¥]|USD|CAD|EUR|GBP)?\s?(?P<open>\()?(?P<sign>[+-])?\s?"
+    r"(?P<num>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\d+,\d{2})"
+    r"(?P<close>\))?\s?(?P<post>USD|CAD|EUR|GBP)?$",
+    re.IGNORECASE | re.ASCII,
+)
+#: A plain number: digits, optional thousands commas, optional decimals.
+_PLAIN_NUMBER = re.compile(r"^[+-]?(\d{1,3}(,\d{3})+|\d+)(\.\d+)?$", re.ASCII)
+_CURRENCY_NAMES = {"$": "USD", "€": "EUR", "£": "GBP", "¥": "JPY"}
+_CODE_PARTS = re.compile(r"[^\s\-./]+")
+_TOKEN_EDGES = ".,:;!?()[]{}\"'"
 
 #: Unambiguous layouts, tried on both sides.
 _DATE_FORMATS = (
@@ -148,23 +182,91 @@ def _dates(value: str, order: Optional[str]) -> set[date]:
 
 
 def _amount(value: str) -> Optional[Decimal]:
-    match = _CURRENCY.match(value.strip())
-    if match is None:
+    """A well-formed amount or number as a Decimal, else None."""
+
+    match = _STRICT_AMOUNT.match(value.strip())
+    if match is None or bool(match["open"]) != bool(match["close"]):
         return None
-    sign, digits = match.groups()
-    digits = digits.replace(" ", "")
-    if "," in digits and "." in digits:
-        digits = digits.replace(",", "")
-    elif digits.count(",") == 1 and len(digits.split(",")[1]) == 2:
-        digits = digits.replace(",", ".")  # 12,50 written with a decimal comma
+    if match["pre"] and match["post"]:
+        return None  # "$250 USD": two currencies is not one amount
+    num = match["num"]
+    if re.fullmatch(r"\d+,\d{2}", num):
+        num = num.replace(",", ".")  # 12,50 written with a decimal comma
     else:
-        digits = digits.replace(",", "")
+        num = num.replace(",", "")
     try:
-        amount = Decimal(digits)
+        amount = Decimal(num)
     except InvalidOperation:
         return None
-    negative = bool(sign) or value.strip().startswith("(")
+    negative = match["sign"] == "-" or bool(match["open"])
     return -amount if negative else amount
+
+
+def _currency(value: str) -> Optional[str]:
+    """The currency an amount names (``$`` is ``USD``), or None."""
+
+    match = _STRICT_AMOUNT.match(value.strip())
+    if match is None:
+        return None
+    name = (match["pre"] or match["post"] or "").upper()
+    return _CURRENCY_NAMES.get(name, name) or None
+
+
+def _leading_zero(value: str) -> bool:
+    """``007``, ``0012345``: an identifier, not a number."""
+
+    return re.match(r"^[+-]?0\d", value.strip()) is not None
+
+
+def _code_edges(value: str) -> tuple[str, str]:
+    """The separators a code starts and ends with (usually none)."""
+
+    text = value.strip()
+    lead = re.match(r"^[\-./]*", text)
+    trail = re.search(r"[\-./]*$", text)
+    return (lead.group() if lead else "", trail.group() if trail else "")
+
+
+def _same_code_layout(a: str, b: str) -> bool:
+    """False when both codes are split by separators, in different places.
+
+    Codes are compared without separators, so ``AC1042`` matches ``AC-1042``.
+    ``12-345`` and ``123-45`` are different codes, though: when both sides
+    have separators, the parts between them must line up, and a leading or
+    trailing separator is part of the code.
+    """
+
+    if _code_edges(a) != _code_edges(b):
+        return False  # "-250" is not "250"
+    parts_a = _CODE_PARTS.findall(a.lower())
+    parts_b = _CODE_PARTS.findall(b.lower())
+    if len(parts_a) < 2 or len(parts_b) < 2:
+        return True
+    return parts_a == parts_b
+
+
+def _tokens(value: str) -> list[str]:
+    return [t.strip(_TOKEN_EDGES) for t in value.split() if t.strip(_TOKEN_EDGES)]
+
+
+def token_occurrences(seen: str, want: str) -> int:
+    """How many times ``want`` appears in ``seen`` as a run of whole tokens,
+    case and edge punctuation ignored. ``Smith`` is not in ``Smithers`` and
+    ``250`` is not in ``$1,250.00``.
+
+    This locates a value; it never proves a field holds only that value.
+    """
+
+    seen_tokens = [t.lower() for t in _tokens(seen)]
+    want_tokens = [t.lower() for t in _tokens(want)]
+    n = len(want_tokens)
+    if not n or n > len(seen_tokens):
+        return 0
+    return sum(
+        1
+        for i in range(len(seen_tokens) - n + 1)
+        if seen_tokens[i : i + n] == want_tokens
+    )
 
 
 def normalize_value(
@@ -185,10 +287,16 @@ def normalize_value(
     if kind == "date":
         found = _dates(value, date_order)
         return found.pop().isoformat() if len(found) == 1 else None
-    if kind == "currency":
+    if kind in ("currency", "number"):
+        if kind == "number" and not _PLAIN_NUMBER.match(value.strip()):
+            return None
         amount = _amount(value)
         return None if amount is None else format(amount.normalize(), "f")
     return _text(value) or None
+
+
+def _squash(value: str) -> str:
+    return "".join(value.split())
 
 
 def _folded_equal(observed: str, expected: str) -> bool:
@@ -206,15 +314,36 @@ def compare_value(
 ) -> Comparison:
     """Judge one field read against its expected value.
 
-    ``exact`` is for ``text`` and ``code``: True compares the whole field (a
-    structure read of one element); False accepts the expected value inside a
-    longer read (an OCR region that also shows a label such as ``MRN:``). Fuzzy OCR
-    matching for free text stays in
-    :func:`openadapt_flow.runtime.effects.onscreen.value_matches`; this
-    function only adds the kinds and the glyph rule.
+    ``match`` only when the whole read equals the expected value under the
+    kind's normalization (see the module docstring). ``exact=False`` is for a
+    read that may hold more than the field: the expected value found inside it
+    as whole tokens, or several times, is ``ambiguous``, never ``match``.
     """
 
     ocr = source == "ocr"
+    whole = _compare_whole(observed, expected, kind, ocr, date_order)
+    if whole != "mismatch" or exact:
+        return whole
+    # The read holds more than the field: finding the value in it locates
+    # the value, it doesn't prove what was saved.
+    found = token_occurrences(observed, expected)
+    if not found and ocr:
+        found = token_occurrences(
+            observed.lower().translate(OCR_CONFUSABLE),
+            expected.lower().translate(OCR_CONFUSABLE),
+        )
+    return "ambiguous" if found else "mismatch"
+
+
+def _compare_whole(
+    observed: str,
+    expected: str,
+    kind: ValueKind,
+    ocr: bool,
+    date_order: Optional[str],
+) -> Comparison:
+    """The whole read against the expected value, normalized by kind."""
+
     if kind in ("phone", "email"):
         seen_form = normalize_value(observed, kind)
         want_form = normalize_value(expected, kind)
@@ -232,44 +361,51 @@ def compare_value(
             return "mismatch"
         # A read that can mean the expected date or another date proves nothing.
         return "match" if len(seen) == 1 and len(want) == 1 else "ambiguous"
-    if kind == "currency":
-        seen_amount = _amount(observed)
+    if kind in ("currency", "number"):
         want_amount = _amount(expected)
-        if seen_amount is not None and want_amount is not None:
-            if seen_amount == want_amount:
-                return "match"
+        if want_amount is None:
             return "mismatch"
-        if ocr and want_amount is not None:
-            folded = _amount(observed.lower().translate(OCR_CONFUSABLE))
-            if folded == want_amount:
+        if kind == "number" and (_leading_zero(observed) or _leading_zero(expected)):
+            # "007" is an identifier, even in a number field: its digits.
+            return "match" if observed.strip() == expected.strip() else "mismatch"
+        seen_amount = normalize_value(observed, kind)
+        if seen_amount is not None:
+            want_form = format(want_amount.normalize(), "f")
+            names = {_currency(observed), _currency(expected)} - {None}
+            if seen_amount != want_form or len(names) > 1:
+                return "mismatch"  # another amount, or another currency
+            return "match"
+        if ocr:
+            folded = observed.lower().translate(OCR_CONFUSABLE)
+            if normalize_value(folded, kind) == format(want_amount.normalize(), "f"):
                 return "ambiguous"
         return "mismatch"
     if kind == "code":
         seen_code, want_code = _code(observed), _code(expected)
         if not want_code:
             return "mismatch"
-        if seen_code == want_code or (not exact and want_code in seen_code):
-            return "match"
-        if ocr and (
-            _folded_equal(seen_code, want_code)
-            or (
-                not exact
-                and want_code.translate(OCR_CONFUSABLE)
-                in seen_code.translate(OCR_CONFUSABLE)
+        if seen_code == want_code:
+            if _same_code_layout(observed, expected):
+                return "match"
+            # OCR adds and drops spaces, so a layout that differs only in
+            # spaces may be a misread; a structure read has the real text.
+            return (
+                "ambiguous"
+                if ocr and _same_code_layout(_squash(observed), _squash(expected))
+                else "mismatch"
             )
-        ):
+        if ocr and _folded_equal(seen_code, want_code):
             return "ambiguous"
         return "mismatch"
     seen_text, want_text = _text(observed), _text(expected)
     if not want_text:
         return "mismatch"
-    if seen_text == want_text or (not exact and want_text in seen_text):
+    if seen_text == want_text:
         return "match"
-    if ocr:
-        folded_seen = seen_text.translate(OCR_CONFUSABLE)
-        folded_want = want_text.translate(OCR_CONFUSABLE)
-        if folded_seen == folded_want or (not exact and folded_want in folded_seen):
-            return "ambiguous"
+    if ocr and _folded_equal(_squash(seen_text), _squash(want_text)):
+        # Equal once OCR's added or dropped spaces (or look-alike glyphs)
+        # are set aside: a possible misread, never proof either way.
+        return "ambiguous"
     return "mismatch"
 
 

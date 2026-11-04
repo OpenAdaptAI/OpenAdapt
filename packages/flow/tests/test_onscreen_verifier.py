@@ -12,8 +12,6 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import pytest
-
 from openadapt_flow.runtime.effects import EffectVerifier
 from openadapt_flow.runtime.effects.effect import (
     Effect,
@@ -72,10 +70,12 @@ def test_confirmed_when_value_reads_back() -> None:
     assert not verdict.should_halt
 
 
-def test_confirmed_when_value_embedded_in_label() -> None:
+def test_a_value_embedded_in_a_label_is_not_proof() -> None:
+    # The region shows more than the field: it locates the value but doesn't
+    # prove the field holds only that value.
     v = _verifier([_Line("Status: encounter documented and saved")])
     verdict = v.read_back("encounter documented and saved")
-    assert verdict.verdict is Verdict.CONFIRMED
+    assert verdict.verdict is Verdict.INDETERMINATE
 
 
 def test_refuted_when_region_shows_different_value() -> None:
@@ -136,7 +136,7 @@ def test_verify_indeterminate_when_no_expected_derivable() -> None:
 
 
 def test_verify_resolves_param_from_context() -> None:
-    v = _verifier([_Line("note text ABC123")])
+    v = _verifier([_Line("ABC123")])
     effect = Effect(
         kind=EffectKind.FIELD_EQUALS,
         field="note",
@@ -304,24 +304,27 @@ def test_is_default_readback_effect_gate() -> None:
     assert not is_default_readback_effect(Effect(kind=EffectKind.RECORD_WRITTEN))
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Known gap: value_matches accepts a 90% longest-run overlap, so the "
-        "same-surface read-back confirms 'patient 8' for an expected 'patient 3'. "
-        "The identity gate, not this read-back, keeps the wrong record out."
-    ),
-)
-def test_single_glyph_difference_not_discriminated_same_surface_limit() -> None:
-    """A one-glyph difference in the saved value must not confirm.
-
-    Fuzzy same-surface read-back cannot yet tell a single trailing-glyph
-    difference apart (patient "3" vs "8"), the same glyph collapse that
-    defeats OCR identity. The pixel-only safety guarantee rests on the
-    identity gate (right record) and halt-on-ambiguity, not on this read-back.
-    The test asserts the correct behavior and is a strict xfail until the
-    matcher discriminates, so a fix shows up as an XPASS.
-    """
+def test_single_glyph_difference_is_refuted_same_surface() -> None:
+    """A one-glyph difference in the saved value must not confirm: the read
+    is the whole field, compared exactly ("patient 8" is not "patient 3")."""
     v = _verifier([_Line("Saved note for patient 8")], min_ratio=0.9)
     verdict = v.read_back("Saved note for patient 3")
-    assert verdict.verdict is not Verdict.CONFIRMED
+    assert verdict.verdict is Verdict.REFUTED
+
+
+def test_null_value_does_not_fall_back_to_the_selector() -> None:
+    """A field_equals whose value has no text reads nothing on screen.
+
+    The record's id is on screen, but that doesn't show the field holds the
+    value, so the check can't confirm.
+    """
+    v = _verifier([_Line("REC-7")])
+    effect = Effect(
+        kind=EffectKind.FIELD_EQUALS,
+        field="note",
+        value={"param": "note_text"},
+        match={"id": "REC-7"},
+    )
+    for params in ({"note_text": None}, {}):
+        verdict = v.verify(effect, v.capture_pre_state(), context=params)
+        assert verdict.verdict is Verdict.INDETERMINATE

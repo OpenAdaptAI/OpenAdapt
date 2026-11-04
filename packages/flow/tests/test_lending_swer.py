@@ -19,11 +19,11 @@ from __future__ import annotations
 import inspect
 import sqlite3
 
+from benchmark.harness.effectbench import summarize
+from openadapt_flow.mockloan.fault_server import LedgerDB
 from benchmark.lending_fault_model import faults as F
 from benchmark.lending_fault_model import ground_truth as G
 from benchmark.lending_fault_model import swer as S
-from openadapt_flow.benchmark.effectbench import summarize
-from openadapt_flow.mockloan.fault_server import LedgerDB
 
 
 def _row(memo: str = F.MEMO_TEXT, source: str = "replay", **kw) -> dict:

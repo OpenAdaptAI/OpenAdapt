@@ -391,7 +391,7 @@ def test_a_recorded_band_that_raises_is_doubt() -> None:
 
 class _Line:
     def __init__(self, text: str, region: tuple[int, int, int, int]) -> None:
-        self.text, self.region = text, region
+        self.text, self.region, self.confidence = text, region, 1.0
 
 
 def _guard(
@@ -765,3 +765,55 @@ def test_the_real_ocr_reads_a_session_notice_as_dismissable() -> None:
     img.save(buf, format="PNG")
     text = " ".join(line.text for line in ocr(buf.getvalue()))
     assert _dialog_message_refusal(text) is None, text
+
+
+def test_the_dialog_band_uses_the_proved_window_before_a_pixel_search() -> None:
+    import io
+    from types import SimpleNamespace
+
+    from PIL import Image
+
+    from openadapt_flow.repair.self_repair import SelfRepairRefused, _dialog_band
+
+    buf = io.BytesIO()
+    Image.new("RGB", (800, 600), "white").save(buf, format="PNG")  # no drawn box
+    lines = [_Line("Your session expires in 5 minutes.", (450, 374, 170, 14))]
+    vision = SimpleNamespace(ocr=lambda png: lines)
+    admission = SimpleNamespace(element=None)
+    with pytest.raises(SelfRepairRefused, match="no dialog was found"):
+        _dialog_band(_workflow(), admission, buf.getvalue(), (598, 440), vision)
+    template, region, crop = _dialog_band(
+        _workflow(),
+        admission,
+        buf.getvalue(),
+        (598, 440),
+        vision,
+        proved_region=(380, 300, 270, 160),
+    )
+    assert region == (380, 300, 270, 160) and template is not None and crop
+    with pytest.raises(SelfRepairRefused, match="outside the dialog"):
+        _dialog_band(
+            _workflow(),
+            admission,
+            buf.getvalue(),
+            (100, 100),
+            vision,
+            proved_region=(380, 300, 270, 160),
+        )
+
+
+def test_a_dialog_that_moved_since_the_halt_is_refused() -> None:
+    from openadapt_flow.repair.self_repair import SelfRepairRefused
+
+    cover = {"hwnd": 7, "pid": 42, "region": [380, 300, 270, 160]}
+    with pytest.raises(SelfRepairRefused, match="moved"):
+        _guard(
+            at={"hwnd": 7, "pid": 42, "region": [300, 300, 270, 160]},
+            message="Your session expires in 5 minutes.",
+            cover=cover,
+        )
+    assert _guard(
+        at={"hwnd": 7, "pid": 42, "region": [380, 300, 270, 160]},
+        message="Your session expires in 5 minutes.",
+        cover=cover,
+    )

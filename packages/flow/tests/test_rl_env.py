@@ -20,8 +20,20 @@ from openadapt_flow.rl_env.tasks import (
 
 ROOT = Path(__file__).resolve().parents[1]
 ENVS = ROOT / "environments" / "openenv"
+
+
+def _web(env_dir: Path) -> bool:
+    """Browser environments; desktop ones load through rl_env.desktop instead."""
+    import yaml
+
+    raw = yaml.safe_load((env_dir / "env.yaml").read_text())
+    return (raw.get("app") or {}).get("kind") != "desktop"
+
+
 SERVABLE = sorted(
-    p.parent.parent for p in ENVS.glob("*/tasks/public.jsonl") if p.read_text().strip()
+    p.parent.parent
+    for p in ENVS.glob("*/tasks/public.jsonl")
+    if p.read_text().strip() and _web(p.parent.parent)
 )
 
 
@@ -279,3 +291,75 @@ def test_a_stuck_step_ends_the_episode_with_no_reward(monkeypatch) -> None:
     obs = env.step(E.WebAction(kind="wait", seconds=1))
     assert (obs.done, obs.reward, obs.verdict) == (True, 0.0, "INDETERMINATE")
     assert env._worker is None and env._task is None and env.state.done
+
+
+def test_mockloan_serve_target_starts_from_the_installed_wheel(tmp_path: Path) -> None:
+    """The Space installs the wheel; a checkout-only fixture cannot serve it."""
+    import subprocess
+
+    import yaml
+
+    manifest = yaml.safe_load((ENVS / "mockloan" / "env.yaml").read_text())
+    serve_target = manifest["app"]["serve"]
+    dist = tmp_path / "dist"
+    installed = tmp_path / "installed"
+    subprocess.run(
+        ["uv", "build", "--wheel", "--out-dir", str(dist)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    (wheel,) = dist.glob("*.whl")
+    subprocess.run(
+        [
+            "uv",
+            "pip",
+            "install",
+            "--python",
+            sys.executable,
+            "--target",
+            str(installed),
+            "--no-deps",
+            "--offline",
+            str(wheel),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    # -I and an empty cwd remove the checkout from import resolution. Assert
+    # the imported serve module came from the actual installed wheel too.
+    probe = """
+import importlib
+from pathlib import Path
+import sys
+from urllib.request import urlopen
+
+installed = Path(sys.argv[1]).resolve()
+sys.path.insert(0, str(installed))
+module_name, function_name = sys.argv[2].split(":")
+module = importlib.import_module(module_name)
+assert Path(module.__file__).resolve().is_relative_to(installed), module.__file__
+url, _store, stop = getattr(module, function_name)(0)
+try:
+    with urlopen(url, timeout=5) as response:
+        assert response.status == 200
+        assert b"MockLoan" in response.read()
+    for asset in ("app.js", "styles.css"):
+        with urlopen(url.rstrip("/") + "/" + asset, timeout=5) as response:
+            assert response.status == 200
+            assert response.read()
+finally:
+    stop()
+"""
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", probe, str(installed), serve_target],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

@@ -99,7 +99,9 @@ def test_system_of_record_only_with_independent_read() -> None:
         add_read(
             SCHEMA.field(f.field),
             f,
-            channel_read(SCHEMA.field(f.field), "database", f.reads[0].raw),
+            channel_read(
+                SCHEMA.field(f.field), "database", f.reads[0].raw, record_count=1
+            ),
         )
         for f in record.fields
     )
