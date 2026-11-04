@@ -228,14 +228,50 @@ an older row. The held-out rows are in the private branch at c59e30c5.
 
 ### Live OpenEMR
 
-| suite | production | read-list candidate | whole database |
-|---|---|---|---|
-| `faults.yaml` | pending a fixture lease | pending a fixture lease | pending a fixture lease |
-| held-out 1 to 5 | pending a fixture lease | pending a fixture lease | pending a fixture lease |
+**2026-11-04: the gate is not met on live OpenEMR.** The whole-database
+contract ran on held-out 2 to 5 against the pinned OpenEMR 8.0.0.3 fixture,
+each suite at the commit where its stand-in result counted, once per case.
+The plan was committed before any live case ran. No fault passed as
+verified, but every clean save was refused, so the catches carry no
+information.
 
-Only #1452's two older contracts have run live (above). The held-out suites
-have run only on the stand-in. The whole-database snapshot has run once on
-the live fixture, on one correct save (`WITNESS_LIVE.md`).
+| suite | commit | live: right | faults passed | false alarms | void | stand-in (counted) |
+|---|---|---|---|---|---|---|
+| held-out 2 | b90903a79 | 14/17 | 0 | 3 | 0 | 16/17, gate met |
+| held-out 3 | 5efb2986d | 12/17 | 0 | 5 | 2 | 14/17 |
+| held-out 4 | e299dd69c | 14/17 | 0 | 3 | 1 | 17/17, gate met |
+| held-out 5 | 3cf03e43c | 13/17 | 0 | 4 | 0 | 17/17, gate met |
+
+Pooled: 53 of 68 right, 0 of 53 faults passed, 15 of 15 clean cases refused.
+Every case whose live verdict differs from the stand-in is a clean case.
+
+- **Held-out 4:** the frame was never checked. The contract's allow-list
+  names a `sessions` table that OpenEMR 8.0.0.3 doesn't have. The
+  stand-in's slice drops allow-list entries it lacks; live keeps them all.
+- **Held-out 2, 3 and 5:** the frame refused every save on 7 to 14 changes
+  that nothing explained. These are OAuth token rows from the users' API
+  sign-ins, address and list rows, and `patient_data` columns the New
+  Patient form writes. The stand-in doesn't emulate these rows, and the
+  pinned app profile (`openemr-frame-profile/2026-10-29.2`) covers none of them.
+- **Harness fixes needed to run live at all,** recorded before the re-run,
+  with no change to a contract, a suite, the scoring or `openadapt_flow/`:
+  1. The live audit query was refused by the check's own read-only SQL
+     guard (keywords inside a regex literal). It was respelled with the
+     same meaning.
+  2. Held-out 2 and 3 needed the reader-account setup that later commits
+     do themselves.
+  3. Held-out 5's live operations came from 40dfb075c.
+- Three cases are void: the browser form didn't keep a typed field. They
+  can't change a verdict, because the frame refused or didn't check every
+  case in those suites.
+
+Raw rows, evidence, the plan, the deviations and the harness diffs are
+private: openadapt-internal, branch `qualification/openemr-live-fault-gate`,
+`qualification/heldout-faults/openemr-referral/runs/live-gate/`.
+
+Not run live: held-out 1 (no counted whole-database result), the
+production and read-list contracts, and `faults.yaml` with the
+whole-database contract.
 
 ## What the stand-in is
 
@@ -250,8 +286,8 @@ excuse (`WITNESS.md`, amendment 5).
 ## Limits
 
 - One referral, one app. The counts are cases, not rates.
-- Held-out results are stand-in results. Live OpenEMR may differ, as it did
-  for `framed` on 2026-10-24.
+- The held-out gate passes are stand-in results. On live OpenEMR
+  (2026-11-04) the same contracts refused every clean save (see above).
 - The held-out authors wrote from a brief and `SPEC.md` only. Their briefs
   are in the private folder.
 
