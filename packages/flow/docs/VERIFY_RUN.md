@@ -122,6 +122,13 @@ collateral, and the outcome is `reconciliation_required`. With `audit_read`,
 a log entry by the bot for a record no effect names is collateral too, even
 when the read shows no change.
 
+An `audit_read` frame needs `frame.database`. The bot's entries for the
+record it saved are excused by record, whatever table they wrote, so its
+other writes for that record (an insurance row, an allergy, a note) are
+caught only as rows, and only the whole-database diff reads every table.
+Without `frame.database` the frame never holds: it reports `not_checked`, so
+the save is never `verified` (#1505).
+
 Only evidence the bot can't write counts:
 
 - `audit_read` reads the app's own audit log or change feed.
