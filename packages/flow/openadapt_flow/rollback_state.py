@@ -829,14 +829,13 @@ class Attributor:
 
 
 def _same_table(entry_table: Any, table: Optional[str]) -> bool:
-    """Does an audit entry's table name this snapshot table? Case aside, an
-    unqualified name means the read's own schema (as the frame decides)."""
+    """Does an audit entry's table name this snapshot table? Exactly, case
+    aside. A snapshot keys the read's own schema's tables unqualified and
+    every other schema's as ``schema.table``, so an unqualified entry names
+    only the own schema's table, never a same-named one elsewhere (#1793)."""
     if table is None or entry_table in (None, ""):
         return False
-    named, mine = str(entry_table).lower(), table.lower()
-    if named == mine:
-        return True
-    return "." not in named and "." in mine and mine.rsplit(".", 1)[1] == named
+    return str(entry_table).lower() == table.lower()
 
 
 __all__ = [
