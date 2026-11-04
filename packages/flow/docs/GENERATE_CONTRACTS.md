@@ -351,6 +351,29 @@ version check, and `report.json` shows `versions: null`. If the app stops
 writing the trail (an agenda setting turned off), the agent's own save has
 no new version, and the verifier stops the write rather than pass it.
 
+**Time stamps checked against the clock.** With `now_checks: true` in the
+answers, a date-time column of the main record that the bookkeeping answer
+leaves unchecked on a create (the write's own time stamp), or excuses on the
+target of an update (its modified time), must hold a time near the read: no
+older than the execution window plus the recheck window plus a minute, and
+no more than five minutes ahead, by the database's local clock or by UTC. A
+NULL fails. Without it, such a column may hold any value. It only adds a
+check.
+
+**Checking both readings.** With `strict_pins: true`, a new-row column the
+demonstrations can't settle is checked instead of refusing the kind, in
+three cases: it holds one value that is also a copy of a column a key points
+to (both are checked), it holds the acting user's id and such a copy (both
+are checked), or its field set was seen in one demonstration only with one
+value (that value is pinned). Each only adds a check: a wrong guess stops
+correct writes, never passes a wrong one.
+
+**Setting up with no person answers.** `python -m
+openadapt_flow.generate.zero_touch` answers these questions by fixed rules
+and admits a kind only after a sandbox copy of the store confirms held-out
+writes and stops planted faults; see
+[research/ZERO_TOUCH_DESIGN.md](research/ZERO_TOUCH_DESIGN.md).
+
 **The recheck window.** One question asks how long the
 app can still write on its own after a verified write. The answer is
 `frame.database.recheck_after_s`; the proposal is 300 seconds.

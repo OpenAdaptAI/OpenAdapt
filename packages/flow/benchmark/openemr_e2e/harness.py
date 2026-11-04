@@ -8,7 +8,7 @@ reproducibly and for $0:
     inject drift -> HALT -> teach the fix -> re-run clean
 
 Unlike the existing OpenEMR *benchmark*
-(:mod:`openadapt_flow.benchmark.openemr_benchmark`), which measures the compiled
+(:mod:`benchmark.harness.openemr_benchmark`), which measures the compiled
 arm vs. a paid agent arm on the LIVE public demo and is explicitly NOT
 CI-reproducible, this harness proves the pipeline *wiring* end to end on a
 deterministic, offline fixture (the in-process MockMed ``fault_server`` as the
@@ -57,7 +57,7 @@ from openadapt_flow.learning import (
     promoted_workflow,
     resolution_demonstration,
 )
-from openadapt_flow.learning.synth_stream import StructuralDiffInducer
+from openadapt_flow.learning.induce import StructuralDiffInducer
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.runtime.effects import RestRecordVerifier
 from openadapt_flow.runtime.replayer import Replayer

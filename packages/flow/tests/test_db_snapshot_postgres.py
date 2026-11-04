@@ -119,6 +119,50 @@ def test_a_default_is_read_only_from_a_literal(expr: Any, stored: Any) -> None:
     assert db_snapshot._default_text(expr, "postgresql") == stored
 
 
+def test_pg_definitions_refuses_table_name_collision() -> None:
+    class FakeSession:
+        def rows(self, sql: str) -> list[tuple[Any, ...]]:
+            if "pg_class" in sql and "pg_namespace" in sql and "attrelid" not in sql:
+                # Two tables that map to the same name "s.t":
+                # 1) table "s.t" in schema "public" (default) -> name "s.t"
+                # 2) table "t" in schema "s" -> name "s.t"
+                return [
+                    (101, "public", "s.t", "r", "p", False, False, True, False),
+                    (102, "s", "t", "r", "p", False, False, True, False),
+                ]
+            return []
+
+    with pytest.raises(SnapshotError, match=r"table name collision: 's\.t'"):
+        db_snapshot._pg_definitions(FakeSession(), ["public", "s"], "public")
+
+
+def test_pg_sequences_refuses_sequence_name_collision() -> None:
+    class FakeSession:
+        def rows(self, sql: str) -> list[tuple[Any, ...]]:
+            if "pg_sequence" in sql:
+                return [
+                    (
+                        "public",
+                        "s.q",
+                        1,
+                        1,
+                        1,
+                        1000,
+                        False,
+                        "bigint",
+                        True,
+                        None,
+                        None,
+                        None,
+                    ),
+                    ("s", "q", 1, 1, 1, 1000, False, "bigint", True, None, None, None),
+                ]
+            return []
+
+    with pytest.raises(SnapshotError, match=r"sequence name collision: 's\.q'"):
+        db_snapshot._pg_sequences(FakeSession(), ["public", "s"], "public")
+
+
 def test_a_numeric_without_scale_keeps_it_and_equals_its_value() -> None:
     a, b = (
         db_snapshot._pg_value("numeric_free", "1.50"),

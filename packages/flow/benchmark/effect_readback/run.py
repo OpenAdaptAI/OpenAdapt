@@ -130,11 +130,12 @@ class _ScreenBackend:
 def _same_surface_screen(case: FaultCase) -> str:
     """What the write's OWN surface shows after the save (optimistic UI).
 
-    The user's typed note is still painted for every accepted/optimistic path;
-    a session expiry bounces to a login screen (no note)."""
+    The note box still paints the user's typed note for every
+    accepted/optimistic path; a session expiry bounces to a login screen (no
+    note)."""
     if case.mode == "session":
         return "Session expired. Please sign in again."
-    return f"Saved. Encounter note: {NOTE}"
+    return NOTE
 
 
 def _different_path_note(records: list[dict]) -> str:

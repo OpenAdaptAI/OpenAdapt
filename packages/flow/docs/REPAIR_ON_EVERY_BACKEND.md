@@ -70,7 +70,7 @@ Each backend fills it from what it reads:
 | --- | --- | --- | --- |
 | macOS AX (built) | `AXRole`, title or description | `AXParent` up to the `AXWindow`, sheets and dialogs included | window title, app pid |
 | Windows UIA ([#1707](https://github.com/OpenAdaptAI/OpenAdapt/pull/1707)) | `ControlType`, `Name`, `AutomationId` | `GetParentControl` up to the outermost window; an unmapped role is empty | outermost window name (an owned dialog's owner), process name or none |
-| Linux AT-SPI (later) | role, accessible name, accessible id | parent chain up to the frame | frame name, application |
+| Linux AT-SPI (built) | mapped role, accessible name, accessible id | raw AT-SPI role and name of each parent up to the pinned window, which must match by title, bounds and process | window title, application name |
 | Browser | not used for admission | | |
 
 The browser keeps its current rule unchanged: a new click must sit inside the
@@ -156,15 +156,38 @@ when all of these hold:
   (`record_verified_window` at that step, then `owned_window_over`). On
   macOS that is the window's one proved sheet; on Windows an owned window of
   the same process, first over the band in the live z-order;
+- that window is what cut the band: its rectangle spans the band from where
+  the text read stops to the band's right edge, at the band's full height
+  (the share of the band left uncovered is within 0.1 of the share of the
+  recorded text read). A popup that only touches the band, such as a tooltip
+  over a column's ellipsis, does not count;
 - the part of the band that was read still matches the recorded record: no
   contradicted, look-alike, glyph-ambiguous or unexplained name token, and at
   least half the band matched. Another patient's header behind the dialog
   fails this and stays an identity halt;
 - the previous step is a click that doesn't save, acted on a trusted rung.
 
+The dismiss click is held to that dialog. It must land in the very window
+`owned_window_over` reported (asked again at the click point), and the
+dialog's text must read as a notice only. Every word in it must be on a
+short list of session-notice words ("Your session expires in 5 minutes",
+"OK"), and it shows no punctuation beyond `. , : !`, so it asks no question
+in any script. It must also say that a session expires, so a dialog whose
+message wasn't read (only its "OK" was) is refused, and so is any text that
+runs across the dialog's edge. The click's label must be "OK". Anything else refuses,
+including an update prompt, a dialog in another language, or one with
+nothing readable in it.
+Answering "OK" to "Discard unsaved changes?" would lose data. The bridge is
+exactly that one click. A covered-band repair gets one attempt: a later
+attempt reopens the app, whose dialog is a new window, so its click is
+refused.
+
 Nothing after that is relaxed: the probe replays the halted step with its own
 identity check in full once the dialog is gone, then the record check and a
-person decide as for any repair.
+person decide as for any repair. That full check is what protects the case
+where the dialog hides exactly where two records differ (a same-name patient
+with another birth date): the read beside the dialog can match, and the
+recheck refuses.
 
 ## One lifecycle on every backend
 
@@ -201,7 +224,8 @@ In this change:
 
 - `openadapt_flow.repair.element_identity`: the identity record, the backend
   kind, the record-check cover and the click admission.
-- `MacOSBackend.element_identity_at`, from the AX tree.
+- `MacOSBackend.element_identity_at`, from the AX tree, and
+  `LinuxBackend.element_identity_at`, from the AT-SPI tree.
 - Self-repair admits bridge clicks by the rules above and gives the new step
   its dialog band. The browser rule is unchanged.
 - The repair hold answers `element_identity`, and agent teach takes the
@@ -226,6 +250,17 @@ because of the caret
 ([#1713](https://github.com/OpenAdaptAI/OpenAdapt/issues/1713)). Under
 `demo`, and with no verifier, the click is refused and nothing is written.
 
+On Linux, through `LinuxBackend` on a GTK3 chart app with a SQLite database
+(`tests/native_apps/chart_gtk.py`, Xvfb with openbox; scripted repair agent
+and approver; live AT-SPI, screen, input and database): the run stops at the
+"Update available" notice before any save, the "Later" click is admitted on
+`element_and_record_check` with its AT-SPI identity (role, name, ancestry up
+to the window, process), the probe and the fault campaign pass, one scripted
+approval is signed, and the resumed run is `VERIFIED` with exactly one new
+row. Under `demo`, and with no verifier, the click is refused and nothing is
+written. The `flow-linux-atspi` CI job runs it
+([benchmark/repair_every_backend](../benchmark/repair_every_backend/README.md)).
+
 The pixel-only path doesn't reach repair yet: a remote click whose next
 screen differs counts as an uncertain delivery
 ([#1712](https://github.com/OpenAdaptAI/OpenAdapt/issues/1712)).
@@ -240,4 +275,3 @@ screen differs counts as an uncertain delivery
 - Input to a Windows app's owned dialog windows. On macOS, the pinned
   window's own AppKit sheet is accepted (#1711); any other window is still
   refused.
-- Linux AT-SPI.
