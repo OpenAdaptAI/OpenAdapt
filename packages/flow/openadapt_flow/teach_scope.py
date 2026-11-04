@@ -670,7 +670,7 @@ def key_target_labels(page: Any, *, enter: bool) -> Optional[list[str]]:
             default = _default_button(session, node.get("backendDOMNodeId"))
             if default is False:
                 return None
-            if default is not None:
+            if isinstance(default, str):
                 labels.append(default)
         return labels
     except Exception:  # noqa: BLE001 - the probe failed: unknown, refused
@@ -727,14 +727,14 @@ def _default_button(session: Any, backend: Any) -> "Optional[str] | bool":
         return None
     form: Optional[Mapping[str, Any]] = None
     form_id = _attrs(focused).get("form")
-    node: Optional[Mapping[str, Any]] = focused
-    while node is not None and form_id is None:
-        if str(node.get("nodeName") or "").upper() == "FORM":
-            form = node
+    walk: Optional[Mapping[str, Any]] = focused
+    while walk is not None and form_id is None:
+        if str(walk.get("nodeName") or "").upper() == "FORM":
+            form = walk
             break
-        if str(node.get("nodeName") or "") == "#document":
+        if str(walk.get("nodeName") or "") == "#document":
             break
-        node = parent.get(node.get("backendNodeId"))
+        walk = parent.get(walk.get("backendNodeId"))
     if form is None and form_id is None:
         return None
     if form is None:
