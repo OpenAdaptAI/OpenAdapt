@@ -24,6 +24,7 @@ Commands (all print one line of JSON or ``OK``)::
 
     seed  <app> [--fault F] [--variant V]   restore the pristine database
     digest <app>                            sha256 over every table
+    attempts <app>                          the saves the app asked for this episode
     dump  <app>                             {"records": [...]} for the oracle
     pc-list <filter> | pc-get <mrn> | pc-save <mrn> <note_b64>
     cd-list <filter> | cd-get <claim_no> | cd-save <claim_no> <status> <amount> <note_b64>
@@ -218,6 +219,8 @@ def seed(app: str, fault: str = "ok", variant: str = "none") -> None:
     shutil.copyfile(pristine, _db(app))
     with open(_fault_path(app), "w", encoding="ascii") as fh:
         json.dump({"fault": fault}, fh)
+    if os.path.exists(_attempts_path(app)):
+        os.remove(_attempts_path(app))
 
 
 def _fault(app: str) -> str:
@@ -260,12 +263,36 @@ def dump(app: str) -> dict:
     return {"records": records}
 
 
+def _attempts_path(app: str) -> str:
+    return os.path.join(ROOT, f"{app}_attempts.jsonl")
+
+
+def _log_attempt(app: str, values: dict) -> None:
+    """Record what the app asked to save, before any fault changes it.
+
+    The environment pays an honest failure report on an infeasible task only
+    when the agent tried the save; this log, cleared at every seed, is how it
+    knows. It holds the request, not the outcome.
+    """
+    with open(_attempts_path(app), "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(values, sort_keys=True) + "\n")
+
+
+def attempts(app: str) -> list:
+    try:
+        with open(_attempts_path(app), encoding="utf-8") as fh:
+            return [json.loads(line) for line in fh if line.strip()]
+    except OSError:
+        return []
+
+
 def _cut_last_word(text: str) -> str:
     head, _, _ = text.rstrip().rpartition(" ")
     return head or text[:-1]
 
 
 def pc_save(mrn: str, note: str) -> None:
+    _log_attempt("patient_chart", {"mrn": mrn, "note": note})
     fault = _fault("patient_chart")
     con = _conn("patient_chart")
     if fault == "drop":
@@ -289,6 +316,15 @@ def pc_save(mrn: str, note: str) -> None:
 
 
 def cd_save(claim_no: str, status: str, amount: str, note: str) -> None:
+    _log_attempt(
+        "claims_desk",
+        {
+            "claim_no": claim_no,
+            "status": status,
+            "allowed_amount": amount,
+            "note": note,
+        },
+    )
     fault = _fault("claims_desk")
     con = _conn("claims_desk")
     if fault == "drop":
@@ -329,6 +365,8 @@ def main(argv: list[str]) -> int:
         print(json.dumps({"seeded": app, "digest": digest(app)}))
     elif cmd == "digest":
         print(json.dumps({"digest": digest(args[0])}))
+    elif cmd == "attempts":
+        print(json.dumps({"attempts": attempts(args[0])}))
     elif cmd == "dump":
         print(json.dumps(dump(args[0])))
     elif cmd == "pc-list":

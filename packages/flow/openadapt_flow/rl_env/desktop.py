@@ -618,13 +618,27 @@ class OpenAdaptDesktopEnvironment(
         time.sleep(self.env.manifest.agent.settle_s)
         return None
 
+    def _attempted(self) -> bool:
+        """Whether the app was asked to save the task's values this episode.
+
+        An infeasible task pays a failure report only after a real try, as on
+        the web environments; an unreadable log counts as no try.
+        """
+        assert self._task is not None
+        try:
+            asked = self._guest.attempts(self.spec.guest_app)
+        except Exception:  # noqa: BLE001 - unread stays unattempted
+            return False
+        want = {k: str(v) for k, v in self._task.params.items()}
+        return any(all(str(row.get(k)) == v for k, v in want.items()) for row in asked)
+
     def _finish(
         self, claim: Optional[str], error: Optional[str] = None
     ) -> DesktopObservation:
         assert self._task is not None and self._judge is not None
         # The app writes through a child process; let it land first.
         time.sleep(max(self.env.manifest.agent.settle_s, self.finish_settle_s))
-        judgement = self._judge.judge(claim, self._task.feasible)
+        judgement = self._judge.judge(claim, self._task.feasible, self._attempted())
         self._judgement = judgement
         self._state.done = True
         self._state.claim = claim

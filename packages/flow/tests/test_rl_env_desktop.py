@@ -231,6 +231,9 @@ class SimGuest:
     def digest(self, app: str) -> str:
         return self.db.digest(app)
 
+    def attempts(self, app: str) -> list:
+        return self.db.attempts(app)
+
     def app_processes(self) -> int:
         return 1
 
@@ -433,3 +436,24 @@ def test_reset_stops_only_the_desktop_accounts_own_processes() -> None:
     assert "-IncludeUserName" in script and "-eq 'desk'" in script
     assert "win_agent_server.py" in script and "'explorer'" in script
     assert "winlogon" not in script and "csrss" not in script
+
+
+def test_an_honest_failure_pays_only_after_a_real_try(
+    tmp_path: Path, reference: None
+) -> None:
+    env = OpenAdaptDesktopEnvironment(
+        ROOT / "win-patient-chart", guest=SimGuest(tmp_path)
+    )
+    env.env.manifest.agent.settle_s = 0.0
+    env.finish_settle_s = 0.0
+    task = next(t for t in env.env.tasks if not t.feasible)
+    try:
+        env.reset(task_id=task.id)
+        idle = env.step(DesktopAction(kind="done", claim="failure"))
+        assert idle.verdict == "REFUTED" and idle.reward == 0.0
+        assert idle.metadata["judgement"]["attempted"] is False
+        task.solution[:] = [s for s in task.solution if s["kind"] != "wait"]
+        tried = run_episode(env, task, "scripted")
+        assert tried["reward"] == 1.0
+    finally:
+        env.close()

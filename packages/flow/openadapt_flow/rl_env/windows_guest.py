@@ -379,6 +379,10 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
     def dump(self, app: str) -> dict[str, Any]:
         return self._db("dump", app)
 
+    def attempts(self, app: str) -> list[dict[str, Any]]:
+        """The saves the app asked for since the last reset (before any fault)."""
+        return list(self._db("attempts", app)["attempts"])
+
     def digest(self, app: str) -> str:
         return str(self._db("digest", app)["digest"])
 
