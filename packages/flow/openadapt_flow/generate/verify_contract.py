@@ -1217,42 +1217,41 @@ def _touched_rows(
         demos_with = {id(d) for d, _, _ in items}
         selector: Optional[dict[str, Any]] = None
         how = ""
-        if (
+        # Reached from the main record by a key column whose target row holds
+        # located values in single columns (the task's project). Tried first:
+        # when every demonstration happened to touch the same such row, its
+        # literal key would excuse that one row for every write, and a
+        # correct write naming another row would stop.
+        for p, loc in plan.locations.items():
+            if not loc.hops or loc.hops[0].kind != "fk" or loc.hops[0].table != table:
+                continue
+            hop = loc.hops[0]
+            if all(
+                (a.after or {}).get(hop.column) == (ch.after or {}).get(pk)
+                for _, a, ch in items
+            ):
+                sel = {
+                    x.columns[0]: {"param": q}
+                    for q, x in plan.locations.items()
+                    if len(x.hops) == 1
+                    and x.hops[0] == hop
+                    and len(x.columns) == 1
+                    and x.rule == "exact"
+                }
+                if sel:
+                    selector = sel
+                    how = f"the {table} row the task's {', '.join(sorted(v['param'] for v in sel.values()))} name"
+                    break
+        if selector is None and (
             len(keys) == 1
             and len(demos_with) == len(plan.demos)
             and len(items) == len(plan.demos)
         ):
+            # The same row (by key) in every demonstration: a counter row.
             key = (items[0][2].after or {}).get(pk)
             if key is not None:
                 selector = {pk: {"literal": key}}
                 how = f"{table} row {pk}={key}"
-        if selector is None:
-            # Reached from the main record by a key column whose target row
-            # holds located values in single columns.
-            for p, loc in plan.locations.items():
-                if (
-                    not loc.hops
-                    or loc.hops[0].kind != "fk"
-                    or loc.hops[0].table != table
-                ):
-                    continue
-                hop = loc.hops[0]
-                if all(
-                    (a.after or {}).get(hop.column) == (ch.after or {}).get(pk)
-                    for _, a, ch in items
-                ):
-                    sel = {
-                        x.columns[0]: {"param": q}
-                        for q, x in plan.locations.items()
-                        if len(x.hops) == 1
-                        and x.hops[0] == hop
-                        and len(x.columns) == 1
-                        and x.rule == "exact"
-                    }
-                    if sel:
-                        selector = sel
-                        how = f"the {table} row the task's {', '.join(sorted(v['param'] for v in sel.values()))} name"
-                        break
         if selector is None or len(items) != len({id(d) for d, _, _ in items}):
             plan.unexcused.setdefault(table, set()).update(cols)
             continue
