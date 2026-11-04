@@ -651,7 +651,9 @@ def propose_api_step(
                 workflow, steps, save, events, lines, params, by_value, json_saves
             )
         return workflow, None, ["no form request was sent by the save step"]
-    post = max(posts, key=carried)
+    # The save is the last request that carries the most recorded values: a
+    # page script may post the same fields earlier (a live preview).
+    post = max(posts, key=lambda ln: (carried(ln), float(ln["t"])))
     if carried(post) < max(1, len(by_value) // 2):
         return workflow, None, ["the save's request does not carry the recorded values"]
     action, url_problems = _url_template(post["url"], by_value)
@@ -1135,7 +1137,7 @@ def _propose_json(
             return -1
         return sum(1 for _, v in _leaves(doc) if isinstance(v, str) and v in by_value)
 
-    post = max(candidates, key=carried)
+    post = max(candidates, key=lambda ln: (carried(ln), float(ln["t"])))
     if post.get("request_truncated"):
         return refuse("the save's JSON body was cut at capture")
     try:
@@ -1168,8 +1170,15 @@ def _propose_json(
             "the page that sent the save is not in the capture; start recording before opening it"
         )
     page_line = page_lines[-1]
+    api_origin: Optional[str] = None
     if _origin(page_line["url"]) != _origin(post["url"]):
-        return refuse("the save goes to another origin than the page that sent it")
+        if not post.get("request_headers"):
+            return refuse(
+                "the save goes to another origin than its page, with no header the "
+                "app's script added to it"
+            )
+        # The app's API has its own host; its script signs each request.
+        api_origin = _origin(post["url"])
     form_path, url_problems = _url_template(page_line["url"], by_value)
     if url_problems:
         return refuse(url_problems[0])
@@ -1294,6 +1303,7 @@ def _propose_json(
         json_body=template,
         session_headers=list(post.get("request_headers") or []),
         graphql=graphql,
+        api_origin=api_origin,
         replaces_steps=[s.id for s in folded],
         screen_only_checks=screen_only,
         folded_checks_digest=folded_checks_digest(folded),

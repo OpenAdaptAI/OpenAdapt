@@ -627,12 +627,17 @@ class PlaywrightSessionTransport:
             timeout_s=self._timeout_ms / 1000.0,
         )
 
-    def session_header_values(self, names: list[str]) -> Optional[dict[str, str]]:
-        """The values the app's own script last sent for ``names`` here."""
+    def session_header_values(
+        self, names: list[str], origin: Optional[str] = None
+    ) -> Optional[dict[str, str]]:
+        """The values the app's own script last sent for ``names`` to
+        ``origin`` (default: the page's own)."""
 
         from openadapt_flow.runtime.actuators import session_headers
 
-        return session_headers.values(self._page.context, self.base_url, names)
+        return session_headers.values(
+            self._page.context, origin or self.base_url, names
+        )
 
     def send_json(
         self,
@@ -642,10 +647,11 @@ class PlaywrightSessionTransport:
         *,
         referer: str,
         headers: dict[str, str],
+        origin: Optional[str] = None,
     ) -> Response:
         return self._wrap(
             self._request.fetch(
-                self.base_url + path,
+                (origin or self.base_url) + path,
                 method=method.upper(),
                 data=body.encode("utf-8"),
                 headers={
@@ -778,6 +784,8 @@ class PreparedSave:
     #: Headers the app's own script sends, with this session's values.
     #: In the digest; never shown to the person.
     headers: tuple[tuple[str, str], ...] = ()
+    #: The API's own origin when it isn't the page's (a ``json`` save only).
+    origin: str = ""
 
     def encoded(self) -> str:
         if self.encoding == "json":
@@ -803,6 +811,8 @@ class PreparedSave:
         }
         if self.headers:
             payload["headers"] = [list(h) for h in self.headers]
+        if self.origin:
+            payload["origin"] = self.origin
         if self.writes:
             # Every request the API step sends, in order. A save without step
             # writes keeps the digest it always had.
@@ -1108,11 +1118,19 @@ class WebFormActuator:
             headers: dict[str, str] = {}
             if spec.session_headers:
                 read = getattr(self.transport, "session_header_values", None)
-                found = read(list(spec.session_headers)) if read else None
+                found = None
+                if read is not None:
+                    found = (
+                        read(list(spec.session_headers), spec.api_origin)
+                        if spec.api_origin
+                        else read(list(spec.session_headers))
+                    )
                 if found is None:
                     return unavailable(
                         "the app's script hasn't sent its "
-                        f"{', '.join(spec.session_headers)} header(s) in this session"
+                        f"{', '.join(spec.session_headers)} header(s) "
+                        f"{'to ' + spec.api_origin + ' ' if spec.api_origin else ''}"
+                        "in this session"
                     )
                 headers = found
         except KeyError as exc:
@@ -1127,6 +1145,7 @@ class WebFormActuator:
             encoding="json",
             json_text=text,
             headers=tuple(sorted(headers.items())),
+            origin=spec.api_origin or "",
         )
 
     def _precheck(self, read: tuple[str, tuple[str, ...], str]) -> Optional[str]:
@@ -1301,6 +1320,7 @@ class WebFormActuator:
                     prepared.json_text,
                     referer=prepared.referer,
                     headers=dict(prepared.headers),
+                    **({"origin": prepared.origin} if prepared.origin else {}),
                 )
             elif prepared.encoding == "urlencoded":
                 resp = self.transport.post_form(

@@ -906,6 +906,11 @@ class WebFormSpec(BaseModel):
     #: The save is a GraphQL mutation: its operation text is a constant of
     #: ``json_body``, and success needs a response with data and no errors.
     graphql: bool = False
+    #: A ``json`` save the page's script sent to another origin than its own
+    #: (an app whose API has its own host). The save goes only there, and
+    #: only when the app's own script sent that origin its headers in this
+    #: session.
+    api_origin: Optional[str] = None
     #: The path the form's own ``action`` names, when the save goes elsewhere:
     #: the page's script sent the form's fields to another endpoint (for
     #: example ``admin-ajax.php``) instead of submitting the form. The runtime
@@ -977,6 +982,8 @@ class WebFormSpec(BaseModel):
                 data.pop("session_headers", None)
             if not data.get("graphql"):
                 data.pop("graphql", None)
+            if data.get("api_origin") is None:
+                data.pop("api_origin", None)
         return data
 
 

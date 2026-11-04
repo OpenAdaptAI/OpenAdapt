@@ -45,7 +45,9 @@ BODY = {
 MUTATION = "mutation ($n: String!) { groups { create(name: $n) { id } } }"
 
 
-def _recording(tmp_path: Path, body: Any, *, headers=("authorization",)) -> Path:
+def _recording(
+    tmp_path: Path, body: Any, *, headers=("authorization",), api="http://app"
+) -> Path:
     rec = tmp_path / "rec"
     rec.mkdir()
     (rec / "meta.json").write_text(json.dumps({"params": PARAMS}))
@@ -59,7 +61,7 @@ def _recording(tmp_path: Path, body: Any, *, headers=("authorization",)) -> Path
     save: dict[str, Any] = {
         "t": 7.2,
         "method": "POST",
-        "url": "http://app/api/v1/Contact",
+        "url": api + "/api/v1/Contact",
         "status": 200,
         "resource_type": "fetch",
         "frame_url": "http://app/app#Contact/create",
@@ -153,6 +155,19 @@ def test_a_graphql_mutation_binds_its_variables_only(tmp_path):
         "variables/b",
     }
     assert PARAMS_GQL == PARAMS
+
+
+def test_a_save_to_the_apps_own_api_host_goes_only_there(tmp_path):
+    rec = _recording(tmp_path, BODY, api="http://api.app:8103")
+    _, step, reasons = propose_api_step(_workflow(), rec)
+    assert step is not None, reasons
+    assert step.api_binding.web_form.api_origin == "http://api.app:8103"
+
+
+def test_a_save_to_another_host_without_the_apps_headers_stays_on_the_gui(tmp_path):
+    rec = _recording(tmp_path, BODY, headers=(), api="http://api.app:8103")
+    _, step, reasons = propose_api_step(_workflow(), rec)
+    assert step is None and "another origin" in reasons[0]
 
 
 @pytest.mark.parametrize(
