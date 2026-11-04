@@ -304,8 +304,15 @@ class Sandbox:
 
     def unique_indexes(self, table: str) -> dict[str, list[str]]:
         """Unique indexes of a sandbox table other than its primary key:
-        name -> columns in index order, from the catalog."""
+        name -> columns in index order, from the catalog (read once per
+        table)."""
 
+        cache = self.__dict__.setdefault("_unique", {})
+        if table not in cache:
+            cache[table] = self._read_unique(table)
+        return cache[table]
+
+    def _read_unique(self, table: str) -> dict[str, list[str]]:
         if self.dialect == "mysql":
             got = self._exec(
                 "SELECT INDEX_NAME, COLUMN_NAME FROM information_schema.STATISTICS "
@@ -595,6 +602,28 @@ def plant_value(
     return mutate(table, column, current)
 
 
+def unique_columns(sb: "Sandbox", table: str) -> set[str]:
+    """Columns in any unique index of ``table`` other than its primary key
+    (none when the sandbox can't say)."""
+
+    get = getattr(sb, "unique_indexes", None)
+    if get is None:
+        return set()
+    return {c for cols in get(table).values() for c in cols}
+
+
+def edit_value(
+    sb: "Sandbox", t: Table, col: str, current: Optional[str], written: Optional[str]
+) -> Optional[str]:
+    """The value an unrelated edit sets on another row: what the write set
+    (the same change elsewhere), except in a column of a unique index, where
+    that value would make the store refuse the edit; there, a planted value."""
+
+    if col in unique_columns(sb, t.name):
+        return plant_value(sb, t, col, current)
+    return written
+
+
 def _text_values(values: Mapping[str, Any]) -> set[str]:
     out: set[str] = set()
 
@@ -738,10 +767,11 @@ def faults(schema: Schema, sb: "Sandbox", demo: Demo, write: list[Op]) -> list[C
                           if store.row_key(t, r) != store.row_key(t, op.key)), None)  # fmt: skip
             if other is not None:
                 for col in changed:
-                    if other.get(col) == op.row.get(col):
+                    v = edit_value(sb, t, col, other.get(col), op.row.get(col))
+                    if v is None or other.get(col) == v:
                         continue
                     edit = dict(other)
-                    edit[col] = op.row.get(col)
+                    edit[col] = v
                     out.append(Case(f"unrelated_edit:{op.table}.{col}", "unrelated_edit",
                                     write + [Op(op.table, other, edit)]))  # fmt: skip
         if not is_new and before is not None:
@@ -764,10 +794,11 @@ def faults(schema: Schema, sb: "Sandbox", demo: Demo, write: list[Op]) -> list[C
                 # The same change on another row: an excuse must hold only
                 # on the rows the write declares.
                 for c in changed:
-                    if other.get(c) == op.row.get(c):
+                    v = edit_value(sb, t, c, other.get(c), op.row.get(c))
+                    if v is None or other.get(c) == v:
                         continue
                     edit = dict(other)
-                    edit[c] = op.row.get(c)
+                    edit[c] = v
                     out.append(Case(f"unrelated_edit:{op.table}.{c}", "unrelated_edit",
                                     write + [Op(op.table, other, edit)]))  # fmt: skip
             # A late change to the target itself: its first changed column.
@@ -825,8 +856,13 @@ def faults(schema: Schema, sb: "Sandbox", demo: Demo, write: list[Op]) -> list[C
         key = _new_key(sb, t, sample[0]) if sample else None
         if key is None:
             continue
+        row = _copy_row(t, sample[0], key)
+        for col in unique_columns(sb, name) - set(key):
+            v = plant_value(sb, t, col, row.get(col))
+            if v is not None:
+                row[col] = v  # a copied unique code would be refused
         out.append(Case(f"other_table:{name}", "other_table",
-                        write + [Op(name, key, _copy_row(t, sample[0], key))]))  # fmt: skip
+                        write + [Op(name, key, row)]))  # fmt: skip
         planted += 1
         if planted >= 2:
             break
@@ -1151,7 +1187,8 @@ def validate(
             sb.put_many([Op(op.table, op.key, row) for op, row in saved])
         for case in cases:
             res = run_verdict(sb, manifest, demo, case, actor_id, extra)
-            log(f"{demo.name} {case.name}: {res.outcome} {'ok' if res.ok else 'FAIL'}")
+            log(f"{demo.name} {case.name}: {res.outcome} {'ok' if res.ok else 'FAIL'}"
+                + ("" if res.ok or not res.reasons else f" | {res.reasons[0][:200]}"))  # fmt: skip
             if record is not None:
                 record.append({"demo": demo.name, "kind": demo.kind, "case": res.case,
                                "class": res.cls, "correct": res.correct, "outcome": res.outcome,
