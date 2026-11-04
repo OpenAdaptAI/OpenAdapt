@@ -17,7 +17,7 @@ APP_IMAGE = "docker.io/dolibarr/dolibarr:20.0.2"
 DB_IMAGE = "docker.io/library/mariadb@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4"
 DB_PASS = "synthetic-db-pass"  # throwaway local container
 ADMIN_PASS = "synthetic-admin-pass"  # throwaway local container
-UPSTREAM, PROXY = 9851, 9852
+UPSTREAM, PROXY = 9667, 9668
 
 
 def dsql(query: str) -> list[dict[str, Any]]:

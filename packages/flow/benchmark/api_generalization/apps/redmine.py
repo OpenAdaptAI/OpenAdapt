@@ -51,8 +51,8 @@ def sql(query: str, *, write: bool = False) -> list[dict[str, Any]]:
 class App(AppBase):
     name = "redmine"
     workflow = "new-issue"
-    upstream_port = 9821
-    proxy_port = 9822
+    upstream_port = 9661
+    proxy_port = 9662
     form_path = "/projects/helpdesk/issues/new"
     save_path_regex = r"^/projects/helpdesk/issues$"
     unique_param = "subject"

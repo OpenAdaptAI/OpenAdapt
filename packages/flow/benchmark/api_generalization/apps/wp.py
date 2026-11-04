@@ -21,7 +21,7 @@ WP_IMAGE = "docker.io/library/wordpress:6.6-php8.2-apache"
 DB_IMAGE = "docker.io/library/mariadb@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4"
 DB_PASS = "synthetic-db-pass"  # throwaway local container
 ADMIN_PASS = "synthetic-admin-pass"  # throwaway local container
-UPSTREAM, PROXY = 9831, 9832
+UPSTREAM, PROXY = 9663, 9664
 MU_PLUGIN = "<?php\n// Test copy only: many comments come from one address.\nadd_filter('comment_flood_filter', '__return_false');\n"
 
 

@@ -21,7 +21,7 @@ PG_IMAGE = "docker.io/library/postgres:16-alpine"
 REDIS_IMAGE = "ffb4a863fae9"  # docker.io/library/redis (alpine), already on this machine
 DB_PASS = "synthetic-db-pass"  # throwaway local container
 ADMIN_PASS = "synthetic-admin-pass"  # throwaway local container
-UPSTREAM, PROXY = 9841, 9842
+UPSTREAM, PROXY = 9665, 9666
 SEED = """
 from extras.models import CustomField
 from core.models import ObjectType
