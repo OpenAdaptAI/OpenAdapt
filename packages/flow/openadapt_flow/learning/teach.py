@@ -762,6 +762,10 @@ class TeachResult(BaseModel):
     promoted: bool
     outcome: LearnOutcome
     out_bundle: Optional[Path] = None
+    #: Sealed input or strict mode: the summary withholds what the learn loop
+    #: read (the skill id, which defaults to the workflow name, the reason,
+    #: clusters and gate failures).
+    private: bool = False
 
     @property
     def refused(self) -> bool:
@@ -770,11 +774,17 @@ class TeachResult(BaseModel):
     def summary(self) -> str:
         """A short operator-facing verdict (what it learned / why it refused)."""
         verdict = "LEARNED" if self.promoted else "REFUSED"
-        lines = [
-            f"{verdict}: {self.outcome.action} (skill {self.skill_id!r})",
-            f"  reason: {self.outcome.reason}",
-        ]
-        if self.outcome.clusters:
+        if self.private:
+            lines = [
+                f"{verdict}: {self.outcome.action}",
+                "  reason: withheld because the input is sealed or strict mode is on",
+            ]
+        else:
+            lines = [
+                f"{verdict}: {self.outcome.action} (skill {self.skill_id!r})",
+                f"  reason: {self.outcome.reason}",
+            ]
+        if self.outcome.clusters and not self.private:
             lines.append(f"  clusters: {self.outcome.clusters}")
         if self.outcome.action != _NOT_ATTEMPTED:
             lines.append(
@@ -785,8 +795,12 @@ class TeachResult(BaseModel):
         if self.outcome.gate is not None:
             gate = "passed" if self.outcome.gate.passed else "FAILED"
             lines.append(f"  regression gate: {gate}")
-            for failure in self.outcome.gate.failures:
-                lines.append(f"    - {failure}")
+            if self.private and self.outcome.gate.failures:
+                count = len(self.outcome.gate.failures)
+                lines.append(f"    {count} failure(s), details withheld")
+            elif not self.private:
+                for failure in self.outcome.gate.failures:
+                    lines.append(f"    - {failure}")
         if self.promoted and self.out_bundle is not None:
             lines.append(f"  updated bundle written to {self.out_bundle}")
             lines.append(
@@ -803,9 +817,10 @@ class TeachResult(BaseModel):
 _NOT_ATTEMPTED = "not_attempted"
 
 
-def _refusal(skill_id: str, reason: str) -> TeachResult:
+def _refusal(skill_id: str, reason: str, *, private: bool = False) -> TeachResult:
     return TeachResult(
         skill_id=skill_id,
+        private=private,
         promoted=False,
         outcome=LearnOutcome(
             skill_id=skill_id,
@@ -1057,7 +1072,7 @@ def teach(
     )
     if plan.refusal:
         # Refused before learning: nothing is written, not even a library.
-        return _refusal(sid, plan.refusal)
+        return _refusal(sid, plan.refusal, private=seal)
     assert plan.correction is not None and plan.baseline is not None
 
     lib_root = (
@@ -1087,7 +1102,7 @@ def teach(
         # Governed refusal: leave the bundle untouched -- the workflow stays
         # halting exactly as before the teach was attempted.
         return TeachResult(
-            skill_id=sid, promoted=False, outcome=outcome, out_bundle=None
+            skill_id=sid, promoted=False, outcome=outcome, out_bundle=None, private=seal
         )
 
     updated = promoted_workflow(library, sid, name=base_workflow.name)
@@ -1117,5 +1132,9 @@ def teach(
     else:
         _write_taught_bundle(updated, Path(bundle), out_bundle, carried, run_dir)
     return TeachResult(
-        skill_id=sid, promoted=True, outcome=outcome, out_bundle=out_bundle
+        skill_id=sid,
+        promoted=True,
+        outcome=outcome,
+        out_bundle=out_bundle,
+        private=seal,
     )

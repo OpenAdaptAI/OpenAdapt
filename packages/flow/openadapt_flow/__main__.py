@@ -7827,22 +7827,16 @@ def _push_failure_reason(args: argparse.Namespace, error: Exception) -> str:
     A failure caused by another error (a validation error, a scrub or
     sanitization failure) can quote what it read. When the input is sealed or
     strict mode is on, that text came out of encrypted content, so push names
-    only the kind of error. A failure push raised itself prints as it is.
+    only the kind of error. A failure push raised itself prints as it is,
+    without any quoted input value.
     """
-    from openadapt_flow import at_rest, sealed_set
+    from openadapt_flow import at_rest, safe_errors, sealed_set
 
-    cause = error.__cause__ or error.__context__
-    if cause is None:
-        return str(error)
-    path = getattr(args, "path", None)
-    if not at_rest.strict() and not (path and sealed_set.is_sealed_path(path)):
-        return str(error)
-    while cause.__cause__ is not None or cause.__context__ is not None:
-        cause = cause.__cause__ or cause.__context__
-    return (
-        f"the input was refused ({type(cause).__name__}). The details are "
-        "withheld because the input is sealed or strict mode is on."
-    )
+    if error.__cause__ is not None or error.__context__ is not None:
+        path = getattr(args, "path", None)
+        if at_rest.strict() or (path and sealed_set.is_sealed_path(path)):
+            return safe_errors.withheld(error)
+    return safe_errors.message(error)
 
 
 def _cmd_push(args: argparse.Namespace) -> int:
@@ -8355,7 +8349,9 @@ def _cmd_teach(args: argparse.Namespace) -> int:
             library_dir=Path(args.library) if args.library else None,
         )
     except TeachError as e:
-        print(f"teach cannot run: {e}")
+        from openadapt_flow import safe_errors
+
+        print(f"teach cannot run: {safe_errors.message(e)}")
         return 2
 
     print(result.summary())
@@ -8390,7 +8386,9 @@ def _cmd_teach_branch(args: argparse.Namespace) -> int:
             library_dir=Path(args.library) if args.library else None,
         )
     except TeachError as e:
-        print(f"teach-branch cannot run: {e}")
+        from openadapt_flow import safe_errors
+
+        print(f"teach-branch cannot run: {safe_errors.message(e)}")
         return 2
     print(result.summary())
     return 0 if result.promoted else 1
@@ -13391,6 +13389,16 @@ def _sealed_paths_in(args: argparse.Namespace) -> list[Path]:
     return found
 
 
+def _private_input(args: argparse.Namespace) -> bool:
+    """Whether the command read sealed input or runs in strict mode."""
+    from openadapt_flow import at_rest, sealed_set
+
+    try:
+        return at_rest.strict() or bool(_sealed_paths_in(args))
+    except (sealed_set.SealedSetError, ValueError, OSError):
+        return True  # cannot tell: treat it as private
+
+
 def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
     """Refuse a sealed path in a command that cannot keep it sealed, and a
     sealed path whose key is not configured, before the command runs."""
@@ -13471,21 +13479,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             print(f"REFUSED (deployment_config_changed): {exc}", file=sys.stderr)
             return 2
-    from openadapt_flow import sealed_set
+    from openadapt_flow import safe_errors, sealed_set
 
     try:
         refusal = _sealed_input_refusal(args)
     except sealed_set.SealedSetError as exc:
         refusal = str(exc)
     if refusal is not None:
-        print(f"REFUSED: {refusal}", file=sys.stderr)
+        print(f"REFUSED: {safe_errors.message(refusal)}", file=sys.stderr)
         return 2
     from openadapt_flow import at_rest
 
     try:
         _unsealed_output_check(args)
     except (at_rest.AtRestRefused, ValueError) as exc:
-        print(f"REFUSED: {exc}", file=sys.stderr)
+        print(f"REFUSED: {safe_errors.message(exc)}", file=sys.stderr)
         return 2
     try:
         code = args.func(args)
@@ -13503,7 +13511,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         # A sealed bundle or encrypted recording that is missing its key,
         # was changed after sealing, or holds an unknown file, or a write
         # strict mode refuses: fail closed.
-        print(f"REFUSED: {exc}", file=sys.stderr)
+        print(f"REFUSED: {safe_errors.message(exc)}", file=sys.stderr)
         return 2
     except BrowserSupportMissing as exc:
         # Missing optional browser support is a setup decision, not a crash.
@@ -13513,6 +13521,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         from openadapt_flow.runtime.known_ids import KnownIdAdmissionHalt
 
         if not isinstance(exc, KnownIdAdmissionHalt):
+            if _private_input(args):
+                # A traceback would quote what the command read from sealed
+                # input: name the kind of error only.
+                print(f"FAILED: {safe_errors.withheld(exc)}", file=sys.stderr)
+                return 1
             raise
         # The configured known-ID list may not be used: halt before any step
         # runs, with the named reason.
