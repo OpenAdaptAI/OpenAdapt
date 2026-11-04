@@ -188,8 +188,20 @@ def test_reads_the_reference_from_the_run_screen() -> None:
 def test_a_bound_backend_is_used_after_build() -> None:
     driver = RecordingDriver(_saved())
     verifier = _verifier(driver)
-    verifier.bind_backend(RunSession(url=BASE + "/chart/patient/CLM-20431"))
+    verifier.bind_backend(RunSession(url=BASE + "/chart/patient/CLM-20431?saved=1"))
     assert verifier.verify(_effect(), verifier.capture_pre_state()).confirmed
+
+
+def test_the_page_the_save_left_is_not_an_independent_read() -> None:
+    # The read opens exactly the URL the acting session shows after the
+    # save: the same view, so it can't confirm (ui_read_checks).
+    verifier = _verifier(
+        RecordingDriver(_saved()),
+        backend=RunSession(url=BASE + "/chart/patient/CLM-20431"),
+    )
+    verdict = verifier.verify(_effect(), verifier.capture_pre_state())
+    assert verdict.verdict is Verdict.INDETERMINATE
+    assert verdict.read_evidence["independence"]["distinct_view"] == "no"
 
 
 @pytest.mark.parametrize(

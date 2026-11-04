@@ -79,7 +79,7 @@ DECISION_SCHEMA: Literal["openadapt.admission-decision/v1"] = (
 #: Opaque decider ids, the same shape Flow accepts for a delegated approver.
 DECIDER_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$"
 #: Policy packs under which only a person may decide.
-PERSON_ONLY_PACKS = frozenset({"regulated"})
+PERSON_ONLY_PACKS = frozenset({"regulated", "regulated-ui-read"})
 #: The preparer id for an MCP client that runs without --delegate-approvals.
 #: It names no one, so it may be the same agent that later decides; only a
 #: person decides what it prepared.

@@ -665,7 +665,93 @@ and it isn't a system-of-record read: the adapter sets
 halt message names the read as a record page read in a separate session. Under
 the Standard and Regulated profiles a tier-2 confirmation can end `VERIFIED`,
 as before. The `regulated` policy pack needs tier 1, so this check doesn't
-qualify a workflow for it.
+qualify a workflow for it. The `regulated-ui-read` pack is the same pack with
+this check admitted: choosing it is the profile's declaration that the
+application has no read API, and every other `regulated` requirement stays.
+
+### When a UI read counts
+
+A read through the application's own screens confirms a save only when it is
+independent of the save. Each read records three rules in the receipt
+(`read_evidence.independence` on the effect evidence), with how each was
+established and the seconds the read took:
+
+| Rule | Holds when | Fails when |
+|---|---|---|
+| `separate_session` | its own browser, a new empty context, its own sign-in | the session shares a context or never signed in |
+| `requery` | the record page's document came from the server | a cached or service-worker page |
+| `distinct_view` | the view isn't the page the save left on the acting session's screen | the read opens that same URL (fragment aside), even re-fetched |
+
+A read that fails a rule can still refute a save, but it can't confirm one:
+the verdict is INDETERMINATE and the run halts. Reading the page the save just
+showed never counts. When no acting session is bound (the verifier called
+outside a run), `distinct_view` is recorded as `unknown` and doesn't block. An
+acting session with no URL (desktop, RDP, Citrix) is a different view by
+construction.
+
+Cardinality comes from the view, not a separate rule: point `record_url` at
+a search or list view (search by the record's name and birth date, say), and a
+`record_written` effect counts the matching rows, so a second copy of the
+record is REFUTED.
+
+### History view (`history`)
+
+Where the application has an audit, history or activity screen, declare it.
+The separate session reads it before the save and again after it, and judges
+the new entries:
+
+- an entry about another record: REFUTED (a collateral change);
+- an entry on this record that none of the `explained` patterns match (taken
+  from the demonstration's own history entries): REFUTED;
+- no entry for the save, with `expect_entry` (the default): INDETERMINATE;
+- entries by other users are excused when `entry.user` and `acting_user_env`
+  are set, as the database frame excuses changes the audit trail attributes
+  to someone else.
+
+```yaml
+    history:
+      url: "https://app.example.org/audit?patient={patient}"
+      ready_selector: "#audit"
+      row_selector: "tr.entry"
+      entry: { record: "td.pid", what: "td.event", user: "td.user" }
+      explained: ["^patient-record update$"]
+      acting_user_env: APP_ACTING_USERNAME
+```
+
+### Provisional, then final (`final`)
+
+A payer portal shows a confirmation number and a "pending review" queue; a
+record can also change after the save. With `final`, the read right after the
+save is provisional: it confirms the record and its values, then writes a
+waiting entry to the deferred-check ledger (the record's URL and identifier,
+and a keyed digest of the values read, never the values). The run ends
+`SAVED_AWAITING_CHECK`. Later,
+`openadapt-flow deferred settle --config deployment.yaml` opens one fresh
+session and re-reads every due record in it, so a batch costs one sign-in:
+
+| The final read shows | Settles |
+|---|---|
+| a `final_values` status and the same values | `VERIFIED` |
+| a `pending_values` status, or a page it can't read | still waiting |
+| a `rejected_values` or undeclared status, changed values, or no record | `RECONCILIATION_REQUIRED` |
+| nothing before `deadline_hours` | `RECONCILIATION_REQUIRED` |
+
+`after_s` is the quiet window: the final read doesn't run before it, so a
+late change has to land before the read that settles the save. Set it from the
+application's observed behavior. A rejected status at the provisional read is
+REFUTED at once. `openadapt-flow deferred status RUN` gives the run's settled
+outcome.
+
+```yaml
+    final:
+      ledger: /var/lib/openadapt/pending
+      after_s: 900
+      deadline_hours: 72
+      status_field: status
+      final_values: [Approved, Paid]
+      pending_values: [Pending review, Received]
+      rejected_values: [Denied, Returned]
+```
 
 **Pilot: with per-entry approval only.** While a person approves each entry
 (`approval_mode: each_item`, the default), a confirmed UI read-back is record
@@ -743,8 +829,10 @@ fixtures, not production rates.
   `empty_selector`.
 - A whitespace-only difference is invisible, because both sides are compared
   with whitespace collapsed.
-- The record needs a URL that an identifier the run already knows can fill. A
-  record whose identifier is assigned at save can't be opened this way yet.
+- The record needs a URL that an identifier the run already knows can fill,
+  or a `reference` the save shows (a confirmation number).
+- A collateral change to a record the view doesn't list is invisible without a
+  `history` view, and the history view sees only what the application logs.
 - It needs its own account. Signing in as the account the workflow types with
   can end the acting session in applications that allow one session per user.
   Single sign-on and multi-factor sign-in aren't supported.

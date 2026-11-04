@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from openadapt_flow.verification import VerificationTier
 
-PolicyPackName = Literal["community", "cloud", "regulated"]
+PolicyPackName = Literal["community", "cloud", "regulated", "regulated-ui-read"]
 
 
 class PolicyPack(BaseModel):
@@ -61,8 +61,29 @@ REGULATED_PACK: Final[PolicyPack] = PolicyPack(
     summary="Independent system-of-record verifier. Production signer required.",
 )
 
+#: Regulated, for an application with no API, database or FHIR read channel.
+#: Everything ``regulated`` requires stays, except that the separate-session
+#: UI read-back (tier 2) is an admissible record check. The runtime still
+#: holds every UI read to the independence rules
+#: (:mod:`openadapt_flow.runtime.effects.ui_read_checks`): a read that isn't
+#: a fresh session, a re-query and a view the save didn't render can't
+#: confirm a write. Choosing this pack is the profile's explicit declaration.
+REGULATED_UI_READ_PACK: Final[PolicyPack] = PolicyPack(
+    name="regulated-ui-read",
+    policy_name="clinical-write",
+    minimum_effect_tier=VerificationTier.INDEPENDENT_SESSION,
+    allow_local_dev_signer=False,
+    require_identity_on_writes=True,
+    require_system_of_record_effect=True,
+    summary=(
+        "Regulated with no read API: an independent UI read-back is admissible. "
+        "Production signer required."
+    ),
+)
+
 POLICY_PACKS: Final[Mapping[str, PolicyPack]] = {
-    pack.name: pack for pack in (COMMUNITY_PACK, CLOUD_PACK, REGULATED_PACK)
+    pack.name: pack
+    for pack in (COMMUNITY_PACK, CLOUD_PACK, REGULATED_PACK, REGULATED_UI_READ_PACK)
 }
 
 

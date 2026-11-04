@@ -121,6 +121,17 @@ class PendingCheck(BaseModel):
     #: The report's status code for the row (``A2``, ``R``), or ``deadline``.
     code: Optional[str] = None
     reason: Optional[str] = None
+    #: A UI read-back's final check (``ui_readback.final``): the earliest time
+    #: the final read may run (the quiet window), where to reopen the record
+    #: (its record-page URL and identifier: a locator, not the inputs), and a
+    #: keyed digest of the values the provisional read saw.
+    due_at: Optional[str] = None
+    locator: Optional[dict[str, str]] = None
+    record_mac: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+#: ``report_format`` of a waiting entry a UI read-back settles.
+UI_READBACK_FORMAT = "ui-readback"
 
 
 @dataclass(frozen=True)
@@ -256,6 +267,68 @@ class PendingLedger:
             )
             self._write(entry)
         return entry
+
+    def add_ui(
+        self,
+        *,
+        effect_contract_hash: str,
+        spec_digest: str,
+        describe: str,
+        deadline_hours: float,
+        due_after_s: float,
+        locator: Mapping[str, str],
+        record_payload: str,
+        now: Optional[datetime] = None,
+    ) -> PendingCheck:
+        """Record a UI read-back's provisional confirmation as waiting for
+        its final read. ``spec_digest`` pins the read-back configuration: only
+        the same configuration can settle it."""
+
+        moment = now or _now()
+        with self._locked():
+            entry = PendingCheck(
+                id=f"deferred:{secrets.token_hex(16)}",
+                created_at=_iso(moment),
+                deadline=_iso(moment + timedelta(hours=deadline_hours)),
+                key_digest=self.key_digest(str(locator.get("identity", ""))),
+                effect_contract_hash=effect_contract_hash,
+                report_format=UI_READBACK_FORMAT,
+                report_format_digest=spec_digest,
+                describe=describe,
+                due_at=_iso(moment + timedelta(seconds=due_after_s)),
+                locator=dict(locator),
+                record_mac=self.key_digest(record_payload),
+            )
+            self._write(entry)
+        return entry
+
+    def settle_entry(
+        self,
+        entry_id: str,
+        state: EntryState,
+        *,
+        code: str,
+        reason: str,
+        now: Optional[datetime] = None,
+    ) -> Optional[Settlement]:
+        """Settle one waiting entry (a UI final read). None when it isn't
+        waiting any more."""
+
+        with self._locked():
+            current = self.get(entry_id)
+            if current is None or current.state != "waiting":
+                return None
+            self._write(
+                current.model_copy(
+                    update={
+                        "state": state,
+                        "settled_at": _iso(now or _now()),
+                        "code": code,
+                        "reason": reason,
+                    }
+                )
+            )
+        return Settlement(entry_id, state, code, reason)
 
     # -- the settle side --------------------------------------------------------------
     def settle(
@@ -530,6 +603,7 @@ def settle_report_file(
 
 
 __all__ = [
+    "UI_READBACK_FORMAT",
     "DeferredReportSpec",
     "DeferredReportVerifier",
     "PendingCheck",
