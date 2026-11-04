@@ -294,10 +294,11 @@ def _execute_screen_oracle(
     workflow: Workflow, effect: Effect, banner_text: str
 ) -> EffectVerdict:
     resolved = _resolved_effect(workflow, effect)
-    # A lying screen can show anything, so it shows what this read looks for.
-    expected = getattr(resolved, "value", None)
-    if expected not in (None, "") and str(expected) not in banner_text:
-        banner_text = f"{banner_text} — {expected}"
+    # A lying screen can paint exactly what the oracle reads, so the broken
+    # case shows the oracle's own expected text when it names one.
+    expected = resolved.value.literal if resolved.value is not None else None
+    if isinstance(expected, str) and expected.strip():
+        banner_text = expected
     verifier = OnScreenReadbackVerifier(
         _BreakItBannerBackend(),
         vision=_BreakItBannerVision(banner_text),

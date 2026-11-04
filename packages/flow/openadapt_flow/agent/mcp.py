@@ -14,6 +14,7 @@ server. This package does not open an HTTP listener.
 
 from __future__ import annotations
 
+import functools
 import io
 import json
 import logging
@@ -287,7 +288,8 @@ def _server_instructions(
     elif teach is not None:
         text += (
             " To add a workflow, teach it: call teach_start with the task, then "
-            "teach_observe and teach_act until it is done, then teach_finish. "
+            "teach_observe and teach_run (web apps) or teach_act until it is "
+            "done, then teach_finish. "
             "Run 1 makes a real entry in the app; use test records. A person "
             "confirms the record check (teach_confirm_checks shows them a form) "
             "and teach_admit admits it only under the operator's signed policy. "
@@ -393,9 +395,9 @@ def build_server(
             elif name == "admit" and authoring is not None and authoring.handles(name):
                 await _confirm_admit(context, authoring)
                 human_confirmed = True
-            elif teaching and name == "teach_act":
+            elif teaching and name in ("teach_act", "teach_run"):
                 hold = await anyio.to_thread.run_sync(
-                    teach.hold_needed, arguments or {}
+                    functools.partial(teach.hold_needed, arguments or {}, tool=name)
                 )
                 if hold:
                     await _confirm_with_person(

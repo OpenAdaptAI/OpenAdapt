@@ -1,0 +1,17 @@
+# The pixels-only surface's RDP client: FreeRDP 3 under Xvfb, so the session
+# negotiates the server's H.264/AVC444 graphics pipeline. Runs the desktop
+# environment server (openadapt_flow.rl_env.desktop) inside the container.
+#
+#   podman build -t openadapt-winenv-rdp -f Containerfile ../../../..
+FROM docker.io/library/debian:trixie-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        freerdp3-x11 xvfb xdotool openbox ca-certificates curl && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY packages/types packages/types
+COPY packages/flow packages/flow
+# openadapt-flow supports Python <3.13; trixie ships 3.13, so uv installs 3.12.
+RUN curl -LsSf https://astral.sh/uv/0.8.17/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh \
+    && uv venv -p 3.12 /venv && VIRTUAL_ENV=/venv uv pip install --no-cache \
+        -e packages/types -e packages/flow "openenv>=0.11,<0.12" fastapi uvicorn pywinrm
+ENV PATH=/venv/bin:$PATH
+WORKDIR /src/packages/flow

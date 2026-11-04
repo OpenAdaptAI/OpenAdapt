@@ -263,3 +263,78 @@ def test_offline_seal_and_batch_work_under_the_mode(tmp_path):
     )
     assert "SEALED_OFFLINE" in proc.stdout, proc.stderr
     assert _blocked(tmp_path) == []
+
+
+_SPAWN_ATTEMPTS = """
+import os, subprocess, sys
+from openadapt_flow import no_outbound
+assert no_outbound.installed()  # importing the package installed the hook
+def attempt(label, fn):
+    try:
+        fn()
+        print(label, "STARTED")
+    except no_outbound.OutboundBlocked:
+        print(label, "BLOCKED")
+attempt("curl", lambda: subprocess.run(["curl", "--version"], capture_output=True))
+attempt("shell", lambda: subprocess.run("true", shell=True))
+attempt("system", lambda: os.system("true"))
+attempt("ps", lambda: subprocess.run(["ps", "-o", "pid=", "-p", str(os.getpid())], capture_output=True))
+attempt("python", lambda: subprocess.run([sys.executable, "-c", "pass"]))
+loose = {k: v for k, v in os.environ.items() if k != "OPENADAPT_NO_OUTBOUND"}
+attempt("python-unhooked", lambda: subprocess.run([sys.executable, "-c", "pass"], env=loose))
+"""
+
+
+def _spawn_lines(proc: subprocess.CompletedProcess) -> dict[str, str]:
+    assert proc.returncode == 0, proc.stderr
+    return dict(line.split() for line in proc.stdout.splitlines() if " " in line)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX tools")
+def test_uncontained_child_processes_are_refused(tmp_path):
+    lines = _spawn_lines(_child(_SPAWN_ATTEMPTS, tmp_path))
+    assert lines["curl"] == "BLOCKED"
+    assert lines["shell"] == "BLOCKED"
+    assert lines["system"] == "BLOCKED"
+    # A local system tool, and a Python child that keeps strict mode (and so
+    # installs the hook when it imports openadapt_flow), may start.
+    assert lines["ps"] == "STARTED"
+    assert lines["python"] == "STARTED"
+    # A Python child with strict mode stripped from its environment may not.
+    assert lines["python-unhooked"] == "BLOCKED"
+    events = [e["event"] for e in _blocked(tmp_path)]
+    assert "subprocess.Popen" in events and "os.system" in events
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX tools")
+def test_a_named_containment_lets_children_start(tmp_path):
+    lines = _spawn_lines(
+        _child(_SPAWN_ATTEMPTS, tmp_path, OPENADAPT_NO_OUTBOUND_CHILDREN="pf")
+    )
+    assert set(lines.values()) == {"STARTED"}
+
+
+def test_an_unknown_containment_stops_startup(tmp_path):
+    proc = _child(
+        "import openadapt_flow", tmp_path, OPENADAPT_NO_OUTBOUND_CHILDREN="yes"
+    )
+    assert proc.returncode != 0
+    assert "OPENADAPT_NO_OUTBOUND_CHILDREN" in proc.stderr
+
+
+def test_a_later_enforce_can_name_a_containment_once(tmp_path):
+    proc = _child(
+        """
+        import subprocess
+        from openadapt_flow import no_outbound
+        assert no_outbound.children_containment() is None
+        no_outbound.enforce({"OPENADAPT_NO_OUTBOUND_CHILDREN": "pf"})
+        no_outbound.enforce({"OPENADAPT_NO_OUTBOUND_CHILDREN": "sandbox"})
+        print(no_outbound.children_containment())
+        subprocess.run(["true"])
+        print("STARTED")
+        """,
+        tmp_path,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.split() == ["pf", "STARTED"]

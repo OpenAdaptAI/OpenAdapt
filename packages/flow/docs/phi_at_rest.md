@@ -11,6 +11,62 @@ See also [PRIVACY.md](PRIVACY.md) (what is scrubbed before anything leaves the
 machine), [phi_in_transit.md](phi_in_transit.md) (PHI on the wire) and
 `openadapt_flow.sealed_set` (the implementation).
 
+## Default, opt-out and strict mode
+
+Flow encrypts with a configured key (`OPENADAPT_BUNDLE_KEY`, or
+`OPENADAPT_RECORDING_KEY` for recordings) or, when none is set, with a key it
+creates on first use at `~/.openadapt/keys/at-rest.key` (`$OPENADAPT_HOME`,
+or `$OPENADAPT_FLOW_AT_REST_HOME`, moves it). The local key is mode 0600 in a
+0700 directory, and Flow checks that only its owner can read it. Back it up
+with your other secrets.
+
+| | Default | `OPENADAPT_FLOW_AT_REST=strict` |
+| --- | --- | --- |
+| Durable checkpoints | Encrypted | Encrypted |
+| Web recordings | Encrypted with a configured key; otherwise logged | Encrypted |
+| Bundles from `compile`, `induce`, `admit` | Encrypted from encrypted input; otherwise logged | Encrypted |
+| Run directories | Encrypted for a sealed bundle; otherwise logged | Encrypted |
+| The bundle, skill library and compiled fix of `teach` | Encrypted from encrypted input; otherwise logged | Encrypted |
+| The sanitized review copy and approved archive of `push` | Encrypted from encrypted input; otherwise logged | Encrypted |
+| Desktop recordings, approval requests, `--record-video`, and the output of `visualize`, `explain`, `emit-skill`, `compose`, `process`, `variants`, `route`, `for-each`, `shadow`, `compile-agent`, `guard`, `bench`, `sanitize`, `redact-report`, `jit`, `--save-healed-to`, `--workers` and `induce --report` | Logged | Held back before the command runs |
+
+**Logged** means stderr names the path and one line goes to
+`~/.openadapt/plaintext-at-rest.jsonl`; when that line can't be written, the
+write stops. OpenAdapt Desktop shows a notice in
+its window from the same ledger. Issue
+[#1751](https://github.com/OpenAdaptAI/OpenAdapt/issues/1751) tracks moving
+each logged artifact to encrypted by default.
+
+A sealed bundle always runs into a sealed run directory, in every mode.
+
+**Healthcare and other regulated deployments:** set
+`OPENADAPT_FLOW_AT_REST=strict` and a key from your secret manager. Strict
+mode runs:
+
+- `record`, `compile`, `induce`, `admit run`, `run`, `replay` and `resume`,
+  which encrypt what they write, plaintext input included;
+- the other commands listed under
+  [Commands on sealed input](#commands-on-sealed-input), on encrypted input
+  (every directory they are given must be encrypted);
+- the commands that write no recorded data: service health and control, the
+  no-outbound allow list, key and Seal verification. `service run` runs the
+  queue script it is given; the Flow commands the script starts inherit
+  strict mode, and the script's other actions are the operator's.
+
+Every other command, and qualification trials (`qualify campaign`,
+`qualify run-case`, `qualify drills`), is held back before it starts. It encrypts every recording, bundle and run directory, and an
+unknown value of `OPENADAPT_FLOW_AT_REST` stops the command. `seal` and
+record checks on encrypted bundles use `OPENADAPT_BUNDLE_KEY` only.
+
+`OPENADAPT_FLOW_PLAINTEXT_AT_REST='<reason>'` is for development and
+already de-identified data: it turns encryption off, and each process that
+uses it prints a warning and adds a ledger line with the reason. `record
+--no-encrypt` does the same for one web recording. Strict mode ignores both.
+
+OpenAdapt Desktop encrypts certified workflows with per-workflow keys in the
+system keychain, and runs Flow with the opt-out recorded under its own
+reason.
+
 ## Summary
 
 With a key configured, these are ciphertext on disk:
@@ -82,8 +138,9 @@ prior certification; certify the sealed destination.
 
 ## Inventory
 
-`openadapt_flow.sealed_set.BUNDLE_FILES` and `RECORDING_FILES` are the source
-of truth; a test keeps this table in step with them.
+`openadapt_flow.sealed_set.BUNDLE_FILES`, `RECORDING_FILES`, `LIBRARY_FILES`
+and `SANITIZED_FILES` are the source of truth; a test keeps these tables in
+step with them.
 
 ### Bundle
 
@@ -98,6 +155,7 @@ of truth; a test keeps this table in step with them.
 | `undo-lineage.json`, `record-check-binding.json` | Prior digests; record-check coverage | Encrypted |
 | `qualification-proposal.json`, `qualification-proposal.draft.json`, `qualification-admission.local-dev.json`, `qualification/*` | Qualification pins, cases and reports | Encrypted |
 | `admission-decision.json`, `admission.json`, `admit.json`, `jit_draft.json` | Admission records; some carry read-back values or a login name | Encrypted |
+| `teach-authorization/*` | The person-signed teach authorization the program was taught under; a spelled-out input or record value is in it | Encrypted |
 | `openadapt-card.json`, `repair/*`, `evidence/*` | Operator card, repair candidates with anchor text, copied evidence | Encrypted |
 | Anything else | Unknown | `seal` refuses |
 
@@ -113,6 +171,24 @@ of truth; a test keeps this table in step with them.
 | `check.json`, `check.proposed.json`, `readback.proposed.yaml`, `record_check.proposed.yaml`, `record_check.proof.json`, `identity.proposed.json`, `effect_contract.yaml` | Checks and proposals derived from the recording | Encrypted |
 | `distill.json`, `.openadapt-approval.json`, `.openadapt-sanitization.json` | Derived reports and approvals | Encrypted |
 | Anything else | Unknown | Refused |
+
+### Skill library
+
+| File | Holds | At rest |
+| --- | --- | --- |
+| `skills.json` | Every learned program version (target labels, typed literals, screen text, crop paths) and the execution traces it was learned from | Encrypted |
+| Anything else | Unknown | Refused |
+
+### Sanitized review copy
+
+| File | Holds | At rest |
+| --- | --- | --- |
+| `.openadapt-sanitization.json` | The redaction manifest: file names, hashes and redaction records | Encrypted |
+| `.openadapt-approval.json` | The reviewer's approval | Encrypted |
+| `*` | The scrubbed copy of each recording or bundle file, before review | Encrypted |
+
+The approved archive beside it (`<name>.approved.zip`) is one AES-256-GCM
+container under the same key.
 
 ### Run directory of a sealed bundle
 
@@ -135,17 +211,15 @@ The web recorder seals every frame, event line, the metadata and the network
 capture in memory and writes only ciphertext, from the first frame. The event
 log is resealed whole on each append, so the file on disk is always one
 complete ciphertext. The recording is finalized (indexed) when it finishes.
-`record --verify` keeps its system-of-record reads inside it, encrypted;
-`record --with-check` says it cannot mark a check in an encrypted recording
-yet and marks nothing.
+`record --verify` keeps its system-of-record reads inside it, encrypted, and
+`record --with-check` marks its check inside it, encrypted.
 
-Encryption is on by default where it is safe: when `OPENADAPT_BUNDLE_KEY` is
-set, a deployment that seals its bundles also encrypts its web recordings.
-`--no-encrypt` opts out. The desktop recorders (`--backend
-windows/macos/linux/rdp/citrix`) write a raw capture session (a SQLite
-database and video) through openadapt-capture, which Flow cannot encrypt yet.
-With `OPENADAPT_RECORDING_KEY` set they refuse to record; with only the bundle
-key set they record in plaintext as before.
+Web recordings are encrypted under a configured key, and under the local key
+in strict mode. `--no-encrypt` records one in plaintext, with a warning and a
+ledger line. The desktop recorders (`--backend
+windows/macos/linux/rdp/citrix`) write a capture session (a SQLite database
+and video) through openadapt-capture, and Flow logs its directory; with
+`OPENADAPT_RECORDING_KEY` set, or in strict mode, use the web recorder.
 
 ### Cost
 
@@ -167,10 +241,15 @@ takes tens to hundreds of milliseconds, so encryption adds about 1% or less.
 
 ## Commands on sealed input
 
-`record`, `compile`, `induce`, `scaffold-verifier`, `seal`, `certify`,
-`qualify`, `admit`, `run`, `replay`, `approve`, `resume` and `undo` read
-sealed bundles and encrypted recordings in memory, given the key, and keep
-what they write sealed:
+`record` (including `--with-check`), `compile`, `induce`,
+`scaffold-verifier`, `seal`, `certify`, `qualify`, `admit`, `run`, `replay`,
+`approve`, `resume`, `undo`, `visualize` (including a process contract),
+`explain`, `emit-skill`, `for-each`, `sections`, `check mark`, `compose`,
+`process`, `variants`, `route`, `teach`, `push`, `sanitize`,
+`review-sanitized` and `approve-sanitized` read sealed bundles, run
+directories and encrypted recordings in memory, given the key, and keep what
+they write inside a sealed set sealed. Each reads artifact files through one reader,
+`openadapt_flow.artifacts`:
 
 - `compile` of an encrypted recording writes a sealed bundle, under
   `OPENADAPT_BUNDLE_KEY` or, when that is unset, the recording's key. It
@@ -189,6 +268,47 @@ what they write sealed:
   it acts, because those stores still write plaintext state.
 - `undo` keeps its approval, claim, parameters and result in the sealed run
   directory; the undo run is a sealed set of its own inside it.
+- `for-each` of a sealed bundle writes the looped bundle sealed, under the
+  same key rules as `compile`.
+- `emit-skill` copies a sealed bundle into the skill folder as ciphertext.
+  `visualize` and `emit-skill` write their page and `SKILL.md` outside the
+  sealed set: by default they name it on stderr and in the ledger, and strict
+  mode refuses them before they run.
+- `sections` and `check mark` write `sections.json` and `check.json` back
+  into the sealed bundle or recording, encrypted.
+- `compose` copies sealed child bundles into the composition as ciphertext.
+  `process`, `variants` and `route` read sealed child bundles and their
+  admission envelopes in place. The parent file each writes
+  (`composition.json`, `process-contract.json`, `variant-set.json`) holds
+  names, digests and pointers; by default it is named on stderr and in the
+  ledger, and strict mode refuses the command before it runs.
+- `teach` of a sealed run, fix recording or bundle, and every `teach` in
+  strict mode, writes the taught bundle sealed (crops, program and repair
+  candidate), under the same key rules as `compile`. Its skill library
+  (`<out>.skills`, or `--library`) is a sealed set of its own, and the fix
+  recording compiles into `_teach_compiled`, a sealed bundle inside the
+  recording that the recording's index skips. A library or `--out` directory
+  that already holds plaintext is refused, so nothing learned from encrypted
+  input lands beside plaintext. An `--out` or library that is, contains, or
+  is inside any input (by real path or by inode, so a symlink alias counts)
+  is refused before anything is written.
+- `push` and `sanitize` of an encrypted recording or bundle, and every
+  `push` in strict mode, write the sanitized review copy as a sealed set of
+  kind `sanitized`, staged in a private (0700) directory beside it and removed
+  if anything fails. Scrubbing, the second-pass check and the approval rescan
+  run on the decrypted bytes in memory and are exactly as strict as for
+  plaintext. `review-sanitized` shows the original and the copy from memory
+  and writes a reviewer's redactions back encrypted; `approve-sanitized`
+  encrypts the approved archive; the upload decrypts that archive in memory and
+  sends the exact approved bytes.
+
+Refusals never quote what they read. A validation error's quoted input value
+is dropped from every refusal the CLI prints. With sealed input or in strict
+mode, a `teach` or `push` refusal names only the error's type, unless its text
+was built only from the command line (the paths you passed, such as an `--out`
+that overlaps an input or a run that came from another bundle). An unexpected
+error prints its type instead of a traceback, and a success line names a skill
+or workflow only by a short hash.
 
 Without the key, each of these refuses before it reads anything and names the
 variable to set. Any other command given a sealed path refuses with a message
@@ -196,6 +316,9 @@ that lists the commands above, rather than decrypt to disk. A bare
 `Workflow.save()` into a sealed bundle keeps it sealed.
 
 ## What is not encrypted
+
+Outside strict mode, the artifacts the [table](#default-opt-out-and-strict-mode)
+marks as logged. Also:
 
 - Data in memory. Decrypted frames, crops and the workflow live in process
   memory while a command runs, and can reach swap or a crash dump. Use
@@ -216,8 +339,8 @@ that lists the commands above, rather than decrypt to disk. A bare
   and no `seal`: only `workflow.json` and `templates/` are encrypted there.
 - The offline Seal of a run (`local-seal`) is not written for an encrypted
   run directory yet; the run says so on stderr.
-- Commands outside the list above, such as `visualize`, `explain`, `teach`,
-  `emit-skill` and `push`, refuse sealed input rather than read it.
+- Commands outside the list above refuse sealed input rather than decrypt it
+  to disk.
 
 ## The identity template is not encryption
 

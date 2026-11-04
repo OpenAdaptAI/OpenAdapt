@@ -170,7 +170,7 @@ def _marked_screen(shows: dict):
     return SimpleNamespace(ocr=ocr)
 
 
-SHOWS = {NOTE_BOX: f"Note: {NOTE}", VISIT_BOX: VISIT}
+SHOWS = {NOTE_BOX: NOTE, VISIT_BOX: VISIT}
 
 
 # -- compiling the check ---------------------------------------------------------
@@ -210,6 +210,18 @@ def test_refuses_a_box_that_does_not_show_the_typed_value(tmp_path):
     rec = _recording(tmp_path)
     with pytest.raises(CheckError, match="doesn't show the value typed for it"):
         apply_check(_workflow(), rec, vision=_marked_screen({NOTE_BOX: "Allergies"}))
+
+
+def test_refuses_a_box_that_takes_in_the_fields_label(tmp_path):
+    # The read-back confirms only a box that is the value; one that also
+    # shows the label would never confirm, so it is refused when marked.
+    rec = _recording(tmp_path)
+    with pytest.raises(CheckError, match="Mark only the value"):
+        apply_check(
+            _workflow(),
+            rec,
+            vision=_marked_screen({**SHOWS, NOTE_BOX: f"Note: {NOTE}"}),
+        )
 
 
 def test_refuses_a_field_that_was_not_typed(tmp_path):

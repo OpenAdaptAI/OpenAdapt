@@ -604,6 +604,129 @@ class LinuxBackend:
             return None
         return census if isinstance(census, dict) else None
 
+    def element_identity_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """The AT-SPI element identity under pixel (x, y), for a repair's new click.
+
+        Shape: :class:`openadapt_flow.repair.element_identity.ElementIdentity`.
+        ``role`` is the mapped role :meth:`structural_locator_at` stores, so the
+        two name the same element. ``ancestry`` is the raw AT-SPI role and name
+        of each ancestor, parent first, ending at this backend's exact window.
+        The client's ``ancestry`` must reach that window by its exact title and
+        bounds. ``process`` is the AT-SPI application name. Scoped to the
+        pinned window; None on any miss (never raises).
+        """
+        read = getattr(self._client, "ancestry", None)
+        if not callable(read):
+            return None
+        try:
+            window, global_x, global_y = self._global_point(
+                int(x), int(y), require_active=False
+            )
+            element = self._client.element_at_point(window, global_x, global_y)
+            if element is None or not self._candidate_matches(
+                element,
+                StructuralLocator(
+                    automation_id=element.accessible_id,
+                    role=element.role,
+                    name=element.name,
+                ),
+                window,
+            ):
+                return None
+            if (
+                element.app_name.casefold() != self._app.casefold()
+                or element.window_title.casefold() != self._window_title.casefold()
+            ):
+                return None
+            left, top, width, height = element.bounds
+            if not (left <= global_x < left + width and top <= global_y < top + height):
+                return None
+            trail = read(window, element)
+            if not trail:
+                return None
+            last_role, last_name, last_bounds = trail[-1]
+            if last_name != window.title or last_bounds != window.bounds:
+                return None
+            from openadapt_flow.repair.element_identity import DIALOG_ROLES
+
+            dialog_region = None
+            wx, wy, ww, wh = window.bounds
+            for role, _name, bounds in trail:
+                if role in DIALOG_ROLES and bounds is not None:
+                    bx, by, bw, bh = bounds
+                    if (
+                        bx >= wx
+                        and by >= wy
+                        and bx + bw <= wx + ww
+                        and by + bh <= wy + wh
+                    ):
+                        dialog_region = [bx - wx, by - wy, bw, bh]
+                    break
+            return {
+                "source": "atspi",
+                "role": element.role,
+                "name": element.name,
+                "automation_id": element.accessible_id,
+                "ancestry": [[role, name] for role, name, _bounds in trail],
+                "window": window.title,
+                "process": window.app_name,
+                "dialog_region": dialog_region,
+            }
+        except Exception:  # noqa: BLE001 - a momentary AT-SPI failure is a miss
+            return None
+
+    def text_value_at(self, x: int, y: int) -> Optional[str]:
+        """The exact text of the editable field under (x, y), from AT-SPI.
+
+        An optional structural observation the runtime uses only to verify
+        that a TYPE step landed (the browser backend's ``text_value_at``).
+        None when the point is not over an editable text field in this exact
+        window, the field is a password field, or the client can't read it,
+        so the runtime falls back to its visual check.
+        """
+        reader = getattr(self._client, "editable_text", None)
+        if not callable(reader):
+            return None
+        try:
+            window, global_x, global_y = self._global_point(
+                int(x), int(y), require_active=False
+            )
+            element = self._client.element_at_point(window, global_x, global_y)
+            if element is None or not self._in_scope(element, window):
+                return None
+            value = reader(element)
+        except Exception:
+            return None
+        return value if isinstance(value, str) else None
+
+    def focused_text_value(self) -> Optional[str]:
+        """The exact text of the one focused editable field in this window."""
+        reader = getattr(self._client, "editable_text", None)
+        if not callable(reader):
+            return None
+        try:
+            window = (
+                self._require_same_window(self._captured_window)
+                if self._captured_window is not None
+                else self._resolve_window()
+            )
+            element = self._client.focused_element(window)
+            if element is None or not self._in_scope(element, window):
+                return None
+            value = reader(element)
+        except Exception:
+            return None
+        return value if isinstance(value, str) else None
+
+    def _in_scope(self, element: LinuxElement, window: LinuxWindow) -> bool:
+        """The element belongs to this backend's exact app, window and process."""
+        return (
+            element.app_name.casefold() == self._app.casefold()
+            and element.window_title.casefold() == self._window_title.casefold()
+            and element.window_title.casefold() == window.title.casefold()
+            and element.pid == window.pid
+        )
+
     def displayed_text_at(self, x: int, y: int) -> Optional[str]:
         """The text of the one AT-SPI element under (x, y), for a read-back.
 
@@ -1237,15 +1360,24 @@ class AtspiLinuxClient:
         return self._state_contains(window.native, "ACTIVE")
 
     def focus_window(self, window: LinuxWindow) -> bool:
+        """Whether ``window`` is the active window, asking for focus if not.
+
+        GTK refuses ``grab_focus`` on a top-level frame, so a window that is
+        already active counts as focused; otherwise it must be active after
+        the request.
+        """
+        if self.window_is_active(window):
+            return True
         component = self._call(
             window.native, "get_component_iface", "queryComponent", default=None
         )
         if component is None:
             return False
         try:
-            return bool(component.grab_focus())
+            component.grab_focus()
         except Exception:
             return False
+        return self.window_is_active(window)
 
     def capture_window(self, window: LinuxWindow) -> tuple[bytes, int, int]:
         x, y, width, height = window.bounds
@@ -1330,6 +1462,43 @@ class AtspiLinuxClient:
             matches[0][1],
         )
         return actionable
+
+    def ancestry(
+        self, window: LinuxWindow, element: LinuxElement
+    ) -> Optional[list[tuple[str, Optional[str], Optional[tuple[int, int, int, int]]]]]:
+        """(raw AT-SPI role, name, screen bounds) of each ancestor, parent first.
+
+        Ends at the top-level node whose parent is the application, which must
+        carry ``window``'s exact title and bounds. None when the walk fails,
+        runs past 32 levels, or never reaches that window.
+        """
+        try:
+            node = element.native
+            if node is None:
+                return None
+            trail: list[
+                tuple[str, Optional[str], Optional[tuple[int, int, int, int]]]
+            ] = []
+            for _ in range(32):
+                node = self._call(node, "get_parent", default=None)
+                if node is None:
+                    return None
+                role = self._raw_role(node)
+                if not role or role in {"application", "desktop frame"}:
+                    return None
+                name = _clean_text(self._call(node, "get_name", default=None))
+                bounds = self._bounds(node)
+                trail.append((role, name, bounds))
+                parent = self._call(node, "get_parent", default=None)
+                if parent is not None and self._raw_role(parent) == "application":
+                    if name != window.title or bounds != window.bounds:
+                        return None
+                    if self._pid(node) != window.pid:
+                        return None
+                    return trail
+            return None
+        except Exception:  # noqa: BLE001 - unobservable AT-SPI is an ordinary miss
+            return None
 
     def focused_element(self, window: LinuxWindow) -> Optional[LinuxElement]:
         nodes, truncated = self._walk(window)
@@ -1523,6 +1692,22 @@ class AtspiLinuxClient:
         if not accepted:
             raise LinuxBackendError("AT-SPI native action was rejected")
         return f"atspi_{operation}"
+
+    #: Raw AT-SPI roles whose text is an editable value (not a password).
+    _EDITABLE_ROLES = frozenset({"text", "entry", "editbar"})
+
+    def editable_text(self, element: LinuxElement) -> Optional[str]:
+        """The full text of an editable text field; None for anything else."""
+        node = element.native
+        if node is None or self._raw_role(node) not in self._EDITABLE_ROLES:
+            return None
+        if not self._state_contains(node, "EDITABLE"):
+            return None
+        try:
+            value = self._atspi.Text.get_text(node, 0, -1)
+        except Exception:
+            return None
+        return value if isinstance(value, str) else None
 
     def replace_text(self, element: LinuxElement, text: str) -> bool:
         editable = self._call(
