@@ -117,6 +117,7 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 | desktop-build.yml | `native-installers` | no | no | macOS arm64, macOS Intel, Windows, Linux bundles |
 | desktop-dependency-audit.yml | `python`, `npm`, `rust` | when Desktop changes | no | when Desktop changes, and weekly |
 | desktop-dependency-audit.yml | `python-macos-intel` | no | no | when Desktop changes, and weekly |
+| desktop-replay.yml | `replay` (Patient Notes through WindowsBackend, judged from SQLite), `freerdp` (FreeRDP transport round trip over a loopback RDP session) | when the Windows path changes; not required | no | nightly |
 | codeql.yml | `Analyze` (Python, JavaScript/TypeScript, Rust) | per changed language | per changed language | all languages on main and weekly |
 | secret-scan.yml, dependency-review.yml, platform-manifest.yml | all | yes | yes | yes |
 | docs.yml, link-check.yml (internal), production-lifecycle.yml, release-health.yml (self-test) | all | yes | no | main only |

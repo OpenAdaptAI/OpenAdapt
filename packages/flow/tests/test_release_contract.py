@@ -113,6 +113,7 @@ SOURCE_BOUNDARY_EXCLUDES = {
     "/docs/validation/identity_roc.json",
     "/docs/validation/identity_roc.png",
     "/openadapt_flow/benchmark/reliability_corpus.py",
+    "/benchmark/harness/reliability_corpus.py",
     "/openadapt_flow/validation/adversary_corpus.py",
     "/openadapt_flow/validation/adversary_corpus_v2.py",
     "/openadapt_flow/validation/adversary_corpus_v3.py",

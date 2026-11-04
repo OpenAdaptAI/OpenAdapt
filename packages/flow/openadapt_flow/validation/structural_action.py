@@ -42,6 +42,7 @@ from typing import Optional
 from PIL import Image
 
 from openadapt_flow import vision as vision_mod
+from openadapt_flow.backend import StructuralResolutionRefused
 from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 from openadapt_flow.ir import Anchor
 from openadapt_flow.runtime.resolver import resolve
@@ -176,7 +177,10 @@ def run_probe(n: int = 21, *, headless: bool = True) -> dict:
             correct_box = _bbox(backend, f"#open-p{i}")
 
             # structural rung (deterministic, id-based)
-            handle = backend.locate_structural(locators[i])
+            try:
+                handle = backend.locate_structural(locators[i])
+            except StructuralResolutionRefused:
+                handle = None  # a refusal is not a correct structural hit
             s_ok = handle is not None and _inside(handle.point, correct_box)
 
             # visual ladder only (structural disabled)

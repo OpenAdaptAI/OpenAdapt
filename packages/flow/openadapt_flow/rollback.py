@@ -1082,8 +1082,9 @@ class ReplayerRunner:
 
     ``make_replayer`` builds a replayer on the run's backend with the run's
     effect verifier, API actuator and approval gate. ``fresh_session``
-    returns the backend to a signed-out start (a web page with its cookies
-    and storage cleared, back at the entry URL). Without it, only an
+    returns the backend to a start: a web page signed out, its cookies and
+    storage cleared, back at the entry URL; or a desktop or remote screen
+    checked at its start screens (``screen_fresh_session``). Without it, only an
     API-only compensation runs: a GUI compensation recorded from a fresh
     session would act on whatever screen the stop left.
     """
@@ -1091,7 +1092,7 @@ class ReplayerRunner:
     def __init__(
         self,
         make_replayer: Callable[[], Any],
-        fresh_session: Optional[Callable[[], None]] = None,
+        fresh_session: Optional[Callable[..., None]] = None,
     ) -> None:
         self.make_replayer = make_replayer
         self.fresh_session = fresh_session
@@ -1110,7 +1111,10 @@ class ReplayerRunner:
                     "this backend can't start a fresh session, so only an "
                     "API-only compensation runs here"
                 )
-            self.fresh_session()
+            if getattr(self.fresh_session, "checks_compensation", False):
+                self.fresh_session(workflow)
+            else:
+                self.fresh_session()
         replayer = self.make_replayer()
         report: RunReport = replayer.run(
             workflow, params=params, bundle_dir=bundle_dir, run_dir=run_dir
@@ -1134,6 +1138,84 @@ def web_fresh_session(
         page.goto(entry_url)
 
     return reset
+
+
+def screen_fresh_session(
+    backend: Any, workflow: Workflow, *, bundle_dir: Path, run_dir: Path
+) -> Optional[Callable[..., None]]:
+    """Check that any backend (a desktop app, a remote display) is back at a
+    start screen before a GUI compensation runs.
+
+    It runs the run's halt cleanup (``halt_cleanup.runnable_cleanup``: the
+    bundle's cleanup steps only when their qualification matches, otherwise
+    none) and checks the run's start screen. Then it checks the
+    compensation's own start screen: its first anchored step's anchor. A
+    screen that doesn't show either refuses the compensation, and so does a
+    compensation with no anchored step. Unlike a web session, nothing here
+    signs out or navigates: without a qualified cleanup it only checks.
+    Nothing here proves an undo: the whole-store reads before and after each
+    compensation cover whatever the cleanup does too. None when the workflow
+    has no start screen to check.
+    """
+    from openadapt_flow import halt_cleanup
+    from openadapt_flow.ir import HaltCleanup
+
+    cleanup = halt_cleanup.runnable_cleanup(workflow)
+    if cleanup is None:
+        return None
+    resets = [0]
+
+    def reset(compensation: Optional[Workflow] = None) -> None:
+        from openadapt_flow.runtime import Replayer
+
+        def replayer() -> Any:
+            return Replayer(backend, use_structural=True)
+
+        resets[0] += 1
+        # Undo ids can't start with a dot: no collision with their run dirs.
+        where = run_dir / ROLLBACK_DIRNAME / f".fresh-session-{resets[0]}"
+        result = halt_cleanup.run_cleanup(
+            replayer, workflow, cleanup, bundle_dir=bundle_dir, run_dir=where
+        )
+        if not result.clean:
+            raise CompensationRefused(
+                "the run's start screen isn't showing "
+                f"({result.dirty or result.record_changed})"
+            )
+        if compensation is None:
+            return
+        start = halt_cleanup.start_state_of(compensation)
+        if start is None:
+            raise CompensationRefused(
+                "the compensation has no anchored step, so its start screen "
+                "can't be checked"
+            )
+        why = halt_cleanup.check_start(
+            replayer,
+            compensation,
+            HaltCleanup(steps=[], start_state=start, source="declared"),
+            bundle_dir=bundle_dir,
+            run_dir=where / "compensation",
+        )
+        if why is not None:
+            raise CompensationRefused(
+                f"the compensation's start screen isn't showing ({why})"
+            )
+
+    reset.checks_compensation = True  # type: ignore[attr-defined]
+    return reset
+
+
+def screen_undo_counts(workflow: Workflow) -> bool:
+    """Does a GUI compensation on a desktop or remote display count as an
+    undo for the undo-or-person rule? Only when the bundle's halt cleanup has
+    steps and its qualification matches: without them nothing returns the
+    screen to a start, so each save goes to a person first."""
+    from openadapt_flow import halt_cleanup
+
+    cleanup = workflow.halt_cleanup
+    runnable = halt_cleanup.runnable_cleanup(workflow)
+    return bool(cleanup is not None and runnable is cleanup and cleanup.steps)
 
 
 class RollbackPlan:
@@ -1300,5 +1382,7 @@ __all__ = [
     "fresh_presence",
     "roll_back",
     "rollback_lines",
+    "screen_fresh_session",
+    "screen_undo_counts",
     "snapshot_sha256",
 ]

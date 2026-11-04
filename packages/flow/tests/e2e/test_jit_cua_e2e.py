@@ -35,6 +35,7 @@ from openadapt_flow.jit.recorded import RecordedTrajectoryAgent
 from openadapt_flow.mockmed.fault_server import serve
 from openadapt_flow.runtime.effects import RestRecordVerifier
 from openadapt_flow.tutorial import _http_json, _records
+from tests._teach_authorization_support import mockmed_note
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "jit"
 TASK = TaskSignature(
@@ -82,6 +83,15 @@ def _jit(base: str, agent: Any, cache: Path, *, fault: str = "ok", on_halt: Any 
         on_halt=on_halt,
         key_dir=cache.parent / "admission-keys",
         on_warning=lambda text: None,
+        # A person signed what the exploring agent may do.
+        teach_authorization=mockmed_note(
+            cache.parent / "admission-keys",
+            cache.parent / "teach-authorization",
+            TASK.task_id,
+            base,
+            note=DEMO_NOTE,
+            record={"type": "Triage"},
+        ),
     )
 
 

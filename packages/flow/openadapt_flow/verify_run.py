@@ -2454,7 +2454,10 @@ def recheck_run(
     (``late_write.LaterWindow``): its declared effects and side rows as they
     landed then, never a row matching its selector that lands later. A
     change that may be what refuted that later write is ``disputed``: the
-    verdict's ``excused_by`` then holds ``LATER_WRITE_DISPUTED``. The
+    verdict's ``excused_by`` then holds ``LATER_WRITE_DISPUTED``. A later
+    write whose frame wasn't judged excuses nothing; when the verdict is
+    refuted with one in ``excused``, ``excused_by`` holds
+    ``LATER_WRITE_UNJUDGED``, since the change may be that write's. The
     database is read twice, ``settle_s`` apart, as after the save. Returns
     the frame verdict and when the database was read.
 
@@ -2464,6 +2467,7 @@ def recheck_run(
     post = dict(state["post_state"])
     since = late_write.parse_time(str(post["read_at"]))
     windows: list[Any] = []
+    unjudged = 0
     for i, (other, other_params) in enumerate(excused):
         problem = recheck_problem(
             cfg, other, params=other_params, run_record=run_record, verified=False
@@ -2484,6 +2488,8 @@ def recheck_run(
         window = _later_window(other)
         if window is not None:
             windows.append(window)
+        else:
+            unjudged += 1
     salt = bytes.fromhex(str(state["salt"]))
     detail: dict[str, Any] = {FRAME_DB_DETAIL: dict(post["snapshot"])}
     if post.get("audit") is not None:
@@ -2502,6 +2508,10 @@ def recheck_run(
         database_only=True,
         later=windows,
     )
+    if unjudged and verdict.status == "refuted":
+        # A later write whose frame wasn't judged excuses nothing, so what
+        # refuted this write may be that write's own change.
+        verdict.excused_by.add(late_write.LATER_WRITE_UNJUDGED)
     return verdict, _now()
 
 
