@@ -78,7 +78,8 @@ def native_action(
             x, y = x * viewport[0], y * viewport[1]
         out["x"], out["y"] = int(x), int(y)
     kind = action.type
-    if kind in (ActionType.CLICK, ActionType.DOUBLE_CLICK):
+    # A double click is not a click: refuse it rather than send one click.
+    if kind == ActionType.CLICK:
         return {"kind": "click", **out}
     if kind == ActionType.TYPE:
         if "selector" in out:
@@ -92,6 +93,11 @@ def native_action(
         keys = [*(action.modifiers or []), action.key or "Enter"]
         return {"kind": "press", "text": "+".join(keys)}
     if kind == ActionType.SCROLL:
+        if action.scroll_direction not in (None, "up", "down"):
+            raise ValueError(
+                f"scroll direction {action.scroll_direction!r} is not available"
+                " in this environment"
+            )
         amount = action.scroll_amount or SCROLL_STEP
         return {
             "kind": "scroll",

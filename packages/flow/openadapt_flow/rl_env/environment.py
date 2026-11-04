@@ -598,6 +598,8 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             return self._call_tool(action)
         if self._task is None or self._page is None:
             raise RuntimeError("call reset() before step()")
+        if self._state.done:
+            return self._observe(reward=0.0, done=True, error="episode is over")
         if action.computer_action is not None:
             try:
                 native = typed.native_action(
@@ -606,11 +608,12 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
                     (VIEWPORT["width"], VIEWPORT["height"]),
                 )
             except ValueError as exc:
+                # An action this environment can't take still spends a step.
                 self._state.step_count += 1
+                if self._state.step_count >= self.env.manifest.agent.max_steps:
+                    return self._finish(None, error=str(exc))
                 return self._observe(reward=0.0, done=False, error=str(exc))
             action = WebAction(**native)
-        if self._state.done:
-            return self._observe(reward=0.0, done=True, error="episode is over")
         self._state.step_count += 1
         if action.kind == "done":
             return self._finish(action.claim)
