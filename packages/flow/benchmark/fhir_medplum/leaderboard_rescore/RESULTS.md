@@ -83,7 +83,7 @@ verifier judged (4/4).
 
 | Column | Sensitivity | Specificity | Completion | Harm | False refusal |
 |---|---|---|---|---|---|
-| live | 15/15 | 1/2 | 0.018 | 0.000 | 0.018 |
+| live | 15/15 (failed checks) | 1/2 | 0.018 | 0.000 | 0.018 |
 | main | 15/15 | 2/2 | 0.035 | 0.000 | 0.000 |
 | operations | 15/15 [0.80, 1.00] | 2/2 [0.34, 1.00] | 0.035 | 0.000 | 0.000 |
 | operations-v2 | 15/15 | 2/2 | 0.035 | 0.000 | 0.000 |
@@ -91,7 +91,8 @@ verifier judged (4/4).
 Intervals are Wilson 95% over runs; the case bootstrap is degenerate at
 15/15 and 2/2. Median steps: 52 model calls. Fara said DONE on 17 of 57 runs,
 and 15 of those were wrong, so this half says more about sensitivity than
-about specificity. The one live false flag was the expired token. Five
+about specificity. Live, 53 of 57 checks failed on the expired token (HTTP 401), so its 15/15
+is failure, not detection, and its one false flag is the same fault. Five
 unlabelled runs (no DONE claim) are flagged because the agent wrote after the
 check; they count in neither metric. Per-row verdicts:
 `results/rescore-<column>-fara.json`; reasons: `results/score-fara.json`.
