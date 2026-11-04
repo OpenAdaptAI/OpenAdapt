@@ -9,7 +9,7 @@ Your AI agent decides what to enter. OpenAdapt enters it in the app and checks t
 
 Use it if your agent reads referrals, intake forms, or authorizations and works out what belongs in the record, but a person still types the result into an app with no usable API. Examples are an electronic medical record (EMR) and a payer portal. This package is the tool your agent calls to do that typing.
 
-- A person or your agent shows OpenAdapt the task in the real app. OpenAdapt replays those steps, and by default a run makes no AI model calls.
+- A person or your agent shows OpenAdapt the task in the real app. OpenAdapt replays those steps, and by default a run makes no calls to a hosted AI model.
 - Before it types, OpenAdapt checks that the right record is open. After it saves, it reads the record back.
 - Your agent gets one of four outcomes: done and checked, stopped before saving, check the record, or didn't run. When OpenAdapt can't confirm a save, it says so, and a person checks the record.
 - It runs on your customer's computer, one that can already open the app. Your agent, or a small program acting for it, has to run on that computer too, since it starts OpenAdapt and talks to it directly. If your agent runs in your own cloud, ask us about a hosted route.
@@ -411,7 +411,7 @@ claude mcp add --scope user openadapt-teach -- uvx --python 3.12 --from 'openada
 Your agent then:
 
 1. Calls `teach_start` with the task (`{note}` for each input), this run's `inputs`, the `record_fields` the saved record must have (such as its patient id), and `on_screen`, the record's identity as the screen shows it (a name and an MRN).
-2. Calls `teach_observe` and `teach_act` until the task is done. On the web, `teach_observe` lists the page as short lines with a ref for each control, and before every save OpenAdapt checks that the record's identity is shown next to the control. A save on the wrong record is refused and ends the run.
+2. Calls `teach_run` with short scripts (read the page, act on elements by role and name, read the result back; web apps), or `teach_observe` and `teach_act` one action at a time, until the task is done. After every save the gate detects, OpenAdapt reads the app's records back and tells the agent what landed; a write on a record the task does not name ends the run after it lands. On the web, `teach_observe` lists the page as short lines with a ref for each control, and before every save OpenAdapt checks that the record's identity is shown next to the control. A save on the wrong record is refused and ends the run.
 3. Calls `teach_finish`. OpenAdapt compiles the run and reads the app's records: exactly one record must have appeared, with every `record_fields` value and every input. The result is the draft: its steps, its inputs, the proposed record check, and what still needs a person.
 4. Calls `teach_confirm_checks`. Your MCP client shows a person the proposed check, and only their answer there, with their name, confirms it. Your agent has no argument that confirms it.
 5. Calls `teach_admit` with `canary_inputs`, the values each canary saves. A canary is a real save on the same record, so use values that are safe there.
@@ -428,7 +428,7 @@ It works on a web app (`--url`) and on the app a deployment file's `backend:` se
 
 | Flag | What it does |
 | --- | --- |
-| `--teach VERIFY_YAML` | Adds `teach_start`, `teach_observe`, `teach_act`, `teach_finish`, `teach_abort`, `teach_status`, `teach_confirm_checks` and `teach_admit`, and turns on runs of taught workflows. |
+| `--teach VERIFY_YAML` | Adds `teach_start`, `teach_run` (web apps), `teach_observe`, `teach_act`, `teach_finish`, `teach_abort`, `teach_status`, `teach_confirm_checks` and `teach_admit`, and turns on runs of taught workflows. |
 | `--teach-dir DIR` | Where drafts and taught programs live (default `RUNS_DIR/teach`). |
 | `--teach-key PEM`, `--teach-policy JSON` | The registered agent's encrypted key (passphrase in `OPENADAPT_JIT_KEY_PASSPHRASE`) and the signed admission policy. Only an agent key under a policy; an admitter key admits from CI with `openadapt-flow jit admit`. |
 | `--key-dir DIR` | The JIT key directory (default `OPENADAPT_JIT_KEY_DIR` or `~/.openadapt/jit`). |
@@ -498,7 +498,7 @@ A scripted agent worked a 30-item synthetic MockMed worklist. The user changes a
 In the middle arm, the agent opens a job and uses each item's `request_id` but keeps its flaws. The ledger stops every rule break, but it can't stop an agent from guessing a value or misreporting its own tally. `close_job` still lists what was verified, so a caller can check the agent's report. The scripted agent stands for a policy, not a model, so these numbers test the mechanism. They aren't a model benchmark. To reproduce them (about 3 seconds):
 
 ```bash
-python -m openadapt_flow.agent.ledger_demo
+python packages/agent/tests/ledger_demo.py
 ```
 
 Results: [docs/task-ledger-measurement.json](docs/task-ledger-measurement.json).

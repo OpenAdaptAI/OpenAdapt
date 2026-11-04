@@ -1,6 +1,6 @@
 """Small synthetic checks for the public reliability aggregation mechanism."""
 
-from openadapt_flow.benchmark.reliability import _outcome, aggregate
+from benchmark.harness.reliability import _outcome, aggregate
 
 
 def _result(outcome: str, *, category: str | None = None) -> dict:

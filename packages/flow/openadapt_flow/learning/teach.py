@@ -31,7 +31,7 @@ DEMONSTRATION of the fix, :func:`teach` wires the EXISTING loop end to end:
 
 Deterministic and ``$0`` on the shipped path: the resolution is induced by the
 model-free reference inducer
-(:class:`~openadapt_flow.learning.synth_stream.StructuralDiffInducer`), which
+(:class:`~openadapt_flow.learning.induce.StructuralDiffInducer`), which
 handles the "an unexpected dialog intercepted the workflow" resolution class
 the halt->learn loop was built for. Three things make that work on a real
 bundle, not only on the synthetic stream:
@@ -87,6 +87,7 @@ from openadapt_flow.learning.halt_loop import (
     promoted_workflow,
     resolution_demonstration,
 )
+from openadapt_flow.learning.induce import StructuralDiffInducer
 from openadapt_flow.learning.library import SkillLibrary
 from openadapt_flow.learning.loop import (
     CanaryContext,
@@ -94,7 +95,6 @@ from openadapt_flow.learning.loop import (
     LearnOutcome,
     ProgramCanaryFn,
 )
-from openadapt_flow.learning.synth_stream import StructuralDiffInducer
 from openadapt_flow.learning.trace import ExecutionTrace, TraceStep
 from openadapt_flow.runtime.authorization import runtime_params_for_gui
 

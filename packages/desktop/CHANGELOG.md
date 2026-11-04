@@ -7,6 +7,12 @@
 
 - show a notice when Flow logs a recording or run record stored without encryption
 
+## v0.25.1 (2026-11-04)
+
+### Bug Fixes
+
+- Keep review choices responsive when a card first appears.
+
 
 
 ## v0.25.0 (2026-10-28)

@@ -20,6 +20,7 @@ import pytest
 from openadapt_flow import onprem_service as svc
 from openadapt_flow.onprem_service import (
     ServiceConfig,
+    child_env,
     classify,
     egress_audit,
     health,
@@ -67,7 +68,7 @@ def _service(tmp_path: Path, **kw) -> "tuple[Path, list, int]":
             max_cycles=kw.pop("cycles", 2),
             allow_outbound=kw.pop("allow_outbound", False),
         ),
-        env=kw.pop("env", {}),
+        env=kw.pop("env", {"OPENADAPT_NO_OUTBOUND_CHILDREN": "sandbox"}),
         runner=_fake_runner(root, calls),
         enforce=lambda env: enforced.append(env),
         install_signals=False,
@@ -128,7 +129,7 @@ def test_service_stops_on_signal_event(tmp_path):
             ),
         ),
         kwargs=dict(
-            env={},
+            env={"OPENADAPT_NO_OUTBOUND_CHILDREN": "sandbox"},
             runner=_fake_runner(root, calls),
             stop=stop,
             enforce=lambda env: None,
@@ -557,6 +558,9 @@ def test_service_loop_end_to_end_in_a_subprocess_with_the_real_hook(tmp_path):
     )
     env = {k: v for k, v in os.environ.items() if not k.startswith("OPENADAPT_")}
     env["PYTHONPATH"] = str(ROOT)
+    # The installer's pf record lets the queue (bash) start under strict mode.
+    (root / "service").mkdir(parents=True)
+    (root / "service" / "firewall.json").write_text(json.dumps({"pf": "installed"}))
     proc = subprocess.run(
         [
             sys.executable,
@@ -584,3 +588,33 @@ def test_service_loop_end_to_end_in_a_subprocess_with_the_real_hook(tmp_path):
     blocked = (root / "audit" / "outbound-blocked.jsonl").read_text().splitlines()
     assert json.loads(blocked[0])["host"] == "192.0.2.10"
     assert health(root)["checks"]  # readable by the health check
+
+
+def test_service_refuses_strict_mode_with_nothing_containing_children(tmp_path, capsys):
+    root = tmp_path / "root"
+    calls: list = []
+    rc = run_service(
+        ServiceConfig(root=root, queue_script=_queue_script(tmp_path), max_cycles=1),
+        env={},
+        runner=_fake_runner(root, calls),
+        enforce=lambda env: None,
+        install_signals=False,
+    )
+    assert rc == 2 and calls == []
+    assert "OPENADAPT_NO_OUTBOUND_CHILDREN" in capsys.readouterr().err
+
+
+def test_child_env_names_pf_only_when_the_installer_recorded_it(tmp_path):
+    cfg = ServiceConfig(root=tmp_path, queue_script=tmp_path / "q.sh")
+    assert "OPENADAPT_NO_OUTBOUND_CHILDREN" not in child_env(cfg, {})
+    (tmp_path / "service").mkdir()
+    (tmp_path / "service" / "firewall.json").write_text(json.dumps({"pf": "declined"}))
+    assert "OPENADAPT_NO_OUTBOUND_CHILDREN" not in child_env(cfg, {})
+    (tmp_path / "service" / "firewall.json").write_text(json.dumps({"pf": "installed"}))
+    assert child_env(cfg, {})["OPENADAPT_NO_OUTBOUND_CHILDREN"] == "pf"
+    assert "OPENADAPT_NO_OUTBOUND_CHILDREN" not in child_env(
+        ServiceConfig(
+            root=tmp_path, queue_script=tmp_path / "q.sh", allow_outbound=True
+        ),
+        {},
+    )

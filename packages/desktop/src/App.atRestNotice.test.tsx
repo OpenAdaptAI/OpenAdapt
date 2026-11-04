@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 // Flow records each write of patient data it can't encrypt yet in a local
@@ -49,7 +49,8 @@ it("names unencrypted writes and where they are listed", async () => {
     ledger: "/Users/me/.openadapt/plaintext-at-rest.jsonl",
   });
   render(<App />);
-  const notice = await screen.findByText(/without encryption/);
+  const [notice, ...others] = await screen.findAllByText(/without encryption/);
+  expect(others).toHaveLength(0);
   expect(notice.textContent).toContain("3 recordings or run records");
   expect(notice.textContent).toContain("/Users/me/.openadapt/plaintext-at-rest.jsonl");
 });
@@ -57,6 +58,8 @@ it("names unencrypted writes and where they are listed", async () => {
 it("shows nothing when nothing was written unencrypted", async () => {
   engineWith({ strict: false, unencrypted_writes: 0, latest_purpose: "", ledger: "x" });
   render(<App />);
-  await screen.findByText(/./);
-  expect(screen.queryByText(/without encryption/)).toBeNull();
+  await waitFor(() =>
+    expect(vi.mocked(engineTry)).toHaveBeenCalledWith(CMD.AT_REST_STATUS, {}, null),
+  );
+  expect(screen.queryAllByText(/without encryption/)).toHaveLength(0);
 });

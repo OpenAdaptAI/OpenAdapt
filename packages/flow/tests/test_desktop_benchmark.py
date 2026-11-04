@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import json
 
-from openadapt_flow.benchmark import desktop_benchmark as db
-from openadapt_flow.benchmark.desktop_benchmark import (
+from benchmark.harness import desktop_benchmark as db
+from benchmark.harness.desktop_benchmark import (
     _classify,
     run_desktop_benchmark,
 )

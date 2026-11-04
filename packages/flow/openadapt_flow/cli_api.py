@@ -196,13 +196,28 @@ def cmd_api_admit(
     except (ApiProposalError, ValueError) as exc:
         print(f"api admit: {exc}", file=sys.stderr)
         return 2
+    ambient = []
     for step in updated.steps:
         if step.id in steps:
             print(describe_api_step(step))
             print()
+            spec = step.api_binding.web_form if step.api_binding else None
+            ambient += [w for w in (spec.writes if spec else []) if w.role == "ambient"]
+    if ambient:
+        # The person decides that these are the page's own requests: the API
+        # step won't send them, and admitting says so.
+        print("The API step will NOT send these requests; they are the page's own:")
+        for write in ambient:
+            print(f"  {write.method} {write.path}: {write.evidence}")
+        print()
     answer = ask(
-        f"Type '{ADMIT_WORD}' to let these requests save in place of the GUI steps "
-        "(the record check still confirms every save): "
+        f"Type '{ADMIT_WORD}' to let these requests save in place of the GUI steps"
+        + (
+            f" and leave the {len(ambient)} request(s) above to the page"
+            if ambient
+            else ""
+        )
+        + " (the record check still confirms every save): "
     )
     if answer.strip().lower() != ADMIT_WORD:
         print("Not admitted. Nothing changed.")

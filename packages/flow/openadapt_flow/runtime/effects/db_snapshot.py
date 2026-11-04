@@ -282,6 +282,14 @@ def row_hash(
     return _mac(key, f"r\x1f{table}\x1f{body}")
 
 
+def every_cell_hashed(table: "Table") -> bool:
+    """Does each row keep a cell MAC for every column? A table over
+    ``max_rows`` keeps them only for its reference columns: a row change
+    there may be in a column no cell shows, so no per-column rule (an app
+    profile's) may judge it."""
+    return set(table.cell_columns) == set(table.columns)
+
+
 def unpack(columns: Sequence[str], packed: str) -> dict[str, str]:
     """A stored row's cell MACs by column (stored as one string per row)."""
 
@@ -1151,8 +1159,14 @@ def _pg_sequences(
         f"WHERE n.nspname IN {_pg_in(scope)} ORDER BY 1, 2"
     ):
         schema, name, inc, start, low, high, cycle, typ, ok, tschema, table, col = row
-        out[_pg_name(str(schema), str(name), default)] = _PgSequence(
-            _pg_name(str(schema), str(name), default),
+        qname = _pg_name(str(schema), str(name), default)
+        if qname in out:
+            raise SnapshotError(
+                f"sequence name collision: {qname!r} refers to both {out[qname].relation} "
+                f"and {_pg_relation(str(schema), str(name))}"
+            )
+        out[qname] = _PgSequence(
+            qname,
             _pg_relation(str(schema), str(name)),
             int(inc),
             bool(ok),
@@ -1216,6 +1230,11 @@ def _pg_definitions(
             parents.append([schema, table])
             continue
         name = _pg_name(str(schema), str(table), default)
+        if name in out:
+            raise SnapshotError(
+                f"table name collision: {name!r} refers to both {out[name].relation} "
+                f"and {_pg_relation(str(schema), str(table))}"
+            )
         tables[int(oid)] = (name, str(schema), [kind, persistence, rls, force])
         d = out[name] = _Def(
             [], [], None, {}, {}, "", relation=_pg_relation(str(schema), str(table))
@@ -1513,6 +1532,13 @@ def take_snapshot(
         SnapshotError: the database can't be read as the frame needs it.
     """
 
+    if dialect != "postgresql":
+        # Before any connection: only PostgreSQL has schemas to skip.
+        wildcards = sorted(t for t in (*modes, *optional_modes) if t.endswith(".*"))
+        if wildcards:
+            raise SnapshotError(
+                f"allow-list entry {wildcards[0]!r} ('<schema>.*') is PostgreSQL only"
+            )
     try:
         s = _Session(connect, dialect)
     except Exception as exc:  # noqa: BLE001

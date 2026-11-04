@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 import pytest
 
+from benchmark.harness.guard_demo import NOTE, FakeAgent, person_approves, verify_yaml
 from openadapt_flow.agent_guard.cdp import CdpGuardPage
 from openadapt_flow.agent_guard.commit_guard import BLOCK_STATUS, CommitGuard
 from openadapt_flow.agent_guard.config import ConfigError, parse_config
@@ -24,7 +25,6 @@ from openadapt_flow.agent_guard.requests import (
     origin_of,
 )
 from openadapt_flow.guard import GuardedSave, GuardTask
-from openadapt_flow.guard_demo import NOTE, FakeAgent, person_approves, verify_yaml
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.verify_run import parse_verify_config
 
@@ -155,7 +155,7 @@ class FakePage:
         return self.agent.open_chart(self.patient)
 
     def screenshot(self) -> Optional[bytes]:
-        from openadapt_flow.guard_demo import tiny_png
+        from benchmark.harness.guard_demo import tiny_png
 
         return tiny_png()
 
