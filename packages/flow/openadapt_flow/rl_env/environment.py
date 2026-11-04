@@ -590,7 +590,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             lambda: self._pw and self._pw.stop(),
             lambda: self._app_stop and self._app_stop(),
             lambda: self._records_stop and self._records_stop(),
-            lambda: self._judge and self._judge.close(),
+            lambda: self._judge.close() if self._judge else None,
         ):
             try:
                 closer()
@@ -764,7 +764,8 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
     ) -> WebObservation:
         assert self._task is not None
         page = self._page
-        text, title, url, elements, shot = "", "", "", [], None
+        elements: list[Any] = []
+        text, title, url, shot = "", "", "", None
         try:
             url = _redact(page.url)
             title = page.title()
