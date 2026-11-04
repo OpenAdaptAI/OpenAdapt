@@ -1148,7 +1148,7 @@ def judge_frame(
         if before is not None and not changed(name, before, after):
             return False  # untouched in the window
         actor = get_path(after, attribution.actor_field)
-        return actor not in (None, "") and _who(actor) not in self_ids
+        return actor is not None and bool(_who(actor)) and _who(actor) not in self_ids
 
     def bot_only_inserted(name: str, ref: Any) -> bool:
         """The bot's write entries for this record are inserts only, so a
@@ -1407,10 +1407,9 @@ def judge_frame(
             )
             kinds = event_kinds(change)
             for e in entries_for(name, ref, field, kinds):
-                if (
-                    id(e) in used
-                    or _who(get_path(e, attribution.actor_field)) in self_ids
-                ):
+                who = _who(get_path(e, attribution.actor_field))
+                # A blank actor names no one, so it explains nothing.
+                if id(e) in used or not who or who in self_ids:
                     continue
                 if attribution.write_events:
                     used.add(id(e))
@@ -1434,7 +1433,7 @@ def judge_frame(
         if after is None:
             return "unattributed"  # a removed record can't say who removed it
         actor = get_path(after, attribution.actor_field)
-        if actor in (None, ""):
+        if actor is None or not _who(actor):
             return "unattributed"
         if _who(actor) in self_ids:
             return "self"
@@ -1811,6 +1810,10 @@ def judge_frame(
                     change.attribution == "other"
                     and view is not None
                     and spec.identity_field
+                    # Only the one table behind the surface holds its
+                    # records: a colleague's row in another table that the
+                    # surface also maps never names the surface's record.
+                    and [t for t, v in views_of.items() if v == view] == [name]
                 ):
                     # The same record as its surface names it, for checks
                     # that read the surface (an exact_new_set's additions).

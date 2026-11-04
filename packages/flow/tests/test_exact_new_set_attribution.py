@@ -22,6 +22,7 @@ def _db(path: Path) -> sqlite3.Connection:
         "CREATE TABLE log (id INTEGER PRIMARY KEY, user TEXT, patient_id INTEGER, "
         "event TEXT, tbl TEXT)"
     )
+    con.execute("CREATE TABLE history (id INTEGER PRIMARY KEY, pid INTEGER)")
     con.execute("INSERT INTO patient VALUES (1, 1, 'Old', 'old@example.test')")
     con.commit()
     return con
@@ -36,6 +37,8 @@ def _run(
     insert_events: bool = True,
     colleague_table: str = "patient",
     bot_name: str = "bot",
+    views: dict[str, str] | None = None,
+    extra: tuple[tuple[str, tuple], ...] = (),
 ) -> str:
     tmp_path.mkdir(exist_ok=True)
     db = tmp_path / "s.db"
@@ -77,7 +80,7 @@ def _run(
                     "dialect": "sqlite",
                     "read": {"sqlite_database": str(db)},
                     "allow_tables": ["log"],
-                    "views": {"patient": ""},
+                    "views": views if views is not None else {"patient": ""},
                     "new_row_fields": {"patient": ["pid"]},
                 },
             },
@@ -103,6 +106,8 @@ def _run(
             "INSERT INTO log (user, patient_id, event, tbl) VALUES ('clinic2', 3, ?, ?)",
             (colleague_event, colleague_table),
         )
+    for sql, args in extra:
+        con.execute(sql, args)
     con.commit()
     con.close()
     receipt = verify_run(
@@ -161,3 +166,61 @@ def test_an_insert_into_another_table_or_by_the_bot_under_another_case_still_ref
             )
             == "reconciliation_required"
         )
+
+
+def test_a_blank_actor_is_nobody(tmp_path: Path) -> None:
+    """Round 3 of #1571: an entry whose user is only spaces names no one, so
+    the bot's extra record it logs is unattributed and still refutes."""
+
+    assert (
+        _run(tmp_path, colleague_logged=False, bot_extra=True, bot_name="  ")
+        == "reconciliation_required"
+    )
+
+
+def test_an_addition_in_another_table_of_the_surface_excuses_nothing(
+    tmp_path: Path,
+) -> None:
+    """Round 3 of #1571: with two tables behind one surface, a colleague's
+    new history row for pid 3 never sets aside the bot's patient 3."""
+
+    assert (
+        _run(
+            tmp_path,
+            colleague_logged=True,
+            colleague_table="history",
+            views={"patient": "", "history": ""},
+            extra=(
+                ("INSERT INTO history VALUES (1, 3)", ()),
+                (
+                    "INSERT INTO log (user, patient_id, event, tbl) "
+                    "VALUES ('clinic2', 3, 'insert', 'history')",
+                    (),
+                ),
+            ),
+        )
+        == "reconciliation_required"
+    )
+
+
+def test_two_colleague_entries_never_explain_the_bots_record_too(
+    tmp_path: Path,
+) -> None:
+    """Round 3 of #1571: the bot's extra record under the colleague's pid,
+    with two colleague insert entries for that pid, still refutes."""
+
+    assert (
+        _run(
+            tmp_path,
+            colleague_logged=True,
+            extra=(
+                ("INSERT INTO patient VALUES (4, 3, 'Extra', 'x@example.test')", ()),
+                (
+                    "INSERT INTO log (user, patient_id, event, tbl) "
+                    "VALUES ('clinic2', 3, 'insert', 'patient')",
+                    (),
+                ),
+            ),
+        )
+        == "reconciliation_required"
+    )

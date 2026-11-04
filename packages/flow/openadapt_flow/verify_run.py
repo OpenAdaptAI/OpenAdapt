@@ -1426,7 +1426,16 @@ def _excuse_attributed_additions(
             base, name = before, ""
         if records is None:
             continue
-        kept = [r for r in records if (name, key_of(r)) not in excused]
+        # One colleague's addition is one record: a key that more than one
+        # record shares can't say which of them is the colleague's.
+        counts: dict[str, int] = {}
+        for r in records:
+            counts[key_of(r)] = counts.get(key_of(r), 0) + 1
+        kept = [
+            r
+            for r in records
+            if (name, key_of(r)) not in excused or counts[key_of(r)] > 1
+        ]
         if len(kept) == len(records):
             continue
         again = judge_records(effect, base, kept, substrate=verdict.substrate)
