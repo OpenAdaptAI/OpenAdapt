@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import base64
 import json
+import sys
+from pathlib import Path
 
 import anyio
 import pytest
@@ -13,15 +15,19 @@ from openadapt_flow.approval_mode.approver_roster import ROOT_ENV
 from openadapt_flow.approval_mode.demo_approver import demo_approver, demo_root
 from openadapt_flow.agent.mcp import build_server
 from openadapt_flow.guard import GUARD_TASK_SCHEMA, GuardedSave
-from openadapt_flow.guard_demo import (
+from openadapt_flow.mockmed.fault_server import serve as fault_serve
+from openadapt_flow.verify_run import parse_verify_config
+
+# The fake agent and its helpers are Flow's guarded-save demo, which lives in
+# Flow's source checkout (packages/flow/benchmark/harness), outside the wheel.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "flow"))
+from benchmark.harness.guard_demo import (  # noqa: E402
     NOTE,
     FakeAgent,
     person_approves,
     tiny_png,
     verify_yaml,
 )
-from openadapt_flow.mockmed.fault_server import serve as fault_serve
-from openadapt_flow.verify_run import parse_verify_config
 
 
 @pytest.fixture

@@ -304,11 +304,14 @@ def test_sealed_bundle_fails_closed_without_or_with_a_wrong_key(
 
 
 def test_command_that_cannot_read_sealed_input_refuses(
-    sealed_pair: tuple[Path, Path], capsys: pytest.CaptureFixture[str]
+    sealed_pair: tuple[Path, Path],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     sealed, _ = sealed_pair
     before = _files(sealed)
-    assert main(["visualize", str(sealed)]) == 2
+    out = tmp_path / "server.py"
+    assert main(["emit-mcp", str(sealed), "--out", str(out)]) == 2
     err = capsys.readouterr().err
     assert "does not read encrypted input" in err
     assert _files(sealed) == before
@@ -544,7 +547,9 @@ def test_halted_sealed_run_is_undone_without_plaintext(
             report = Replayer(
                 MockMedBackend(url),
                 vision=_vision(),
-                effect_verifier=RestRecordVerifier(url),
+                effect_verifier=RestRecordVerifier(
+                    url, records_path="/api/db", records_key="records"
+                ),
                 poll_interval_s=0.01,
             ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
             assert report.execution_outcome == "HALTED"

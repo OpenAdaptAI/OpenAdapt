@@ -127,6 +127,8 @@ def test_password_goes_to_stdin_not_argv(monkeypatch):
     argv = " ".join(client.__dict__.get("argv", spawned[procs.index(client)][0]))
     assert "s3cret-synthetic" not in argv
     assert "/from-stdin:force" in argv and "/u:svc" in argv
+    # No title bar: it would shift the remote desktop off the frame's coordinates.
+    assert "/f" in argv.split() and "-decorations" in argv.split()
     assert client.written == b"s3cret-synthetic\n"
     env = spawned[procs.index(client)][1]["env"]
     assert "s3cret-synthetic" not in " ".join(env.values())

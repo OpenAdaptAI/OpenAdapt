@@ -2693,9 +2693,6 @@ grounder = [
 grounding = [
     { name = "openadapt-grounding" },
 ]
-harness2 = [
-    { name = "playwright" },
-]
 hosted = [
     { name = "keyring" },
 ]
@@ -2825,7 +2822,6 @@ requires-dist = [
     { name = "playwright", marker = "python_full_version >= '3.11' and extra == 'openenv'", specifier = ">=1.44" },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.44" },
     { name = "playwright", marker = "extra == 'dev'", specifier = ">=1.44" },
-    { name = "playwright", marker = "extra == 'harness2'", specifier = ">=1.44" },
     { name = "pydantic", specifier = ">=2.5" },
     { name = "pygobject", marker = "sys_platform == 'linux' and extra == 'linux'", specifier = ">=3.46" },
     { name = "pyobjc-core", marker = "sys_platform == 'darwin' and extra == 'native-ocr'", specifier = ">=10.0" },
@@ -2865,7 +2861,7 @@ requires-dist = [
     { name = "winrt-windows-media-ocr", marker = "sys_platform == 'win32' and extra == 'native-ocr'", specifier = ">=2.0" },
     { name = "winrt-windows-storage-streams", marker = "sys_platform == 'win32' and extra == 'native-ocr'", specifier = ">=2.0" },
 ]
-provides-extras = ["native-ocr", "browser", "dev", "grounder", "grounding", "local-grounding", "console", "countersign", "receipts", "keychain", "pkcs11", "execute", "windows", "reward", "harness2", "openenv", "macos", "linux", "rdp", "registry", "privacy", "hosted", "service", "service-mlx", "capture", "interop", "agent", "claude-agent-sdk", "openai-agents", "langgraph"]
+provides-extras = ["native-ocr", "browser", "dev", "grounder", "grounding", "local-grounding", "console", "countersign", "receipts", "keychain", "pkcs11", "execute", "windows", "reward", "openenv", "macos", "linux", "rdp", "registry", "privacy", "hosted", "service", "service-mlx", "capture", "interop", "agent", "claude-agent-sdk", "openai-agents", "langgraph"]
 
 [[package]]
 name = "openadapt-grounding"
