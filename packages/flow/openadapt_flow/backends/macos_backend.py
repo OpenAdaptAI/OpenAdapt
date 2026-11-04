@@ -155,6 +155,20 @@ _MAC_ROLE_MAP = {
     "AXRow": "row",
 }
 
+#: Neutral role -> the authoring observation's role vocabulary (the one the
+#: browser tree uses). Only controls an agent acts on are listed.
+_AUTHORING_ROLES = {
+    "button": "button",
+    "link": "link",
+    "menuitem": "menu_item",
+    "tab": "tab",
+    "radio": "radio",
+    "checkbox": "checkbox",
+    "textbox": "text_input",
+    "combobox": "combobox",
+}
+_AUTHORING_MAX_NODES = 200
+
 # AX action name -> backend-neutral operation. Recorded ONLY as diagnostic
 # ``supported_operations`` on a resolved handle; the macOS backend does not
 # perform native AX actions (it re-uses the fully gated physical click), so these
@@ -573,6 +587,38 @@ class QuartzMacAXClient:
     _TABLE_ROLES = frozenset({"AXTable", "AXOutline", "AXGrid"})
     #: Bound on the nodes read for one row's text.
     _ROW_TEXT_NODES = 256
+
+    def walk(
+        self, pid: int, window_title: str, *, limit: int
+    ) -> tuple[list[tuple[MacElement, bool, bool]], bool]:
+        """Every element of the one window, in tree order, bounded by ``limit``.
+
+        Each entry is ``(element, enabled, focused)`` from ``AXEnabled`` and
+        ``AXFocused``. ``truncated`` is True past ``limit`` nodes. An empty
+        list when the window can't be found.
+        """
+        from ApplicationServices import kAXChildrenAttribute
+
+        window = self._window_element(int(pid), window_title)
+        if window is None:
+            return [], False
+        out: list[tuple[MacElement, bool, bool]] = []
+        visited = 0
+        stack: list[tuple[Any, str]] = [(window, "0")]
+        while stack:
+            native, path = stack.pop()
+            visited += 1
+            if visited > limit:
+                return out, True
+            element = self._to_element(native, path, int(pid), window_title)
+            if element is not None:
+                enabled = self._attr(native, "AXEnabled")
+                focused = self._attr(native, "AXFocused")
+                out.append((element, enabled is not False, focused is True))
+            children = self._attr(native, kAXChildrenAttribute) or []
+            for index in reversed(range(len(children))):
+                stack.append((children[index], f"{path}/{index}"))
+        return out, False
 
     def structured_text(self, element: MacElement) -> Optional[str]:
         """The element's record text: its row's text inside a table.
@@ -1671,32 +1717,116 @@ class MacOSBackend(RemoteDisplayBackend):
             element = self._ax_client.element_at_point(
                 window.pid, window.title, screen_x, screen_y
             )
-            if element is None or not self._scoped_to_target(element):
-                return None
-            if self._in_window_pixel_rect(window, element.bounds) is None:
-                return None
-            read = getattr(self._ax_client, "ancestry", None)
-            trail = read(element) if callable(read) else None
-            if not trail:
-                return None
-            from openadapt_flow.repair.element_identity import DIALOG_ROLES
-
-            dialog_region = None
-            for role, _name, bounds in trail:
-                if role in DIALOG_ROLES and bounds is not None:
-                    dialog_region = self._in_window_pixel_rect(window, bounds)
-                    break
-            return {
-                "source": "ax",
-                "role": element.role,
-                "name": element.name,
-                "automation_id": element.accessible_id,
-                "ancestry": [[role, name] for role, name, _bounds in trail],
-                "window": window.title,
-                "process": window.owner,
-                "dialog_region": list(dialog_region) if dialog_region else None,
-            }
+            return self._identity_of(element, window)
         except Exception:  # noqa: BLE001 - a momentary AX failure is not fatal
+            return None
+
+    def _identity_of(
+        self, element: Optional[MacElement], window: WindowInfo, *, visible: bool = True
+    ) -> Optional[dict[str, Any]]:
+        """``element``'s identity in :meth:`element_identity_at`'s shape, or None.
+
+        ``visible=False`` reads it for an element outside the captured window
+        (scrolled out of view), which is never clicked.
+        """
+        if element is None or not self._scoped_to_target(element):
+            return None
+        if visible and self._in_window_pixel_rect(window, element.bounds) is None:
+            return None
+        read = getattr(self._ax_client, "ancestry", None)
+        trail = read(element) if callable(read) else None
+        if not trail:
+            return None
+        from openadapt_flow.repair.element_identity import DIALOG_ROLES
+
+        dialog_region = None
+        for role, _name, bounds in trail:
+            if role in DIALOG_ROLES and bounds is not None:
+                dialog_region = self._in_window_pixel_rect(window, bounds)
+                break
+        return {
+            "source": "ax",
+            "role": element.role,
+            "name": element.name,
+            "automation_id": element.accessible_id,
+            "ancestry": [[role, name] for role, name, _bounds in trail],
+            "window": window.title,
+            "process": window.owner,
+            "dialog_region": list(dialog_region) if dialog_region else None,
+        }
+
+    def authoring_tree(self) -> Optional[dict[str, Any]]:
+        """The pinned window's controls for an agent, from the AX tree.
+
+        Buttons, links, menu items, tabs, check boxes, radio buttons, text
+        fields and pop-up menus fully inside the captured window, in tree
+        order, at most ``_AUTHORING_MAX_NODES``. Controls outside it (scrolled
+        out of view) follow with ``offscreen: true`` and no pixels: they are
+        never clicked, but count when an identity must be unique. Each node
+        has the browser tree's fields with ``backend_pixels`` in
+        captured-window pixels, and ``identity``, exactly what :meth:`element_identity_at` reads for that
+        element. An element with no id and no role-and-name, or whose
+        ancestry can't be read, is left out. None when the AX client can't
+        walk a window. Never raises.
+        """
+        walk = getattr(self._ax_client, "walk", None)
+        if not callable(walk):
+            return None
+        try:
+            window = self._ensure_captured()
+            entries, truncated = walk(
+                window.pid, window.title, limit=_AX_ENUMERATION_LIMIT
+            )
+            nodes: list[dict[str, Any]] = []
+            hidden: list[dict[str, Any]] = []
+            for element, enabled, focused in entries:
+                role = _AUTHORING_ROLES.get(element.role or "")
+                if role is None:
+                    continue
+                rect = self._in_window_pixel_rect(window, element.bounds)
+                identity = self._identity_of(element, window, visible=rect is not None)
+                if identity is None or not (
+                    element.accessible_id or (element.role and element.name)
+                ):
+                    continue
+                if rect is None:
+                    # Scrolled out of view: listed only for the uniqueness check.
+                    identity["dialog_region"] = None
+                    hidden.append(
+                        {"role": role, "offscreen": True, "identity": identity}
+                    )
+                    continue
+                nodes.append(
+                    {
+                        "role": role,
+                        "control_type": element.role,
+                        "automation_id": element.accessible_id,
+                        "class_name": None,
+                        "name": element.name,
+                        "enabled": bool(enabled),
+                        "focused": bool(focused),
+                        "backend_pixels": {
+                            "x": rect[0],
+                            "y": rect[1],
+                            "w": rect[2],
+                            "h": rect[3],
+                        },
+                        "identity": identity,
+                    }
+                )
+                if len(nodes) >= _AUTHORING_MAX_NODES:
+                    truncated = True
+                    break
+            width, height = self._viewport or (0, 0)
+            return {
+                "tree": nodes + hidden,
+                "window": {
+                    "process_name": window.owner,
+                    "bounds": {"x": 0, "y": 0, "w": width, "h": height},
+                },
+                "truncated": bool(truncated),
+            }
+        except Exception:  # noqa: BLE001 - an unreadable tree is no tree
             return None
 
     def _unique_candidate(self, locator: StructuralLocator) -> Optional[MacElement]:

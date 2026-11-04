@@ -172,6 +172,21 @@ _ACTION_ALIASES = {
 
 _CONTEXT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 
+#: Neutral role -> the authoring observation's role vocabulary (the one the
+#: browser tree uses). Only controls an agent acts on are listed.
+_AUTHORING_ROLES = {
+    "button": "button",
+    "link": "link",
+    "menuitem": "menu_item",
+    "tab": "tab",
+    "listitem": "list_item",
+    "checkbox": "checkbox",
+    "radio": "radio",
+    "textbox": "text_input",
+    "combobox": "combobox",
+}
+_AUTHORING_MAX_NODES = 200
+
 
 def _application_identifier(name: str) -> Optional[str]:
     """Return a bounded app id without including a sensitive window title."""
@@ -447,29 +462,109 @@ class LinuxBackend:
         )
         return window, window.bounds[0] + int(x), window.bounds[1] + int(y)
 
-    def structural_locator_at(self, x: int, y: int) -> Optional[StructuralLocator]:
-        window, global_x, global_y = self._global_point(
-            int(x), int(y), require_active=False
-        )
-        element = self._client.element_at_point(window, global_x, global_y)
-        if element is None:
-            return None
+    def _scoped(self, window: LinuxWindow, element: LinuxElement) -> bool:
+        """``element`` is in this backend's app and window, fully inside it."""
         if element.app_name.casefold() != self._app.casefold():
-            return None
+            return False
         if element.window_title.casefold() != self._window_title.casefold():
-            return None
+            return False
         left, top, width, height = element.bounds
         wx, wy, ww, wh = window.bounds
-        if not (
+        return (
             width > 0
             and height > 0
-            and left <= global_x < left + width
-            and top <= global_y < top + height
             and left >= wx
             and top >= wy
             and left + width <= wx + ww
             and top + height <= wy + wh
-        ):
+        )
+
+    def _element_at(self, x: int, y: int) -> tuple[LinuxWindow, Optional[LinuxElement]]:
+        window, global_x, global_y = self._global_point(
+            int(x), int(y), require_active=False
+        )
+        element = self._client.element_at_point(window, global_x, global_y)
+        if element is None or not self._scoped(window, element):
+            return window, None
+        left, top, width, height = element.bounds
+        if not (left <= global_x < left + width and top <= global_y < top + height):
+            return window, None
+        return window, element
+
+    def authoring_tree(self) -> Optional[dict[str, Any]]:
+        """The pinned window's controls for an agent, from AT-SPI.
+
+        Buttons, links, menu items, tabs, list items, check boxes, radio
+        buttons, text fields and combo boxes fully inside the window, in tree
+        order, at most ``_AUTHORING_MAX_NODES``. Controls not showing or
+        outside the window follow with ``offscreen: true`` and no pixels: never
+        clicked, but counted when an identity must be unique. Each node has the browser
+        tree's fields with ``backend_pixels`` in captured-window pixels, and
+        ``identity``, exactly what :meth:`element_identity_at` reads for it.
+        None when the client can't walk the window. Never raises.
+        """
+        walk = getattr(self._client, "walk_elements", None)
+        if not callable(walk):
+            return None
+        try:
+            if self._captured_window is None:
+                self.screenshot()
+            assert self._captured_window is not None
+            window = self._require_same_window(self._captured_window)
+            entries, truncated = walk(window)
+            nodes: list[dict[str, Any]] = []
+            hidden: list[dict[str, Any]] = []
+            wx, wy, ww, wh = window.bounds
+            for element, enabled, focused, showing in entries:
+                role = _AUTHORING_ROLES.get(element.role or "")
+                if role is None:
+                    continue
+                visible = showing and self._scoped(window, element)
+                identity = self._identity_of(window, element, visible=visible)
+                if identity is None:
+                    continue
+                if not visible:
+                    # Out of view: listed only for the uniqueness check.
+                    hidden.append(
+                        {"role": role, "offscreen": True, "identity": identity}
+                    )
+                    continue
+                left, top, width, height = element.bounds
+                nodes.append(
+                    {
+                        "role": role,
+                        "control_type": element.role,
+                        "automation_id": element.accessible_id,
+                        "class_name": None,
+                        "name": element.name,
+                        "enabled": bool(enabled),
+                        "focused": bool(focused),
+                        "backend_pixels": {
+                            "x": left - wx,
+                            "y": top - wy,
+                            "w": width,
+                            "h": height,
+                        },
+                        "identity": identity,
+                    }
+                )
+                if len(nodes) >= _AUTHORING_MAX_NODES:
+                    truncated = True
+                    break
+            return {
+                "tree": nodes + hidden,
+                "window": {
+                    "process_name": window.app_name,
+                    "bounds": {"x": 0, "y": 0, "w": ww, "h": wh},
+                },
+                "truncated": bool(truncated),
+            }
+        except Exception:  # noqa: BLE001 - an unreadable tree is no tree
+            return None
+
+    def structural_locator_at(self, x: int, y: int) -> Optional[StructuralLocator]:
+        window, element = self._element_at(int(x), int(y))
+        if element is None:
             return None
         if not element.accessible_id and not (element.role and element.name):
             return None
@@ -615,15 +710,39 @@ class LinuxBackend:
         bounds. ``process`` is the AT-SPI application name. Scoped to the
         pinned window; None on any miss (never raises).
         """
-        read = getattr(self._client, "ancestry", None)
-        if not callable(read):
-            return None
         try:
             window, global_x, global_y = self._global_point(
                 int(x), int(y), require_active=False
             )
             element = self._client.element_at_point(window, global_x, global_y)
-            if element is None or not self._candidate_matches(
+            if element is None:
+                return None
+            left, top, width, height = element.bounds
+            if not (left <= global_x < left + width and top <= global_y < top + height):
+                return None
+            return self._identity_of(window, element)
+        except Exception:  # noqa: BLE001 - a momentary AT-SPI failure is a miss
+            return None
+
+    def _identity_of(
+        self, window: LinuxWindow, element: LinuxElement, *, visible: bool = True
+    ) -> Optional[dict[str, Any]]:
+        """``element``'s identity in :meth:`element_identity_at`'s shape, or None.
+
+        ``visible=False`` reads it for an element that isn't showing or lies
+        outside the window (the authoring tree lists those only to count
+        twins; they are never clicked).
+        """
+        read = getattr(self._client, "ancestry", None)
+        if not callable(read):
+            return None
+        if (
+            element.app_name.casefold() != self._app.casefold()
+            or element.window_title.casefold() != self._window_title.casefold()
+        ):
+            return None
+        if visible:
+            if not self._candidate_matches(
                 element,
                 StructuralLocator(
                     automation_id=element.accessible_id,
@@ -633,47 +752,36 @@ class LinuxBackend:
                 window,
             ):
                 return None
-            if (
-                element.app_name.casefold() != self._app.casefold()
-                or element.window_title.casefold() != self._window_title.casefold()
-            ):
-                return None
-            left, top, width, height = element.bounds
-            if not (left <= global_x < left + width and top <= global_y < top + height):
-                return None
-            trail = read(window, element)
-            if not trail:
-                return None
-            last_role, last_name, last_bounds = trail[-1]
-            if last_name != window.title or last_bounds != window.bounds:
-                return None
-            from openadapt_flow.repair.element_identity import DIALOG_ROLES
-
-            dialog_region = None
-            wx, wy, ww, wh = window.bounds
-            for role, _name, bounds in trail:
-                if role in DIALOG_ROLES and bounds is not None:
-                    bx, by, bw, bh = bounds
-                    if (
-                        bx >= wx
-                        and by >= wy
-                        and bx + bw <= wx + ww
-                        and by + bh <= wy + wh
-                    ):
-                        dialog_region = [bx - wx, by - wy, bw, bh]
-                    break
-            return {
-                "source": "atspi",
-                "role": element.role,
-                "name": element.name,
-                "automation_id": element.accessible_id,
-                "ancestry": [[role, name] for role, name, _bounds in trail],
-                "window": window.title,
-                "process": window.app_name,
-                "dialog_region": dialog_region,
-            }
-        except Exception:  # noqa: BLE001 - a momentary AT-SPI failure is a miss
+        elif element.pid != window.pid or not (
+            element.accessible_id or (element.role and element.name)
+        ):
             return None
+        trail = read(window, element)
+        if not trail:
+            return None
+        last_role, last_name, last_bounds = trail[-1]
+        if last_name != window.title or last_bounds != window.bounds:
+            return None
+        from openadapt_flow.repair.element_identity import DIALOG_ROLES
+
+        dialog_region = None
+        wx, wy, ww, wh = window.bounds
+        for role, _name, bounds in trail:
+            if role in DIALOG_ROLES and bounds is not None:
+                bx, by, bw, bh = bounds
+                if bx >= wx and by >= wy and bx + bw <= wx + ww and by + bh <= wy + wh:
+                    dialog_region = [bx - wx, by - wy, bw, bh]
+                break
+        return {
+            "source": "atspi",
+            "role": element.role,
+            "name": element.name,
+            "automation_id": element.accessible_id,
+            "ancestry": [[role, name] for role, name, _bounds in trail],
+            "window": window.title,
+            "process": window.app_name,
+            "dialog_region": dialog_region,
+        }
 
     def text_value_at(self, x: int, y: int) -> Optional[str]:
         """The exact text of the editable field under (x, y), from AT-SPI.
@@ -1462,6 +1570,45 @@ class AtspiLinuxClient:
             matches[0][1],
         )
         return actionable
+
+    def walk_elements(
+        self, window: LinuxWindow
+    ) -> tuple[list[tuple[LinuxElement, bool, bool, bool]], bool]:
+        """Every element of ``window`` in tree order, bounded.
+
+        Each entry is ``(element, enabled, focused, showing)`` from the AT-SPI
+        state set. An element that isn't showing (scrolled out of view) has
+        ``bounds`` ``(0, 0, 0, 0)``. ``truncated`` is True when the walk hit
+        the node bound.
+        """
+        nodes, truncated = self._walk(window)
+        out: list[tuple[LinuxElement, bool, bool, bool]] = []
+        for node, path in nodes:
+            if not path:
+                continue  # the window itself
+            element = self._element(node, path, window)
+            showing = element is not None
+            if element is None:
+                element = LinuxElement(
+                    native_id=f"{window.native_id}:{self._native_id(path)}",
+                    accessible_id=self._accessible_id(node),
+                    role=self._role(node),
+                    name=_clean_text(self._call(node, "get_name", default=None)),
+                    app_name=window.app_name,
+                    window_title=window.title,
+                    pid=window.pid,
+                    bounds=(0, 0, 0, 0),
+                    native=node,
+                )
+            out.append(
+                (
+                    element,
+                    self._state_contains(node, "ENABLED"),
+                    self._state_contains(node, "FOCUSED"),
+                    showing,
+                )
+            )
+        return out, truncated
 
     def ancestry(
         self, window: LinuxWindow, element: LinuxElement

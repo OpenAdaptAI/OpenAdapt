@@ -901,3 +901,58 @@ def test_atspi_focus_window_accepts_an_already_active_window() -> None:
         "0.1", "gedit", "oa-trial.txt", 9001, (0, 0, 1, 1), native=object()
     )
     assert client.focus_window(window) is False
+
+
+class _TreeLinuxClient(FakeLinuxClient):
+    """A client that walks the window and reads each element's ancestry."""
+
+    def walk_elements(self, window):
+        hidden = LinuxElement(
+            "0.1:2.9",
+            "save-button",
+            "button",
+            "Save",
+            "gedit",
+            "oa-trial.txt",
+            9001,
+            (0, 0, 0, 0),
+            (),
+        )
+        return [
+            (TEXT_ELEMENT, True, True, True),
+            (TARGET_ELEMENT, True, False, True),
+            (hidden, True, False, False),
+        ], False
+
+    def ancestry(self, window, element):
+        return [("panel", None, None), ("frame", window.title, window.bounds)]
+
+
+def test_linux_authoring_tree_gives_each_control_its_element_identity() -> None:
+    client = _TreeLinuxClient()
+    backend = LinuxBackend(client, app="gedit", window_title="oa-trial.txt")
+
+    tree = backend.authoring_tree()
+
+    assert tree is not None and tree["truncated"] is False
+    save = next(node for node in tree["tree"] if node.get("name") == "Save")
+    (hidden,) = [node for node in tree["tree"] if node.get("offscreen")]
+    assert hidden["identity"] == save["identity"]  # counted, never clicked
+    assert save["role"] == "button"
+    # Window-relative pixels: the element's screen box minus the window origin.
+    assert save["backend_pixels"] == {"x": 500, "y": 20, "w": 80, "h": 40}
+    client.text_at_point = TARGET_ELEMENT
+    assert backend.element_identity_at(540, 40) == save["identity"]
+    assert save["identity"] == {
+        "source": "atspi",
+        "role": "button",
+        "name": "Save",
+        "automation_id": "save-button",
+        "ancestry": [["panel", None], ["frame", "oa-trial.txt"]],
+        "window": "oa-trial.txt",
+        "process": "gedit",
+        "dialog_region": None,
+    }
+    text = next(node for node in tree["tree"] if node["role"] == "text_input")
+    assert "backend_pixels" not in hidden
+    assert text["focused"] is True

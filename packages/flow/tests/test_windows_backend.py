@@ -995,3 +995,37 @@ def test_a_second_capture_of_another_window_drops_the_step(second) -> None:
         )  # iterator empty
     finally:
         server.shutdown()
+
+
+def test_authoring_tree_keeps_only_nodes_in_the_exact_shape() -> None:
+    good = {
+        "role": "button",
+        "control_type": "ButtonControl",
+        "automation_id": _IDENTITY["automation_id"],
+        "class_name": None,
+        "name": _IDENTITY["name"],
+        "enabled": True,
+        "focused": False,
+        "backend_pixels": {"x": 500, "y": 450, "w": 100, "h": 34},
+        "offscreen": False,
+        "identity": _IDENTITY,
+    }
+    hidden = {**good, "backend_pixels": None, "offscreen": True}
+    renamed = {**good, "name": "Delete"}  # disagrees with its own identity
+    extra = {**good, "value": "Jane Roe"}
+    payload = {
+        "status": "ok",
+        "tree": [good, hidden, renamed, extra],
+        "window": {"process_name": "PatientNotes.exe", "bounds": None},
+        "truncated": False,
+    }
+    server, seen = _serve_identity_route(200, payload)
+    try:
+        tree = WindowsBackend(f"http://127.0.0.1:{server.server_port}").authoring_tree()
+    finally:
+        server.shutdown()
+    assert seen == {"path": "/uia/authoring-tree", "payload": {}}
+    assert tree is not None
+    assert tree["tree"] == [good, hidden]
+    assert tree["truncated"] is True  # malformed nodes were dropped
+    assert tree["window"] == {"process_name": "PatientNotes.exe", "bounds": None}

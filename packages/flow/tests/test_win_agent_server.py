@@ -1617,3 +1617,81 @@ def test_locator_at_keeps_a_unique_automation_id(monkeypatch) -> None:
         _perform_uia("locator-at", {"x": 560, "y": 400})["locator"]["automation_id"]
         == "noteBox"
     )
+
+
+def test_authoring_tree_lists_the_foreground_apps_controls_with_identity(
+    monkeypatch,
+) -> None:
+    from openadapt_flow.backends.windows_backend import WindowsBackend
+
+    save = _FakeControl(
+        "ButtonControl",
+        automation_id="saveButton",
+        name="Save Note",
+        bounds=(500, 450, 600, 484),
+    )
+    note = _FakeControl(
+        "EditControl", automation_id="noteBox", bounds=(10, 60, 400, 90)
+    )
+    label = _FakeControl("TextControl", name="Note", bounds=(10, 40, 60, 58))
+    unnamed = _FakeControl("ButtonControl", bounds=(700, 450, 740, 484))
+    scrolled = _FakeControl("ButtonControl", automation_id="older", name="Older")
+    scrolled.IsOffscreen = True
+    group = _FakeControl("PaneControl", name="Note editor")
+    group.children = [note, save, scrolled]
+    module = _fake_uia_module(label, group, unnamed)
+    for child in group.children:
+        child.parent = group
+    window = group.parent
+    module.GetForegroundControl = lambda: window
+    monkeypatch.setitem(sys.modules, "uiautomation", module)
+
+    tree = _perform_uia("authoring-tree", {})
+
+    assert [node["automation_id"] for node in tree["tree"]] == [
+        "noteBox",
+        "saveButton",
+        "older",
+    ]
+    assert [node["offscreen"] for node in tree["tree"]] == [False, False, True]
+    assert tree["tree"][2]["backend_pixels"] is None
+    by_id = {node["automation_id"]: node for node in tree["tree"]}
+    assert by_id["noteBox"]["role"] == "text_input"
+    assert by_id["saveButton"]["backend_pixels"] == {
+        "x": 500,
+        "y": 450,
+        "w": 100,
+        "h": 34,
+    }
+    module.ControlFromPoint = lambda _x, _y: save
+    assert (
+        by_id["saveButton"]["identity"]
+        == _perform_uia("element-identity-at", {"x": 550, "y": 467})["identity"]
+    )
+    assert tree["window"]["bounds"] == {"x": 0, "y": 0, "w": 800, "h": 600}
+    assert tree["truncated"] is False
+    with pytest.raises(AgentRequestError):
+        _perform_uia("authoring-tree", {"x": 1})
+
+    agent = RunningAgent(AgentConfig(host="127.0.0.1", port=0, token="secret"))
+    try:
+        client = WindowsBackend(agent.url, auth_token="secret").authoring_tree()
+        assert client is not None
+        assert [node["identity"] for node in client["tree"]] == [
+            node["identity"] for node in tree["tree"]
+        ]
+    finally:
+        agent.close()
+
+
+def test_authoring_tree_without_a_foreground_window_is_empty(monkeypatch) -> None:
+    module = _fake_uia_module()
+    module.GetForegroundControl = lambda: None
+    monkeypatch.setitem(sys.modules, "uiautomation", module)
+
+    assert _perform_uia("authoring-tree", {}) == {
+        "status": "ok",
+        "tree": [],
+        "window": None,
+        "truncated": False,
+    }

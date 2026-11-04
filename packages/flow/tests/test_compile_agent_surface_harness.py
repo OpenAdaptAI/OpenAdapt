@@ -277,7 +277,11 @@ def _verify(tmp_path: Path) -> Path:
 
 
 def test_only_an_agent_that_drives_surfaces_records_one(tmp_path: Path) -> None:
-    from openadapt_flow.compile_agent import FirstRunCompiler, ScriptedAgent
+    from openadapt_flow.compile_agent import (
+        ClaudeAgent,
+        FirstRunCompiler,
+        ScriptedAgent,
+    )
     from openadapt_flow.compile_agent.pipeline import UnsupportedTarget
 
     compiler = FirstRunCompiler(
@@ -291,7 +295,9 @@ def test_only_an_agent_that_drives_surfaces_records_one(tmp_path: Path) -> None:
     )
     assert compiler.backend_kind == "macos" and compiler.url is None
     with pytest.raises(UnsupportedTarget, match="surface harness"):
-        compiler.record(ScriptedAgent(steps=[]), {"note": "x"})
+        compiler.record(ClaudeAgent(vision="code", client=object()), {"note": "x"})
+    # Scripted steps name controls, which the surface harness lists too.
+    assert ScriptedAgent(steps=[]).drives_surfaces is True
     # The spec round-trips with its surface, for runs after a restart.
     compiler.save_spec()
     again = FirstRunCompiler.load(compiler.dir)
