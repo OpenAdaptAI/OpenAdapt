@@ -43,6 +43,7 @@ they are, and turns the outcome into one number for ranking:
 | `wrong_effect`: reported saved, but no record landed | -0.5 |
 | A record landed on another patient | -1.0 |
 | The patient got more than one record | -1.0 |
+| `escalated_after_effect`: the record landed as declared, then the agent stopped and asked | the receipt's scalar, the contract's `escalated_after_effect_reward` (default 0.5) |
 | `reconciliation_required` or `failed_platform` | none (a person settles it) |
 
 The penalties are the caller's choice (`Penalties`). A write on another
@@ -62,7 +63,7 @@ changes underneath.
 | `mockmed/lookalike` | another patient with the same referral reason sits above her | `verified` |
 | `mockmed/sort` | the queue is sorted by name | `verified` |
 | `mockmed/typelabel` | the encounter-type buttons swapped order | `verified` |
-| `mockmed/timeout` | the save lands, then the client times out and shows an error | `verified` or `reconciliation_required` |
+| `mockmed/timeout` | the save lands, then the client times out and shows an error | `verified`, `escalated_after_effect` or `reconciliation_required` |
 | `mockmed/missing` | her referral is gone | `halted_before_effect` |
 | `mockmed/slow` | every screen change takes four seconds, so the form stays up after a save that already landed | `verified` |
 

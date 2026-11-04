@@ -686,13 +686,6 @@ def column_roles(
         if is_link:
             out[name] = ColumnRole("link")
             continue
-        template = None if one else _key_template(t, values, rows)
-        if template is not None:
-            out[name] = ColumnRole(
-                "varies",
-                detail={"why": "holds the row's own key", "template": template},
-            )
-            continue
         part = None if one else _date_part(values, [d for d, _ in rows])
         if part is not None:
             out[name] = ColumnRole(
@@ -715,6 +708,11 @@ def column_roles(
             continue
         if copied is not None:
             out[name] = ColumnRole("copied", detail=copied)
+            continue
+        # Only once no copy fits: a copied price of 15 and 25 on rows 1 and
+        # 2 reads as ``{key}5``, and a copy is checked where this isn't.
+        if not one and _holds_own_key(t, values, rows):
+            out[name] = ColumnRole("varies", detail={"why": "holds the row's own key"})
             continue
         distinct = {v for v in values}
         if col.kind == "text" and distinct <= {None, ""}:
@@ -757,27 +755,25 @@ def column_roles(
     return out
 
 
-def _key_template(
+def _holds_own_key(
     t: Table,
     values: Sequence[Optional[str]],
     rows: Sequence[tuple["Demo", Mapping[str, Optional[str]]]],
-) -> Optional[str]:
-    """``prefix{key}suffix`` when every row holds its own single-column key
-    between the same prefix and suffix (``INV-{key}``), else None."""
+) -> bool:
+    """Does every row hold its own single-column key between the same prefix
+    and suffix (``INV-{key}``)? Only the question's wording uses this: such
+    a column is never checked unless the answer leaves it out."""
 
     if len(t.primary_key) != 1 or not values:
-        return None
+        return False
     shapes = set()
     for v, (_, r) in zip(values, rows):
         key = r.get(t.primary_key[0])
         if v is None or key is None or v == key or str(key) not in v:
-            return None
+            return False
         i = v.index(str(key))
         shapes.add((v[:i], v[i + len(str(key)) :]))
-    if len(shapes) != 1:
-        return None
-    prefix, suffix = next(iter(shapes))
-    return prefix + "{key}" + suffix
+    return len(shapes) == 1
 
 
 def _date_part(

@@ -498,6 +498,12 @@ class WindowsBackend:
                     "guarded Windows input refused "
                     f"({code}): {message or 'identity binding changed'}"
                 )
+            if path in {"/input", "/input/guarded"} and code == "input_focus_changed":
+                raise ActionDeliveryUncertain(
+                    operation=operation,
+                    native=False,
+                    cause_type="ForegroundChanged",
+                )
             if response.status_code >= 500:
                 raise ActionDeliveryUncertain(
                     operation=operation,

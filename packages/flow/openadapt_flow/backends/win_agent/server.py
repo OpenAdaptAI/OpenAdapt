@@ -449,8 +449,29 @@ def _perform_input(payload: dict[str, Any]) -> dict[str, Any]:
 
         pyautogui.FAILSAFE = False
         if text:
+            foreground = _foreground_window_identity()
+            if foreground is None:
+                raise AgentRequestError(
+                    503,
+                    "input_focus_unavailable",
+                    "cannot bind keyboard input to a foreground window",
+                )
+
+            def require_foreground() -> None:
+                if _foreground_window_identity() != foreground:
+                    raise AgentRequestError(
+                        409,
+                        "input_focus_changed",
+                        "foreground window changed during typing; delivery may be partial",
+                    )
+
             if text.isascii():
-                pyautogui.write(text, interval=float(interval))
+                for index, char in enumerate(text):
+                    require_foreground()
+                    pyautogui.write(char, interval=0, _pause=False)
+                    require_foreground()
+                    if index + 1 < len(text):
+                        time.sleep(float(interval))
             else:
                 encoded = base64.b64encode(text.encode("utf-8")).decode("ascii")
                 ps = (
@@ -465,7 +486,9 @@ def _perform_input(payload: dict[str, Any]) -> dict[str, Any]:
                 if completed.returncode != 0:
                     raise RuntimeError("Set-Clipboard failed")
                 time.sleep(0.2)
+                require_foreground()
                 pyautogui.hotkey("ctrl", "v")
+                require_foreground()
         return _delivery_receipt("physical_type_text", native=False)
 
     if action == "press":
@@ -2280,8 +2303,8 @@ def _running_image_digest(pid: int, path: str) -> Optional[str]:
     return _image_file_digest(path)
 
 
-def _foreground_process_id() -> Optional[int]:
-    """The process that owns the foreground window, without reading its title."""
+def _foreground_window_identity() -> Optional[tuple[int, int]]:
+    """Foreground window and owning process, without reading a window title."""
 
     if os.name != "nt":
         return None
@@ -2311,7 +2334,13 @@ def _foreground_process_id() -> Optional[int]:
             return None
     except Exception:  # noqa: BLE001 - unavailable means unverifiable
         return None
-    return int(pid.value)
+    return int(hwnd), int(pid.value)
+
+
+def _foreground_process_id() -> Optional[int]:
+    """The process that owns the foreground window, without reading its title."""
+    identity = _foreground_window_identity()
+    return identity[1] if identity is not None else None
 
 
 def _foreground_application_identity() -> Optional[str]:

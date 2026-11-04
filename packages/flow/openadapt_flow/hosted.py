@@ -38,6 +38,7 @@ dependency is introduced.
 from __future__ import annotations
 
 import hashlib
+import io
 import ipaddress
 import json
 import os
@@ -899,7 +900,11 @@ def _is_recording_dir(path: Path) -> bool:
 
 
 def _is_bundle_dir(path: Path) -> bool:
-    return (path / "workflow.json").is_file() or (path / "workflow.json.enc").is_file()
+    from openadapt_flow import artifacts
+
+    return artifacts.is_file(path / "workflow.json") or artifacts.is_file(
+        path / "workflow.json.enc"
+    )
 
 
 def find_latest_recording(base: Optional[Path] = None) -> Path:
@@ -1221,6 +1226,15 @@ def _verified_archive_snapshot(archive_path: Path, *, expected_sha256: str) -> A
         raise
 
 
+def _verified_archive_bytes(data: bytes, *, expected_sha256: str) -> Any:
+    """An in-memory upload body for an encrypted derivative's archive."""
+    if hashlib.sha256(data).hexdigest() != expected_sha256:
+        raise HostedError(
+            "Approved immutable archive changed before upload; refusing egress"
+        )
+    return io.BytesIO(data)
+
+
 def push(
     path: Optional[Any] = None,
     *,
@@ -1303,6 +1317,7 @@ def push(
         raise HostedError(f"PATH is not a directory: {src}")
     _assert_upload_tree_safe(src)
 
+    from openadapt_flow import artifacts
     from openadapt_flow.sanitized_artifact import (
         MANIFEST_NAME,
         SanitizationError,
@@ -1311,11 +1326,12 @@ def push(
         build_ingest_manifest,
         load_and_verify_derivative,
         load_valid_approval,
+        read_approved_archive,
         sanitize_artifact,
         source_tree_sha256,
     )
 
-    is_derivative = (src / MANIFEST_NAME).is_file()
+    is_derivative = artifacts.is_file(src / MANIFEST_NAME)
     if not is_derivative:
         actual_kind = (
             "bundle" if kind == "bundle" and _is_bundle_dir(src) else "recording"
@@ -1497,10 +1513,19 @@ def push(
             ),
         }
     try:
-        archive_snapshot = _verified_archive_snapshot(
-            archive_path,
-            expected_sha256=approval["approved_derivative_sha256"],
-        )
+        if artifacts.is_sealed(src):
+            # An encrypted derivative's archive is decrypted in memory only.
+            archive_snapshot = _verified_archive_bytes(
+                read_approved_archive(src),
+                expected_sha256=approval["approved_derivative_sha256"],
+            )
+        else:
+            archive_snapshot = _verified_archive_snapshot(
+                archive_path,
+                expected_sha256=approval["approved_derivative_sha256"],
+            )
+    except SanitizationError as exc:
+        raise HostedError(f"Sanitized artifact is not uploadable: {exc}") from exc
     except HostedError:
         raise
     except OSError as exc:

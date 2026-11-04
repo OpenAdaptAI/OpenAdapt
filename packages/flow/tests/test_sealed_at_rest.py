@@ -751,5 +751,10 @@ def test_sealed_run_pauses_and_resumes_without_plaintext(
 
 def test_phi_at_rest_doc_lists_every_inventory_entry() -> None:
     doc = (Path(__file__).parents[1] / "docs" / "phi_at_rest.md").read_text()
-    for entry in (*sealed_set.BUNDLE_FILES, *sealed_set.RECORDING_FILES):
+    for entry in (
+        *sealed_set.BUNDLE_FILES,
+        *sealed_set.RECORDING_FILES,
+        *sealed_set.LIBRARY_FILES,
+        *sealed_set.SANITIZED_FILES,
+    ):
         assert f"`{entry.pattern}`" in doc, entry.pattern
