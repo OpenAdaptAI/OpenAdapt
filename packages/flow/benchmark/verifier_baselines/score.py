@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import random
 from collections import defaultdict
 from pathlib import Path
@@ -17,6 +18,10 @@ from typing import Any, Optional
 
 HERE = Path(__file__).resolve().parent
 RES = HERE / "results"
+#: Per-run rows, judge outputs and the spend ledger are private run-level
+#: evidence (openadapt-corpus, paid_agent_evidence/2026-11-03-verifier-baselines);
+#: point this at that folder. Aggregates, rubrics and judge views stay in RES.
+DATA = Path(os.environ.get("VERIFIER_BASELINES_DATA") or RES)
 
 
 # -- statistics ---------------------------------------------------------------
@@ -149,11 +154,11 @@ def _judge_samples(folder: Path) -> dict[str, list[Optional[bool]]]:
 
 
 def effect_e2e() -> Optional[dict[str, Any]]:
-    rows_path = RES / "effect_e2e" / "rows.jsonl"
+    rows_path = DATA / "effect_e2e" / "rows.jsonl"
     if not rows_path.exists():
         return None
     rows = [json.loads(line) for line in rows_path.read_text().splitlines()]
-    judge = _judge_samples(RES / "effect_e2e" / "judge")
+    judge = _judge_samples(DATA / "effect_e2e" / "judge")
 
     def sample(view: str, rep: int) -> Optional[bool]:
         """Repetition i of every scenario uses sample i of its view (PROTOCOL.md)."""
@@ -207,15 +212,15 @@ CONFIRMED = {"created_verified", "found_existing"}
 def medplum() -> dict[str, Any]:
     from benchmark.verifier_baselines import medplum_views
 
-    jdir = RES / "medplum" / "judge"
+    jdir = DATA / "medplum" / "judge"
     # Our verifier, replayed offline on each run's frozen server state
     # (DEVIATIONS.md 3); the recorded field is kept only to show the 401 fault.
     # (verifier-specificity commit 2fe6b6e98): contracts `main` is the primary
     # column, contracts `operations` the secondary one.
-    replay = json.loads((RES / "medplum" / "verifier_rescore_main.json").read_text())[
+    replay = json.loads((DATA / "medplum" / "verifier_rescore_main.json").read_text())[
         "rows"
     ]
-    ops_path = RES / "medplum" / "verifier_rescore_operations.json"
+    ops_path = DATA / "medplum" / "verifier_rescore_operations.json"
     ops = json.loads(ops_path.read_text())["rows"] if ops_path.exists() else None
     units, not_scored = [], defaultdict(int)
     for run in medplum_views.runs():
@@ -312,6 +317,10 @@ def render_classes(t: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _p(p: float) -> str:
+    return "<1e-6" if p < 1e-6 else f"={p:.3g}"
+
+
 def render_paired(t: dict[str, Any]) -> list[str]:
     lines = [
         "| Baseline | Bad saves: only ours right / only baseline right, p | Good saves: only ours / only baseline, p |",
@@ -320,8 +329,8 @@ def render_paired(t: dict[str, Any]) -> list[str]:
     for arm, v in t["paired"].items():
         b, g = v["bad_saves"], v["good_saves"]
         lines.append(
-            f"| {LABELS.get(arm, arm)} | {b['only_ours']} / {b['only_baseline']}, p={b['p']:.3g} "
-            f"| {g['only_ours']} / {g['only_baseline']}, p={g['p']:.3g} |"
+            f"| {LABELS.get(arm, arm)} | {b['only_ours']} / {b['only_baseline']}, p{_p(b['p'])} "
+            f"| {g['only_ours']} / {g['only_baseline']}, p{_p(g['p'])} |"
         )
     return lines
 

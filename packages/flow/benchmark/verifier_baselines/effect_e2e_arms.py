@@ -16,6 +16,7 @@ import argparse
 import hashlib
 import html
 import json
+import os
 import tempfile
 from pathlib import Path
 from typing import Any, Optional
@@ -30,6 +31,10 @@ from openadapt_flow.verifier import Actor, Contract, begin_write, verify_write
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "results" / "effect_e2e"
+#: The per-run rows are private run-level evidence (see score.py).
+DATA = (
+    Path(os.environ.get("VERIFIER_BASELINES_DATA") or HERE / "results") / "effect_e2e"
+)
 ACTOR = Actor(kind="program", id="effect-e2e")
 TASK = (
     f"In the clinic's record app, add a {TARGET_TYPE} encounter for patient "
@@ -325,7 +330,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     views = out / "views"
     views.mkdir(parents=True, exist_ok=True)
     rows = [run_one(s, rep, views) for s in SCENARIOS for rep in range(1, args.n + 1)]
-    with open(out / "rows.jsonl", "w") as f:
+    DATA.mkdir(parents=True, exist_ok=True)
+    with open(DATA / "rows.jsonl", "w") as f:
         for row in rows:
             f.write(json.dumps(row) + "\n")
     print(

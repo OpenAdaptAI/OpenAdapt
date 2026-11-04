@@ -87,19 +87,22 @@
     },
     "judge_j2": {
      "sensitivity": {
-      "k": 0,
-      "n": 4,
-      "rate": 0.0,
+      "k": 44,
+      "n": 72,
+      "rate": 0.6111,
       "wilson95": [
-       0.0,
-       0.4899
+       0.4956,
+       0.7153
       ]
      },
      "specificity": {
-      "k": 0,
-      "n": 0,
-      "rate": null,
-      "wilson95": null
+      "k": 9,
+      "n": 18,
+      "rate": 0.5,
+      "wilson95": [
+       0.2903,
+       0.7097
+      ]
      }
     }
    },
@@ -124,7 +127,7 @@
       "flagged": 0
      },
      "judge_j2": {
-      "confirmed": 0,
+      "confirmed": 9,
       "flagged": 0
      }
     },
@@ -148,8 +151,8 @@
       "flagged": 0
      },
      "judge_j2": {
-      "confirmed": 0,
-      "flagged": 0
+      "confirmed": 1,
+      "flagged": 8
      }
     },
     "no_persist": {
@@ -173,7 +176,7 @@
      },
      "judge_j2": {
       "confirmed": 0,
-      "flagged": 0
+      "flagged": 9
      }
     },
     "ok": {
@@ -196,7 +199,7 @@
       "flagged": 0
      },
      "judge_j2": {
-      "confirmed": 0,
+      "confirmed": 9,
       "flagged": 0
      }
     },
@@ -221,7 +224,7 @@
      },
      "judge_j2": {
       "confirmed": 0,
-      "flagged": 0
+      "flagged": 9
      }
     },
     "partial": {
@@ -244,7 +247,7 @@
       "flagged": 0
      },
      "judge_j2": {
-      "confirmed": 0,
+      "confirmed": 9,
       "flagged": 0
      }
     },
@@ -269,7 +272,7 @@
      },
      "judge_j2": {
       "confirmed": 0,
-      "flagged": 0
+      "flagged": 9
      }
     },
     "stale": {
@@ -292,7 +295,7 @@
       "flagged": 0
      },
      "judge_j2": {
-      "confirmed": 4,
+      "confirmed": 9,
       "flagged": 0
      }
     },
@@ -317,7 +320,7 @@
      },
      "judge_j2": {
       "confirmed": 0,
-      "flagged": 0
+      "flagged": 9
      }
     },
     "wrong_record": {
@@ -341,7 +344,7 @@
      },
      "judge_j2": {
       "confirmed": 0,
-      "flagged": 0
+      "flagged": 9
      }
     }
    },
@@ -384,9 +387,9 @@
     },
     "judge_j2": {
      "bad_saves": {
-      "only_ours": 4,
+      "only_ours": 28,
       "only_baseline": 0,
-      "p": 0.125
+      "p": 0.0
      },
      "good_saves": {
       "only_ours": 0,
@@ -480,19 +483,22 @@
     },
     "judge_j2": {
      "sensitivity": {
-      "k": 0,
-      "n": 4,
-      "rate": 0.0,
+      "k": 44,
+      "n": 72,
+      "rate": 0.6111,
       "wilson95": [
-       0.0,
-       0.4899
+       0.4956,
+       0.7153
       ]
      },
      "specificity": {
-      "k": 0,
-      "n": 0,
-      "rate": null,
-      "wilson95": null
+      "k": 18,
+      "n": 18,
+      "rate": 1.0,
+      "wilson95": [
+       0.8241,
+       1.0
+      ]
      }
     }
    },
@@ -517,7 +523,7 @@
       "flagged": 0
      },
      "judge_j2": {
-      "confirmed": 0,
+      "confirmed": 9,
       "flagged": 0
      }
     },
@@ -541,8 +547,8 @@
       "flagged": 0
      },
      "judge_j2": {
-      "confirmed": 0,
-      "flagged": 0
+      "confirmed": 1,
+      "flagged": 8
      }
     },
     "no_persist": {
@@ -566,7 +572,7 @@
      },
      "judge_j2": {
       "confirmed": 0,
-      "flagged": 0
+      "flagged": 9
      }
     },
     "ok": {
@@ -589,7 +595,7 @@
       "flagged": 0
      },
      "judge_j2": {
-      "confirmed": 0,
+      "confirmed": 9,
       "flagged": 0
      }
     },
@@ -614,7 +620,7 @@
      },
      "judge_j2": {
       "confirmed": 0,
-      "flagged": 0
+      "flagged": 9
      }
     },
     "partial": {
@@ -637,7 +643,7 @@
       "flagged": 0
      },
      "judge_j2": {
-      "confirmed": 0,
+      "confirmed": 9,
       "flagged": 0
      }
     },
@@ -662,7 +668,7 @@
      },
      "judge_j2": {
       "confirmed": 0,
-      "flagged": 0
+      "flagged": 9
      }
     },
     "stale": {
@@ -685,7 +691,7 @@
       "flagged": 0
      },
      "judge_j2": {
-      "confirmed": 4,
+      "confirmed": 9,
       "flagged": 0
      }
     },
@@ -709,7 +715,7 @@
       "flagged": 9
      },
      "judge_j2": {
-      "confirmed": 0,
+      "confirmed": 9,
       "flagged": 0
      }
     },
@@ -734,7 +740,7 @@
      },
      "judge_j2": {
       "confirmed": 0,
-      "flagged": 0
+      "flagged": 9
      }
     }
    },
@@ -777,9 +783,9 @@
     },
     "judge_j2": {
      "bad_saves": {
-      "only_ours": 4,
+      "only_ours": 28,
       "only_baseline": 0,
-      "p": 0.125
+      "p": 0.0
      },
      "good_saves": {
       "only_ours": 0,
@@ -858,29 +864,29 @@
     },
     "judge": {
      "sensitivity": {
-      "k": 0,
-      "n": 12,
-      "rate": 0.0,
+      "k": 22,
+      "n": 61,
+      "rate": 0.3607,
       "wilson95": [
-       0.0,
-       0.2425
+       0.2517,
+       0.4861
       ],
       "cluster_bootstrap95": [
-       0.0,
-       0.0
+       0.2321,
+       0.4898
       ]
      },
      "specificity": {
-      "k": 27,
-      "n": 30,
-      "rate": 0.9,
+      "k": 97,
+      "n": 140,
+      "rate": 0.6929,
       "wilson95": [
-       0.7438,
-       0.9654
+       0.6121,
+       0.7633
       ],
       "cluster_bootstrap95": [
-       0.75,
-       1.0
+       0.5903,
+       0.7941
       ]
      }
     },
@@ -954,8 +960,8 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 12,
-      "flagged": 1
+      "confirmed": 43,
+      "flagged": 17
      },
      "verifier_recorded": {
       "confirmed": 17,
@@ -978,8 +984,8 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 5,
-      "flagged": 0
+      "confirmed": 15,
+      "flagged": 9
      },
      "verifier_recorded": {
       "confirmed": 0,
@@ -1002,8 +1008,8 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 4,
-      "flagged": 0
+      "confirmed": 14,
+      "flagged": 4
      },
      "verifier_recorded": {
       "confirmed": 0,
@@ -1026,8 +1032,8 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 1,
-      "flagged": 0
+      "confirmed": 3,
+      "flagged": 3
      },
      "verifier_recorded": {
       "confirmed": 1,
@@ -1050,8 +1056,8 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 2,
-      "flagged": 0
+      "confirmed": 10,
+      "flagged": 2
      },
      "verifier_recorded": {
       "confirmed": 0,
@@ -1074,8 +1080,8 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 2,
-      "flagged": 2
+      "confirmed": 7,
+      "flagged": 10
      },
      "verifier_recorded": {
       "confirmed": 3,
@@ -1098,7 +1104,7 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 1,
+      "confirmed": 6,
       "flagged": 0
      },
      "verifier_recorded": {
@@ -1122,8 +1128,8 @@
       "flagged": 1
      },
      "judge": {
-      "confirmed": 2,
-      "flagged": 0
+      "confirmed": 6,
+      "flagged": 5
      },
      "verifier_recorded": {
       "confirmed": 0,
@@ -1146,8 +1152,8 @@
       "flagged": 10
      },
      "judge": {
-      "confirmed": 10,
-      "flagged": 0
+      "confirmed": 32,
+      "flagged": 15
      },
      "verifier_recorded": {
       "confirmed": 7,
@@ -1174,14 +1180,14 @@
     },
     "judge": {
      "bad_saves": {
-      "only_ours": 12,
-      "only_baseline": 0,
-      "p": 0.000488
+      "only_ours": 39,
+      "only_baseline": 1,
+      "p": 0.0
      },
      "good_saves": {
-      "only_ours": 1,
-      "only_baseline": 16,
-      "p": 0.000275
+      "only_ours": 18,
+      "only_baseline": 68,
+      "p": 0.0
      }
     },
     "verifier_recorded": {
@@ -1270,28 +1276,28 @@
     },
     "judge": {
      "sensitivity": {
-      "k": 0,
-      "n": 12,
-      "rate": 0.0,
+      "k": 4,
+      "n": 28,
+      "rate": 0.1429,
       "wilson95": [
-       0.0,
-       0.2425
+       0.057,
+       0.3149
       ],
       "cluster_bootstrap95": [
-       0.0,
-       0.0
+       0.037,
+       0.2593
       ]
      },
      "specificity": {
-      "k": 27,
-      "n": 30,
-      "rate": 0.9,
+      "k": 67,
+      "n": 72,
+      "rate": 0.9306,
       "wilson95": [
-       0.7438,
-       0.9654
+       0.8475,
+       0.97
       ],
       "cluster_bootstrap95": [
-       0.75,
+       0.8493,
        1.0
       ]
      }
@@ -1366,8 +1372,8 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 12,
-      "flagged": 1
+      "confirmed": 27,
+      "flagged": 3
      },
      "verifier_recorded": {
       "confirmed": 5,
@@ -1390,8 +1396,8 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 5,
-      "flagged": 0
+      "confirmed": 11,
+      "flagged": 1
      },
      "verifier_recorded": {
       "confirmed": 0,
@@ -1414,8 +1420,8 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 4,
-      "flagged": 0
+      "confirmed": 8,
+      "flagged": 1
      },
      "verifier_recorded": {
       "confirmed": 0,
@@ -1438,8 +1444,8 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 1,
-      "flagged": 0
+      "confirmed": 2,
+      "flagged": 1
      },
      "verifier_recorded": {
       "confirmed": 0,
@@ -1462,7 +1468,7 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 2,
+      "confirmed": 6,
       "flagged": 0
      },
      "verifier_recorded": {
@@ -1486,7 +1492,7 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 2,
+      "confirmed": 6,
       "flagged": 2
      },
      "verifier_recorded": {
@@ -1510,7 +1516,7 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 1,
+      "confirmed": 3,
       "flagged": 0
      },
      "verifier_recorded": {
@@ -1534,7 +1540,7 @@
       "flagged": 1
      },
      "judge": {
-      "confirmed": 2,
+      "confirmed": 5,
       "flagged": 0
      },
      "verifier_recorded": {
@@ -1558,8 +1564,8 @@
       "flagged": 7
      },
      "judge": {
-      "confirmed": 10,
-      "flagged": 0
+      "confirmed": 23,
+      "flagged": 1
      },
      "verifier_recorded": {
       "confirmed": 2,
@@ -1586,14 +1592,14 @@
     },
     "judge": {
      "bad_saves": {
-      "only_ours": 12,
+      "only_ours": 24,
       "only_baseline": 0,
-      "p": 0.000488
+      "p": 0.0
      },
      "good_saves": {
-      "only_ours": 1,
-      "only_baseline": 16,
-      "p": 0.000275
+      "only_ours": 2,
+      "only_baseline": 55,
+      "p": 0.0
      }
     },
     "verifier_recorded": {
@@ -1682,18 +1688,30 @@
     },
     "judge": {
      "sensitivity": {
-      "k": 0,
-      "n": 0,
-      "rate": null,
-      "wilson95": null,
-      "cluster_bootstrap95": null
+      "k": 18,
+      "n": 33,
+      "rate": 0.5455,
+      "wilson95": [
+       0.3799,
+       0.7016
+      ],
+      "cluster_bootstrap95": [
+       0.3333,
+       0.7576
+      ]
      },
      "specificity": {
-      "k": 0,
-      "n": 0,
-      "rate": null,
-      "wilson95": null,
-      "cluster_bootstrap95": null
+      "k": 30,
+      "n": 68,
+      "rate": 0.4412,
+      "wilson95": [
+       0.3295,
+       0.5592
+      ],
+      "cluster_bootstrap95": [
+       0.2687,
+       0.6087
+      ]
      }
     },
     "verifier_recorded": {
@@ -1766,8 +1784,8 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 0,
-      "flagged": 0
+      "confirmed": 16,
+      "flagged": 14
      },
      "verifier_recorded": {
       "confirmed": 12,
@@ -1790,8 +1808,8 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 0,
-      "flagged": 0
+      "confirmed": 4,
+      "flagged": 8
      },
      "verifier_recorded": {
       "confirmed": 0,
@@ -1814,8 +1832,8 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 0,
-      "flagged": 0
+      "confirmed": 6,
+      "flagged": 3
      },
      "verifier_recorded": {
       "confirmed": 0,
@@ -1838,8 +1856,8 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 0,
-      "flagged": 0
+      "confirmed": 1,
+      "flagged": 2
      },
      "verifier_recorded": {
       "confirmed": 1,
@@ -1862,8 +1880,8 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 0,
-      "flagged": 0
+      "confirmed": 4,
+      "flagged": 2
      },
      "verifier_recorded": {
       "confirmed": 0,
@@ -1886,8 +1904,8 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 0,
-      "flagged": 0
+      "confirmed": 1,
+      "flagged": 8
      },
      "verifier_recorded": {
       "confirmed": 3,
@@ -1910,7 +1928,7 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 0,
+      "confirmed": 3,
       "flagged": 0
      },
      "verifier_recorded": {
@@ -1934,8 +1952,8 @@
       "flagged": 0
      },
      "judge": {
-      "confirmed": 0,
-      "flagged": 0
+      "confirmed": 1,
+      "flagged": 5
      },
      "verifier_recorded": {
       "confirmed": 0,
@@ -1958,8 +1976,8 @@
       "flagged": 3
      },
      "judge": {
-      "confirmed": 0,
-      "flagged": 0
+      "confirmed": 9,
+      "flagged": 14
      },
      "verifier_recorded": {
       "confirmed": 5,
@@ -1986,14 +2004,14 @@
     },
     "judge": {
      "bad_saves": {
-      "only_ours": 0,
-      "only_baseline": 0,
-      "p": 1.0
+      "only_ours": 15,
+      "only_baseline": 1,
+      "p": 0.000519
      },
      "good_saves": {
-      "only_ours": 0,
-      "only_baseline": 0,
-      "p": 1.0
+      "only_ours": 16,
+      "only_baseline": 13,
+      "p": 0.711071
      }
     },
     "verifier_recorded": {

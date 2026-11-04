@@ -29,3 +29,11 @@
    the port was priced at about $0.21 per judged run, so the judge could also
    run on effect_e2e. The runner stops at $65. Order as pre-registered:
    Medplum, then effect_e2e J1, then J2 if there is room.
+5. **Per-run data lives in the private corpus, not in `results/`.** The
+   protocol said results are committed under `results/`. This repository's
+   release check refuses per-run result rows in public source, and the data
+   boundary puts run-level evidence and cost ledgers in `openadapt-corpus`.
+   Per-run rows, judge outputs, the replayed verifier verdicts and the spend
+   ledger are committed there
+   (`paid_agent_evidence/2026-11-03-verifier-baselines/`); aggregates,
+   rubrics and the synthetic effect_e2e judge views stay here.

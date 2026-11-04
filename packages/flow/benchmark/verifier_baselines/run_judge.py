@@ -15,6 +15,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -27,12 +28,16 @@ from benchmark.verifier_baselines.uv_judge import (
 
 HERE = Path(__file__).resolve().parent
 RES = HERE / "results"
+#: Per-run rows, judge outputs and the spend ledger are private run-level
+#: evidence (openadapt-corpus, paid_agent_evidence/2026-11-03-verifier-baselines);
+#: point this at that folder. Aggregates, rubrics and judge views stay in RES.
+DATA = Path(os.environ.get("VERIFIER_BASELINES_DATA") or RES)
 CAP_USD = 65.0
 SAMPLES_PER_VIEW = 9
 
 
 def spent() -> float:
-    f = RES / "spend.jsonl"
+    f = DATA / "spend.jsonl"
     if not f.exists():
         return 0.0
     return sum(
@@ -41,8 +46,8 @@ def spent() -> float:
 
 
 def log_spend(label: str, usd: float, tokens_in: int, tokens_out: int) -> None:
-    RES.mkdir(exist_ok=True)
-    with open(RES / "spend.jsonl", "a") as f:
+    DATA.mkdir(parents=True, exist_ok=True)
+    with open(DATA / "spend.jsonl", "a") as f:
         f.write(
             json.dumps(
                 {
@@ -143,7 +148,7 @@ async def medplum(client: Any, parallel: int) -> None:
             judge_one(
                 view,
                 shots,
-                RES / "medplum" / "judge" / f"{name}.json",
+                DATA / "medplum" / "judge" / f"{name}.json",
                 f"medplum {name}",
                 client,
                 sem,
@@ -155,7 +160,7 @@ async def medplum(client: Any, parallel: int) -> None:
 async def effect_e2e(client: Any, parallel: int, views: list[str]) -> None:
     rows = [
         json.loads(line)
-        for line in (RES / "effect_e2e" / "rows.jsonl").read_text().splitlines()
+        for line in (DATA / "effect_e2e" / "rows.jsonl").read_text().splitlines()
     ]
     sem = asyncio.Semaphore(parallel)
     jobs = []
@@ -173,7 +178,7 @@ async def effect_e2e(client: Any, parallel: int, views: list[str]) -> None:
             view = json.loads((d / "view.json").read_text())
             shots = [p.read_bytes() for p in sorted(d.glob("screen*.png"))]
             for i in range(min(count, SAMPLES_PER_VIEW)):
-                out = RES / "effect_e2e" / "judge" / h / f"sample{i}.json"
+                out = DATA / "effect_e2e" / "judge" / h / f"sample{i}.json"
                 jobs.append(
                     judge_one(
                         view, shots, out, f"effect_e2e {key} {h} #{i}", client, sem
