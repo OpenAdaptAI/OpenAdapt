@@ -22,6 +22,9 @@ on:
       - packages/flow/scripts/desktop/patient_notes.ps1
       - packages/flow/tests/e2e/test_windows_hosted_replay.py
       - packages/flow/tests/e2e/test_windows_hosted_governed.py
+      - packages/flow/tests/_approver_keys.py
+      - packages/flow/tests/conftest.py
+      - packages/flow/tests/e2e/conftest.py
       - packages/flow/tests/test_xfreerdp.py
       - packages/flow/tests/test_windows_attempt_ledger.py
       - packages/flow/tests/test_approval_form_window.py

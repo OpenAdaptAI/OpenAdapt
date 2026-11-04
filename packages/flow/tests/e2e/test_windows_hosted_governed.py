@@ -49,7 +49,7 @@ pytestmark = [
         not RUN_E2E,
         reason="opt-in hosted Windows e2e; set OAFLOW_WINDOWS_HOSTED_E2E=1 on Windows",
     ),
-    pytest.mark.timeout(1500),
+    pytest.mark.timeout(900),
 ]
 
 FLOW = Path(__file__).resolve().parents[2]
@@ -380,22 +380,38 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
         env={**host.env, "OPENADAPT_BUNDLE_KEY": BUNDLE_KEY},
     )
     evidence["certify"] = (lint.stdout + lint.stderr)[-6000:]
+    assert lint.returncode == 0, evidence["certify"]
 
     key_dir = tmp_path / "approver-keys"
     state_root = _state_root(tmp_path)
+    previous_key_dir = os.environ.get(KEY_DIR_ENV)
+    os.environ[KEY_DIR_ENV] = str(key_dir)
+    try:
+        approver_key, _signer = approver_keys.provision(key_dir)
+        root = approver_keys.root_of(key_dir)
+    finally:
+        if previous_key_dir is None:
+            os.environ.pop(KEY_DIR_ENV, None)
+        else:
+            os.environ[KEY_DIR_ENV] = previous_key_dir
+    # The run knows only the approvers' root public key. The person's key
+    # and passphrase go to the person's process alone, so the run cannot
+    # sign its own approval.
     env = {
         **host.env,
         # The attempt ledger must sit in this user's profile, as the default
         # ~/.openadapt does; the runner's temp folder is on another drive.
         "OPENADAPT_HOME": str(state_root),
         "OPENADAPT_BUNDLE_KEY": BUNDLE_KEY,
+        ROOT_ENV: root,
+    }
+    for name in (KEY_DIR_ENV, KEY_PASSPHRASE_ENV):
+        env.pop(name, None)
+    person_env = {
+        **env,
         KEY_DIR_ENV: str(key_dir),
         KEY_PASSPHRASE_ENV: approver_keys.PASSPHRASE,
     }
-    os.environ.update({KEY_DIR_ENV: str(key_dir)})
-    approver_key, _signer = approver_keys.provision(key_dir)
-    root = approver_keys.root_of(key_dir)
-    env[ROOT_ENV] = root
     config = _config(
         tmp_path,
         host,
@@ -435,7 +451,7 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
         backend.qualification_environment_identity() or ()
     )
     run_dir, argv = run_case("practice-1", 300)
-    with _Person(run_dir, env, approver_key) as person:
+    with _Person(run_dir, person_env, approver_key) as person:
         done = _flow(*argv, env=env)
     rows = {r["id"]: r for r in host.rows()}
     evidence["environment_after_run"] = list(
@@ -453,6 +469,10 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
     evidence["approved"]["outcome"] = report.transaction_outcome
     assert report.transaction_outcome == "VERIFIED", evidence["approved"]
     assert report.approval is not None and report.approval.decision.value == "approved"
+    # The one approval came from the person's process, before the save.
+    assert len(person.answers) == 1, evidence["approved"]
+    assert person.answers[0]["decision"] == "approve"
+    assert person.answers[0]["resume_required"] is False
     assert rows[TARGET_ID]["note"] == DEMO_NOTE
     assert all(r["note"] == "" for i, r in rows.items() if i != TARGET_ID)
 
@@ -470,10 +490,17 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
     assert held.returncode != 0, evidence["held"]
     assert all(r["note"] == "" for r in rows.values()), "a held run wrote"
     evidence["held"]["outcome"] = _report(run_dir).transaction_outcome
-    person = _Person(run_dir, env, approver_key)
+    # Held for the person, not stopped for any other reason.
+    assert evidence["held"]["outcome"] == "HALTED_BEFORE_EFFECT", evidence["held"]
+    assert "each_item: approval_wait_timed_out" in held.stdout + held.stderr, evidence[
+        "held"
+    ]
+    person = _Person(run_dir, person_env, approver_key)
     assert person.answer_waiting() == 1, person.errors
     assert person.errors == [], person.errors
     evidence["held"]["answer"] = person.answers
+    assert person.answers[0]["decision"] == "approve"
+    assert person.answers[0]["resume_required"] is True, evidence["held"]
     resumed = _flow("resume", str(run_dir), "--config", str(config), env=env)
     rows = {r["id"]: r for r in host.rows()}
     evidence["resumed"] = {
