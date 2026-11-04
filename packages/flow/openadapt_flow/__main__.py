@@ -1587,6 +1587,8 @@ def _propose_lookup_check(args: argparse.Namespace, *, from_lookup: bool) -> Non
 
 
 def _cmd_record_capture(args: argparse.Namespace) -> int:
+    if getattr(args, "surface", None):
+        return _cmd_record_surfaces(args)
     # The interactive (web) recorder installs in-page DOM listeners against a
     # headed Playwright page. The DESKTOP recorder (--backend windows) captures
     # the operator's native OS input over the win_agent contract; both emit the
@@ -1809,6 +1811,97 @@ def _recording_privacy_notices(recording_dir: Path) -> list[str]:
             "actions."
         )
     return notices
+
+
+def _cmd_record_surfaces(args: argparse.Namespace) -> int:
+    """``record --surface``: one recording across declared windows."""
+
+    from openadapt_flow.multi_surface_record import (
+        MultiSurfaceRecordError,
+        parse_record_surfaces,
+        record_multi_surface,
+    )
+
+    url = getattr(args, "url", None)
+    try:
+        surfaces = parse_record_surfaces(args.surface, web_primary=bool(url))
+    except MultiSurfaceRecordError as exc:
+        raise SystemExit(f"record: {exc}. Nothing was recorded.") from exc
+    backend = getattr(args, "backend", None)
+    lead = "web" if url else surfaces[0].kind
+    if backend is not None and backend != lead:
+        raise SystemExit(
+            f"record --surface: the recording starts on {lead} "
+            f"({'--url' if url else 'the first --surface'}), not --backend "
+            f"{backend}. Drop --backend. Nothing was recorded."
+        )
+    unsupported = [
+        flag
+        for attr, flag in (
+            ("window", "--window"),
+            ("window_title", "--window-title"),
+            ("rdp_window", "--rdp-window"),
+            ("rdp_window_title", "--rdp-window-title"),
+            ("rdp_readiness_text", "--rdp-readiness-text"),
+            ("browser_cdp_endpoint", "--browser-cdp-endpoint"),
+            ("browser_page_url", "--browser-page-url"),
+            ("capture_network", "--capture-network"),
+            ("identifier", "--identifier"),
+        )
+        if getattr(args, attr, None)
+    ]
+    if unsupported:
+        raise SystemExit(
+            f"record --surface: {', '.join(unsupported)} cannot be combined "
+            "with --surface (each declared window is found by its "
+            "--surface WINDOW). Nothing was recorded."
+        )
+    # A capture session runs for every cross-window recording, and Flow
+    # cannot encrypt it yet: the desktop recording policy applies.
+    _recording_encryption_key(args, surfaces[0].kind)
+    desktop_params: dict[str, str] = {}
+    web_params: list[str] = []
+    for entry in args.param or ():
+        if "=" in entry:
+            desktop_params.update(_parse_params([entry]))
+        elif url:
+            web_params.append(entry)
+        else:
+            raise SystemExit(
+                f"record --surface: --param {entry!r}: a desktop window has "
+                "no field names; use NAME=VALUE. Nothing was recorded."
+            )
+    if args.secret and not url:
+        raise SystemExit(
+            "record --surface: --secret names browser fields and needs --url. "
+            "Nothing was recorded."
+        )
+    try:
+        out = record_multi_surface(
+            Path(args.out),
+            surfaces=surfaces,
+            url=url,
+            params=desktop_params,
+            web_params=web_params,
+            web_secrets=tuple(args.secret or ()),
+            headless=bool(getattr(args, "headless", False)),
+            task_description=args.task or "openadapt-flow recording",
+            stop=_record_until_stop(args),
+        )
+    except MultiSurfaceRecordError as exc:
+        raise SystemExit(f"record: {exc}. Nothing was kept.") from exc
+    from openadapt_flow.cli_hints import command
+
+    print(f"Recording written to {out}")
+    binds = " ".join(
+        f"--surface {s.id}={s.kind}:<target>" for s in surfaces if s.id != surfaces[0].id or url
+    )
+    lead_flag = "--url <app>" if url else f"--backend {surfaces[0].kind} <target>"
+    print(
+        f"Compile it:  {command('compile')} {out} --out <bundle> --name <workflow>\n"
+        f"Then replay: {command('replay')} <bundle> {lead_flag} {binds}"
+    )
+    return 0
 
 
 def _cmd_record_desktop(args: argparse.Namespace, backend: str) -> int:
@@ -9256,6 +9349,23 @@ def build_parser() -> argparse.ArgumentParser:
             "verify.proposed.yaml. Both reads go to sor_snapshots.json "
             "(mode 0600). With no file, look the record up after you save: "
             "that look-up becomes the proposed check"
+        ),
+    )
+    p.add_argument(
+        "--surface",
+        action="append",
+        default=None,
+        metavar="NAME=KIND:WINDOW",
+        help=(
+            "Record a workflow that crosses windows in one session: declare "
+            "each desktop or remote window the person works in (repeatable). "
+            "KIND is windows, macos, linux, rdp or citrix; WINDOW is part of "
+            "that window's title (on macOS, the app name). Repeat a NAME to "
+            "add another window to it, such as its dialog. With --url the "
+            "browser leads; otherwise the first --surface does. Each change "
+            "of window becomes a checked switch step. An action in a window "
+            "you did not declare stops the recording. See "
+            "docs/MULTI_SURFACE.md."
         ),
     )
     _add_backend_flags(p)

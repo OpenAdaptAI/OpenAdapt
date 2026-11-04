@@ -202,7 +202,12 @@ class Recorder:
         encryption_key: Optional[str] = None,
         finalize_on_finish: bool = True,
         capture_hover: bool = False,
+        event_clock: Optional[list[float]] = None,
     ) -> None:
+        # A cross-window recording (multi_surface_record) orders this
+        # recorder's events against another recorder's by wall-clock time:
+        # each committed event appends the time its action was observed.
+        self._event_clock = event_clock
         # Pixel surfaces: before each click, rest the pointer on the target
         # and keep that frame (frames/{i}_hover.png) so the compiler can store
         # the hover response as identity evidence (runtime.hover_evidence).
@@ -890,6 +895,7 @@ class Recorder:
         redact_region: Optional[tuple[int, int, int, int]] = None,
         after_png: Optional[bytes] = None,
         structural_after: Optional[dict[str, Any]] = None,
+        observed_at: Optional[float] = None,
     ) -> None:
         """Persist an event the USER already performed (no backend action).
 
@@ -961,6 +967,7 @@ class Recorder:
             structural_before,
             redact_region=redact_region,
             structural_after=structural_after,
+            observed_at=observed_at,
         )
 
     def _commit(
@@ -972,6 +979,7 @@ class Recorder:
         *,
         redact_region: Optional[tuple[int, int, int, int]] = None,
         structural_after: Optional[dict[str, Any]] = None,
+        observed_at: Optional[float] = None,
     ) -> None:
         """Write this step's before/after frames and its events.jsonl line.
 
@@ -983,6 +991,10 @@ class Recorder:
         navigating click produced); when None it is read now.
         """
         i = self._i
+        if self._event_clock is not None:
+            self._event_clock.append(
+                observed_at if observed_at is not None else time.time()
+            )
         if redact_region is not None:
             before_png = self._redact(before_png, redact_region)
             after_png = self._redact(after_png, redact_region)

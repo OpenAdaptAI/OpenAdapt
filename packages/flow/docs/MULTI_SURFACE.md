@@ -1,9 +1,11 @@
 # Multi-surface workflows: tabs, popups, and backend switches
 
-Status: recorder (scripted, interactive, and attach mode), compiler, IR,
-replayer, CLI binding, governed/qualified/durable runs, resume by identity,
-and managed dispatch. This page is the design and its
-limits. The audit that motivated it is at the end.
+Status, from the tests and runs named under "Tests": the scripted recorder,
+the interactive and attach-mode web recorders (popups and tabs), one
+`record --surface` session across a browser and declared desktop or remote
+windows, the compiler, IR, replayer, CLI binding, governed, qualified and
+durable runs, resume by identity, and managed dispatch. This page is the
+design and its limits. The audit that motivated it is at the end.
 
 A bundle used to run on exactly one surface: one browser tab, one desktop app,
 or one remote-desktop window. Real tasks cross that boundary. A referral opens
@@ -293,6 +295,75 @@ A click in a new page within the first poll tick after it loads can arrive
 before the listener is installed and is not recorded. Replay then halts at the
 next step rather than skipping it silently.
 
+### Recording across windows (`record --surface`)
+
+A person's task often moves between a web app, a native app and a remote
+window. One `record` session records it while they switch windows
+themselves. Declare each desktop or remote window once; the browser is
+`--url`:
+
+```bash
+openadapt-flow record --url https://portal.example \
+  --surface chart=linux:Chart \
+  --surface rdp_1=rdp:"Remote Desktop" \
+  --out referral-recording
+```
+
+`--surface NAME=KIND:WINDOW` takes the same `NAME=KIND:TARGET` shape as
+replay. `KIND` is `windows`, `macos`, `linux`, `rdp` or `citrix`. `WINDOW` is
+part of the window's title, case-sensitive (on macOS the title starts with
+the app name). Repeat a name to add a window to it, for example an app's own
+dialog whose title differs. Without `--url`, the first `--surface` is where
+the recording starts, so two desktop apps, or a desktop app and an RDP
+window, work the same way.
+
+How it works:
+
+- One full-screen openadapt-capture session runs for the whole recording,
+  and the web recorder runs inside it against a browser Flow launched.
+- Capture keeps the active-window timeline. Each desktop action belongs to
+  the declared surface whose window was active when it happened; a click
+  that brings a window forward counts for that window only if the click
+  lands inside it.
+- The browser's actions come from the web recorder, with the time each was
+  observed. The desktop capture sees the same clicks in the browser window;
+  an action in an undeclared window is set aside only when a browser action
+  of the same kind happened within 1.5 seconds.
+- The streams are merged in time order. Each change of surface is written as
+  an explicit `switch_surface` event (before frame: the surface left; after
+  frame: the surface entered), so the bundle has a SWITCH_SURFACE step with
+  an identity check at every boundary, exactly as a scripted recording does.
+- Each surface is kept in the pixel space its replay backend uses. A
+  Windows (UI Automation agent) surface keeps desktop pixels and its
+  action-time UIA evidence. A macOS, Linux, RDP or Citrix surface is cropped
+  to its window, and its coordinates are moved into that window.
+- The raw capture session (which holds every window's pixels) is deleted
+  once the recording is written. Window titles are used for matching only
+  and are not written to the recording.
+
+Halt, never guess. The recording is refused, and nothing is kept, when:
+
+- an action went to a window no `--surface` declared;
+- one window matches two declared surfaces;
+- two actions on different surfaces came less than 0.25 seconds apart, too
+  close to order across the two recorders;
+- the first action is not on the surface the recording starts on;
+- a declared surface has no action, or an action lands outside its window.
+
+Replay binds each declared surface the usual way (see "Binding backends
+from the CLI"):
+
+```bash
+openadapt-flow replay referral-bundle --url https://portal.example \
+  --surface chart=linux:chart --surface rdp_1=rdp:10.0.0.5
+```
+
+A capture session cannot be encrypted by Flow yet, so a cross-window
+recording follows the desktop recording rule: it is written in plaintext
+with a warning and a ledger line, and it is refused under
+`OPENADAPT_FLOW_AT_REST=strict` or with a recording key set. The compiled
+bundle is sealed as usual.
+
 ## Compiling
 
 `compile_recording` turns `meta.json` `surfaces` into `Workflow.surfaces`, each
@@ -515,6 +586,13 @@ backend surface bound here.
 - Re-binding a page is vision first, so two pages that look the same and share
   every structured attribute halt as ambiguous. Two report tabs for the same
   record are the example. This is by design.
+- `record --surface` launches its own browser; attach mode (`--cdp`) and a
+  window-scoped capture (`--window`) do not combine with it. Its desktop
+  side has the limits of desktop recording: no `--secret` redaction of a
+  typed desktop value, and no encryption of the recording at rest.
+- `record --surface` matches a window by its title. A dialog whose title
+  shares nothing with its app needs its own `--surface` entry under the same
+  name.
 - Attach mode follows only same-origin pages that a followed page opened. An
   OAuth popup on another origin is refused by attach mode's origin contract.
 - Qualification pinning and proposal do not yet propose per-surface
@@ -523,6 +601,20 @@ backend surface bound here.
   Nothing is guessed, and a managed run refuses to start without one.
 
 ## Tests
+
+- `tests/test_multi_surface_record.py`: `record --surface` flag parsing; a
+  browser, a Linux window and the browser again merged into two switches,
+  with the window's frames cropped and its clicks moved into it; two
+  Windows apps and an RDP window without a browser; refusals for an
+  undeclared window, a window that matches two surfaces, a switch too fast
+  to order, a first action off the lead surface and a declared surface with
+  no action; one capture session around the web recorder, with the raw
+  capture deleted.
+- `benchmark/multi_surface_record/qualify_linux_cross_window.py`: on real
+  apps in Xvfb, physical input (XTest) in a Chromium page, the GTK3 chart app
+  (SQLite) and the page again, recorded by one `record --url ... --surface`
+  session, compiled and replayed through the CLI; results in
+  `benchmark/multi_surface_record/results/`.
 
 - `tests/test_multi_surface_e2e.py`: a local app that opens a popup
   (`window.open`) and a `target=_blank` tab. It records, compiles, and replays
