@@ -13,29 +13,29 @@ from pathlib import Path
 
 import pytest
 
-from openadapt_flow.integrations.harness2.agent import (
+from benchmark.harness.harness2.agent import (
     RULE_IDENTITY,
     RULE_SAVE_ONCE,
     RULE_TYPE_LABEL,
     ScriptedGuiAgent,
 )
-from openadapt_flow.integrations.harness2.apps import MockMedTarget
-from openadapt_flow.integrations.harness2.llm import (
+from benchmark.harness.harness2.apps import MockMedTarget
+from benchmark.harness.harness2.llm import (
     BudgetExceeded,
     Completion,
     CostLedger,
 )
-from openadapt_flow.integrations.harness2.rollout import (
+from benchmark.harness.harness2.rollout import (
     load_run,
     load_score,
     run_rollout,
 )
-from openadapt_flow.integrations.harness2.scorer import (
+from benchmark.harness.harness2.scorer import (
     EpisodeScore,
     Penalties,
     ReadBackScorer,
 )
-from openadapt_flow.integrations.harness2.tasks import mockmed_tasks
+from benchmark.harness.harness2.tasks import mockmed_tasks
 
 CAREFUL = (
     f"Check the {RULE_IDENTITY}. Choose the type {RULE_TYPE_LABEL}. {RULE_SAVE_ONCE}."
@@ -228,7 +228,7 @@ def test_a_rollout_is_redone_when_the_harness_changed(tmp_path):
 def test_reward_selection_ranks_the_right_outcome_first(tmp_path, h2):
     from harness2.core.spec import RunView
 
-    from openadapt_flow.integrations.harness2.selection import reward_selection
+    from benchmark.harness.harness2.selection import reward_selection
 
     scores = {
         # A single save, then a stop: right on the timeout task, partial credit.
@@ -250,8 +250,8 @@ def test_reward_selection_ranks_the_right_outcome_first(tmp_path, h2):
 
 
 def test_model_requests_pass_the_privacy_gate(monkeypatch, tmp_path):
+    from benchmark.harness.harness2.llm import HttpChatModel, Price
     from openadapt_flow import privacy
-    from openadapt_flow.integrations.harness2.llm import HttpChatModel, Price
 
     monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path))
     monkeypatch.delenv(privacy.OUTBOUND_OPT_OUT_ENV, raising=False)
@@ -288,7 +288,7 @@ def h2():
 
 
 def _adapter(tmp_path, variants, evidence="readback"):
-    from openadapt_flow.integrations.harness2.adapter import OpenAdaptGuiAdapter
+    from benchmark.harness.harness2.adapter import OpenAdaptGuiAdapter
 
     return OpenAdaptGuiAdapter(
         mockmed_tasks(variants),
@@ -315,8 +315,8 @@ def test_adapter_is_a_harness2_benchmark_adapter(tmp_path, h2):
 
 def test_reward_selection_finds_the_safe_harness(tmp_path, h2):
     pytest.importorskip("playwright.sync_api")
-    from openadapt_flow.integrations.harness2.proposers import ScriptedProposer
-    from openadapt_flow.integrations.harness2.selection import run_task
+    from benchmark.harness.harness2.proposers import ScriptedProposer
+    from benchmark.harness.harness2.selection import run_task
 
     adapter = _adapter(tmp_path, ("lookalike",))
     prop = ScriptedProposer(
@@ -367,8 +367,8 @@ def test_screen_evidence_hides_the_readback(tmp_path, h2):
 
 def test_model_selector_path_runs_harness2_selection(tmp_path, h2):
     pytest.importorskip("playwright.sync_api")
-    from openadapt_flow.integrations.harness2.proposers import ScriptedProposer
-    from openadapt_flow.integrations.harness2.selection import run_task
+    from benchmark.harness.harness2.proposers import ScriptedProposer
+    from benchmark.harness.harness2.selection import run_task
 
     adapter = _adapter(tmp_path, ("plain",), evidence="screen")
     prop = ScriptedProposer(
@@ -401,7 +401,7 @@ class _FakeModel:
 
 
 def test_model_proposer_writes_only_harness_files(tmp_path, h2):
-    from openadapt_flow.integrations.harness2.proposers import ModelProposer
+    from benchmark.harness.harness2.proposers import ModelProposer
 
     reply = (
         '<file path="harness/AGENTS.md">\n# New\n- check the date of birth\n</file>\n'

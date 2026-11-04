@@ -1,0 +1,50 @@
+{
+  "checks": {
+    "no_errors": true,
+    "screen_trusting_paid_only_on_feasible": true,
+    "scripted_reaches_max": true
+  },
+  "env": "openadapt-mockmed",
+  "model_calls": 0,
+  "passed": true,
+  "screen_trusting": {
+    "episodes": 11,
+    "errors": 0,
+    "mean_reward": 0.5455,
+    "rewards": {
+      "mockmed-01": 1.0,
+      "mockmed-02": 1.0,
+      "mockmed-03": 1.0,
+      "mockmed-04": 1.0,
+      "mockmed-05": 1.0,
+      "mockmed-06": 1.0,
+      "mockmed-07": 0.0,
+      "mockmed-08": 0.0,
+      "mockmed-09": 0.0,
+      "mockmed-10": 0.0,
+      "mockmed-11": 0.0
+    },
+    "wall_s": 172.0
+  },
+  "scripted": {
+    "episodes": 11,
+    "errors": 0,
+    "mean_reward": 1.0,
+    "rewards": {
+      "mockmed-01": 1.0,
+      "mockmed-02": 1.0,
+      "mockmed-03": 1.0,
+      "mockmed-04": 1.0,
+      "mockmed-05": 1.0,
+      "mockmed-06": 1.0,
+      "mockmed-07": 1.0,
+      "mockmed-08": 1.0,
+      "mockmed-09": 1.0,
+      "mockmed-10": 1.0,
+      "mockmed-11": 1.0
+    },
+    "wall_s": 182.2
+  },
+  "tasks": 11,
+  "transport": "verifiers v1 eval -> openadapt-web-envs taskset -> OpenEnv WebSocket"
+}

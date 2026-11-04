@@ -141,6 +141,7 @@ GENERATED_BENCHMARK_EXCLUDES = {
     "/benchmark/**/outputs",
     "/benchmark/**/recording-live*",
     "/benchmark/**/results-*",
+    "/benchmark/**/RESULTS-*",
     "/benchmark/**/state",
     "/benchmark/**/work",
     "/benchmark/**/_bundle",

@@ -28,7 +28,7 @@ from openadapt_flow.agent.browser_teach import BrowserTeachBridge  # noqa: E402
 from openadapt_flow.agent.mcp import build_server  # noqa: E402
 from openadapt_flow.agent.teach import TeachBridge, TeachConfig  # noqa: E402
 from openadapt_flow.agent.verify_tools import VerifyBridge  # noqa: E402
-from openadapt_flow.guard_demo import verify_yaml  # noqa: E402
+from benchmark.harness.guard_demo import verify_yaml  # noqa: E402
 
 BASE = "http://127.0.0.1:9"
 # The MCP layer's answer when a call raised something other than BridgeError,
