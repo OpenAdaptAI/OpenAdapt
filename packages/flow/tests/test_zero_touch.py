@@ -382,7 +382,7 @@ def test_s1_s2_install_keeps_only_admitted_kinds_and_fingerprints_ignore_connect
     zt.install(staged, tmp_path / "contracts", ["a"])
     got = yaml.safe_load((tmp_path / "contracts" / "manifest.yaml").read_text())
     assert list(got["kinds"]) == ["a"]
-    assert list(got["field_sets"]["listed_sha256"]) == ["contracts/a/x.create.yaml"]
+    assert "field_sets" not in got  # no contracts built at run time
     assert not (tmp_path / "contracts" / "contracts" / "b").exists()
     assert not staged.exists()
 
@@ -492,3 +492,147 @@ def test_unique_indexes_reads_the_catalog_on_postgresql(pg: Any) -> None:  # noq
             "user": "admin", "dbname": "uq_probe"}}  # fmt: skip
     sb = zt.Sandbox(read, read)
     assert sb.unique_indexes("res") == {"uk_res": ["b", "a"]}
+
+
+# -- review round 2: R2-B1, R2-B2, S8-S10 -------------------------------------
+
+READ_BACK_FAILED = (
+    "the system of record could not be read back (OperationalError); "
+    "the write may still land"
+)
+
+
+def test_r2b1_a_verdict_from_a_failed_read_is_retried_then_fails(
+    monkeypatch: Any,
+) -> None:
+    calls: list[int] = []
+
+    def fails_to_read(*a: Any, **k: Any) -> Any:
+        calls.append(1)
+        return zt.Outcome("bookkeeping:p.c15", "bookkeeping", False, "UNCERTAIN", False,
+                          [READ_BACK_FAILED])  # fmt: skip
+
+    monkeypatch.setattr(zt, "run_case", fails_to_read)
+    case = zt.Case("bookkeeping:p.c15", "bookkeeping", [])
+    res = zt.run_verdict(None, Path("m/manifest.yaml"), None, case, "a", {})  # type: ignore[arg-type]
+    assert len(calls) == zt.READ_ATTEMPTS
+    assert res.outcome == "READ_FAILED" and not res.ok
+    correct = zt.Outcome("correct", "correct", True, "CONFIRMED", True)
+    assert not zt.summarize({"k": [correct, res]}, ["k"])["k"]["admitted"]
+
+
+def test_r2b1_a_read_that_recovers_gives_its_real_verdict(monkeypatch: Any) -> None:
+    seq = iter([
+        zt.Outcome("x", "bookkeeping", False, "UNCERTAIN", False, [READ_BACK_FAILED]),
+        zt.Outcome("x", "bookkeeping", False, "REFUTED", False, ["record_written was refuted"]),
+    ])  # fmt: skip
+    monkeypatch.setattr(zt, "run_case", lambda *a, **k: next(seq))
+    res = zt.run_verdict(None, Path("m/manifest.yaml"), None,  # type: ignore[arg-type]
+                         zt.Case("x", "bookkeeping", []), "a", {})  # fmt: skip
+    assert res.outcome == "REFUTED" and res.ok
+
+
+def test_r2b2_found_keeps_only_the_constant_half_of_a_strict_role() -> None:
+    from openadapt_flow.generate.demo_analysis import ColumnRole
+
+    copied = {"table": "q", "column": "owner", "ref_column": "id", "via": "q_id"}
+    assert (
+        gen._found_role(ColumnRole("strict", detail={"actor": "bot", "copied": copied}))
+        is None
+    )
+    kept = gen._found_role(
+        ColumnRole("strict", detail={"constant": "1", "copied": copied})
+    )
+    assert kept is not None and kept.detail == {"constant": "1"}
+    assert gen._found_role(ColumnRole("actor", detail={"param": "bot"})) is None
+
+
+TICKETS = """
+CREATE TABLE queues (id serial PRIMARY KEY, name text NOT NULL, owner_id integer);
+CREATE TABLE tickets (id serial PRIMARY KEY, queue_id integer REFERENCES queues(id),
+  subject text NOT NULL, owner_id integer);
+INSERT INTO queues (name, owner_id) VALUES ('Ops', 1), ('Billing', 1), ('Desk', 1);
+SELECT setval('tickets_id_seq', 100);
+CREATE ROLE oa_t LOGIN PASSWORD 'reader-pw';
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO oa_t;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO oa_t;
+"""
+
+
+def test_r2b2_a_record_another_user_made_is_found_under_strict_pins(
+    pg: Any,  # noqa: F811
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    """A ticket's owner is the acting user and a copy of its queue's owner in
+    every demonstration, so ``strict_pins`` checks both on a create. A ticket
+    a colleague already made (owner 2) must still be found, so the task
+    writes nothing and a second create is refuted."""
+
+    admin = psycopg2.connect(
+        host="127.0.0.1", port=pg["port"], user="admin", dbname="postgres"
+    )
+    admin.autocommit = True
+    admin.cursor().execute("CREATE DATABASE tickets")
+    admin.close()
+    app = App(pg["port"], "tickets")
+    with app.con() as c, c.cursor() as cur:
+        cur.execute(TICKETS)
+    os.environ["OA_ZT_T_PW"] = "reader-pw"
+    read = {"sql_driver": "psycopg2", "sql_connect_args": {"host": "127.0.0.1",
+            "port": pg["port"], "user": "oa_t", "dbname": "tickets"},
+            "sql_password_env": "OA_ZT_T_PW"}  # fmt: skip
+    (tmp_path / "read.yaml").write_text(yaml.safe_dump(read))
+    kinds = {"kinds": [{"kind": "create_ticket", "parameters": ["queue", "subject"],
+                        "examples": [{"values": {"queue": "Ops", "subject": "a"}}]}]}  # fmt: skip
+    (tmp_path / "kinds.yaml").write_text(yaml.safe_dump(kinds))
+    common = ["--read", str(tmp_path / "read.yaml")]
+    for queue, subject in (
+        ("Ops", "Badge reader"),
+        ("Billing", "Refund"),
+        ("Desk", "VPN"),
+    ):
+        assert (
+            gen.main(["snapshot", *common, "--out", str(tmp_path / "before.json")]) == 0
+        )
+        app.q("INSERT INTO tickets (queue_id, subject, owner_id) SELECT id, %s, 1 "
+              "FROM queues WHERE name = %s", (subject, queue))  # fmt: skip
+        assert gen.main(["record", *common, "--before", str(tmp_path / "before.json"),
+                         "--kind", "create_ticket", "--values",
+                         json.dumps({"queue": queue, "subject": subject}),
+                         "--demos", str(tmp_path / "demos")]) == 0  # fmt: skip
+    answers = {"strict_pins": True, "bookkeeping": "accept", "recheck_after_s": 300}
+    gen.propose(read=read, kinds=gen.load_kinds(tmp_path / "kinds.yaml"),
+                demo_dir=tmp_path / "demos", out=tmp_path / "out",
+                actor_params={"bot_user_id": "1"}, answers=answers)  # fmt: skip
+    create = next((tmp_path / "out" / "contracts").rglob("*.create.yaml")).read_text()
+    assert "copy__owner_id" in create  # strict: the copy is checked on a create
+    # A colleague (user 2) already made this ticket.
+    app.q("INSERT INTO tickets (queue_id, subject, owner_id) SELECT id, 'Printer', 2 "
+          "FROM queues WHERE name = 'Ops'")  # fmt: skip
+    loaded: list[Path] = []
+    real = gen._load_for
+
+    def record(path: Path, params: Any) -> Any:
+        loaded.append(Path(path))
+        return real(path, params)
+
+    monkeypatch.setattr(gen, "_load_for", record)
+    gen.choose(tmp_path / "out" / "manifest.yaml", "create_ticket",
+               {"queue": "Ops", "subject": "Printer"}, {"bot_user_id": "1"})  # fmt: skip
+    # The found contract is read first; it must also be the one returned.
+    assert loaded and loaded[-1].name.endswith(".found.yaml"), loaded
+
+
+def test_s9_s10_a_new_rows_own_key_and_each_value_on_another_row_are_faulted() -> None:
+    from openadapt_flow.generate.sql_store import Column, Schema, Table
+
+    t = Table("codes", [Column("code", "varchar", False, None), Column("label", "varchar", True, None)],
+              ["code"])  # fmt: skip
+    schema = Schema("mysql", "app", {"codes": t})
+    sb = _FakeSandbox({"codes": [{"code": "AA", "label": "old"}]})
+    cases = zt.faults(schema, sb, type("D", (), {"values": {"code": "BB"}})(),
+                      [zt.Op("codes", {"code": "BB"}, {"code": "BB", "label": "new"})])  # fmt: skip
+    names = {c.name for c in cases}
+    assert "wrong_value:codes.code" in names  # S9
+    assert "unrelated_edit:codes.label" in names  # S10

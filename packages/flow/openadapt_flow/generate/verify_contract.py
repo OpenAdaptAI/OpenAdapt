@@ -103,6 +103,21 @@ def _strict(roles: Mapping[str, ColumnRole], on: bool) -> dict[str, ColumnRole]:
     }
 
 
+def _found_role(role: ColumnRole) -> Optional[ColumnRole]:
+    """The part of a role a ``found`` contract checks. Who made the record and
+    what it copied may differ for a record already there (a person entered
+    it), so ``actor`` and ``copied`` are left out, and a ``strict`` role keeps
+    only its constant half. None: nothing to check."""
+
+    if role.role in ("actor", "copied"):
+        return None
+    if role.role == "strict":
+        if "constant" not in role.detail:
+            return None
+        return ColumnRole("strict", detail={"constant": role.detail["constant"]})
+    return role
+
+
 def _strict_pins(
     b: "SqlBuilder", surf: "Surface", table: str, col: str, detail: Mapping[str, Any],
     match: dict[str, Any],
@@ -2011,8 +2026,10 @@ def build_contract(
             settings.strict_pins,
         )
         for col, role in sorted(roles.items()):
-            if flavor == "found" and role.role in ("actor", "copied"):
-                continue
+            if flavor == "found":
+                role = _found_role(role)
+                if role is None:
+                    continue
             _pin(
                 b,
                 main,
@@ -2142,8 +2159,12 @@ def build_contract(
                 else:
                     m[key] = _value_expr(pname, loc.rule)
             for col, role in sorted(_strict(g.roles, settings.strict_pins).items()):
-                if role.role == "link" or (found and role.role in ("actor", "copied")):
+                if role.role == "link":
                     continue
+                if found:
+                    role = _found_role(role)
+                    if role is None:
+                        continue
                 _pin(
                     b,
                     surf,

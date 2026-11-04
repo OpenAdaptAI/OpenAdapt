@@ -709,6 +709,41 @@ def faults(schema: Schema, sb: "Sandbox", demo: Demo, write: list[Op]) -> list[C
         for col in changed:
             cls = "wrong_value" if _is_value(op.row.get(col), values) else "bookkeeping"
             column_fault(cls, i, op, col)
+        if is_new:
+            # A new row's own key, when the store doesn't fill it (a code,
+            # a user name): a wrong one is planted like any other value.
+            for col in t.primary_key:
+                c = t.column(col)
+                if c is None or c.auto:
+                    continue
+                new = plant_value(sb, t, col, op.row.get(col))
+                cls = (
+                    "wrong_value"
+                    if _is_value(op.row.get(col), values)
+                    else "bookkeeping"
+                )
+                if new is None:
+                    out.append(Case(f"{cls}:{op.table}.{col}", cls, [],
+                                    unplantable="no other key value can be planted"))  # fmt: skip
+                    continue
+                row = dict(op.row)
+                row[col] = new
+                key = {k: row.get(k) for k in t.primary_key}
+                out.append(Case(f"{cls}:{op.table}.{col}", cls,
+                                write[:i] + [Op(op.table, key, row)] + write[i + 1 :]))  # fmt: skip
+            # Each value the new row holds, set the same way on another row
+            # of the table: an excuse must hold only on the rows the write
+            # declares.
+            other = next((r for r in sb.rows(op.table, 20)
+                          if store.row_key(t, r) != store.row_key(t, op.key)), None)  # fmt: skip
+            if other is not None:
+                for col in changed:
+                    if other.get(col) == op.row.get(col):
+                        continue
+                    edit = dict(other)
+                    edit[col] = op.row.get(col)
+                    out.append(Case(f"unrelated_edit:{op.table}.{col}", "unrelated_edit",
+                                    write + [Op(op.table, other, edit)]))  # fmt: skip
         if not is_new and before is not None:
             for c in t.columns:
                 if c.name not in t.primary_key and c.name not in changed:
@@ -801,9 +836,22 @@ def faults(schema: Schema, sb: "Sandbox", demo: Demo, write: list[Op]) -> list[C
 # -- running a case ---------------------------------------------------------------
 
 #: Verdicts the verifier gives for a state it read and didn't pass. Only
-#: these count as a stopped fault: an error, a missing contract or a fault
-#: that couldn't be planted never does.
+#: these count as a stopped fault: an error, a missing contract, a fault
+#: that couldn't be planted or a read that failed (``READ_FAILED``) never
+#: does.
 STOP_VERDICTS = ("REFUTED", "UNCERTAIN", "RECHECK_REFUTED", "RECHECK_UNCERTAIN")
+#: A case whose verdict came from a failed read is run this many times in
+#: all before it counts as not stopped.
+READ_ATTEMPTS = 3
+_READ_FAILURE = re.compile(r"could(?:n't| not) be read|can't be read|still moving")
+
+
+def read_failed(reasons: Sequence[str]) -> bool:
+    """The verifier gave its verdict because it couldn't read the store (a
+    timeout, a lost connection, rows still moving), not from the state it
+    read."""
+
+    return any(_READ_FAILURE.search(r) for r in reasons)
 
 
 @dataclass
@@ -1044,6 +1092,29 @@ def _load_yaml(path: Path) -> Any:
     return yaml.safe_load(Path(path).read_text()) if path else None
 
 
+def run_verdict(
+    sb: Sandbox,
+    manifest: Path,
+    demo: Demo,
+    case: Case,
+    actor_id: str,
+    extra: Mapping[str, Any],
+) -> Outcome:
+    """:func:`run_case`, run again while its verdict came from a failed read,
+    up to :data:`READ_ATTEMPTS` times. A read that keeps failing gives
+    ``READ_FAILED``: the planted state was never judged, so it isn't
+    stopped."""
+
+    for _ in range(READ_ATTEMPTS):
+        res = run_case(sb, manifest, demo, case, actor_id, extra,
+                       manifest.parent / "state")  # fmt: skip
+        if not (res.outcome in STOP_VERDICTS and read_failed(res.reasons)):
+            return res
+    res.reasons = [f"read failed {READ_ATTEMPTS} times"] + res.reasons
+    res.outcome = "READ_FAILED"
+    return res
+
+
 def validate(
     sb: Sandbox,
     manifest: Path,
@@ -1079,9 +1150,7 @@ def validate(
         finally:
             sb.put_many([Op(op.table, op.key, row) for op, row in saved])
         for case in cases:
-            res = run_case(
-                sb, manifest, demo, case, actor_id, extra, manifest.parent / "state"
-            )
+            res = run_verdict(sb, manifest, demo, case, actor_id, extra)
             log(f"{demo.name} {case.name}: {res.outcome} {'ok' if res.ok else 'FAIL'}")
             if record is not None:
                 record.append({"demo": demo.name, "kind": demo.kind, "case": res.case,
@@ -1251,23 +1320,79 @@ def fingerprint(manifest_dir: Path, kind: str) -> str:
     return hashlib.sha256(body.encode()).hexdigest()
 
 
-def install(staged: Path, final: Path, admitted: Sequence[str]) -> None:
+def field_set(values: Mapping[str, Any]) -> tuple[list[str], dict[str, int]]:
+    """A task's field set as the manifest writes it: its non-null scalar
+    fields, and its lists by length."""
+
+    given = sorted(
+        k for k, v in values.items() if v is not None and not isinstance(v, list)
+    )
+    lists = {k: len(v) for k, v in values.items() if isinstance(v, list)}
+    return given, lists
+
+
+def install(
+    staged: Path,
+    final: Path,
+    admitted: Sequence[str],
+    validated: Optional[
+        Mapping[str, Sequence[tuple[list[str], dict[str, int]]]]
+    ] = None,
+) -> None:
     """Keep only the admitted kinds in ``staged`` (manifest entries, pinned
-    digests and contract files), then move it to ``final`` in one rename."""
+    digests and contract files), and of each kind only the field sets a
+    held-out write validated (``validated``: kind -> field sets; None keeps
+    every listed one). Contracts are never built at run time from a
+    zero-touch manifest: ``choose`` stops a task whose field set isn't
+    listed. Then move it to ``final`` in one rename."""
 
     import shutil
 
     path = staged / "manifest.yaml"
     manifest = _load_yaml(path) or {}
     dropped = [k for k in list(manifest.get("kinds") or {}) if k not in admitted]
+    if validated is not None:
+        for k, entry in (manifest.get("kinds") or {}).items():
+            if k in dropped:
+                continue
+            listed = [(sorted(v.get("fields") or []), dict(v.get("lists") or {}))
+                      for v in entry.get("variants") or []]  # fmt: skip
+            for given, lists in validated.get(k, []):
+                if (sorted(given), dict(lists)) in listed:
+                    continue
+                # Validated through a contract built on demand: build the
+                # same one here, from the same pinned inputs, and list it.
+                try:
+                    files = gen._field_set(
+                        path, manifest, k, entry, set(given), dict(lists)
+                    )
+                except gen.GenerateError:
+                    files = None
+                if files:
+                    var: dict[str, Any] = {"fields": sorted(given), **files}
+                    if lists:
+                        var["lists"] = dict(lists)
+                    entry.setdefault("variants", []).append(var)
+                    listed.append((sorted(given), dict(lists)))
+            keep = []
+            for var in entry.get("variants") or []:
+                fs = (sorted(var.get("fields") or []), dict(var.get("lists") or {}))
+                if fs in [(sorted(f), dict(lst)) for f, lst in validated.get(k, [])]:
+                    keep.append(var)
+                else:
+                    for flavor in ("create", "update", "found"):
+                        if isinstance(var.get(flavor), str):
+                            (staged / var[flavor]).unlink(missing_ok=True)
+            entry["variants"] = keep
+    # Dropped kinds go only now: building a field set checks every pinned
+    # file of the manifest as ``propose`` wrote it.
     for k in dropped:
         manifest["kinds"].pop(k)
-        for sub in ("contracts", "field_sets"):
-            shutil.rmtree(staged / sub / k, ignore_errors=True)
-    listed = (manifest.get("field_sets") or {}).get("listed_sha256") or {}
-    for rel in list(listed):
-        if not (staged / rel).exists():
-            listed.pop(rel)
+        shutil.rmtree(staged / "contracts" / k, ignore_errors=True)
+    # No run-time builds: they would be contracts no sandbox validated.
+    manifest.pop("field_sets", None)
+    for k in dropped:
+        shutil.rmtree(staged / "field_sets" / k, ignore_errors=True)
     manifest["zero_touch"] = {"admitted": sorted(admitted)}
     path.write_text(yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True),
                     encoding="utf-8")  # fmt: skip
@@ -1393,7 +1518,10 @@ def onboard(
             s["why"] = ("the contracts proposed against the app's own store differ "
                         "from the ones validated in the sandbox")  # fmt: skip
     admitted = sorted(k for k, s in summary.items() if s["admitted"])
-    install(staged, out / "contracts", admitted)
+    validated_sets: dict[str, list[tuple[list[str], dict[str, int]]]] = {}
+    for d in holdout:
+        validated_sets.setdefault(d.kind, []).append(field_set(d.values))
+    install(staged, out / "contracts", admitted, validated_sets)
     result = {
         "minutes": round((time.time() - t0) / 60, 2),
         "person_decisions": 0,
@@ -1402,9 +1530,16 @@ def onboard(
         "admitted": admitted,
         "kinds": summary,
         "exceptions": sum(1 for s in summary.values() if not s["admitted"]),
+        "validated_field_sets": validated_sets,
+        "sandbox_fk_errors": list(sb.fk_errors),
     }
     (out / "ONBOARDING.json").write_text(json.dumps(result, indent=2, default=str))
-    (out / "EXCEPTIONS.md").write_text(exceptions_md(summary, prod))
+    text = exceptions_md(summary, prod)
+    if sb.fk_errors:
+        text += ("\nForeign keys the sandbox couldn't copy (contracts that depend "
+                 "on them differ from production and are not admitted):\n"
+                 + "".join(f"- {e}\n" for e in sb.fk_errors))  # fmt: skip
+    (out / "EXCEPTIONS.md").write_text(text)
     (out / "VALIDATION.jsonl").write_text("".join(json.dumps(c) + "\n" for c in cases))
     return result
 
