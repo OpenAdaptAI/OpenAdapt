@@ -351,10 +351,18 @@ def cmd_compile_agent(
     surface_config = None
     if args.config:
         from openadapt_flow.backends.factory import _normalize_kind
+        from openadapt_flow.compile_agent.pipeline import BACKENDS
         from openadapt_flow.deployment import load_deployment
 
         section = load_deployment(args.config, allow_unresolved=True).backend
         backend = (section.kind or "web").strip().lower()
+        if backend not in BACKENDS:
+            print(
+                f"compile-agent: --config names backend {backend!r}; use one of "
+                f"{', '.join(BACKENDS)}. Nothing ran.",
+                file=sys.stderr,
+            )
+            return 2
         if _normalize_kind(backend) != "web":
             # A native or remote app: the deployment's backend section names
             # it, and build_backend opens it for run 1, the canaries and runs.

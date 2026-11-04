@@ -519,9 +519,14 @@ class LinuxBackend:
                 role = _AUTHORING_ROLES.get(element.role or "")
                 if role is None:
                     continue
+                if not (element.accessible_id or (element.role and element.name)):
+                    continue  # nothing to identify it by, so no twin either
                 visible = showing and self._scoped(window, element)
                 identity = self._identity_of(window, element, visible=visible)
                 if identity is None:
+                    # It could be another control's twin: uniqueness can't
+                    # be shown, so no click by node from this tree.
+                    truncated = True
                     continue
                 if not visible:
                     # Out of view: listed only for the uniqueness check.

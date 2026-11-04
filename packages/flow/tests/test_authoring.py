@@ -1147,7 +1147,102 @@ def test_a_node_from_an_earlier_observation_is_stale(tmp_path: Path) -> None:
     assert excinfo.value.code == "stale_node"
 
 
-def test_a_native_combo_box_shows_no_name(tmp_path: Path) -> None:
-    combo = {**_native_node("Jane Roe", 100), "role": "combobox"}
+@pytest.mark.parametrize("role", ["combobox", "list_item"])
+def test_a_native_combo_box_or_list_row_shows_no_name(
+    tmp_path: Path, role: str
+) -> None:
+    combo = {**_native_node("Jane Roe", 100), "role": role}
     (node,) = _native_session(tmp_path, _NativeTreeBackend([combo])).observe()["tree"]
-    assert node["role"] == "combobox" and "name" not in node
+    assert node["role"] == role and "name" not in node
+
+
+class _WindowedTreeBackend(_NativeTreeBackend):
+    """Windows: each node names its top-level window, read again at a point."""
+
+    def __init__(self, nodes: list[dict]) -> None:
+        super().__init__(nodes)
+        self.window_at: dict[tuple[int, int], Optional[tuple[int, int]]] = {}
+
+    def window_root_at(self, x: int, y: int) -> Optional[tuple[int, int]]:
+        return self.window_at.get((x, y))
+
+
+def _windowed(name: str, x: int, window: Any) -> dict:
+    return {**_native_node(name, x), "window": window}
+
+
+@pytest.mark.parametrize(
+    ("recorded", "live"),
+    [
+        ({"hwnd": 11, "pid": 7}, (12, 7)),  # the same app's other window
+        ({"hwnd": 11, "pid": 7}, None),  # no foreground window there
+        (None, (11, 7)),  # the tree could not name its window
+    ],
+    ids=["other_window", "no_window", "unknown_window"],
+)
+def test_a_native_node_in_another_window_is_not_clicked(
+    tmp_path: Path, recorded: Any, live: Any
+) -> None:
+    backend = _WindowedTreeBackend([_windowed("Save", 100, recorded)])
+    backend.live[(120, 110)] = _identity("Save")  # same title, same identity
+    backend.window_at[(120, 110)] = live
+    session = _native_session(tmp_path, backend)
+    (node,) = session.observe()["tree"]
+    session.start_record()
+    with pytest.raises(AuthoringError) as excinfo:
+        session.click(node_id=node["node_id"])
+    assert excinfo.value.code == "stale_node"
+    assert not [call for call in backend.calls if call[0] == "click"]
+
+
+def test_a_native_node_in_its_own_window_is_clicked(tmp_path: Path) -> None:
+    backend = _WindowedTreeBackend([_windowed("Save", 100, {"hwnd": 11, "pid": 7})])
+    backend.live[(120, 110)] = _identity("Save")
+    backend.window_at[(120, 110)] = (11, 7)
+    session = _native_session(tmp_path, backend)
+    (node,) = session.observe()["tree"]
+    session.start_record()
+    session.click(node_id=node["node_id"])
+    session.stop_record()
+    assert ("click", 120, 110, False) in backend.calls
+
+
+def test_native_node_ids_do_not_repeat_across_sessions(tmp_path: Path) -> None:
+    """The identity part of a node id is salted per session: a node id can't
+    be matched offline against a guessed window title or name."""
+    first = _native_session(
+        tmp_path / "a", _NativeTreeBackend([_native_node("Save", 100)])
+    )
+    second = _native_session(
+        tmp_path / "b", _NativeTreeBackend([_native_node("Save", 100)])
+    )
+    (a,) = first.observe()["tree"]
+    (b,) = second.observe()["tree"]
+    (again,) = first.observe()["tree"]
+    assert a["node_id"] != b["node_id"]
+    assert again["node_id"] == a["node_id"]  # stable within a session
+
+
+def test_an_observed_native_node_cannot_be_moved_by_pixels(tmp_path: Path) -> None:
+    backend = _NativeTreeBackend([_native_node("Save", 100)])
+    session = _native_session(tmp_path, backend)
+    (node,) = session.observe()["tree"]
+    session.start_record()
+    with pytest.raises(AuthoringError) as excinfo:
+        session.pause_for_input(
+            param="note",
+            node_id=node["node_id"],
+            backend_pixels={"x": 500, "y": 500, "w": 10, "h": 10},
+        )
+    assert excinfo.value.code == "invalid_pause"
+
+
+def test_pausing_on_a_native_node_checks_its_identity(tmp_path: Path) -> None:
+    backend = _NativeTreeBackend([_native_node("Save", 100)])
+    backend.live[(120, 110)] = _identity("Delete")
+    session = _native_session(tmp_path, backend)
+    (node,) = session.observe()["tree"]
+    session.start_record()
+    with pytest.raises(AuthoringError) as excinfo:
+        session.pause_for_input(param="note", node_id=node["node_id"])
+    assert excinfo.value.code == "stale_node"

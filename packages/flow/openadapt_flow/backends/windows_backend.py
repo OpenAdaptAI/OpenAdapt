@@ -231,6 +231,16 @@ def _pixel_box(value: object) -> Optional[dict[str, int]]:
     return {k: int(value[k]) for k in ("x", "y", "w", "h")}
 
 
+def _window_pair(raw: object) -> Optional[tuple[int, int]]:
+    """``(hwnd, pid)`` from an agent's ``{hwnd, pid}``, or None when off-shape."""
+    if not isinstance(raw, dict) or set(raw) != {"hwnd", "pid"}:
+        return None
+    values = (raw["hwnd"], raw["pid"])
+    if any(isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in values):
+        return None
+    return values  # type: ignore[return-value]
+
+
 def _authoring_node(raw: object) -> Optional[dict[str, Any]]:
     """One ``/uia/authoring-tree`` node, or None when anything is off-shape."""
     keys = {
@@ -244,6 +254,7 @@ def _authoring_node(raw: object) -> Optional[dict[str, Any]]:
         "backend_pixels",
         "offscreen",
         "identity",
+        "window",
     }
     if not isinstance(raw, dict) or set(raw) != keys:
         return None
@@ -255,6 +266,9 @@ def _authoring_node(raw: object) -> Optional[dict[str, Any]]:
     ):
         return None
     if not all(isinstance(raw[k], bool) for k in ("enabled", "focused", "offscreen")):
+        return None
+    window = raw["window"]
+    if window is not None and _window_pair(window) is None:
         return None
     pixels = _pixel_box(raw["backend_pixels"])
     identity = _element_identity_payload(raw["identity"])
@@ -882,21 +896,10 @@ class WindowsBackend:
         answer for itself. Returns False (and records nothing) when the agent
         cannot say which window that is. Never raises.
         """
-        typed = self._post_typed_read("/window/root-at", {"x": int(x), "y": int(y)})
-        window = typed.payload.get("window") if typed.payload is not None else None
-        if (
-            not isinstance(window, dict)
-            or set(window) != {"hwnd", "pid"}
-            or not all(
-                isinstance(window[k], int)
-                and not isinstance(window[k], bool)
-                and window[k] > 0
-                for k in ("hwnd", "pid")
-            )
-        ):
+        capture = self.window_root_at(x, y)
+        if capture is None:
             self._verified_windows.pop(step_id, None)
             return False
-        capture = (window["hwnd"], window["pid"])
         earlier = self._verified_windows.get(step_id)
         if step_id in self._conflicted_windows or (
             earlier is not None and earlier != capture
@@ -907,6 +910,21 @@ class WindowsBackend:
             return False
         self._verified_windows[step_id] = capture
         return True
+
+    def window_root_at(self, x: int, y: int) -> Optional[tuple[int, int]]:
+        """``(hwnd, pid)`` of the foreground app's top-level window at (x, y).
+
+        None when the window there is not the foreground app's, or the agent
+        can't say. The authoring tree names each control's window the same
+        way, so a click by node can check the window is still that one.
+        Never raises.
+        """
+        try:
+            typed = self._post_typed_read("/window/root-at", {"x": int(x), "y": int(y)})
+        except Exception:  # noqa: BLE001 - no answer is no window
+            return None
+        window = typed.payload.get("window") if typed.payload is not None else None
+        return _window_pair(window)
 
     def clear_verified_windows(self) -> None:
         """Forget every capture (call between runs: step ids repeat)."""

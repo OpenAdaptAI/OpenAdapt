@@ -1009,13 +1009,15 @@ def test_authoring_tree_keeps_only_nodes_in_the_exact_shape() -> None:
         "backend_pixels": {"x": 500, "y": 450, "w": 100, "h": 34},
         "offscreen": False,
         "identity": _IDENTITY,
+        "window": {"hwnd": 4242, "pid": 77},
     }
-    hidden = {**good, "backend_pixels": None, "offscreen": True}
+    hidden = {**good, "backend_pixels": None, "offscreen": True, "window": None}
     renamed = {**good, "name": "Delete"}  # disagrees with its own identity
     extra = {**good, "value": "Jane Roe"}
+    bad_window = {**good, "window": {"hwnd": 0, "pid": 77}}
     payload = {
         "status": "ok",
-        "tree": [good, hidden, renamed, extra],
+        "tree": [good, hidden, renamed, extra, bad_window],
         "window": {"process_name": "PatientNotes.exe", "bounds": None},
         "truncated": False,
     }
