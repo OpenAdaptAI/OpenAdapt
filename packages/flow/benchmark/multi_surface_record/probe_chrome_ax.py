@@ -73,6 +73,12 @@ def main():
     )
     time.sleep(3)
     result["points_after_manual"] = grid(pid, bounds)
+    result["set_enhanced"] = AX.AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface", True)
+    time.sleep(3)
+    result["points_after_enhanced"] = grid(pid, bounds)
+    AX.AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface", False)
+    for key in [k for k in result if k.startswith("points")]:
+        result[key] = sorted(result[key])
     print(json.dumps(result, indent=1))
     return 0
 
