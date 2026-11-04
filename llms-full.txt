@@ -2324,7 +2324,9 @@ refuses a write when the record or its outcome cannot be established.
 - Encrypt recordings and bundles at rest with a local key. Strict mode refuses
   unsealed inputs. Compile, compose, route, process, visualize, variant, teach
   and library paths can read sealed artifacts without a plaintext export.
-  See [Encryption at rest](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/phi_at_rest.md).
+  Attended state, checkpoints and the approval journal are encrypted by default;
+  legacy plaintext state is upgraded before use, and raw authority paths are
+  refused in strict mode. See [Encryption at rest](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/phi_at_rest.md).
 - Roll back durable runs, including after a crash. Desktop and remote-display
   rollback checks the starting screen through the same step resolver used by
   a run. The ledger retains owed rechecks across restarts and distinguishes a
