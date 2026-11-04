@@ -45,7 +45,7 @@
       "importer": "openadapt_flow.qualification_oracle_gate",
       "imported": "openadapt_flow.mockmed.fault_server",
       "reason": "The qualification oracle gate runs its break-it fault against the bundled MockMed fault server, its only fixture. Core reaches the gate through receipt > repair.standard_change > repair.self_repair > agent.repair > agent.authoring > agent.bridge > agent.admission > admit_pipeline > qualification_proposal. Removing the edge means passing the fault fixture in from the caller, which changes the gate and its callers.",
-      "issue": "TODO: public follow-up issue to be filed"
+      "issue": "https://github.com/OpenAdaptAI/OpenAdapt/issues/1876"
     }
   ]
 }

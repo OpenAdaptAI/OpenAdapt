@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 from collections import deque
 from pathlib import Path
 
@@ -219,7 +220,9 @@ def test_every_exception_is_documented_and_still_needed(
         assert _forbidden_group(edge[1], contract["forbidden"])
         assert not _under(edge[0], contract["core"]), "core has no exceptions"
         assert exception["reason"].strip()
-        assert exception["issue"].strip()
+        assert re.fullmatch(
+            r"https://github\.com/OpenAdaptAI/OpenAdapt/issues/\d+", exception["issue"]
+        ), f"exception needs a public issue link: {edge}"
 
 
 def test_contract_names_real_modules(graph: Graph, contract: dict) -> None:
