@@ -427,11 +427,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Each shard runs pytest-xdist on all four runner cores and pays about
-        # a minute and a half of setup. A pull request's fast lane takes four
-        # shards to fit `ci` in ten minutes at about the same runner time; the
-        # full suite on main and nightly takes two.
-        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"shard":1,"of":4},{"shard":2,"of":4},{"shard":3,"of":4},{"shard":4,"of":4}]' || '[{"shard":1,"of":2},{"shard":2,"of":2}]') }}
+        # Each shard runs one pytest-xdist worker per vCPU (four on
+        # ubuntu-latest) and pays about 35 s of setup. Files are packed by
+        # measured time (scripts/ci/flow_shards.py), so the shards finish
+        # together: a pull request's fast lane takes three shards, about five
+        # minutes each, to fit `ci` in ten minutes. The full suite on main and
+        # nightly takes two.
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"shard":1,"of":3},{"shard":2,"of":3},{"shard":3,"of":3}]' || '[{"shard":1,"of":2},{"shard":2,"of":2}]') }}
     defaults:
       run:
         working-directory: packages/flow
@@ -495,30 +497,32 @@ jobs:
           # Everything outside tests/e2e, minus the installer self-test and the
           # long qualification campaign. The nightly run (a schedule, or a
           # dispatch) also takes all of tests/e2e; pull requests and main run
-          # the end-to-end tests flow-critical names. Files are dealt
-          # round-robin from a sorted list, so every file lands in exactly one
-          # shard.
+          # the end-to-end tests flow-critical names. flow_shards.py packs the
+          # files by their measured time (scripts/ci/flow_test_durations.json)
+          # and lists each shard longest first; every file lands in exactly
+          # one shard.
           e2e=(-not -path 'tests/e2e/*')
           case "$EVENT_NAME" in schedule|workflow_dispatch) e2e=() ;; esac
           find tests -name 'test_*.py' "${e2e[@]}" \
             -not -path 'tests/test_install_playwright_browser.py' \
             -not -path 'tests/test_qualification_gate_campaign.py' \
-            | LC_ALL=C sort | awk -v s="$SHARD" -v n="$SHARDS" 'NR % n == s % n' > "$RUNNER_TEMP/shard.txt"
+            | python ../../scripts/ci/flow_shards.py --shard "$SHARD" --of "$SHARDS" > "$RUNNER_TEMP/shard.txt"
           wc -l < "$RUNNER_TEMP/shard.txt"
       - name: Test
         # A pull request runs the fast lane: tests/nightly_only.txt lists the
         # slow tests (over about 5 s on CI) that main and nightly run instead.
         env:
           OPENADAPT_TEST_LANE: ${{ github.event_name == 'pull_request' && 'fast' || 'full' }}
-        # -n auto: one xdist worker per core. --dist loadfile keeps each file
-        # on one worker, so module fixtures and file-local state stay in one
-        # process. xdist gives each worker its own directory under --basetemp
+        # -n logical: one xdist worker per vCPU. (-n auto counts physical
+        # cores and started two workers on the four-vCPU runner.) --dist
+        # loadfile keeps each file on one worker, so module fixtures and
+        # file-local state stay in one process. xdist gives each worker its own directory under --basetemp
         # (runs/ci/popen-gwN), so tmp_path never collides.
         run: |
           set -euo pipefail
           mkdir -p runs
           mapfile -t files < "$RUNNER_TEMP/shard.txt"
-          pytest -n auto --dist loadfile -v --durations=20 --basetemp=runs/ci "${files[@]}"
+          pytest -n logical --dist loadfile -v --durations=20 --basetemp=runs/ci "${files[@]}"
 
   flow-critical:
     name: flow core critical (golden VERIFIED, zero model calls)
@@ -567,10 +571,10 @@ jobs:
         # agent guard's wire check end to end. Serially, these and the step
         # below took about 13 minutes. tests/e2e runs apart from tests/: in one
         # xdist run with both, test_structural_action lost its conftest's
-        # `bundle` fixture.
+        # `bundle` fixture. -n logical: one worker per vCPU, as in flow-unit.
         run: |
           mkdir -p runs
-          pytest -n auto --dist loadfile -v --durations=20 \
+          pytest -n logical --dist loadfile -v --durations=20 \
             tests/e2e/test_free_path_e2e.py \
             tests/e2e/test_record_compile_replay.py \
             tests/e2e/test_structural_action.py \
@@ -585,7 +589,7 @@ jobs:
             --basetemp=runs/ci-critical-e2e --junitxml=runs/critical-e2e-junit.xml
       - name: Read-back and zero-model-call tests, by name
         run: |
-          pytest -n auto --dist loadfile -v --durations=20 \
+          pytest -n logical --dist loadfile -v --durations=20 \
             tests/test_replayer_readback.py \
             tests/test_readback_authoring.py \
             tests/test_run_receipt.py \
