@@ -5362,8 +5362,32 @@ def _cmd_silent_saves(args: argparse.Namespace) -> int:
     return int(silent_saves_main(list(args.silent_saves_argv)))
 
 
+def _checkout_harness_on_path(command: str) -> bool:
+    """Put the checkout's ``benchmark`` harness on ``sys.path``.
+
+    The harness lives in ``packages/flow/benchmark/harness``, outside the
+    package, so a wheel install has none and the command says so.
+    """
+    checkout = Path(__file__).resolve().parents[1]
+    if not (checkout / "benchmark" / "harness" / "__init__.py").is_file():
+        print(
+            f"{command} runs from a source checkout of OpenAdapt "
+            "(packages/flow/benchmark/harness); the wheel does not ship it.",
+            file=sys.stderr,
+        )
+        return False
+    if str(checkout) not in sys.path:
+        # Appended, so nothing in the checkout shadows an installed module.
+        sys.path.append(str(checkout))
+    return True
+
+
 def _cmd_benchmark(args: argparse.Namespace) -> int:
-    from openadapt_flow.benchmark.run_benchmark import run_benchmark
+    if not _checkout_harness_on_path("benchmark"):
+        return 2
+    from benchmark.harness.run_benchmark import (  # type: ignore[import-not-found]
+        run_benchmark,
+    )
 
     results = run_benchmark(
         Path(args.out),

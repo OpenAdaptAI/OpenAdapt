@@ -1,11 +1,11 @@
 """The runner harness — wire each arm through ``score_episode`` identically.
 
 This is the multi-baseline runner's core: given a set of
-:class:`~openadapt_flow.benchmark.effectbench.schema.TaskSpec` and a set of arms,
+:class:`~benchmark.harness.effectbench.schema.TaskSpec` and a set of arms,
 it produces one
-:class:`~openadapt_flow.benchmark.effectbench.schema.EpisodeRecord` per
+:class:`~benchmark.harness.effectbench.schema.EpisodeRecord` per
 (task × arm × trial), each scored by the task's INDEPENDENT oracle through
-:func:`~openadapt_flow.benchmark.effectbench.oracle.score_episode`. Every arm
+:func:`~benchmark.harness.effectbench.oracle.score_episode`. Every arm
 runs the SAME task and is judged by the SAME oracle — the harness guarantees the
 comparison is fair by construction:
 
@@ -30,10 +30,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, List, Mapping, Optional, Sequence
 
-from openadapt_flow.benchmark.effectbench.oracle import score_episode
-from openadapt_flow.benchmark.effectbench.runner.arms import AgentArm
-from openadapt_flow.benchmark.effectbench.runner.substrate import SubstrateSession
-from openadapt_flow.benchmark.effectbench.schema import (
+from benchmark.harness.effectbench.oracle import score_episode
+from benchmark.harness.effectbench.runner.arms import AgentArm
+from benchmark.harness.effectbench.runner.substrate import SubstrateSession
+from benchmark.harness.effectbench.schema import (
     AgentReport,
     EpisodeRecord,
     ModelCall,

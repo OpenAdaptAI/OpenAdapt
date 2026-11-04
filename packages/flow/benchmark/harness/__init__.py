@@ -1,4 +1,8 @@
-"""Benchmark: compiled replay vs. a frontier computer-use agent.
+"""Benchmark harnesses: compiled replay vs. a frontier computer-use agent.
+
+This package lives in the source checkout, outside ``openadapt_flow``, so the
+wheel does not ship it. Import it as ``benchmark.harness`` from
+``packages/flow``.
 
 Submodules (import them directly; nothing heavy is imported here):
 

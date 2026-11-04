@@ -67,12 +67,12 @@ from typing import Any, Callable, Optional
 
 from pydantic import BaseModel
 
-from openadapt_flow.benchmark import agent_baseline
-from openadapt_flow.benchmark.openemr_benchmark import (
+from benchmark.harness import agent_baseline
+from benchmark.harness.openemr_benchmark import (
     BILLING_ABORT_AFTER,
     _looks_like_billing_error,
 )
-from openadapt_flow.benchmark.run_benchmark import (
+from benchmark.harness.run_benchmark import (
     _agent_run,
     _arm_aggregate,
     _compiled_run,
@@ -863,7 +863,7 @@ def render_hybrid_chart(results: dict[str, Any], out_png: Path) -> Path:
     Returns:
         The written PNG path.
     """
-    from openadapt_flow.benchmark.chart_fonts import configure_bundled_font
+    from benchmark.harness.chart_fonts import configure_bundled_font
 
     plt = configure_bundled_font()
 
@@ -1379,7 +1379,7 @@ ${mean_fb_cost:.4f}), and `a` = the agent-only mean cost per run
 ## Reproduce
 
 ```
-.venv/bin/python -m openadapt_flow.benchmark.hybrid_benchmark --out benchmark/hybrid
+.venv/bin/python -m benchmark.harness.hybrid_benchmark --out benchmark/hybrid
 ```
 
 Requires `ANTHROPIC_API_KEY` (or `~/.anthropic/api_key`). The paid arms
@@ -1398,7 +1398,7 @@ def write_hybrid_outputs(results: dict[str, Any], out_dir: Path) -> None:
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "results.json").write_text(json.dumps(results, indent=2) + "\n")
-    from openadapt_flow.benchmark.chart_fonts import safe_render
+    from benchmark.harness.chart_fonts import safe_render
 
     safe_render(render_hybrid_chart, results, out_dir / "success_cost.png")
     (out_dir / "BENCHMARK.md").write_text(render_hybrid_markdown(results))
@@ -1649,7 +1649,7 @@ def _error_row(arm: str, exc: Exception) -> dict[str, Any]:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    """CLI entry point: ``python -m openadapt_flow.benchmark.hybrid_benchmark``."""
+    """CLI entry point: ``python -m benchmark.harness.hybrid_benchmark``."""
     parser = argparse.ArgumentParser(
         description=(
             "Four-arm hybrid benchmark on MockMed (compiled / agent / "

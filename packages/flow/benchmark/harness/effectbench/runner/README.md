@@ -1,7 +1,7 @@
 # EffectBench runner adapter — one interface, every baseline
 
 The **multi-baseline runner adapter** (downstream effort #2 on the
-`openadapt_flow.benchmark.effectbench` contract). It drives every agent *arm*
+`benchmark.harness.effectbench` contract). It drives every agent *arm*
 through one common interface against the **identical task** and **identical
 independent oracle**, records one `EpisodeRecord` per (task × arm × trial), and
 summarizes per arm with `summarize`. A difference between arms is then the
@@ -10,8 +10,8 @@ AGENT, never the harness.
 Run the CI-fast dry-run (real in-process HTTP, no Docker, no paid API, no spend):
 
 ```bash
-python -m openadapt_flow.benchmark.effectbench.runner            # all live arms
-python -m openadapt_flow.benchmark.effectbench.runner --list-arms
+python -m benchmark.harness.effectbench.runner            # all live arms
+python -m benchmark.harness.effectbench.runner --list-arms
 ```
 
 ## The arm interface

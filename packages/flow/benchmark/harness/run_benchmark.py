@@ -28,9 +28,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from benchmark.harness import agent_baseline
+from benchmark.harness.verify import verify_encounter_saved
 from openadapt_flow.bench import _percentile
-from openadapt_flow.benchmark import agent_baseline
-from openadapt_flow.benchmark.verify import verify_encounter_saved
 
 N_COMPILED = 100
 N_AGENT = 20
@@ -153,7 +153,7 @@ def _agent_run(
         A per-run row dict. API failures are recorded as failed rows with
         ``error`` set, never raised; a failed row still carries whatever
         usage/cost the run paid for before crashing (via
-        :class:`~openadapt_flow.benchmark.agent_baseline.UsageLedger`), so
+        :class:`~benchmark.harness.agent_baseline.UsageLedger`), so
         crashed runs' real spend counts in aggregates and cost ceilings.
     """
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
@@ -364,7 +364,7 @@ def render_chart(results: dict[str, Any], out_png: Path) -> Path:
     Returns:
         The written PNG path.
     """
-    from openadapt_flow.benchmark.chart_fonts import configure_bundled_font
+    from benchmark.harness.chart_fonts import configure_bundled_font
 
     plt = configure_bundled_font()
 
@@ -578,7 +578,7 @@ def write_outputs(results: dict[str, Any], out_dir: Path) -> None:
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "results.json").write_text(json.dumps(results, indent=2) + "\n")
-    from openadapt_flow.benchmark.chart_fonts import safe_render
+    from benchmark.harness.chart_fonts import safe_render
 
     safe_render(render_chart, results, out_dir / "latency_cost.png")
     (out_dir / "BENCHMARK.md").write_text(render_markdown(results))

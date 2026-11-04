@@ -1,7 +1,7 @@
 """Competitor-drift instrument: point our EffectVerifier at ANY external agent.
 
 The self-directed silent-wrong-action benchmark
-(``openadapt_flow.benchmark.silent_wrong_action``, #67) measures how often our
+(``benchmark.harness.silent_wrong_action``, #67) measures how often our
 OWN runtime lets a wrong / absent / duplicate business effect land while
 reporting success. This package generalizes that measurement to an *arbitrary
 external computer-use agent*: given any agent behind the
@@ -19,7 +19,7 @@ adapter and running it against a real competitor is a separate, explicit,
 user-gated step.
 """
 
-from openadapt_flow.instrument.competitor_drift import (  # noqa: F401
+from benchmark.harness.instrument.competitor_drift import (  # noqa: F401
     AgentRunResult,
     ArchitectureClassError,
     CostGuard,

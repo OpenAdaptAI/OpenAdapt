@@ -3,7 +3,7 @@
 These are the reference tasks the multi-baseline runner exercises end-to-end
 without Docker or spend: the bundled MockMed transactional-fault surface
 (``openadapt_flow.mockmed.fault_server``) turned into
-:class:`~openadapt_flow.benchmark.effectbench.schema.TaskSpec` s across the
+:class:`~benchmark.harness.effectbench.schema.TaskSpec` s across the
 divergence categories, plus a :func:`mockmed_env_factory` that provisions one
 isolated fault server per episode with an INDEPENDENT in-process oracle.
 
@@ -24,17 +24,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping, Optional
 
-from openadapt_flow.benchmark.effectbench.oracle import RecordSnapshotOracle
-from openadapt_flow.benchmark.effectbench.runner.compound import (
+from benchmark.harness.effectbench.oracle import RecordSnapshotOracle
+from benchmark.harness.effectbench.runner.compound import (
     CompoundEffectVerifier,
 )
-from openadapt_flow.benchmark.effectbench.runner.harness import EpisodeEnv
-from openadapt_flow.benchmark.effectbench.runner.substrate import (
+from benchmark.harness.effectbench.runner.harness import EpisodeEnv
+from benchmark.harness.effectbench.runner.substrate import (
     MockMedFault,
     MockMedSession,
     mockmed_session,
 )
-from openadapt_flow.benchmark.effectbench.schema import (
+from benchmark.harness.effectbench.schema import (
     DivergenceCategory,
     OracleChannel,
     OracleSpec,

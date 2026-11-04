@@ -1,7 +1,7 @@
 """EffectBench metrics — SWER and its co-metrics, with confidence intervals.
 
 Every headline is a pure aggregation over a list of
-:class:`~openadapt_flow.benchmark.effectbench.schema.EpisodeRecord` rows, so a
+:class:`~benchmark.harness.effectbench.schema.EpisodeRecord` rows, so a
 run's numbers can be recomputed from the published raw rows by anyone. No
 single mean is reported alone: :func:`summarize` always returns the per
 (category x substrate) decomposition alongside the overall rate (design doc
@@ -39,7 +39,7 @@ from typing import Callable, Iterable, Mapping, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from openadapt_flow.benchmark.effectbench.schema import (
+from benchmark.harness.effectbench.schema import (
     EpisodeRecord,
     OutcomeLabel,
     SwerVariant,

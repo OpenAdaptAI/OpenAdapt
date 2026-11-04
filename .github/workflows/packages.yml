@@ -357,7 +357,7 @@ jobs:
         # every public data/config asset listed in public-artifacts.json.
         run: python scripts/check_release_consistency.py
       - name: Ruff lint
-        run: ruff check openadapt_flow
+        run: ruff check openadapt_flow benchmark/harness
       - name: Install uv (for the oldest-Python syntax check)
         uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
       - name: Syntax at the oldest supported Python (3.10)
@@ -372,7 +372,7 @@ jobs:
           ruff check --isolated --select E9 --target-version py310 .
           uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Ruff format check
-        run: ruff format --check openadapt_flow tests
+        run: ruff format --check openadapt_flow tests benchmark/harness
       - name: Mypy
         run: mypy
       - name: Mypy (strict, safety path only)

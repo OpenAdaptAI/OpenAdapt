@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Sequence
 from urllib.parse import urlencode
 
-from openadapt_flow.benchmark.frappe_lending import (
+from benchmark.harness.frappe_lending import (
     ARMS,
     CONDITIONS,
     INITIAL_TRIALS_PER_CELL,

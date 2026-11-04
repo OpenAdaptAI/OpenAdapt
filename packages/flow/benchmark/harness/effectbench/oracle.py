@@ -17,7 +17,7 @@ into two reusable pieces:
 
 2. **The classifier** — :func:`classify_outcome`, which crosses the oracle's
    reading of the true effect with the agent's (untrusted) self-report to
-   assign exactly one :class:`~openadapt_flow.benchmark.effectbench.schema.OutcomeLabel`.
+   assign exactly one :class:`~benchmark.harness.effectbench.schema.OutcomeLabel`.
    This is ``fault_model.classify`` generalized: it adds the OVER_HALT vs
    SAFE_HALT split (was the correct action available?) and makes
    ``SILENT_WRONG_EFFECT`` the single home of ``reported_success AND
@@ -25,7 +25,7 @@ into two reusable pieces:
 
 :func:`score_episode` ties the two together for a runner: capture pre-state,
 run the arm's action, verify, classify, and emit an
-:class:`~openadapt_flow.benchmark.effectbench.schema.EpisodeRecord`.
+:class:`~benchmark.harness.effectbench.schema.EpisodeRecord`.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ import time
 from enum import Enum
 from typing import Any, Callable, Mapping, Optional
 
-from openadapt_flow.benchmark.effectbench.schema import (
+from benchmark.harness.effectbench.schema import (
     AgentReport,
     DivergenceCategory,
     EpisodeRecord,

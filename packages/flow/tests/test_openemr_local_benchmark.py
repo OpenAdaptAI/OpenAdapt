@@ -23,7 +23,7 @@ from benchmark.openemr_local.fixture import (
     audit_table_deltas,
     unexpected_table_deltas,
 )
-from openadapt_flow.benchmark.openemr_local import (
+from benchmark.harness.openemr_local import (
     ARMS,
     CONDITIONS,
     OpenEMRPatientOracle,
@@ -1062,7 +1062,7 @@ def test_free_token_count_guard_refuses_before_paid_cap_overshoot() -> None:
         "max_tokens": 4096,
     }
     ledger = __import__(
-        "openadapt_flow.benchmark.agent_baseline", fromlist=["UsageLedger"]
+        "benchmark.harness.agent_baseline", fromlist=["UsageLedger"]
     ).UsageLedger()
 
     allowed_messages = Messages(10_000)

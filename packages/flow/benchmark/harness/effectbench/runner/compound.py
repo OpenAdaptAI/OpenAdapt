@@ -9,16 +9,16 @@ write the benchmark scores is a **compound** contract:
 * ``field_equals`` — that encounter's note reads back the run's exact value;
   catches a *partial save* that persists the row but drops a field.
 
-:class:`~openadapt_flow.benchmark.effectbench.oracle.score_episode` verifies a
+:class:`~benchmark.harness.effectbench.oracle.score_episode` verifies a
 SINGLE :class:`Effect` through the oracle. This module supplies a thin
 :class:`~openadapt_flow.runtime.effects.effect.EffectVerifier` that wraps ANY
 concrete base verifier (the in-process
-:class:`~openadapt_flow.benchmark.effectbench.oracle.RecordSnapshotOracle`, a
+:class:`~benchmark.harness.effectbench.oracle.RecordSnapshotOracle`, a
 :class:`~openadapt_flow.runtime.effects.rest.RestRecordVerifier`, …) and, when
 ``score_episode`` calls :meth:`verify` with the primary ``record_written``
 effect, ALSO checks the authored extra sub-effects against the SAME pre-state
 snapshot, reducing the per-effect true-effect states with
-:func:`~openadapt_flow.benchmark.effectbench.oracle.combine_true_states`.
+:func:`~benchmark.harness.effectbench.oracle.combine_true_states`.
 
 It returns the single **deciding** :class:`EffectVerdict` whose
 ``effect_state`` equals the combined state (the fault-model precedence: the
@@ -33,7 +33,7 @@ from __future__ import annotations
 
 from typing import Any, Sequence
 
-from openadapt_flow.benchmark.effectbench.oracle import (
+from benchmark.harness.effectbench.oracle import (
     TrueEffectState,
     combine_true_states,
     effect_state,

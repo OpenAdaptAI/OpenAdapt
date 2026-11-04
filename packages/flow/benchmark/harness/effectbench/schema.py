@@ -135,7 +135,7 @@ class OracleChannel(str, Enum):
 
     Maps 1:1 onto the ``substrate`` attribute of the concrete
     :class:`~openadapt_flow.runtime.effects.effect.EffectVerifier`
-    implementations re-exported by :mod:`openadapt_flow.benchmark.effectbench`.
+    implementations re-exported by :mod:`benchmark.harness.effectbench`.
     """
 
     SQL = "sql"  # SqlRecordVerifier — read-only SELECT under a read-only role
@@ -311,7 +311,7 @@ class EpisodeRecord(BaseModel):
     """One trial of one task by one arm — the atomic benchmark result row.
 
     Every headline metric is a pure aggregation over a list of these (see
-    :func:`openadapt_flow.benchmark.effectbench.metrics.summarize`). The runner
+    :func:`benchmark.harness.effectbench.metrics.summarize`). The runner
     produces one per (task x arm x trial); ``summarize`` never needs anything
     the row does not carry, so raw rows can be published for external replication.
     """

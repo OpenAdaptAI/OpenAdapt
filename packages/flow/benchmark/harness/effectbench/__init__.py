@@ -31,10 +31,10 @@ Three pieces, each a submodule:
   bootstrap confidence intervals, all decomposed by category x substrate.
 
 The design doc is ``.private/benchmark_design_2026_07_20.md``; the operator
-contract is ``openadapt_flow/benchmark/effectbench/README.md``.
+contract is ``benchmark/harness/effectbench/README.md``.
 """
 
-from openadapt_flow.benchmark.effectbench.metrics import (  # noqa: F401
+from benchmark.harness.effectbench.metrics import (  # noqa: F401
     BenchmarkSummary,
     CellSummary,
     Interval,
@@ -44,7 +44,7 @@ from openadapt_flow.benchmark.effectbench.metrics import (  # noqa: F401
     summarize,
     wilson_interval,
 )
-from openadapt_flow.benchmark.effectbench.oracle import (  # noqa: F401
+from benchmark.harness.effectbench.oracle import (  # noqa: F401
     RecordSnapshotOracle,
     TrueEffectState,
     classify_outcome,
@@ -53,7 +53,7 @@ from openadapt_flow.benchmark.effectbench.oracle import (  # noqa: F401
     oracle_verdict_of,
     score_episode,
 )
-from openadapt_flow.benchmark.effectbench.schema import (  # noqa: F401
+from benchmark.harness.effectbench.schema import (  # noqa: F401
     AgentReport,
     DivergenceCategory,
     EpisodeRecord,
