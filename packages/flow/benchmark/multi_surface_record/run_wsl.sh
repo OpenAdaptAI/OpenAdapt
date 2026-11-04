@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-uv pip install -q -e ../capture -e ../types 2>&1 | tail -2
+"${UV:-$HOME/.local/bin/uv}" pip install -q -e ../capture -e ../types python-xlib
 unset WAYLAND_DISPLAY DISPLAY
 export XDG_SESSION_TYPE=x11 GDK_BACKEND=x11 NO_AT_BRIDGE=0 GTK_MODULES=atk-bridge
 exec xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- \
