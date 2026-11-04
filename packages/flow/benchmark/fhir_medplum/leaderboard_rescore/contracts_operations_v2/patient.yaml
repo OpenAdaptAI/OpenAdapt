@@ -41,4 +41,4 @@ change_feed:
   sweep_types: [Patient, AllergyIntolerance, Appointment, Observation, Condition, Encounter]
 settle_s: 1
 
-semantics: {path: ../../app_semantics/medplum-v2.yaml, app: medplum, version: 2}
+semantics: {path: ../../app_semantics/medplum-v2.yaml, app: medplum, version: 2, sha256: 6b6accdd943039a6f9d46d05a23f37b596ba7dd0557414922d478385989dcc34}

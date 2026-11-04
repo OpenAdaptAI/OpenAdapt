@@ -134,3 +134,17 @@ third column, `operations-v2`, pins `app_semantics/medplum-v2.yaml`
 (`between: either`: the person, or only the task's values). It was chosen
 after seeing the results and is reported as exploratory, not as the
 pre-registered outcome.
+
+### Deviation 4: review fixes (after the run)
+
+An independent adversarial review of PR #1795 found two ways the new rules
+could confirm what needs review: a cleaned-up duplicate that another
+record referred to, and bookkeeping paths broad enough to excuse access
+control or clinical elements. Both are fixed in `ensure_record.py`, along
+with the review's other items: the semantics pin now names the spec's
+sha256 (the v1 spec file is unchanged; the contracts' pin line gained it),
+the transient rule needs the heartbeat, `consistent` refuses extra elements
+on open contracts too, and the bootstrap's upper index is corrected. Every
+verdict of every column is the same before and after; one interval bound
+moved by a draw. `RESULTS-SHA256SUMS` lists the code and contracts that
+produced `results/`.

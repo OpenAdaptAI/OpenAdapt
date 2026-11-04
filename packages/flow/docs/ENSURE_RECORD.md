@@ -86,7 +86,7 @@ operations:
     own_transient: true     # default false
   bookkeeping:              # default none
     - resource_type: Practitioner
-      paths: [meta, extension]
+      paths: [meta.versionId, meta.lastUpdated, "extension[url=urn:app:last-seen]"]
 ```
 
 The rules belong to the application, not to one task, so they can live in
@@ -95,7 +95,8 @@ app pins (example: `benchmark/fhir_medplum/app_semantics/medplum.yaml`):
 
 ```yaml
 # the contract
-semantics: {path: ../app_semantics/medplum.yaml, app: medplum, version: 1}
+semantics: {path: ../app_semantics/medplum.yaml, app: medplum, version: 1,
+            sha256: <the spec file's sha256>}
 
 # the spec
 schema_version: openadapt.app-semantics/v1
@@ -106,15 +107,17 @@ resources:                 # resource type -> correction and cardinality
 bookkeeping: []            # rules as below, for every task on the app
 ```
 
-A pin that doesn't match the file's `app` and `version`, a missing file, or
-a contract with both `semantics` and `operations` doesn't load. The format
+A pin that doesn't match the file's `app`, `version` and sha256 (a spec
+edited in place), an absolute or missing path, or a contract with both
+`semantics` and `operations` doesn't load. The app's bookkeeping rules
+apply to every contract on the app except one of the rule's own type. The format
 is public; a spec for a customer's system is private, like its other
 per-system recipes (`source-policy.yaml`).
 
 - **`correction.between`.** `person` (the default) is the rule above: each
   version in the window is the person. `consistent`: each version holds
   only the task's values, any of them possibly still missing, and nothing
-  else (on a `closed` contract, no element the task didn't give either). A
+  else: no element the task didn't give, on an open contract too. A
   web form that saves a new record as a create and then updates (Medplum's
   app does: the first version can be `{}`) is one write. A version that held
   another birth date, another patient or a wrong phone number refuses.
@@ -126,27 +129,31 @@ per-system recipes (`source-policy.yaml`).
 - **`cardinality.own_transient`.** A second record of the contract's type
   that the agent created and deleted again in the window (a double submit,
   or a save resubmitted after a lost response, then cleaned up) counts as
-  not created, when: its every write is the agent's, logged and timed, the
-  create first and the delete last; `_history` shows as many versions as the
+  not created, when: no version of any other write in the window refers to
+  it (an Encounter or an Observation filed on the duplicate); its every write
+  is the agent's, logged and timed, the create first and the delete last; `_history` shows as many versions as the
   trail shows creates and updates; every version holds only the task's
-  values; no other actor read it by id; and the trail logs reads at all
-  (the verifier's heartbeat on the record that stays). The result says how
+  values; no other actor read it by id; and the contract's audit read has
+  `heartbeat` on, so the trail is shown to log reads (the verifier's own read
+  of the record that stays). The result says how
   many such records it deleted (`transient_records`).
 - **`bookkeeping`.** An update by the agent's actor to *another* record that
-  changed only the named elements of its type (a version counter, a
-  timestamp, an app's own extension) is the save's bookkeeping, not a write
-  (`bookkeeping_writes`). Each rule names one resource type and exact element
-  paths, with no filters or wildcards; `meta.security`, `meta.tag`, `id` and
-  `resourceType` can't be named, and `meta.security` and `meta.tag` stay
-  compared even under `meta`. It never applies to the record the task
-  writes, to any record that is the person before or after, to a create or
-  a delete, or to a change the trail didn't log or attribute. `_history`
-  must give the version before the window, and each version must differ
-  from the one before only in the named elements. With `now_checks: true`
-  (the temporal rule of the whole-database generator's bookkeeping answer),
-  every time stamp the named elements change to must lie within
-  `now_within_s` (default 60) of the version's own server-set
-  `meta.lastUpdated`; a planted or replayed time refuses.
+  changed only the named elements is the save's bookkeeping, not a write
+  (`bookkeeping_writes`). A rule names one resource type, never the
+  contract's own (another record of it may be the person), and only these
+  paths: `meta.versionId`, `meta.lastUpdated`, and `extension[url=<url>]`
+  for one extension by its exact url. Anything else (`meta.security`,
+  `meta.tag`, `meta.account`, `meta.profile`, `active`, `link`, a bare
+  `extension`) can hide a record, move it, or change a clinical fact, and
+  doesn't load. It never applies to the record the task writes, to any
+  record that is the person before or after, to a create or a delete, to a
+  change the trail didn't log or attribute, or to a change any other actor
+  also wrote. `_history` must give the version before the window, and each
+  version must differ from the one before only in the named elements. With
+  `now_checks: true` (the temporal rule of the whole-database generator's
+  bookkeeping answer), every time stamp or date a named extension changes
+  to must lie within `now_within_s` (default 60) of the version's own
+  server-set `meta.lastUpdated`; a planted or replayed time refuses.
 - **Attribution** stays as `self`, `change_feed.audit` and
   `history_author` say: a change no source attributes is the agent's, and
   another actor's change to the created record refuses.

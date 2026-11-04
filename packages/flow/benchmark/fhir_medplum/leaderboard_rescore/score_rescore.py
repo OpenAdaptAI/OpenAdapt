@@ -97,7 +97,7 @@ def cluster_bootstrap(
             n += len(by[c])
         stats.append(k / n)
     stats.sort()
-    return (stats[int(0.025 * DRAWS)], stats[int(0.975 * DRAWS) - 1])
+    return (stats[int(0.025 * DRAWS)], stats[min(DRAWS - 1, int(0.975 * DRAWS))])
 
 
 def load_rows(agent: str) -> list[dict[str, Any]]:
@@ -173,6 +173,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     for path in args.rescores:
         data = json.loads(path.read_text())
         judged = data["rows"]
+        if data["contracts"] in columns:
+            raise SystemExit(f"two re-scores are labelled {data['contracts']!r}")
         columns[data["contracts"]] = lambda key, r, j=judged: j.get(key)
         if data["contracts"] == "main":
             main_rows = judged

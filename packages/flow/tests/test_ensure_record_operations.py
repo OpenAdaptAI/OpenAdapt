@@ -269,6 +269,44 @@ def test_a_duplicate_anyone_else_could_have_used_still_refuses(over):
     assert r.outcome == "needs_review"
 
 
+def test_a_duplicate_someone_filed_a_record_on_still_refuses():
+    x = patient("x")
+    changes = double_submit()
+    enc = {
+        "resourceType": "Encounter",
+        "id": "e",
+        "subject": {"reference": "Patient/y"},
+    }
+    changes["Encounter/e"] = written("Encounter/e", (3, "C", OTHER), bodies=[enc])
+    r = judge(contract(**TRANSIENT), PARAMS, base(), changes, {"x": x}, x)
+    assert r.outcome == "needs_review"
+
+
+def test_a_cleaned_up_duplicate_needs_a_trail_that_logs_reads():
+    x = patient("x")
+    c = contract(**TRANSIENT)
+    c = c.model_copy(
+        update={
+            "change_feed": c.change_feed.model_copy(
+                update={
+                    "audit": c.change_feed.audit.model_copy(update={"heartbeat": False})
+                }
+            )
+        }
+    )
+    assert (
+        judge(c, PARAMS, base(), double_submit(), {"x": x}, x).outcome == "needs_review"
+    )
+
+
+def test_consistent_refuses_an_extra_element_on_an_open_contract():
+    x = patient("x")
+    open_c = contract(**CONSISTENT).model_copy(update={"closed": False})
+    extra = {"resourceType": "Patient", "id": "x", "identifier": [{"value": "MRN-9"}]}
+    r = judge(open_c, PARAMS, base(), stepped(extra), {"x": x}, x)
+    assert r.outcome == "needs_review"
+
+
 def test_a_duplicate_still_there_is_a_duplicate():
     x, y = patient("x"), patient("y")
     changes = {
@@ -282,9 +320,8 @@ def test_a_duplicate_still_there_is_a_duplicate():
 # -- bookkeeping on another record --------------------------------------------------------
 
 
-BOOK = {
-    "bookkeeping": [{"resource_type": "Practitioner", "paths": ["meta", "extension"]}]
-}
+BOOK_PATHS = ["meta.versionId", "meta.lastUpdated", "extension[url=urn:app:last-seen]"]
+BOOK = {"bookkeeping": [{"resource_type": "Practitioner", "paths": BOOK_PATHS}]}
 DOC = {
     "resourceType": "Practitioner",
     "id": "d",
@@ -332,6 +369,12 @@ def test_an_update_of_bookkeeping_elements_only_is_not_a_write():
             DOC,
         ),  # a label
         ({**DOC, "meta": {"versionId": "2"}}, None),  # no version before the window
+        ({**DOC, "meta": {"versionId": "2", "account": {"reference": "Org/x"}}}, DOC),
+        ({**DOC, "active": False}, DOC),  # deactivated
+        (  # an extension with another url
+            {**DOC, "extension": [{"url": "urn:birthsex", "valueCode": "F"}]},
+            DOC,
+        ),
     ],
 )
 def test_bookkeeping_excuses_nothing_else(after, prior):
@@ -347,19 +390,43 @@ def test_bookkeeping_excuses_nothing_else(after, prior):
     assert r.outcome == "needs_review"
 
 
-def test_bookkeeping_never_excuses_the_record_or_the_person():
-    book = {"bookkeeping": [{"resource_type": "Patient", "paths": ["meta"]}]}
+def test_bookkeeping_never_names_the_contracts_own_type():
+    # Another record of that type may be the person: a rule on it doesn't load.
+    with pytest.raises(Exception):
+        contract(
+            bookkeeping=[{"resource_type": "Patient", "paths": ["meta.versionId"]}]
+        )
+
+
+def test_bookkeeping_by_someone_else_is_not_the_agents():
     x = patient("x")
-    touched_x = touched({**x, "meta": {"versionId": "2"}}, ref="Patient/x", prior=x)
-    # A found record the agent touched, even in meta only, is a write.
-    r = judge(
-        contract(**book), PARAMS, base(x), {"Patient/x": touched_x}, {"x": x}, None, x
+    after = {**DOC, "meta": {"versionId": "2", "lastUpdated": "2026-10-28T12:00:02Z"}}
+    c = written(
+        "Practitioner/d",
+        (2, "U", BOT),
+        (3, "U", OTHER),
+        bodies=[after, after],
+        prior=DOC,
     )
+    r = judge(contract(**BOOK), PARAMS, base(), created_with(c), {"x": x}, x)
     assert r.outcome == "needs_review"
 
 
 @pytest.mark.parametrize(
-    "path", ["meta.security", "meta.tag.code", "id", "telecom[system=x]", "meta*"]
+    "path",
+    [
+        "meta",
+        "meta.security",
+        "meta.tag",
+        "meta.account",
+        "meta.profile",
+        "extension",
+        "active",
+        "link",
+        "id",
+        "telecom[system=x]",
+        "extension[url=a].valueString",
+    ],
 )
 def test_a_bookkeeping_path_that_could_hide_a_change_is_refused(path):
     with pytest.raises(Exception):
@@ -471,9 +538,11 @@ def test_a_contract_loads_its_pinned_app_semantics(tmp_path, monkeypatch):
     assert c.operations.correction.between == "consistent"
     assert c.operations.cardinality.own_transient is True
     text = (RESCORE / "contracts_operations" / "allergy.yaml").read_text()
-    spec = RESCORE.parent / "app_semantics" / "medplum.yaml"
+    spec = (RESCORE.parent / "app_semantics" / "medplum.yaml").resolve()
     bad = [
-        text.replace("version: 1}", "version: 2}"),  # a pin the file doesn't match
+        text.replace("version: 1,", "version: 2,"),  # a pin the file doesn't match
+        text.replace("sha256: 2", "sha256: 3"),  # the file was edited in place
+        text.replace("../../app_semantics/medplum.yaml", str(spec)),  # absolute
         text.replace("app: medplum", "app: openemr"),
         text + "operations: {}\n",  # two sources
         text.replace("../../app_semantics/medplum.yaml", str(tmp_path / "none.yaml")),
@@ -494,7 +563,7 @@ def test_a_bookkeeping_time_stamp_must_be_near_the_versions_own_time():
         "bookkeeping": [
             {
                 "resource_type": "Practitioner",
-                "paths": ["meta", "extension"],
+                "paths": BOOK_PATHS,
                 "now_checks": True,
             }
         ]

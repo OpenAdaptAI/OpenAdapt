@@ -36,6 +36,14 @@ and evidence counts.
 
 ## What the numbers say
 
+The pre-registered rule is the v1 column. Most of the gain over the
+as-registered columns (claude 14/72 to 46/72, openai 33/68 to 57/68 under
+main) comes from deviation 1, made after seeing the first results; the
+fidelity gate passes with or without it. An independent review checked
+every agent write the cap hides: only the fault proxy's after-check creates
+on case A10 (3 per agent), none an agent's save still in flight, so the cap
+doesn't move a run toward confirming.
+
 - **The published false-flag rate was mostly an expired token.** With the
   verifier able to read, specificity on the same runs and the same
   contracts goes from 7/72 to 46/72 (claude) and from 21/68 to 57/68

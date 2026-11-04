@@ -164,10 +164,14 @@ class BookkeepingRule(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    #: Never the contract's own type: another record of that type may be
+    #: the person, and its identity elements are never bookkeeping.
     resource_type: str = Field(min_length=1)
-    #: Element paths (``meta``, ``meta.lastUpdated``, ``extension``) whose
-    #: change alone is not a write. No list filters; ``meta.security`` and
-    #: ``meta.tag`` never: a label can hide a record.
+    #: Only a version counter, a time stamp or one extension named by its
+    #: exact url: ``meta.versionId``, ``meta.lastUpdated``,
+    #: ``extension[url=<url>]``. Any other element (``meta.security``,
+    #: ``meta.account``, ``active``, ``link``, a bare ``extension``) can hide a
+    #: record, move it or change a clinical fact, so it can't be named.
     paths: list[str] = Field(min_length=1)
     #: A temporal rule, as the whole-database generator's bookkeeping answer
     #: has it (``now_checks``): every time stamp these elements change to
@@ -197,8 +201,9 @@ class Operations(BaseModel):
     bookkeeping: list[BookkeepingRule] = Field(default_factory=list)
 
 
-#: A bookkeeping path: dotted FHIR element names, no filters.
-_ELEMENT_PATH = re.compile(r"[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)*")
+#: The only element paths a bookkeeping rule may name.
+_BOOK_META = ("meta.versionId", "meta.lastUpdated")
+_BOOK_EXTENSION = re.compile(r"extension\[url=([^\[\]\s]+)\]")
 
 
 class EnsureContract(BaseModel):
@@ -270,15 +275,17 @@ class EnsureContract(BaseModel):
             if _bare(path) in identity_paths:
                 raise ValueError(f"void entry {entry!r} names an identity field")
         for book in self.operations.bookkeeping:
+            if book.resource_type == self.resource_type:
+                raise ValueError(
+                    f"a bookkeeping rule can't name the contract's own type "
+                    f"{book.resource_type}: another record of it may be the person"
+                )
             for path in book.paths:
-                if not _ELEMENT_PATH.fullmatch(path):
+                if path not in _BOOK_META and not _BOOK_EXTENSION.fullmatch(path):
                     raise ValueError(
-                        f"bookkeeping path {path!r} is not an element path"
+                        f"bookkeeping path {path!r} can't be excused: only "
+                        "meta.versionId, meta.lastUpdated and extension[url=...]"
                     )
-                if path in ("id", "resourceType") or path.startswith(
-                    ("meta.security", "meta.tag")
-                ):
-                    raise ValueError(f"bookkeeping path {path!r} can't be excused")
         return self
 
     @property
@@ -315,8 +322,12 @@ class AppSemantics(BaseModel):
         return self
 
     def operations_for(self, resource_type: str) -> Operations:
+        """A contract's operations: its type's rules, and the app's
+        bookkeeping on every *other* type."""
+
         ops = self.resources.get(resource_type, Operations())
-        return ops.model_copy(update={"bookkeeping": list(self.bookkeeping)})
+        book = [b for b in self.bookkeeping if b.resource_type != resource_type]
+        return ops.model_copy(update={"bookkeeping": book})
 
 
 def load_semantics(path: str | Path) -> AppSemantics:
@@ -331,16 +342,37 @@ def load_semantics(path: str | Path) -> AppSemantics:
 
 
 def _apply_semantics(data: dict[str, Any], source: Path) -> dict[str, Any]:
-    """Resolve ``semantics: {path, app, version}`` into ``operations``."""
+    """Resolve ``semantics: {path, app, version, sha256}`` into ``operations``.
+
+    The pin names the spec's exact bytes: a spec edited in place, without a
+    new version and a new pin, doesn't load. The path is relative to the
+    contract; an absolute one is refused.
+    """
+
+    import hashlib
 
     pin = data.pop("semantics", None)
     if pin is None:
         return data
     if "operations" in data:
         raise EnsureRecordError(f"{source}: give operations or semantics, not both")
-    if not isinstance(pin, dict) or set(pin) != {"path", "app", "version"}:
-        raise EnsureRecordError(f"{source}: semantics needs path, app and version")
-    spec = load_semantics((source.parent / str(pin["path"])).resolve())
+    if not isinstance(pin, dict) or set(pin) != {"path", "app", "version", "sha256"}:
+        raise EnsureRecordError(
+            f"{source}: semantics needs path, app, version and sha256"
+        )
+    rel = Path(str(pin["path"]))
+    if rel.is_absolute():
+        raise EnsureRecordError(f"{source}: the semantics path must be relative")
+    where = (source.parent / rel).resolve()
+    try:
+        digest = hashlib.sha256(where.read_bytes()).hexdigest()
+    except OSError as exc:
+        raise EnsureRecordError(f"cannot read semantics {where}: {exc}") from exc
+    if digest != str(pin["sha256"]):
+        raise EnsureRecordError(
+            f"{source}: semantics {rel} is not the pinned file (sha256 {digest})"
+        )
+    spec = load_semantics(where)
     if (spec.app, spec.version) != (pin["app"], pin["version"]):
         raise EnsureRecordError(
             f"{source}: semantics pins {pin['app']} v{pin['version']}, "
@@ -638,7 +670,9 @@ def holds_only_task_values(
             return False
         if not all(same(contract, name, v, params[name]) for v in held):
             return False
-    return not (contract.closed and extra_elements(contract, resource, params))
+    # On any contract, open or closed: a version in between may hold nothing
+    # the task didn't give (another person's identifier, an address).
+    return not extra_elements(contract, resource, params)
 
 
 def _between_ok(
@@ -654,43 +688,44 @@ def _between_ok(
     return is_person(contract, version, params)
 
 
-_KEPT_META = ("security", "tag")
+def _strip(node: Any, path: str) -> Any:
+    """``node`` without the element a bookkeeping path names."""
 
-
-def _strip(node: Any, path: list[str]) -> Any:
-    """``node`` without the element at ``path`` (through lists)."""
-
-    if isinstance(node, list):
-        return [_strip(x, path) for x in node]
-    if not isinstance(node, dict) or not path:
-        return node
-    head, rest = path[0], path[1:]
-    if head not in node:
-        return node
     out = dict(node)
-    if rest:
-        out[head] = _strip(node[head], rest)
-    elif head == "meta" and isinstance(node[head], dict):
-        # A label can hide the record from other users: never bookkeeping.
-        kept = {k: v for k, v in node[head].items() if k in _KEPT_META}
+    m = _BOOK_EXTENSION.fullmatch(path)
+    if m:
+        kept = [
+            e
+            for e in out.get("extension") or []
+            if not (isinstance(e, dict) and e.get("url") == m.group(1))
+        ]
         if kept:
-            out[head] = kept
+            out["extension"] = kept
+        else:
+            out.pop("extension", None)
+        return out
+    head, _, leaf = path.partition(".")
+    if isinstance(out.get(head), dict):
+        inner = {k: v for k, v in out[head].items() if k != leaf}
+        if inner:
+            out[head] = inner
         else:
             del out[head]
-    else:
-        del out[head]
     return out
 
 
 def _same_outside(a: Mapping[str, Any], b: Mapping[str, Any], paths: list[str]) -> bool:
     left, right = dict(a), dict(b)
     for path in paths:
-        left, right = _strip(left, path.split(".")), _strip(right, path.split("."))
+        left, right = _strip(left, path), _strip(right, path)
     return json.dumps(left, sort_keys=True) == json.dumps(right, sort_keys=True)
 
 
 def bookkeeping_only(
-    contract: EnsureContract, change: "Change", protected: Collection[str]
+    contract: EnsureContract,
+    change: "Change",
+    protected: Collection[str],
+    selfs: Collection[str] = (),
 ) -> bool:
     """True when ``change`` is the agent's update of another record that moved
     only the elements a ``bookkeeping`` rule names for its type.
@@ -716,6 +751,8 @@ def bookkeeping_only(
         return False
     if not change.events or any(when is None for when, _, _ in change.events):
         return False
+    if any(not who or set(who) - set(selfs) for _, _, who in change.events):
+        return False  # only the agent's own updates can be its bookkeeping
     if change.versions is None or change.prior is None:
         return False
     if change.versions != len(change.events) or not change.bodies:
@@ -743,26 +780,41 @@ def bookkeeping_only(
 def _times_near_now(
     before: Mapping[str, Any], after: Mapping[str, Any], rule: BookkeepingRule
 ) -> bool:
-    """Every time stamp ``rule``'s elements changed to is near ``after``'s
-    own ``meta.lastUpdated``; a version with no readable time refuses."""
+    """Every time stamp or date ``rule``'s extensions changed to is near
+    ``after``'s own ``meta.lastUpdated``; a version with no readable time
+    refuses. A value counts as unchanged only at the same path."""
 
     now = _when((after.get("meta") or {}).get("lastUpdated"))
     if now is None:
         return False
-    old = set(map(str, (v for _, v in leaves(dict(before)))))
-    for path, value in leaves(dict(after)):
-        if not any(path == p or path.startswith(p + ".") for p in rule.paths):
+    for path in rule.paths:
+        m = _BOOK_EXTENSION.fullmatch(path)
+        if not m:
+            continue  # meta.lastUpdated is the server's own clock
+
+        def values(res: Mapping[str, Any], url: str = m.group(1)) -> list[str]:
+            return sorted(
+                str(v)
+                for e in res.get("extension") or []
+                if isinstance(e, dict) and e.get("url") == url
+                for _, v in leaves(e)
+            )
+
+        if values(before) == values(after):
             continue
-        if path.startswith(("meta.versionId", "meta.lastUpdated")) or str(value) in old:
-            continue
-        if not isinstance(value, str) or not re.match(r"\d{4}-\d{2}-\d{2}T", value):
-            continue
-        try:
-            when = _when(value)
-        except Unreadable:
-            return False
-        if when is None or abs((when - now).total_seconds()) > rule.now_within_s:
-            return False
+        for value in values(after):
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+                if value != now.date().isoformat():
+                    return False
+                continue
+            if not re.match(r"\d{4}-\d{2}-\d{2}T", value):
+                continue  # the extension's url or a non-time value
+            try:
+                when = _when(value)
+            except Unreadable:
+                return False
+            if when is None or abs((when - now).total_seconds()) > rule.now_within_s:
+                return False
     return True
 
 
@@ -1187,7 +1239,9 @@ def judge(
         protected = {f"{own_type}/{i}" for i in (*baseline.matches, *after_matches)}
         protected |= {r for r, c in mine.items() if "C" in c.actions}
         booked = sorted(
-            r for r, c in mine.items() if bookkeeping_only(contract, c, protected)
+            r
+            for r, c in mine.items()
+            if bookkeeping_only(contract, c, protected, selfs)
         )
         mine = {r: c for r, c in mine.items() if r not in booked}
     evidence: dict[str, Any] = {
@@ -1249,7 +1303,7 @@ def judge(
             r
             for r in creates
             if r.split("/", 1)[1] not in after_matches
-            and transient_ok(contract, mine[r], selfs, params)
+            and transient_ok(contract, mine[r], selfs, params, changes)
         ]
         creates = [r for r in creates if r not in transient]
         if transient:
@@ -1394,11 +1448,23 @@ def correction_refused(
     return None
 
 
+def _refers_to(resource: Mapping[str, Any], ref: str) -> bool:
+    """True when any string in ``resource`` is a reference to ``ref``
+    (relative, absolute or versioned: ``Patient/y``, ``http://x/Patient/y``,
+    ``Patient/y/_history/2``)."""
+
+    return any(
+        isinstance(value, str) and "/" in value and _ref(value) == ref
+        for _, value in leaves(dict(resource))
+    )
+
+
 def transient_ok(
     contract: EnsureContract,
     change: Change,
     selfs: set[str],
     params: Mapping[str, Any],
+    changes: Mapping[str, Change] = {},
 ) -> bool:
     """True when ``change`` is a record the agent created and deleted again
     that ``cardinality.own_transient`` lets count as not created.
@@ -1410,8 +1476,20 @@ def transient_ok(
     must log reads by id (the verifier's heartbeat).
     """
 
-    if contract.change_feed.audit is None or contract.settle_s < 1:
+    audit = contract.change_feed.audit
+    if audit is None or not audit.heartbeat or contract.settle_s < 1:
+        return False  # "no one else read it" needs a trail that logs reads
+    if not contract.change_feed.history:
         return False
+    # Nobody may have used it: no version of any other write in the window
+    # may refer to it (an Encounter, an Observation filed on the duplicate).
+    for ref, other in changes.items():
+        if ref == change.ref:
+            continue
+        if other.versions is None:
+            return False
+        if any(_refers_to(b, change.ref) for b in other.bodies):
+            return False
     if change.actions not in ({"C", "D"}, {"C", "U", "D"}):
         return False
     if not change.attributed or not change.events or change.versions is None:
