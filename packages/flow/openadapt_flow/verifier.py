@@ -1826,7 +1826,16 @@ def _reasons(evidence: Mapping[str, Any], receipt_outcome: str) -> list[str]:
             f"{frame.get('unattributed_count', 0)} of them no actor explains"
         )
     elif frame.get("status") == "not_checked" and not problem:
-        out.append("what else changed could not be read, so the frame is not checked")
+        database = frame.get("database") or {}
+        if database.get("read_status") == "too_large":
+            out.append(
+                "frame too large: row read budget of "
+                f"{database.get('read_row_budget')} exceeded; the frame is not checked"
+            )
+        else:
+            out.append(
+                "what else changed could not be read, so the frame is not checked"
+            )
     source = evidence.get("source") or {}
     if isinstance(source, Mapping) and source.get("status") == "refuted":
         fields = ", ".join(source.get("mismatched_fields") or [])

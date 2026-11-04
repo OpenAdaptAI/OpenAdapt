@@ -166,7 +166,7 @@ def test_a_log_that_grows_past_the_budget_never_verifies(tmp_path: Path) -> None
     result = _run(tmp_path, grow, read_row_budget=11, settle_s=0)
     assert result["receipt"]["checked"]["frame"] == "not_checked"
     assert result["receipt"]["outcome"] != "verified"
-    assert "frame too large" in result["evidence"]["frame"]["reason"]
+    assert result["evidence"]["frame"]["database"]["read_status"] == "too_large"
 
 
 def test_growth_during_the_settling_read_is_also_not_checked(
@@ -184,7 +184,7 @@ def test_growth_during_the_settling_read_is_also_not_checked(
     result = _run(tmp_path, read_row_budget=11, settle_s=0)
     assert result["receipt"]["checked"]["frame"] == "not_checked"
     assert result["receipt"]["outcome"] != "verified"
-    assert "frame too large" in result["evidence"]["frame"]["reason"]
+    assert result["evidence"]["frame"]["database"]["read_status"] == "too_large"
 
 
 def test_a_clean_save_at_the_combined_budget_still_verifies(tmp_path: Path) -> None:
@@ -247,7 +247,7 @@ def test_an_oversized_baseline_does_not_retry_the_audit_without_a_budget(
     result = _run(tmp_path, read_row_budget=4, settle_s=0)
     assert result["receipt"]["checked"]["frame"] == "not_checked"
     assert result["receipt"]["outcome"] != "verified"
-    assert "frame too large" in result["evidence"]["frame"]["reason"]
+    assert result["evidence"]["frame"]["database"]["read_status"] == "too_large"
 
 
 def test_snapshot_and_rollback_apis_share_the_budget(tmp_path: Path) -> None:
@@ -323,3 +323,27 @@ def test_a_recheck_over_budget_cannot_confirm_the_earlier_write(
     late = verifier.recheck(contract, first, params=_params(2), actor=BOT)
     assert late.outcome == "UNCERTAIN"
     assert "frame too large" in " ".join(late.reasons)
+
+
+def test_the_public_write_result_explains_an_oversized_frame(tmp_path: Path) -> None:
+    from openadapt_flow.verifier import Actor, Contract, begin_write, verify_write
+
+    db = _db(tmp_path)
+    contract = Contract.from_dict(_doc(db, read_row_budget=11, settle_s=0))
+    actor = Actor(kind="agent", id="bot")
+    before = begin_write(contract, NEW, actor=actor)
+    with sqlite3.connect(db) as con:
+        _save(con)
+        con.executemany(
+            "INSERT INTO log (user,event) VALUES ('viewer',?)", [("view",)] * 20
+        )
+    result = verify_write(before)
+    assert not result.verified
+    assert result.checked["frame"] == "not_checked"
+    assert any(
+        "frame too large: row read budget of 11 exceeded" in r for r in result.reasons
+    )
+    assert result.evidence["frame"]["database"] == {
+        "read_status": "too_large",
+        "read_row_budget": 11,
+    }

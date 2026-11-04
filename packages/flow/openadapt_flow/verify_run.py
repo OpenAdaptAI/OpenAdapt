@@ -1178,6 +1178,10 @@ def judge_run_frame(
         return FrameVerdict(
             status="not_checked",
             reason=str(SnapshotTooLarge(spec.database.read_row_budget)),
+            database={
+                "read_status": "too_large",
+                "read_row_budget": spec.database.read_row_budget,
+            },
             attribution=spec.attribution.kind if spec.attribution else "none",
         )
     after: Any = None
