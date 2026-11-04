@@ -1849,3 +1849,131 @@ def test_uia_tree_lists_one_windows_elements_without_values(monkeypatch) -> None
     ):
         with pytest.raises(AgentRequestError):
             _perform_uia("tree", bad)
+
+
+@pytest.fixture
+def physical_keyboard(monkeypatch):
+    """A physical-input seam with no desktop, clipboard or real key events."""
+    from openadapt_flow.backends.win_agent import server
+
+    state = types.SimpleNamespace(
+        foreground=(101, 202), typed="", pastes=0, after_write=None, after_paste=None
+    )
+    fake = types.ModuleType("pyautogui")
+
+    def write(text, **_kwargs):
+        state.typed += text
+        if state.after_write is not None:
+            state.after_write()
+
+    def hotkey(*keys):
+        assert keys == ("ctrl", "v")
+        state.pastes += 1
+        if state.after_paste is not None:
+            state.after_paste()
+
+    fake.write = write
+    fake.hotkey = hotkey
+    monkeypatch.setitem(sys.modules, "pyautogui", fake)
+    monkeypatch.setattr(server, "_foreground_window_identity", lambda: state.foreground)
+    monkeypatch.setattr(server.time, "sleep", lambda _delay: None)
+    return state
+
+
+def test_physical_typing_preserves_the_complete_value_with_stable_focus(
+    physical_keyboard,
+):
+    receipt = _perform_input(
+        {"action": "type_text", "text": "safe-text", "interval_s": 0}
+    )
+    assert physical_keyboard.typed == "safe-text"
+    assert receipt["status"] == "delivered"
+    assert receipt["operation"] == "physical_type_text"
+
+
+def test_physical_typing_refuses_an_unobservable_foreground(physical_keyboard):
+    physical_keyboard.foreground = None
+    with pytest.raises(AgentRequestError, match="foreground window"):
+        _perform_input({"action": "type_text", "text": "abc"})
+    assert physical_keyboard.typed == ""
+    assert physical_keyboard.pastes == 0
+
+
+@pytest.mark.parametrize("changed", [(303, 202), (101, 404), None])
+def test_physical_typing_stops_after_focus_changes(physical_keyboard, changed):
+    physical_keyboard.after_write = lambda: setattr(
+        physical_keyboard, "foreground", changed
+    )
+    with pytest.raises(AgentRequestError, match="delivery may be partial") as error:
+        _perform_input({"action": "type_text", "text": "abc"})
+    assert error.value.code == "input_focus_changed"
+    assert physical_keyboard.typed == "a"
+
+
+def test_physical_typing_refuses_focus_change_before_the_first_key(
+    physical_keyboard, monkeypatch
+):
+    from openadapt_flow.backends.win_agent import server
+
+    readings = iter([(101, 202), (303, 202)])
+    monkeypatch.setattr(server, "_foreground_window_identity", lambda: next(readings))
+    with pytest.raises(AgentRequestError, match="delivery may be partial"):
+        _perform_input({"action": "type_text", "text": "abc"})
+    assert physical_keyboard.typed == ""
+
+
+def test_unicode_paste_is_refused_if_focus_changes_during_clipboard_setup(
+    physical_keyboard, monkeypatch
+):
+    from openadapt_flow.backends.win_agent import server
+
+    def clipboard(*_args, **_kwargs):
+        physical_keyboard.foreground = (303, 202)
+        return types.SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(server.subprocess, "run", clipboard)
+    with pytest.raises(AgentRequestError, match="delivery may be partial"):
+        _perform_input({"action": "type_text", "text": "caf\u00e9"})
+    assert physical_keyboard.typed == ""
+    assert physical_keyboard.pastes == 0
+
+
+def test_unicode_paste_reports_uncertainty_if_focus_changes_after_delivery(
+    physical_keyboard, monkeypatch
+):
+    from openadapt_flow.backends.win_agent import server
+
+    monkeypatch.setattr(
+        server.subprocess, "run", lambda *_a, **_k: types.SimpleNamespace(returncode=0)
+    )
+    physical_keyboard.after_paste = lambda: setattr(
+        physical_keyboard, "foreground", (303, 202)
+    )
+    with pytest.raises(AgentRequestError, match="delivery may be partial"):
+        _perform_input({"action": "type_text", "text": "caf\u00e9"})
+    assert physical_keyboard.pastes == 1
+
+
+def test_focus_change_over_http_is_uncertain_and_never_uses_legacy_delivery(
+    physical_keyboard,
+):
+    from openadapt_flow.backend import ActionDeliveryUncertain
+    from openadapt_flow.backends.windows_backend import WindowsBackend
+
+    physical_keyboard.after_write = lambda: setattr(
+        physical_keyboard, "foreground", (303, 202)
+    )
+    legacy_calls = []
+    agent = RunningAgent(
+        AgentConfig(host="127.0.0.1", port=0, allow_legacy_exec=True),
+        legacy_fn=_recording_legacy_fn(legacy_calls),
+    )
+    try:
+        backend = WindowsBackend(agent.url, allow_legacy_exec=True)
+        with pytest.raises(ActionDeliveryUncertain) as error:
+            backend.type_text("abc")
+        assert error.value.operation == "physical_type_text"
+        assert physical_keyboard.typed == "a"
+        assert legacy_calls == []
+    finally:
+        agent.close()
