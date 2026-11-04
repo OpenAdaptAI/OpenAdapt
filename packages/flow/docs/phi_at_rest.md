@@ -52,7 +52,14 @@ mode runs:
   strict mode, and the script's other actions are the operator's.
 
 Every other command, and qualification trials (`qualify campaign`,
-`qualify run-case`, `qualify drills`), is held back before it starts. It encrypts every recording, bundle and run directory, and an
+`qualify run-case`, `qualify drills`), is held back before it starts.
+`seal` runs on plaintext input too: it writes a sealed set under
+`OPENADAPT_BUNDLE_KEY`. A symlink is judged by the directory it points to,
+and a directory holding a plaintext `workflow.json`, `events.jsonl` or
+`report.json` counts as plaintext wherever it sits. `qualify run` and
+`qualify certify` take `--evidence-root`, which is usually a plaintext parent
+of sealed runs, so in strict mode run them on encrypted evidence or outside
+strict mode. It encrypts every recording, bundle and run directory, and an
 unknown value of `OPENADAPT_FLOW_AT_REST` stops the command. `seal` and
 record checks on encrypted bundles use `OPENADAPT_BUNDLE_KEY` only.
 

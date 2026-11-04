@@ -12663,6 +12663,7 @@ _STRICT_SELF_SEALING: frozenset[str] = frozenset(
         "openadapt_flow.__main__:_cmd_run",
         "openadapt_flow.__main__:_cmd_replay",
         "openadapt_flow.__main__:_cmd_resume",
+        "openadapt_flow.__main__:_cmd_seal",
     }
 )
 
@@ -12671,7 +12672,6 @@ def _plaintext_directories_in(args: argparse.Namespace) -> list[Path]:
     """Existing directories among the arguments that are not inside a sealed
     set. Files a person passes (a config, a results JSON) are not artifacts
     and are not checked."""
-    from openadapt_flow import sealed_set
 
     found: list[Path] = []
     for name, value in vars(args).items():
@@ -12690,11 +12690,34 @@ def _plaintext_directories_in(args: argparse.Namespace) -> list[Path]:
                 path = Path(candidate)
                 if not path.is_dir():
                     continue
-                if sealed_set.is_sealed(path) or sealed_set.sealed_root(path):
+                if _inside_sealed_set(path):
                     continue
                 if path not in found:
                     found.append(path)
     return found
+
+
+#: A plaintext copy of one of these inside a sealed set's directory is a
+#: plaintext artifact placed there, not part of the set.
+_PLAINTEXT_ARTIFACT_MARKERS = ("workflow.json", "events.jsonl", "report.json")
+
+
+def _inside_sealed_set(path: Path) -> bool:
+    """Whether ``path`` really is, or is inside, a sealed set.
+
+    Symlinks are resolved first, so a link inside a set to a directory
+    elsewhere is judged by where it points. A directory that holds a
+    plaintext workflow, event log or report is plaintext even when it sits
+    inside a set's directory.
+    """
+    import os
+
+    from openadapt_flow import sealed_set
+
+    real = Path(os.path.realpath(path))
+    if not (sealed_set.is_sealed(real) or sealed_set.sealed_root(real)):
+        return False
+    return not any((real / name).is_file() for name in _PLAINTEXT_ARTIFACT_MARKERS)
 
 
 def _unsealed_output_check(args: argparse.Namespace) -> None:

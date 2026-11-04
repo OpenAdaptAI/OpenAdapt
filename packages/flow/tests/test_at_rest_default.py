@@ -548,3 +548,78 @@ def test_read_paths_create_no_key_and_no_ledger_line(
     monkeypatch.delenv(at_rest.OPT_OUT_ENV)
     key = crypto.resolve_key(None)
     assert crypto.resolve_read_key(None) == key
+
+
+# -- review round 3 follow-ups --------------------------------------------------
+
+
+def _sealed_and_plain(tmp_path: Path) -> tuple[Path, Path]:
+    from tests.test_after_stop_mockmed import _workflow
+
+    plain = tmp_path / "plain-bundle"
+    _workflow().save(plain)
+    sealed = tmp_path / "sealed-bundle"
+    with sealed_set.writing(sealed, "bundle", crypto.resolve_key(None)):
+        _workflow().save(sealed)
+    return sealed, plain
+
+
+@pytest.mark.skipif(os.name != "posix", reason="symlinks")
+def test_strict_judges_a_symlink_inside_a_set_by_its_target(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from openadapt_flow import __main__ as cli
+
+    sealed, plain = _sealed_and_plain(tmp_path)
+    link = sealed / "evil"
+    link.symlink_to(plain, target_is_directory=True)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    with pytest.raises(at_rest.AtRestRefused, match="not encrypted"):
+        cli._unsealed_output_check(
+            argparse.Namespace(func=cli._cmd_certify, bundle=str(link))
+        )
+
+
+def test_strict_treats_a_plaintext_copy_inside_a_set_as_plaintext(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    import shutil
+
+    from openadapt_flow import __main__ as cli
+
+    sealed, plain = _sealed_and_plain(tmp_path)
+    nested = sealed / "nested"
+    shutil.copytree(plain, nested)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    with pytest.raises(at_rest.AtRestRefused, match="not encrypted"):
+        cli._unsealed_output_check(
+            argparse.Namespace(func=cli._cmd_certify, bundle=str(nested))
+        )
+    cli._unsealed_output_check(
+        argparse.Namespace(func=cli._cmd_certify, bundle=str(sealed))
+    )
+
+
+def test_strict_seals_plaintext_input_with_seal(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from openadapt_flow import __main__ as cli
+
+    _sealed, plain = _sealed_and_plain(tmp_path)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    cli._unsealed_output_check(
+        argparse.Namespace(func=cli._cmd_seal, bundle=str(plain), out="out")
+    )
+
+
+@pytest.mark.skipif(os.name != "posix" or os.geteuid() == 0, reason="POSIX perms")
+def test_the_kept_report_message_says_what_happened(
+    default_mode: Path, tmp_path: Path, monkeypatch, capsys
+) -> None:
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    (locked / at_rest.LEDGER_NAME).mkdir()
+    monkeypatch.setenv(at_rest.HOME_ENV, str(locked))
+    at_rest.unsealed_write("a worklist report", "/data/pool", refuse=False)
+    err = capsys.readouterr().err
+    assert "is kept in plaintext" in err and "Nothing was written" not in err
