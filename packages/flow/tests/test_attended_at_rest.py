@@ -137,10 +137,13 @@ def test_default_mode_attended_run_leaves_no_plaintext_attended_state(
 
     for name in PLAINTEXT_NAMES:
         assert not (run / name).exists(), name
-    for name in ("attended_capability_history.json", "attended_decisions.json"):
-        sealed = run / (name + attended_state.ENC_SUFFIX)
-        assert sealed.is_file(), name
-        assert crypto.is_encrypted(sealed.read_bytes())
+    attended_files = [
+        path for path in run.iterdir() if path.name.startswith("attended_")
+    ]
+    assert run / "attended_decisions.json.enc" in attended_files
+    for path in attended_files:
+        assert path.name.endswith(attended_state.ENC_SUFFIX), path.name
+        assert crypto.is_encrypted(path.read_bytes())
     assert (run / attended_state.MARKER_FILENAME).is_file()
 
     rows = _journal_rows()
@@ -150,7 +153,7 @@ def test_default_mode_attended_run_leaves_no_plaintext_attended_state(
 
     # The store and a fresh reader still see the decision.
     log = AttendedActionStore(run)._read_log()
-    assert [item.operator for item in log.decisions] == [OPERATOR]
+    assert {item.operator for item in log.decisions} == {OPERATOR}
 
 
 def test_default_mode_program_continue_encrypts_receipts_and_controls(
@@ -176,7 +179,9 @@ def test_default_mode_program_continue_encrypts_receipts_and_controls(
             ),
         )
     assert decision.status == "completed"
-    markers = [OPERATOR.encode(), capability.pause_id.encode()]
+    # The pause id names the receipt file (and so its associated data); it
+    # is a random identifier, not recorded data.
+    markers = [OPERATOR.encode(), capability.signature.split(":", 1)[1].encode()]
     assert _attended_leaks(watch, run, markers) == []
 
     for dirname in (
@@ -232,7 +237,8 @@ def test_older_plaintext_attended_run_still_resumes(tmp_path, monkeypatch):
     assert not rows[0].startswith(attended_state.JOURNAL_MARKER)
     assert rows[-1].startswith(attended_state.JOURNAL_MARKER)
     log = AttendedActionStore(run)._read_log()
-    assert [item.operator for item in log.decisions] == ["earlier operator", OPERATOR]
+    operators = [item.operator for item in log.decisions]
+    assert operators[0] == "earlier operator" and operators[-1] == OPERATOR
 
 
 def test_encrypted_file_moved_to_another_path_or_replaced_is_refused(

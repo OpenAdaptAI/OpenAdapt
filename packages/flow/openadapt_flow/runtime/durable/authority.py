@@ -1066,6 +1066,8 @@ class DurableAuthority:
 
         from openadapt_flow.runtime.durable import attended_state as _state
 
+        snapshot_key = key  # ``key`` is reused below for the journal HMAC key
+
         rows = connection.execute(
             "SELECT * FROM attended_journal WHERE path_key = ? ORDER BY sequence",
             (self.path_key,),
@@ -1095,7 +1097,7 @@ class DurableAuthority:
             try:
                 snapshot_json = _state.open_journal_snapshot(
                     str(values["snapshot_json"]),
-                    key,
+                    snapshot_key,
                     path_key=self.path_key,
                     sequence=expected_sequence,
                 )
@@ -1269,6 +1271,8 @@ class DurableAuthority:
 
         from openadapt_flow.runtime.durable import attended_state as _state
 
+        snapshot_key = key  # ``key`` is reused below for the journal HMAC key
+
         # Parse before the transaction so invalid JSON never enters authority.
         self._validate_snapshot_extension(None, snapshot_json)
         with self._transaction() as connection:
@@ -1281,7 +1285,7 @@ class DurableAuthority:
                 connection,
                 expected_run_id=expected_run_id,
                 authority_record=record,
-                key=key,
+                key=snapshot_key,
             )
             if head != expected_head_digest:
                 raise DurableAuthorityBusy(
@@ -1330,7 +1334,7 @@ class DurableAuthority:
                     snapshot_digest,
                     _state.seal_journal_snapshot(
                         snapshot_json,
-                        key,
+                        snapshot_key,
                         path_key=self.path_key,
                         sequence=sequence,
                     ),
