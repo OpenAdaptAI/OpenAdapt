@@ -33,15 +33,17 @@ See docs/MULTI_SURFACE.md ("Recording across windows").
 
 from __future__ import annotations
 
+import contextlib
 import io
 import json
 import re
 import shutil
 import sys
 import tempfile
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, Callable, Iterator, Optional, Sequence
 
 #: Surface kinds a declared window can be. The browser is ``--url``.
 DESKTOP_KINDS = ("windows", "macos", "linux", "rdp", "citrix")
@@ -212,6 +214,31 @@ class _Placed:
     window: Optional[WindowSample] = None
 
 
+def _from_flow_browser(
+    event: dict[str, Any],
+    t: float,
+    web_events: Sequence[tuple[float, str]],
+    flow_pids: frozenset[int],
+) -> bool:
+    """True only when this OS action is the web recorder's own copy.
+
+    Needs positive evidence: the action's process is one of the browser
+    processes Flow launched for ``--url`` (``flow_pids``), and the web
+    recorder saw an action of the same family that close in time. An
+    action with no readable process is never treated as the browser's.
+    """
+
+    observed = event.get("observed_process")
+    pid = observed.get("pid") if isinstance(observed, dict) else None
+    if not isinstance(pid, int) or pid not in flow_pids:
+        return False
+    family = _family(str(event.get("kind")))
+    return any(
+        abs(wt - t) <= WEB_DUPLICATE_WINDOW_S and _family(wk) == family
+        for wt, wk in web_events
+    )
+
+
 def _family(kind: str) -> str:
     return "pointer" if kind in _POINTER_KINDS or kind == "scroll" else "keys"
 
@@ -224,6 +251,7 @@ def attribute_desktop_events(
     surfaces: Sequence[RecordSurface],
     origin: tuple[int, int],
     web_events: Sequence[tuple[float, str]] = (),
+    flow_pids: frozenset[int] = frozenset(),
 ) -> list["_Placed"]:
     """Place each converted desktop event on the declared surface it went to.
 
@@ -269,11 +297,7 @@ def attribute_desktop_events(
                 _Placed(t, surface.id, "desktop", int(event["i"]), dict(event), window)
             )
             continue
-        family = _family(kind)
-        if any(
-            abs(wt - t) <= WEB_DUPLICATE_WINDOW_S and _family(wk) == family
-            for wt, wk in web_events
-        ):
+        if _from_flow_browser(event, t, web_events, flow_pids):
             continue  # the browser recorder has this action
         raise MultiSurfaceRecordError(
             f"{where}: it went to a window no --surface declared. Declare "
@@ -376,6 +400,7 @@ def discover_surfaces(
     os_kind: str,
     web_events: Sequence[tuple[float, str]] = (),
     own_processes: frozenset[str] = frozenset(),
+    flow_pids: frozenset[int] = frozenset(),
 ) -> tuple[list[RecordSurface], list["_Placed"]]:
     """Place each desktop action on a surface found from the process it went to.
 
@@ -404,10 +429,13 @@ def discover_surfaces(
             last is not None
             and active is not None
             and last[1] is not None
+            and active.window_id
             and active.window_id == last[1].window_id
         ):
             # A keystroke with no accessibility reading, in the same window
-            # as the action before it.
+            # as the action before it: only when both windows carry an id
+            # and it is the same id. Two windows with no id are never the
+            # same window.
             name = last[0]
         else:
             raise MultiSurfaceRecordError(
@@ -423,11 +451,7 @@ def discover_surfaces(
                 f"{where}: an earlier action went to the terminal running "
                 "record. Keep the terminal for stopping only"
             )
-        family = _family(kind)
-        if any(
-            abs(wt - t) <= WEB_DUPLICATE_WINDOW_S and _family(wk) == family
-            for wt, wk in web_events
-        ) and is_browser(name):
+        if _from_flow_browser(event, t, web_events, flow_pids):
             continue  # the browser recorder has this action
         if (
             is_browser(name)
@@ -519,6 +543,8 @@ def merge_surface_recordings(
     web_clock: Sequence[float] = (),
     os_kind: Optional[str] = None,
     own_processes: frozenset[str] = frozenset(),
+    flow_pids: frozenset[int] = frozenset(),
+    confirmed: bool = True,
 ) -> Path:
     """Write one multi-surface recording from a browser and a desktop stream.
 
@@ -551,6 +577,7 @@ def merge_surface_recordings(
             os_kind=os_kind,
             web_events=web_kinds,
             own_processes=own_processes,
+            flow_pids=flow_pids,
         )
     else:
         placed = attribute_desktop_events(
@@ -560,6 +587,7 @@ def merge_surface_recordings(
             surfaces=surfaces,
             origin=origin,
             web_events=web_kinds,
+            flow_pids=flow_pids,
         )
     kinds = {s.id: s.kind for s in surfaces}
     if web_dir is not None:
@@ -748,6 +776,8 @@ def merge_surface_recordings(
     meta["multi_surface_record"] = {
         "automatic": automatic,
         "surfaces": listed_surfaces,
+        # Compile refuses an unconfirmed recording (see confirm_review).
+        "confirmed": bool(confirmed),
     }
     (out_dir / "meta.json").write_text(json.dumps(meta, indent=2))
     return out_dir
@@ -820,8 +850,10 @@ def record_multi_surface(
             readable_browsers_while_recording,
         )
 
+        flow_pids: set[int] = set()
         with (
             readable_browsers_while_recording(),
+            _watch_children(flow_pids),
             recorder_factory(task_description, str(cap_dir)) as recorder,
         ):
             wait_ready = getattr(recorder, "wait_for_ready", None)
@@ -883,7 +915,7 @@ def record_multi_surface(
                 params=params or {},
                 include_structural=automatic
                 or any(s.kind == "windows" for s in surfaces),
-                include_process=automatic,
+                include_process=True,
             )
         return merge_surface_recordings(
             out_dir,
@@ -896,9 +928,76 @@ def record_multi_surface(
             web_clock=clock,
             os_kind=host_surface_kind() if automatic else None,
             own_processes=own_process_names() if automatic else frozenset(),
+            flow_pids=frozenset(flow_pids),
+            confirmed=False,
         )
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+
+@contextlib.contextmanager
+def _watch_children(pids: set[int], interval_s: float = 0.5) -> Iterator[None]:
+    """Collect every process this recorder starts (the browser for ``--url``).
+
+    An OS action counts as the web recorder's own copy only when it went to
+    one of these processes.
+    """
+
+    stop = threading.Event()
+
+    def loop() -> None:
+        try:
+            import psutil
+
+            me = psutil.Process()
+        except Exception:
+            return
+        while not stop.is_set():
+            try:
+                pids.update(child.pid for child in me.children(recursive=True))
+            except Exception:
+                pass
+            stop.wait(interval_s)
+
+    thread = threading.Thread(target=loop, name="record-children", daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        thread.join(timeout=5)
+
+
+REVIEW_FILE = "surfaces.review.txt"
+
+
+def confirm_review(recording: Path) -> list[str]:
+    """Mark a cross-window recording's surfaces as reviewed by a person."""
+
+    recording = Path(recording)
+    meta = _load_meta(recording)
+    section = meta.get("multi_surface_record")
+    if not isinstance(section, dict):
+        raise MultiSurfaceRecordError(f"{recording} is not a cross-window recording")
+    lines = review_lines(recording)
+    section["confirmed"] = True
+    (recording / "meta.json").write_text(json.dumps(meta, indent=2))
+    (recording / REVIEW_FILE).unlink(missing_ok=True)
+    return lines
+
+
+def write_unconfirmed_review(recording: Path) -> Path:
+    """Write the review list beside an unconfirmed recording."""
+
+    path = Path(recording) / REVIEW_FILE
+    path.write_text(
+        "This recording used the surfaces below. Compile refuses it until a\n"
+        "person confirms them with:\n"
+        f"  openadapt-flow confirm-surfaces {recording}\n\n"
+        + "\n".join(review_lines(recording))
+        + "\n"
+    )
+    return path
 
 
 def host_surface_kind() -> str:

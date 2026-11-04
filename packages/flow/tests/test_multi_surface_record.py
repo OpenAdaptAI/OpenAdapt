@@ -106,8 +106,15 @@ def test_browser_then_window_then_browser_gets_two_switches(tmp_path: Path) -> N
     desktop = _desktop(
         tmp_path,
         [
-            # The browser's own copy of the first web click: set aside.
-            {"kind": "click", "x": 30, "y": 30, "t": 1.0},
+            # The browser's own copy of the first web click, in the browser
+            # process Flow launched: set aside.
+            {
+                "kind": "click",
+                "x": 30,
+                "y": 30,
+                "t": 1.0,
+                "observed_process": {"name": "chrome", "pid": 4242},
+            },
             {"kind": "click", "x": 300, "y": 250, "t": 4.0},
             {"kind": "type", "text": "note", "t": 4.5},
         ],
@@ -121,6 +128,7 @@ def test_browser_then_window_then_browser_gets_two_switches(tmp_path: Path) -> N
         timeline=TIMELINE,
         web_dir=web,
         web_clock=clock,
+        flow_pids=frozenset({4242}),
     )
     events = _read(out)
     assert [(e["kind"], e.get("surface")) for e in events] == [
@@ -543,3 +551,230 @@ def test_linux_launcher_setting_is_added_and_undone(tmp_path: Path) -> None:
     ba.disable_linux(user_dir=user)
     assert not (user / "google-chrome.desktop").exists()
     assert (user / "chromium.desktop").exists()
+
+
+# -- review findings on #1880 (each failed on b9e8a637f) ----------------------
+
+
+def test_a_key_is_never_placed_by_two_windows_without_ids(tmp_path: Path) -> None:
+    """Two windows that carry no id are not the same window."""
+    timeline = window_timeline(
+        [
+            _window(T0 + 0.0, "Chart", 100, 50, 600, 400, ""),
+            _window(T0 + 2.0, "Password Manager", 0, 0, 800, 600, ""),
+        ]
+    )
+    desktop = _desktop(
+        tmp_path,
+        [
+            {
+                "kind": "click",
+                "x": 300,
+                "y": 250,
+                "t": 1.0,
+                "observed_process": _proc("chart-app", (100, 50, 600, 400)),
+            },
+            {"kind": "key", "key": "Enter", "t": 3.0},
+        ],
+    )
+    with pytest.raises(MultiSurfaceRecordError, match="could not be read"):
+        merge_surface_recordings(
+            tmp_path / "rec",
+            surfaces=[],
+            desktop_dir=desktop,
+            desktop_started_at=T0,
+            timeline=timeline,
+            os_kind="linux",
+        )
+
+
+def test_declared_mode_refuses_typing_in_an_undeclared_window_near_a_browser_event(
+    tmp_path: Path,
+) -> None:
+    web, _ = _web(tmp_path)
+    timeline = window_timeline(
+        [
+            _window(T0 + 0.0, "Chromium", 0, 0, 1280, 800, "11"),
+            _window(T0 + 3.0, "Chart - Ada Lovelace", 100, 50, 600, 400, "22"),
+            _window(T0 + 4.0, "Slack", 0, 0, 1280, 800, "44"),
+        ]
+    )
+    desktop = _desktop(
+        tmp_path,
+        [
+            {"kind": "click", "x": 300, "y": 250, "t": 3.5},
+            # Typed into Slack; a browser type happened 0.5 s earlier.
+            {
+                "kind": "type",
+                "text": "meet at 3",
+                "t": 5.0,
+                "observed_process": {"name": "slack", "pid": 777},
+            },
+        ],
+    )
+    with pytest.raises(MultiSurfaceRecordError, match="no --surface declared"):
+        merge_surface_recordings(
+            tmp_path / "rec",
+            surfaces=parse_record_surfaces(["chart=linux:Chart"], web_primary=True),
+            desktop_dir=desktop,
+            desktop_started_at=T0,
+            timeline=timeline,
+            web_dir=web,
+            web_clock=[T0 + 1.0, T0 + 4.5],
+            flow_pids=frozenset({4242}),
+        )
+
+
+def test_automatic_mode_never_drops_the_persons_own_chrome_near_a_flow_event(
+    tmp_path: Path,
+) -> None:
+    """Only Flow's own browser process is the web recorder's copy."""
+    web, clock = _web(tmp_path)
+    desktop = _desktop(
+        tmp_path,
+        [
+            {
+                "kind": "click",
+                "x": 30,
+                "y": 30,
+                "t": 2.0,
+                "observed_process": _proc("Google Chrome", (0, 0, 1280, 800))
+                | {"pid": 9},
+            }
+        ],
+    )
+    out = merge_surface_recordings(
+        tmp_path / "rec",
+        surfaces=[],
+        desktop_dir=desktop,
+        desktop_started_at=T0,
+        timeline=TIMELINE,
+        os_kind="macos",
+        web_dir=web,
+        web_clock=[T0 + 1.0, T0 + 7.0],
+        flow_pids=frozenset({4242}),
+    )
+    assert ("click", "google_chrome") in [
+        (e["kind"], e.get("surface")) for e in _read(out)
+    ]
+
+
+def test_without_a_terminal_the_recording_is_kept_unconfirmed_and_compile_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    import sys as _sys
+
+    from openadapt_flow.__main__ import main
+    from openadapt_flow.compiler import compile_recording
+
+    def fake_multi(out, **kwargs):
+        desktop = _desktop(
+            tmp_path / "src",
+            [
+                {
+                    "kind": "click",
+                    "x": 300,
+                    "y": 250,
+                    "t": 4.0,
+                    "observed_process": _proc("chart", (100, 50, 600, 400)),
+                }
+            ],
+        )
+        return merge_surface_recordings(
+            out,
+            surfaces=[],
+            desktop_dir=desktop,
+            desktop_started_at=T0,
+            timeline=TIMELINE,
+            os_kind="linux",
+            confirmed=False,
+        )
+
+    monkeypatch.setattr(
+        "openadapt_flow.multi_surface_record.record_multi_surface", fake_multi
+    )
+    monkeypatch.setattr(_sys.stdin, "isatty", lambda: False)
+    rec = tmp_path / "rec"
+    assert main(["record", "--out", str(rec)]) == 0
+    meta = json.loads((rec / "meta.json").read_text())
+    assert meta["multi_surface_record"]["confirmed"] is False
+    assert "chart: 1 step(s)" in (rec / "surfaces.review.txt").read_text()
+    assert "confirm-surfaces" in capsys.readouterr().out
+    with pytest.raises(ValueError, match="not been confirmed"):
+        compile_recording(rec, tmp_path / "bundle", name="x")
+    assert not (tmp_path / "bundle").exists()
+    # A person confirms; compile then gets past the review.
+    assert main(["confirm-surfaces", str(rec), "--yes"]) == 0
+    assert (
+        json.loads((rec / "meta.json").read_text())["multi_surface_record"]["confirmed"]
+        is True
+    )
+    assert not (rec / "surfaces.review.txt").exists()
+
+
+def test_record_yes_confirms_without_asking(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sys as _sys
+
+    from openadapt_flow.__main__ import main
+
+    def fake_multi(out, **kwargs):
+        desktop = _desktop(
+            tmp_path / "src",
+            [
+                {
+                    "kind": "click",
+                    "x": 300,
+                    "y": 250,
+                    "t": 4.0,
+                    "observed_process": _proc("chart", (100, 50, 600, 400)),
+                }
+            ],
+        )
+        return merge_surface_recordings(
+            out,
+            surfaces=[],
+            desktop_dir=desktop,
+            desktop_started_at=T0,
+            timeline=TIMELINE,
+            os_kind="linux",
+            confirmed=False,
+        )
+
+    monkeypatch.setattr(
+        "openadapt_flow.multi_surface_record.record_multi_surface", fake_multi
+    )
+    monkeypatch.setattr(_sys.stdin, "isatty", lambda: False)
+    rec = tmp_path / "rec"
+    assert main(["record", "--out", str(rec), "--yes"]) == 0
+    assert (
+        json.loads((rec / "meta.json").read_text())["multi_surface_record"]["confirmed"]
+        is True
+    )
+
+
+def test_typing_that_moves_to_another_app_is_split() -> None:
+    from openadapt_flow.adapters.capture import _flow_events
+
+    def key(ch, ts, app, pid):
+        return SimpleNamespace(
+            type="key.type",
+            timestamp=ts,
+            text=ch,
+            keys=[ch],
+            structural_observation={
+                "process": {"process_name": app, "process_id": pid},
+            },
+        )
+
+    actions = [
+        key("a", T0, "chart", 1),
+        key("b", T0 + 0.1, "chart", 1),
+        key("c", T0 + 0.2, "slack", 2),
+    ]
+    events = _flow_events(actions, 1.0, {}, include_process=True)
+    assert [(e["text"], e["observed_process"]["name"]) for e in events] == [
+        ("ab", "chart"),
+        ("c", "slack"),
+    ]

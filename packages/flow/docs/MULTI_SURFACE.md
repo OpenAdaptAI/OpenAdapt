@@ -316,7 +316,10 @@ accessibility reading capture takes at each action carries it):
   the recording are dropped, and any earlier action there refuses it.
 
 When the recording stops, it lists each surface with its step count and
-asks before keeping it. A browser page is read through the OS
+asks before keeping it (`--yes` keeps it without asking). With no terminal
+to ask in, the recording is kept unconfirmed with the list beside it in
+`surfaces.review.txt`, and `compile` refuses it until a person runs
+`openadapt-flow confirm-surfaces RECORDING`. A browser page is read through the OS
 accessibility tree, the same way as a native app (see "The person's own
 browser"). macOS and Linux readings now compile to structural locators
 (role and accessible name) as Windows readings do.
@@ -348,9 +351,15 @@ How it works:
   that brings a window forward counts for that window only if the click
   lands inside it.
 - The browser's actions come from the web recorder, with the time each was
-  observed. The desktop capture sees the same clicks in the browser window;
-  an action in an undeclared window is set aside only when a browser action
-  of the same kind happened within 1.5 seconds.
+  observed. The desktop capture sees the same clicks in the browser window.
+  A desktop action is set aside as the web recorder's own copy only with
+  positive evidence: it went to a process of the browser `record` launched,
+  and the web recorder saw an action of the same kind within 1.5 seconds.
+  Any other action in an undeclared window refuses the recording.
+- A keystroke with no accessibility reading is placed on the app before it
+  only when the active window carries an id and it is the same id; two
+  windows without ids are never taken to be one. Typing that moves to
+  another app is split into one action per app.
 - The streams are merged in time order. Each change of surface is written as
   an explicit `switch_surface` event (before frame: the surface left; after
   frame: the surface entered), so the bundle has a SWITCH_SURFACE step with

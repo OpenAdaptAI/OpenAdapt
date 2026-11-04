@@ -343,6 +343,7 @@ A test fails when a command has no file or this list is out of date.
 - `compile-agent`: With `admit TASK_DIR`, a person confirms and admits a waiting draft, such as one an agent taught over MCP (`openadapt-agent serve --teach`).
 - `compile`
 - `compose`
+- `confirm-surfaces`: Show the windows and apps a cross-window recording used, with the steps on each, and confirm them. `compile` refuses a cross-window recording until a person has confirmed its surfaces, either at the end of `record` or with this command. `--yes` confirms without asking.
 - `demo-record`
 - `disambiguate`
 - `for-each`

@@ -1097,9 +1097,21 @@ def _convert_key_type(
     if action.text:
         # Literal typed characters (a shifted character carries shift in .keys
         # but is still just text). Accumulated into the run buffer.
+        observed = _observed_process(action)
+        running = text_run["process"]
+        if (
+            text_run["chars"]
+            and observed is not None
+            and running is not None
+            and (observed.get("name"), observed.get("pid"))
+            != (running.get("name"), running.get("pid"))
+        ):
+            # Focus moved to another application mid-typing: the characters
+            # after the move are a separate action on another window.
+            flush_text()
         if not text_run["chars"]:
             text_run["ts"] = ts
-            text_run["process"] = _observed_process(action)
+            text_run["process"] = observed
         text_run["chars"].append(action.text)
         return
 

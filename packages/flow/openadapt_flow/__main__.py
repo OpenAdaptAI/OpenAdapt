@@ -1813,6 +1813,36 @@ def _recording_privacy_notices(recording_dir: Path) -> list[str]:
     return notices
 
 
+def _cmd_confirm_surfaces(args: argparse.Namespace) -> int:
+    from openadapt_flow.multi_surface_record import (
+        MultiSurfaceRecordError,
+        confirm_review,
+        review_lines,
+    )
+
+    recording = Path(args.recording)
+    try:
+        lines = review_lines(recording)
+    except (OSError, ValueError, KeyError) as exc:
+        raise SystemExit(f"confirm-surfaces: cannot read {recording}: {exc}") from exc
+    print("This recording used:")
+    for line in lines:
+        print(line)
+    if not args.yes:
+        if not sys.stdin.isatty():
+            print("Not confirmed: run it in a terminal, or pass --yes.")
+            return 2
+        if input("Confirm these surfaces? [y/N] ").strip().lower() not in ("y", "yes"):
+            print("Not confirmed.")
+            return 1
+    try:
+        confirm_review(recording)
+    except MultiSurfaceRecordError as exc:
+        raise SystemExit(f"confirm-surfaces: {exc}") from exc
+    print("Confirmed. The recording can be compiled.")
+    return 0
+
+
 def _cmd_browser_accessibility(args: argparse.Namespace) -> int:
     from openadapt_flow import browser_accessibility as ba
 
@@ -1826,9 +1856,11 @@ def _cmd_browser_accessibility(args: argparse.Namespace) -> int:
         lines = ba.enable_linux()
         for line in lines or ["no Chromium-family browser launcher found"]:
             print(line)
+        from openadapt_flow.cli_hints import command
+
         print(
             "Restart the browser for this to take effect. Undo with "
-            "'openadapt-flow browser-accessibility --disable'."
+            f"'{command('browser-accessibility')} --disable'."
         )
     elif args.disable:
         for line in ba.disable_linux() or ["nothing to remove"]:
@@ -1944,11 +1976,17 @@ def _cmd_record_surfaces(args: argparse.Namespace) -> int:
     except MultiSurfaceRecordError as exc:
         raise SystemExit(f"record: {exc}. Nothing was kept.") from exc
     from openadapt_flow.cli_hints import command
+    from openadapt_flow.multi_surface_record import (
+        confirm_review,
+        write_unconfirmed_review,
+    )
 
     print("This recording used:")
     for line in review_lines(out):
         print(line)
-    if sys.stdin.isatty():
+    if getattr(args, "yes", False):
+        confirm_review(out)
+    elif sys.stdin.isatty():
         answer = input("Keep it? [Y/n] ").strip().lower()
         if answer in ("n", "no"):
             import shutil
@@ -1956,6 +1994,14 @@ def _cmd_record_surfaces(args: argparse.Namespace) -> int:
             shutil.rmtree(out, ignore_errors=True)
             print("Deleted. Nothing was kept.")
             return 1
+        confirm_review(out)
+    else:
+        review = write_unconfirmed_review(out)
+        print(
+            f"No one confirmed these surfaces, so compile refuses the recording "
+            f"until a person runs '{command('confirm-surfaces')} {out}' "
+            f"(the list is in {review.name})."
+        )
     print(f"Recording written to {out}")
     import json as _json
 
@@ -9235,6 +9281,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_demo)
 
     p = sub.add_parser(
+        "confirm-surfaces",
+        help=(
+            "Review the windows a cross-window recording used, and confirm "
+            "them so the recording can be compiled"
+        ),
+    )
+    p.add_argument("recording", help="Recording directory")
+    p.add_argument("--yes", action="store_true", help="Confirm without asking")
+    p.set_defaults(func=_cmd_confirm_surfaces)
+
+    p = sub.add_parser(
         "browser-accessibility",
         help=(
             "Linux: start Chrome, Chromium, Edge and Brave with their page "
@@ -9453,6 +9510,15 @@ def build_parser() -> argparse.ArgumentParser:
             "of window becomes a checked switch step. An action in a window "
             "you did not declare stops the recording. See "
             "docs/MULTI_SURFACE.md."
+        ),
+    )
+    p.add_argument(
+        "--yes",
+        action="store_true",
+        help=(
+            "Keep a cross-window recording's surfaces without asking. Without "
+            "a terminal and without --yes, the recording is kept unconfirmed "
+            "and compile refuses it until confirm-surfaces is run."
         ),
     )
     _add_backend_flags(p)
