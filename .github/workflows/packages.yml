@@ -638,7 +638,9 @@ jobs:
   # no index and the machine has no network, so a wheel missing from the
   # archive fails the install. deploy/on-prem/bin/test-offline-install.sh.
   # First, bin/test-update.sh: the update state machine's refusal, migration
-  # and recovery paths with a fake venv build, which nothing else runs.
+  # and recovery paths with a fake venv build, which nothing else runs. Then
+  # bin/test-container.sh: the runner image built from the first release with
+  # no network, run on docker-compose.yml's internal network.
   flow-onprem-offline:
     name: flow on-prem offline install, update and rollback (egress blocked)
     needs: scope
@@ -662,6 +664,8 @@ jobs:
         run: bash deploy/on-prem/bin/test-update.sh
       - name: Build two signed offline releases from the lock (connected)
         run: bash deploy/on-prem/bin/test-offline-install.sh stage "$RUNNER_TEMP/offline"
+      - name: Container image from the signed release (no-network build, internal network)
+        run: bash deploy/on-prem/bin/test-container.sh "$RUNNER_TEMP/offline"
       - name: Install, update and roll back with egress blocked
         # env -u SUDO_UID keeps the command root inside the namespace:
         # install.sh owns the release tree as root.

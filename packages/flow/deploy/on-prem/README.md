@@ -25,7 +25,7 @@ install story) and **[COMPLIANCE.md](COMPLIANCE.md)** (posture + data-flow).
 | `bin/test-offline-install.sh` | Builds two signed releases, then as root with egress blocked installs the real engine from the first, refuses a tampered second, updates to the signed second, rolls back, and runs the air-gap attestation. CI runs it with `bin/test-update.sh` (job `flow-onprem-offline`). | REAL (Linux, root) |
 | `UPDATE.md` | Offline update + rollback runbook: build a signed release, apply it atomically, revert instantly. | REAL (doc) |
 | `systemd/openadapt-flow-runner.service` + `.path` | Event-driven runner unit with kernel-level egress denial (`IPAddressDeny=any`). | REAL (Linux/systemd) |
-| `docker-compose.yml` + `Dockerfile` | Container alternative on an `internal:true` (egress-blocked) network; optional LAN-only VLM appliance profile. | REAL topology; STUB image build (needs offline `./wheels`) |
+| `docker-compose.yml` + `Dockerfile` + `bin/build-image.sh` | Container alternative on an `internal:true` (egress-blocked) network; optional LAN-only VLM appliance profile. `bin/build-image.sh` verifies a signed release and builds the image from its wheels with `--network none`. `bin/test-container.sh` (CI, job `flow-onprem-offline`) builds it, refuses a tampered archive, checks a missing wheel fails the build, and runs the runner on the compose network with no route out. | REAL (Linux, Docker) |
 | `COMPLIANCE.md` | Regulatory posture, data-flow diagram, what's encrypted, boundaries. | REAL (doc; non-legal) |
 
 ## 60-second install (systemd host)
