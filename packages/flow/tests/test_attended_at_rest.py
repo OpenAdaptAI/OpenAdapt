@@ -24,6 +24,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+from cryptography.exceptions import InvalidTag
 
 from openadapt_flow import at_rest, crypto
 from openadapt_flow.runtime.durable import attended_state
@@ -563,3 +564,17 @@ def test_replayer_classifies_with_its_own_checkpoint_key(monkeypatch, tmp_path):
     )
     assert seen["transition_evidence_key"] == "k-run"
     assert seen["transition_evidence_root"] == tmp_path
+
+
+def test_run_key_cache_never_reuses_a_key_for_another_passphrase(counted_scrypt):
+    salt = b"\x07" * crypto.SALT_LEN
+    first = attended_state._run_keys("passphrase-one", salt)
+    assert attended_state._run_keys("passphrase-one", salt) is first
+    assert len(counted_scrypt) == 1
+    other = attended_state._run_keys("passphrase-two", salt)
+    assert other is not first
+    assert len(counted_scrypt) == 2
+    nonce = b"\x00" * crypto.NONCE_LEN
+    sealed = first[0].encrypt(nonce, b"attended", b"aad")
+    with pytest.raises(InvalidTag):
+        other[0].decrypt(nonce, sealed, b"aad")

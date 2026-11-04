@@ -103,9 +103,10 @@ _CACHE_LIMIT = 64
 _CACHE_LOCK = threading.Lock()
 
 
-# One scrypt per (passphrase, run salt) per process. Keyed by a digest of the
-# passphrase, never the passphrase itself.
-_RUN_KEYS: "OrderedDict[tuple[bytes, bytes], tuple[AESGCM, AESGCM]]" = OrderedDict()
+# One scrypt per (passphrase, run salt) per process. Keyed by the run salt;
+# an entry is reused only for the same passphrase (compared in constant time,
+# as the container cache above does), so a different passphrase derives again.
+_RUN_KEYS: "OrderedDict[bytes, tuple[str, tuple[AESGCM, AESGCM]]]" = OrderedDict()
 _RUN_KEY_LIMIT = 32
 _RUN_KEY_LOCK = threading.Lock()
 # A journal salt for a run directory with no salted marker (a sealed run
@@ -115,15 +116,14 @@ _JOURNAL_SALTS: dict[str, bytes] = {}
 
 def _run_keys(passphrase: str, salt: bytes) -> tuple[AESGCM, AESGCM]:
     """The (file, journal) AEADs for one run salt, deriving them only once."""
-    ident = (
-        hashlib.sha256(b"openadapt-flow/run-key\0" + passphrase.encode()).digest(),
-        salt,
-    )
     with _RUN_KEY_LOCK:
-        cached = _RUN_KEYS.get(ident)
+        cached = _RUN_KEYS.get(salt)
         if cached is not None:
-            _RUN_KEYS.move_to_end(ident)
-            return cached
+            _RUN_KEYS.move_to_end(salt)
+    if cached is not None and hmac.compare_digest(
+        cached[0].encode("utf-8"), passphrase.encode("utf-8")
+    ):
+        return cached[1]
     master = _crypto.derive_data_key(passphrase, salt)
     pair = tuple(
         AESGCM(
@@ -135,7 +135,7 @@ def _run_keys(passphrase: str, salt: bytes) -> tuple[AESGCM, AESGCM]:
     )
     keys = (pair[0], pair[1])
     with _RUN_KEY_LOCK:
-        _RUN_KEYS[ident] = keys
+        _RUN_KEYS[salt] = (passphrase, keys)
         while len(_RUN_KEYS) > _RUN_KEY_LIMIT:
             _RUN_KEYS.popitem(last=False)
     return keys
