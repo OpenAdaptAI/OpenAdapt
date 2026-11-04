@@ -1525,19 +1525,31 @@ def _run_live_cdp_attach_in_child(
         )
     # Exit 0 alone is not a pass: pytest exits 0 for a skipped test, and a
     # child that calls os._exit(0) early exits 0 without running anything.
-    outcome = _child_test_outcome(report)
+    outcome = _child_test_outcome(report, request.node.name)
     if outcome != "passed":
         pytest.fail(f"the live CDP attach child did not pass: {outcome}{detail}")
 
 
-def _child_test_outcome(report: Path) -> str:
-    """Read the child's JUnit report: "passed" only for one completed pass."""
+def _child_test_outcome(report: Path, expected_name: str) -> str:
+    """Read the child's JUnit report: "passed" only for one completed pass.
+
+    A child that calls pytest.exit(returncode=0) still writes a report, with
+    one bare testcase under a suite that counts zero tests, so the suite's own
+    count and the case's name are checked as well as the case itself.
+    """
 
     if not report.exists():
         return "no test report (the child exited before pytest finished)"
-    cases = list(ElementTree.parse(report).getroot().iter("testcase"))
+    root = ElementTree.parse(report).getroot()
+    suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
+    if len(suites) != 1 or suites[0].get("tests") != "1":
+        counts = [suite.get("tests") for suite in suites]
+        return f"the report counts {counts} tests, expected exactly one"
+    cases = list(suites[0].iter("testcase"))
     if len(cases) != 1:
         return f"{len(cases)} tests ran, expected exactly one"
+    if cases[0].get("name") != expected_name:
+        return f"the report names {cases[0].get('name')!r}, not {expected_name!r}"
     for tag in ("skipped", "failure", "error"):
         if cases[0].find(tag) is not None:
             return tag
@@ -1590,7 +1602,7 @@ def _run_fake_live_child(tmp_path: Path, body: str, **kwargs: Any) -> None:
         encoding="utf-8",
     )
     request = SimpleNamespace(
-        node=SimpleNamespace(nodeid=str(test_file)),
+        node=SimpleNamespace(nodeid=str(test_file), name="test_fake_live_child"),
         config=SimpleNamespace(rootpath=tmp_path),
     )
     _run_live_cdp_attach_in_child(request, tmp_path, **kwargs)
@@ -1605,9 +1617,10 @@ def test_live_cdp_child_runner_accepts_a_completed_pass(tmp_path: Path) -> None:
     [
         ("pytest.skip('child-only skip')", "did not pass: skipped"),
         ("os._exit(0)", "no test report"),
+        ("pytest.exit('child-only exit', returncode=0)", "report counts"),
         ("assert False", r"child failed \(exit 1\)"),
     ],
-    ids=["skipped", "early-zero-exit", "assertion"],
+    ids=["skipped", "early-zero-exit", "pytest-exit-zero", "assertion"],
 )
 def test_live_cdp_child_runner_rejects_a_child_that_did_not_pass(
     tmp_path: Path, body: str, reason: str
