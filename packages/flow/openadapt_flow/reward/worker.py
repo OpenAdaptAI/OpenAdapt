@@ -138,9 +138,13 @@ def judge_episode(
       any REFUTED -> ``WRONG_EFFECT`` (the banner lie lands here: the screen
       said saved, the store holds nothing).
     * signal ``halted_before_effect`` / ``refused`` / ``rejected_policy``:
-      no required effect present -> that outcome; a required effect present
-      anyway -> ``RECONCILIATION_REQUIRED`` with ``effect_uncertain``, since
-      the runtime and the store disagree and a person settles it.
+      no required effect present -> that outcome; every required effect
+      CONFIRMED -> ``ESCALATED_AFTER_EFFECT``, the contract's partial credit
+      (default 0.5), because the work is done and the policy asked a person
+      instead of declaring it; any other required effect present (a
+      duplicate or wrong write, say) -> ``RECONCILIATION_REQUIRED`` with
+      ``effect_uncertain``, since the runtime and the store disagree and a
+      person settles it.
     """
 
     substrate = bundle.oracle.channel.value
@@ -211,6 +215,15 @@ def judge_episode(
             refuted.reason,
         )
     signalled = _SIGNAL_OUTCOME[runtime_signal]
+    if required and all_confirmed:
+        return Judgement(
+            RewardOutcomeV1.ESCALATED_AFTER_EFFECT,
+            RewardUncertaintyStateV1.NONE,
+            required,
+            forbidden,
+            f"runtime reported {runtime_signal} but every required effect is "
+            "present exactly as declared",
+        )
     if any_present:
         return Judgement(
             RewardOutcomeV1.RECONCILIATION_REQUIRED,
@@ -742,6 +755,7 @@ OutcomeLiteral = Literal[
     "refused",
     "rejected_policy",
     "wrong_effect",
+    "escalated_after_effect",
     "reconciliation_required",
     "failed_platform",
 ]

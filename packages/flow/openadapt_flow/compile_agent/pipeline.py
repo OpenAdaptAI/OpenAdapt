@@ -426,7 +426,9 @@ class FirstRunCompiler:
         self.headless = headless
         self.on_warning = on_warning
         self.model_key = model_key
-        self.observer, self.verifier_section = load_observer(self.verify_path)
+        self.observer, self.verifier_section = load_observer(
+            self.verify_path, for_run1=True
+        )
         #: Run 1's teach scope (see :meth:`teach_scope`): more app origins,
         #: more text the agent may type, and the app's write adapter.
         self.allow_origins = [str(o) for o in allow_origins]

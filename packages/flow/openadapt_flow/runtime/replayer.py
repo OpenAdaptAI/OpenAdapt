@@ -48,6 +48,7 @@ import struct
 import threading
 import time
 import uuid
+from collections import Counter
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -85,6 +86,7 @@ from openadapt_flow.backend import (
     RemoteFrameContractBackend,
     RichPointerActionBackend,
     SelectOptionBackend,
+    StructuralBackend,
     StructuralElementNotActionable,
     StructuralResolutionRefused,
     SubmitBindingBackend,
@@ -395,13 +397,12 @@ PC_TEMPLATE_THRESHOLD = 0.9
 # modal at 0.24, leaving a deliberate margin on both sides.
 PC_STRUCTURAL_TEMPLATE_THRESHOLD = 0.8
 
-# Typed-input verification: size of the "field region" diffed/OCRed around
-# the focusing click point after a TYPE action. Generous on purpose — the
-# typed text renders at the field's own left edge / first line, not at the
-# click point — and clamped to the viewport. When no focusing click is
-# known (keyboard-only focus moves, e.g. Tab between fields), the whole
-# frame is used instead.
-FIELD_REGION_SIZE = (640, 240)
+# Typed-input verification: height of the visual readback band around the
+# focusing click after TYPE. Without structural field bounds, read the full
+# viewport width: a centered crop can hide the value's beginning or suffix.
+# With no focusing click (e.g. Tab between fields), use the whole frame.
+FIELD_REGION_HEIGHT = 240
+MASKED_FIELD_REGION_WIDTH = 640
 FIELD_REGION_PAD = 16
 
 # Typed-input verification, secret-only diff acceptance: when a SECRET typed
@@ -1634,14 +1635,35 @@ class Replayer:
         before they are written, and durable checkpoints use the same key.
         No plaintext of the bundle or of the live screen reaches the disk.
         """
+        from openadapt_flow import at_rest
+
         bundle_path = Path(bundle_dir)
-        if (
-            not (
-                _sealed.is_sealed(bundle_path)
-                or _sealed.active_writer(bundle_path) is not None
+        bundle_sealed = (
+            _sealed.is_sealed(bundle_path)
+            or _sealed.active_writer(bundle_path) is not None
+        )
+        # A sealed bundle always runs into a sealed run directory, whatever
+        # the mode or opt-out: encrypted input never yields plaintext output.
+        # Strict mode seals the run of a plaintext bundle too. Otherwise the
+        # plaintext run directory is named on stderr and in the ledger
+        # (docs/phi_at_rest.md).
+        seal_run = at_rest.strict() or bundle_sealed
+        if save_healed_to is not None and seal_run:
+            # The healed copy is written as a plaintext bundle: hold it back
+            # before anything runs rather than decrypt a sealed bundle to disk.
+            raise at_rest.AtRestRefused(
+                f"Not writing a healed bundle at {save_healed_to}: it would be a "
+                "plaintext copy of an encrypted run. Nothing was executed."
             )
-            or _sealed.active_writer(Path(run_dir)) is not None
-        ):
+        if not seal_run or _sealed.active_writer(Path(run_dir)) is not None:
+            if _sealed.active_writer(Path(run_dir)) is None:
+                if not at_rest.plaintext_allowed("a run directory"):
+                    at_rest.unsealed_write("a run directory", run_dir)
+                if self.checkpoint_key is None:
+                    # Durable checkpoints can still be encrypted here.
+                    from openadapt_flow import crypto as _crypto
+
+                    self.checkpoint_key = _crypto.resolve_key(None)
             return self._run_unsealed(
                 workflow,
                 params=params,
@@ -1672,9 +1694,9 @@ class Replayer:
             # Refuse before anything is actuated or written: these stores
             # keep their own plaintext state files in the run directory.
             raise _sealed.SealedSetError(
-                f"a sealed bundle cannot run with {unsupported} yet, because "
-                "that state is written to the run directory in plaintext. "
-                "Nothing was executed."
+                f"a sealed run keeps {unsupported} outside the sealed set, so "
+                "it is held back. Nothing was executed. Run a plaintext bundle "
+                "outside OPENADAPT_FLOW_AT_REST=strict to use it (recorded)."
             )
         if self.checkpoint_key is None:
             # A sealed bundle's run keeps its durable state under the same key.
@@ -17455,6 +17477,8 @@ class Replayer:
         self,
         field_point: Optional[Point],
         structural_region: Optional[Region] = None,
+        *,
+        masked: bool = False,
     ) -> Optional[Region]:
         """Region to observe for typed input, or None for the whole frame."""
         vw, vh = self.backend.viewport
@@ -17468,8 +17492,8 @@ class Replayer:
                 return (x, y, right - x, bottom - y)
         if field_point is None:
             return None
-        w = min(FIELD_REGION_SIZE[0], vw)
-        h = min(FIELD_REGION_SIZE[1], vh)
+        w = min(MASKED_FIELD_REGION_WIDTH, vw) if masked else vw
+        h = min(FIELD_REGION_HEIGHT, vh)
         x = min(max(0, field_point[0] - w // 2), max(0, vw - w))
         y = min(max(0, field_point[1] - h // 2), max(0, vh - h))
         return (x, y, w, h)
@@ -17536,14 +17560,14 @@ class Replayer:
         """Did the just-typed ``text`` visibly land?
 
         Exact structural readback is authoritative when the backend exposes
-        it. Otherwise, for an OCR-able value (>=
-        ``identity.MIN_PARAM_CHARS`` squashed chars), a contiguous squashed
-        run of the value (retried at 2x resolution) must be readable in the
-        field region. Pixel-only acceptance is restricted to steps declared
-        ``secret``: masked password dots may render no readable text. A dialog
+        it. Otherwise the complete lowercased, whitespace-squashed value must
+        match the field's new OCR text (retried at 2x resolution), including
+        short values.
+        Whole unchanged context lines may be excluded. Pixel-only acceptance
+        is restricted to steps declared ``secret``: masked password dots may
+        render no readable text. A dialog
         painting over the region or an unreadable ordinary field must never
-        count as "input landed". Values too short for OCR to arbitrate retain
-        the legacy diff fallback.
+        count as "input landed".
 
         Returns:
             ``(landed, changed)`` — the verdict, and whether the field
@@ -17551,7 +17575,9 @@ class Replayer:
             retyping is only safe when nothing changed).
         """
         after_png = self._settle_seeded()
-        region = self._field_region(field_point, field_region)
+        # Masked input has no readable value: keep its pixel-only change
+        # evidence local, so an unrelated change elsewhere cannot confirm it.
+        region = self._field_region(field_point, field_region, masked=allow_masked)
         if baseline_field_value is not None:
             expected = baseline_field_value + text
             after_at_point = (
@@ -17606,21 +17632,45 @@ class Replayer:
                 == identity_mod.squash(text).casefold()
             ):
                 return True, True
+        if not changed:
+            return False, False
         needle = identity_mod.squash(text)
-        if len(needle) < identity_mod.MIN_PARAM_CHARS:
-            return changed, changed  # too short for OCR to arbitrate
-        need = identity_mod.required_run(len(needle))
-        after_hay = self._ocr_squashed(after_png, region)
-        if identity_mod.longest_run(needle, after_hay) >= need:
+
+        def exact_ocr_value(
+            before: bytes, after: bytes, crop: Optional[Region]
+        ) -> bool:
+            observed = [
+                identity_mod.squash(line.text)
+                for line in self.vision.ocr(after, region=crop)
+                if identity_mod.squash(line.text)
+            ]
+            if needle and "".join(observed) == needle:
+                return True
+            if allow_masked or not needle:
+                return False
+            # The readback window may include unchanged labels beside the
+            # field. Remove whole unchanged OCR lines, with multiplicity;
+            # every remaining character must belong to the complete value.
+            previous = Counter(
+                identity_mod.squash(line.text)
+                for line in self.vision.ocr(before, region=crop)
+            )
+            added = []
+            for value in observed:
+                if previous[value]:
+                    previous[value] -= 1
+                else:
+                    added.append(value)
+            return "".join(added) == needle
+
+        if exact_ocr_value(baseline_png, after_png, region):
             return True, changed
         if region is not None:
             upscaled = identity_mod.upscale_crop(after_png, region)
-            if upscaled is not None:
-                up_hay = self._ocr_squashed(upscaled, None)
-                if identity_mod.longest_run(needle, up_hay) >= need:
+            before_upscaled = identity_mod.upscale_crop(baseline_png, region)
+            if upscaled is not None and before_upscaled is not None:
+                if exact_ocr_value(before_upscaled, upscaled, None):
                     return True, changed
-        if not changed:
-            return False, False
         # Pixels changed but the value is unreadable: masked rendering is
         # the only acceptable explanation, and masked rendering adds no
         # confidently readable alphanumeric text (dot glyphs OCR as
@@ -17656,10 +17706,10 @@ class Replayer:
     ) -> Optional[str]:
         """Verify a TYPE action landed; one guarded refocus-and-retype retry.
 
-        The retry only fires when exact readback or pixels prove the first
-        attempt changed NOTHING in the field (keystrokes fell on a
-        non-rendering target): re-click
-        the field (when its point is known), select-all so a false-negative
+        A retry needs a browser surface, structural browser observations and
+        exact field readback proving no change. An opaque or native surface
+        cannot prove where the first input went and must halt. For a browser,
+        re-click the field (when its point is known), select-all so a false-negative
         first attempt is replaced rather than duplicated, retype. When the
         region DID change but the value cannot be read (a dialog over the
         field, an unexpected re-render), retyping is not safe — select-all
@@ -17689,12 +17739,32 @@ class Replayer:
                 "or instead of the input) — retyping is unsafe in this "
                 "state; run aborted"
             )
-        if not allow_retry:
+        can_retry = (
+            allow_retry
+            and workflow.surface in (None, "web")
+            and isinstance(self.backend, StructuralBackend)
+            and bool(self.backend.url)
+            and baseline_field_value is not None
+        )
+        if not can_retry:
             result.input_verified = False
+            # This is a halt, not a new delivery edge: recheck authority
+            # without consuming a durable fence or an approval permit.
+            refusal = self._fresh_actuation_authorization_refusal(
+                workflow, params, step
+            )
+            if refusal is not None:
+                result.safety_halt = True
+                result.failure_category = (
+                    "governed_refusal"
+                    if self.governed_authorization is not None
+                    else "safety_halt"
+                )
+                return refusal
             return (
                 f"Typed input could not be verified for step '{step.id}' "
-                f"({step.intent}): the identity-bound browser field showed no "
-                "confirmed change; refusing an unleased refocus/retype retry"
+                f"({step.intent}): the target field showed no confirmed change; "
+                "refusing an unleased refocus/retype retry after possibly stray input"
             )
         result.input_retried = True
         retry_resolution = resolution

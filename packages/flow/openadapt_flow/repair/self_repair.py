@@ -2937,7 +2937,7 @@ class _CoveredHalt(tuple):
 
 #: How far the share of the band left uncovered may be from the share of the
 #: recorded text read: the dialog's left edge must be where the read stops.
-#: On the lab's Patient Notes notice the two are 0.79 and 0.81.
+#: On one lab app's session notice the two were 0.79 and 0.81.
 _CUT_TOLERANCE = 0.1
 
 
