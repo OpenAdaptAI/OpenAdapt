@@ -7,7 +7,8 @@ export AWS_PROFILE=openadapt AWS_REGION=us-east-1
 N=${1:-100}; EPISODES=${2:-2}; BRANCH=${3:-feat/openenv-benches}
 TYPE=c6a.8xlarge; MAX_PRICE=1.00; CAP_MIN=45
 account=$(aws sts get-caller-identity --query Account --output text)
-[[ $account == 992382684924 ]] || { echo "wrong AWS account $account"; exit 1; }
+expected=${OA_AWS_ACCOUNT:?set OA_AWS_ACCOUNT to the only account this may run in}
+[[ $account == "$expected" ]] || { echo "wrong AWS account $account"; exit 1; }
 HERE=${0:A:h}
 ami=$(aws ssm get-parameter --name /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id --query Parameter.Value --output text)
 data=$(sed -e "s|__CAP_MIN__|$CAP_MIN|" -e "s|__BRANCH__|$BRANCH|" -e "s|__N__|$N|" -e "s|__EPISODES__|$EPISODES|" $HERE/user-data.sh)
