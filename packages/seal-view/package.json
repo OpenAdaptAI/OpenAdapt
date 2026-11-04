@@ -1,0 +1,57 @@
+{
+  "name": "@openadapt/seal-view",
+  "version": "0.1.0",
+  "description": "The OpenAdapt Seal: one run's signed report, checked in the browser and drawn as a living object, with the run replayed over its program map.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./styles.css": "./dist/styles.css",
+    "./seal-viewer.html": "./dist/seal-viewer.html",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/build.mjs --check",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@openadapt/program-graph": ">=0.1.0",
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "@openadapt/program-graph": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "preact": "10.29.8",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "vitest": "5.0.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenAdaptAI/OpenAdapt.git",
+    "directory": "packages/seal-view"
+  },
+  "homepage": "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/seal-view#readme",
+  "bugs": "https://github.com/OpenAdaptAI/OpenAdapt/issues",
+  "keywords": [
+    "openadapt",
+    "seal",
+    "ed25519",
+    "react"
+  ]
+}

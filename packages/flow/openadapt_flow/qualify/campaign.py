@@ -22,6 +22,10 @@ Flow of :func:`qualify`::
        pixels-only pass); a gate when the target surface is pixels only
     -> record results and the lookups they used, certify under the policy
        (optional)
+    -> when certifying, run each business-rule case from verify.yaml on the
+       certified bundle (seed the conflicting record, run on the rule's
+       inputs, require HALTED_BEFORE_EFFECT and no new or changed record);
+       one failed trial withdraws the certification
     -> optionally run the certified bundle once on new inputs
 
 The keys are per-campaign local test keys (:mod:`openadapt_flow.qualify.keys`).
@@ -48,7 +52,13 @@ from openadapt_flow.lookup_capabilities import (
     resolve_deployment_surface,
     surface_offers_structure,
 )
-from openadapt_flow.qualify.config import CASE_IDS, QualifyConfigError, VerifyConfig
+from openadapt_flow.qualify.config import (
+    CASE_IDS,
+    RULE_CASE_PREFIX,
+    BusinessRuleCase,
+    QualifyConfigError,
+    VerifyConfig,
+)
 from openadapt_flow.qualify.environment import (
     WEB_OBSERVER_CONTRACT_SHA256,
     WEB_OBSERVER_ID,
@@ -372,6 +382,7 @@ def check_ready(
             "role and a name): the web fault driver needs it for the ambiguity "
             "and identity faults"
         )
+    problems.extend(business_rule_problems(workflow, config, save, params))
     return problems
 
 
@@ -575,6 +586,11 @@ class RecordReadback:
     def snapshot(self) -> None:
         if self._read is not None:
             self.before = self._read()
+
+    def records(self) -> Optional[list[dict[str, Any]]]:
+        """The records as they are now, or None without an independent read."""
+
+        return self._read() if self._read is not None else None
 
     def judge(self, oracle_kind: str, report: RunReport) -> dict[str, Any]:
         base = {
@@ -1181,7 +1197,7 @@ class QualifyResult:
         A partial run is a development check, never a qualification.
         """
 
-        return len({row["case_id"] for row in self.rows}) < len(CASES)
+        return not set(CASE_IDS) <= {row["case_id"] for row in self.rows}
 
 
 def _default_hooks(config: VerifyConfig, hooks: Optional[QualifyHooks]) -> QualifyHooks:
@@ -1252,16 +1268,28 @@ def qualify(
     if (out / "cases").exists() or (out.exists() and not in_place):
         raise QualifyError(f"output already exists: {out}")
     selected = list(cases or config.campaign.cases)
-    unknown = [c for c in selected if c not in CASE_IDS]
+    known = config.all_case_ids()
+    unknown = [c for c in selected if c not in known]
     if unknown:
-        raise QualifyConfigError(f"unknown case(s) {unknown}; known: {list(CASE_IDS)}")
+        raise QualifyConfigError(f"unknown case(s) {unknown}; known: {known}")
     n_trials = trials or config.campaign.trials
     if certify is not None:
         load_policy(certify)  # fail before any run on an unknown policy
-        if set(selected) != set(CASE_IDS):
+        if not set(CASE_IDS) <= set(selected):
             raise QualifyConfigError(
                 "--certify needs all six cases; certification refuses a partial campaign"
             )
+        named_rules = {c for c in selected if c.startswith(RULE_CASE_PREFIX)}
+        if named_rules and named_rules != {
+            rule.case_id for rule in config.business_rules
+        }:
+            raise QualifyConfigError(
+                "--certify runs every business rule; name all of them or none"
+            )
+    elif any(c.startswith(RULE_CASE_PREFIX) for c in selected):
+        raise QualifyConfigError(
+            "business-rule cases run on the certified bundle; pass --certify"
+        )
     campaign_id = (
         campaign_id or config.campaign.id or f"qualify-{bundle_src.name}-{int(t0)}"
     )
@@ -1612,6 +1640,36 @@ def qualify(
         )
     else:
         qreport = evaluate_qualification(workflow, evidence_root=root)
+    if certify is not None and qreport.passed and config.business_rules:
+        # The application's own rules run on the certified bundle, as the
+        # runs it will make; a single failed trial withdraws certification.
+        _run_business_rules(
+            workflow=workflow,
+            bundle_dir=bundle_dir,
+            config=config,
+            hooks=hooks,
+            setup=setup,
+            out=out,
+            n_trials=n_trials,
+            params=params,
+            save_id=save.id,
+            policy=certify,
+            run_id_prefix=run_id_prefix or campaign_id,
+            lookup=lookup_kwargs,
+            verifier_tier=verifier_tier,
+            verifier_substrate=getattr(probe_verifier, "substrate", None),
+            rows=rows,
+            case_entries=case_entries,
+            write_campaign_files=write_campaign_files,
+            log=log,
+            fail_result=lambda: build_result(
+                report=qreport,
+                verify_sha256=verify_sha,
+                verifier_identity=verifier_id,
+                fault_driver_version=setup.driver.contract_sha256[:16],
+                cases=case_entries,
+            ),
+        )
     write_json(out / "qualification" / "report.json", qreport.model_dump(mode="json"))
     qresult = build_result(
         report=qreport,
@@ -1732,6 +1790,322 @@ def qualify(
         write_json(out / "timing.json", timing)
         write_summary_markdown(result)
     return result
+
+
+def rule_halt_steps(
+    workflow: Workflow, rule: BusinessRuleCase, save_id: str
+) -> set[str]:
+    """The steps a rule's run may halt at (``BusinessRuleCase.halt_at``)."""
+
+    from openadapt_flow.compiler.empty_result_guard import is_empty_result_statement
+    from openadapt_flow.ir import PostconditionKind
+
+    ids = [step.id for step in workflow.steps]
+    if rule.halt_at == "empty_result_guard":
+        # The compiler's exact checks, and an empty-result text check a bundle
+        # compiled before them carries (added by hand after compiling).
+        return {
+            step.id
+            for step in workflow.steps
+            if any(
+                pc.kind is PostconditionKind.TEXT_PRESENT
+                and is_empty_result_statement(pc.text or "")
+                for pc in step.expect
+            )
+            or (
+                step.guard is not None
+                and step.guard.on_unmet == "halt"
+                and step.guard.predicate.exact
+                and is_empty_result_statement(step.guard.predicate.text or "")
+            )
+        }
+    if rule.halt_at == "before_save":
+        # The save step itself only before its action (its guard or identity
+        # check); HALTED_BEFORE_EFFECT is required separately.
+        return set(ids[: ids.index(save_id) + 1]) if save_id in ids else set()
+    return {rule.halt_at} if rule.halt_at in ids else set()
+
+
+def business_rule_problems(
+    workflow: Workflow, config: VerifyConfig, save: Any, params: Mapping[str, str]
+) -> list[str]:
+    """What keeps the business-rule cases from running, found before any run."""
+
+    problems: list[str] = []
+    for rule in config.business_rules:
+        unknown = sorted(set(rule.params) - set(params))
+        if unknown:
+            problems.append(
+                f"business rule {rule.id!r} sets inputs the workflow does not "
+                f"take: {unknown}"
+            )
+        if save is not None and not rule_halt_steps(workflow, rule, save.id):
+            problems.append(
+                f"business rule {rule.id!r}: halt_at {rule.halt_at!r} names no "
+                "step of this workflow"
+                + (
+                    " (the compiler mined no empty search result; see the "
+                    "bundle's compile_notes.json)"
+                    if rule.halt_at == "empty_result_guard"
+                    else ""
+                )
+            )
+    return problems
+
+
+def rule_params(rule: BusinessRuleCase, params: Mapping[str, str]) -> dict[str, str]:
+    """The campaign's inputs with the rule's values in place."""
+
+    unknown = sorted(set(rule.params) - set(params))
+    if unknown:
+        raise QualifyConfigError(
+            f"business rule {rule.id!r} sets inputs the workflow does not take: "
+            f"{unknown}"
+        )
+    return {**params, **rule.params}
+
+
+def business_rule_trial(
+    *,
+    workflow: Workflow,
+    bundle_dir: Path,
+    config: VerifyConfig,
+    hooks: QualifyHooks,
+    setup: CampaignSetup,
+    rule: BusinessRuleCase,
+    params: dict[str, str],
+    trial: int,
+    trial_dir: Path,
+    run_id: str,
+    policy: str,
+    lookup: Optional[Mapping[str, Any]] = None,
+    verifier_tier: Optional[VerificationTier] = None,
+    verifier_substrate: Optional[str] = None,
+) -> tuple[dict[str, Any], dict[str, Any], Optional[str]]:
+    """One trial of a business-rule case on the certified bundle.
+
+    Reset, run the rule's seed (the conflicting record), read the system of
+    record, then run the bundle as a Standard-profile run on the rule's
+    inputs. Returns the campaign row, the ``cases[]`` entry, and why the trial
+    failed (``None`` when it passed): the run must halt before the save
+    (``HALTED_BEFORE_EFFECT``) and the read-back must show no new or changed
+    record.
+    """
+
+    from openadapt_flow.qualify.result import case_entry
+    from openadapt_flow.qualify.session import step_runner
+    from openadapt_flow.run_gate import build_runtime_authorization, evaluate_run_gate
+
+    trial_dir.mkdir(parents=True)
+    t0 = time.time()
+    if hooks.reset is not None:
+        hooks.reset()
+    save = next(s for s in workflow.steps if s.risk == "irreversible" and s.effects)
+    assert hooks.make_verifier is not None
+    readback = RecordReadback(hooks.make_verifier(params), save, params)
+    # The seed must be seen to create the conflicting record: read before and
+    # after it. A trial that cannot show that is not a test of the rule.
+    pre_seed = readback.records()
+    step_runner(rule.seed, f"business rule {rule.id!r} seed")()
+    readback.snapshot()
+    if pre_seed is None or readback.before is None:
+        raise QualifyError(
+            f"{rule.case_id} trial {trial}: the verifier cannot read the records, "
+            "so the seed cannot be shown to have created the conflicting record"
+        )
+    known = {_canon(rec) for rec in pre_seed}
+    seeded = [rec for rec in readback.before if _canon(rec) not in known]
+    if not seeded:
+        raise QualifyError(
+            f"{rule.case_id} trial {trial}: the seed created no record "
+            f"({len(pre_seed)} records before it and {len(readback.before)} after)"
+        )
+    write_json(trial_dir / "seed.json", {"records_created": len(seeded)})
+    ctx = TrialContext(
+        case_id=rule.case_id,
+        expected="HALTED",
+        oracle_kind=rule.readback,
+        trial=trial,
+        trial_dir=trial_dir,
+        run_dir=trial_dir / "run",
+        run_id=run_id,
+        params=dict(params),
+        certified_run=True,
+        state={"policy": policy},
+    )
+    if hooks.before_trial is not None:
+        hooks.before_trial(ctx)
+
+    def authorize(_verifier: Any, gate_kwargs: dict[str, Any]) -> Any:
+        gate = evaluate_run_gate(workflow, **gate_kwargs)
+        write_json(trial_dir / "run-gate.json", gate.model_dump(mode="json"))
+        if not gate.passed:
+            raise QualifyError(gate.render())
+        return build_runtime_authorization(workflow, gate, params=dict(params))
+
+    marks: dict[str, float] = {"start": time.time()}
+    report, _ = _run(
+        workflow=workflow,
+        bundle_dir=bundle_dir,
+        config=config,
+        hooks=hooks,
+        ctx=ctx,
+        setup=setup,
+        authorize=authorize,
+        fault_driver=None,
+        marks=marks,
+        lookup=lookup,
+    )
+    judged = _judge_trial(hooks=hooks, ctx=ctx, report=report, readback=readback)
+    oracle = judged["oracle"]
+    entry = case_entry(
+        case_id=rule.case_id,
+        trial=trial,
+        report=report,
+        oracle=oracle,
+        verifier_tier=verifier_tier,
+        report_path=ctx.run_dir / "report.json",
+        verifier_substrate=verifier_substrate,
+    )
+    row = {
+        "case_id": rule.case_id,
+        "trial": trial,
+        "expected": "HALTED",
+        **report_summary(report),
+        "oracle": oracle.get("observed"),
+        "trial_wall_s": round(time.time() - t0, 1),
+        **{f"{n}_passed": bool(r.get("passed")) for n, r in judged["extra"].items()},
+    }
+    failed_steps = [r.step_id for r in report.results if not r.ok]
+    halted_at = failed_steps[0] if failed_steps else None
+    halt_reason = (
+        report.halt.reason
+        if report.halt is not None and getattr(report.halt, "reason", None)
+        else next((r.error or "" for r in report.results if not r.ok), "")
+    )
+    allowed = rule_halt_steps(workflow, rule, save.id)
+    row["halted_at"] = halted_at
+    failure: Optional[str] = None
+    if report.transaction_outcome != rule.expect:
+        failure = (
+            f"observed {report.execution_outcome}/{report.transaction_outcome}, "
+            f"expected HALTED/{rule.expect}"
+        )
+    elif report.execution_outcome != "HALTED":
+        failure = f"observed {report.execution_outcome}, expected HALTED"
+    elif halted_at not in allowed:
+        failure = (
+            f"halted at {halted_at}, not where the rule stops it "
+            f"({rule.halt_at}: {sorted(allowed)})"
+        )
+    elif rule.halt_reason and rule.halt_reason not in (halt_reason or ""):
+        failure = f"the halt does not name {rule.halt_reason!r}"
+    elif report.model_calls != 0:
+        failure = "a business-rule run called a model"
+    elif report.screenshots_may_leave_box:
+        failure = "a business-rule run let screenshots leave this computer"
+    elif not oracle.get("passed") or oracle.get("silent_incorrect_success"):
+        failure = f"read-back {oracle.get('observed')}"
+    elif not entry["passed"]:
+        failure = (
+            f"read-back verdict {entry['observed_verdict']} at "
+            f"{entry['verification_tier']}, expected REFUTED at "
+            "independent_readback"
+        )
+    else:
+        bad = [n for n, r in judged["extra"].items() if not r.get("passed")]
+        if bad:
+            failure = f"extra check(s) failed: {bad}"
+    if failure is not None:
+        entry["passed"] = False
+    return row, entry, failure
+
+
+#: Where the certified copy the business-rule trials run lives, under ``out``.
+RULE_BUNDLE_DIR = "business-rule-bundle"
+
+
+def _run_business_rules(
+    *,
+    workflow: Workflow,
+    bundle_dir: Path,
+    config: VerifyConfig,
+    hooks: QualifyHooks,
+    setup: CampaignSetup,
+    out: Path,
+    n_trials: int,
+    params: Mapping[str, str],
+    save_id: str,
+    policy: str,
+    run_id_prefix: str,
+    lookup: Mapping[str, Any],
+    verifier_tier: Optional[VerificationTier],
+    verifier_substrate: Optional[str],
+    rows: list[dict[str, Any]],
+    case_entries: list[dict[str, Any]],
+    write_campaign_files: bool,
+    log: Callable[[str], None],
+    fail_result: Callable[[], dict[str, Any]],
+) -> None:
+    """Run every business-rule case ``n_trials`` times on the certified bundle.
+
+    ``workflow`` has just been certified in memory. The trials run a certified
+    copy of the bundle (``out/business-rule-bundle``, removed afterwards)
+    through the ordinary run gate; ``bundle_dir`` is not written while they
+    run, so it is certified only when the caller saves it after every rule
+    passed. A failed trial, or anything that raises (a seed or reset error, a
+    run-gate refusal, a crash, Ctrl-C), withdraws the certification in memory,
+    saves ``bundle_dir`` uncertified, writes the failed result and re-raises.
+    """
+
+    from openadapt_flow.qualification import (
+        _invalidate_certification,
+        save_qualified_workflow,
+    )
+
+    rule_dir = out / RULE_BUNDLE_DIR
+    try:
+        shutil.copytree(bundle_dir, rule_dir)
+        save_qualified_workflow(workflow, rule_dir)
+        certified = Workflow.load(rule_dir)
+        for rule in config.business_rules:
+            inputs = rule_params(rule, params)
+            for trial in range(1, n_trials + 1):
+                row, entry, failure = business_rule_trial(
+                    workflow=certified,
+                    bundle_dir=rule_dir,
+                    config=config,
+                    hooks=hooks,
+                    setup=setup,
+                    rule=rule,
+                    params=inputs,
+                    trial=trial,
+                    trial_dir=out / "cases" / rule.case_id / f"trial-{trial:02d}",
+                    run_id=f"{run_id_prefix}-{rule.case_id}-trial-{trial:02d}",
+                    policy=policy,
+                    lookup=lookup,
+                    verifier_tier=verifier_tier,
+                    verifier_substrate=verifier_substrate,
+                )
+                rows.append(row)
+                case_entries.append(entry)
+                if write_campaign_files:
+                    write_json(out / "campaign-summary.json", rows)
+                log(json.dumps(row, default=str))
+                if failure is not None:
+                    raise QualifyError(
+                        f"{rule.case_id} trial {trial}: {failure}; certification "
+                        f"withdrawn (save step {save_id})"
+                    )
+    except BaseException:
+        _invalidate_certification(workflow)
+        save_qualified_workflow(workflow, bundle_dir)
+        result = dict(fail_result())
+        result["passed"] = False
+        write_json(out / "qualification" / "result.json", result)
+        raise
+    finally:
+        shutil.rmtree(rule_dir, ignore_errors=True)
 
 
 def certified_run(
@@ -1884,6 +2258,8 @@ __all__ = [
     "RecordReadback",
     "TrialContext",
     "apply_verify_config",
+    "business_rule_problems",
+    "business_rule_trial",
     "case_result",
     "certified_run",
     "check_ready",
@@ -1896,6 +2272,8 @@ __all__ = [
     "report_summary",
     "resolve_inputs",
     "resolve_save_step",
+    "rule_halt_steps",
+    "rule_params",
     "summarize_pixels_only",
     "write_json",
 ]
