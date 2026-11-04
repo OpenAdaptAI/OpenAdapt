@@ -36,13 +36,20 @@ def test_session_falls_back_to_httpx_without_requests(
     import httpx
 
     _hide(monkeypatch, "requests")
-    session = RestRecordVerifier("http://127.0.0.1:1")._get_session()
+    session = RestRecordVerifier(
+        "http://127.0.0.1:1", records_path="/api/db", records_key="records"
+    )._get_session()
     assert isinstance(session, httpx.Client)
 
 
 def test_injected_session_is_always_preferred() -> None:
     sentinel = object()
-    verifier = RestRecordVerifier("http://127.0.0.1:1", session=sentinel)
+    verifier = RestRecordVerifier(
+        "http://127.0.0.1:1",
+        records_path="/api/db",
+        records_key="records",
+        session=sentinel,
+    )
     assert verifier._get_session() is sentinel
 
 
@@ -57,7 +64,9 @@ def test_records_are_read_over_the_fallback_transport(
     base_url, db, stop = serve()
     try:
         db.add("p1", "Triage", "note", key="k1")
-        state = RestRecordVerifier(base_url).capture_pre_state()
+        state = RestRecordVerifier(
+            base_url, records_path="/api/db", records_key="records"
+        ).capture_pre_state()
         assert state.reachable is True
         assert [record["patient_id"] for record in state.records] == ["p1"]
     finally:

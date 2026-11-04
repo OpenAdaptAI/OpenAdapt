@@ -1,0 +1,10 @@
+{
+ "resource_type": "Appointment",
+ "deployment": {
+  "base_url": "${MEDPLUM_FHIR_URL}",
+  "access_token_env": "MEDPLUM_RECORD_TOKEN",
+  "self": [
+   "${MEDPLUM_BOT_REF}"
+  ]
+ }
+}

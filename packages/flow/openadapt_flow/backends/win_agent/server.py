@@ -11,6 +11,8 @@ matching the Windows Agent Arena Flask contract (the WAADirect pattern):
     POST /input/guarded     -> frame/context/focus check + bounded input in one
                                serialized request
     POST /uia/locator-at    -> stable UIA locator at a demonstrated point
+    POST /uia/element-identity-at -> role, name, AutomationId, window path and
+                               process of the element at a point
     POST /uia/text-at-point -> structured row text for identity verification
     POST /uia/identity-candidates-at -> rows that read the same as that row
     POST /uia/find          -> zero / unique / ambiguous exact candidates
@@ -87,6 +89,7 @@ import re
 import secrets
 import subprocess
 import sys
+import threading
 import time
 import traceback
 import unicodedata
@@ -116,6 +119,12 @@ _MAX_TEXT_CHARS = 65_536
 _MAX_UIA_NODES = 5_000
 _MAX_UIA_CANDIDATES = 16
 _MAX_UIA_DEPTH = 24
+#: Elements one ``/uia/tree`` observation returns at most.
+_MAX_TREE_NODES = 400
+# An Invoke that has not returned after this long (a click handler showing a
+# modal dialog, or an app that is not answering) is an uncertain delivery.
+_INVOKE_RETURN_S = 2.0
+_INVOKE_START_S = 15.0
 
 _ROLE_TO_CONTROL = {
     "button": "ButtonControl",
@@ -440,8 +449,29 @@ def _perform_input(payload: dict[str, Any]) -> dict[str, Any]:
 
         pyautogui.FAILSAFE = False
         if text:
+            foreground = _foreground_window_identity()
+            if foreground is None:
+                raise AgentRequestError(
+                    503,
+                    "input_focus_unavailable",
+                    "cannot bind keyboard input to a foreground window",
+                )
+
+            def require_foreground() -> None:
+                if _foreground_window_identity() != foreground:
+                    raise AgentRequestError(
+                        409,
+                        "input_focus_changed",
+                        "foreground window changed during typing; delivery may be partial",
+                    )
+
             if text.isascii():
-                pyautogui.write(text, interval=float(interval))
+                for index, char in enumerate(text):
+                    require_foreground()
+                    pyautogui.write(char, interval=0, _pause=False)
+                    require_foreground()
+                    if index + 1 < len(text):
+                        time.sleep(float(interval))
             else:
                 encoded = base64.b64encode(text.encode("utf-8")).decode("ascii")
                 ps = (
@@ -456,7 +486,9 @@ def _perform_input(payload: dict[str, Any]) -> dict[str, Any]:
                 if completed.returncode != 0:
                     raise RuntimeError("Set-Clipboard failed")
                 time.sleep(0.2)
+                require_foreground()
                 pyautogui.hotkey("ctrl", "v")
+                require_foreground()
         return _delivery_receipt("physical_type_text", native=False)
 
     if action == "press":
@@ -540,6 +572,29 @@ def _bounds(control: object) -> Optional[list[int]]:
         return None
 
 
+def _uniquely_names(auto: Any, locator: dict[str, Any], control: object) -> bool:
+    """True when ``locator`` matches exactly one element now, and it is ``control``."""
+    found, truncated = _find_candidates(locator, auto)
+    if truncated or len(found) != 1:
+        return False
+    mine = _candidate(control)
+    return mine is not None and hmac.compare_digest(
+        mine["fingerprint"], found[0][1]["fingerprint"]
+    )
+
+
+def _centered_on(control: object, x: int, y: int) -> bool:
+    """True when (x, y) lies in the middle half of the control, on both axes."""
+    bounds = _bounds(control)
+    if bounds is None:
+        return False
+    left, top, right, bottom = bounds
+    return (
+        abs(2 * x - (left + right)) <= (right - left) / 2
+        and abs(2 * y - (top + bottom)) <= (bottom - top) / 2
+    )
+
+
 def _locator_from_control(control: object) -> Optional[dict[str, Any]]:
     automation_id = str(_control_value(control, "AutomationId", "") or "") or None
     name = " ".join(str(_control_value(control, "Name", "") or "").split()) or None
@@ -551,6 +606,91 @@ def _locator_from_control(control: object) -> Optional[dict[str, Any]]:
         "role": role,
         "name": name,
         "window_name": _window_name(control),
+    }
+
+
+_MAX_IDENTITY_TEXT = 512
+
+
+class _IdentityUnreadable(Exception):
+    """One identity read failed; the identity is refused, never truncated."""
+
+
+def _identity_text(control: object, attr: str) -> Optional[str]:
+    try:
+        raw = getattr(control, attr, "")
+    except Exception as exc:  # noqa: BLE001 - providers are fallible
+        raise _IdentityUnreadable(attr) from exc
+    value = " ".join(str(raw or "").split())
+    if len(value) > _MAX_IDENTITY_TEXT:
+        # Two long rows sharing a prefix would read the same if cut short.
+        raise _IdentityUnreadable(attr)
+    return value or None
+
+
+def _identity_parent(control: object) -> Optional[object]:
+    try:
+        return control.GetParentControl()  # type: ignore[attr-defined]
+    except Exception as exc:  # noqa: BLE001 - a fault is not the root
+        raise _IdentityUnreadable("parent") from exc
+
+
+def _element_identity(control: object) -> Optional[dict[str, Any]]:
+    """Describe one element by role, name, AutomationId and its window path.
+
+    The ancestry runs parent-first up to and including the top-level window,
+    the outermost ``WindowControl`` below the desktop root. An owned dialog
+    sits under its owner, so ``window`` is then the owner's name and the
+    dialog appears in ``ancestry``. Returns None, never a partial identity,
+    when the element has neither an AutomationId nor a role and name, when a
+    provider read fails, when a name is longer than the bound, or when the
+    chain does not reach a desktop root within ``_MAX_UIA_DEPTH`` parents.
+    ``process`` is None when the executable cannot be read; a consumer must
+    never treat two None processes as the same.
+    """
+    try:
+        role = _role(control)
+        name = _identity_text(control, "Name")
+        automation_id = _identity_text(control, "AutomationId")
+        if not automation_id and not (role and name):
+            return None
+        chain: list[object] = []
+        node = _identity_parent(control)
+        for _ in range(_MAX_UIA_DEPTH):
+            if node is None:
+                break
+            chain.append(node)
+            node = _identity_parent(node)
+        else:
+            return None
+        if (
+            not chain
+            or str(_control_value(chain[-1], "ControlTypeName", "")) != "PaneControl"
+        ):
+            return None  # the last node must be the desktop root
+        window_index = None
+        for index, ancestor in enumerate(chain[:-1]):
+            if str(_control_value(ancestor, "ControlTypeName", "")) == "WindowControl":
+                window_index = index
+        if window_index is None:
+            return None
+        ancestry = [
+            [_role(ancestor), _identity_text(ancestor, "Name")]
+            for ancestor in chain[: window_index + 1]
+        ]
+    except _IdentityUnreadable:
+        return None
+    process_id = _control_value(control, "ProcessId", 0)
+    return {
+        "source": "uia",
+        "role": role,
+        "name": name,
+        "automation_id": automation_id,
+        "ancestry": ancestry,
+        "window": ancestry[-1][1],
+        "process": _process_image_identifier(
+            process_id if isinstance(process_id, int) else 0
+        ),
     }
 
 
@@ -1044,12 +1184,69 @@ def _read_rows(container: object) -> tuple[list[dict[str, Any]], bool]:
     return rows, truncated
 
 
+def _window_tree(
+    auto: Any, window_name: str, max_nodes: int
+) -> tuple[list[dict[str, Any]], bool]:
+    """The elements of the top-level windows named ``window_name``.
+
+    Read-only, for an observation: role, name, automation id, bounds and
+    depth of each element with a known role or a name, depth first. Values are
+    not read: a text box's content shows on screen, and reading it here would
+    add a channel the pixels-only surface does not have.
+    """
+    try:
+        root = auto.GetRootControl()
+    except Exception as exc:  # noqa: BLE001
+        raise AgentRequestError(
+            503, "uia_unavailable", "UI Automation is unavailable"
+        ) from exc
+    nodes: list[dict[str, Any]] = []
+    visited = 0
+    truncated = False
+    for window in _children(root):
+        if (
+            " ".join(str(_control_value(window, "Name", "") or "").split())
+            != window_name
+        ):
+            continue
+        stack: list[tuple[Any, int]] = [(window, 0)]
+        while stack:
+            control, depth = stack.pop()
+            visited += 1
+            if visited > _MAX_UIA_NODES or len(nodes) >= max_nodes:
+                truncated = True
+                break
+            bounds = _bounds(control)
+            role = _role(control)
+            name = " ".join(str(_control_value(control, "Name", "") or "").split())
+            if bounds is not None and (role or name):
+                nodes.append(
+                    {
+                        "role": role
+                        or str(_control_value(control, "ControlTypeName", "")),
+                        "name": name[:_MAX_IDENTITY_TEXT] or None,
+                        "automation_id": str(
+                            _control_value(control, "AutomationId", "") or ""
+                        )
+                        or None,
+                        "bounds": bounds,
+                        "depth": depth,
+                    }
+                )
+            if depth < _MAX_UIA_DEPTH:
+                stack.extend((c, depth + 1) for c in reversed(_children(control)))
+        if truncated:
+            break
+    return nodes, truncated
+
+
 def _perform_uia_initialized(
     auto: Any, operation: str, payload: dict[str, Any]
 ) -> dict[str, Any]:
     """Perform one typed UIA operation in an initialized COM apartment."""
     if operation in {
         "locator-at",
+        "element-identity-at",
         "text-at-point",
         "focused-at-point",
         "identity-candidates-at",
@@ -1068,6 +1265,8 @@ def _perform_uia_initialized(
                 503, "uia_unavailable", "UI Automation is unavailable"
             ) from exc
         if element is None:
+            if operation == "element-identity-at":
+                return {"status": "ok", "identity": None}
             return {"status": "ok", "locator": None}
         actionable: Optional[object] = None
         node: Optional[object] = element
@@ -1116,7 +1315,47 @@ def _perform_uia_initialized(
                     point_candidate["fingerprint"] if matches else None
                 ),
             }
-        return {"status": "ok", "locator": _locator_from_control(actionable or element)}
+        if operation == "element-identity-at":
+            return {
+                "status": "ok",
+                "identity": _element_identity(actionable or element),
+            }
+        if actionable is None and not _centered_on(element, x, y):
+            # A structural replay acts at the element's centre. A painted
+            # toolbar or grid is one large pane whose centre is some other
+            # button, so it is no locator for this click.
+            return {"status": "ok", "locator": None}
+        target = actionable or element
+        locator = _locator_from_control(target)
+        if locator is not None and not _uniquely_names(auto, locator, target):
+            # WPF gives every text box's inner edit AutomationId "textBox":
+            # a locator that matches others too could only ever be refused.
+            locator = None
+        return {"status": "ok", "locator": locator}
+
+    if operation == "tree":
+        data = _exact_object(
+            payload,
+            required=frozenset({"window_name"}),
+            optional=frozenset({"max_nodes"}),
+            label="uia tree",
+        )
+        window_name = data["window_name"]
+        if not isinstance(window_name, str) or not 1 <= len(window_name) <= 512:
+            raise AgentRequestError(
+                400, "invalid_schema", "window_name must be a bounded string"
+            )
+        max_nodes = data.get("max_nodes", _MAX_TREE_NODES)
+        if (
+            not isinstance(max_nodes, int)
+            or isinstance(max_nodes, bool)
+            or not 1 <= max_nodes <= _MAX_TREE_NODES
+        ):
+            raise AgentRequestError(
+                400, "invalid_schema", f"max_nodes must be 1..{_MAX_TREE_NODES}"
+            )
+        nodes, truncated = _window_tree(auto, window_name, max_nodes)
+        return {"status": "ok", "nodes": nodes, "truncated": truncated}
 
     if operation == "read":
         data = _exact_object(
@@ -1196,11 +1435,31 @@ def _perform_uia_initialized(
         raise AgentRequestError(
             409, "native_action_unavailable", "native double-click is unavailable"
         )
+    if not _hits_target(auto, control, candidate):
+        raise AgentRequestError(
+            409,
+            "target_obscured",
+            "another window or dialog is over the UIA target",
+        )
     role = candidate.get("role")
+    user32 = _user32_factory() if os.name == "nt" else None
+    if user32 is not None:
+        _window_guard(user32, _window_handle(control), tuple(candidate["point"]))
     try:
         if role in {"button", "link", "menuitem"}:
-            control.GetInvokePattern().Invoke()
-            delivered = "uia_invoke"
+            hwnd = _control_value(control, "NativeWindowHandle", 0)
+            if (
+                role == "button"
+                and user32 is not None
+                and isinstance(hwnd, int)
+                and hwnd
+                and _is_push_button(user32, hwnd)
+            ):
+                _post_button_click(user32, hwnd)
+                delivered = "win32_bm_click"
+            else:
+                _invoke_off_thread(locator, candidate["fingerprint"])
+                delivered = "uia_invoke"
         elif role == "textbox":
             if control.SetFocus() is False:
                 raise AgentRequestError(
@@ -1234,8 +1493,487 @@ def _perform_uia_initialized(
     }
 
 
+def _hits_target(auto: Any, control: object, candidate: dict[str, Any]) -> bool:
+    """Whether the element at the target's own point is the target.
+
+    UI Automation reaches controls that another window covers, or that a
+    modal dialog blocks. A native action must only go to a control a person
+    could click there, so the element under its point (or one of that
+    element's ancestors) must be the target itself. Without a runtime id the
+    two cannot be compared and the answer is no.
+    """
+    target_id = _runtime_id(control)
+    if not target_id:
+        return False
+    x, y = candidate["point"]
+    try:
+        node: Optional[object] = auto.ControlFromPoint(int(x), int(y))
+    except Exception:  # noqa: BLE001 - no hit test, no action
+        return False
+    for _ in range(_MAX_UIA_DEPTH):
+        if node is None:
+            return False
+        if _runtime_id(node) == target_id:
+            return True
+        node = _parent(node)
+    return False
+
+
+_BM_CLICK = 0x00F5
+_GA_ROOT = 2
+_GA_ROOTOWNER = 3
+_PUSH_BUTTON_CLASSES = ("button", "windowsforms10.button")
+
+
+class _User32:
+    """The user32 calls the native-action guards make (Windows only)."""
+
+    def __init__(self) -> None:
+        import ctypes  # noqa: PLC0415
+        from ctypes import wintypes  # noqa: PLC0415
+
+        self._ctypes = ctypes
+        self._wintypes = wintypes
+        dll = getattr(ctypes, "WinDLL")("user32", use_last_error=True)
+        for name, args, res in (
+            ("IsWindow", [wintypes.HWND], wintypes.BOOL),
+            ("IsWindowEnabled", [wintypes.HWND], wintypes.BOOL),
+            ("IsWindowVisible", [wintypes.HWND], wintypes.BOOL),
+            ("GetAncestor", [wintypes.HWND, wintypes.UINT], wintypes.HWND),
+            ("GetForegroundWindow", [], wintypes.HWND),
+            ("WindowFromPoint", [wintypes.POINT], wintypes.HWND),
+            (
+                "GetClassNameW",
+                [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int],
+                ctypes.c_int,
+            ),
+            (
+                "PostMessageW",
+                [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM],
+                wintypes.BOOL,
+            ),
+            ("GetWindow", [wintypes.HWND, wintypes.UINT], wintypes.HWND),
+            (
+                "GetWindowThreadProcessId",
+                [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)],
+                wintypes.DWORD,
+            ),
+            (
+                "GetWindowRect",
+                [wintypes.HWND, ctypes.POINTER(wintypes.RECT)],
+                wintypes.BOOL,
+            ),
+            (
+                "GetWindowTextW",
+                [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int],
+                ctypes.c_int,
+            ),
+        ):
+            fn = getattr(dll, name)
+            fn.argtypes = args
+            fn.restype = res
+        self._dll = dll
+        self._enum_proc = getattr(ctypes, "WINFUNCTYPE")(
+            wintypes.BOOL, wintypes.HWND, wintypes.LPARAM
+        )
+        dll.EnumWindows.argtypes = [self._enum_proc, wintypes.LPARAM]
+        dll.EnumWindows.restype = wintypes.BOOL
+        try:
+            dwm = getattr(ctypes, "WinDLL")("dwmapi")
+            dwm.DwmGetWindowAttribute.argtypes = [
+                wintypes.HWND,
+                wintypes.DWORD,
+                ctypes.c_void_p,
+                wintypes.DWORD,
+            ]
+            dwm.DwmGetWindowAttribute.restype = ctypes.c_long
+            self._dwm = dwm
+        except OSError:
+            self._dwm = None
+
+    def is_window(self, hwnd: int) -> bool:
+        return bool(self._dll.IsWindow(hwnd))
+
+    def is_enabled(self, hwnd: int) -> bool:
+        return bool(self._dll.IsWindowEnabled(hwnd))
+
+    def is_visible(self, hwnd: int) -> bool:
+        return bool(self._dll.IsWindowVisible(hwnd))
+
+    def ancestor(self, hwnd: int, flag: int) -> int:
+        return int(self._dll.GetAncestor(hwnd, flag) or 0)
+
+    def foreground(self) -> int:
+        return int(self._dll.GetForegroundWindow() or 0)
+
+    def window_from_point(self, x: int, y: int) -> int:
+        return int(self._dll.WindowFromPoint(self._wintypes.POINT(x, y)) or 0)
+
+    def class_name(self, hwnd: int) -> str:
+        buffer = self._ctypes.create_unicode_buffer(256)
+        self._dll.GetClassNameW(hwnd, buffer, 256)
+        return buffer.value
+
+    def post(self, hwnd: int, message: int) -> bool:
+        return bool(self._dll.PostMessageW(hwnd, message, 0, 0))
+
+    def top_level_windows(self) -> list[int]:
+        """Every top-level window, topmost first (EnumWindows is z-order)."""
+        found: list[int] = []
+
+        def collect(hwnd, _param):
+            found.append(int(hwnd or 0))
+            return len(found) < 4096
+
+        self._dll.EnumWindows(self._enum_proc(collect), 0)
+        return [hwnd for hwnd in found if hwnd]
+
+    def owner(self, hwnd: int) -> int:
+        return int(self._dll.GetWindow(hwnd, 4) or 0)  # GW_OWNER
+
+    def pid_of(self, hwnd: int) -> int:
+        pid = self._wintypes.DWORD()
+        self._dll.GetWindowThreadProcessId(hwnd, self._ctypes.byref(pid))
+        return int(pid.value)
+
+    def rect(self, hwnd: int) -> Optional[tuple[int, int, int, int]]:
+        """The window's visible frame: DWM's extended frame bounds, which
+        leave out the invisible resize border GetWindowRect includes."""
+        r = self._wintypes.RECT()
+        if self._dwm is not None and (
+            self._dwm.DwmGetWindowAttribute(
+                hwnd, 9, self._ctypes.byref(r), self._ctypes.sizeof(r)
+            )
+            == 0
+        ):
+            return (int(r.left), int(r.top), int(r.right), int(r.bottom))
+        if not self._dll.GetWindowRect(hwnd, self._ctypes.byref(r)):
+            return None
+        return (int(r.left), int(r.top), int(r.right), int(r.bottom))
+
+    def outer_rect(self, hwnd: int) -> Optional[tuple[int, int, int, int]]:
+        """Everything the window may paint: GetWindowRect joined with the
+        visible frame (a self-drawn frame can paint into the border DWM
+        leaves out)."""
+        r = self._wintypes.RECT()
+        frame = self.rect(hwnd)
+        if not self._dll.GetWindowRect(hwnd, self._ctypes.byref(r)):
+            return frame
+        outer = (int(r.left), int(r.top), int(r.right), int(r.bottom))
+        if frame is None:
+            return outer
+        return (
+            min(outer[0], frame[0]),
+            min(outer[1], frame[1]),
+            max(outer[2], frame[2]),
+            max(outer[3], frame[3]),
+        )
+
+    def per_monitor_dpi(self) -> bool:
+        """Put this thread in per-monitor-v2 DPI awareness, so window rects
+        and points are physical pixels like the screenshot's."""
+        return bool(self._dll.SetThreadDpiAwarenessContext(self._ctypes.c_void_p(-4)))
+
+    def title(self, hwnd: int) -> str:
+        buffer = self._ctypes.create_unicode_buffer(512)
+        self._dll.GetWindowTextW(hwnd, buffer, 512)
+        return buffer.value
+
+    def is_cloaked(self, hwnd: int) -> Optional[bool]:
+        """A cloaked window (another virtual desktop, a suspended UWP app) is
+        'visible' to IsWindowVisible but not on screen. None: unknown."""
+        if self._dwm is None:
+            return None
+        value = self._ctypes.c_int(0)
+        result = self._dwm.DwmGetWindowAttribute(
+            hwnd, 14, self._ctypes.byref(value), self._ctypes.sizeof(value)
+        )
+        if result != 0:
+            return None
+        return value.value != 0
+
+
+#: Replaced in tests; Windows builds the real binding.
+_user32_factory: Callable[[], Any] = _User32
+
+
+def _window_handle(control: object) -> int:
+    """The control's own window handle, or the nearest ancestor's."""
+    node: Optional[object] = control
+    for _ in range(_MAX_UIA_DEPTH):
+        if node is None:
+            break
+        hwnd = _control_value(node, "NativeWindowHandle", 0)
+        if isinstance(hwnd, int) and hwnd:
+            return hwnd
+        node = _parent(node)
+    return 0
+
+
+def _window_guard(user32: Any, hwnd: int, point: tuple[int, int]) -> None:
+    """Refuse a native action that the target's window could not take.
+
+    Checked with Win32 because UI Automation's own hit test passes through
+    windows that are still loading (seen live with Notepad over the app):
+    the window under the point must belong to the target's top-level
+    window, and that window and the target's must be enabled. A window a
+    modal dialog has disabled would drop the action without a word.
+    """
+    if not hwnd or not user32.is_window(hwnd):
+        raise AgentRequestError(
+            409, "stale_target", "UIA target changed after resolution"
+        )
+    root = user32.ancestor(hwnd, _GA_ROOT) or hwnd
+    if not user32.is_enabled(hwnd) or not user32.is_enabled(root):
+        raise AgentRequestError(
+            409, "target_blocked", "the UIA target's window is not accepting input"
+        )
+    under = user32.window_from_point(int(point[0]), int(point[1]))
+    if not under or (user32.ancestor(under, _GA_ROOT) or under) != root:
+        raise AgentRequestError(
+            409,
+            "target_obscured",
+            "another window or dialog is over the UIA target",
+        )
+
+
+def _is_push_button(user32: Any, hwnd: int) -> bool:
+    name = user32.class_name(hwnd).casefold()
+    return name == "button" or name.startswith(_PUSH_BUTTON_CLASSES[1])
+
+
+def _post_button_click(user32: Any, hwnd: int) -> None:
+    """Click a Win32 or WinForms push button by posting it ``BM_CLICK``.
+
+    This is the message UI Automation's own Win32 button provider sends for
+    Invoke, but posted: the click runs in the app's message loop and this
+    returns at once, so a click handler that opens a modal dialog cannot hold
+    the agent inside a call. Only a visible push button whose top-level
+    window is the foreground one gets it (Windows documents that BM_CLICK
+    can be dropped by an inactive dialog). The receipt is ``win32_bm_click``:
+    the message was queued, and the outcome is for the run's checks.
+    """
+    if not user32.is_visible(hwnd):
+        raise AgentRequestError(
+            409, "target_obscured", "the UIA target's window is not visible"
+        )
+    owner = user32.ancestor(hwnd, _GA_ROOTOWNER) or hwnd
+    foreground = user32.foreground()
+    if (
+        not foreground
+        or (user32.ancestor(foreground, _GA_ROOTOWNER) or foreground) != owner
+    ):
+        raise AgentRequestError(
+            409, "target_blocked", "the UIA target's window is not in front"
+        )
+    if not user32.post(hwnd, _BM_CLICK):
+        raise AgentRequestError(409, "native_action_failed", "native UIA action failed")
+
+
+def _invoke_off_thread(locator: dict[str, Any], fingerprint: str) -> None:
+    """Invoke the exact resolved control without waiting on a modal loop.
+
+    UIA elements belong to the thread that found them, so a worker thread
+    resolves the locator again and invokes only the control with the same
+    fingerprint, after hit-testing it again. A call still inside the provider
+    after ``_INVOKE_RETURN_S`` is reported as an uncertain delivery (HTTP 503):
+    a modal loop and a hung app look the same from here. A failed or
+    mismatched resolution raises before any input.
+    """
+    state: dict[str, Any] = {}
+    started = threading.Event()
+    finished = threading.Event()
+
+    def work() -> None:
+        try:
+            import uiautomation as auto  # noqa: PLC0415 - Windows-only, lazy
+
+            with auto.UIAutomationInitializerInThread():
+                found, truncated = _find_candidates(locator, auto)
+                if (
+                    len(found) != 1
+                    or truncated
+                    or not hmac.compare_digest(fingerprint, found[0][1]["fingerprint"])
+                ):
+                    state["error"] = "stale_target"
+                    return
+                control, candidate = found[0]
+                if not _hits_target(auto, control, candidate):
+                    state["error"] = "target_obscured"
+                    return
+                pattern = control.GetInvokePattern()
+                started.set()
+                pattern.Invoke()
+                state["returned"] = True
+        except Exception as exc:  # noqa: BLE001 - reported below
+            state["error"] = type(exc).__name__
+        finally:
+            started.set()
+            finished.set()
+
+    threading.Thread(target=work, name="uia-invoke", daemon=True).start()
+    if not started.wait(_INVOKE_START_S):
+        raise AgentRequestError(
+            503, "uia_unavailable", "UI Automation did not resolve the target"
+        )
+    finished.wait(_INVOKE_RETURN_S)
+    error = state.get("error")
+    if error == "stale_target":
+        raise AgentRequestError(
+            409, "stale_target", "UIA target changed after resolution"
+        )
+    if error == "target_obscured":
+        raise AgentRequestError(
+            409, "target_obscured", "another window or dialog is over the UIA target"
+        )
+    if error is None and not state.get("returned"):
+        # Still inside the provider: a modal loop, or an app that is not
+        # answering. The two look the same from here, so this is not a
+        # delivery the agent can vouch for.
+        raise AgentRequestError(
+            503, "delivery_uncertain", "the UIA invoke has not returned"
+        )
+    if error is not None:
+        raise AgentRequestError(409, "native_action_failed", "native UIA action failed")
+
+
+_MAX_OWNER_CHAIN = 32
+_WINDOW_OPERATIONS = frozenset({"window-root-at", "owned-window-over"})
+
+
+def _intersects(
+    rect: tuple[int, int, int, int], region: tuple[int, int, int, int]
+) -> bool:
+    left, top, right, bottom = rect
+    x, y, w, h = region
+    return left < x + w and x < right and top < y + h and y < bottom
+
+
+def _window_operation(
+    operation: str, payload: dict[str, Any], user32: Any
+) -> dict[str, Any]:
+    """Win32 window facts for repair: the top-level window at a point, and
+    whether a window the app itself owns now sits over a region.
+
+    ``owned-window-over`` walks the live top-level windows from the top down
+    to the captured window and answers with a window only when all of this
+    holds: no visible window of another process, and none of the captured
+    process that its owner chain does not tie to the captured window, meets
+    the region anywhere above the captured window; and an owned window meets
+    the region (its visible frame, not the resize border). The topmost such
+    window is the answer, with its visible frame as ``region``
+    ``[x, y, w, h]``. A 1x1 region asks about one point. Whether the covered part hides anything that
+    matters is for the caller, which still sees the uncovered part.
+    A captured window that is gone or changed process, a cloak state that
+    cannot be read for one of the app's windows, and anything else answer
+    ``None``.
+    """
+    if not user32.per_monitor_dpi():
+        raise AgentRequestError(
+            503, "uia_unavailable", "per-monitor DPI awareness is unavailable"
+        )
+    if operation == "window-root-at":
+        data = _exact_object(payload, required=frozenset({"x", "y"}), label=operation)
+        hit = user32.window_from_point(
+            _bounded_int(data["x"], "x"), _bounded_int(data["y"], "y")
+        )
+        root = user32.ancestor(hit, _GA_ROOT) if hit else 0
+        if not root or not user32.is_window(root):
+            return {"status": "ok", "window": None}
+        # The verified target's window is the foreground app's; anything else
+        # (a topmost window that slid over the point) is not a capture.
+        foreground = user32.foreground()
+        front = (
+            (user32.ancestor(foreground, _GA_ROOTOWNER) or foreground)
+            if foreground
+            else 0
+        )
+        if not front or (user32.ancestor(root, _GA_ROOTOWNER) or root) != front:
+            return {"status": "ok", "window": None}
+        return {
+            "status": "ok",
+            "window": {"hwnd": root, "pid": user32.pid_of(root)},
+        }
+    data = _exact_object(
+        payload, required=frozenset({"hwnd", "pid", "region"}), label=operation
+    )
+    hwnd, pid, region = data["hwnd"], data["pid"], data["region"]
+    if (
+        not isinstance(hwnd, int)
+        or isinstance(hwnd, bool)
+        or hwnd <= 0
+        or not isinstance(pid, int)
+        or isinstance(pid, bool)
+        or pid <= 0
+        or not isinstance(region, list)
+        or len(region) != 4
+        or any(isinstance(v, bool) or not isinstance(v, int) for v in region)
+        or region[2] <= 0
+        or region[3] <= 0
+    ):
+        raise AgentRequestError(400, "invalid_schema", "hwnd, pid and region required")
+    if not user32.is_window(hwnd) or user32.pid_of(hwnd) != pid:
+        return {"status": "ok", "window": None}
+    box = (region[0], region[1], region[2], region[3])
+    owned: Optional[dict[str, Any]] = None
+    reached = False
+    for candidate in user32.top_level_windows():
+        if candidate == hwnd:
+            reached = True
+            break
+        if not user32.is_visible(candidate):
+            continue
+        same_process = user32.pid_of(candidate) == pid
+        cloaked = user32.is_cloaked(candidate)
+        if cloaked is None and same_process:
+            return {"status": "ok", "window": None}  # cannot tell if it shows
+        if cloaked:
+            continue
+        # Another process's window is measured by everything it may paint;
+        # the app's own by its visible frame.
+        rect = user32.rect(candidate) if same_process else user32.outer_rect(candidate)
+        if rect is None or rect[2] <= rect[0] or rect[3] <= rect[1]:
+            continue
+        if not _intersects(rect, box):
+            continue
+        if not same_process:
+            return {"status": "ok", "window": None}  # a foreign occluder
+        owner = user32.owner(candidate)
+        link = owner
+        for _ in range(_MAX_OWNER_CHAIN):
+            if not link or link == hwnd:
+                break
+            link = user32.owner(link)
+        if link != hwnd:
+            return {"status": "ok", "window": None}  # not tied to the capture
+        if owned is None:
+            owned = {
+                "title": user32.title(candidate)[:512] or None,
+                "hwnd": candidate,
+                "owner_hwnd": owner,
+                "pid": pid,
+                # Its visible frame (DWM bounds, no shadow), in the region's
+                # pixels, so the caller can check what it covers.
+                "region": [rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1]],
+            }
+    if not reached:
+        return {"status": "ok", "window": None}  # nothing proves the order
+    return {"status": "ok", "window": owned}
+
+
 def _perform_uia(operation: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Perform one typed UIA operation on one COM-affine server thread."""
+    if operation in _WINDOW_OPERATIONS:
+        if os.name != "nt":
+            raise AgentRequestError(503, "uia_unavailable", "Win32 is unavailable")
+        try:
+            return _window_operation(operation, payload, _user32_factory())
+        except AgentRequestError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - bounded, never a crash
+            raise AgentRequestError(
+                503, "uia_unavailable", "window state is unavailable"
+            ) from exc
     try:
         import uiautomation as auto  # noqa: PLC0415 - Windows-only, lazy
     except Exception as exc:  # noqa: BLE001
@@ -1346,6 +2084,51 @@ def _active_console_session() -> int:
         return -1
 
 
+def _session_is_active(session_id: int) -> bool:
+    """True when this Windows session has a live display and input.
+
+    That is the console session, or a remote (RDP, Citrix) session that is
+    connected. A disconnected session draws nothing and takes no input.
+    """
+
+    if session_id == _active_console_session():
+        return True
+    try:
+        import ctypes  # noqa: PLC0415
+        from ctypes import wintypes  # noqa: PLC0415
+
+        win_dll = getattr(ctypes, "WinDLL", None)
+        if win_dll is None:
+            return False
+        wtsapi32 = win_dll("wtsapi32", use_last_error=True)
+        wtsapi32.WTSQuerySessionInformationW.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            ctypes.c_int,
+            ctypes.POINTER(ctypes.c_void_p),
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        wtsapi32.WTSQuerySessionInformationW.restype = wintypes.BOOL
+        wtsapi32.WTSFreeMemory.argtypes = [ctypes.c_void_p]
+        wtsapi32.WTSFreeMemory.restype = None
+        buffer = ctypes.c_void_p()
+        size = wintypes.DWORD()
+        # WTSConnectState (8) of this server's (0) session.
+        if not wtsapi32.WTSQuerySessionInformationW(
+            None, session_id, 8, ctypes.byref(buffer), ctypes.byref(size)
+        ):
+            return False
+        try:
+            if size.value < ctypes.sizeof(ctypes.c_int) or not buffer.value:
+                return False
+            state = ctypes.cast(buffer, ctypes.POINTER(ctypes.c_int)).contents.value
+        finally:
+            wtsapi32.WTSFreeMemory(buffer)
+        return int(state) == 0  # WTSActive
+    except Exception:  # noqa: BLE001 - unavailable means not active
+        return False
+
+
 def _bounded_application_identifier(name: str) -> Optional[str]:
     """Canonicalize one executable basename into the public context-id syntax."""
 
@@ -1366,10 +2149,10 @@ def _bounded_application_identifier(name: str) -> Optional[str]:
     return identifier
 
 
-def _foreground_application_identity() -> Optional[str]:
-    """Observe the foreground executable without reading its window title."""
+def _process_image_path(pid: int) -> Optional[str]:
+    """Full executable path of one live process, or None."""
 
-    if os.name != "nt":
+    if os.name != "nt" or not isinstance(pid, int) or pid <= 0:
         return None
     try:
         import ctypes  # noqa: PLC0415
@@ -1378,15 +2161,7 @@ def _foreground_application_identity() -> Optional[str]:
         win_dll = getattr(ctypes, "WinDLL", None)
         if win_dll is None:
             return None
-        user32 = win_dll("user32", use_last_error=True)
         kernel32 = win_dll("kernel32", use_last_error=True)
-        user32.GetForegroundWindow.argtypes = []
-        user32.GetForegroundWindow.restype = wintypes.HWND
-        user32.GetWindowThreadProcessId.argtypes = [
-            wintypes.HWND,
-            ctypes.POINTER(wintypes.DWORD),
-        ]
-        user32.GetWindowThreadProcessId.restype = wintypes.DWORD
         kernel32.OpenProcess.argtypes = [
             wintypes.DWORD,
             wintypes.BOOL,
@@ -1402,16 +2177,7 @@ def _foreground_application_identity() -> Optional[str]:
         kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
         kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
         kernel32.CloseHandle.restype = wintypes.BOOL
-        hwnd = user32.GetForegroundWindow()
-        if not hwnd:
-            return None
-        pid = wintypes.DWORD()
-        if (
-            not user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-            or not pid.value
-        ):
-            return None
-        process = kernel32.OpenProcess(0x1000, False, pid.value)
+        process = kernel32.OpenProcess(0x1000, False, pid)
         if not process:
             return None
         try:
@@ -1421,11 +2187,188 @@ def _foreground_application_identity() -> Optional[str]:
                 process, 0, path, ctypes.byref(size)
             ):
                 return None
-            return _bounded_application_identifier(path.value)
+            return path.value or None
         finally:
             kernel32.CloseHandle(process)
     except Exception:  # noqa: BLE001 - unavailable means unverifiable
         return None
+
+
+def _process_image_identifier(pid: int) -> Optional[str]:
+    """Canonical executable basename of one live process, or None."""
+
+    path = _process_image_path(pid)
+    return _bounded_application_identifier(path) if path else None
+
+
+#: File identity -> sha256 of the executable's bytes. The key holds the path,
+#: size, modification and change times and the NTFS file id, so a file
+#: replaced in place or by rename is hashed again. An executable rarely
+#: changes while the agent runs, and hashing a large one on every observation
+#: would sit between resolution and input.
+_IMAGE_DIGESTS: dict[tuple[str, int, int, int, int], str] = {}
+_IMAGE_DIGEST_CACHE_SIZE = 8
+_IMAGE_DIGEST_MAX_BYTES = 2 * 1024 * 1024 * 1024
+
+
+def _file_key(path: str) -> tuple[str, int, int, int, int]:
+    stat = os.stat(path)
+    return (
+        os.path.normcase(path),
+        int(stat.st_size),
+        int(stat.st_mtime_ns),
+        int(stat.st_ctime_ns),
+        int(stat.st_ino),
+    )
+
+
+def _image_file_digest(path: str) -> Optional[str]:
+    """``sha256:<hex>`` of one executable file's bytes, or None."""
+
+    try:
+        key = _file_key(path)
+        cached = _IMAGE_DIGESTS.pop(key, None)
+        if cached is None:
+            if key[1] > _IMAGE_DIGEST_MAX_BYTES:
+                return None
+            digest = hashlib.sha256()
+            with open(path, "rb") as image:
+                for chunk in iter(lambda: image.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            if _file_key(path) != key:
+                return None
+            cached = f"sha256:{digest.hexdigest()}"
+        _IMAGE_DIGESTS[key] = cached
+        while len(_IMAGE_DIGESTS) > _IMAGE_DIGEST_CACHE_SIZE:
+            del _IMAGE_DIGESTS[next(iter(_IMAGE_DIGESTS))]
+        return cached
+    except Exception:  # noqa: BLE001 - unavailable means unverifiable
+        return None
+
+
+def _process_start_ns(pid: int) -> Optional[int]:
+    """When one live process started, in Unix nanoseconds, or None."""
+
+    if os.name != "nt" or pid <= 0:
+        return None
+    try:
+        import ctypes  # noqa: PLC0415
+        from ctypes import wintypes  # noqa: PLC0415
+
+        win_dll = getattr(ctypes, "WinDLL", None)
+        if win_dll is None:
+            return None
+        kernel32 = win_dll("kernel32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.GetProcessTimes.argtypes = [wintypes.HANDLE] + [
+            ctypes.POINTER(wintypes.FILETIME)
+        ] * 4
+        kernel32.GetProcessTimes.restype = wintypes.BOOL
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel32.CloseHandle.restype = wintypes.BOOL
+        process = kernel32.OpenProcess(0x1000, False, pid)
+        if not process:
+            return None
+        try:
+            times = [wintypes.FILETIME() for _ in range(4)]
+            if not kernel32.GetProcessTimes(process, *(ctypes.byref(t) for t in times)):
+                return None
+        finally:
+            kernel32.CloseHandle(process)
+        created = (int(times[0].dwHighDateTime) << 32) | int(times[0].dwLowDateTime)
+        # FILETIME counts 100 ns ticks from 1601-01-01.
+        return (created - 116444736000000000) * 100
+    except Exception:  # noqa: BLE001 - unavailable means unverifiable
+        return None
+
+
+def _running_image_digest(pid: int, path: str) -> Optional[str]:
+    """The digest of ``path`` only if it is still the file the process loaded.
+
+    An updater that replaces an executable while it runs leaves the old code
+    in memory and a new file on disk. A file changed after the process
+    started is therefore not evidence for the running code, and yields None.
+    """
+
+    started = _process_start_ns(pid)
+    if started is None:
+        return None
+    try:
+        key = _file_key(path)
+    except OSError:
+        return None
+    if max(key[2], key[3]) > started:
+        return None
+    return _image_file_digest(path)
+
+
+def _foreground_window_identity() -> Optional[tuple[int, int]]:
+    """Foreground window and owning process, without reading a window title."""
+
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes  # noqa: PLC0415
+        from ctypes import wintypes  # noqa: PLC0415
+
+        win_dll = getattr(ctypes, "WinDLL", None)
+        if win_dll is None:
+            return None
+        user32 = win_dll("user32", use_last_error=True)
+        user32.GetForegroundWindow.argtypes = []
+        user32.GetForegroundWindow.restype = wintypes.HWND
+        user32.GetWindowThreadProcessId.argtypes = [
+            wintypes.HWND,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+        hwnd = user32.GetForegroundWindow()
+        if not hwnd:
+            return None
+        pid = wintypes.DWORD()
+        if (
+            not user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            or not pid.value
+        ):
+            return None
+    except Exception:  # noqa: BLE001 - unavailable means unverifiable
+        return None
+    return int(hwnd), int(pid.value)
+
+
+def _foreground_process_id() -> Optional[int]:
+    """The process that owns the foreground window, without reading its title."""
+    identity = _foreground_window_identity()
+    return identity[1] if identity is not None else None
+
+
+def _foreground_application_identity() -> Optional[str]:
+    """Observe the foreground executable without reading its window title."""
+
+    pid = _foreground_process_id()
+    return _process_image_identifier(pid) if pid is not None else None
+
+
+def _foreground_application_image() -> tuple[Optional[str], Optional[str]]:
+    """The foreground executable's basename identity and its file digest.
+
+    Both come from the same process image path, so the version can never
+    describe a different program than the identity. The digest covers that
+    executable file only: for an app run by a shared host (a script
+    interpreter, a browser, a runtime that loads the app's own libraries) it
+    pins the host, not the app's code.
+    """
+
+    pid = _foreground_process_id()
+    path = _process_image_path(pid) if pid is not None else None
+    if path is None:
+        return None, None
+    identity = _bounded_application_identifier(path)
+    if identity is None:
+        return None, None
+    assert pid is not None
+    return identity, _running_image_digest(pid, path)
 
 
 def _native_session_digest() -> Optional[str]:
@@ -1489,7 +2432,7 @@ def _native_session_digest() -> Optional[str]:
         session_id = wintypes.DWORD()
         if not kernel32.ProcessIdToSessionId(os.getpid(), ctypes.byref(session_id)):
             return None
-        if int(session_id.value) != _active_console_session():
+        if not _session_is_active(int(session_id.value)):
             return None
 
         token = wintypes.HANDLE()
@@ -1530,13 +2473,57 @@ def _native_session_digest() -> Optional[str]:
         return None
 
 
-def _execution_context_identity() -> dict[str, Any]:
-    """Return PHI-free identities observed from live Windows OS state."""
+def _environment_digest() -> Optional[str]:
+    """Hash this Windows installation: machine id and exact OS build.
 
+    PHI-free and stable across sign-ins, so a qualification bound to one
+    machine and OS build is refused on another or after an OS update.
+    """
+
+    if os.name != "nt":
+        return None
+    try:
+        import importlib  # noqa: PLC0415
+
+        winreg = importlib.import_module("winreg")
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Cryptography",
+        ) as key:
+            machine_guid = str(winreg.QueryValueEx(key, "MachineGuid")[0])
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Windows NT\CurrentVersion",
+        ) as key:
+            build = str(winreg.QueryValueEx(key, "CurrentBuildNumber")[0])
+            try:
+                revision = str(int(winreg.QueryValueEx(key, "UBR")[0]))
+            except OSError:
+                revision = ""
+        if not machine_guid or not build:
+            return None
+        material = f"windows-environment-v1\0{machine_guid}\0{build}\0{revision}"
+        return hashlib.sha256(material.encode("utf-8")).hexdigest()
+    except Exception:  # noqa: BLE001 - unavailable means unverifiable
+        return None
+
+
+def _execution_context_identity() -> dict[str, Any]:
+    """Return PHI-free identities observed from live Windows OS state.
+
+    ``application`` and ``application_version`` describe the same foreground
+    executable (its basename and the SHA-256 of its file); ``environment``
+    hashes the machine id and OS build. All four come from this one call so
+    a qualification observer sees one consistent snapshot.
+    """
+
+    application, application_version = _foreground_application_image()
     return {
         "status": "ok",
-        "application": _foreground_application_identity(),
+        "application": application,
+        "application_version": application_version,
         "session": _native_session_digest(),
+        "environment": _environment_digest(),
         "workflow_state": None,
     }
 
@@ -1602,6 +2589,7 @@ def make_handler_class(
                         "capabilities": [
                             "screenshot",
                             "context_identity_v1",
+                            "context_environment_v1",
                             "typed_input_v1",
                             "guarded_input_v1",
                             "uia_v1",
@@ -1642,11 +2630,15 @@ def make_handler_class(
                 "/input/guarded": ("guarded-input", ""),
                 "/context/identity": ("context", "identity"),
                 "/uia/locator-at": ("uia", "locator-at"),
+                "/uia/element-identity-at": ("uia", "element-identity-at"),
+                "/window/root-at": ("uia", "window-root-at"),
+                "/window/owned-over": ("uia", "owned-window-over"),
                 "/uia/text-at-point": ("uia", "text-at-point"),
                 "/uia/identity-candidates-at": ("uia", "identity-candidates-at"),
                 "/uia/find": ("uia", "find"),
                 "/uia/act": ("uia", "act"),
                 "/uia/read": ("uia", "read"),
+                "/uia/tree": ("uia", "tree"),
             }
             is_legacy = self.path == "/execute_windows" and config.allow_legacy_exec
             if self.path not in typed_routes and not is_legacy:
@@ -1740,6 +2732,9 @@ def make_handler_class(
                             required=frozenset(
                                 {"application", "session", "workflow_state"}
                             ),
+                            # context_environment_v1: the executable's digest
+                            # and the environment, compared like the others.
+                            optional=frozenset({"application_version", "environment"}),
                             label="expected_context",
                         )
                         for key, value in expected_context.items():

@@ -9,7 +9,7 @@ Your AI agent decides what to enter. OpenAdapt enters it in the app and checks t
 
 Use it if your agent reads referrals, intake forms, or authorizations and works out what belongs in the record, but a person still types the result into an app with no usable API. Examples are an electronic medical record (EMR) and a payer portal. This package is the tool your agent calls to do that typing.
 
-- A person or your agent shows OpenAdapt the task in the real app. OpenAdapt replays those steps, and by default a run makes no AI model calls.
+- A person or your agent shows OpenAdapt the task in the real app. OpenAdapt replays those steps, and by default a run makes no calls to a hosted AI model.
 - Before it types, OpenAdapt checks that the right record is open. After it saves, it reads the record back.
 - Your agent gets one of four outcomes: done and checked, stopped before saving, check the record, or didn't run. When OpenAdapt can't confirm a save, it says so, and a person checks the record.
 - It runs on your customer's computer, one that can already open the app. Your agent, or a small program acting for it, has to run on that computer too, since it starts OpenAdapt and talks to it directly. If your agent runs in your own cloud, ask us about a hosted route.
@@ -60,7 +60,7 @@ flowchart LR
 | What your product does with each outcome | One result per request, and no second entry when your agent repeats a `request_id` |
 | Your tests against the four outcomes | A sandbox that returns each outcome on demand |
 
-Your customer provides the computer and a person for runs that stop. A person or an agent shows the task, in web apps, native Windows apps, and over Citrix or remote desktop. A person accepts the result before it runs. See [Record a first workflow](#record-a-first-workflow), or [talk to us](https://openadapt.ai/qualify?why=embed) about setting it up.
+Your customer provides the computer and a person for runs that stop. A person or an agent shows the task, in web apps, native Windows apps, and remote-desktop sessions. A person accepts the result before it runs. See [Record a first workflow](#record-a-first-workflow), or [talk to us](https://openadapt.ai/qualify?why=embed) about setting it up.
 
 ## Try it in three steps
 
@@ -411,7 +411,7 @@ claude mcp add --scope user openadapt-teach -- uvx --python 3.12 --from 'openada
 Your agent then:
 
 1. Calls `teach_start` with the task (`{note}` for each input), this run's `inputs`, the `record_fields` the saved record must have (such as its patient id), and `on_screen`, the record's identity as the screen shows it (a name and an MRN).
-2. Calls `teach_observe` and `teach_act` until the task is done. On the web, `teach_observe` lists the page as short lines with a ref for each control, and before every save OpenAdapt checks that the record's identity is shown next to the control. A save on the wrong record is refused and ends the run.
+2. Calls `teach_run` with short scripts (read the page, act on elements by role and name, read the result back; web apps), or `teach_observe` and `teach_act` one action at a time, until the task is done. After every save the gate detects, OpenAdapt reads the app's records back and tells the agent what landed; a write on a record the task does not name ends the run after it lands. On the web, `teach_observe` lists the page as short lines with a ref for each control, and before every save OpenAdapt checks that the record's identity is shown next to the control. A save on the wrong record is refused and ends the run.
 3. Calls `teach_finish`. OpenAdapt compiles the run and reads the app's records: exactly one record must have appeared, with every `record_fields` value and every input. The result is the draft: its steps, its inputs, the proposed record check, and what still needs a person.
 4. Calls `teach_confirm_checks`. Your MCP client shows a person the proposed check, and only their answer there, with their name, confirms it. Your agent has no argument that confirms it.
 5. Calls `teach_admit` with `canary_inputs`, the values each canary saves. A canary is a real save on the same record, so use values that are safe there.
@@ -424,11 +424,11 @@ openadapt-flow compile-agent admit <task dir> --admit-as "<your name>" --canary-
 
 Once the program is admitted, it is in `list_workflows` and `run_workflow` at once and has its own `taught_<name>` tool, and the server sends `notifications/tools/list_changed` to clients that support it. A server started later lists every program taught in its `--teach-dir`.
 
-It works on a web app (`--url`) and on the app a deployment file's `backend:` section names (`--config deploy.yaml`): a native Windows, macOS or Linux window, or a local RDP or Citrix client window. Off the web, OpenAdapt can't read which record a form shows, so a person approves, in your client's form, every action that might save: any click except on a text field, a check box, a tab or a control that plainly navigates (Open, New, Cancel), any click at x,y, Enter, typing outside a text field, and shortcuts. Each answer covers that one action on the screen as it was; if anything changes first, the action isn't done. A client without forms can't save. RDP and Citrix have no control tree, and the Windows, macOS and Linux backends don't list controls yet, so off the web your agent needs `--teach-screens scrubbed` to see the screen, and clicks x,y pixels. Admission there fails closed for now: a pixel-only click carries no checked record identity, so the canary is refused and says why. Network RDP (`rdp_host`) is refused.
+It works on a web app (`--url`) and on the app a deployment file's `backend:` section names (`--config deploy.yaml`): a native Windows, macOS or Linux window, or a local RDP or Citrix client window. Off the web, OpenAdapt can't read which record a form shows, so a person approves, in your client's form, every action that might save: any click except on a text field, a check box, a tab or a control that plainly navigates (Open, New, Cancel), any click at x,y, Enter, typing outside a text field, and shortcuts. Each answer covers that one action on the screen as it was; if anything changes first, the action isn't done. A client without forms can't save. RDP and Citrix have no control tree, and the Windows, macOS and Linux teach backends work from the screen, so off the web your agent needs `--teach-screens scrubbed` to see the screen, and clicks x,y pixels. Admission there fails closed: a pixel-only click carries no checked record identity, so the canary is refused and says why. Network RDP (`rdp_host`) is refused.
 
 | Flag | What it does |
 | --- | --- |
-| `--teach VERIFY_YAML` | Adds `teach_start`, `teach_observe`, `teach_act`, `teach_finish`, `teach_abort`, `teach_status`, `teach_confirm_checks` and `teach_admit`, and turns on runs of taught workflows. |
+| `--teach VERIFY_YAML` | Adds `teach_start`, `teach_run` (web apps), `teach_observe`, `teach_act`, `teach_finish`, `teach_abort`, `teach_status`, `teach_confirm_checks` and `teach_admit`, and turns on runs of taught workflows. |
 | `--teach-dir DIR` | Where drafts and taught programs live (default `RUNS_DIR/teach`). |
 | `--teach-key PEM`, `--teach-policy JSON` | The registered agent's encrypted key (passphrase in `OPENADAPT_JIT_KEY_PASSPHRASE`) and the signed admission policy. Only an agent key under a policy; an admitter key admits from CI with `openadapt-flow jit admit`. |
 | `--key-dir DIR` | The JIT key directory (default `OPENADAPT_JIT_KEY_DIR` or `~/.openadapt/jit`). |
@@ -498,7 +498,7 @@ A scripted agent worked a 30-item synthetic MockMed worklist. The user changes a
 In the middle arm, the agent opens a job and uses each item's `request_id` but keeps its flaws. The ledger stops every rule break, but it can't stop an agent from guessing a value or misreporting its own tally. `close_job` still lists what was verified, so a caller can check the agent's report. The scripted agent stands for a policy, not a model, so these numbers test the mechanism. They aren't a model benchmark. To reproduce them (about 3 seconds):
 
 ```bash
-python -m openadapt_flow.agent.ledger_demo
+python packages/agent/tests/ledger_demo.py
 ```
 
 Results: [docs/task-ledger-measurement.json](docs/task-ledger-measurement.json).
@@ -538,17 +538,17 @@ openadapt-agent seal verify runs/<run_id>/report.json
 openadapt-agent seal verify https://example.com/receipt.json --json
 ```
 
-## Limits
+## How runs work
 
-- Your agent, or a program acting for it, has to run on your customer's computer.
-- Nobody is notified when a run outside a [task-ledger job](#track-a-long-job) stops. Someone has to check `list_needs_attention` or Flow's console.
-- A job belongs to one server process. Two servers that share a runs folder shouldn't work on the same job.
-- Ledger questions are yes or no. The phone still titles them "Approve a save" and labels the answers Save and Don't save; the card shows the question and says the answer saves nothing in any app.
+- Your agent, or a program acting for it, runs on your customer's computer.
+- Runs that stop show up in `list_needs_attention` and Flow's console; inside a [task-ledger job](#track-a-long-job), a person gets the question on the phone or in Desktop.
+- A job belongs to one server process. Give each server its own runs folder for a job.
+- Ledger questions are yes or no. The phone card shows the question and says the answer saves nothing in any app.
 - The check that stops a second entry covers one runs folder. Pass the same absolute `--runs-dir` every time.
 - If the server exits during a run, the run reads as `not_sure_if_saved`, and Flow may still finish it.
-- This server issues no signed receipts itself. `proof` is `sealed` only when a run is connected to OpenAdapt Cloud Execute, Cloud signed its receipt, and that signature verifies against keys you pinned (see [Seals](#seals)).
+- `proof` is `sealed` when a run is connected to OpenAdapt Cloud Execute, Cloud signed its receipt, and that signature verifies against keys you pinned (see [Seals](#seals)).
 - With openadapt-flow 2, each save waits for approval unless the operator names another mode (`serve --approval-mode problems_only` or `not_gated`). Your agent gets `needs_review` with the reason `waiting_for_approval`. A person answers on the computer that runs OpenAdapt, or your agent does when the server runs with `--delegate-approvals` and the run's approver policy allows an agent for that step. Nothing is saved without that answer. `get_approval_mode` tells your agent which mode applies; no tool changes it.
-- Each call carries one request. There's no batch call.
+- Each call carries one request.
 - Accounts, separation between customers, fleet policy, and hosted runs belong to OpenAdapt Cloud.
 
 ## Release status

@@ -44,6 +44,18 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _teach_authorization_env(monkeypatch: pytest.MonkeyPatch):
+    """Lets tests/_teach_authorization_support.py pin an approver root for one test."""
+
+    from tests import _teach_authorization_support as support
+
+    support._MONKEYPATCH[:] = [monkeypatch]
+    yield
+    support._MONKEYPATCH.clear()
+    support._AUTHORIZERS.clear()
+
+
+@pytest.fixture(autouse=True)
 def _isolate_durable_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep each test's monotonic run authority independent and disposable."""
 
@@ -54,3 +66,16 @@ def _isolate_durable_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     # Offline Seals are on by default; keep each test's Seal key and batch
     # queue out of the real home directory.
     monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / ".seal-home"))
+    # The frame's host secret: a per-test value, so a test never creates or
+    # reads the real ~/.config/openadapt/frame.key.
+    monkeypatch.setenv("OPENADAPT_FRAME_SECRET", "11" * 32)
+    # The uncertain-write ledger: per test, never ~/.openadapt/ledger.
+    monkeypatch.setenv("OPENADAPT_LEDGER_DIR", str(tmp_path / ".write-ledger"))
+    monkeypatch.delenv("OPENADAPT_FRAME_SECRET_FILE", raising=False)
+    # Encryption at rest is the default (openadapt_flow.at_rest). The suite
+    # keeps the plaintext behaviour its fixtures assert, under the recorded
+    # opt-out, and keeps the local key and the ledger out of the real home.
+    # tests/test_at_rest_default.py covers the default and strict modes.
+    monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "test suite: synthetic data")
+    monkeypatch.setenv("OPENADAPT_FLOW_AT_REST_HOME", str(tmp_path / ".at-rest-home"))
+    monkeypatch.delenv("OPENADAPT_FLOW_AT_REST", raising=False)

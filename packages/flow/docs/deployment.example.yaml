@@ -128,8 +128,12 @@ effects:
   #     field: patient_id                  # added to every row for matching
 
   # fhir (used when kind: fhir) ----------------------------------------------
-  # base_url: https://openemr.example.org/apis/default/fhir
-  # resource_type: Observation
+  # base_url: https://fhir.example.org/r4
+  # resource_type: Observation             # required: the app's resource
+  # field_paths:                           # required: where each field lives
+  #   id: id
+  #   patient: subject.reference
+  #   note: valueString
   # search_params: { category: vital-signs }
   # search_param_exprs:
   #   patient: { param: patient_ref }      # bound per-run
@@ -226,6 +230,15 @@ runtime:
   # on a substrate where the pixel VERIFY gate has been validated for your
   # renders (see docs/LIMITS.md); MISMATCH/ABSTAIN are unaffected either way.
   pixel_verify_enabled: false
+
+  # Local grounding model for pixel surfaces (Citrix, RDP, VNC, canvas). It
+  # finds an icon or unlabeled control again after a display-scale, zoom,
+  # font or theme change, and halts when it sees look-alikes that the
+  # recorded landmarks cannot tell apart. Runs in process; nothing leaves the
+  # box. The pinned 24 MB weights are fetched once and SHA-256 checked; an
+  # offline site places them under OPENADAPT_FLOW_MODEL_DIR. See
+  # benchmark/pixel_grounding/README.md.
+  local_grounding: false
 
   # Operator-selected ("bring your own") model grounder: the VLM fallback rung
   # BEHIND the local OCR rung. Configuring it NEVER enables egress by itself —

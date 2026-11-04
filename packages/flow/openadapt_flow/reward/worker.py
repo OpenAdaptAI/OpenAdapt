@@ -61,7 +61,10 @@ from openadapt_flow.reward.oracles import (
     effect_state_of,
     records_of,
 )
-from openadapt_flow.runtime.effects._common import judge_records
+from openadapt_flow.runtime.effects._common import (
+    carries_composite_key,
+    judge_records,
+)
 from openadapt_flow.runtime.effects.effect import (
     Effect,
     EffectKind,
@@ -69,6 +72,7 @@ from openadapt_flow.runtime.effects.effect import (
     EffectVerdict,
     Verdict,
     record_matches,
+    selector_value,
 )
 
 
@@ -134,9 +138,13 @@ def judge_episode(
       any REFUTED -> ``WRONG_EFFECT`` (the banner lie lands here: the screen
       said saved, the store holds nothing).
     * signal ``halted_before_effect`` / ``refused`` / ``rejected_policy``:
-      no required effect present -> that outcome; a required effect present
-      anyway -> ``RECONCILIATION_REQUIRED`` with ``effect_uncertain``, since
-      the runtime and the store disagree and a person settles it.
+      no required effect present -> that outcome; every required effect
+      CONFIRMED -> ``ESCALATED_AFTER_EFFECT``, the contract's partial credit
+      (default 0.5), because the work is done and the policy asked a person
+      instead of declaring it; any other required effect present (a
+      duplicate or wrong write, say) -> ``RECONCILIATION_REQUIRED`` with
+      ``effect_uncertain``, since the runtime and the store disagree and a
+      person settles it.
     """
 
     substrate = bundle.oracle.channel.value
@@ -207,6 +215,15 @@ def judge_episode(
             refuted.reason,
         )
     signalled = _SIGNAL_OUTCOME[runtime_signal]
+    if required and all_confirmed:
+        return Judgement(
+            RewardOutcomeV1.ESCALATED_AFTER_EFFECT,
+            RewardUncertaintyStateV1.NONE,
+            required,
+            forbidden,
+            f"runtime reported {runtime_signal} but every required effect is "
+            "present exactly as declared",
+        )
     if any_present:
         return Judgement(
             RewardOutcomeV1.RECONCILIATION_REQUIRED,
@@ -232,11 +249,15 @@ def _in_scope(record: dict[str, Any], effect: Effect) -> bool:
     """Whether the judge looks at ``record`` when it judges ``effect``.
 
     Mirrors the selection in ``judge_records``: the effect's ``match``
-    selector, then its idempotency key when it declares one.
+    selector, then its idempotency key when it declares one. With a
+    composite key the judge also reads every record that carries the key,
+    whether or not it matches the selector, so those are in scope too.
     """
 
-    selector = {key: str(want) for key, want in effect.match.items()}
-    if not record_matches(record, selector):
+    if carries_composite_key(record, effect):
+        return True
+    selector = {key: selector_value(want) for key, want in effect.match.items()}
+    if not record_matches(record, selector) or effect.composite_key:
         return False
     if effect.idempotency_key is None:
         return True
@@ -734,6 +755,7 @@ OutcomeLiteral = Literal[
     "refused",
     "rejected_policy",
     "wrong_effect",
+    "escalated_after_effect",
     "reconciliation_required",
     "failed_platform",
 ]

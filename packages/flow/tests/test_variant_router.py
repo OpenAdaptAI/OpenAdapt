@@ -513,7 +513,9 @@ def test_routed_variant_runs_through_the_replayer_and_its_report_names_it(
             report = Replayer(
                 _RowWritingBackend(url),
                 vision=_vision_confirms_saved(),
-                effect_verifier=RestRecordVerifier(url),
+                effect_verifier=RestRecordVerifier(
+                    url, records_path="/api/db", records_key="records"
+                ),
                 poll_interval_s=0.01,
             ).run(
                 workflow,

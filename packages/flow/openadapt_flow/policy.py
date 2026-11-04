@@ -24,7 +24,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, Literal, Optional
+from typing import TYPE_CHECKING, Any, Iterable, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -92,7 +92,7 @@ def is_identity_armed(step: Step) -> bool:
     The compiler-written ``identity_armed`` field is an audit flag, not the
     identity evidence. An explicit false remains a refusal. Otherwise require
     the ground truth the replayer uses: structured/context identity, an
-    identity template, or an identifier crop.
+    identity template, an identifier crop, or a create-new form's identity.
     """
     if step.identity_armed is False:
         return False
@@ -102,6 +102,7 @@ def is_identity_armed(step: Step) -> bool:
         or a.structured_identity
         or a.identity_template
         or a.identifier_crop
+        or a.form_identity
     )
 
 
@@ -408,11 +409,37 @@ def effect_has_idempotency_key(step: Step) -> bool:
     """True when at least one of the step's system-of-record effects carries a
     non-empty idempotency / at-most-once key — the guard that collapses a
     retried or double-delivered submission to a single record instead of a
-    silent duplicate write."""
+    silent duplicate write. A key of one field (``idempotency_key``) or of
+    several (``composite_key``, such as last name, first name and birth date)
+    both count."""
     paths = list(iter_effect_paths(step))
     return bool(paths) and all(
-        any(getattr(effect, "idempotency_key", None) for effect in effects)
-        for _path, effects in paths
+        any(_has_usable_key(effect) for effect in effects) for _path, effects in paths
+    )
+
+
+def _has_usable_key(effect: Any) -> bool:
+    """A key whose every field is named and whose every value can be non-empty
+    (a run parameter, or a literal that is not blank)."""
+
+    composite = getattr(effect, "composite_key", None) or {}
+    if composite:
+        selector = dict(composite)
+    else:
+        key = getattr(effect, "idempotency_key", None)
+        if not key:
+            return False
+        selector = {getattr(effect, "key_field", "") or "": key}
+
+    def usable(value: Any) -> bool:
+        if getattr(value, "param", None):
+            return True
+        literal = getattr(value, "literal", value)
+        return isinstance(literal, str) and bool(literal.strip())
+
+    return all(
+        isinstance(name, str) and name.strip() and usable(value)
+        for name, value in selector.items()
     )
 
 

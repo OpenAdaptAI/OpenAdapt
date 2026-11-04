@@ -11,19 +11,19 @@ from typing import Any, Iterator
 
 import pytest
 
-from openadapt_flow.integrations.harness2.agent import (
+from benchmark.harness.harness2.agent import (
     RULE_IDENTITY,
     RULE_TYPE_LABEL,
     ScriptedGuiAgent,
 )
-from openadapt_flow.integrations.harness2.apps import MockMedTarget
-from openadapt_flow.integrations.harness2.pixels import PixelDriver, web_pixels
-from openadapt_flow.integrations.harness2.rollout import (
+from benchmark.harness.harness2.apps import MockMedTarget
+from benchmark.harness.harness2.pixels import PixelDriver, web_pixels
+from benchmark.harness.harness2.rollout import (
     load_run,
     load_score,
     run_rollout,
 )
-from openadapt_flow.integrations.harness2.tasks import mockmed_tasks
+from benchmark.harness.harness2.tasks import mockmed_tasks
 
 CAREFUL = f"Check the {RULE_IDENTITY}. Choose the type {RULE_TYPE_LABEL}."
 
@@ -138,8 +138,8 @@ def test_rdp_window_rollout_is_scored_by_readback(tmp_path, kiosk):
 
 
 def test_model_agent_is_told_typing_appends_on_pixels():
-    from openadapt_flow.integrations.harness2.agent import ModelGuiAgent, Observation
-    from openadapt_flow.integrations.harness2.llm import Completion
+    from benchmark.harness.harness2.agent import ModelGuiAgent, Observation
+    from benchmark.harness.harness2.llm import Completion
 
     class Model:
         name = "fake/model"

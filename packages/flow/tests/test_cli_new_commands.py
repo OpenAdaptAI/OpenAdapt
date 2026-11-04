@@ -126,6 +126,7 @@ def _replay_ns(**over) -> argparse.Namespace:
         config=None,
         effects_kind=None,
         effects_base_url=None,
+        effects_records_path=None,
         effects_root=None,
         api_actuator=False,
         api_base_url=None,
@@ -145,6 +146,7 @@ def test_deployment_runtime_flags_wire_objects() -> None:
     ns = _replay_ns(
         effects_kind="rest",
         effects_base_url="http://sor",
+        effects_records_path="/api/db",
         api_base_url="http://api",
         durable=True,
     )
@@ -384,7 +386,7 @@ class _FakePage:
 
 
 class _FakeBrowser:
-    def new_page(self, viewport=None):
+    def new_page(self, viewport=None, **_options):
         return _FakePage()
 
     def close(self):
@@ -460,6 +462,8 @@ def test_replay_injects_effects_actuator_durable_and_worklist(
             "http://app.example",
             "--effects-kind",
             "rest",
+            "--effects-records-path",
+            "/api/db",
             "--effects-base-url",
             "http://sor",
             "--api-base-url",
@@ -533,6 +537,7 @@ def test_run_delegates_to_replay_with_config(tmp_path: Path, monkeypatch) -> Non
     cfg.write_text(
         "backend:\n  url: http://from-config\n"
         "effects:\n  kind: rest\n  base_url: http://sor\n"
+        "  records_path: /api/db\n"
         "runtime:\n  durable: true\n"
         "policy:\n  policy: clinical-write\n"
     )

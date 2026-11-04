@@ -48,6 +48,9 @@ def next_steps(
             )
         return NextSteps(
             verify=verify,
+            verify_run=lambda run_dir: hint(
+                f"seal verify {quote(display_path(run_dir))}"
+            ),
             record=hint(
                 f"flow record --backend web --url {YOUR_APP_URL} --out my-task"
             ),

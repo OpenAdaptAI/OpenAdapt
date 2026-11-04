@@ -18,6 +18,8 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = sorted((ROOT / ".github" / "workflows").glob("*.yml"))
+# Local composite actions run steps for the workflows that call them.
+ACTIONS = sorted((ROOT / ".github" / "actions").glob("*/action.yml"))
 
 # Installs that resolve on purpose, each with the reason.
 ALLOWED = {
@@ -26,6 +28,8 @@ ALLOWED = {
     ("main.yml", "pip install dist/*.whl"),
     # Bootstraps uv itself: one exact, dependency-free wheel.
     ("desktop-release.yml", "pip install --disable-pip-version-check uv==0.11.29"),
+    # The same bootstrap in the Windows build desktop-release.yml shares.
+    ("build-desktop-windows-installers", "pip install --disable-pip-version-check uv==0.11.29"),
     # Not on PyPI; pinned to a commit, installed without dependencies.
     ("packages.yml", "uv pip install --system --no-deps 'harness2 @ git+"),
     # Not an install: the test reads the fix the launcher prints.
@@ -49,6 +53,14 @@ def _commands() -> list[tuple[str, str]]:
                     line = " ".join(line.split())
                     if line and not line.startswith("#"):
                         found.append((path.name, line))
+    for path in ACTIONS:
+        action = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for step in (action.get("runs") or {}).get("steps") or []:
+            joined = re.sub(r"[\\`]\n\s*", " ", step.get("run") or "")
+            for line in joined.splitlines():
+                line = " ".join(line.split())
+                if line and not line.startswith("#"):
+                    found.append((path.parent.name, line))
     return found
 
 

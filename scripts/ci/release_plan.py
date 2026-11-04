@@ -39,8 +39,6 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-import tomllib
-
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGES = {
     "types": "openadapt-types",
@@ -61,6 +59,14 @@ def _newest_green():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _toml(text: str) -> dict:
+    # Imported here: the release workflow runs Python 3.12, but the launcher's
+    # tests import this module on 3.10 too, which has no tomllib.
+    import tomllib
+
+    return tomllib.loads(text)
 
 
 def version_key(version: str) -> tuple:
@@ -201,7 +207,7 @@ def main(argv: list[str] | None = None) -> int:
     for package in PACKAGES if args.package == "all" else [args.package]:
         project = PACKAGES[package]
         directory = ROOT / "packages" / package
-        meta = tomllib.loads((directory / "pyproject.toml").read_text(encoding="utf-8"))
+        meta = _toml((directory / "pyproject.toml").read_text(encoding="utf-8"))
         if meta["project"]["name"] != project:
             raise SystemExit(
                 f"packages/{package} is {meta['project']['name']}, not {project}"

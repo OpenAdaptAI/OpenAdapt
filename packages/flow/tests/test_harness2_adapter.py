@@ -13,25 +13,29 @@ from pathlib import Path
 
 import pytest
 
-from openadapt_flow.integrations.harness2.agent import (
+from benchmark.harness.harness2.agent import (
     RULE_IDENTITY,
     RULE_SAVE_ONCE,
     RULE_TYPE_LABEL,
     ScriptedGuiAgent,
 )
-from openadapt_flow.integrations.harness2.apps import MockMedTarget
-from openadapt_flow.integrations.harness2.llm import (
+from benchmark.harness.harness2.apps import MockMedTarget
+from benchmark.harness.harness2.llm import (
     BudgetExceeded,
     Completion,
     CostLedger,
 )
-from openadapt_flow.integrations.harness2.rollout import (
+from benchmark.harness.harness2.rollout import (
     load_run,
     load_score,
     run_rollout,
 )
-from openadapt_flow.integrations.harness2.scorer import ReadBackScorer
-from openadapt_flow.integrations.harness2.tasks import mockmed_tasks
+from benchmark.harness.harness2.scorer import (
+    EpisodeScore,
+    Penalties,
+    ReadBackScorer,
+)
+from benchmark.harness.harness2.tasks import mockmed_tasks
 
 CAREFUL = (
     f"Check the {RULE_IDENTITY}. Choose the type {RULE_TYPE_LABEL}. {RULE_SAVE_ONCE}."
@@ -63,7 +67,9 @@ def _post(base: str, patient_id: str, note: str, typ: str = "Triage") -> None:
         ([("p1", "Consult")], "completed", "wrong_effect", -0.5, ("wrong_value",)),
         ([], "completed", "wrong_effect", -0.5, ()),
         ([], "halted_before_effect", "halted_before_effect", 0.0, ("safe_stop",)),
-        ([("p1", None)], "halted_before_effect", "reconciliation_required", None, ()),
+        # The right record landed, then the agent stopped: partial credit, the
+        # contract's escalated_after_effect_reward from the signed receipt.
+        ([("p1", None)], "halted_before_effect", "escalated_after_effect", 0.5, ()),
         # Halted after writing on another patient: the worker leaves it for a
         # person, but the read shows a stray record, so the search penalises it.
         (
@@ -122,6 +128,36 @@ def test_a_duplicate_is_never_the_right_outcome(tmp_path):
     assert score.passed is False and score.reward == -1.0
 
 
+def test_a_stop_after_the_one_right_save_passes_the_timeout_task(tmp_path):
+    task = mockmed_tasks(("timeout",))[0]
+    session = MockMedTarget().start()
+    try:
+        scorer = ReadBackScorer(task, session.oracle_recipe(), tmp_path)
+        scorer.begin("episode_timeout_0002")
+        _post(session.base_url, "p1", task.params["note"])
+        score = scorer.score("episode_timeout_0002", "halted_before_effect")
+    finally:
+        session.stop()
+    assert score.outcome == "escalated_after_effect"
+    assert score.reward == score.receipt_reward == 0.5
+    assert score.passed is True and not score.safe_stop
+
+
+def test_an_escalation_without_a_receipt_scalar_stays_unscored():
+    score = EpisodeScore(
+        episode_id="e",
+        outcome="escalated_after_effect",
+        reason="",
+        receipt_reward=None,
+        unscored=False,
+        receipt_id="r",
+        oracle_tier=2,
+    )
+    scorer = ReadBackScorer.__new__(ReadBackScorer)
+    scorer.penalties = Penalties()
+    assert scorer.search_reward(score) is None
+
+
 def test_unknown_variant_is_refused():
     with pytest.raises(ValueError, match="unknown MockMed variants"):
         mockmed_tasks(("plain", "nope"))
@@ -140,7 +176,7 @@ def test_task_prompt_carries_no_expected_outcome():
         ("lookalike", "", "wrong_effect", "wrong_record"),
         ("lookalike", CAREFUL, "verified", None),
         ("timeout", "", "wrong_effect", "duplicate"),
-        ("timeout", CAREFUL, "reconciliation_required", None),
+        ("timeout", CAREFUL, "escalated_after_effect", None),
         ("missing", CAREFUL, "halted_before_effect", "safe_stop"),
     ],
 )
@@ -192,11 +228,11 @@ def test_a_rollout_is_redone_when_the_harness_changed(tmp_path):
 def test_reward_selection_ranks_the_right_outcome_first(tmp_path, h2):
     from harness2.core.spec import RunView
 
-    from openadapt_flow.integrations.harness2.selection import reward_selection
+    from benchmark.harness.harness2.selection import reward_selection
 
     scores = {
-        # A single save a person reconciles: right on the timeout task, unscored.
-        "a": {"reward": None, "all_pass": True},
+        # A single save, then a stop: right on the timeout task, partial credit.
+        "a": {"reward": 0.5, "all_pass": True},
         # Never saved: a safe stop, reward 0, not the task.
         "b": {"reward": 0.0, "all_pass": False},
         "c": {"reward": -1.0, "all_pass": False},
@@ -214,8 +250,8 @@ def test_reward_selection_ranks_the_right_outcome_first(tmp_path, h2):
 
 
 def test_model_requests_pass_the_privacy_gate(monkeypatch, tmp_path):
+    from benchmark.harness.harness2.llm import HttpChatModel, Price
     from openadapt_flow import privacy
-    from openadapt_flow.integrations.harness2.llm import HttpChatModel, Price
 
     monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path))
     monkeypatch.delenv(privacy.OUTBOUND_OPT_OUT_ENV, raising=False)
@@ -252,7 +288,7 @@ def h2():
 
 
 def _adapter(tmp_path, variants, evidence="readback"):
-    from openadapt_flow.integrations.harness2.adapter import OpenAdaptGuiAdapter
+    from benchmark.harness.harness2.adapter import OpenAdaptGuiAdapter
 
     return OpenAdaptGuiAdapter(
         mockmed_tasks(variants),
@@ -279,8 +315,8 @@ def test_adapter_is_a_harness2_benchmark_adapter(tmp_path, h2):
 
 def test_reward_selection_finds_the_safe_harness(tmp_path, h2):
     pytest.importorskip("playwright.sync_api")
-    from openadapt_flow.integrations.harness2.proposers import ScriptedProposer
-    from openadapt_flow.integrations.harness2.selection import run_task
+    from benchmark.harness.harness2.proposers import ScriptedProposer
+    from benchmark.harness.harness2.selection import run_task
 
     adapter = _adapter(tmp_path, ("lookalike",))
     prop = ScriptedProposer(
@@ -331,8 +367,8 @@ def test_screen_evidence_hides_the_readback(tmp_path, h2):
 
 def test_model_selector_path_runs_harness2_selection(tmp_path, h2):
     pytest.importorskip("playwright.sync_api")
-    from openadapt_flow.integrations.harness2.proposers import ScriptedProposer
-    from openadapt_flow.integrations.harness2.selection import run_task
+    from benchmark.harness.harness2.proposers import ScriptedProposer
+    from benchmark.harness.harness2.selection import run_task
 
     adapter = _adapter(tmp_path, ("plain",), evidence="screen")
     prop = ScriptedProposer(
@@ -365,7 +401,7 @@ class _FakeModel:
 
 
 def test_model_proposer_writes_only_harness_files(tmp_path, h2):
-    from openadapt_flow.integrations.harness2.proposers import ModelProposer
+    from benchmark.harness.harness2.proposers import ModelProposer
 
     reply = (
         '<file path="harness/AGENTS.md">\n# New\n- check the date of birth\n</file>\n'
