@@ -354,7 +354,7 @@ def test_full_frame_ocr_filters_outside_candidates_before_local_selection() -> N
     vision = _CandidateVision(
         candidates={
             ("Delete", None): [
-                _match((190, 140), (160, 130, 60, 20)),
+                _match((125, 106), (95, 96, 60, 20)),
                 _match((400, 300), (370, 290, 60, 20)),
             ]
         },
@@ -363,9 +363,26 @@ def test_full_frame_ocr_filters_outside_candidates_before_local_selection() -> N
     result = resolve(_anchor(), _png(), vision, viewport=VIEWPORT)
 
     assert result is not None
-    assert result[0].point == (190, 140)
+    assert result[0].point == (125, 106)
     assert result[0].resolution_evidence_regions == ((0, 0, *VIEWPORT),)
     assert vision.text_calls == [("Delete", None)]
+
+
+def test_one_local_copy_of_a_repeated_label_off_the_recorded_spot_refuses() -> None:
+    """The padded window holds one copy of a repeated label, but not where
+    the target was recorded: in a dense list that is the next row's label.
+    Without a landmark to choose, the step refuses instead of clicking it."""
+    vision = _CandidateVision(
+        candidates={
+            ("Delete", None): [
+                _match((190, 140), (160, 130, 60, 20)),
+                _match((400, 300), (370, 290, 60, 20)),
+            ]
+        },
+    )
+
+    with pytest.raises(AmbiguousOcrMatchError):
+        resolve(_anchor(), _png(), vision, viewport=VIEWPORT)
 
 
 def test_full_frame_ocr_reuses_unique_global_candidate_after_local_miss() -> None:

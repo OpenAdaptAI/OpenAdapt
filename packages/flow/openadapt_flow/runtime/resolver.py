@@ -65,7 +65,7 @@ from openadapt_flow.ir import (
     StructuralHandle,
     StructuralLocator,
 )
-from openadapt_flow.vision.match import Match
+from openadapt_flow.vision.match import LOCALITY_MIN_PX, Match, moved_off_spot
 from openadapt_flow.vision.ocr import (
     AmbiguousOcrMatchError,
     ContradictoryOcrEvidenceError,
@@ -147,6 +147,8 @@ def visual_resolution_evaluator_contract_sha256() -> str:
         DEFAULT_TEMPLATE_SCALES,
         LOCALITY_MIN_PX,
         MAX_PEAKS,
+        SAME_SPOT_MIN_PX,
+        SAME_SPOT_SHARE,
     )
 
     payload = {
@@ -161,6 +163,11 @@ def visual_resolution_evaluator_contract_sha256() -> str:
         "template_locality_min_px": LOCALITY_MIN_PX,
         "template_max_peaks": MAX_PEAKS,
         "template_ambiguity_suspicion_score": AMBIGUITY_SUSPICION_SCORE,
+        "template_moved_lookalike": {
+            "same_spot": ["per-axis", SAME_SPOT_MIN_PX, SAME_SPOT_SHARE],
+            "landmark_share": _MOVED_MATCH_LANDMARK_SHARE,
+            "ocr_local_copy": "whole-frame-unless-in-recorded-region",
+        },
         "template_scales": list(DEFAULT_TEMPLATE_SCALES),
         "ambiguity": "unique-or-independent-retained-evidence",
         "ocr_candidates": "full-frame-enumeration-then-local-region-filter",
@@ -395,6 +402,55 @@ def _estimates_conflict(estimates: list[Point]) -> bool:
         for index, (ax, ay) in enumerate(estimates)
         for bx, by in estimates[index + 1 :]
     )
+
+
+#: A landmark supports a moved template match when it predicts the click
+#: within this share of the match's short side (8 px at least).
+_MOVED_MATCH_LANDMARK_SHARE = 0.5
+
+
+def _moved_match_unsupported(
+    anchor: Anchor, matched: Region, point: Point, screen_png: bytes, vision: Any
+) -> bool:
+    """True when a template match has moved off the recorded spot and a
+    located landmark puts the target somewhere else.
+
+    A crop that carries state (a checked box, a selected radio button)
+    matches the control now in that state, which after a toggle is the
+    neighbour. A moved match is also unsupported when the anchor kept
+    landmarks and none of them is found. ``_landmarks_contradict``'s 40 px tolerance is wider than a
+    form's row pitch, so it cannot tell the two apart; this test uses the
+    control's own size instead. Only a move inside the matcher's locality
+    radius, where the next row's copy can sit, is tested.
+    """
+    x, y, w, h = anchor.region
+    if not moved_off_spot(matched[0] - x, matched[1] - y, w, h):
+        return False
+    if math.hypot(matched[0] - x, matched[1] - y) > max(LOCALITY_MIN_PX, min(w, h)):
+        # A far move is the matcher's lone unique peak, which its own
+        # whole-frame test already admitted; no neighbour is in question.
+        return False
+    tolerance = max(8.0, _MOVED_MATCH_LANDMARK_SHARE * min(matched[2], matched[3]))
+    retained = located = 0
+    for landmark in anchor.landmarks:
+        if landmark.dx_px is None or landmark.dy_px is None:
+            continue
+        retained += 1
+        try:
+            match = _find_landmark_text(vision, screen_png, landmark)
+        except AmbiguousOcrMatchError:
+            continue
+        if match is None:
+            continue
+        located += 1
+        scale = matched[2] / w if w else 1.0
+        ex = int(match.point[0]) + landmark.dx_px * scale
+        ey = int(match.point[1]) + landmark.dy_px * scale
+        if math.hypot(ex - point[0], ey - point[1]) > tolerance:
+            return True
+    # The control was recorded with context that is no longer found: the move
+    # cannot be checked, and a pixel-identical neighbour is as likely.
+    return retained > 0 and located == 0
 
 
 def _point_in_region(point: Point, region: Region) -> bool:
@@ -728,7 +784,8 @@ def _model_grounded(
     candidate's short side.
 
     - One look-alike: kept unless a located landmark disagrees with it
-      (:class:`ContradictoryOcrEvidenceError`).
+      (:class:`ContradictoryOcrEvidenceError`), or it is off the recorded
+      spot and the anchor kept landmarks of which none is found (abstain).
     - Several: kept only when exactly one is supported by every located
       landmark (at least one located); else :class:`LookAlikeTargetsRefused`.
 
@@ -773,6 +830,22 @@ def _model_grounded(
 
     if len(candidates) == 1:
         only = candidates[0]
+        retained = any(
+            landmark.dx_px is not None and landmark.dy_px is not None
+            for landmark in anchor.landmarks
+        )
+        moved = moved_off_spot(
+            click(only)[0] - anchor.click_point[0],
+            click(only)[1] - anchor.click_point[1],
+            anchor.region[2],
+            anchor.region[3],
+        )
+        if retained and not located and moved:
+            # The one look-alike is off the recorded spot and none of the
+            # recorded context is found to check the move: a control whose
+            # crop carries state (a checked box) looks like its toggled
+            # neighbour. Abstain.
+            return None
         if not all(supported_by(only, point, landmark) for point, landmark in located):
             raise ContradictoryOcrEvidenceError(
                 "a located landmark places the model-grounded target elsewhere"
@@ -964,7 +1037,9 @@ def resolve(
                 _scaled_click_point(anchor, tuple(match.region)),
                 tuple(match.region),
             )
-            if bound_point is None:
+            if bound_point is None or _moved_match_unsupported(
+                anchor, tuple(match.region), bound_point, screen_png, vision
+            ):
                 match = None
         if match is not None:
             assert bound_point is not None
@@ -1004,7 +1079,9 @@ def resolve(
                 _scaled_click_point(anchor, tuple(match.region)),
                 tuple(match.region),
             )
-            if bound_point is None:
+            if bound_point is None or _moved_match_unsupported(
+                anchor, tuple(match.region), bound_point, screen_png, vision
+            ):
                 match = None
         if match is not None:
             assert bound_point is not None
@@ -1064,6 +1141,20 @@ def resolve(
                 )
                 if not candidates:
                     continue
+                if (
+                    ocr_region is not None
+                    and len(candidates) == 1
+                    and len(full_frame_candidates) > 1
+                    and not _point_in_region(
+                        (int(candidates[0].point[0]), int(candidates[0].point[1])),
+                        anchor.region,
+                    )
+                ):
+                    # The padded window holds one copy of a repeated label,
+                    # but not where the target was recorded: in a dense list
+                    # that is the next row's label. Only the whole frame's
+                    # evidence (recorded region, landmarks) may choose.
+                    candidates = full_frame_candidates
                 match = _select_ocr_candidate(
                     anchor,
                     list(candidates),

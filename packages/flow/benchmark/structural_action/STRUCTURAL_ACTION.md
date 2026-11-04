@@ -31,8 +31,13 @@ Numbers are MEASURED, never hardcoded.
 ```
 structural (DOM) rung : 21/21 acted correctly
 visual ladder only    :  6/21 acted correctly
+visual ladder wrong   :  0 (a neighbour clicked)
 under drift (15 targets): structural 15/15 vs visual 0/15
 ```
+
+Until November 2026 the visual ladder resolved 10 of the 15 drifted buttons
+to the next row's button instead of refusing them; see
+[`benchmark/pixel_drift`](../pixel_drift/README.md).
 
 Structural resolves every target whose id is still in the DOM; the visual ladder
 resolves only the non-drifted minority. The structural point flows through the

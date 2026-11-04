@@ -24,6 +24,7 @@ def main(argv: list[str]) -> int:
     out.write_text(json.dumps(report, indent=2))
     print(f"structural (DOM) rung : {report['structural_ratio']} acted correctly")
     print(f"visual ladder only    : {report['visual_ratio']} acted correctly")
+    print(f"visual ladder wrong   : {report['visual_wrong']} (a neighbour clicked)")
     drifted = [t for t in report["targets"] if t["drifted"]]
     d_struct = sum(t["structural_ok"] for t in drifted)
     d_vis = sum(t["visual_ok"] for t in drifted)

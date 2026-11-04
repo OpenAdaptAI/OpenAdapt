@@ -251,6 +251,77 @@ def test_resolve_halts_on_unpainted_target_cell() -> None:
     assert result is None
 
 
+def test_near_neighbor_refused_when_widget_repeats_and_target_moved() -> None:
+    """A dense list: rows 34 px apart, inside the 48 px locality radius. The
+    target's row moved its button to another column; the nearest copy is the
+    next row's. A moved peak is kept only when nothing else on the frame looks
+    like the widget, so both template rungs refuse instead of clicking it."""
+    scr = _blank(shade=235)
+    for gy in (100, 236, 304):  # rows 0, 4, 6 kept their gear
+        _gear(scr, 150, gy)
+    _gear(scr, 600, 134)  # row 1's gear moved to another column
+    template = scr[80:120, 130:170].copy()  # identical to row 1's recorded crop
+    m = find_template(
+        _png(scr),
+        _png(template),
+        search_region=(50, 34, 200, 200),
+        threshold=0.985,
+        prefer_near=(130, 114),  # where row 1's gear was recorded
+    )
+    assert m is None
+    anchor = _anchor((130, 114, 40, 40), (150, 134), ocr_text=None, pad=80)
+    result = resolver.resolve(anchor, _png(scr), VISION, template_png=_png(template))
+    assert result is None or abs(result[0].point[1] - 134) <= 20
+
+
+def test_near_moved_unique_target_is_still_found() -> None:
+    """The guard does not touch a lone widget that moved a few rows' worth."""
+    scr = _blank(shade=235)
+    _gear(scr, 150, 134 + 30)
+    template = _blank(shade=235)
+    _gear(template, 150, 134)
+    template = template[114:154, 130:170].copy()
+    m = find_template(
+        _png(scr),
+        _png(template),
+        search_region=(50, 34, 200, 200),
+        threshold=0.985,
+        prefer_near=(130, 114),
+    )
+    assert m is not None and abs(m.point[1] - 164) <= 2
+
+
+def test_moved_match_refused_when_recorded_landmark_is_gone() -> None:
+    """A crop that carries state (a checked box) matches the box now in that
+    state, a row lower after a toggle. The anchor kept a label landmark that
+    is not found, so the move cannot be checked: the template rungs refuse."""
+    from openadapt_flow.ir import Landmark
+
+    scr = _blank(shade=235)
+    _gear(scr, 150, 164)  # the stateful look moved down one row
+    template = _blank(shade=235)
+    _gear(template, 150, 134)
+    template = template[114:154, 130:170].copy()
+    anchor = Anchor(
+        template="t.png",
+        region=(130, 114, 40, 40),
+        click_point=(150, 134),
+        ocr_text=None,
+        landmarks=[
+            Landmark(
+                relation="right_of",
+                ocr_text="Morning",
+                distance_px=60,
+                dx_px=-60,
+                dy_px=0,
+            )
+        ],
+        search_pad=80,
+    )
+    result = resolver.resolve(anchor, _png(scr), VISION, template_png=_png(template))
+    assert result is None or result[0].rung not in ("template", "template_global")
+
+
 def test_peaks_above_suppresses_neighbors() -> None:
     """The NMS peak enumerator yields one peak per identical instance."""
     scr = _blank(shade=235)
