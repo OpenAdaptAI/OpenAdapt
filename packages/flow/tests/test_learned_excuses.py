@@ -1200,6 +1200,9 @@ def test_a_column_the_contract_or_the_agent_names_is_never_learned() -> None:
     for kw in (
         {"contract_fields": ["last_seen", "last_login"]},
         {"sent_fields": ["Last_Seen", "user.last_login"]},
+        {"sent_fields": ["token[last_seen]", "user[last_login]"]},
+        {"param_names": ["token[0][last_seen][]", "user.profile[last_login]"]},
+        {"contract_fields": ["last_seen[value]", "user[last_login][value]"]},
         {"param_names": ["last_seen", "last_login"]},
     ):
         k = learn.propose(eps(**kw), users=USERS)["kinds"]["k"]
@@ -1597,8 +1600,12 @@ class _App:
     """POST /api/notes: saves a note, and, as many apps do, updates the
     acting user's last_login on every request."""
 
-    def __init__(self, db: Path) -> None:
+    def __init__(
+        self, db: Path, *, email_field: str = "email", touch_email: bool = False
+    ) -> None:
         self.db = db
+        self.email_field = email_field
+        self.touch_email = touch_email
         app = self
 
         class H(BaseHTTPRequestHandler):
@@ -1610,9 +1617,9 @@ class _App:
                 from urllib.parse import parse_qs, urlsplit
 
                 q = parse_qs(urlsplit(self.path).query)
-                if "email" in q:
+                if app.email_field in q:
                     con.execute(
-                        "UPDATE app_user SET email = ? WHERE id = 2", (q["email"][0],)
+                        "UPDATE app_user SET email = ? WHERE id = 2", (q[app.email_field][0],)
                     )
 
             def do_GET(self) -> None:
@@ -1632,6 +1639,11 @@ class _App:
                     "UPDATE app_user SET last_login = ? WHERE id = 2",
                     (secrets.token_hex(4),),
                 )
+                if app.touch_email:
+                    con.execute(
+                        "UPDATE app_user SET email = ? WHERE id = 2",
+                        (secrets.token_hex(4) + "@example.test",),
+                    )
                 self._email(con)
                 con.execute(
                     "INSERT INTO note (title, body, stamp) VALUES (?, ?, 's')",
@@ -1714,21 +1726,30 @@ def test_collect_through_the_shadow_hook(tmp_path: Path) -> None:
             }
 
 
-@pytest.mark.parametrize("how", ["write", "read"])
-def test_query_string_fields_count_as_sent(tmp_path: Path, how: str) -> None:
-    """Round 2: the agent sends ``email`` in a query string (on the write
-    itself, or on a read inside the write's window) and the app stores it
-    on the actor's own row. ``email`` counts as sent, so the actor's row
-    moving ``email`` with ``last_login`` is never learned."""
+@pytest.mark.parametrize(
+    "field_name", ["email", "note[email]", "note[contact][email]", "note[email][]"]
+)
+@pytest.mark.parametrize("how", ["write", "read", "during_check"])
+def test_query_string_fields_count_as_sent(
+    tmp_path: Path, how: str, field_name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An agent-sent field never becomes an actor-row excuse, including a
+    bracketed name or a GET that arrives during the check's database read."""
 
     import http.client
+    import importlib
+    from urllib.parse import urlencode
 
     from openadapt_flow.shadow import Route, Shadow
 
     e = _sqlite(tmp_path)
     for statement in e.ddl():
         e.run(statement)
-    app = _App(Path(e.read["sqlite_database"]))
+    app = _App(
+        Path(e.read["sqlite_database"]),
+        email_field=field_name,
+        touch_email=how == "during_check",
+    )
     contract = Contract.from_dict(note_contract(e), name="note")
     collector = learn.Collector(tmp_path / "episodes.jsonl")
     sh = Shadow(
@@ -1748,11 +1769,33 @@ def test_query_string_fields_count_as_sent(tmp_path: Path, how: str) -> None:
     ).start()
     learn.record_bodies(sh)
     sh.on_checked = collector
+    pending_queries: list[str] = []
+    injected_queries: list[str] = []
     try:
         host, port = sh.server.server_address[:2]
+
+        def read_query(query: str) -> None:
+            conn = http.client.HTTPConnection(host, port, timeout=5)
+            conn.request("GET", "/api/me" + query)
+            assert conn.getresponse().status == 200
+            conn.close()
+
+        if how == "during_check":
+            verify = importlib.import_module("openadapt_flow.verify_run")
+            read_database = verify._read_database
+
+            def during_read(cfg, salt, before=None, errors=None):
+                if before is not None and pending_queries:
+                    query = pending_queries.pop(0)
+                    read_query(query)
+                    injected_queries.append(query)
+                return read_database(cfg, salt, before=before, errors=errors)
+
+            monkeypatch.setattr(verify, "_read_database", during_read)
+
         for i in range(5):
-            query = f"?email=bot{i}%40example.test"
-            conn = http.client.HTTPConnection(host, port)
+            query = "?" + urlencode({field_name: f"bot{i}@example.test"})
+            conn = http.client.HTTPConnection(host, port, timeout=5)
             conn.request(
                 "POST",
                 "/api/notes" + (query if how == "write" else ""),
@@ -1762,18 +1805,35 @@ def test_query_string_fields_count_as_sent(tmp_path: Path, how: str) -> None:
             assert conn.getresponse().status == 201
             conn.close()
             if how == "read":
-                conn = http.client.HTTPConnection(host, port)
-                conn.request("GET", "/api/me" + query)
-                assert conn.getresponse().status == 200
-                conn.close()
+                read_query(query)
+            elif how == "during_check" and i == 4:
+                # The first four episodes see only app-driven email changes.
+                # The last episode must record the first agent-sent email,
+                # even though it arrives after the check has started.
+                pending_queries.append(query)
             sh.flush()
+            assert not pending_queries
     finally:
         sh.stop()
+        app.server.shutdown()
+        app.server.server_close()
     eps = learn.read_episodes([collector.path])
-    assert len(eps) == 5 and all("email" in ep["sent_fields"] for ep in eps)
+    assert len(eps) == 5
+    assert all(ep["delta"] == "held" and ep["frame"] == "refuted" for ep in eps)
+    assert all(
+        any(m["table"] == "app_user" and "email" in m["columns"] for m in ep["moves"])
+        for ep in eps
+    )
     p = learn.propose(eps, users=learn.users_from("app_user", "id", None))
     k = p["kinds"]["create_note"]
     assert [x for x in k["excuses"] if x["table"] == "app_user"] == []
     assert any(
         s["table"] == "app_user" and "email" in s["why"] for s in k["stays_a_stop"]
     )
+    if how == "during_check":
+        assert len(injected_queries) == 1
+        assert all(field_name not in ep["sent_fields"] for ep in eps[:-1])
+        assert field_name in eps[-1]["sent_fields"]
+    else:
+        assert all(field_name in ep["sent_fields"] for ep in eps)
+    assert all(f"bot{i}@example.test" not in collector.path.read_text() for i in range(5))
