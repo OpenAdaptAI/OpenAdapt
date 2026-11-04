@@ -51,6 +51,8 @@ import urllib.parse as up
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+URLENCODED = "application/x-www-form-urlencoded"
+
 #: Before any page script: what a form's own ``submit()`` would send is
 #: recorded instead of navigating; window.open, WebSocket, EventSource and
 #: RTCPeerConnection do nothing but say they were used; every click
@@ -58,7 +60,7 @@ from typing import Any, Optional
 _INSTRUMENT_JS = """
 (() => {
   const pairs = (f, s) => Array.from(s ? new FormData(f, s) : new FormData(f)).map(
-    ([k, v]) => [k, typeof v === 'string' ? v : '<file>']);
+    ([k, v]) => [k, typeof v === 'string' ? v : (v && v.size === 0 && v.name === '' ? '' : '<file>')]);
   const state = { programmatic: [], channels: [], clickTargets: [], pairs,
                   submits: [], reached: 0, prevented: 0 };
   Object.defineProperty(window, '__openadaptFormEval', { value: state });
@@ -87,10 +89,12 @@ _INSTRUMENT_JS = """
 #: Finds the form, marks it for the locators, and adds the last submit
 #: listener (it records each submit that gets through, then stops it).
 _SETUP_JS = """
-({ actionPath, leaf }) => {
+({ actionPath, leaf, formAction }) => {
   const state = window.__openadaptFormEval;
   if (!state) return { unevaluable: 'the scratch page could not be instrumented' };
-  const form = Array.from(document.forms).find((f) => {
+  const form = formAction ? Array.from(document.forms).find((f) =>
+    new URL(f.getAttribute('action') || location.href, location.href).pathname === formAction
+  ) : Array.from(document.forms).find((f) => {
     const p = new URL(f.getAttribute('action') || location.href, location.href).pathname;
     return p === actionPath || (leaf && p.split('/').pop() === leaf);
   });
@@ -192,14 +196,18 @@ def evaluate_form(
     submitter_requests: tuple[str, ...] = (),
     confirm: Optional[str] = None,
     step_writes: tuple[str, ...] = (),
+    form_action: Optional[str] = None,
     timeout_s: float = 20.0,
     settle_ms: int = 300,
 ) -> FormEvaluation:
     """Run the form's script in a scratch copy of ``page``'s session.
 
     ``fields`` are the values the person would type or pick (the API step's
-    ``param`` and ``select_label`` fields). Never raises: a failure to run
-    the script is an ``unevaluable`` result.
+    ``param`` and ``select_label`` fields). ``form_action`` is the form's own
+    action when the page's script sends the save to ``action_path`` instead
+    of submitting the form: the form is found by it, and the script's
+    request to ``action_path`` (blocked) is the save compared. Never raises:
+    a failure to run the script is an ``unevaluable`` result.
     """
 
     started = time.monotonic()
@@ -266,6 +274,14 @@ def evaluate_form(
             body = req.post_data
         except Exception:  # noqa: BLE001 - a binary body has no text
             body = None
+        content_type = (req.headers or {}).get("content-type", "")
+        if body is not None and content_type.startswith("multipart/form-data"):
+            # Compared as fields; a body that carries a file isn't comparable.
+            from openadapt_flow.network_capture import parse_multipart
+
+            parsed = parse_multipart(body.encode("utf-8"), content_type)
+            body = up.urlencode(parsed[0]) if parsed is not None else None
+            content_type = URLENCODED if parsed is not None else content_type
         what = _summary(req.method, req.url)
         late.append(
             {
@@ -273,12 +289,15 @@ def evaluate_form(
                 "method": req.method,
                 "path": parts.path,
                 "body": body,
-                "content_type": (req.headers or {}).get("content-type", ""),
+                "content_type": content_type,
             }
         )
-        if what in step_writes:
-            # A declared step write: it never leaves, but the page sees it
-            # accepted, as it was in the recording.
+        if what in step_writes or (
+            form_action and req.method == "POST" and parts.path == action_path
+        ):
+            # A declared step write, or the save a page script sends itself:
+            # it never leaves, but the page sees it accepted, as it was in
+            # the recording (a refused request would raise in the script).
             r.fulfill(status=200, body="")
         else:
             r.abort()
@@ -354,7 +373,11 @@ def evaluate_form(
         phase["loaded"] = True
         setup = scratch.evaluate(
             _SETUP_JS,
-            {"actionPath": action_path, "leaf": action_path.rsplit("/", 1)[-1]},
+            {
+                "actionPath": action_path,
+                "leaf": action_path.rsplit("/", 1)[-1],
+                "formAction": form_action,
+            },
         )
         if setup.get("unevaluable"):
             return done("unevaluable", setup["unevaluable"])

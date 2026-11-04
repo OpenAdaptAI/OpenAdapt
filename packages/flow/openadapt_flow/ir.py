@@ -791,13 +791,20 @@ class WebFormField(BaseModel):
     the live form each run). ``session``: a value the server issued to this
     session, such as a CSRF token, read from the live form each run.
     ``form_default``: the form's own default, which must still equal ``value``
-    in the live form or the API step does not run.
+    in the live form or the API step does not run. ``submitter``: the
+    ``name=value`` the browser adds for the submit button the person clicked;
+    the live form must still have exactly one enabled submit button that
+    sends exactly ``value``. ``empty_file``: a file input sent with no file
+    (a multipart save); the live form must still have that file input, and
+    the API step never attaches a file.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1)
-    source: Literal["param", "select_label", "session", "form_default"]
+    source: Literal[
+        "param", "select_label", "session", "form_default", "submitter", "empty_file"
+    ]
     param: Optional[str] = None
     value: Optional[str] = None
 
@@ -805,8 +812,8 @@ class WebFormField(BaseModel):
     def _source_fields(self) -> "WebFormField":
         if self.source in ("param", "select_label") and not self.param:
             raise ValueError(f"{self.source} field {self.name!r} needs a param")
-        if self.source == "form_default" and self.value is None:
-            raise ValueError(f"form_default field {self.name!r} needs its value")
+        if self.source in ("form_default", "submitter") and self.value is None:
+            raise ValueError(f"{self.source} field {self.name!r} needs its value")
         return self
 
 
@@ -882,6 +889,16 @@ class WebFormSpec(BaseModel):
     form_path: str = Field(min_length=1)
     fields: list[WebFormField] = Field(min_length=1)
     controls: list[str] = Field(default_factory=list)
+    #: How the save's body is encoded, as the recorded request was:
+    #: ``urlencoded`` (``application/x-www-form-urlencoded``) or ``multipart``
+    #: (``multipart/form-data`` with no file attached).
+    encoding: Literal["urlencoded", "multipart"] = "urlencoded"
+    #: The path the form's own ``action`` names, when the save goes elsewhere:
+    #: the page's script sent the form's fields to another endpoint (for
+    #: example ``admin-ajax.php``) instead of submitting the form. The runtime
+    #: finds the form by this path, and runs the page's script before every
+    #: save to check that the script sends exactly the body the API step built.
+    form_action: Optional[str] = None
     client_rules: Optional[dict[str, Any]] = None
     #: Page script the browser runs on this save that the API step can't
     #: evaluate by reading the form: the form's ``on*`` handlers, the ``on*``
@@ -928,6 +945,19 @@ class WebFormSpec(BaseModel):
     #: admitted again. Bindings proposed before it covered more than the
     #: on-screen checks need proposing again.
     folded_checks_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+
+    @model_serializer(mode="wrap")
+    def _omit_new_defaults(self, handler: Any) -> Any:
+        # A binding proposed before ``encoding`` and ``form_action`` existed
+        # keeps the admission digest a person admitted: the keys are written
+        # only when they say something.
+        data = handler(self)
+        if isinstance(data, dict):
+            if data.get("encoding") == "urlencoded":
+                data.pop("encoding")
+            if data.get("form_action") is None:
+                data.pop("form_action", None)
+        return data
 
 
 class ApiAdmission(BaseModel):
