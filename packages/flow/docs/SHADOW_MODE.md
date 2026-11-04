@@ -204,7 +204,9 @@ it to be checked, for at most `hold_ms` (default 30,000 ms in this mode).
   `CONFIRMED`;
 - `end` waits for the check and answers with the verdict and its reasons.
 
-An agent that obeys stops at the first write that isn't right. The guard
+An agent that obeys stops at the first write that isn't right. A recheck
+runs later: a write that is `CONFIRMED` and then `REFUTED` on its recheck
+halts the guard from the next `begin` after the recheck, not before. The guard
 can't stop a client that doesn't ask it: that write shows as a change
 between actions.
 

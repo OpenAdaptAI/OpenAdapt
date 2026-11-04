@@ -188,6 +188,10 @@ def build(cfg: dict[str, Any], out: Path) -> Any:
 
             if not routes:
                 raise ShadowConfigError("db mode needs at least one action")
+            if cfg.get("audit_sql") and not cfg.get("actor"):
+                raise ShadowConfigError(
+                    "audit_sql needs actor: the agent's own user id in the app"
+                )
             return DatabaseShadow(
                 routes=routes,
                 actor_id=str(cfg.get("actor") or "agent"),
