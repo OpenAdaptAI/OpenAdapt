@@ -304,9 +304,11 @@ they write inside a sealed set sealed. Each reads artifact files through one rea
 
 Refusals never quote what they read. A validation error's quoted input value
 is dropped from every refusal the CLI prints. With sealed input or in strict
-mode, `teach` names a stopped run by its halt id instead of the step intent or
-workflow name, a `push` failure caused by another error names only that
-error's type, and an unexpected error prints its type instead of a traceback.
+mode, a `teach` or `push` refusal names only the error's type, unless its text
+was built only from the command line (the paths you passed, such as an `--out`
+that overlaps an input or a run that came from another bundle). An unexpected
+error prints its type instead of a traceback, and a success line names a skill
+or workflow only by a short hash.
 
 Without the key, each of these refuses before it reads anything and names the
 variable to set. Any other command given a sealed path refuses with a message

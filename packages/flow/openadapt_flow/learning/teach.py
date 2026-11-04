@@ -102,7 +102,15 @@ from openadapt_flow.runtime.authorization import runtime_params_for_gui
 class TeachError(Exception):
     """A teach cannot even be attempted (bad inputs), as distinct from a
     governed REFUSAL to promote a correction (which is a normal, reported
-    outcome -- see :attr:`TeachResult.promoted`)."""
+    outcome -- see :attr:`TeachResult.promoted`).
+
+    ``public`` marks a message built only from the command line (the paths
+    it was given). Any other message may quote what teach read, so the CLI
+    withholds it when the input is sealed or strict mode is on."""
+
+    def __init__(self, message: str, *, public: bool = False) -> None:
+        super().__init__(message)
+        self.public = public
 
 
 # -- fix demonstration: a scripted correction spec ---------------------------
@@ -196,21 +204,20 @@ def check_provenance(
     program that never ran, and the learn loop would only report a generic
     refusal. Raises :class:`TeachError` before anything is written.
 
-    With ``private`` (sealed input or strict mode) the message names the halt
-    by its state id only, never a workflow name or step intent read from the
-    encrypted report.
+    With ``private`` (sealed input or strict mode) the message names only the
+    paths on the command line, never a state id, workflow name or step intent
+    read from the encrypted report, so the CLI may print it.
     """
     halt = report.halt
     assert halt is not None  # guaranteed by load_halt_report
-    if private:
-        stale = (
-            f"the run at {run_dir} (halt {halt.state_id!r}) did not stop in a "
-            f"program --bundle {bundle_dir} holds. Pass the bundle whose replay "
-            "stopped."
-        )
+    stale = TeachError(
+        f"the run at {run_dir} did not stop in a program --bundle {bundle_dir} "
+        "holds. Pass the bundle whose replay stopped.",
+        public=True,
+    )
     if report.workflow_name != base_workflow.name:
         if private:
-            raise TeachError(stale)
+            raise stale
         raise TeachError(
             f"the run at {run_dir} came from the workflow "
             f"{report.workflow_name!r}, but --bundle {bundle_dir} is the "
@@ -229,7 +236,7 @@ def check_provenance(
     ):
         return
     if private:
-        raise TeachError(stale)
+        raise stale
     raise TeachError(
         f"the step where the run at {run_dir} stopped ({halt.intent!r}) is not "
         f"in --bundle {bundle_dir}. Pass the bundle whose replay stopped."
@@ -969,7 +976,8 @@ def check_out_is_new(
             if _overlap(target, Path(path)):
                 raise TeachError(
                     f"{flag} {target} is or overlaps the {name} input {path}. "
-                    "Pass a new directory: teach never writes over its inputs"
+                    "Pass a new directory: teach never writes over its inputs",
+                    public=True,
                 )
 
 
@@ -1083,7 +1091,9 @@ def teach(
     try:
         library = SkillLibrary(lib_root, seal=seal)
     except sealed_set.SealedSetError as exc:
-        raise TeachError(str(exc)) from exc
+        # Opening the library names only its directory (``--library`` or the
+        # one beside ``--out``) and the key it needs.
+        raise TeachError(str(exc), public=True) from exc
     _seed_or_check_library(
         library, sid, program, dict(base_workflow.subflows), bundle_dir=bundle
     )

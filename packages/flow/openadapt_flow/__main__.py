@@ -7821,24 +7821,6 @@ def _print_push_json(document: dict[str, Any]) -> None:
     print(json.dumps(document, sort_keys=True, separators=(",", ":")))
 
 
-def _push_failure_reason(args: argparse.Namespace, error: Exception) -> str:
-    """What ``push`` prints when it fails.
-
-    A failure caused by another error (a validation error, a scrub or
-    sanitization failure) can quote what it read. When the input is sealed or
-    strict mode is on, that text came out of encrypted content, so push names
-    only the kind of error. A failure push raised itself prints as it is,
-    without any quoted input value.
-    """
-    from openadapt_flow import at_rest, safe_errors, sealed_set
-
-    if error.__cause__ is not None or error.__context__ is not None:
-        path = getattr(args, "path", None)
-        if at_rest.strict() or (path and sealed_set.is_sealed_path(path)):
-            return safe_errors.withheld(error)
-    return safe_errors.message(error)
-
-
 def _cmd_push(args: argparse.Namespace) -> int:
     """Upload the exact approved sanitized archive to ``/api/ingest``.
 
@@ -7883,7 +7865,7 @@ def _cmd_push(args: argparse.Namespace) -> int:
         if args.json:
             _print_push_json(_push_json_failure())
             return 1
-        print(f"push failed: {_push_failure_reason(args, e)}")
+        print(f"push failed: {_refusal_text(args, e)}")
         return 1
     if args.json:
         try:
@@ -8352,9 +8334,7 @@ def _cmd_teach(args: argparse.Namespace) -> int:
             library_dir=Path(args.library) if args.library else None,
         )
     except TeachError as e:
-        from openadapt_flow import safe_errors
-
-        print(f"teach cannot run: {safe_errors.message(e)}")
+        print(f"teach cannot run: {_refusal_text(args, e)}")
         return 2
 
     print(result.summary())
@@ -8389,9 +8369,7 @@ def _cmd_teach_branch(args: argparse.Namespace) -> int:
             library_dir=Path(args.library) if args.library else None,
         )
     except TeachError as e:
-        from openadapt_flow import safe_errors
-
-        print(f"teach-branch cannot run: {safe_errors.message(e)}")
+        print(f"teach-branch cannot run: {_refusal_text(args, e)}")
         return 2
     print(result.summary())
     return 0 if result.promoted else 1
@@ -13390,6 +13368,22 @@ def _sealed_paths_in(args: argparse.Namespace) -> list[Path]:
                 if root is not None and root not in found:
                     found.append(root)
     return found
+
+
+def _refusal_text(args: argparse.Namespace, error: BaseException) -> str:
+    """What a command prints when it refuses ``error``.
+
+    When the command read sealed input or strict mode is on, any part of the
+    message may quote decrypted content (a skill id, a workflow name, a
+    path inside the artifact), so only the kind of error is printed, unless
+    the error is marked ``public`` (built only from the command line).
+    Otherwise the message prints without quoted input values.
+    """
+    from openadapt_flow import safe_errors
+
+    if _private_input(args) and getattr(error, "public", False) is not True:
+        return safe_errors.withheld(error)
+    return safe_errors.message(error)
 
 
 def _private_input(args: argparse.Namespace) -> bool:

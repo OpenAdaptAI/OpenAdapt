@@ -546,9 +546,9 @@ def teach_branch(
             "`openadapt-flow teach`"
         )
     inputs: dict[str, Path | str] = {"base bundle": bundle}
-    for i, ex in enumerate(examples):
-        inputs[f"halted run {i + 1}"] = ex.run_dir
-        inputs[f"fix {i + 1}"] = ex.fix
+    for i, example in enumerate(examples):
+        inputs[f"halted run {i + 1}"] = example.run_dir
+        inputs[f"fix {i + 1}"] = example.fix
     for i, negative in enumerate(negatives):
         inputs[f"normal run {i + 1}"] = negative
     check_out_is_new(out, library=library_dir, **inputs)

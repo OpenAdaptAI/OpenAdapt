@@ -633,8 +633,8 @@ def _marker_absent(root: Path, *printed: str) -> None:
 def test_teach_refusal_on_a_sealed_run_never_prints_its_contents(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd, caplog, stale: str
 ) -> None:
-    """A provenance refusal names the halt by its state id, never by a step
-    intent or workflow name read from the encrypted halt report."""
+    """A provenance refusal names only the paths on the command line, never a
+    state id, step intent or workflow name read from the encrypted report."""
     from tests.test_teach_cli import _base_bundle, _dismiss_recording, _halt_run
 
     monkeypatch.setenv(crypto.ENV_KEY, KEY)
@@ -663,7 +663,8 @@ def test_teach_refusal_on_a_sealed_run_never_prints_its_contents(
     printed = capfd.readouterr()
     _marker_absent(tmp_path, printed.out, printed.err, caplog.text)
     assert "teach cannot run" in printed.out
-    assert repr(report["halt"]["state_id"]) in printed.out
+    assert "did not stop in a program --bundle" in printed.out
+    assert repr(report["halt"]["state_id"]) not in printed.out
     assert not out.exists()
 
 
@@ -1060,3 +1061,95 @@ def test_push_success_names_the_workflow_only_for_plain_input(
         assert "name=withheld, sha256 " in captured.out
     else:
         assert f"name={_MARKER!r}" in captured.out
+
+
+def test_strict_library_mismatch_refusal_never_prints_the_skill_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd, caplog
+) -> None:
+    """A skill library that already holds another program for the skill is
+    refused without naming the skill id teach read from the input."""
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    run, fix, base = _named_teach_inputs(tmp_path, monkeypatch)
+    from openadapt_flow.learning.library import SkillLibrary
+
+    monkeypatch.setenv("OPENADAPT_FLOW_AT_REST", "strict")
+    args = ["teach", str(run), "--fix", str(fix), "--bundle", str(base)]
+    first = tmp_path / "first"
+    assert main([*args, "--out", str(first)]) == 0
+    # A sealed library that holds the taught program, not the base one, for
+    # the same skill id.
+    library = tmp_path / "library"
+    taught = Workflow.load(first, key=KEY)
+    SkillLibrary(library, seal=True).create_skill(_MARKER, taught.program)
+    capfd.readouterr()
+    caplog.set_level("DEBUG")
+    second = tmp_path / "second"
+    assert main([*args, "--library", str(library), "--out", str(second)]) == 2
+    printed = capfd.readouterr()
+    for text in (printed.out, printed.err, caplog.text):
+        assert _MARKER not in text
+    assert "teach cannot run: the input was refused (TeachError)" in printed.out
+    assert not second.exists()
+
+
+@pytest.mark.parametrize("public", [False, True], ids=["read", "command line"])
+def test_strict_teach_refusal_prints_only_command_line_details(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd, caplog, public: bool
+) -> None:
+    """Strict teach prints a refusal's text only when the error says it was
+    built from the command line. (teach-branch is refused in strict mode and
+    for sealed input before it runs.)"""
+    from openadapt_flow.learning import teach
+    from openadapt_flow.learning.teach import TeachError
+
+    def refuse(*_args, **_kwargs):
+        raise TeachError(f"refused {_MARKER!r}", public=public)
+
+    monkeypatch.setattr(teach, "teach", refuse)
+    monkeypatch.setenv("OPENADAPT_FLOW_AT_REST", "strict")
+    for name in ("run", "fix", "bundle"):
+        (tmp_path / name).mkdir()
+    run, fix, bundle = (str(tmp_path / n) for n in ("run", "fix", "bundle"))
+    capfd.readouterr()
+    caplog.set_level("DEBUG")
+    out = str(tmp_path / "out")
+    args = ["teach", run, "--fix", fix, "--bundle", bundle, "--out", out]
+    assert main(args) == 2
+    printed = capfd.readouterr()
+    assert "teach cannot run" in printed.out
+    if public:
+        assert f"refused {_MARKER!r}" in printed.out
+    else:
+        for text in (printed.out, printed.err, caplog.text):
+            assert _MARKER not in text
+        assert "the input was refused (TeachError)" in printed.out
+
+
+@pytest.mark.parametrize("strict", [True, False], ids=["strict", "plain"])
+def test_push_failure_of_its_own_is_withheld_only_for_private_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd, caplog, strict: bool
+) -> None:
+    """A push error with no cause can still name a path inside the artifact,
+    so strict mode withholds it too."""
+    from openadapt_flow import hosted
+
+    if strict:
+        monkeypatch.setenv("OPENADAPT_FLOW_AT_REST", "strict")
+
+    def fail(*_args, **_kwargs):
+        raise hosted.HostedError(f"cannot read {_MARKER}/steps.json")
+
+    monkeypatch.setattr(hosted, "push", fail)
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    capfd.readouterr()
+    caplog.set_level("DEBUG")
+    push = ["push", str(bundle), "--kind", "bundle", "--host", "https://h.test"]
+    assert main([*push, "--token", "tok"]) == 1
+    captured = capfd.readouterr()
+    if strict:
+        for text in (captured.out, captured.err, caplog.text):
+            assert _MARKER not in text
+        assert "push failed: the input was refused (HostedError)" in captured.out
+    else:
+        assert f"push failed: cannot read {_MARKER}/steps.json" in captured.out
