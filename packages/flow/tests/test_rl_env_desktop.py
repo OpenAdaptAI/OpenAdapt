@@ -436,7 +436,10 @@ def test_reset_stops_only_the_desktop_accounts_own_processes() -> None:
     # Scoped to the account's own session and its own processes; the agent
     # and the shell are kept.
     assert "query session 'desk'" in script
-    assert "-IncludeUserName" in script and "-eq 'desk'" in script
+    assert "-IncludeUserName -ErrorAction Stop" in script
+    assert "$_.UserName -eq 'LAB\\desk'" in script
+    assert "throw 'no desktop session for desk" in script
+    assert "-eq 'desk'" in wg._stop_desktop_processes("desk")
     assert "win_agent_server.py" in script and "'explorer'" in script
     assert "winlogon" not in script and "csrss" not in script
 
@@ -467,7 +470,7 @@ def test_guest_settings_fall_back_to_the_lab_profile(
 ) -> None:
     from openadapt_flow.rl_env import windows_guest as wg
 
-    for key in ("HOST", "USER", "SSH_KEY"):
+    for key in ("HOST", "USER", "SSH_KEY", "PASSWORD"):
         monkeypatch.delenv(f"OPENADAPT_WINENV_{key}", raising=False)
     monkeypatch.setenv("OAFLOW_LAB_PROFILE", "winlap")
     monkeypatch.setenv("OAFLOW_WINLAP_HOST", "10.9.8.7")
@@ -478,8 +481,19 @@ def test_guest_settings_fall_back_to_the_lab_profile(
     assert (guest.host, guest.user, guest._session) == ("10.9.8.7", "lab", None)
     assert guest.python == r"C:\Python312\python.exe"
     assert guest._ssh_base()[-1] == "lab@10.9.8.7"
+    # A customer host takes every setting from OPENADAPT_WINENV_*: the lab's
+    # key must not travel to it.
     monkeypatch.setenv("OPENADAPT_WINENV_HOST", "10.1.1.1")
-    assert wg.WindowsGuest().host == "10.1.1.1"
+    with pytest.raises(wg.GuestError, match="OPENADAPT_WINENV_USER"):
+        wg.WindowsGuest()
+    monkeypatch.setenv("OPENADAPT_WINENV_USER", "svc")
+    monkeypatch.setenv("OPENADAPT_WINENV_PASSWORD", "synthetic-test-password")
+    customer = wg.WindowsGuest()
+    assert (customer.host, customer.user, customer._ssh_key) == (
+        "10.1.1.1",
+        "svc",
+        None,
+    )
 
 
 def test_one_manifest_schema_with_a_desktop_kind() -> None:
@@ -516,3 +530,25 @@ def test_the_browser_environment_refuses_a_desktop_directory() -> None:
 
     with pytest.raises(TaskError, match="desktop"):
         OpenAdaptWebEnvironment(ROOT / "win-patient-chart")
+
+
+def test_the_public_generator_cannot_rebuild_the_heldout_half(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import hashlib
+    import sys
+
+    sys.path.insert(0, str(ROOT / "_windows"))
+    import make_tasks
+
+    monkeypatch.delenv(make_tasks.HELDOUT_SEED_ENV, raising=False)
+    with pytest.raises(SystemExit):
+        make_tasks.build("patient_chart", "")
+    sets = make_tasks.build("patient_chart", "not-the-secret-seed-0000")
+    public = "".join(json.dumps(t, sort_keys=True) + "\n" for t in sets["public"])
+    guess = "".join(json.dumps(t, sort_keys=True) + "\n" for t in sets["heldout"])
+    manifest = json.loads(
+        (ROOT / "win-patient-chart" / "tasks" / "MANIFEST.json").read_text()
+    )
+    assert hashlib.sha256(public.encode()).hexdigest() == manifest["public"]["sha256"]
+    assert hashlib.sha256(guess.encode()).hexdigest() != manifest["heldout"]["sha256"]

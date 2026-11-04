@@ -9,6 +9,8 @@ serves the app (the UIA and the pixels-only variant share tasks). The
 held-out half goes only to ``--heldout-out``, outside this repository; its
 SHA-256 and counts are recorded in ``tasks/MANIFEST.json`` beside the public
 file, so a held-out score can be tied to the exact set without publishing it.
+The held-out half comes from a secret seed (``OPENADAPT_HELDOUT_SEED``, kept
+with it), so this file cannot rebuild it.
 
 Per half and app: 12 feasible tasks and 12 infeasible ones.
 
@@ -28,6 +30,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import random
 import sys
 from pathlib import Path
@@ -48,6 +51,8 @@ FAULTS = (
     + ["stale"] * 2
 )
 SEED = 20261103
+#: The held-out half's secret seed, kept with the held-out files (private).
+HELDOUT_SEED_ENV = "OPENADAPT_HELDOUT_SEED"
 
 NOTES = [
     "BP 128/82, continue lisinopril, recheck in 2 weeks",
@@ -91,10 +96,10 @@ CLAIM_NOTES = [
 ]
 
 
-def _task_id(app: str, split: str, n: int) -> str:
+def _task_id(app: str, split: str, n: int, seed: str = str(SEED)) -> str:
     return (
         f"{app}-"
-        + hashlib.sha256(f"{SEED}:{app}:{split}:{n}".encode()).hexdigest()[:10]
+        + hashlib.sha256(f"{seed}:{app}:{split}:{n}".encode()).hexdigest()[:10]
     )
 
 
@@ -170,7 +175,7 @@ def _pc_task(
     if setup.get("variant", "none") != "none":
         tags.append(f"variant:{setup['variant']}")
     return {
-        "id": _task_id("winchart", split, n),
+        "id": _task_id("winchart", split, n, _SEEDS[split]),
         "split": split,
         "instruction": instruction,
         "params": {"mrn": mrn, "note": note},
@@ -238,7 +243,7 @@ def _cd_task(
     if setup.get("variant", "none") != "none":
         tags.append(f"variant:{setup['variant']}")
     return {
-        "id": _task_id("winclaims", split, n),
+        "id": _task_id("winclaims", split, n, _SEEDS[split]),
         "split": split,
         "instruction": instruction,
         "params": {
@@ -273,8 +278,21 @@ def _plan(rng: random.Random) -> list[tuple[str, dict]]:
     return slots
 
 
-def build(app: str) -> dict[str, list[dict]]:
+#: Seed per split. The held-out one is secret (set by ``build``), so the
+#: held-out half cannot be rebuilt from this public file.
+_SEEDS = {"public": str(SEED), "heldout": ""}
+
+
+def build(app: str, heldout_seed: str) -> dict[str, list[dict]]:
+    if len(heldout_seed) < 16:
+        raise SystemExit(
+            f"{HELDOUT_SEED_ENV} must be a secret of at least 16 characters"
+        )
+    _SEEDS["heldout"] = heldout_seed
     rng = random.Random(f"{SEED}:{app}")
+    # Its own stream for the held-out half: plan, targets, amounts and
+    # suffixes all come from the secret seed.
+    rngs = {"public": rng, "heldout": random.Random(f"{heldout_seed}:{app}")}
     out: dict[str, list[dict]] = {"public": [], "heldout": []}
     if app == "patient_chart":
         targets = [p for p in pack_db.PATIENTS if p[0] in pack_db.PATIENT_TWIN]
@@ -287,6 +305,7 @@ def build(app: str) -> dict[str, list[dict]]:
         rng.shuffle(notes)
         pools = {"public": notes[:6], "heldout": notes[6:]}
     for split in ("public", "heldout"):
+        rng = rngs[split]
         for n, (fault, setup) in enumerate(_plan(rng)):
             target = targets[rng.randrange(len(targets))]
             setup = json.loads(json.dumps(setup))
@@ -302,7 +321,7 @@ def build(app: str) -> dict[str, list[dict]]:
             note = pools[split][n % len(pools[split])]
             if app == "patient_chart":
                 # A per-task suffix keeps every (patient, note) pair unique.
-                text = f"{note} [{split[0]}{n:02d}]"
+                text = f"{note} [{_suffix(split, n, rng)}]"
                 out[split].append(_pc_task(n, split, target, text, fault, setup))
             else:
                 decision, note = note
@@ -314,11 +333,19 @@ def build(app: str) -> dict[str, list[dict]]:
                     if decision == "Approved"
                     else "0.00"
                 )
-                text = f"{note} [{split[0]}{n:02d}]"
+                text = f"{note} [{_suffix(split, n, rng)}]"
                 out[split].append(
                     _cd_task(n, split, target, decision, amount, text, fault, setup)
                 )
     return out
+
+
+def _suffix(split: str, n: int, rng: random.Random) -> str:
+    """The public half keeps its index; the held-out half gets a random tag,
+    so a held-out text says nothing about its slot in the plan."""
+    if split == "public":
+        return f"p{n:02d}"
+    return "h" + "".join(rng.choice("abcdefghjkmnpqrstuvwxyz") for _ in range(3))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -330,7 +357,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--heldout-out must be outside this repository")
     args.heldout_out.mkdir(parents=True, exist_ok=True)
     for app, envs in ENVS.items():
-        sets = build(app)
+        sets = build(app, os.environ.get(HELDOUT_SEED_ENV, ""))
         heldout = args.heldout_out / f"{app}.heldout.jsonl"
         heldout.write_text(
             "".join(json.dumps(t, sort_keys=True) + "\n" for t in sets["heldout"]),
@@ -348,7 +375,7 @@ def main(argv: list[str] | None = None) -> int:
                 "schema": "openadapt.rl-env-task-manifest/v1",
                 "app": app,
                 "generator": "environments/openenv/_windows/make_tasks.py",
-                "seed": SEED,
+                "public_seed": SEED,
                 "public": {
                     "file": "public.jsonl",
                     "sha256": _sha(public),

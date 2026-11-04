@@ -335,6 +335,9 @@ def validate(
         "wall_s": round(time.time() - started, 1),
         "server_platform": f"{platform.system()} {platform.machine()} py{platform.python_version()}",
         "model_calls": 0,
+        # "pack" keeps whatever else the desktop runs between episodes (a
+        # shared desktop); "account" stops every process of the account.
+        "reset_scope": getattr(env._guest, "reset_scope", None),  # noqa: SLF001
     }
     result = {"summary": summary, "episodes": rows}
     if out is not None:

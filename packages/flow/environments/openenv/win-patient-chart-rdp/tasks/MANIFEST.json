@@ -5,7 +5,7 @@
     "feasible": 12,
     "file": "patient_chart.heldout.jsonl",
     "location": "private (OpenAdaptAI/openadapt-corpus)",
-    "sha256": "5ec9337e87ef43d0ad4302e8c8a4c2ffbcd1f38643ded64912e44a155f6aa61e",
+    "sha256": "cf1ec6991b9ea864125e1c7c2ab3aad0cdbd9676579dadea0c0e57b9e43c3026",
     "tasks": 24
   },
   "public": {
@@ -14,6 +14,6 @@
     "sha256": "fe6609cecc8c976659fa1d6dd3add0d7df144f16024c35ac826cc2483ad9c4c4",
     "tasks": 24
   },
-  "schema": "openadapt.rl-env-task-manifest/v1",
-  "seed": 20261103
+  "public_seed": 20261103,
+  "schema": "openadapt.rl-env-task-manifest/v1"
 }

@@ -88,20 +88,32 @@ _KEEP = (
 
 
 def _stop_desktop_processes(user: str) -> str:
-    """PowerShell that stops the desktop account's own processes but its shell."""
+    """PowerShell that stops the desktop account's own processes but its shell.
+
+    Fails (the reset is refused) when the account has no desktop session or
+    its processes' owners cannot be read, rather than leaving the last
+    episode's windows open.
+    """
     short = _ps_quote(user.split("\\")[-1])
+    # With a domain, match the whole DOMAIN\\name; without, the name alone.
+    owner = (
+        f"$_.UserName -eq '{_ps_quote(user)}'"
+        if "\\" in user
+        else f"$_.UserName.Split('\\')[-1] -eq '{short}'"
+    )
     return (
         "$keep = @(" + ",".join(f"'{n}'" for n in _KEEP) + ")\n"
         f"$line = (query session '{short}' 2>$null | Select-Object -Skip 1 | Select-Object -First 1)\n"
-        "if ($line -and $line -match '\\s(\\d+)\\s+(Active|Disc)') {\n"
-        "  $sid = [int]$Matches[1]\n"
-        "  $agent = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "
-        "'*win_agent_server.py*' } | ForEach-Object { $_.ProcessId })\n"
-        "  Get-Process -IncludeUserName | Where-Object { $_.SessionId -eq $sid -and $_.UserName "
-        f"-and $_.UserName.Split('\\')[-1] -eq '{short}' -and $keep -notcontains "
-        "$_.ProcessName.ToLower() -and $agent -notcontains $_.Id } | "
-        "ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }\n"
+        "if (-not ($line -and $line -match '\\s(\\d+)\\s+(Active|Disc)')) {\n"
+        f"  throw 'no desktop session for {short}: refusing a reset that could leave windows open'\n"
         "}\n"
+        "$sid = [int]$Matches[1]\n"
+        "$agent = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "
+        "'*win_agent_server.py*' } | ForEach-Object { $_.ProcessId })\n"
+        "Get-Process -IncludeUserName -ErrorAction Stop | Where-Object { $_.SessionId -eq $sid "
+        f"-and $_.UserName -and {owner} -and $keep -notcontains $_.ProcessName.ToLower() "
+        "-and $agent -notcontains $_.Id } | "
+        "ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }\n"
         # A save launched from another session, or still exiting.
         "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
         "Where-Object { $_.CommandLine -like '*pack_db.py*' } | "
@@ -161,21 +173,22 @@ class GuestResult:
 
 
 def _setting(key: str, *, required: bool = False) -> Optional[str]:
-    """``OPENADAPT_WINENV_<KEY>``, else the lab profile's ``OAFLOW_<PROFILE>_<KEY>``.
+    """One guest setting, all from one source.
 
-    The lab profile is the one ``OAFLOW_LAB_PROFILE`` names (default
-    ``winlab``), the same variables the lab harnesses read.
+    ``OPENADAPT_WINENV_<KEY>`` when ``OPENADAPT_WINENV_HOST`` is set; else the
+    lab profile ``OAFLOW_<PROFILE>_<KEY>`` (the profile ``OAFLOW_LAB_PROFILE``
+    names, default ``winlab``). Never a mix: a lab key, password or relay must
+    not reach another host.
     """
-    profile = os.environ.get("OAFLOW_LAB_PROFILE", "winlab").upper()
-    for name in (f"OPENADAPT_WINENV_{key}", f"OAFLOW_{profile}_{key}"):
-        value = os.environ.get(name)
-        if value:
-            return value
-    if required:
-        raise GuestError(
-            f"set OPENADAPT_WINENV_{key} (the Windows guest is not configured)"
-        )
-    return None
+    if os.environ.get("OPENADAPT_WINENV_HOST"):
+        name = f"OPENADAPT_WINENV_{key}"
+    else:
+        profile = os.environ.get("OAFLOW_LAB_PROFILE", "winlab").upper()
+        name = f"OAFLOW_{profile}_{key}"
+    value = os.environ.get(name) or None
+    if value is None and required:
+        raise GuestError(f"set {name} (the Windows guest is not configured)")
+    return value
 
 
 # PowerShell also ends a single-quoted string at these.
