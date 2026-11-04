@@ -12876,7 +12876,8 @@ _STRICT_SELF_SEALING: frozenset[str] = frozenset(
 def _plaintext_directories_in(args: argparse.Namespace) -> list[Path]:
     """Existing directories among the arguments that are not inside a sealed
     set. Files a person passes (a config, a results JSON) are not artifacts
-    and are not checked."""
+    and are not checked. A path the filesystem can't classify, a broken link
+    and a link to a file are returned too, so the caller refuses them."""
 
     found: list[Path] = []
     for name, value in vars(args).items():
@@ -12886,26 +12887,61 @@ def _plaintext_directories_in(args: argparse.Namespace) -> list[Path]:
             if not isinstance(item, (str, Path)) or not str(item):
                 continue
             text = str(item)
-            if "://" in text or "\n" in text or len(text) > 4096:
-                continue
+            # Every string is checked against the filesystem, whatever it
+            # looks like: a newline, "://" or any length can spell a local
+            # path. NAME=PATH arguments name a path after the first "=".
             candidates = [text]
             if isinstance(item, str) and "=" in text:
                 candidates.append(text.split("=", 1)[1])
             for candidate in candidates:
+                if not candidate:
+                    continue
                 path = Path(candidate)
-                if path.is_symlink() and not path.is_dir():
-                    # A link that resolves to nothing (broken, a loop) could
-                    # be pointed at plaintext after this check.
-                    if path not in found:
-                        found.append(path)
+                kind = _local_path_kind(candidate)
+                if kind is None or kind == "other":
                     continue
-                if not path.is_dir():
+                if kind == "directory" and _inside_sealed_set(path):
                     continue
-                if _inside_sealed_set(path):
-                    continue
+                # A plaintext directory, or a path that can't be checked: a
+                # broken or looping link, a link to a file (either could be
+                # pointed at plaintext after this check), or a stat error.
                 if path not in found:
                     found.append(path)
     return found
+
+
+def _local_path_kind(text: str) -> Optional[str]:
+    """``directory``, ``other`` (an existing non-directory that is not a
+    link), ``unchecked`` (a link that isn't a directory, or a path the
+    filesystem can't classify), or None when no such path can exist."""
+
+    import errno
+    import os
+    import stat
+
+    no_such_path = (errno.ENOENT, errno.ENOTDIR, errno.ENAMETOOLONG)
+    # Windows rejects a name it cannot hold, such as "http:" with a colon
+    # (ERROR_INVALID_NAME, ERROR_BAD_PATHNAME): no such path can exist.
+    invalid_name = (123, 161)
+
+    def absent(exc: OSError) -> bool:
+        return (
+            exc.errno in no_such_path or getattr(exc, "winerror", None) in invalid_name
+        )
+
+    try:
+        link = os.lstat(text)
+    except ValueError:  # an embedded NUL: no such path
+        return None
+    except OSError as exc:
+        return None if absent(exc) else "unchecked"
+    try:
+        st = os.stat(text)
+    except (OSError, ValueError):
+        return "unchecked"  # a broken or looping link, or unreadable
+    if stat.S_ISDIR(st.st_mode):
+        return "directory"
+    return "unchecked" if stat.S_ISLNK(link.st_mode) else "other"
 
 
 #: A plaintext copy of one of these inside a sealed set's directory is a

@@ -649,3 +649,63 @@ def test_the_kept_report_message_says_what_happened(
     at_rest.unsealed_write("a worklist report", "/data/pool", refuse=False)
     err = capsys.readouterr().err
     assert "is kept in plaintext" in err and "Nothing was written" not in err
+
+
+# -- review round 3 (#1815): no string skipped by its spelling --------------------
+
+
+@pytest.mark.skipif(os.name != "posix", reason="newline and ':' in file names")
+@pytest.mark.parametrize("spelling", ["new\nline", "url://shaped"])
+def test_strict_refuses_plaintext_at_a_newline_or_url_shaped_path(
+    default_mode: Path, tmp_path: Path, monkeypatch, spelling: str
+) -> None:
+    from openadapt_flow import __main__ as cli
+    from tests.test_after_stop_mockmed import _workflow
+
+    plain = tmp_path / spelling
+    _workflow().save(plain)
+    text = f"{tmp_path}/{spelling}"
+    assert Path(text).is_dir() and (Path(text) / "workflow.json").is_file()
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    for func in (cli._cmd_scaffold_verifier, cli._cmd_certify):
+        with pytest.raises(at_rest.AtRestRefused, match="not encrypted"):
+            cli._unsealed_output_check(argparse.Namespace(func=func, bundle=text))
+
+
+def test_strict_takes_text_that_names_no_path(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    # Controls: a URL, multi-line text and an over-long string name nothing
+    # on disk, so they never refuse a run; a sealed bundle is still taken.
+    from openadapt_flow import __main__ as cli
+
+    sealed, _plain = _sealed_and_plain(tmp_path)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    for text in ("http://127.0.0.1:8080", "a\nb", "x" * 5000, str(sealed)):
+        cli._unsealed_output_check(
+            argparse.Namespace(func=cli._cmd_certify, bundle=str(sealed), note=text)
+        )
+
+
+@pytest.mark.skipif(os.name != "posix" or os.geteuid() == 0, reason="POSIX permissions")
+def test_strict_refuses_a_path_it_cannot_check(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from openadapt_flow import __main__ as cli
+
+    sealed, _plain = _sealed_and_plain(tmp_path)
+    locked = tmp_path / "locked"
+    (locked / "inner").mkdir(parents=True)
+    locked.chmod(0)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    try:
+        with pytest.raises(at_rest.AtRestRefused, match="not encrypted"):
+            cli._unsealed_output_check(
+                argparse.Namespace(
+                    func=cli._cmd_certify,
+                    bundle=str(sealed),
+                    other=str(locked / "inner"),
+                )
+            )
+    finally:
+        locked.chmod(0o700)
