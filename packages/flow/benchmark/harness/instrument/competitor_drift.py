@@ -416,7 +416,9 @@ class StubExternalAgentAdapter:
         self, task: DriftTask, target_url: str, *, max_steps: int
     ) -> AgentRunResult:
         base = self._base_of(target_url)
-        verifier = RestRecordVerifier(base)
+        verifier = RestRecordVerifier(
+            base, records_path="/api/db", records_key="records"
+        )
         # Observe the system of record BEFORE acting (an agent may inspect
         # state around its own action) so the honest policy can detect
         # collateral loss, not just its own row.
@@ -736,7 +738,7 @@ def _run_one(
     db.reset(seed_concurrent=task.scenario.seed_concurrent)
     before_snapshot = db.snapshot()["records"]
 
-    verifier = RestRecordVerifier(base)
+    verifier = RestRecordVerifier(base, records_path="/api/db", records_key="records")
     before_state = verifier.capture_pre_state()
 
     target_url = f"{base}/?fault={task.scenario.name}"

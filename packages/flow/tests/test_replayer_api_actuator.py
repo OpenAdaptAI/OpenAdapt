@@ -185,7 +185,7 @@ class _TrackingRestVerifier(RestRecordVerifier):
         fail_verify=False,
         tier_after_verify=None,
     ):
-        super().__init__(url)
+        super().__init__(url, records_path="/api/db", records_key="records")
         self.substrate = substrate
         self.verification_tier = tier
         self.fail_verify = fail_verify
@@ -214,7 +214,7 @@ class _LegacyReachabilityState:
 
 class _LegacyReachabilityVerifier(RestRecordVerifier):
     def __init__(self, url, reachable):
-        super().__init__(url)
+        super().__init__(url, records_path="/api/db", records_key="records")
         self._reachable = reachable
 
     def capture_pre_state(self):
@@ -236,7 +236,9 @@ def test_api_binding_actuates_and_confirms_skipping_gui(tmp_path):
         replayer = Replayer(
             backend,
             vision=vision,
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             api_actuator=ApiActuator(url),
             poll_interval_s=0.01,
         )
@@ -281,7 +283,9 @@ def test_unreachable_api_halts_without_gui_fallback(tmp_path):
         replayer = Replayer(
             backend,
             vision=vision,
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             api_actuator=ApiActuator(dead, timeout_s=1.0),
             poll_interval_s=0.01,
         )
@@ -307,7 +311,9 @@ def test_unreachable_effect_pre_state_refuses_api_actuation(tmp_path):
         replayer = Replayer(
             backend,
             vision=_vision_that_confirms_saved(),
-            effect_verifier=RestRecordVerifier("http://127.0.0.1:1"),
+            effect_verifier=RestRecordVerifier(
+                "http://127.0.0.1:1", records_path="/api/db", records_key="records"
+            ),
             api_actuator=ApiActuator(url),
             poll_interval_s=0.01,
         )
@@ -376,7 +382,9 @@ def test_post_send_protocol_error_is_proven_by_the_complete_contract(tmp_path):
         report = Replayer(
             backend,
             vision=_vision_that_confirms_saved(),
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             api_actuator=ApiActuator(url, session=session),
             poll_interval_s=0.01,
         ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
@@ -502,7 +510,9 @@ def test_post_send_protocol_error_with_refuted_effect_requires_reconciliation(
         report = Replayer(
             backend,
             vision=_vision_that_confirms_saved(),
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             api_actuator=ApiActuator(url, session=session),
             poll_interval_s=0.01,
         ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
@@ -533,7 +543,9 @@ def test_post_send_protocol_error_with_unavailable_verifier_requires_reconciliat
         report = Replayer(
             backend,
             vision=_vision_that_confirms_saved(),
-            effect_verifier=_UnavailableVerifier(url),
+            effect_verifier=_UnavailableVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             api_actuator=ApiActuator(url, session=session),
             poll_interval_s=0.01,
         ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
@@ -574,7 +586,9 @@ def test_api_write_refuted_by_record_halts(tmp_path):
         replayer = Replayer(
             backend,
             vision=vision,
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             api_actuator=ApiActuator(url),
             poll_interval_s=0.01,
         )
@@ -614,7 +628,9 @@ def test_api_non_2xx_halts_never_double_writes(tmp_path):
         replayer = Replayer(
             backend,
             vision=vision,
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             api_actuator=ApiActuator(url),
             poll_interval_s=0.01,
         )
@@ -648,7 +664,9 @@ def test_api_binding_without_effects_is_config_error_halt(tmp_path):
         replayer = Replayer(
             backend,
             vision=vision,
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             api_actuator=ApiActuator(url),
             poll_interval_s=0.01,
         )
@@ -710,7 +728,9 @@ def test_binding_present_but_no_actuator_uses_gui_unchanged(tmp_path):
         replayer = Replayer(
             backend,
             vision=vision,
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             poll_interval_s=0.01,
         )
         report = replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)
