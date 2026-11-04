@@ -133,6 +133,31 @@ UNCOVERED_RUN_CAP = 4
 # patterns, and only those are accepted.
 MIN_BLOCK = 3
 
+# Split matching rejoins up to this many consecutive recorded tokens: OCR
+# reads a whole static label ("Hint: enter values in multiple boxes.", six
+# words) as one token as readily as two words.
+SPLIT_SIZES = tuple(range(2, 9))
+# Gluing words also drops the punctuation between them ("Hint:" + "enter"
+# -> "Hintenter"), so a split also tries each fragment but the last without
+# its trailing punctuation -- only between two digit-free fragments. Beside
+# a digit the mark carries identity: "1." "23456" is a row number and MRN
+# 23456, not MRN 123456; "12." "50" is 12.50, not 1250.
+_GLUE_PUNCT = ":;,."
+
+
+def glued_forms(tokens: list[str]) -> list[str]:
+    """The forms OCR may read ``tokens`` as once it glues them into one."""
+    plain = "".join(tokens)
+    parts = []
+    for index, token in enumerate(tokens):
+        nxt = tokens[index + 1] if index + 1 < len(tokens) else None
+        if nxt is not None and not _has_digit(token) and not _has_digit(nxt):
+            token = token.rstrip(_GLUE_PUNCT)
+        parts.append(token)
+    bare = "".join(parts)
+    return [plain] if bare == plain else [plain, bare]
+
+
 # Whole-token similarity used ONLY by substitute_param's token-ownership
 # test (which band tokens belong to a parameter's demo value), not by
 # band matching.
@@ -1100,12 +1125,14 @@ def _match_tokens(
 
     # split: consecutive recorded tokens -> one observed token
     for i in range(len(exp)):
-        for size in (2, 3, 4):
-            if i + size > len(exp):
-                break
+        for size, concat_raw in (
+            (size, form)
+            for size in SPLIT_SIZES
+            if i + size <= len(exp)
+            for form in glued_forms(exp[i : i + size])
+        ):
             if all(matched[i : i + size]):
                 continue
-            concat_raw = "".join(exp[i : i + size])
             concat_c = ocr_canonical(concat_raw)
             if len(concat_c) < MIN_BLOCK:
                 continue

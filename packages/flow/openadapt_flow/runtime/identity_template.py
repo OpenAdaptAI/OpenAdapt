@@ -295,10 +295,12 @@ def build_identity_template(
         tmpl.tokens = [_token_template(salt, t) for t in squashed_tokens]
         # Split-window concat keys (recorded tokens the live OCR may glue).
         for i in range(len(squashed_tokens)):
-            for size in (2, 3, 4):
-                if i + size > len(squashed_tokens):
-                    break
-                concat_raw = "".join(squashed_tokens[i : i + size])
+            for size, concat_raw in (
+                (size, form)
+                for size in _id.SPLIT_SIZES
+                if i + size <= len(squashed_tokens)
+                for form in _id.glued_forms(squashed_tokens[i : i + size])
+            ):
                 concat_c = _id.ocr_canonical(concat_raw)
                 if len(concat_c) < _id.MIN_BLOCK:
                     continue
