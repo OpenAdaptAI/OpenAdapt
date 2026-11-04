@@ -241,7 +241,7 @@ def test_verify_recheck_confirms_then_is_spent(sqlite_bridge, monkeypatch) -> No
     assert late["due"] is True and late["outcome"] == "CONFIRMED"
     assert late["verified"] is True and late["late"] is False
     assert late["receipt_sha256"] == checked["receipt_sha256"]
-    with pytest.raises(BridgeError, match="no provisional result"):
+    with pytest.raises(BridgeError, match=r"already rechecked \(CONFIRMED\)"):
         bridge.dispatch("verify_recheck", {"write_id": checked["write_id"]})
 
 
@@ -338,3 +338,76 @@ def test_a_write_without_a_recheck_has_none_to_run(sqlite_bridge) -> None:
     bridge, _ = sqlite_bridge
     with pytest.raises(BridgeError, match="no provisional result"):
         bridge.dispatch("verify_recheck", {"write_id": "nope"})
+
+
+# -- review #1670: owed rechecks survive a restart; a fault doesn't spend one --
+
+
+def test_an_owed_recheck_is_named_after_a_restart(sqlite_bridge, tmp_path) -> None:
+    from openadapt_flow.write_ledger import default_ledger
+
+    bridge, db = sqlite_bridge
+    checked = _provisional(bridge, db)
+    assert len(default_ledger().rechecks_owed()) == 1
+    # A new server on the same folders: the recheck isn't held here, and the
+    # error says it is owed, not that there never was one.
+    restarted = VerifyBridge(tmp_path / "contracts", tmp_path / "state")
+    with pytest.raises(BridgeError, match="ledger shows its recheck owed"):
+        restarted.dispatch("verify_recheck", {"write_id": checked["write_id"]})
+    retry = restarted.dispatch(
+        "verify_begin", {"contract": "patient", "values": VALUES}
+    )
+    assert retry["ok_to_write"] is False
+    assert retry["earlier_result"]["provisional"] is True
+    assert "doesn't hold it" in retry["next"] and "ledger list" in retry["next"]
+
+
+def test_a_retry_before_the_recheck_is_told_to_recheck(sqlite_bridge) -> None:
+    bridge, db = sqlite_bridge
+    checked = _provisional(bridge, db)
+    retry = bridge.dispatch("verify_begin", {"contract": "patient", "values": VALUES})
+    assert retry["earlier_result"]["provisional"] is True
+    assert checked["write_id"] in retry["next"]
+    assert "verify_recheck" in retry["next"]
+
+
+def test_a_retry_after_a_confirming_recheck_is_not_provisional(
+    sqlite_bridge, monkeypatch
+) -> None:
+    from openadapt_flow.write_ledger import default_ledger
+
+    bridge, db = sqlite_bridge
+    checked = _provisional(bridge, db)
+    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+    late = bridge.dispatch("verify_recheck", {"write_id": checked["write_id"]})
+    assert late["outcome"] == "CONFIRMED"
+    assert default_ledger().rechecks_owed() == []
+    retry = bridge.dispatch("verify_begin", {"contract": "patient", "values": VALUES})
+    earlier = retry["earlier_result"]
+    assert earlier["provisional"] is False and earlier["recheck_due_at"] is None
+    assert "next" not in retry
+
+
+def test_a_recheck_that_could_not_run_is_still_owed(sqlite_bridge, monkeypatch) -> None:
+    from openadapt_flow.agent import verify_tools
+
+    bridge, db = sqlite_bridge
+    checked = _provisional(bridge, db)
+    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+
+    def broken(*args, **kwargs):
+        raise verifier.VerifierError("excused_by[0] has no params")
+
+    real = verify_tools.recheck
+    monkeypatch.setattr(verify_tools, "recheck", broken)
+    with pytest.raises(BridgeError, match="still owed"):
+        bridge.dispatch("verify_recheck", {"write_id": checked["write_id"]})
+    monkeypatch.setattr(verify_tools, "recheck", real)
+    late = bridge.dispatch("verify_recheck", {"write_id": checked["write_id"]})
+    assert late["outcome"] == "CONFIRMED", late["reasons"]
+
+
+def test_the_recheck_tool_says_another_agent_id_is_not_excused(sqlite_bridge) -> None:
+    bridge, _ = sqlite_bridge
+    spec = {t.name: t for t in bridge.list_tool_specs()}["verify_recheck"]
+    assert "another agent_id" in spec.description
