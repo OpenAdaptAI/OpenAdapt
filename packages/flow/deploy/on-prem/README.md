@@ -19,6 +19,7 @@ install story) and **[COMPLIANCE.md](COMPLIANCE.md)** (posture + data-flow).
 | `bin/run-queue.sh` | Local, directory-based run queue. Claims jobs, runs `openadapt-flow run`, records outcomes, files done/failed. Fail-closed on `SCRUB!=on`. | REAL (thin wrapper over the shipped CLI) |
 | `bin/audit-log.sh` | Append-only, hash-chained, PHI-free audit writer (run + release-lifecycle events). | REAL |
 | `bin/verify-airgap.sh` | Asserts no outbound path: config/env/deployment URL scan, optional active egress probe, optional audit-chain walk. | REAL (best-effort; firewall is primary) |
+| `bin/run-egress-blocked.sh` | Runs a command in a loopback-only Linux network namespace, refusing to start unless no other interface or route exists. CI runs the golden free path through it (`tests/e2e/test_egress_blocked_e2e.py`): VERIFIED, zero model calls, and no outbound attempt in strict no-outbound mode. | REAL (Linux, root) |
 | `bin/test-update.sh` | Hermetic offline proof of signed update, refusal paths, legacy migration, data preservation, rollback/recovery, locks, and audit-chain serialization. | REAL (43 baseline assertions; 45 when local GPG key generation is available) |
 | `UPDATE.md` | Offline update + rollback runbook: build a signed release, apply it atomically, revert instantly. | REAL (doc) |
 | `systemd/openadapt-flow-runner.service` + `.path` | Event-driven runner unit with kernel-level egress denial (`IPAddressDeny=any`). | REAL (Linux/systemd) |
@@ -46,6 +47,19 @@ PHI-free record to `audit/audit.log`, and files the job under `jobs/done` (exit
 ```bash
 OPENADAPT_FLOW_SCRUB=on ./bin/verify-airgap.sh --config onprem.yaml --probe --audit
 ```
+
+## Proof that a run needs no network
+
+On any Linux host with the engine installed, run the free path with every
+packet bound off the machine refused by the kernel:
+
+```bash
+sudo -E env "PATH=$PATH" "HOME=$HOME" deploy/on-prem/bin/run-egress-blocked.sh \
+  python -m pytest -v tests/e2e/test_egress_blocked_e2e.py
+```
+
+The first test shows public hosts are unreachable inside the namespace, so the
+proof cannot pass on a connected machine. CI runs this on every flow change.
 
 ## Update & rollback
 
