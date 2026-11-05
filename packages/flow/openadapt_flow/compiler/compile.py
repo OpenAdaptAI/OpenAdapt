@@ -823,119 +823,6 @@ def _text_carries_phi(text: str) -> bool:
     return bool(scrubbed) and scrubbed != text
 
 
-_VALUE_TOKEN = re.compile(r"[^\W_][\w./-]*")
-
-
-def _value_tokens(text: str) -> set[str]:
-    """Data-like words of a line: names, ids and dates, not labels.
-
-    A token counts when it carries a digit (four or more characters: an id,
-    a date) or is a capitalized word of three or more letters that is not a
-    label (followed by a colon). ``"Patient: Neil Sorenson (1984-03-12)"``
-    gives ``{"neil", "sorenson", "1984-03-12"}``.
-    """
-    tokens: set[str] = set()
-    for match in _VALUE_TOKEN.finditer(text):
-        word = match.group(0).rstrip(".")
-        if text[match.end() : match.end() + 1] == ":":
-            continue
-        if any(c.isdigit() for c in word):
-            if len(word) >= 4:
-                tokens.add(word.casefold())
-        elif len(word) >= 3 and word[0].isupper():
-            tokens.add(word.casefold())
-    return tokens
-
-
-def _label_words(text: str) -> tuple[str, ...]:
-    """The line's words that are not data words, in order (its label)."""
-    data = _value_tokens(text)
-    return tuple(
-        word.casefold()
-        for word in (m.group(0).rstrip(".") for m in _VALUE_TOKEN.finditer(text))
-        if word.casefold() not in data
-    )
-
-
-def _same_band(a: OcrLine, b: OcrLine) -> bool:
-    top = max(a.region[1], b.region[1])
-    bottom = min(a.region[1] + a.region[3], b.region[1] + b.region[3])
-    return bottom - top >= 0.5 * min(a.region[3], b.region[3])
-
-
-def _overlaps(a: OcrLine, b: OcrLine) -> bool:
-    ax, ay, aw, ah = a.region
-    bx, by, bw, bh = b.region
-    return ax < bx + bw and bx < ax + aw and ay < by + bh and by < ay + ah
-
-
-def _echoes_screen_rows(
-    line: OcrLine,
-    before_lines: list[OcrLine],
-    after_lines: list[OcrLine],
-    click_point: Optional[Point] = None,
-) -> bool:
-    """Whether ``line`` is a detail field restating a row the person did not click.
-
-    A detail header that follows a list's selection ("Patient: Neil Sorenson
-    (1984-03-12)" under a grid whose first row the app selected) describes
-    whatever row is selected, often one the app chose. Asserting it compiles
-    the app's choice into the check: with another row first, the header
-    names that row and the step stops though nothing went wrong.
-
-    All of these must hold, so identity banners, titles and save messages
-    stay checks:
-
-    - the line replaced a line at the same place in the before frame with
-      the same label words (a field whose value changed, not a new banner);
-    - two or more of its data words (names, ids, dates) appear in one other
-      row of the after frame: two or more separate lines on one row band;
-    - the step's click is not on that row (its text, or its padding up to
-      one text height above or below): a step that selects the row keeps a
-      header restating it.
-
-    Known misses, which keep stopping as before (fail closed): a detail pane
-    that was empty before, a header with no label words, a row OCR reads as
-    one line. With openadapt-privacy installed, names in such headers are
-    already dropped as PHI.
-    """
-    tokens = _value_tokens(line.text)
-    if len(tokens) < 2:
-        return False
-    label = _label_words(line.text)
-    if not label or not any(
-        _overlaps(line, prior)
-        and _label_words(prior.text) == label
-        and _value_tokens(prior.text) != tokens
-        for prior in before_lines
-    ):
-        return False
-    others = [o for o in after_lines if o is not line and not _overlaps(o, line)]
-    echo_rows: list[list[OcrLine]] = []
-    for anchor in others:
-        row = [o for o in others if _same_band(anchor, o)]
-        if len(row) < 2 or any(row == r for r in echo_rows):
-            continue
-        cells = [_value_tokens(o.text) & tokens for o in row]
-        if sum(1 for c in cells if c) >= 2 and len(set().union(*cells)) >= 2:
-            echo_rows.append(row)
-    if not echo_rows:
-        return False
-    if click_point is not None:
-        cx, cy = click_point
-        for row in echo_rows:
-            left = min(o.region[0] for o in row)
-            right = max(o.region[0] + o.region[2] for o in row)
-            top = min(o.region[1] for o in row)
-            bottom = max(o.region[1] + o.region[3] for o in row)
-            pad = bottom - top
-            if left <= cx <= right and top - pad <= cy <= bottom + pad:
-                # A click on the restated row, on its text or in its padding:
-                # the step selects that row, and the header is that choice.
-                return False
-    return True
-
-
 def _new_text_postcondition(
     before_lines: list[OcrLine],
     after_lines: list[OcrLine],
@@ -953,9 +840,7 @@ def _new_text_postcondition(
     docs/validation/VALIDATION.md):
 
     1. Candidates must be new (not in the before frame), confidently read,
-       not a parameterized value, not a click-target label, and not a
-       detail field that changed to restate a list row the person did not
-       click (the header a list fills in for a row it selected itself).
+       not a parameterized value, and not a click-target label.
     2. Volatile candidates are rejected (clock times, dates near the
        recording date, digit-dominated fragments, low-entropy noise); a
        date FAR from the recording date — a DOB in an identity banner — is
@@ -989,6 +874,9 @@ def _new_text_postcondition(
         A TEXT_PRESENT postcondition, or None if there is no suitable
         stable new text.
     """
+    # A field may restate a row and still confirm a save. OCR layout and
+    # an off-row click do not establish selection semantics, so they cannot
+    # remove an otherwise eligible positive text check.
     before_norm = {normalize_text(l.text) for l in before_lines}
     before_squashed = [_squash(l.text) for l in before_lines if l.text.strip()]
 
@@ -1021,10 +909,6 @@ def _new_text_postcondition(
         if _contains_excluded(text, exclude_texts):
             continue
         if _matches_label(text, avoid_labels):
-            continue
-        if _echoes_screen_rows(line, before_lines, after_lines, click_point):
-            # A restatement of a row selected elsewhere (often by the app,
-            # not the demonstrator): never a check of this step's effect.
             continue
         if _text_carries_phi(text):
             # PHI scrub on the compile path (audit REM-2 / GAP-3): when the
