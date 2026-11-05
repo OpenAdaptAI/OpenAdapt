@@ -772,10 +772,10 @@ def bookkeeping_only(
         return False
     if any(not (b.get("meta") or {}).get("lastUpdated") for b in change.bodies):
         return False  # a version with no time can't be put in order
-    chain = [
-        change.prior,
-        *sorted(change.bodies, key=lambda v: str(v["meta"]["lastUpdated"])),
-    ]
+    ordered = _by_instant(change.bodies)
+    if ordered is None:
+        return False  # a version with no readable time can't be put in order
+    chain = [change.prior, *ordered]
     if not all(_same_outside(a, b, paths) for a, b in zip(chain, chain[1:])):
         return False
     timed = [
@@ -788,6 +788,26 @@ def bookkeeping_only(
             if not _times_near_now(a, b, rule):
                 return False
     return True
+
+
+def _by_instant(bodies: list[dict[str, Any]]) -> Optional[list[dict[str, Any]]]:
+    """``bodies`` oldest first by the instant of ``meta.lastUpdated``, or None
+    when one has no readable time (none, unparseable, or no time zone) or
+    two share an instant. Compared as instants, not text: with mixed offsets
+    the text order is not the time order. Tied versions have no known order,
+    and the server's return order is not a chronology, so a tie refuses."""
+
+    try:
+        read = [_when((b.get("meta") or {}).get("lastUpdated")) for b in bodies]
+    except Unreadable:
+        return None
+    times = [when for when in read if when is not None]
+    if len(times) != len(bodies):
+        return None
+    if len(set(times)) != len(times):
+        return None
+    order = sorted(range(len(bodies)), key=lambda i: times[i])
+    return [bodies[i] for i in order]
 
 
 def _times_near_now(
@@ -1435,6 +1455,9 @@ def read_back_unbound(change: Change, created: Mapping[str, Any]) -> Optional[st
     return None
 
 
+_NO_TIME = datetime.min.replace(tzinfo=timezone.utc)
+
+
 def version_trail(change: Change) -> list[dict[str, Optional[str]]]:
     """Each version in the window, oldest first: its id and who wrote it.
 
@@ -1442,10 +1465,13 @@ def version_trail(change: Change) -> list[dict[str, Optional[str]]]:
     The author is ``meta.author`` when the server returns it. When it
     doesn't (some servers omit it), and the audit trail logged exactly one
     timed create or update per version, the n-th logged write names the
-    n-th version. Otherwise ``author`` is None: unknown, never guessed.
+    n-th version, but only when that order is unambiguous: every version
+    has a time, and no two versions and no two logged writes share one (a
+    tie keeps whatever order the server returned). Otherwise ``author`` is
+    None: unknown, never guessed.
     """
 
-    rows: list[tuple[str, str, Optional[str]]] = []
+    rows: list[tuple[Optional[datetime], str, Optional[str]]] = []
     for body in change.bodies:
         when, vid = _version_meta(body)
         meta = body.get("meta") or {}
@@ -1454,22 +1480,25 @@ def version_trail(change: Change) -> list[dict[str, Optional[str]]]:
             if isinstance(meta, Mapping)
             else None
         )
-        rows.append(
-            (
-                when.isoformat() if when is not None else "",
-                vid,
-                _ref(who) if isinstance(who, str) and who else None,
-            )
-        )
-    rows.sort(key=lambda r: r[0])
+        rows.append((when, vid, _ref(who) if isinstance(who, str) and who else None))
+    # By instant, not by text: with mixed offsets the text order is not the
+    # time order, and the n-th logged write would name the wrong version.
+    # A version with no time sorts first, as before.
+    rows.sort(key=lambda r: (r[0] is not None, r[0] or _NO_TIME))
     writes = [
         (when, who)
         for when, action, who in change.events
         if action in ("C", "U") and when is not None
     ]
     logged: list[Optional[str]] = [None] * len(rows)
-    if len(writes) == len(rows) and len(writes) == sum(
-        1 for _, a, _ in change.events if a in ("C", "U")
+    version_times = [r[0] for r in rows]
+    write_times = [w[0] for w in writes]
+    if (
+        len(writes) == len(rows)
+        and len(writes) == sum(1 for _, a, _ in change.events if a in ("C", "U"))
+        and None not in version_times
+        and len(set(version_times)) == len(version_times)
+        and len(set(write_times)) == len(write_times)
     ):
         logged = [
             ", ".join(sorted(who)) if who else None

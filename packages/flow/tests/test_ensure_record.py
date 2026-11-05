@@ -1471,3 +1471,106 @@ def test_the_reader_binds_the_read_back_to_history(server, outcome):
         ]
     authors = [v["author"] for v in r.evidence.get("versions", [])]
     assert authors == [BOT, BOT]
+
+
+def test_version_trail_orders_mixed_offsets_by_instant():
+    # v1 at 12:00:01Z written as +01:00, v2 at 12:00:02Z: as text, v2 sorts
+    # first and the audit trail's n-th write would name the wrong version.
+    from openadapt_flow.ensure_record import version_trail
+
+    v1 = {
+        **patient("x"),
+        "meta": {"versionId": "1", "lastUpdated": "2026-10-28T13:00:01+01:00"},
+    }
+    v2 = {
+        **patient("x"),
+        "meta": {"versionId": "2", "lastUpdated": "2026-10-28T12:00:02Z"},
+    }
+    change = Change(
+        ref="Patient/x",
+        actions={"C", "U"},
+        authors={BOT, OTHER},
+        events=[
+            (T0 + timedelta(seconds=1), "C", frozenset({BOT})),
+            (T0 + timedelta(seconds=2), "U", frozenset({OTHER})),
+        ],
+        versions=2,
+        bodies=[v2, v1],
+    )
+    assert version_trail(change) == [
+        {"version": "1", "author": BOT},
+        {"version": "2", "author": OTHER},
+    ]
+
+
+def _trail_change(v_times, events):
+    bodies = [
+        {**patient("x"), "meta": {"versionId": str(i + 1), "lastUpdated": when}}
+        for i, when in enumerate(v_times)
+    ]
+    return Change(
+        ref="Patient/x",
+        actions={"C", "U"},
+        authors={BOT, OTHER},
+        events=events,
+        versions=len(bodies),
+        bodies=list(reversed(bodies)),
+    )
+
+
+def test_version_trail_leaves_authors_unknown_when_writes_share_a_time():
+    # Two writes logged in the same second, update returned before create:
+    # their order is the server's, not the writes', so no one is named.
+    from openadapt_flow.ensure_record import version_trail
+
+    change = _trail_change(
+        ["2026-10-28T12:00:01.100Z", "2026-10-28T12:00:01.200Z"],
+        [
+            (T0 + timedelta(seconds=1), "U", frozenset({BOT})),
+            (T0 + timedelta(seconds=1), "C", frozenset({OTHER})),
+        ],
+    )
+    assert version_trail(change) == [
+        {"version": "1", "author": None},
+        {"version": "2", "author": None},
+    ]
+
+
+def test_version_trail_leaves_authors_unknown_when_versions_share_a_time():
+    from openadapt_flow.ensure_record import version_trail
+
+    change = _trail_change(
+        ["2026-10-28T12:00:01Z", "2026-10-28T12:00:01Z"],
+        [
+            (T0 + timedelta(seconds=1), "C", frozenset({BOT})),
+            (T0 + timedelta(seconds=2), "U", frozenset({OTHER})),
+        ],
+    )
+    assert [v["author"] for v in version_trail(change)] == [None, None]
+
+
+def test_version_trail_leaves_authors_unknown_when_a_version_has_no_time():
+    from openadapt_flow.ensure_record import version_trail
+
+    change = _trail_change(
+        ["2026-10-28T12:00:01Z", None],
+        [
+            (T0 + timedelta(seconds=1), "C", frozenset({BOT})),
+            (T0 + timedelta(seconds=2), "U", frozenset({OTHER})),
+        ],
+    )
+    assert [v["author"] for v in version_trail(change)] == [None, None]
+
+
+def test_version_trail_names_authors_when_the_order_is_unambiguous():
+    # The control: distinct times on both sides still name each version.
+    from openadapt_flow.ensure_record import version_trail
+
+    change = _trail_change(
+        ["2026-10-28T12:00:01.100Z", "2026-10-28T12:00:01.200Z"],
+        [
+            (T0 + timedelta(seconds=2), "U", frozenset({OTHER})),
+            (T0 + timedelta(seconds=1), "C", frozenset({BOT})),
+        ],
+    )
+    assert [v["author"] for v in version_trail(change)] == [BOT, OTHER]
