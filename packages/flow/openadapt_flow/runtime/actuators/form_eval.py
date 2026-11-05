@@ -189,8 +189,10 @@ def _summary(method: str, url: str) -> str:
     return f"{method} {up.urlsplit(url).path}"
 
 
-def _destination(url: str) -> Optional[tuple[str, str, int, str, str]]:
+def _destination(url: Optional[str]) -> Optional[tuple[str, str, int, str, str]]:
     """An explicit HTTP destination, never an assumed local origin."""
+    if not isinstance(url, str):
+        return None
     try:
         parts = up.urlsplit(url)
         if (

@@ -1100,7 +1100,7 @@ class WebFormActuator:
 
         evaluate = getattr(self.transport, "evaluate_form", None)
         if evaluate is None:
-            return "this session can't observe the form's native submission and script"
+            return "the form requires browser evaluation and this session can't run it"
         typed = {f.name for f in spec.fields if f.source in ("param", "select_label")}
         result = evaluate(
             form_path,

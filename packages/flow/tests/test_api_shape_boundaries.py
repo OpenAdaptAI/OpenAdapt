@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 import urllib.parse as up
@@ -104,6 +105,18 @@ def binding_from_browser(tmp_path: Path, site: Site, page: Any):
     capture = NetworkCapture(page.context).start()
     try:
         page.goto(site.base + "/compose")
+        # Finish capturing the form before recording its first input event.
+        # Playwright may return from goto before requestfinished is delivered.
+        deadline = time.monotonic() + 3
+        while not any(
+            r.get("method") == "GET"
+            and r.get("url") == site.base + "/compose"
+            and r.get("status") == 200
+            for r in capture.lines(clock)
+        ):
+            assert time.monotonic() < deadline, "the form capture did not finish"
+            page.wait_for_timeout(10)
+        page.wait_for_timeout(10)  # separate events from millisecond capture stamps
         events = [
             {
                 "i": 0,
@@ -296,6 +309,18 @@ def test_live_native_submit_and_api_agree(mode, allowed, tmp_path, site_page):
         assert (
             len(site.writes()) == 1 and site.writes()[0]["path"] == reference[0]["path"]
         )
+        actual = site.writes()[0]
+        if reference[0]["content_type"].startswith("multipart/form-data"):
+            old = re.search(r"boundary=([^; ]+)", reference[0]["content_type"])
+            new = re.search(r"boundary=([^; ]+)", actual["content_type"])
+            assert old and new
+            assert reference[0]["body"].replace(old.group(1), "BOUNDARY") == actual[
+                "body"
+            ].replace(new.group(1), "BOUNDARY")
+        else:
+            assert up.parse_qsl(actual["body"], keep_blank_values=True) == up.parse_qsl(
+                reference[0]["body"], keep_blank_values=True
+            )
     else:
         assert result.status is ActuationStatus.UNAVAILABLE, result.reason
         assert not site.writes()
