@@ -77,6 +77,87 @@ def test_times_out_and_cleans_up(tmp_path: Path) -> None:
     assert not Path(hold["socket"]).parent.exists()
 
 
+def test_hold_is_published_only_after_serialization(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    writing = threading.Event()
+    resume = threading.Event()
+    dump = json.dump
+    result: dict = {}
+    errors: list[Exception] = []
+
+    def paused_dump(payload, handle):
+        handle.write('{"socket":')
+        handle.flush()
+        writing.set()
+        assert resume.wait(10)
+        handle.seek(0)
+        handle.truncate()
+        dump(payload, handle)
+
+    def serve() -> None:
+        try:
+            result["ended"] = hold_for_repair(FakeBackend(), tmp_path, 10)
+        except Exception as exc:
+            errors.append(exc)
+
+    monkeypatch.setattr(json, "dump", paused_dump)
+    thread = threading.Thread(target=serve)
+    thread.start()
+    hold_path = tmp_path / HOLD_FILE
+    try:
+        assert writing.wait(5)
+        assert not hold_path.exists()
+        staged = list(tmp_path.iterdir())
+        assert len(staged) == 1
+        assert staged[0].stat().st_mode & 0o777 == 0o600
+        resume.set()
+        deadline = time.monotonic() + 5
+        while not hold_path.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        hold = json.loads(hold_path.read_text())
+        assert hold_path.stat().st_mode & 0o777 == 0o600
+        assert request(hold, {"op": "release"}) == {"ok": True}
+    finally:
+        resume.set()
+        thread.join(15)
+    assert not thread.is_alive()
+    assert errors == []
+    assert result["ended"] == "released"
+    assert list(tmp_path.iterdir()) == []
+    assert not Path(hold["socket"]).parent.exists()
+
+
+@pytest.mark.parametrize("failure", ["serialization", "publication"])
+@pytest.mark.parametrize("existing", [False, True])
+def test_failed_publication_cleans_staging_and_preserves_existing_hold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str, existing: bool
+) -> None:
+    import os
+
+    hold_path = tmp_path / HOLD_FILE
+    previous = "previous hold authority"
+    if existing:
+        hold_path.write_text(previous)
+
+    def failed_dump(payload, handle):
+        handle.write('{"socket":')
+        raise OSError("serialization interrupted")
+
+    def failed_replace(source, target):
+        raise OSError("publication interrupted")
+
+    if failure == "serialization":
+        monkeypatch.setattr(json, "dump", failed_dump)
+    else:
+        monkeypatch.setattr(os, "replace", failed_replace)
+    with pytest.raises(OSError, match=f"{failure} interrupted"):
+        hold_for_repair(FakeBackend(), tmp_path, 10)
+    if existing:
+        assert hold_path.read_text() == previous
+    assert list(tmp_path.iterdir()) == ([hold_path] if existing else [])
+
+
 def test_sigterm_ends_the_hold_and_cleans_up(tmp_path: Path) -> None:
     import os
     import signal
