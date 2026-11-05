@@ -188,3 +188,42 @@ Arms A and B ran the same harness against a checkout of `f55800815`
 (`origin/main` at `c21ba89c4` plus the pre-registration). The live RDP
 captures used `rdp_capture.py` in the lab's FreeRDP 3 container, with the
 relay listening on the Mac's loopback.
+
+## Round 2 (development data, not confirmatory)
+
+Pre-registered in [PREREGISTRATION_2.md](PREREGISTRATION_2.md) (`42df059b`)
+and amended before measuring ([amendment](PREREGISTRATION_2_AMENDMENT.md)).
+The code was informed by the private #1919 NO-GO measurement, and the snap
+window was widened after the held-out pages had been scored once. These
+results are therefore **development data**. A GO needs a fresh seed drawn
+after the code freeze.
+
+Arm P is `89f51575` (the measured candidate). Arm N is `9809ecab2`. The
+held-out set is 40 seeded controls in 5 conditions (200 targets).
+
+| Held-out condition | P, local off | N, local off | N, local on |
+|---|---|---|---|
+| unchanged (40) | 40 right | 40 right | 40 right |
+| moved list (40) | 38 right, 2 missed | 38 right, 2 missed | 36 right, 4 refused |
+| dark theme (40) | 23 right, **15 wrong**, 2 missed | 38 right, 0 wrong, 2 missed | 18 right, 0 wrong, 22 refused |
+| state moved, label gone (40) | 20 right, 5 refused, 15 missed | 20 right, 5 refused, 15 missed | 20 right, 17 refused, 3 missed |
+| state moved, no landmark (40) | 20 right, 5 refused, 15 missed | 20 right, 5 refused, 15 missed | 20 right, 17 refused, 3 missed |
+
+P with local grounding on made 1 wrong click (dark theme). N made **0 wrong**
+on every held-out condition and every regression suite: drift-21, controls,
+81 AVC444 frames and 1,428 live RDP targets, with local grounding off and on.
+
+- **(c) Dark-theme geometry.** OCR read each label together with the box
+  beside it, which moved the landmark estimate about one control-width
+  sideways. The estimate now moves onto the control's outline (theme
+  independent) when exactly one copy is within the control's width across
+  and half its height up or down. It refuses when separate copies are there,
+  and stands as before when there are none or the copies overlap (a
+  self-similar strip).
+- **(b) Heal on an unarmed anchor.** A correct click no longer fails because
+  the heal tried to add identity evidence the step never had. Covered by a
+  real-Replayer test; the governor is unchanged.
+- **(a) State-transfer refusals stay.** A box whose checked state moved to
+  another row looks, in pixels, the same as a reordered list. Picking the
+  recorded spot would click the wrong row in the reorder case. The refusal
+  target is not met, by design.

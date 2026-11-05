@@ -1,0 +1,3723 @@
+{
+  "schema": "openadapt.pixel-drift-arms.v1",
+  "arm": "P-off",
+  "local_grounding": false,
+  "commit": "42df059b2",
+  "generated_at": "2026-11-05T06:39:17+00:00",
+  "host": {
+    "machine": "arm64",
+    "system": "Darwin"
+  },
+  "summary": {
+    "heldout": {
+      "correct": 141,
+      "wrong": 15,
+      "refused": 10,
+      "miss": 34,
+      "n": 200,
+      "by_condition": {
+        "dark": {
+          "correct": 23,
+          "wrong": 15,
+          "refused": 0,
+          "miss": 2
+        },
+        "moved": {
+          "correct": 38,
+          "wrong": 0,
+          "refused": 0,
+          "miss": 2
+        },
+        "transfer_missing": {
+          "correct": 20,
+          "wrong": 0,
+          "refused": 5,
+          "miss": 15
+        },
+        "transfer_none": {
+          "correct": 20,
+          "wrong": 0,
+          "refused": 5,
+          "miss": 15
+        },
+        "unchanged": {
+          "correct": 40,
+          "wrong": 0,
+          "refused": 0,
+          "miss": 0
+        }
+      },
+      "median_ms": 258.7
+    }
+  },
+  "rows": [
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p0/0/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        94,
+        204
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        193.5,
+        21,
+        21
+      ],
+      "ms": 100.6
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p0/0/radio",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        177,
+        277
+      ],
+      "refusal": null,
+      "truth_box": [
+        166,
+        265.5,
+        21,
+        21
+      ],
+      "ms": 4723.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p0/0/radio",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        97,
+        204
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        193.5,
+        21,
+        21
+      ],
+      "ms": 8422.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p0/0/radio",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        84,
+        193.5,
+        21,
+        21
+      ],
+      "ms": 2963.5
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p0/0/radio",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        84,
+        193.5,
+        21,
+        21
+      ],
+      "ms": 429.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p0/1/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        94,
+        244
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        233.5,
+        21,
+        21
+      ],
+      "ms": 43.5
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p0/1/radio",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        175,
+        316
+      ],
+      "refusal": null,
+      "truth_box": [
+        166,
+        305.5,
+        21,
+        21
+      ],
+      "ms": 507.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p0/1/radio",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        106,
+        245
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        233.5,
+        21,
+        21
+      ],
+      "ms": 661.5
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p0/1/radio",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        84,
+        233.5,
+        21,
+        21
+      ],
+      "ms": 2249.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p0/1/radio",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        84,
+        233.5,
+        21,
+        21
+      ],
+      "ms": 443.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p0/2/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        94,
+        284
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        273.5,
+        21,
+        21
+      ],
+      "ms": 27.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p0/2/radio",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        184,
+        358
+      ],
+      "refusal": null,
+      "truth_box": [
+        166,
+        345.5,
+        21,
+        21
+      ],
+      "ms": 368.0
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p0/2/radio",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        104,
+        285
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        273.5,
+        21,
+        21
+      ],
+      "ms": 676.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p0/2/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        94,
+        284
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        273.5,
+        21,
+        21
+      ],
+      "ms": 47.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p0/2/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        94,
+        284
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        273.5,
+        21,
+        21
+      ],
+      "ms": 25.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p0/3/checkbox",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        94,
+        324
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        313.5,
+        21,
+        21
+      ],
+      "ms": 79.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p0/3/checkbox",
+      "outcome": "correct",
+      "rung": "template_global",
+      "point": [
+        176,
+        396
+      ],
+      "refusal": null,
+      "truth_box": [
+        166,
+        385.5,
+        21,
+        21
+      ],
+      "ms": 479.8
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p0/3/checkbox",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        108,
+        324
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        313.5,
+        21,
+        21
+      ],
+      "ms": 393.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p0/3/checkbox",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        94,
+        324
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        313.5,
+        21,
+        21
+      ],
+      "ms": 32.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p0/3/checkbox",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        94,
+        324
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        313.5,
+        21,
+        21
+      ],
+      "ms": 22.9
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p0/4/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        94,
+        364
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        353.5,
+        21,
+        21
+      ],
+      "ms": 68.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p0/4/radio",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        178,
+        438
+      ],
+      "refusal": null,
+      "truth_box": [
+        166,
+        425.5,
+        21,
+        21
+      ],
+      "ms": 652.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p0/4/radio",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        100,
+        366
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        353.5,
+        21,
+        21
+      ],
+      "ms": 679.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p0/4/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        94,
+        364
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        353.5,
+        21,
+        21
+      ],
+      "ms": 37.6
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p0/4/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        94,
+        364
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        353.5,
+        21,
+        21
+      ],
+      "ms": 30.6
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p0/5/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        94,
+        404
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        393.5,
+        21,
+        21
+      ],
+      "ms": 32.8
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p0/5/radio",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        176,
+        476
+      ],
+      "refusal": null,
+      "truth_box": [
+        166,
+        465.5,
+        21,
+        21
+      ],
+      "ms": 335.0
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p0/5/radio",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        106,
+        404
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        393.5,
+        21,
+        21
+      ],
+      "ms": 489.0
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p0/5/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        94,
+        404
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        393.5,
+        21,
+        21
+      ],
+      "ms": 29.6
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p0/5/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        94,
+        404
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        393.5,
+        21,
+        21
+      ],
+      "ms": 26.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p0/6/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        100,
+        444
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        428,
+        32,
+        32
+      ],
+      "ms": 35.5
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p0/6/icon",
+      "outcome": "correct",
+      "rung": "template_global",
+      "point": [
+        182,
+        516
+      ],
+      "refusal": null,
+      "truth_box": [
+        166,
+        500,
+        32,
+        32
+      ],
+      "ms": 358.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p0/6/icon",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        101,
+        445
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        428,
+        32,
+        32
+      ],
+      "ms": 429.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p0/6/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        100,
+        444
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        428,
+        32,
+        32
+      ],
+      "ms": 77.8
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p0/6/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        100,
+        444
+      ],
+      "refusal": null,
+      "truth_box": [
+        84,
+        428,
+        32,
+        32
+      ],
+      "ms": 35.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p1/0/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        215,
+        139
+      ],
+      "refusal": null,
+      "truth_box": [
+        199,
+        123,
+        32,
+        32
+      ],
+      "ms": 44.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p1/0/icon",
+      "outcome": "correct",
+      "rung": "template_global",
+      "point": [
+        309,
+        217
+      ],
+      "refusal": null,
+      "truth_box": [
+        293,
+        201,
+        32,
+        32
+      ],
+      "ms": 3881.9
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p1/0/icon",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        217,
+        139
+      ],
+      "refusal": null,
+      "truth_box": [
+        199,
+        123,
+        32,
+        32
+      ],
+      "ms": 2169.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p1/0/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        215,
+        139
+      ],
+      "refusal": null,
+      "truth_box": [
+        199,
+        123,
+        32,
+        32
+      ],
+      "ms": 60.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p1/0/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        215,
+        139
+      ],
+      "refusal": null,
+      "truth_box": [
+        199,
+        123,
+        32,
+        32
+      ],
+      "ms": 41.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p1/1/checkbox",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        209,
+        169
+      ],
+      "refusal": null,
+      "truth_box": [
+        199,
+        158.5,
+        21,
+        21
+      ],
+      "ms": 30.0
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p1/1/checkbox",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        304,
+        247
+      ],
+      "refusal": null,
+      "truth_box": [
+        293,
+        236.5,
+        21,
+        21
+      ],
+      "ms": 251.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p1/1/checkbox",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        223,
+        169
+      ],
+      "refusal": null,
+      "truth_box": [
+        199,
+        158.5,
+        21,
+        21
+      ],
+      "ms": 361.5
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p1/1/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        199,
+        158.5,
+        21,
+        21
+      ],
+      "ms": 3866.8
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p1/1/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        199,
+        158.5,
+        21,
+        21
+      ],
+      "ms": 527.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p1/2/checkbox",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        209,
+        199
+      ],
+      "refusal": null,
+      "truth_box": [
+        199,
+        188.5,
+        21,
+        21
+      ],
+      "ms": 23.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p1/2/checkbox",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        302,
+        276
+      ],
+      "refusal": null,
+      "truth_box": [
+        293,
+        266.5,
+        21,
+        21
+      ],
+      "ms": 249.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p1/2/checkbox",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        221,
+        198
+      ],
+      "refusal": null,
+      "truth_box": [
+        199,
+        188.5,
+        21,
+        21
+      ],
+      "ms": 243.0
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p1/2/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        199,
+        188.5,
+        21,
+        21
+      ],
+      "ms": 1946.9
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p1/2/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        199,
+        188.5,
+        21,
+        21
+      ],
+      "ms": 443.9
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p1/3/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        209,
+        229
+      ],
+      "refusal": null,
+      "truth_box": [
+        199,
+        218.5,
+        21,
+        21
+      ],
+      "ms": 29.8
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p1/3/radio",
+      "outcome": "correct",
+      "rung": "template_global",
+      "point": [
+        303,
+        307
+      ],
+      "refusal": null,
+      "truth_box": [
+        293,
+        296.5,
+        21,
+        21
+      ],
+      "ms": 282.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p1/3/radio",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        221,
+        229
+      ],
+      "refusal": null,
+      "truth_box": [
+        199,
+        218.5,
+        21,
+        21
+      ],
+      "ms": 313.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p1/3/radio",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        199,
+        218.5,
+        21,
+        21
+      ],
+      "ms": 1712.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p1/3/radio",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        199,
+        218.5,
+        21,
+        21
+      ],
+      "ms": 267.6
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p1/4/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        215,
+        259
+      ],
+      "refusal": null,
+      "truth_box": [
+        199,
+        243,
+        32,
+        32
+      ],
+      "ms": 30.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p1/4/icon",
+      "outcome": "correct",
+      "rung": "template_global",
+      "point": [
+        309,
+        337
+      ],
+      "refusal": null,
+      "truth_box": [
+        293,
+        321,
+        32,
+        32
+      ],
+      "ms": 246.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p1/4/icon",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        231,
+        261
+      ],
+      "refusal": null,
+      "truth_box": [
+        199,
+        243,
+        32,
+        32
+      ],
+      "ms": 240.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p1/4/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        215,
+        259
+      ],
+      "refusal": null,
+      "truth_box": [
+        199,
+        243,
+        32,
+        32
+      ],
+      "ms": 25.9
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p1/4/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        215,
+        259
+      ],
+      "refusal": null,
+      "truth_box": [
+        199,
+        243,
+        32,
+        32
+      ],
+      "ms": 25.8
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p1/5/checkbox",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        209,
+        289
+      ],
+      "refusal": null,
+      "truth_box": [
+        199,
+        278.5,
+        21,
+        21
+      ],
+      "ms": 24.6
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p1/5/checkbox",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        303,
+        366
+      ],
+      "refusal": null,
+      "truth_box": [
+        293,
+        356.5,
+        21,
+        21
+      ],
+      "ms": 227.9
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p1/5/checkbox",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        223,
+        289
+      ],
+      "refusal": null,
+      "truth_box": [
+        199,
+        278.5,
+        21,
+        21
+      ],
+      "ms": 231.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p1/5/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        199,
+        278.5,
+        21,
+        21
+      ],
+      "ms": 1882.9
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p1/5/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        199,
+        278.5,
+        21,
+        21
+      ],
+      "ms": 398.6
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p1/6/checkbox",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        209,
+        319
+      ],
+      "refusal": null,
+      "truth_box": [
+        199,
+        308.5,
+        21,
+        21
+      ],
+      "ms": 25.0
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p1/6/checkbox",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        300,
+        397
+      ],
+      "refusal": null,
+      "truth_box": [
+        293,
+        386.5,
+        21,
+        21
+      ],
+      "ms": 334.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p1/6/checkbox",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        210,
+        318
+      ],
+      "refusal": null,
+      "truth_box": [
+        199,
+        308.5,
+        21,
+        21
+      ],
+      "ms": 330.8
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p1/6/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        199,
+        308.5,
+        21,
+        21
+      ],
+      "ms": 1904.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p1/6/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        199,
+        308.5,
+        21,
+        21
+      ],
+      "ms": 399.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p2/0/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        37,
+        167
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        156.5,
+        21,
+        21
+      ],
+      "ms": 22.8
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p2/0/radio",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        82,
+        231
+      ],
+      "refusal": null,
+      "truth_box": [
+        66,
+        220.5,
+        21,
+        21
+      ],
+      "ms": 1812.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p2/0/radio",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        46,
+        167
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        156.5,
+        21,
+        21
+      ],
+      "ms": 1284.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p2/0/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        37,
+        167
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        156.5,
+        21,
+        21
+      ],
+      "ms": 36.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p2/0/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        37,
+        167
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        156.5,
+        21,
+        21
+      ],
+      "ms": 48.0
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p2/1/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        43,
+        201
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        185,
+        32,
+        32
+      ],
+      "ms": 26.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p2/1/icon",
+      "outcome": "correct",
+      "rung": "template_global",
+      "point": [
+        82,
+        265
+      ],
+      "refusal": null,
+      "truth_box": [
+        66,
+        249,
+        32,
+        32
+      ],
+      "ms": 317.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p2/1/icon",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        59,
+        202
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        185,
+        32,
+        32
+      ],
+      "ms": 253.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p2/1/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        43,
+        201
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        185,
+        32,
+        32
+      ],
+      "ms": 24.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p2/1/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        43,
+        201
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        185,
+        32,
+        32
+      ],
+      "ms": 26.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p2/2/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        37,
+        235
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        224.5,
+        21,
+        21
+      ],
+      "ms": 24.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p2/2/radio",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        66,
+        288.5,
+        21,
+        21
+      ],
+      "ms": 367.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p2/2/radio",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        27,
+        224.5,
+        21,
+        21
+      ],
+      "ms": 295.0
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p2/2/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        37,
+        235
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        224.5,
+        21,
+        21
+      ],
+      "ms": 24.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p2/2/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        37,
+        235
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        224.5,
+        21,
+        21
+      ],
+      "ms": 34.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p2/3/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        37,
+        269
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        258.5,
+        21,
+        21
+      ],
+      "ms": 25.6
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p2/3/radio",
+      "outcome": "correct",
+      "rung": "template_global",
+      "point": [
+        76,
+        333
+      ],
+      "refusal": null,
+      "truth_box": [
+        66,
+        322.5,
+        21,
+        21
+      ],
+      "ms": 282.9
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p2/3/radio",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        49,
+        270
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        258.5,
+        21,
+        21
+      ],
+      "ms": 260.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p2/3/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        37,
+        269
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        258.5,
+        21,
+        21
+      ],
+      "ms": 24.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p2/3/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        37,
+        269
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        258.5,
+        21,
+        21
+      ],
+      "ms": 27.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p2/4/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        37,
+        303
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        292.5,
+        21,
+        21
+      ],
+      "ms": 22.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p2/4/radio",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        75,
+        367
+      ],
+      "refusal": null,
+      "truth_box": [
+        66,
+        356.5,
+        21,
+        21
+      ],
+      "ms": 560.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p2/4/radio",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        48,
+        303
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        292.5,
+        21,
+        21
+      ],
+      "ms": 532.0
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p2/4/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        37,
+        303
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        292.5,
+        21,
+        21
+      ],
+      "ms": 26.9
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p2/4/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        37,
+        303
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        292.5,
+        21,
+        21
+      ],
+      "ms": 32.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p2/5/checkbox",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        37,
+        337
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        326.5,
+        21,
+        21
+      ],
+      "ms": 65.5
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p2/5/checkbox",
+      "outcome": "correct",
+      "rung": "template_global",
+      "point": [
+        76,
+        401
+      ],
+      "refusal": null,
+      "truth_box": [
+        66,
+        390.5,
+        21,
+        21
+      ],
+      "ms": 289.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p2/5/checkbox",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        50,
+        338
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        326.5,
+        21,
+        21
+      ],
+      "ms": 261.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p2/5/checkbox",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        37,
+        337
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        326.5,
+        21,
+        21
+      ],
+      "ms": 26.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p2/5/checkbox",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        37,
+        337
+      ],
+      "refusal": null,
+      "truth_box": [
+        27,
+        326.5,
+        21,
+        21
+      ],
+      "ms": 23.6
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p3/0/checkbox",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        99,
+        188
+      ],
+      "refusal": null,
+      "truth_box": [
+        89,
+        177.5,
+        21,
+        21
+      ],
+      "ms": 24.5
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p3/0/checkbox",
+      "outcome": "correct",
+      "rung": "template_global",
+      "point": [
+        205,
+        227
+      ],
+      "refusal": null,
+      "truth_box": [
+        195,
+        216.5,
+        21,
+        21
+      ],
+      "ms": 2603.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p3/0/checkbox",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        102,
+        188
+      ],
+      "refusal": null,
+      "truth_box": [
+        89,
+        177.5,
+        21,
+        21
+      ],
+      "ms": 973.9
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p3/0/checkbox",
+      "outcome": "refused",
+      "rung": null,
+      "point": null,
+      "refusal": "UncorroboratedMovedTargetRefused",
+      "truth_box": [
+        89,
+        177.5,
+        21,
+        21
+      ],
+      "ms": 1635.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p3/0/checkbox",
+      "outcome": "refused",
+      "rung": null,
+      "point": null,
+      "refusal": "UncorroboratedMovedTargetRefused",
+      "truth_box": [
+        89,
+        177.5,
+        21,
+        21
+      ],
+      "ms": 376.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p3/1/checkbox",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        99,
+        218
+      ],
+      "refusal": null,
+      "truth_box": [
+        89,
+        207.5,
+        21,
+        21
+      ],
+      "ms": 28.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p3/1/checkbox",
+      "outcome": "correct",
+      "rung": "template_global",
+      "point": [
+        205,
+        257
+      ],
+      "refusal": null,
+      "truth_box": [
+        195,
+        246.5,
+        21,
+        21
+      ],
+      "ms": 243.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p3/1/checkbox",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        111,
+        219
+      ],
+      "refusal": null,
+      "truth_box": [
+        89,
+        207.5,
+        21,
+        21
+      ],
+      "ms": 276.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p3/1/checkbox",
+      "outcome": "refused",
+      "rung": null,
+      "point": null,
+      "refusal": "UncorroboratedMovedTargetRefused",
+      "truth_box": [
+        89,
+        207.5,
+        21,
+        21
+      ],
+      "ms": 1663.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p3/1/checkbox",
+      "outcome": "refused",
+      "rung": null,
+      "point": null,
+      "refusal": "UncorroboratedMovedTargetRefused",
+      "truth_box": [
+        89,
+        207.5,
+        21,
+        21
+      ],
+      "ms": 419.0
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p3/2/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        105,
+        248
+      ],
+      "refusal": null,
+      "truth_box": [
+        89,
+        232,
+        32,
+        32
+      ],
+      "ms": 30.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p3/2/icon",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        201,
+        286
+      ],
+      "refusal": null,
+      "truth_box": [
+        195,
+        271,
+        32,
+        32
+      ],
+      "ms": 320.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p3/2/icon",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        112,
+        248
+      ],
+      "refusal": null,
+      "truth_box": [
+        89,
+        232,
+        32,
+        32
+      ],
+      "ms": 500.9
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p3/2/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        105,
+        248
+      ],
+      "refusal": null,
+      "truth_box": [
+        89,
+        232,
+        32,
+        32
+      ],
+      "ms": 24.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p3/2/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        105,
+        248
+      ],
+      "refusal": null,
+      "truth_box": [
+        89,
+        232,
+        32,
+        32
+      ],
+      "ms": 29.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p3/3/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        105,
+        278
+      ],
+      "refusal": null,
+      "truth_box": [
+        89,
+        262,
+        32,
+        32
+      ],
+      "ms": 39.6
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p3/3/icon",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        209,
+        317
+      ],
+      "refusal": null,
+      "truth_box": [
+        195,
+        301,
+        32,
+        32
+      ],
+      "ms": 345.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p3/3/icon",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        105,
+        279
+      ],
+      "refusal": null,
+      "truth_box": [
+        89,
+        262,
+        32,
+        32
+      ],
+      "ms": 351.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p3/3/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        105,
+        278
+      ],
+      "refusal": null,
+      "truth_box": [
+        89,
+        262,
+        32,
+        32
+      ],
+      "ms": 33.8
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p3/3/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        105,
+        278
+      ],
+      "refusal": null,
+      "truth_box": [
+        89,
+        262,
+        32,
+        32
+      ],
+      "ms": 21.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p3/4/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        99,
+        308
+      ],
+      "refusal": null,
+      "truth_box": [
+        89,
+        297.5,
+        21,
+        21
+      ],
+      "ms": 25.9
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p3/4/radio",
+      "outcome": "correct",
+      "rung": "template_global",
+      "point": [
+        205,
+        347
+      ],
+      "refusal": null,
+      "truth_box": [
+        195,
+        336.5,
+        21,
+        21
+      ],
+      "ms": 304.9
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p3/4/radio",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        99,
+        309
+      ],
+      "refusal": null,
+      "truth_box": [
+        89,
+        297.5,
+        21,
+        21
+      ],
+      "ms": 218.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p3/4/radio",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        89,
+        297.5,
+        21,
+        21
+      ],
+      "ms": 1953.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p3/4/radio",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        89,
+        297.5,
+        21,
+        21
+      ],
+      "ms": 234.0
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p3/5/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        105,
+        338
+      ],
+      "refusal": null,
+      "truth_box": [
+        89,
+        322,
+        32,
+        32
+      ],
+      "ms": 34.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p3/5/icon",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        210,
+        378
+      ],
+      "refusal": null,
+      "truth_box": [
+        195,
+        361,
+        32,
+        32
+      ],
+      "ms": 266.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p3/5/icon",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        105,
+        339
+      ],
+      "refusal": null,
+      "truth_box": [
+        89,
+        322,
+        32,
+        32
+      ],
+      "ms": 255.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p3/5/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        105,
+        338
+      ],
+      "refusal": null,
+      "truth_box": [
+        89,
+        322,
+        32,
+        32
+      ],
+      "ms": 26.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p3/5/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        105,
+        338
+      ],
+      "refusal": null,
+      "truth_box": [
+        89,
+        322,
+        32,
+        32
+      ],
+      "ms": 25.5
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p4/0/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        99,
+        190
+      ],
+      "refusal": null,
+      "truth_box": [
+        83,
+        174,
+        32,
+        32
+      ],
+      "ms": 30.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p4/0/icon",
+      "outcome": "correct",
+      "rung": "template_global",
+      "point": [
+        186,
+        295
+      ],
+      "refusal": null,
+      "truth_box": [
+        170,
+        279,
+        32,
+        32
+      ],
+      "ms": 1539.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p4/0/icon",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        106,
+        191
+      ],
+      "refusal": null,
+      "truth_box": [
+        83,
+        174,
+        32,
+        32
+      ],
+      "ms": 2269.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p4/0/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        99,
+        190
+      ],
+      "refusal": null,
+      "truth_box": [
+        83,
+        174,
+        32,
+        32
+      ],
+      "ms": 24.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p4/0/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        99,
+        190
+      ],
+      "refusal": null,
+      "truth_box": [
+        83,
+        174,
+        32,
+        32
+      ],
+      "ms": 25.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p4/1/checkbox",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        93,
+        224
+      ],
+      "refusal": null,
+      "truth_box": [
+        83,
+        213.5,
+        21,
+        21
+      ],
+      "ms": 24.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p4/1/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        170,
+        318.5,
+        21,
+        21
+      ],
+      "ms": 360.0
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p4/1/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        83,
+        213.5,
+        21,
+        21
+      ],
+      "ms": 258.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p4/1/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        83,
+        213.5,
+        21,
+        21
+      ],
+      "ms": 385.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p4/1/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        83,
+        213.5,
+        21,
+        21
+      ],
+      "ms": 391.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p4/2/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        93,
+        258
+      ],
+      "refusal": null,
+      "truth_box": [
+        83,
+        247.5,
+        21,
+        21
+      ],
+      "ms": 35.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p4/2/radio",
+      "outcome": "correct",
+      "rung": "template_global",
+      "point": [
+        180,
+        363
+      ],
+      "refusal": null,
+      "truth_box": [
+        170,
+        352.5,
+        21,
+        21
+      ],
+      "ms": 424.5
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p4/2/radio",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        105,
+        258
+      ],
+      "refusal": null,
+      "truth_box": [
+        83,
+        247.5,
+        21,
+        21
+      ],
+      "ms": 213.0
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p4/2/radio",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        83,
+        247.5,
+        21,
+        21
+      ],
+      "ms": 1518.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p4/2/radio",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        83,
+        247.5,
+        21,
+        21
+      ],
+      "ms": 442.9
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p4/3/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        99,
+        292
+      ],
+      "refusal": null,
+      "truth_box": [
+        83,
+        276,
+        32,
+        32
+      ],
+      "ms": 31.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p4/3/icon",
+      "outcome": "correct",
+      "rung": "template_global",
+      "point": [
+        186,
+        397
+      ],
+      "refusal": null,
+      "truth_box": [
+        170,
+        381,
+        32,
+        32
+      ],
+      "ms": 275.6
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p4/3/icon",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        100,
+        293
+      ],
+      "refusal": null,
+      "truth_box": [
+        83,
+        276,
+        32,
+        32
+      ],
+      "ms": 265.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p4/3/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        99,
+        292
+      ],
+      "refusal": null,
+      "truth_box": [
+        83,
+        276,
+        32,
+        32
+      ],
+      "ms": 27.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p4/3/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        99,
+        292
+      ],
+      "refusal": null,
+      "truth_box": [
+        83,
+        276,
+        32,
+        32
+      ],
+      "ms": 26.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p4/4/checkbox",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        93,
+        326
+      ],
+      "refusal": null,
+      "truth_box": [
+        83,
+        315.5,
+        21,
+        21
+      ],
+      "ms": 21.5
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p4/4/checkbox",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        188,
+        431
+      ],
+      "refusal": null,
+      "truth_box": [
+        170,
+        420.5,
+        21,
+        21
+      ],
+      "ms": 306.6
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p4/4/checkbox",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        104,
+        326
+      ],
+      "refusal": null,
+      "truth_box": [
+        83,
+        315.5,
+        21,
+        21
+      ],
+      "ms": 338.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p4/4/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        83,
+        315.5,
+        21,
+        21
+      ],
+      "ms": 4578.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p4/4/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        83,
+        315.5,
+        21,
+        21
+      ],
+      "ms": 1448.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p4/5/checkbox",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        93,
+        360
+      ],
+      "refusal": null,
+      "truth_box": [
+        83,
+        349.5,
+        21,
+        21
+      ],
+      "ms": 43.8
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p4/5/checkbox",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        181,
+        465
+      ],
+      "refusal": null,
+      "truth_box": [
+        170,
+        454.5,
+        21,
+        21
+      ],
+      "ms": 404.9
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p4/5/checkbox",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        105,
+        360
+      ],
+      "refusal": null,
+      "truth_box": [
+        83,
+        349.5,
+        21,
+        21
+      ],
+      "ms": 259.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p4/5/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        83,
+        349.5,
+        21,
+        21
+      ],
+      "ms": 737.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p4/5/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        83,
+        349.5,
+        21,
+        21
+      ],
+      "ms": 275.8
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p4/6/checkbox",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        93,
+        394
+      ],
+      "refusal": null,
+      "truth_box": [
+        83,
+        383.5,
+        21,
+        21
+      ],
+      "ms": 17.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p4/6/checkbox",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        185,
+        499
+      ],
+      "refusal": null,
+      "truth_box": [
+        170,
+        488.5,
+        21,
+        21
+      ],
+      "ms": 140.8
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p4/6/checkbox",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        94,
+        393
+      ],
+      "refusal": null,
+      "truth_box": [
+        83,
+        383.5,
+        21,
+        21
+      ],
+      "ms": 141.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p4/6/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        83,
+        383.5,
+        21,
+        21
+      ],
+      "ms": 1546.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p4/6/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        83,
+        383.5,
+        21,
+        21
+      ],
+      "ms": 257.8
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p5/0/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        150,
+        173
+      ],
+      "refusal": null,
+      "truth_box": [
+        140,
+        162.5,
+        21,
+        21
+      ],
+      "ms": 16.5
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p5/0/radio",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        213,
+        213
+      ],
+      "refusal": null,
+      "truth_box": [
+        201,
+        202.5,
+        21,
+        21
+      ],
+      "ms": 6076.6
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p5/0/radio",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        156,
+        173
+      ],
+      "refusal": null,
+      "truth_box": [
+        140,
+        162.5,
+        21,
+        21
+      ],
+      "ms": 1815.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p5/0/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        150,
+        173
+      ],
+      "refusal": null,
+      "truth_box": [
+        140,
+        162.5,
+        21,
+        21
+      ],
+      "ms": 37.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p5/0/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        150,
+        173
+      ],
+      "refusal": null,
+      "truth_box": [
+        140,
+        162.5,
+        21,
+        21
+      ],
+      "ms": 21.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p5/1/checkbox",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        150,
+        203
+      ],
+      "refusal": null,
+      "truth_box": [
+        140,
+        192.5,
+        21,
+        21
+      ],
+      "ms": 28.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p5/1/checkbox",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        211,
+        243
+      ],
+      "refusal": null,
+      "truth_box": [
+        201,
+        232.5,
+        21,
+        21
+      ],
+      "ms": 249.9
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p5/1/checkbox",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        161,
+        203
+      ],
+      "refusal": null,
+      "truth_box": [
+        140,
+        192.5,
+        21,
+        21
+      ],
+      "ms": 235.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p5/1/checkbox",
+      "outcome": "refused",
+      "rung": null,
+      "point": null,
+      "refusal": "UncorroboratedMovedTargetRefused",
+      "truth_box": [
+        140,
+        192.5,
+        21,
+        21
+      ],
+      "ms": 2675.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p5/1/checkbox",
+      "outcome": "refused",
+      "rung": null,
+      "point": null,
+      "refusal": "UncorroboratedMovedTargetRefused",
+      "truth_box": [
+        140,
+        192.5,
+        21,
+        21
+      ],
+      "ms": 299.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p5/2/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        156,
+        233
+      ],
+      "refusal": null,
+      "truth_box": [
+        140,
+        217,
+        32,
+        32
+      ],
+      "ms": 42.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p5/2/icon",
+      "outcome": "correct",
+      "rung": "template_global",
+      "point": [
+        217,
+        273
+      ],
+      "refusal": null,
+      "truth_box": [
+        201,
+        257,
+        32,
+        32
+      ],
+      "ms": 298.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p5/2/icon",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        163,
+        234
+      ],
+      "refusal": null,
+      "truth_box": [
+        140,
+        217,
+        32,
+        32
+      ],
+      "ms": 295.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p5/2/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        156,
+        233
+      ],
+      "refusal": null,
+      "truth_box": [
+        140,
+        217,
+        32,
+        32
+      ],
+      "ms": 32.8
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p5/2/icon",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        156,
+        233
+      ],
+      "refusal": null,
+      "truth_box": [
+        140,
+        217,
+        32,
+        32
+      ],
+      "ms": 32.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p5/3/checkbox",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        150,
+        263
+      ],
+      "refusal": null,
+      "truth_box": [
+        140,
+        252.5,
+        21,
+        21
+      ],
+      "ms": 27.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p5/3/checkbox",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        211,
+        303
+      ],
+      "refusal": null,
+      "truth_box": [
+        201,
+        292.5,
+        21,
+        21
+      ],
+      "ms": 287.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p5/3/checkbox",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        162,
+        263
+      ],
+      "refusal": null,
+      "truth_box": [
+        140,
+        252.5,
+        21,
+        21
+      ],
+      "ms": 316.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p5/3/checkbox",
+      "outcome": "refused",
+      "rung": null,
+      "point": null,
+      "refusal": "UncorroboratedMovedTargetRefused",
+      "truth_box": [
+        140,
+        252.5,
+        21,
+        21
+      ],
+      "ms": 1992.8
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p5/3/checkbox",
+      "outcome": "refused",
+      "rung": null,
+      "point": null,
+      "refusal": "UncorroboratedMovedTargetRefused",
+      "truth_box": [
+        140,
+        252.5,
+        21,
+        21
+      ],
+      "ms": 368.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p5/4/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        150,
+        293
+      ],
+      "refusal": null,
+      "truth_box": [
+        140,
+        282.5,
+        21,
+        21
+      ],
+      "ms": 31.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p5/4/radio",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        217,
+        332
+      ],
+      "refusal": null,
+      "truth_box": [
+        201,
+        322.5,
+        21,
+        21
+      ],
+      "ms": 251.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p5/4/radio",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        162,
+        293
+      ],
+      "refusal": null,
+      "truth_box": [
+        140,
+        282.5,
+        21,
+        21
+      ],
+      "ms": 262.2
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p5/4/radio",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        140,
+        282.5,
+        21,
+        21
+      ],
+      "ms": 2045.9
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p5/4/radio",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        140,
+        282.5,
+        21,
+        21
+      ],
+      "ms": 358.5
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p5/5/radio",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        150,
+        323
+      ],
+      "refusal": null,
+      "truth_box": [
+        140,
+        312.5,
+        21,
+        21
+      ],
+      "ms": 26.3
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p5/5/radio",
+      "outcome": "correct",
+      "rung": "template_global",
+      "point": [
+        211,
+        363
+      ],
+      "refusal": null,
+      "truth_box": [
+        201,
+        352.5,
+        21,
+        21
+      ],
+      "ms": 277.4
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p5/5/radio",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        162,
+        323
+      ],
+      "refusal": null,
+      "truth_box": [
+        140,
+        312.5,
+        21,
+        21
+      ],
+      "ms": 355.9
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p5/5/radio",
+      "outcome": "refused",
+      "rung": null,
+      "point": null,
+      "refusal": "UncorroboratedMovedTargetRefused",
+      "truth_box": [
+        140,
+        312.5,
+        21,
+        21
+      ],
+      "ms": 2350.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p5/5/radio",
+      "outcome": "refused",
+      "rung": null,
+      "point": null,
+      "refusal": "UncorroboratedMovedTargetRefused",
+      "truth_box": [
+        140,
+        312.5,
+        21,
+        21
+      ],
+      "ms": 385.5
+    },
+    {
+      "suite": "heldout",
+      "condition": "unchanged",
+      "target": "p5/6/checkbox",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        150,
+        353
+      ],
+      "refusal": null,
+      "truth_box": [
+        140,
+        342.5,
+        21,
+        21
+      ],
+      "ms": 27.9
+    },
+    {
+      "suite": "heldout",
+      "condition": "moved",
+      "target": "p5/6/checkbox",
+      "outcome": "correct",
+      "rung": "template_global",
+      "point": [
+        211,
+        393
+      ],
+      "refusal": null,
+      "truth_box": [
+        201,
+        382.5,
+        21,
+        21
+      ],
+      "ms": 318.1
+    },
+    {
+      "suite": "heldout",
+      "condition": "dark",
+      "target": "p5/6/checkbox",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        154,
+        353
+      ],
+      "refusal": null,
+      "truth_box": [
+        140,
+        342.5,
+        21,
+        21
+      ],
+      "ms": 288.0
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_missing",
+      "target": "p5/6/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        140,
+        342.5,
+        21,
+        21
+      ],
+      "ms": 1676.7
+    },
+    {
+      "suite": "heldout",
+      "condition": "transfer_none",
+      "target": "p5/6/checkbox",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        140,
+        342.5,
+        21,
+        21
+      ],
+      "ms": 316.7
+    }
+  ]
+}
