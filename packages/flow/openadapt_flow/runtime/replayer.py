@@ -15994,7 +15994,10 @@ class Replayer:
             if anchor.dialog_row is False:
                 # Whole-dialog text cannot identify a row's Select button.
                 # Reconfirm the recorded non-row role before any tier runs.
-                if self._structured_census(step, resolution.point).verdict != "not_a_row":
+                if (
+                    self._structured_census(step, resolution.point).verdict
+                    != "not_a_row"
+                ):
                     return IdentityCheck(
                         status="unreadable",
                         mode="context",

@@ -10,7 +10,14 @@ import numpy as np
 import pytest
 
 from openadapt_flow.compiler import compile_recording
-from openadapt_flow.ir import ActionKind, Anchor, IdentityCheck, Resolution, Step, Workflow
+from openadapt_flow.ir import (
+    ActionKind,
+    Anchor,
+    IdentityCheck,
+    Resolution,
+    Step,
+    Workflow,
+)
 from openadapt_flow.runtime import identity as identity_mod
 from openadapt_flow.runtime.replayer import Replayer
 
@@ -45,7 +52,7 @@ def step(context, *, dialog_row=None):
             click_point=(730, 150),
             context_text=context,
             dialog_region=DIALOG,
-            dialog_row=dialog_row,
+            **({"dialog_row": dialog_row} if dialog_row is not None else {}),
         ),
     )
 
@@ -95,8 +102,11 @@ def test_grok_wrong_row_probe_keeps_the_clicked_row_inside_dialog():
         Line("Cancel", (700, 310, 60, 20)),
     ]
     recorded = identity_mod.context_from_lines(
-        lines, exclude_region=(650, 118, 160, 64), band=DIALOG,
-        point=(730, 150), scope=DIALOG,
+        lines,
+        exclude_region=(650, 118, 160, 64),
+        band=DIALOG,
+        point=(730, 150),
+        scope=DIALOG,
     )
     assert recorded == "Jane Lindqvist Room 7 East"
     assert check(lines, step(recorded)).status == "verified"
@@ -104,6 +114,24 @@ def test_grok_wrong_row_probe_keeps_the_clicked_row_inside_dialog():
     assert wrong.status == "mismatch", wrong
     assert "Ann Wuttke" in wrong.observed
     assert "Jane Lindqvist" not in wrong.observed
+
+
+def test_legacy_whole_dialog_context_cannot_verify_the_wrong_row():
+    # Bundles compiled before row refinement have the entire modal's text.
+    # Replaying one must fail closed rather than accept another row's button.
+    lines = [
+        Line("Select patient", (220, 60, 160, 20)),
+        Line("Jane Lindqvist Room 7 East", (220, 140, 350, 20)),
+        Line("Select", (700, 140, 60, 20)),
+        Line("Ann Wuttke Room 9 West", (220, 240, 350, 20)),
+        Line("Select", (700, 240, 60, 20)),
+    ]
+    legacy_context = identity_mod.context_from_lines(
+        lines, exclude_region=(650, 118, 160, 64), band=DIALOG, scope=DIALOG
+    )
+    assert legacy_context is not None
+    wrong = check(lines, step(legacy_context), y=250)
+    assert wrong.status != "verified", wrong
 
 
 def test_dialog_census_stops_identical_rows():
@@ -124,11 +152,15 @@ def test_dialog_census_ignores_rows_behind_the_modal():
     assert result.candidate_count == 1
 
 
-@pytest.mark.parametrize("census", [None, {"row": True, "uncountable": True}, {"candidates": [{"self": True}]}])
+@pytest.mark.parametrize(
+    "census",
+    [None, {"row": True, "uncountable": True}, {"candidates": [{"self": True}]}],
+)
 def test_whole_dialog_requires_positive_live_nonrow_census(census):
     result = check(
         [Line("No matching records were found", (220, 90, 350, 20))],
-        step("No matching records were found", dialog_row=False), census=census,
+        step("No matching records were found", dialog_row=False),
+        census=census,
     )
     assert result.status == "unreadable"
 
@@ -136,7 +168,8 @@ def test_whole_dialog_requires_positive_live_nonrow_census(census):
 def test_standalone_confirmation_can_read_dialog_result():
     result = check(
         [Line("No matching records were found", (220, 90, 350, 20))],
-        step("No matching records were found", dialog_row=False), census={"row": False},
+        step("No matching records were found", dialog_row=False),
+        census={"row": False},
     )
     assert result.status == "verified"
     assert result.census_status == "not_a_row"
@@ -147,11 +180,18 @@ def test_fresh_look_mask_failure_never_reads_unscoped_frame(monkeypatch):
     replayer._identity_dialog_box = DIALOG
     monkeypatch.setattr(identity_mod, "mask_outside", lambda *args: None)
     reads = []
-    first = IdentityCheck(status="abstain", abstain_reason="glyph_confusable_identifier")
+    first = IdentityCheck(
+        status="abstain", abstain_reason="glyph_confusable_identifier"
+    )
     result = replayer._look_again(
-        step("C0X1234 Jane Lindqvist"), first, None,
+        step("C0X1234 Jane Lindqvist"),
+        first,
+        None,
         lambda png: reads.append(png) or IdentityCheck(status="verified"),
-        {}, Workflow(name="dialog"), None, frame(),
+        {},
+        Workflow(name="dialog"),
+        None,
+        frame(),
     )
     assert reads == []
     assert result.status == "unreadable"
@@ -165,6 +205,7 @@ def test_unset_dialog_row_preserves_old_anchor_serialization():
 @pytest.fixture
 def live_dialog_page():
     from playwright.sync_api import sync_playwright
+
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 
     with sync_playwright() as pw:
@@ -184,40 +225,62 @@ def _compile_page(page, backend, target, tmp_path, *, known_nonrow=False):
     (recording / "frames").mkdir(parents=True)
     for suffix in ("before", "after"):
         (recording / "frames" / f"0000_{suffix}.png").write_bytes(png)
-    event = {"i": 0, "kind": "click", "x": point[0], "y": point[1], "t": 1.0,
-             "dialog_region": list(dialog)}
+    event = {
+        "i": 0,
+        "kind": "click",
+        "x": point[0],
+        "y": point[1],
+        "t": 1.0,
+        "dialog_region": list(dialog),
+    }
     if known_nonrow:
         census = backend.identity_candidates_at(*point)
         assert census == {"row": False, "top_level": True}
         event["dialog_row"] = False
     (recording / "events.jsonl").write_text(json.dumps(event) + "\n")
-    (recording / "meta.json").write_text(json.dumps({
-        "id": "dialog-row-regression", "created_at": "2026-11-04T00:00:00+00:00",
-        "viewport": [1000, 500], "params": {},
-    }))
+    (recording / "meta.json").write_text(
+        json.dumps(
+            {
+                "id": "dialog-row-regression",
+                "created_at": "2026-11-04T00:00:00+00:00",
+                "viewport": [1000, 500],
+                "params": {},
+            }
+        )
+    )
     workflow = compile_recording(recording, tmp_path / "bundle", name="dialog-row")
     anchor_step = next(s for s in workflow.steps if s.anchor is not None)
     return workflow, anchor_step, point
 
 
 @pytest.mark.parametrize("duplicate", [False, True])
-def test_chromium_compile_and_ocr_refuse_wrong_dialog_row(live_dialog_page, tmp_path, duplicate):
+def test_chromium_compile_and_ocr_refuse_wrong_dialog_row(
+    live_dialog_page, tmp_path, duplicate
+):
     page, backend = live_dialog_page
     second = "Jane Lindqvist Room 7 East" if duplicate else "Ann Wuttke Room 9 West"
-    page.set_content("""<style>
+    page.set_content(
+        """<style>
       body {font:22px Arial} dialog {width:760px} td {padding:20px} button {font:22px Arial}
       </style><p>Jane Lindqvist Room 7 East</p><dialog id=d><h2>Select record</h2><table>
       <tr><td>Jane Lindqvist Room 7 East</td><td><button id=first>Select</button></td></tr>
-      <tr><td>""" + second + """</td><td><button id=second>Select</button></td></tr>
-      </table><button>Cancel</button></dialog><script>d.showModal()</script>""")
+      <tr><td>"""
+        + second
+        + """</td><td><button id=second>Select</button></td></tr>
+      </table><button>Cancel</button></dialog><script>d.showModal()</script>"""
+    )
     workflow, anchor_step, point = _compile_page(page, backend, "#first", tmp_path)
     assert anchor_step.anchor.dialog_row is True
     box = page.locator("#second").bounding_box()
     wrong_point = (int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2))
     replayer = Replayer(backend, poll_interval_s=0)
     result = replayer._verify_identity(
-        anchor_step, Resolution(rung="template", point=wrong_point, confidence=1, elapsed_ms=1),
-        backend.screenshot(), {}, workflow, tmp_path / "bundle",
+        anchor_step,
+        Resolution(rung="template", point=wrong_point, confidence=1, elapsed_ms=1),
+        backend.screenshot(),
+        {},
+        workflow,
+        tmp_path / "bundle",
     )
     assert result.status in ("mismatch", "abstain"), result
     if duplicate:
@@ -225,31 +288,45 @@ def test_chromium_compile_and_ocr_refuse_wrong_dialog_row(live_dialog_page, tmp_
         assert result.candidate_count == 2
     else:
         correct = replayer._verify_identity(
-            anchor_step, Resolution(rung="template", point=point, confidence=1, elapsed_ms=1),
-            backend.screenshot(), {}, workflow, tmp_path / "bundle",
+            anchor_step,
+            Resolution(rung="template", point=point, confidence=1, elapsed_ms=1),
+            backend.screenshot(),
+            {},
+            workflow,
+            tmp_path / "bundle",
         )
         assert correct.status == "verified", correct
 
 
 @pytest.mark.parametrize("target", ["#confirm", "#cancel"])
-def test_chromium_compile_standalone_buttons_keep_dialog_fallback(live_dialog_page, tmp_path, target):
+def test_chromium_compile_standalone_buttons_keep_dialog_fallback(
+    live_dialog_page, tmp_path, target
+):
     page, backend = live_dialog_page
     page.set_content("""<style>body {font:22px Arial} dialog {width:760px}
       button {font:20px Arial;margin:12px}</style><p>County: Emergency Contact:</p>
       <dialog id=d><h2>Check existing records</h2><p>No matching records were found.</p>
       <button id=confirm>Confirm</button><button id=cancel>Cancel</button></dialog>
       <script>d.showModal()</script>""")
-    workflow, anchor_step, point = _compile_page(page, backend, target, tmp_path, known_nonrow=True)
+    workflow, anchor_step, point = _compile_page(
+        page, backend, target, tmp_path, known_nonrow=True
+    )
     assert anchor_step.anchor.dialog_row is False
     result = Replayer(backend, poll_interval_s=0)._verify_identity(
-        anchor_step, Resolution(rung="template", point=point, confidence=1, elapsed_ms=1),
-        backend.screenshot(), {}, workflow, tmp_path / "bundle",
+        anchor_step,
+        Resolution(rung="template", point=point, confidence=1, elapsed_ms=1),
+        backend.screenshot(),
+        {},
+        workflow,
+        tmp_path / "bundle",
     )
     assert result.status == "verified", result
     assert result.census_status == "not_a_row"
 
 
-def test_chromium_short_record_row_never_falls_back_to_whole_dialog(live_dialog_page, tmp_path):
+def test_chromium_short_record_row_never_falls_back_to_whole_dialog(
+    live_dialog_page, tmp_path
+):
     page, backend = live_dialog_page
     page.set_content("""<style>dialog {width:760px;font:22px Arial} td {padding:20px}
       button {font:22px Arial}</style><dialog id=d><h2>Select existing record</h2><table>
@@ -269,5 +346,7 @@ def test_chromium_structured_census_counts_only_modal_rows(live_dialog_page):
       <tr><td>Jane Lindqvist</td><td><button>Select</button></td></tr></table></dialog>
       <script>d.showModal()</script>""")
     box = page.locator("#first").bounding_box()
-    census = backend.identity_candidates_at(int(box["x"]+box["width"]/2), int(box["y"]+box["height"]/2))
+    census = backend.identity_candidates_at(
+        int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2)
+    )
     assert len(census["candidates"]) == 2, census

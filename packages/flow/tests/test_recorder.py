@@ -308,8 +308,12 @@ def test_recorder_omits_structural_keys_on_plain_backend(
         assert key not in event
 
 
-@pytest.mark.parametrize("census, expected", [({"row": False}, False), ({"row": True}, True), (None, None)])
-def test_dialog_records_nonrow_evidence_without_structured_identity(tmp_path, census, expected):
+@pytest.mark.parametrize(
+    "census, expected", [({"row": False}, False), ({"row": True}, True), (None, None)]
+)
+def test_dialog_records_nonrow_evidence_without_structured_identity(
+    tmp_path, census, expected
+):
     class DialogBackend(FakeBackend):
         def dialog_region_at(self, x, y):
             return "dialog", (0, 0, 500, 500)

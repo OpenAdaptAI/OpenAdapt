@@ -515,8 +515,17 @@ def test_heal_dialog_mask_failure_never_recontexts_unmasked_frame(monkeypatch):
     step = ocr_anchored_step()
     step.anchor.dialog_region = (60, 40, 180, 120)
     monkeypatch.setattr(identity_mod, "mask_outside", lambda *args: None)
-    resolution = Resolution(rung="template_global", point=step.anchor.click_point,
-                            confidence=0.99, elapsed_ms=1)
-    event, _ = build_heal_event(step, resolution, step.anchor.region,
-                                make_png(VIEWPORT, (0, 0, 0)), FakeVision())
+    resolution = Resolution(
+        rung="template_global",
+        point=step.anchor.click_point,
+        confidence=0.99,
+        elapsed_ms=1,
+    )
+    event, _ = build_heal_event(
+        step,
+        resolution,
+        step.anchor.region,
+        make_png(VIEWPORT, (0, 0, 0)),
+        FakeVision(),
+    )
     assert event.new_anchor.context_text is None
