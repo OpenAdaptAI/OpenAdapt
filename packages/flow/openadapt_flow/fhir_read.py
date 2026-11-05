@@ -50,7 +50,10 @@ def next_page_url(bundle: Mapping[str, Any]) -> Optional[str]:
     for link in links:
         if not isinstance(link, dict):
             raise ValueError("a Bundle link is not an object")
-        if link.get("relation") != "next":
+        relation = link.get("relation")
+        if not isinstance(relation, str) or not relation.strip():
+            raise ValueError("a Bundle link relation is not nonempty text")
+        if relation != "next":
             continue
         url = link.get("url")
         if not isinstance(url, str) or not url.strip():

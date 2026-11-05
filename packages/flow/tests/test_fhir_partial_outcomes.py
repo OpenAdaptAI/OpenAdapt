@@ -156,3 +156,12 @@ def test_no_match_detail_cannot_override_a_noninformational_issue(kind, severity
     issue["code"] = code
     records, _ = read(kind, [page(issue)])
     assert records is None
+
+
+@pytest.mark.parametrize("kind", ["ensure", "effect"])
+@pytest.mark.parametrize("relation", [None, 7, ""])
+def test_malformed_link_relation_is_not_a_qualified_end(kind, relation):
+    body = page({"severity": "information", "code": "informational"})
+    body["link"] = [{"relation": relation, "url": NEXT}]
+    records, _ = read(kind, [body])
+    assert records is None
