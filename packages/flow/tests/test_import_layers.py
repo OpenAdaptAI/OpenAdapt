@@ -306,9 +306,14 @@ def direct_violations(graph: Graph, contract: dict) -> list[str]:
 
 
 def reached_edges(graph: Graph, contract: dict) -> dict[tuple[str, str], list[str]]:
-    """Every edge into forbidden code reachable from core, with one path to it."""
+    """Every edge into forbidden code reachable from core, with one path to it.
+
+    The walk continues through an excepted edge, so an exception admits only
+    that edge: whatever the excepted module imports in turn is still checked.
+    """
 
     forbidden = contract["forbidden"]
+    allowed = {(e["importer"], e["imported"]) for e in contract["exceptions"]}
     parent: dict[str, str | None] = {
         m: None for m in sorted(graph) if _under(m, contract["core"])
     }
@@ -323,7 +328,14 @@ def reached_edges(graph: Graph, contract: dict) -> dict[tuple[str, str], list[st
                 step = parent[step]
             edges.setdefault((module, imported), path[::-1])
         for imported in sorted(graph.get(module, {})):
-            if _forbidden_group(imported, forbidden):
+            if _forbidden_group(imported, forbidden) and not any(
+                (module, target) in allowed
+                and (target == imported or target.startswith(imported + "."))
+                for target in _forbidden_imports(graph, module, contract)
+            ):
+                # Not walked past, unless an exception admits this edge
+                # (or the deeper edge it is the package of: importing a.b.c
+                # runs a.b too).
                 continue
             if imported not in parent and imported in graph:
                 parent[imported] = module
@@ -340,9 +352,48 @@ def transitive_violations(graph: Graph, contract: dict) -> list[str]:
     ]
 
 
+def policy_problems(contract: object) -> list[str]:
+    """Why ``contract`` is not a complete policy; empty when it is.
+
+    An empty section would make every check pass vacuously.
+    """
+
+    if not isinstance(contract, dict):
+        return ["the contract is not an object"]
+
+    def names(value: object) -> bool:
+        return (
+            isinstance(value, list)
+            and bool(value)
+            and all(isinstance(v, str) and v for v in value)
+        )
+
+    problems = []
+    if not names(contract.get("core")):
+        problems.append("core must be a nonempty list of module names")
+    forbidden = contract.get("forbidden")
+    if not isinstance(forbidden, dict) or not forbidden:
+        problems.append("forbidden must be a nonempty object of groups")
+    else:
+        for group, prefixes in forbidden.items():
+            if not group or not names(prefixes):
+                problems.append(f"forbidden group {group!r} names no modules")
+    exceptions = contract.get("exceptions")
+    if not isinstance(exceptions, list) or not all(
+        isinstance(e, dict)
+        and isinstance(e.get("importer"), str)
+        and isinstance(e.get("imported"), str)
+        for e in exceptions
+    ):
+        problems.append("exceptions must be a list of importer/imported edges")
+    return problems
+
+
 @pytest.fixture(scope="module")
 def contract() -> dict:
-    return json.loads(CONTRACT.read_text(encoding="utf-8"))
+    loaded = json.loads(CONTRACT.read_text(encoding="utf-8"))
+    assert policy_problems(loaded) == []
+    return loaded
 
 
 @pytest.fixture(scope="module")
@@ -528,3 +579,51 @@ def test_checker_follows_every_kind_of_lazy_reexport(tmp_path: Path, ui: str) ->
         **{"ui/__init__.py": ui, "helper.py": "from planted.ui import text\n"},
     )
     assert transitive_violations(clean, _PLANTED_CONTRACT) == []
+
+
+@pytest.mark.parametrize(
+    "policy",
+    [
+        {"core": [], "forbidden": {}, "exceptions": []},
+        {**_PLANTED_CONTRACT, "core": []},
+        {**_PLANTED_CONTRACT, "forbidden": {}},
+        {**_PLANTED_CONTRACT, "forbidden": {"app": []}},
+        {**_PLANTED_CONTRACT, "forbidden": {"app": ["planted.demo"], "ui": [""]}},
+        {**_PLANTED_CONTRACT, "core": "planted.core"},
+        {"forbidden": _PLANTED_CONTRACT["forbidden"], "exceptions": []},
+        {"core": ["planted.core"], "forbidden": {"app": ["planted.demo"]}},
+        {**_PLANTED_CONTRACT, "exceptions": [{"importer": "planted.helper"}]},
+        [],
+    ],
+)
+def test_an_incomplete_policy_is_refused(policy: object) -> None:
+    assert policy_problems(policy) != []
+
+
+def test_a_complete_policy_is_accepted() -> None:
+    assert policy_problems(_PLANTED_CONTRACT) == []
+
+
+def test_an_exception_admits_only_its_own_edge(tmp_path: Path) -> None:
+    # core > helper > demo.app is excepted; demo.app's own import of the UI
+    # window is not, and must still be reported.
+    graph = _plant(
+        tmp_path, **{"demo/app.py": "from planted.ui.window import window\n"}
+    )
+    contract = {
+        **_PLANTED_CONTRACT,
+        "exceptions": [{"importer": "planted.helper", "imported": "planted.demo.app"}],
+    }
+    assert transitive_violations(graph, contract) == [
+        "planted.core.engine > planted.helper > planted.demo.app > planted.ui.window"
+    ]
+
+
+def test_an_exception_still_admits_its_edge(tmp_path: Path) -> None:
+    # The control: with nothing beyond the excepted edge, nothing is reported.
+    graph = _plant(tmp_path)
+    contract = {
+        **_PLANTED_CONTRACT,
+        "exceptions": [{"importer": "planted.helper", "imported": "planted.demo.app"}],
+    }
+    assert transitive_violations(graph, contract) == []
