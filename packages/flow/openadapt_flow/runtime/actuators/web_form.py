@@ -106,6 +106,16 @@ class _FormParser(HTMLParser):
                     # it is None (not known); a <button> without one sends "".
                     "value": a.get("value", "" if tag == "button" else None),
                     "disabled": "disabled" in a,
+                    "submission_overrides": {
+                        k: a[k]
+                        for k in (
+                            "formaction",
+                            "formmethod",
+                            "formenctype",
+                            "formtarget",
+                        )
+                        if k in a
+                    },
                     "handler_src": {k: v for k, v in a.items() if k.startswith("on")},
                 }
             )
@@ -598,8 +608,9 @@ class Transport(Protocol):
     # that doesn't take ``content_type`` can't send one (the save fails before
     # anything leaves, and the GUI steps don't run in its place).
     # Optional: ``evaluate_form(form_path, action_path, fields) -> FormEvaluation``
-    # runs the form's own script on the run's values (form_eval). A transport
-    # without it can't run a form that has script; that save stays on the GUI.
+    # observes native submission and the form's script on the run's values
+    # (form_eval). A transport without it can't run a form that requires this
+    # evidence; that save stays on the GUI.
 
 
 class PlaywrightSessionTransport:
@@ -623,6 +634,7 @@ class PlaywrightSessionTransport:
         confirm: Optional[str] = None,
         step_writes: tuple[str, ...] = (),
         form_action: Optional[str] = None,
+        encoding: str = URLENCODED,
     ) -> Any:
         from openadapt_flow.runtime.actuators.form_eval import evaluate_form
 
@@ -637,6 +649,7 @@ class PlaywrightSessionTransport:
             confirm=confirm,
             step_writes=step_writes,
             form_action=form_action,
+            encoding=encoding,
             timeout_s=self._timeout_ms / 1000.0,
         )
 
@@ -1012,6 +1025,12 @@ class WebFormActuator:
             if form is None:
                 return unavailable("the form page no longer has the recorded form")
             controls = form["controls"]
+            if not spec.submitter and any(
+                b.get("submission_overrides") for b in form.get("buttons") or []
+            ):
+                return unavailable(
+                    "the recording does not identify the submitter whose overrides apply"
+                )
             problem = _encoding_problem(spec, form)
             if problem:
                 return unavailable(problem)
@@ -1071,9 +1090,13 @@ class WebFormActuator:
                     "the API step would send writes the page's script sends, but "
                     "the page has no script to check them against"
                 )
-            if scripts:
+            if (
+                scripts
+                or spec.submitter
+                or any(f.source in ("submitter", "empty_file") for f in spec.fields)
+            ):
                 problem = self._run_page_script(
-                    spec, form_path, action_path, body, writes
+                    spec, form_path, save_path, body, writes
                 )
                 if problem:
                     return unavailable(problem)
@@ -1194,7 +1217,7 @@ class WebFormActuator:
         body: list[tuple[str, str]],
         writes: list["PreparedWrite"] = (),  # type: ignore[assignment]
     ) -> Optional[str]:
-        """Run the form's own script on the run's values; why not to send, or None.
+        """Observe the form's native submit and script; why not to send, or None.
 
         The fields the person typed or picked are typed into a scratch copy
         of the form, and the recorded controls are clicked (form_eval). The
@@ -1205,7 +1228,7 @@ class WebFormActuator:
 
         evaluate = getattr(self.transport, "evaluate_form", None)
         if evaluate is None:
-            return "the form runs script and this session can't run it"
+            return "the form requires browser evaluation and this session can't run it"
         typed = {f.name for f in spec.fields if f.source in ("param", "select_label")}
         result = evaluate(
             form_path,
@@ -1216,6 +1239,11 @@ class WebFormActuator:
             confirm=spec.confirm,
             step_writes=tuple(f"{w.method} {up.urlsplit(w.path).path}" for w in writes),
             **({"form_action": spec.form_action} if spec.form_action else {}),
+            **(
+                {"encoding": "multipart/form-data"}
+                if spec.encoding == "multipart"
+                else {}
+            ),
         )
         self.log.append(
             {
@@ -1227,7 +1255,7 @@ class WebFormActuator:
             }
         )
         if not result.valid:
-            return f"{result.reason}; the page's own script decided"
+            return f"{result.reason}; the browser did not reproduce the recorded submit"
         session = {f.name for f in spec.fields if f.source == "session"}
         want = sorted((k, v) for k, v in body if k not in session)
         got = sorted((k, v) for k, v in result.serialized or [] if k not in session)

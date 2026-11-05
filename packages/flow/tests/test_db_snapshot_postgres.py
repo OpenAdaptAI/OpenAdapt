@@ -676,6 +676,25 @@ def test_a_change_to_types_rules_or_views_shows(pg: Pg, change: str) -> None:
 
 
 @live
+def test_disabling_a_rule_shows(pg: Pg) -> None:
+    pg.sql("CREATE RULE r AS ON INSERT TO pairs DO INSTEAD NOTHING")
+    a = pg.snap()
+    pg.sql("ALTER TABLE pairs DISABLE RULE r")
+    assert "(database code)" in diff(a, pg.snap(before=a), key=KEY)
+
+
+@live
+def test_a_unique_index_made_or_dropped_shows(pg: Pg) -> None:
+    a = pg.snap()
+    # pairs holds a duplicate a = 1, so the index covers only a = 2.
+    pg.sql("CREATE UNIQUE INDEX pairs_a ON pairs (a) WHERE a = 2")
+    b = pg.snap(before=a)
+    assert "(database code)" in diff(a, b, key=KEY)
+    pg.sql("DROP INDEX pairs_a")
+    assert "(database code)" in diff(b, pg.snap(before=b), key=KEY)
+
+
+@live
 def test_a_column_default_is_read_from_the_catalog(pg: Pg) -> None:
     pg.sql(
         "CREATE TABLE d (id serial PRIMARY KEY, s varchar(9) DEFAULT 'open', "
