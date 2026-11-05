@@ -17,6 +17,7 @@ from openadapt_flow.ir import (
     ActionKind,
     Anchor,
     HealEvent,
+    Landmark,
     Resolution,
     Step,
     Workflow,
@@ -324,12 +325,24 @@ def test_no_heal_when_template_rung_resolves(bundle, run_dir):
 def test_heal_on_template_global_uses_matched_region(bundle, run_dir):
     (bundle / "templates" / "s1.png").write_bytes(make_png((50, 20)))
     vision = FakeVision()
-    # Local search misses; global match at a relocated position.
+    # Local search misses; global match at a relocated position. A moved
+    # match needs located retained context, so the step keeps a landmark
+    # that moved with it.
     vision.template_results = [
         None,
         Match(point=(210, 130), region=(200, 120, 50, 20), confidence=0.9),
     ]
-    workflow = Workflow(name="wf", steps=[ocr_anchored_step()])
+    vision.text_results = {
+        "Notes": Match(point=(150, 125), region=(130, 118, 40, 14), confidence=0.95)
+    }
+    step = ocr_anchored_step()
+    assert step.anchor is not None
+    step.anchor.landmarks = [
+        Landmark(
+            relation="left_of", ocr_text="Notes", distance_px=60, dx_px=60, dy_px=0
+        )
+    ]
+    workflow = Workflow(name="wf", steps=[step])
     report = Replayer(FakeBackend(), vision=vision).run(
         workflow, bundle_dir=bundle, run_dir=run_dir
     )
@@ -353,11 +366,9 @@ def test_build_heal_event_clamps_region_at_frame_edge():
     assert event.new_anchor.ocr_text == "Save Encounter"  # old text kept
     assert png_dims(crop) == (50, 20)
     assert event.applied is False  # build does not apply
-    # Re-OCR over the new region, then a full-frame pass for the identity
-    # context refresh (region=None).
-    assert vision.ocr_calls == [(0, 0, 50, 20), None]
-    # Nothing recognized on the frame -> the healed anchor carries no
-    # identity context (the check is honestly disabled, never stale).
+    # Re-OCR over the new region only: the step has no identity band, so the
+    # heal reads no context for it (a locator repair adds no identity).
+    assert vision.ocr_calls == [(0, 0, 50, 20)]
     assert event.new_anchor.context_text is None
 
 
@@ -386,6 +397,29 @@ def test_heal_translates_and_refreshes_marked_identifier_region():
 
     assert event.new_anchor.identifier_region == (10, 130, 240, 40)
     assert event.new_anchor.context_text == "REQ-LIVE-2048 REC-2048"
+
+
+def test_heal_on_an_unarmed_anchor_adds_no_context_and_the_run_succeeds(
+    bundle, run_dir
+):
+    """A correct click on a step compiled without an identity band heals the
+    locator only. Adding newly readable context there is an identity change
+    the heal governor refuses, which used to fail a correct click."""
+    vision = _drifted_vision()
+    vision.ocr_lines = [
+        OcrLine("Submit Encounter", region=(130, 144, 60, 14), confidence=0.95),
+        OcrLine("Chart 2048 Jane", region=(230, 144, 90, 14), confidence=0.95),
+    ]
+    workflow = Workflow(name="wf", steps=[ocr_anchored_step()])
+
+    report = Replayer(FakeBackend(), vision=vision).run(
+        workflow, bundle_dir=bundle, run_dir=run_dir
+    )
+
+    assert report.success is True
+    heal = report.results[0].heal
+    assert heal is not None and heal.applied is True
+    assert heal.new_anchor.context_text is None
 
 
 def test_heal_keeps_phi_free_pixel_identity_without_plaintext_context():

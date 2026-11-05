@@ -358,6 +358,73 @@ SELF_SIMILAR_SHIFT_SCORE = 0.9
 FLAT_CROP_STD = 2.0
 
 
+# --- Control outline (geometry corroboration) -------------------------------
+# The landmark geometry rung predicts a click from a label's recorded offset.
+# OCR can read a label together with the glyph beside it, which moves the
+# label's centre and the prediction with it. The prediction is kept only when
+# the recorded crop's outline is found once near it. The outline is the edge
+# strength of the crop's border ring: it does not depend on light or dark
+# theme, and a checked or unchecked fill in the centre does not change it.
+#: Normalised correlation of the outline at or above which a place shows the
+#: recorded control.
+OUTLINE_SCORE = 0.9
+#: Share of the crop's height and width, on each side, kept as the border ring.
+OUTLINE_RING_SHARE = 0.25
+
+
+def _edge_strength(gray: np.ndarray) -> np.ndarray:
+    gy, gx = np.gradient(gray.astype(np.float32))
+    return np.hypot(gx, gy)
+
+
+def outline_matches_near(
+    screen_png: bytes,
+    template_png: bytes,
+    origin: Point,
+    radius: tuple[int, int],
+) -> list[tuple[float, int, int]]:
+    """Places near ``origin`` (the crop's expected top-left) where the crop's
+    outline appears: ``(score, x, y)`` top-left corners at or above
+    :data:`OUTLINE_SCORE`, one per place, best first."""
+    try:
+        screen = _edge_strength(_decode_gray(screen_png))
+        template = _edge_strength(_decode_gray(template_png))
+    except ValueError:
+        return []  # an unreadable image shows no outline
+    th, tw = template.shape
+    mask = np.ones((th, tw), dtype=bool)
+    r0, r1 = int(th * OUTLINE_RING_SHARE), int(np.ceil(th * (1 - OUTLINE_RING_SHARE)))
+    c0, c1 = int(tw * OUTLINE_RING_SHARE), int(np.ceil(tw * (1 - OUTLINE_RING_SHARE)))
+    mask[r0:r1, c0:c1] = False
+    t = template[mask]
+    t = t - t.mean()
+    t_norm = float(np.sqrt((t * t).sum()))
+    if t_norm < 1e-6:
+        return []
+    sh, sw = screen.shape
+    found: list[tuple[float, int, int]] = []
+    for y in range(
+        max(0, origin[1] - radius[1]), min(sh - th, origin[1] + radius[1]) + 1
+    ):
+        for x in range(
+            max(0, origin[0] - radius[0]), min(sw - tw, origin[0] + radius[0]) + 1
+        ):
+            w = screen[y : y + th, x : x + tw][mask]
+            w = w - w.mean()
+            w_norm = float(np.sqrt((w * w).sum()))
+            if w_norm < 1e-6:
+                continue
+            score = float((w * t).sum()) / (w_norm * t_norm)
+            if score >= OUTLINE_SCORE:
+                found.append((score, x, y))
+    found.sort(key=lambda f: -f[0])
+    places: list[tuple[float, int, int]] = []
+    for score, x, y in found:
+        if all(abs(x - px) > tw // 2 or abs(y - py) > th // 2 for _s, px, py in places):
+            places.append((score, x, y))
+    return places
+
+
 def crop_is_featureless(template_png: bytes) -> bool:
     """Whether a crop has too little structure to tell one place from another.
 

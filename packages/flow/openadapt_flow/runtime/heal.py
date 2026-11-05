@@ -203,6 +203,7 @@ def build_heal_event(
             iw,
             ih,
         )
+    old_template = old_anchor.identity_template
     if (
         old_anchor.context_text is None
         and old_anchor.identity_template is not None
@@ -212,6 +213,16 @@ def build_heal_event(
         # The PHI-free template and the unchanged pixel crop remain the
         # identity evidence. Do not add live plaintext to the healed anchor.
         new_context = None
+    elif (
+        not old_anchor.context_text
+        and not (old_template and old_template.tokens)
+        and old_anchor.identifier_region is None
+        and old_anchor.identifier_crop is None
+    ):
+        # No recorded context or template band: the step was compiled without
+        # identity evidence, and a locator repair must not add any. The heal
+        # governor would refuse that addition and fail a correct click.
+        new_context = old_anchor.context_text
     else:
         new_context = _recontext(
             vision,

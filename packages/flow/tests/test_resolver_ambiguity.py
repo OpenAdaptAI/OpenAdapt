@@ -340,3 +340,57 @@ def test_peaks_above_suppresses_neighbors() -> None:
     peaks = match_mod._peaks_above(result, 0.985, tmpl.shape[1], tmpl.shape[0])
     # Four identical gears -> at least four distinct strong peaks, not hundreds.
     assert 4 <= len(peaks) <= match_mod.MAX_PEAKS
+
+
+# --- geometry corroborated by the control's outline -------------------------
+
+
+def _checkbox(img: np.ndarray, x: int, y: int, ink, checked: bool = False) -> None:
+    cv2.rectangle(img, (x, y), (x + 14, y + 14), ink, 1)
+    if checked:
+        cv2.line(img, (x + 3, y + 7), (x + 6, y + 11), ink, 2)
+        cv2.line(img, (x + 6, y + 11), (x + 12, y + 3), ink, 2)
+
+
+def _checkbox_anchor() -> Anchor:
+    return _anchor((96, 96, 23, 23), (107, 107))
+
+
+def test_geometry_estimate_snaps_onto_the_one_nearby_outline_in_a_dark_theme() -> None:
+    """OCR read the label with the box beside it, so the landmark estimate
+    landed 10 px left of the box; the box's outline (theme-independent) is
+    the only one within half its size, so the click moves onto it."""
+    light = _blank(shade=240)
+    _checkbox(light, 100, 100, (40, 40, 40))
+    template = light[96:119, 96:119].copy()
+    dark = _blank(shade=30)
+    _checkbox(dark, 100, 100, (220, 220, 220))
+    point = resolver._outline_corroborated(
+        _checkbox_anchor(), (97, 107), _png(dark), _png(template)
+    )
+    assert abs(point[0] - 107) <= 1 and abs(point[1] - 107) <= 1
+
+
+def test_geometry_estimate_between_two_outlines_refuses() -> None:
+    scr = _blank(shade=240)
+    _checkbox(scr, 100, 100, (40, 40, 40))
+    _checkbox(scr, 120, 100, (40, 40, 40))
+    template = _blank(shade=240)
+    _checkbox(template, 100, 100, (40, 40, 40))
+    template = template[96:119, 96:119].copy()
+    import pytest
+
+    with pytest.raises(resolver.UncorroboratedGeometryRefused):
+        resolver._outline_corroborated(
+            _checkbox_anchor(), (117, 107), _png(scr), _png(template)
+        )
+
+
+def test_geometry_estimate_stands_when_no_outline_is_near() -> None:
+    template = _blank(shade=240)
+    _checkbox(template, 100, 100, (40, 40, 40))
+    template = template[96:119, 96:119].copy()
+    blank = _blank(shade=240)
+    assert resolver._outline_corroborated(
+        _checkbox_anchor(), (107, 107), _png(blank), _png(template)
+    ) == (107, 107)

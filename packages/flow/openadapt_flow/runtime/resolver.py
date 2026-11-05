@@ -147,6 +147,8 @@ def visual_resolution_evaluator_contract_sha256() -> str:
         DEFAULT_TEMPLATE_SCALES,
         LOCALITY_MIN_PX,
         MAX_PEAKS,
+        OUTLINE_RING_SHARE,
+        OUTLINE_SCORE,
         SAME_SPOT_MIN_PX,
         SAME_SPOT_SHARE,
     )
@@ -170,6 +172,12 @@ def visual_resolution_evaluator_contract_sha256() -> str:
             "off_spot_context": "located-retained-context-or-terminal-refusal",
             "missing_context": "checked-before-far-unique-exemption",
         },
+        "geometry_outline": [
+            OUTLINE_SCORE,
+            OUTLINE_RING_SHARE,
+            "half-size-window",
+            "snap-one-refuse-several",
+        ],
         "template_scales": list(DEFAULT_TEMPLATE_SCALES),
         "ambiguity": "unique-or-independent-retained-evidence",
         "ocr_candidates": "full-frame-enumeration-then-local-region-filter",
@@ -738,6 +746,40 @@ class UncorroboratedMovedTargetRefused(LookAlikeTargetsRefused):
     """A moved pixel candidate lacks independent retained control context."""
 
 
+class UncorroboratedGeometryRefused(OcrResolutionRefused):
+    """The landmark geometry estimate is near several copies of the recorded
+    control's outline. A halt, never a pick."""
+
+
+def _outline_corroborated(
+    anchor: Anchor, estimate: Point, screen_png: bytes, template_png: bytes
+) -> Point:
+    """Move a geometry estimate onto the recorded control, or refuse.
+
+    The control's outline is sought within half its size of the estimate.
+    One place: the click moves there (by the recorded offset inside the
+    crop). Several: :class:`UncorroboratedGeometryRefused`. None (a frame
+    with no such outline nearby): the estimate stands, as before.
+    """
+    from openadapt_flow.vision.match import outline_matches_near
+
+    x, y, w, h = anchor.region
+    origin = (
+        estimate[0] - (anchor.click_point[0] - x),
+        estimate[1] - (anchor.click_point[1] - y),
+    )
+    places = outline_matches_near(screen_png, template_png, origin, (w // 2, h // 2))
+    if not places:
+        return estimate
+    if len(places) > 1:
+        raise UncorroboratedGeometryRefused(
+            f"the landmark estimate is near {len(places)} copies of the control's "
+            "outline"
+        )
+    _score, ox, oy = places[0]
+    return (ox + anchor.click_point[0] - x, oy + anchor.click_point[1] - y)
+
+
 _LATIN_ALNUM = re.compile(r"[A-Za-z0-9]")
 
 
@@ -1261,6 +1303,8 @@ def resolve(
     evidence = identity_landmark_evidence()
     if evidence is not None:
         (px, py), geometry_confidence = evidence
+        if template_png is not None:
+            px, py = _outline_corroborated(anchor, (px, py), screen_png, template_png)
         region = _clamp_region_of_size(
             (px, py), (anchor.region[2], anchor.region[3]), viewport
         )
