@@ -169,7 +169,6 @@ jobs:
         working-directory: packages/flow
     env:
       EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-      EVIDENCE_DIR: ${{ runner.temp }}/check-it-gtk
       OPENADAPT_TEST_LANE: full
       XDG_SESSION_TYPE: x11
       GDK_BACKEND: x11
@@ -183,6 +182,8 @@ jobs:
       - name: Record and require the exact source head
         run: |
           set -euo pipefail
+          export EVIDENCE_DIR="$RUNNER_TEMP/check-it-gtk"
+          printf 'EVIDENCE_DIR=%s\n' "$EVIDENCE_DIR" >> "$GITHUB_ENV"
           mkdir -p "$EVIDENCE_DIR"
           {
             git rev-parse HEAD
