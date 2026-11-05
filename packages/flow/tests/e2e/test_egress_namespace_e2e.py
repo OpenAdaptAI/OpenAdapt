@@ -67,7 +67,7 @@ def test_real_namespace_and_invoking_identity(root: bool, tmp_path: Path) -> Non
     argv = _namespace(sys.executable, "-c", code)
     if root:
         # env OPTIONS must precede NAME=VALUE. Index 4 was correct when argv
-        # was sudo -n -E env PATH=...; after dropping -E, insert after env.
+        # was ``sudo -n -E env PATH=...``; after dropping -E, insert after env.
         env_i = argv.index("env")
         argv[env_i + 1 : env_i + 1] = ["-u", "SUDO_UID", "-u", "SUDO_GID"]
     proc = _invoke(argv)
