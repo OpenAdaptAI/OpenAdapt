@@ -1,0 +1,35 @@
+name: Protected safety review
+
+# This is deliberately pull_request_target: verifier code and the manifest come
+# from the trusted base. The job reads PR metadata/comments over the API and
+# never checks out or executes pull-request-head code.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+  issue_comment:
+    types: [created, edited, deleted]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+  checks: write
+
+jobs:
+  evaluate:
+    name: Evaluate protected-path evidence
+    if: github.event_name == 'pull_request_target' || github.event.issue.pull_request != null
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the exact trusted base commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Evaluate current PR metadata and publish exact-head status
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TRUSTED_BASE_SHA: ${{ github.sha }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+        run: python3 scripts/ci/protected_safety_review.py
