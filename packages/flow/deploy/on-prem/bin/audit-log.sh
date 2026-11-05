@@ -68,21 +68,50 @@ chmod 0700 "$(dirname "$AUDIT_LOG")" 2>/dev/null || true
 # Serialize the read-last-hash + append transaction. O_APPEND prevents byte
 # interleaving, but without this lock two writers can both chain to the same
 # parent and produce a structurally broken audit log.
+#
+# Ownership is the exclusive creation of the pid file, done by the shell itself
+# with noclobber (open(2) with O_CREAT|O_EXCL). The exit status of mkdir(1) is
+# not trusted for exclusion: the uutils mkdir that Ubuntu 26.04 ships reports
+# success to both callers when two processes race to create one directory.
 lock_dir="${AUDIT_LOG}.lock"
+lock_file="$lock_dir/pid"
+break_file="${AUDIT_LOG}.lock-breaker"
 lock_acquired=0
+
+# Create $1 holding this process's pid; fails if $1 already exists.
+create_exclusive() {
+  ( set -C; printf '%s\n' "$$" > "$1" ) 2>/dev/null
+}
+
+# Remove a lock whose owner has exited. Between reading the owner and removing
+# the lock, that owner can release it and another writer can take it, so the
+# removal happens only under a second exclusive lock that serializes breakers,
+# and only if the lock still names the same dead owner. Without this, a breaker
+# could delete a live writer's lock and let two writers chain to the same parent.
+break_stale_lock() {
+  local stale="$1" current=""
+  create_exclusive "$break_file" || return 0
+  current="$(cat "$lock_file" 2>/dev/null || true)"
+  if [[ "$current" == "$stale" ]] && ! kill -0 "$stale" 2>/dev/null; then
+    rm -f "$lock_file" 2>/dev/null || true
+  fi
+  rm -f "$break_file" 2>/dev/null || true
+}
+
 for ((attempt = 0; attempt < 200; attempt++)); do
-  if mkdir "$lock_dir" 2>/dev/null; then
-    printf '%s\n' "$$" > "$lock_dir/pid"
-    lock_acquired=1
-    break
+  if [[ ! -L "$lock_dir" ]]; then
+    mkdir -p "$lock_dir" 2>/dev/null || true
+    if [[ -d "$lock_dir" && ! -L "$lock_dir" ]] && create_exclusive "$lock_file"; then
+      lock_acquired=1
+      break
+    fi
   fi
   owner=""
-  if [[ -d "$lock_dir" && ! -L "$lock_dir" && -r "$lock_dir/pid" ]]; then
-    owner="$(cat "$lock_dir/pid" 2>/dev/null || true)"
+  if [[ -d "$lock_dir" && ! -L "$lock_dir" && -f "$lock_file" && ! -L "$lock_file" ]]; then
+    owner="$(cat "$lock_file" 2>/dev/null || true)"
   fi
   if [[ -n "$owner" && "$owner" =~ ^[0-9]+$ ]] && ! kill -0 "$owner" 2>/dev/null; then
-    rm -f "$lock_dir/pid" 2>/dev/null || true
-    rmdir "$lock_dir" 2>/dev/null || true
+    break_stale_lock "$owner"
     continue
   fi
   sleep 0.05
@@ -92,7 +121,7 @@ if [[ "$lock_acquired" -ne 1 ]]; then
   exit 1
 fi
 release_audit_lock() {
-  rm -f "$lock_dir/pid" 2>/dev/null || true
+  rm -f "$lock_file" 2>/dev/null || true
   rmdir "$lock_dir" 2>/dev/null || true
 }
 trap release_audit_lock EXIT
