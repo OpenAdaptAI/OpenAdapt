@@ -48,8 +48,15 @@ from pathlib import Path
 from typing import Any, Literal, Optional
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer, model_validator
 
+from openadapt_flow.fhir_read import (
+    check_search_coverage,
+    check_search_outcome,
+    fhir_read_headers,
+    next_page_url,
+    search_total,
+)
 from openadapt_flow.fhir_reference import (
     ReferenceEvidence,
     ReferenceReader,
@@ -222,6 +229,8 @@ class EnsureContract(BaseModel):
     resource_type: str = Field(min_length=1)
     base_url: str = Field(min_length=1)
     access_token_env: Optional[str] = None
+    #: Explicit adapter cache-window declaration, never inferred from a reply.
+    cache_bound_s: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False, strict=True)
     #: Exact schema metadata proving which elements are FHIR References.
     reference_schema: Optional[ReferenceSchema] = None
     #: The agent's own actor references (``Practitioner/<id>``).
@@ -325,11 +334,20 @@ class EnsureContract(BaseModel):
                     )
         return self
 
+    @field_validator("cache_bound_s", mode="before")
+    @classmethod
+    def _cache_bound_value(cls, value: Any) -> Optional[float]:
+        from openadapt_flow.runtime.effects.fhir import validate_fhir_cache_bound
+
+        return validate_fhir_cache_bound(value)
+
     @model_serializer(mode="wrap")
     def _serialize_reference_schema(self, handler: Any) -> Any:
         data = handler(self)
         if self.reference_schema is None:
             data.pop("reference_schema", None)
+        if self.cache_bound_s is None:
+            data.pop("cache_bound_s", None)
         return data
 
     @property
@@ -1049,6 +1067,7 @@ class FhirReader:
     def __init__(self, contract: EnsureContract, get: Optional[Getter] = None) -> None:
         self.base_url = contract.base_url.rstrip("/")
         self.timeout_s = contract.timeout_s
+        self.cache_bound_s = contract.cache_bound_s
         self._token_env = contract.access_token_env
         self._get = get or self._httpx_get
         self._client: Any = None
@@ -1060,7 +1079,7 @@ class FhirReader:
 
         if self._client is None:
             self._client = httpx.Client(timeout=self.timeout_s, follow_redirects=False)
-        headers = {"Accept": "application/fhir+json"}
+        headers = fhir_read_headers()
         if self._token_env:
             token = os.environ.get(self._token_env)
             if not token:
@@ -1094,6 +1113,7 @@ class FhirReader:
         url: Optional[str] = f"{self.base_url}/{path}"
         query: Optional[Mapping[str, Any]] = params
         entries: list[dict[str, Any]] = []
+        total: Optional[int] = None
         for _ in range(MAX_PAGES):
             assert url is not None
             _, body = self.fetch(url, query)
@@ -1103,32 +1123,28 @@ class FhirReader:
             if not isinstance(page, list):
                 raise Unreadable(f"{path}: entry is not a list")
             entries += [e for e in page if isinstance(e, dict)]
-            for e in page:
-                res = e.get("resource") if isinstance(e, dict) else None
-                if (e.get("search") or {}).get("mode") != "outcome" or not isinstance(
-                    res, dict
+            has_matches = any(
+                isinstance(e.get("resource"), dict)
+                and e["resource"].get("resourceType") != "OperationOutcome"
+                and (e.get("search") or {}).get("mode", "match") == "match"
+                for e in entries
+            )
+            for e in entries:
+                res = e.get("resource")
+                if not isinstance(res, dict) or (
+                    (e.get("search") or {}).get("mode") != "outcome"
+                    and res.get("resourceType") != "OperationOutcome"
                 ):
                     continue
-                # A warning ("no results") is a message; an error means the
-                # search may be partial, and a missed match is a duplicate.
-                issues = res.get("issue") or []
-                if not isinstance(issues, list) or any(
-                    not isinstance(i, dict)
-                    or i.get("severity") not in ("warning", "information")
-                    for i in issues
-                ):
-                    raise Unreadable(f"{path}: the search returned an error outcome")
-            nxt = next(
-                (
-                    link.get("url")
-                    for link in body.get("link") or []
-                    if isinstance(link, dict) and link.get("relation") == "next"
-                ),
-                None,
-            )
-            if not nxt:
-                total = body.get("total")
-                if isinstance(total, int) and body.get("type") == "searchset":
+                try:
+                    check_search_outcome(res, has_matches=has_matches)
+                except ValueError as exc:
+                    raise Unreadable(f"{path}: {exc}") from exc
+            try:
+                nxt = next_page_url(body)
+                if body.get("type") == "searchset":
+                    total = search_total(body, total)
+                if not nxt and total is not None:
                     found = len(
                         {
                             json.dumps(
@@ -1139,10 +1155,14 @@ class FhirReader:
                             )
                             for e in entries
                             if (e.get("search") or {}).get("mode", "match") == "match"
+                            and (e.get("resource") or {}).get("resourceType")
+                            != "OperationOutcome"
                         }
                     )
-                    if total > found:
-                        raise Unreadable(f"{path}: total {total} but read {found}")
+                    check_search_coverage(total, found)
+            except ValueError as exc:
+                raise Unreadable(f"{path}: {exc}") from exc
+            if not nxt:
                 return entries
             if _origin(nxt) != _origin(self.base_url):
                 raise Unreadable(f"{path}: next page on another origin")
@@ -1157,6 +1177,8 @@ class FhirReader:
             if (entry.get("search") or {}).get("mode", "match") != "match":
                 continue
             res = entry.get("resource")
+            if isinstance(res, dict) and res.get("resourceType") == "OperationOutcome":
+                continue
             if not isinstance(res, dict) or not res.get("id"):
                 raise Unreadable(f"{path}: an entry has no resource id")
             out.append(res)

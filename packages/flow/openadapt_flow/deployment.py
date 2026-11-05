@@ -458,6 +458,8 @@ class EffectsConfig(BaseModel):
     access_token: Optional[str] = None
     #: Nonsecret metadata preferences; auth/routing/framing overrides refuse.
     fhir_read_headers: Optional[dict[str, str]] = Field(default=None, repr=False)
+    #: Operator-declared maximum identifying-search cache window; no default.
+    fhir_cache_bound_s: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False, strict=True)
     #: Name of the env var holding the OAuth2 bearer token (secret-isolated;
     #: wins over ``access_token``; missing var fails loud).
     access_token_env: Optional[str] = None
@@ -636,10 +638,24 @@ class EffectsConfig(BaseModel):
             "records_path",
             "resource_type",
             "fhir_read_headers",
+            "fhir_cache_bound_s",
         ):
             if data.get(added, "") is None:
                 data.pop(added, None)
         return data
+
+    @field_validator("fhir_cache_bound_s", mode="before")
+    @classmethod
+    def _validate_cache_bound_value(cls, value: Any) -> Optional[float]:
+        from openadapt_flow.runtime.effects.fhir import validate_fhir_cache_bound
+
+        return validate_fhir_cache_bound(value)
+
+    @model_validator(mode="after")
+    def _validate_cache_bound_kind(self) -> "EffectsConfig":
+        if self.fhir_cache_bound_s is not None and self.kind != "fhir":
+            raise ValueError("fhir_cache_bound_s applies only to FHIR")
+        return self
 
     @model_validator(mode="after")
     def _validate_fhir_read_headers(self) -> "EffectsConfig":
@@ -2153,6 +2169,7 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
         "deferred_report",
         "records_next_path",
         "records_total_path",
+        "fhir_cache_bound_s",
     ):
         if config.get(added) is None:
             config.pop(added, None)
@@ -2163,6 +2180,7 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
             "fresh_session",
             "desktop_readback",
             "deferred_report",
+            "fhir_cache_bound_s",
         ):
             if isinstance(candidate, dict) and candidate.get(added) is None:
                 candidate.pop(added, None)
@@ -2358,6 +2376,7 @@ def _build_effect_verifier_unredacted(
             poll_interval_s=cfg.poll_interval_s,
             drop_fields=tuple(cfg.records_drop_fields),
             read_headers=cfg.fhir_read_headers,
+            cache_bound_s=cfg.fhir_cache_bound_s,
         )
 
     if kind == "sql":

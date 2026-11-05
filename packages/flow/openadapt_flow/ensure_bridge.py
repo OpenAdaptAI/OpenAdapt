@@ -266,6 +266,7 @@ class EnsureEffectVerifier(FhirEffectVerifier):
             native.base_url.rstrip("/") != binding.contract.base_url.rstrip("/")
             or native.resource_type != binding.contract.resource_type
             or native.drop_fields
+            or native.cache_bound_s != binding.contract.cache_bound_s
         ):
             raise ValueError("ensure adapter and native read name different sources")
         super().__init__(
@@ -280,6 +281,7 @@ class EnsureEffectVerifier(FhirEffectVerifier):
             verify_tls=native.verify_tls,
             poll_interval_s=native.poll_interval_s,
             read_headers=native._read_headers,
+            cache_bound_s=native.cache_bound_s,
         )
         self._verify_per_request = native._verify_per_request
         self.binding, self.params = binding, dict(params)
@@ -289,6 +291,7 @@ class EnsureEffectVerifier(FhirEffectVerifier):
         if self.context.reader is not None and (
             self.context.reader.base_url.rstrip("/") != self.base_url
             or self.context.reader._token_env != binding.contract.access_token_env
+            or self.context.reader.cache_bound_s != self.cache_bound_s
         ):
             raise ValueError(
                 "ensure runtime reader names another source or credential reference"

@@ -326,6 +326,7 @@ class Contract:
                 "base_url": ensure.base_url,
                 "resource_type": ensure.resource_type,
                 "access_token_env": ensure.access_token_env,
+                "fhir_cache_bound_s": ensure.cache_bound_s,
                 "field_paths": {"id": "id"},
                 "timeout_s": ensure.timeout_s,
             },
@@ -815,6 +816,8 @@ class RecheckState:
     path: Optional[Path] = field(default=None, repr=False)
     #: Exact private locators; save() never serializes these.
     target_ids: tuple[str, ...] = field(default=(), repr=False)
+    # Issuer-proven live timing only; never serialized/restored by save/load.
+    _targeted_read_clock: Any = field(default=None, init=False, repr=False)
 
     @property
     def due_at(self) -> str:
@@ -1819,6 +1822,7 @@ def _judge(
         post_state,
         pending.params,
         target_ids=targeted.get("locators", ()),
+        targeted_read_clock=targeted.get("read_clock"),
     )
     if state is not None:
         state.path = state.save(pending.workdir / "recheck.json")
@@ -1858,6 +1862,7 @@ def _issue_state(
     params: Mapping[str, Any],
     *,
     target_ids: Sequence[str] = (),
+    targeted_read_clock: Any = None,
 ) -> Optional["RecheckState"]:
     """The run's recheck state, recorded as issued here, or None when its
     evidence binds no post-save state."""
@@ -1866,7 +1871,11 @@ def _issue_state(
     if payload is None:
         return None
     _issue_recheck(payload)
-    return RecheckState(payload, params=dict(params), target_ids=tuple(target_ids))
+    state = RecheckState(payload, params=dict(params), target_ids=tuple(target_ids))
+    # The existing issued payload seals the domain/stamp/target/config before
+    # the witness is attached. This is no replacement for that authority.
+    state._targeted_read_clock = targeted_read_clock
+    return state
 
 
 def classify(
@@ -2377,6 +2386,7 @@ def _verify_snapshot(
             post_state,
             params,
             target_ids=targeted.get("locators", ()),
+            targeted_read_clock=targeted.get("read_clock"),
         ),
         recheck_due_at=receipt.get("recheck_due_at"),
     )
@@ -3136,7 +3146,28 @@ def _prepare_recheck(
     )
     if problem is not None:
         return _replace(base, reasons=[_recheck_refusal(problem)])
+    if cfg.frame is not None and cfg.frame.targeted is not None:
+        from openadapt_flow.runtime.effects.targeted import targeted_read_clock_problem
+
+        original_clock = original._targeted_read_clock
+        checkpoint = state.payload["post_state"]["targeted"]
+        # Validate copied issued bindings first; never reconstruct a witness
+        # from saved timestamps, a caller ack or a replacement dataclass.
+        if targeted_read_clock_problem(checkpoint, bytes.fromhex(state.payload["salt"]), original_clock) is None:
+            state._targeted_read_clock = original_clock
     wait_s = seconds_until(state.due_at)
+    if cfg.frame is not None and cfg.frame.targeted is not None:
+        from openadapt_flow.runtime.effects.targeted import targeted_read_wait_s
+
+        wait_s = max(
+            wait_s,
+            targeted_read_wait_s(
+                cfg.frame.targeted,
+                state.payload["post_state"]["targeted"],
+                bytes.fromhex(state.payload["salt"]),
+                state._targeted_read_clock,
+            ),
+        )
     if wait_s > 0:
         if not wait:
             raise RecheckNotDue(state.due_at, wait_s)
@@ -3195,6 +3226,7 @@ def _read_recheck(
             run_record=run_record,
             excused=excused,
             target_ids=state.target_ids,
+            targeted_read_clock=state._targeted_read_clock,
         )
     except VerifyRunError as exc:
         raise VerifierError(str(exc)) from exc

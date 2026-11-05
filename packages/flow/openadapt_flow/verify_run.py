@@ -274,6 +274,7 @@ class VerifyConfig(BaseModel):
                 or self.verifier.base_url != source.base_url
                 or self.verifier.resource_type != source.resource_type
                 or self.verifier.access_token_env != source.access_token_env
+                or self.verifier.fhir_cache_bound_s != source.cache_bound_s
                 or self.verifier.access_token is not None
                 or self.verifier.smart_backend is not None
                 or len(self.effects) != 1
@@ -2401,6 +2402,7 @@ def verify_run(
             judge_targeted,
             observe_targeted,
             unresolved_targeted,
+            bind_targeted_read_clock,
         )
 
         target_spec = frame_spec.targeted
@@ -2477,6 +2479,9 @@ def verify_run(
             detail["write_confirmation_read_at"] = observation.read_at
             frame.targeted = detail
             frame.post_state["read_at"] = observation.read_at
+            clock = bind_targeted_read_clock(checkpoint, salt, observation.read_completion_ns)
+            if targeted_out is not None:
+                targeted_out["read_clock"] = clock
             if observed_status == "refuted" or (
                 observed_status == "not_checked" and target_status != "refuted"
             ):
@@ -3119,6 +3124,7 @@ def recheck_run(
     run_record: Mapping[str, Any],
     excused: Sequence[tuple[Mapping[str, Any], Mapping[str, object]]] = (),
     target_ids: Sequence[str] = (),
+    targeted_read_clock: Any = None,
 ) -> tuple[FrameVerdict, str]:
     """Judge every change since a verified write's post-save read.
 
@@ -3165,6 +3171,7 @@ def recheck_run(
             receipt_sha256(state["receipt"]),
             _now(),
             str(run_record.get("executor_id") or ""),
+            read_clock=targeted_read_clock,
         )
         status, detail = judge_targeted(observation)
         original = post["targeted"]["initial_frame_status"]

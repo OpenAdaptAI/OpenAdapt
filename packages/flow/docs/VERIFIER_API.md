@@ -536,3 +536,32 @@ does not create authority to read or confirm that target.
 A later successful scoped observation does not promote an initially
 `UNCERTAIN` write. Its overall outcome and review obligation stay unchanged;
 the late targeted evidence records what was observed.
+
+
+### Declared cache bounds for a targeted late search
+
+A FHIR adapter can set `fhir_cache_bound_s` to the operator's finite,
+nonnegative cache-window bound. The legacy Ensure input uses `cache_bound_s`
+and forwards the same value through its native reader. Omission means the
+bound is unknown; zero is an explicit declaration. The receipt records the
+value, `source: operator_declared_adapter_config`, and the configured quiet
+window. A missing bound records `source: unknown` and leaves the late
+identifying-search check `UNCERTAIN`.
+
+The quiet window must be strictly greater than the declared bound. The late
+search also waits for that window to elapse after an independent native
+post-save read completes. Its live monotonic clock domain and completion
+stamp enter the existing issued-state commitment, together with the target,
+version and selected adapter configuration. A caller timestamp or replacement
+clock object cannot supply that binding. `wait=True` respects both the issued
+UTC due time and the validated live-clock obligation. A saved or restarted
+state does not restore a live witness; unprovable timing remains `UNCERTAIN`.
+
+The declaration is an operator assumption about server configuration. A native
+startup log can qualify an isolated development fixture; it does not create a
+product declaration. The reader uses the shared `Cache-Control: no-cache`
+policy, complete paging and explicit partial-result refusals. Neither the
+header nor a terminal page alone proves complete native search visibility.
+Current-record and authenticated history refutations remain observable when
+fresh search coverage is unknown. A late observation cannot promote an
+initial `UNCERTAIN` verdict or release a terminal refutation.

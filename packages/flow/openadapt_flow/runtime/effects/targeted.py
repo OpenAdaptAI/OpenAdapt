@@ -8,6 +8,9 @@ These objects are not an authority or a serialized receipt format.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+import os
+import time
 from typing import Any, Literal, Mapping, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -99,6 +102,9 @@ class TargetedObservation:
     read_at: str
     history_required: bool = True
     phase: Literal["write", "late"] = "late"
+    cache_policy: Mapping[str, Any] = field(default_factory=dict)
+    search_problem: Optional[str] = None
+    read_completion_ns: Optional[int] = field(default=None, repr=False)
 
 
 @dataclass(frozen=True)
@@ -141,6 +147,134 @@ def _sha(value: Any) -> str:
     from openadapt_flow.verify_run import sha256_tagged
 
     return sha256_tagged(value)
+
+
+# This identifies only this live process's monotonic clock domain. It is
+# timing data, not a key or an independent issuer/registry. The domain and
+# stamp enter the existing issued post-state commitment before any late use.
+_CLOCK_DOMAIN = f"{os.getpid()}:{time.monotonic_ns()}"
+_LIVE_CLOCK = object()
+
+
+@dataclass(frozen=True, repr=False)
+class _TargetedReadClock:
+    domain: str
+    completed_ns: int
+    post_mac: str
+    live_domain: object
+
+
+def _cache_policy(spec: Any, reader: Any) -> dict[str, Any]:
+    return {
+        "bound_s": reader.cache_bound_s,
+        "source": "operator_declared_adapter_config" if reader.cache_bound_s is not None else "unknown",
+        "W_s": spec.quiet_s,
+    }
+
+
+def _cache_policy_problem(value: Any) -> Optional[str]:
+    from openadapt_flow.runtime.effects.fhir import validate_fhir_cache_bound
+
+    if not isinstance(value, Mapping) or set(value) != {"bound_s", "source", "W_s"}:
+        return "the targeted cache policy is malformed"
+    try:
+        bound = validate_fhir_cache_bound(value["bound_s"])
+        window = validate_fhir_cache_bound(value["W_s"])
+    except ValueError:
+        return "the targeted cache policy is malformed"
+    if window is None or window <= 0 or value["source"] != ("unknown" if bound is None else "operator_declared_adapter_config"):
+        return "the targeted cache policy is malformed"
+    return None
+
+
+def bind_targeted_read_clock(post: dict[str, Any], salt: bytes, completed_ns: Optional[int]) -> Optional[_TargetedReadClock]:
+    """Bind an independent native read completion under existing state MACs.
+
+    Only canonical write observation calls this before receipt/state issuance.
+    No load/restart API restores a live witness from the persisted clock data.
+    """
+    if type(completed_ns) is not int or completed_ns <= 0 or completed_ns > time.monotonic_ns():
+        return None
+    if post.get("status") == "unresolved" or not post.get("targets"):
+        return None
+    if any(not t.get("version_mac") or not t.get("anchor_mac") for t in post["targets"]):
+        return None
+    post["read_clock"] = {"domain": _CLOCK_DOMAIN, "completed_ns": completed_ns}
+    return _TargetedReadClock(_CLOCK_DOMAIN, completed_ns, _digest("read_clock", post, salt), _LIVE_CLOCK)
+
+
+def targeted_read_clock_problem(post: Mapping[str, Any], salt: bytes, clock: Any) -> Optional[str]:
+    """Pure sealed-data/live-domain check; no public caller clock authority."""
+    sealed = post.get("read_clock")
+    if (
+        type(clock) is not _TargetedReadClock
+        or clock.live_domain is not _LIVE_CLOCK
+        or clock.domain != _CLOCK_DOMAIN
+        or not clock.domain.startswith(f"{os.getpid()}:")
+        or not isinstance(sealed, Mapping)
+        or sealed != {"domain": clock.domain, "completed_ns": clock.completed_ns}
+        or clock.post_mac != _digest("read_clock", post, salt)
+    ):
+        return "late_search_live_read_clock_binding_unknown"
+    return None
+
+
+def late_search_problem(spec: Any, reader: Any, post: Mapping[str, Any], salt: bytes,
+                        clock: Optional[_TargetedReadClock], started_ns: int) -> Optional[str]:
+    """One late identifying search's declared-policy and live-clock gate.
+
+    Existing canonical issuance/receipt/target/version/config validation must
+    already have admitted this exact post-state. This is never that authority.
+    """
+    policy = post.get("cache_policy")
+    if _cache_policy_problem(policy) is not None or policy != _cache_policy(spec, reader):
+        return "late_search_cache_policy_binding_unknown"
+    bound = policy["bound_s"]
+    if bound is None:
+        return "late_search_cache_bound_unknown"
+    # Integer nanoseconds conservatively bound the two float durations. Equal
+    # W and bound refuse; no rounded float/UTC conversion manufactures time.
+    from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
+
+    duration = Decimal(str(spec.quiet_s)) * 1_000_000_000
+    window_ns = int(duration.to_integral_value(rounding=ROUND_FLOOR))
+    elapsed_window_ns = int(duration.to_integral_value(rounding=ROUND_CEILING))
+    bound_ns = int((Decimal(str(bound)) * 1_000_000_000).to_integral_value(rounding=ROUND_CEILING))
+    if window_ns <= bound_ns:
+        return "late_search_window_does_not_exceed_declared_bound"
+    problem = targeted_read_clock_problem(post, salt, clock)
+    if problem is not None:
+        return problem
+    if type(started_ns) is not int or started_ns < clock.completed_ns or started_ns - clock.completed_ns < elapsed_window_ns:
+        return "late_search_window_not_elapsed"
+    return None
+
+
+def targeted_read_wait_s(spec: Any, post: Mapping[str, Any], salt: bytes, clock: Any) -> float:
+    """Remaining issued live-clock obligation; never a new timing authority.
+
+    Canonical preparation calls this only after its existing issued-state,
+    receipt, config, actor, parameter and target binding checks. Unknown policy
+    or clock cannot grant freshness or manufacture a replacement deadline.
+    """
+    policy = post.get("cache_policy")
+    if (
+        _cache_policy_problem(policy) is not None
+        or policy["bound_s"] is None
+        or policy["W_s"] != spec.quiet_s
+        or targeted_read_clock_problem(post, salt, clock) is not None
+    ):
+        return 0.0
+    from decimal import Decimal, ROUND_CEILING
+
+    window_ns = int((Decimal(str(spec.quiet_s)) * 1_000_000_000).to_integral_value(rounding=ROUND_CEILING))
+    remaining_ns = clock.completed_ns + window_ns - time.monotonic_ns()
+    return max(0.0, remaining_ns / 1_000_000_000)
+
+
+def _native_read_upper_bound() -> datetime:
+    """Full precision for native version timestamps; receipt UTC stays whole seconds."""
+    return datetime.now(timezone.utc)
 
 
 def _identity(value: str, resource_type: str) -> str:
@@ -227,7 +361,7 @@ def _transport(reader: Any, url: str, params: Any = None) -> tuple[int, Any, Any
         raise TargetedUnreadable("targeted read authentication is unavailable")
     session = reader._get_session()
     kw: dict[str, Any] = {
-        "headers": {**headers, "Cache-Control": "no-cache, no-store"},
+        "headers": headers,
         "timeout": reader.timeout_s,
     }
     if reader._verify_per_request:
@@ -366,6 +500,8 @@ def capture_targeted(
         "search": _sealed_search(search, salt),
         "ignore_fields": list(ignore),
         "params_mac": _digest("params", dict(params), salt),
+        "cache_policy": _cache_policy(spec, reader),
+        "read_clock": None,
     }
     status: TargetedStatus = (
         "refuted"
@@ -443,8 +579,22 @@ def targeted_state_problem(value: Any) -> Optional[str]:
         "ignore_fields",
         "params_mac",
         "initial_frame_status",
+        "cache_policy",
+        "read_clock",
     }:
         return "the targeted post-state has unknown or missing fields"
+    if _cache_policy_problem(value["cache_policy"]) is not None:
+        return "the targeted cache policy is malformed"
+    clock = value["read_clock"]
+    if clock is not None and (
+        not isinstance(clock, Mapping)
+        or set(clock) != {"domain", "completed_ns"}
+        or not isinstance(clock["domain"], str)
+        or not re.fullmatch(r"[0-9]+:[0-9]+", clock["domain"])
+        or type(clock["completed_ns"]) is not int
+        or clock["completed_ns"] <= 0
+    ):
+        return "the targeted read-completion clock is malformed"
     if value["initial_frame_status"] not in ("held", "refuted", "not_checked"):
         return "the initial frame status is malformed"
     if value["schema_version"] != TARGETED_SCHEMA:
@@ -600,9 +750,9 @@ def _versions(
             "delete" if request.get("method") == "DELETE" else "write"
         )
         events.append((at, str(version), resource, operation))
-    from openadapt_flow.verify_run import _now
+    read_completed_at = _native_read_upper_bound()
 
-    if any(e[0] > instant(_now()) for e in events):
+    if any(e[0] > read_completed_at for e in events):
         return False, ()
     events.sort(key=lambda e: e[0])
     if len({e[0] for e in events}) != len(events):
@@ -691,6 +841,7 @@ def observe_targeted(
     receipt_digest: str,
     at: str,
     run_actor: str,
+    *, read_clock: Optional[_TargetedReadClock] = None,
 ) -> TargetedObservation:
     problem = targeted_locators_problem(spec, post, locators, params, salt)
     if problem is not None:
@@ -768,7 +919,13 @@ def observe_targeted(
 
     from openadapt_flow.verify_run import _now
 
+    phase: Literal["write", "late"] = "write" if receipt_digest == "" else "late"
+    search_problem = None
     try:
+        if phase == "late":
+            search_problem = late_search_problem(spec, reader, post, salt, read_clock, time.monotonic_ns())
+            if search_problem is not None:
+                raise TargetedUnreadable(search_problem)
         late_search = _search(spec, reader, params, at)
         if (
             late_search.contract_sha256 != stored["contract_sha256"]
@@ -841,6 +998,10 @@ def observe_targeted(
         late_search,
         _now(),
         history_required=spec.history_required,
+        phase=phase,
+        cache_policy=dict(post["cache_policy"]),
+        search_problem=search_problem,
+        read_completion_ns=time.monotonic_ns(),
     )
 
 
@@ -859,6 +1020,8 @@ def judge_targeted(
     )
     if not observation.write_search.complete or not observation.late_search.complete:
         problems.append("identifying_search_unknown")
+    if observation.search_problem is not None:
+        problems.append(observation.search_problem)
     other = 0
     for target in observation.targets:
         if not target.receipt_bound:
@@ -898,6 +1061,7 @@ def judge_targeted(
         "domain": COMPARES,
         "status": status,
         "phase": observation.phase,
+        "cache_policy": dict(observation.cache_policy),
         "future_late_search": "owed" if observation.phase == "write" else "observed",
         "targets": len(observation.targets),
         "target_mismatches": refuted,
