@@ -1710,8 +1710,14 @@ def video_pre_callback(
     if frame_size is not None:
         monitor_width, monitor_height = frame_size
     else:
-        # TODO XXX replace with utils.get_monitor_dims() once fixed
-        monitor_width, monitor_height = utils.take_screenshot().size
+        # Physical pixels of the main display, without a framebuffer read.
+        # take_screenshot().size matches on a single display, but the grab
+        # can stall for tens of seconds in a macOS VM guest and blow the
+        # writer startup budget (#1883). get_monitor_dims() stays logical.
+        try:
+            monitor_width, monitor_height = platform.get_screen_dimensions()
+        except platform.DisplayMetricsUnavailable:
+            monitor_width, monitor_height = utils.take_screenshot().size
     video_container, video_stream, video_start_timestamp = video.initialize_video_writer(
         video_file_path,
         monitor_width,
