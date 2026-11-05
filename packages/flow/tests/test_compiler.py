@@ -871,11 +871,20 @@ class TestCompileRecording:
         assert step.expect == []
 
     def test_bundle_roundtrip(self, compiled) -> None:
+        from openadapt_flow import bundle_validation
+
         wf, bundle = compiled["workflow"], compiled["bundle"]
         loaded = Workflow.load(bundle)
-        assert loaded == wf
+        # A loaded workflow intentionally carries private original-seal state;
+        # compare the public model and validate that persisted seal separately.
+        assert loaded.model_dump(mode="json") == wf.model_dump(mode="json")
+        bundle_validation.verify_integrity(loaded, bundle, loaded.manifest)
+        loaded.save(bundle)
+        reloaded = Workflow.load(bundle)
+        assert reloaded.model_dump(mode="json") == wf.model_dump(mode="json")
+        bundle_validation.verify_integrity(reloaded, bundle, reloaded.manifest)
         # every referenced template exists in the bundle
-        for step in loaded.steps:
+        for step in reloaded.steps:
             if step.anchor:
                 assert (bundle / step.anchor.template).exists()
 
