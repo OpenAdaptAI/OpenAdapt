@@ -106,3 +106,15 @@ Missing identity remains named UNKNOWN, including when no native read can be
 scheduled. An unavailable baseline, or inputs changed after dispatch, cannot
 become positive from a later matching row. A refuted attempt remains refuted;
 recorded review may authorize a new attempt.
+
+The Ensure adapter retains the full field contract for late comparisons.
+Reference evidence is collected through the same native transport before the
+original field predicates run. Display text can differ only under those
+existing rules; an unresolved target remains UNKNOWN. The exact written
+version and body anchor are still authenticated independently of field
+comparison. A field comparison cannot repair a changed anchor.
+
+An issued read-only reconciliation deadline is an obligation, including when
+the record identity is unresolved. It does not mark the write landed,
+provisional, or confirmed. Such an obligation remains visible after a refused
+read and cannot authorize a retry.

@@ -139,6 +139,39 @@ def _project(reader: Any, body: Mapping[str, Any], ignore: list[str]) -> dict[st
     return {k: v for k, v in reader._flatten(dict(body)).items() if k not in ignore and k not in reader.drop_fields}
 
 
+def _matches_receipt(
+    spec: Any, reader: Any, resource: Mapping[str, Any], bound: Mapping[str, Any],
+    salt: bytes, ignore: list[str], params: Mapping[str, object],
+) -> Optional[bool]:
+    """Keep exact anchor binding while reusing the internal Ensure field judge.
+
+    This helper is used only after the producer's issued-state/locator checks.
+    It accepts no public callback, and never replaces a raw body or its MAC.
+    """
+    from openadapt_flow.ensure_bridge import EnsureEffectVerifier
+    from openadapt_flow.ensure_record import Unreadable
+    from openadapt_flow.fhir_reference import ReferenceUnreadable
+
+    if not isinstance(reader, EnsureEffectVerifier):
+        return _digest("contents", _project(reader, resource, ignore), salt) == bound["contents_mac"]
+    if reader.binding.contract != spec.search or dict(params) != reader.params:
+        raise TargetedUnreadable("ensure field predicate names another contract or parameters")
+    if not bound["version_mac"] or not bound["anchor_mac"]:
+        return None
+    meta = resource.get("meta") or {}
+    version = meta.get("versionId") if isinstance(meta, Mapping) else None
+    if not isinstance(version, str) or not version:
+        return None
+    if (_digest("version", version, salt) == bound["version_mac"]
+            and _digest("anchor", resource, salt) != bound["anchor_mac"]):
+        return None
+    try:
+        references = reader._targeted_reference_evidence([resource], params)
+        return reader._matches_targeted_resource(resource, params, references)
+    except (Unreadable, ReferenceUnreadable):
+        return None
+
+
 def _transport(reader: Any, url: str, params: Any = None) -> tuple[int, Any, Any]:
     """Use the existing adapter's authentication, TLS and redirect boundary."""
     from urllib.parse import urlsplit
@@ -434,7 +467,7 @@ def _versions(spec: Any, reader: Any, identity: str, bound: Mapping[str, Any],
         observed.append(VersionObservation(
             version, operation, resource, author if isinstance(author, str) else None,
             trusted, author in own if trusted else None, at.isoformat(),
-            operation != "delete" and _digest("contents", _project(reader, resource, ignore), salt) == bound["contents_mac"],
+            False if operation == "delete" else _matches_receipt(spec, reader, resource, bound, salt, ignore, params),
         ))
     return True, tuple(observed)
 
@@ -488,7 +521,7 @@ def observe_targeted(spec: Any, verifier: Any, post: Mapping[str, Any],
         try:
             current = _current(spec, reader, identity)
             status: CurrentStatus = "present" if current is not None else "absent"
-            matches = current is not None and _digest("contents", _project(reader, current, post["ignore_fields"]), salt) == bound["contents_mac"]
+            matches = False if current is None else _matches_receipt(spec, reader, current, bound, salt, post["ignore_fields"], params)
             complete, versions = _versions(spec, reader, identity, bound, salt, post["ignore_fields"], current, params, run_actor) if spec.history_available else (False, ())
         except Exception:  # noqa: BLE001 - one unreadable target cannot pass
             current, status, matches, complete, versions = None, "unreadable", None, False, ()
@@ -520,7 +553,7 @@ def observe_targeted(spec: Any, verifier: Any, post: Mapping[str, Any],
                     continue
                 targets[i] = replace(target, current_status="present" if final is not None else "absent",
                                      current=final,
-                                     matches_receipt=final is not None and _digest("contents", _project(reader, final, post["ignore_fields"]), salt) == post["targets"][i]["contents_mac"],
+                                     matches_receipt=False if final is None else _matches_receipt(spec, reader, final, post["targets"][i], salt, post["ignore_fields"], params),
                                      history_status="incomplete" if spec.history_available else "unavailable",
                                      history_anchor_bound=False)
             except Exception:  # noqa: BLE001 - never discard earlier proven harm
@@ -553,7 +586,9 @@ def judge_targeted(observation: TargetedObservation) -> tuple[TargetedStatus, di
         complete = target.history_status == "complete" and target.history_anchor_bound
         if observation.history_required and not complete:
             problems.append("required_record_history_unknown")
-        if target.current_status != "unreadable" and target.matches_receipt is not True:
+        if target.current_status != "unreadable" and target.matches_receipt is None:
+            problems.append("target_value_unknown")
+        if target.current_status != "unreadable" and target.matches_receipt is False:
             later = target.versions[-1] if complete and target.versions else None
             if later is not None and later.author_trusted and later.by_run is False:
                 other += 1
@@ -562,6 +597,8 @@ def judge_targeted(observation: TargetedObservation) -> tuple[TargetedStatus, di
             else:
                 problems.append("changed_target_provenance_unknown")
         for version in target.versions:
+            if version.matches_receipt is None and observation.history_required:
+                problems.append("later_value_unknown")
             if version.matches_receipt is False:
                 if version.author_trusted and version.by_run is False:
                     continue

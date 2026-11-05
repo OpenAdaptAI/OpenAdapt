@@ -19,8 +19,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from openadapt_flow.ensure_record import (
     Baseline, EnsureContract, EnsureObservation, EnsureResult, FhirReader,
-    Unreadable, _capture_ensure, _collect_ensure,
+    Unreadable, _capture_ensure, _collect_ensure, is_person, wrong_fields, extra_elements,
 )
+from openadapt_flow.fhir_reference import ReferenceEvidence
 from openadapt_flow.runtime.effects.adapter import set_verifier_identity, verifier_identity
 from openadapt_flow.runtime.effects.effect import Effect, EffectState, EffectVerdict, Verdict
 from openadapt_flow.runtime.effects.fhir import FhirEffectVerifier
@@ -206,6 +207,25 @@ class EnsureEffectVerifier(FhirEffectVerifier):
         # Never replace a stored value with the expected value. The native
         # body is sealed as cells and stays in memory while judging.
         return dict(resource)
+
+    def _targeted_reference_evidence(
+        self, resources: Collection[Mapping[str, Any]], params: Mapping[str, object],
+    ) -> ReferenceEvidence:
+        if dict(params) != self.params:
+            raise Unreadable("ensure targeted parameter binding changed")
+        return self.reader.reference_evidence(self.binding.contract, self.params, resources)
+
+    def _matches_targeted_resource(
+        self, resource: Mapping[str, Any], params: Mapping[str, object],
+        references: ReferenceEvidence,
+    ) -> bool:
+        """Apply the original field predicates to already collected evidence."""
+        if dict(params) != self.params:
+            raise Unreadable("ensure targeted parameter binding changed")
+        contract = self.binding.contract
+        return (is_person(contract, resource, self.params, references)
+                and not wrong_fields(contract, resource, self.params, references)
+                and (not contract.closed or not extra_elements(contract, resource, self.params)))
 
     def capture_pre_state(self, context: Any = None) -> EffectState:
         try:

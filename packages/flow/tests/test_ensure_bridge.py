@@ -276,3 +276,19 @@ def test_schema_mapping_named_param_does_not_declare_an_extra_runtime_input() ->
         "name": {"path": "name", "map": {"param": "a-stored-code"}}}), PARAMS)
     assert contract.params == ["name"]
     assert contract.null_unsafe_params() == {}
+
+
+def test_closed_unresolved_shadow_obligation_is_owed_but_not_executable():
+    shadow = object.__new__(Shadow)
+    shadow.recheck_s = 1.0
+    result = SimpleNamespace(final=False,
+        recheck=SimpleNamespace(due_at="2026-11-05T10:00:30Z"),
+        evidence={"reconciliation": {"status": "owed", "purpose": "read_only_reconciliation",
+                  "reason": "independent_target_identity_unknown", "executable": False}})
+    ep = Episode(1, "sql", "unknown", checked=True, checked_at=10.0,
+                 verdict=UNCERTAIN, result=result)
+    shadow._schedule_recheck(ep)
+    assert ep.recheck_at > 0
+    assert ep.evidence["reconciliation"]["status"] == "owed"
+    assert ep.evidence["reconciliation"]["executable"] is False
+    assert ep.evidence["reconciliation"]["reason"] == "independent_target_identity_unknown"

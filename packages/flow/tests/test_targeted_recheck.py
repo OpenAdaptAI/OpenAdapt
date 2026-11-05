@@ -9,8 +9,10 @@ from __future__ import annotations
 import copy
 import json
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
@@ -35,19 +37,37 @@ class Store:
         self.omit_identifying_search = False
         self.fail_identifying_search = False
         self.change_during_identifying_search = False
+        self.bridge_mode = False
+        self.metadata_delay_s = 0.0
+        self.broad_identifying_search = False
+        self.extra_resources: dict[str, dict[str, Any]] = {}
+        self.audit_events: list[dict[str, Any]] = []
+        self.reply_id_override: str | None = None
 
     def save(self, identity: str = RECORD_ID, *, name: str = PARAMS["name"],
-             author: str | None = "actor/run", timestamp: str | None = None) -> None:
+             author: str | None = "actor/run", timestamp: str | None = None,
+             fields: dict[str, Any] | None = None) -> None:
         versions = self.history.setdefault(identity, [])
+        if self.bridge_mode and timestamp is None:
+            timestamp = datetime.now(timezone.utc).isoformat()
         resource = {
             "resourceType": "Basic", "id": identity, "name": name,
             "meta": {"versionId": f"v{len(versions) + 1}",
                      "lastUpdated": timestamp or f"2026-01-01T00:00:{len(versions):02d}Z"},
         }
+        resource.update(copy.deepcopy(fields or {}))
         if author is not None:
             resource["meta"]["author"] = {"reference": author}
         self.current[identity] = copy.deepcopy(resource)
         versions.append(copy.deepcopy(resource))
+        if self.bridge_mode:
+            self.audit_events.append({
+                "resourceType": "AuditEvent", "id": f"audit-{len(self.audit_events)}",
+                "action": "C" if len(versions) == 1 else "U",
+                "recorded": resource["meta"]["lastUpdated"],
+                "agent": [{"who": {"reference": author}}] if author else [],
+                "entity": [{"what": {"reference": f"Basic/{identity}"}}],
+            })
 
 
 @pytest.fixture
@@ -63,11 +83,30 @@ def server():
             route = urlsplit(self.path)
             parts = route.path.strip("/").split("/")
             status = 200
-            if parts == ["Basic"]:
+            if store.bridge_mode and parts == ["metadata"]:
+                time.sleep(store.metadata_delay_s)
+                body = {"resourceType": "CapabilityStatement"}
+            elif store.bridge_mode and parts == ["AuditEvent"]:
+                params = parse_qs(route.query)
+                events = copy.deepcopy(store.audit_events)
+                for bound in params.get("date", []):
+                    instant = datetime.fromisoformat(bound[2:].replace("Z", "+00:00"))
+                    if bound.startswith("ge"):
+                        events = [e for e in events if datetime.fromisoformat(e["recorded"].replace("Z", "+00:00")) >= instant]
+                    elif bound.startswith("le"):
+                        events = [e for e in events if datetime.fromisoformat(e["recorded"].replace("Z", "+00:00")) <= instant]
+                if "action" in params:
+                    events = [e for e in events if e["action"] == params["action"][0]]
+                if "entity" in params:
+                    events = [e for e in events if e["entity"][0]["what"]["reference"] == params["entity"][0]]
+                body = {"resourceType": "Bundle", "type": "searchset", "total": len(events),
+                        "entry": [{"resource": e} for e in events]}
+            elif parts == ["Basic"]:
                 params = parse_qs(route.query)
                 records = list(store.current.values())
                 if "name" in params:
-                    records = [r for r in records if r["name"] == params["name"][0]]
+                    if not store.broad_identifying_search:
+                        records = [r for r in records if r["name"] == params["name"][0]]
                     if store.omit_identifying_search:
                         records = []
                 body = {"resourceType": "Bundle", "type": "searchset", "total": len(records),
@@ -93,11 +132,40 @@ def server():
                     body["link"] = [{"relation": "next", "url": self.path + "&page=2"}]
             elif len(parts) == 2 and parts[0] == "Basic" and parts[1] in store.current:
                 body = store.current[parts[1]]
+                if store.bridge_mode:
+                    store.audit_events.append({
+                        "resourceType": "AuditEvent", "id": f"audit-{len(store.audit_events)}",
+                        "action": "R", "recorded": datetime.now(timezone.utc).isoformat(),
+                        "agent": [{"who": {"reference": "actor/run"}}],
+                        "entity": [{"what": {"reference": f"Basic/{parts[1]}"}}],
+                    })
+            elif "/".join(parts) in store.extra_resources:
+                body = store.extra_resources["/".join(parts)]
             else:
                 status = 404
                 body = {"resourceType": "OperationOutcome", "issue": [{"severity": "error", "code": "not-found"}]}
             encoded = json.dumps(body).encode()
             self.send_response(status)
+            self.send_header("Content-Type", "application/fhir+json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
+        def do_POST(self) -> None:
+            store.calls.append("POST " + self.path)
+            length = int(self.headers.get("Content-Length") or 0)
+            document = json.loads(self.rfile.read(length))
+            if not store.bridge_mode or urlsplit(self.path).path != "/Basic":
+                self.send_error(405)
+                return
+            identity = RECORD_ID
+            fields = {k: v for k, v in document.items() if k not in {"resourceType", "id", "meta", "name"}}
+            store.save(identity, name=document["name"], fields=fields)
+            body = copy.deepcopy(store.current[identity])
+            if store.reply_id_override is not None:
+                body["id"] = store.reply_id_override
+            encoded = json.dumps(body).encode()
+            self.send_response(201)
             self.send_header("Content-Type", "application/fhir+json")
             self.send_header("Content-Length", str(len(encoded)))
             self.end_headers()
@@ -506,3 +574,47 @@ def test_bad_pure_binding_reads_nothing_and_creates_no_fence(issued: Any, tmp_pa
     assert result.outcome == "UNCERTAIN" and not result.verified and not result.final
     assert store.calls == before
     assert not list((tmp_path / "authority").rglob("*.inflight"))
+
+
+@pytest.mark.parametrize("caller_ids", [(), ("Basic/reply-only-id",)])
+def test_unresolved_owed_deadline_survives_pure_refusal_without_landed_claim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any, caller_ids: tuple[str, ...],
+) -> None:
+    import sqlite3
+
+    monkeypatch.setenv("OPENADAPT_VERIFIER_STATE_DIR", str(tmp_path / "authority"))
+    _, base = server
+    db = tmp_path / "unresolved.sqlite"
+    with sqlite3.connect(db) as connection:
+        connection.execute("CREATE TABLE records (id TEXT PRIMARY KEY, name TEXT)")
+    document = contract(base).config.model_dump(mode="json", by_alias=True)
+    document["verifier"] = {"kind": "sql", "sqlite_database": str(db), "sql_query": "SELECT * FROM records"}
+    cfg = api.Contract.from_dict(document)
+    ledger = api.Ledger(api.MemoryLedger())
+    pending = api.begin_write(cfg, PARAMS, actor=ACTOR, ledger=ledger, workdir=tmp_path / "runs")
+    with sqlite3.connect(db) as connection:
+        connection.execute("INSERT INTO records VALUES (?, ?)", (RECORD_ID, PARAMS["name"]))
+    write = api.verify_write(pending, write_attempted=True)
+    assert write.outcome is api.Outcome.UNCERTAIN and not write.verified and not write.final
+    assert not write.landed and write.review and not write.provisional
+    assert write.recheck is not None and write.recheck_due_at
+    assert "recheck_due_at" not in write.receipt
+    assert write.evidence["reconciliation"]["executable"] is False
+    assert ledger.latest(write.write_key).recheck_owed == write.recheck_due_at
+    write.recheck.target_ids = caller_ids
+
+    def forbidden(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("unresolved identity must not read the native store")
+
+    monkeypatch.setattr(sqlite3, "connect", forbidden)
+    result = late(cfg, write, ledger)
+    assert result.outcome == "UNCERTAIN" and not result.verified and not result.final
+    assert any("independent_target_identity_unknown" in reason for reason in result.reasons)
+    attempt = ledger.latest(write.write_key)
+    assert attempt.resolved["landed"] is False and attempt.review
+    assert attempt.resolved["outcome"] == "UNCERTAIN"
+    assert attempt.resolved["result"]["reconciliation"]["executable"] is False
+    assert attempt.recheck_owed == write.recheck_due_at
+    assert not list((tmp_path / "authority").rglob("*.inflight"))
+    with pytest.raises(api.WriteHeld):
+        api.begin_write(cfg, PARAMS, actor=ACTOR, ledger=ledger)

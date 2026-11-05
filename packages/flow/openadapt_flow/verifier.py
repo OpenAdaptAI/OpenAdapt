@@ -90,6 +90,7 @@ from openadapt_flow.verify_run import (
     VerifyConfig,
     VerifyRunError,
     _write_private,
+    _owed_reconciliation,
     capture_baseline,
     parse_verify_config,
     receipt_sha256,
@@ -2852,6 +2853,24 @@ def _record_recheck_hold(
                 ),
                 True,
             )
+        # Preserve an already issued closed obligation, including unknown IDs.
+        # This is display/hold metadata only; it never admits a native read.
+        owed_fields: dict[str, Any] = {}
+        state = write.recheck if isinstance(write, WriteResult) else write
+        prior_result = prior.get("result") or {}
+        if state is not None and late.outcome == "UNCERTAIN":
+            issued_evidence = state.payload.get("evidence") or {}
+            issued_receipt = state.payload.get("receipt") or {}
+            issued_schedule = (issued_evidence.get("frame") or {}).get(EVIDENCE_KEY)
+            if (
+                prior_result.get("recheck_purpose") == "read_only_reconciliation"
+                and _recheck_issued(state.payload)
+                and receipt_sha256(issued_receipt) == late.receipt_sha256
+                and prior.get("receipt_sha256") == late.receipt_sha256
+                and _owed_reconciliation(issued_evidence, issued_receipt, issued_schedule)
+                and prior_result.get("reconciliation") == issued_evidence.get("reconciliation")
+            ):
+                owed_fields["reconciliation"] = dict(issued_evidence["reconciliation"])
         reason = "; ".join(late.reasons) or "the recheck did not confirm the write"
         led.resolved(
             key,
@@ -2871,6 +2890,7 @@ def _record_recheck_hold(
                 "late": late.late,
                 "reason": reason,
                 "receipt_sha256": digest,
+                **owed_fields,
                 **({"recheck_purpose": "read_only_reconciliation", "recheck_due_at": (prior.get("result") or {}).get("recheck_due_at"), "provisional": False, "final": False} if late.outcome == "UNCERTAIN" and (prior.get("result") or {}).get("recheck_purpose") == "read_only_reconciliation" else {}),
             },
         )
