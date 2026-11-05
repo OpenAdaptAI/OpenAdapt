@@ -1894,6 +1894,17 @@ class Replayer:
         campaign_refusal = self._qualification_campaign_refusal(workflow)
         if campaign_refusal is not None:
             raise ValueError(campaign_refusal)
+        # Locale / date-order / keyboard layout (#1897): refuse before any
+        # keystroke when the recording's environment does not match this one.
+        from openadapt_flow.locale_invariants import (
+            LocaleInvariantMismatch,
+            enforce_workflow_locale_invariants,
+        )
+
+        try:
+            enforce_workflow_locale_invariants(workflow)
+        except LocaleInvariantMismatch as exc:
+            raise ValueError(exc.reason) from exc
         if bundle_dir is not None:
             # Every execution path runs through here, so a JIT draft with no
             # valid admission, or an admitted one run on another app or
