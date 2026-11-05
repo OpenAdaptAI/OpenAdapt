@@ -1748,10 +1748,14 @@ class AtspiLinuxClient:
         labelled_by = getattr(self._atspi.RelationType, "LABELLED_BY", None)
         if labelled_by is None:
             return None
+        relations: list[Any] = []
         try:
             relations = list(relation_set)
         except TypeError:
-            relations = relation_set if isinstance(relation_set, (list, tuple)) else []
+            if isinstance(relation_set, list):
+                relations = relation_set
+            elif isinstance(relation_set, tuple):
+                relations = list(relation_set)
         for relation in relations:
             rel_type = self._call(relation, "get_relation_type", default=None)
             if rel_type != labelled_by:
