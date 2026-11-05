@@ -2603,9 +2603,15 @@ def _run_recheck(
 
     state, base = prepared.state, prepared.base
     bound = write if isinstance(write, WriteResult) else state
+    terminal = False
 
     def stopped(reason: str) -> RecheckResult:
-        late = _replace(base, reasons=[reason])
+        late = _replace(
+            base,
+            outcome="REFUTED" if terminal else base.outcome,
+            frame="refuted" if terminal else base.frame,
+            reasons=[reason],
+        )
         return _hold_after_recheck(ledger, bound, late, trusted=True)
 
     try:
