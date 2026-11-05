@@ -78,8 +78,8 @@ identity, a declared cleanup plan and an explicit final absence read. Actor
 equality and absence from a search do not supply that binding. The legacy
 Ensure path has no such receipt input, so its cleanup exception refutes with
 `own_transient_receipt_binding_missing`. Without authenticated targeted
-observations, production checks report a named unknown rather than infer
-complete coverage from a snapshot.
+observations, production checks report a named unknown. A snapshot cannot
+establish undeclared search or intermediate-history coverage.
 
 The targeted adapter's synthetic controls are component checks. They do not
 qualify a real application or establish wider historical absence. Per-field
@@ -118,3 +118,28 @@ An issued read-only reconciliation deadline is an obligation, including when
 the record identity is unresolved. It does not mark the write landed,
 provisional, or confirmed. Such an obligation remains visible after a refused
 read and cannot authorize a retry.
+
+## Declared native SQL scope
+
+The shared producer also consumes the SQL adapter's existing complete native
+query result. It proves the declared projected tuple currently exists; it does
+not prove a database schema, a primary key or persistent record history. An
+explicit contract identity field remains required when declared. Without one,
+evidence labels the commitment `projected_tuple`, rather than a record ID.
+Ambiguous column labels, incomplete rows or an unreadable projection refuse.
+Per-field matching and the existing expected-count checks remain independent.
+
+A contract that already declares a database frame reuses its settled native
+snapshot, schema and row-key commitments for the receipt-named records and late
+readback. The producer adds no query. Issued receipt, source, parameters and
+row/schema commitments are validated before the common durable read fence.
+Existing scope, delete and actor adjudication still apply to every declared
+native frame read; a missing in-scope observation prevents confirmation.
+
+When no identifying search was declared, its named check is `not_checked` and
+its coverage is `UNKNOWN` outside the guarantee. That undeclared search does
+not downgrade complete in-scope reads or become a successful empty search.
+Each receipt discloses this limit, along with the absence of intermediate
+history. Declared database side-record coverage remains independently checked.
+The optional strict global predicates and the FHIR targeted guarantee retain
+their own required observations.

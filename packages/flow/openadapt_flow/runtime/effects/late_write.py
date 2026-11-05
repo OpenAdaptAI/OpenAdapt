@@ -180,6 +180,12 @@ def state_problem(payload: Any) -> Optional[str]:
         if set(post) != {"read_at", "history"}:
             return "the history post-state has unknown fields"
         return checkpoint_problem(post["history"])
+    if "receipt_records" in post:
+        from openadapt_flow.runtime.effects.targeted import receipt_records_problem
+
+        problem = receipt_records_problem(post["receipt_records"])
+        if problem is not None:
+            return problem
     if not isinstance(post.get("snapshot"), Mapping):
         return "the recheck state holds no post-save snapshot"
     try:

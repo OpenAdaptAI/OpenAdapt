@@ -8,7 +8,7 @@ These objects are not an authority or a serialized receipt format.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal, Mapping, Optional
+from typing import Any, Literal, Mapping, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -99,6 +99,26 @@ class TargetedObservation:
     read_at: str
     history_required: bool = True
     phase: Literal["write", "late"] = "late"
+
+
+@dataclass(frozen=True)
+class ReceiptObservation:
+    """A complete declared native record read, without an invented search.
+
+    Produced from an existing SQL projection or an already-declared database
+    snapshot. These commitments do not establish undeclared schema, side-record
+    or intermediate-history coverage and cannot issue recheck authority.
+    """
+
+    contract_sha256: str
+    source_sha256: str
+    target_id_macs: tuple[str, ...]
+    read_at: str
+    receipt_sha256: str = ""
+    phase: Literal["write", "late"] = "write"
+    scope: Literal["declared_projection", "declared_database"] = "declared_projection"
+    schema_sha256: Optional[str] = None
+    identity_binding: Literal["declared_identity", "projected_tuple", "native_primary_key"] = "declared_identity"
 
 
 # The issued post-state contains these commitments, never the raw observations.
@@ -896,6 +916,200 @@ def judge_targeted(
         "problems": sorted(set(problems)),
         "outside_intermediate_history": OUTSIDE_INTERMEDIATE_HISTORY,
     }
+
+
+RECEIPT_RECORDS_SCHEMA = "openadapt.receipt-records/v1"
+
+
+def _native_projection(record: Mapping[str, Any]) -> dict[str, list[str]]:
+    """Commit exact native projected values without changing field matching."""
+    from openadapt_flow.runtime.effects.db_snapshot import canonical
+
+    return {
+        name: [type(value).__name__, canonical(value)]
+        for name, value in sorted(record.items())
+    }
+
+
+def receipt_records_problem(value: Any) -> Optional[str]:
+    """Closed private commitments, never a caller-supplied completeness flag."""
+    import re
+
+    if not isinstance(value, Mapping) or set(value) != {
+        "schema_version", "contract_sha256", "source_sha256", "params_mac", "targets"
+    }:
+        return "native receipt commitments are malformed"
+    if value["schema_version"] != RECEIPT_RECORDS_SCHEMA:
+        return "native receipt commitment version is unsupported"
+    for name in ("contract_sha256", "source_sha256"):
+        if not isinstance(value[name], str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", value[name]):
+            return "native receipt digest is malformed"
+    if not isinstance(value["params_mac"], str) or not re.fullmatch(r"hmac-sha256:[0-9a-f]{64}", value["params_mac"]):
+        return "native receipt parameters are malformed"
+    targets = value["targets"]
+    if not isinstance(targets, list) or not targets:
+        return "native receipt targets are missing"
+    seen: set[tuple[str, str]] = set()
+    for target in targets:
+        if not isinstance(target, Mapping) or set(target) != {
+            "table", "row_key_mac", "row_mac", "schema"
+        }:
+            return "native receipt target is malformed"
+        if not isinstance(target["table"], str) or not target["table"]:
+            return "native receipt table is malformed"
+        for name in ("row_key_mac", "row_mac"):
+            if not isinstance(target[name], str) or not re.fullmatch(r"[0-9a-f]{32}", target[name]):
+                return "native receipt row commitment is malformed"
+        if not isinstance(target["schema"], str) or not re.fullmatch(r"[0-9a-f]{64}", target["schema"]):
+            return "native receipt schema is malformed"
+        identity = (target["table"], target["row_key_mac"])
+        if identity in seen:
+            return "native receipt target is duplicated"
+        seen.add(identity)
+    return None
+
+
+def receipt_records_binding_problem(
+    issued: Any,
+    contract_sha256: str,
+    source_sha256: str,
+    params: Mapping[str, object],
+    salt: bytes,
+    previous: Any,
+) -> Optional[str]:
+    """Pure issued-anchor validation before the common durable read fence."""
+    from openadapt_flow.runtime.effects.db_snapshot import Snapshot
+
+    problem = receipt_records_problem(issued)
+    if problem is not None:
+        return problem
+    if issued["contract_sha256"] != contract_sha256 or issued["source_sha256"] != source_sha256 or issued["params_mac"] != _digest("native-params", dict(params), salt):
+        return "native receipt source, contract or parameters changed"
+    if not isinstance(previous, Snapshot):
+        return "the issued native snapshot is unavailable"
+    for bound in issued["targets"]:
+        old = previous.tables.get(bound["table"])
+        if old is None or old.schema != bound["schema"] or old.rows.get(bound["row_key_mac"], [None])[0] != bound["row_mac"]:
+            return "the native receipt row or schema is not the issued anchor"
+    return None
+
+
+def observe_receipt_records(
+    *,
+    contract_sha256: str,
+    source_sha256: str,
+    params: Mapping[str, object],
+    salt: bytes,
+    at: str,
+    reads: Optional[Mapping[str, tuple[Any, Optional[list[dict[str, Any]]]]]] = None,
+    targets: Sequence[tuple[str, Mapping[str, Any]]] = (),
+    identity_field: Optional[str] = None,
+    ignore_fields: Sequence[str] = (),
+    snapshot: Any = None,
+    tables: Optional[Mapping[str, str]] = None,
+    ignore_columns: Optional[Mapping[str, Sequence[str]]] = None,
+    issued: Optional[Mapping[str, Any]] = None,
+    previous: Any = None,
+    receipt_digest: str = "",
+) -> tuple[ReceiptObservation, Optional[dict[str, Any]]]:
+    """Bind existing complete native reads through the shared producer.
+
+    This function performs no I/O. A SQL adapter's successful fetchall proves
+    only its declared projection. A declared settled Snapshot supplies its own
+    schema/key/whole-database proof; no synthetic FHIR state, search, history,
+    additional query or second per-field judge is constructed.
+    """
+    from openadapt_flow.runtime.effects.db_snapshot import (
+        Snapshot, cell_hash, key_text, mac_key, row_key_hash, unpack,
+    )
+    from openadapt_flow.runtime.effects.sql import SqlRecordVerifier
+
+    def table_read(name: str) -> Any:
+        if not isinstance(snapshot, Snapshot) or not snapshot.code_visible:
+            raise TargetedUnreadable("the declared native database read is unavailable")
+        table = snapshot.tables.get(name)
+        if table is None or table.mode != "compare" or table.non_transactional or len(table.rows) != table.count:
+            raise TargetedUnreadable("the declared native table read is incomplete")
+        return table
+
+    entries: list[dict[str, Any]] = []
+    native_macs: set[str] = set()
+    if issued is not None:
+        problem = receipt_records_binding_problem(issued, contract_sha256, source_sha256, params, salt, previous)
+        if problem is not None:
+            raise TargetedUnreadable(problem)
+        for bound in issued["targets"]:
+            name, row_key = bound["table"], bound["row_key_mac"]
+            old = previous.tables.get(name)
+            current = table_read(name)
+            if old is None or old.schema != bound["schema"] or current.schema != bound["schema"] or old.rows.get(row_key, [None])[0] != bound["row_mac"]:
+                raise TargetedUnreadable("the native receipt row or schema is not the issued anchor")
+            # Presence or absence is observed by the complete current read.
+            # The unchanged frame judge adjudicates any change and its actor.
+            entries.append(dict(bound))
+            native_macs.add(_digest("native-id", [source_sha256, name, row_key], salt))
+    else:
+        if not targets or reads is None:
+            raise TargetedUnreadable("no independently matched native receipt records")
+        for surface, target in targets:
+            adapter, records = reads.get(surface, (None, None))
+            if not isinstance(adapter, SqlRecordVerifier) or records is None:
+                raise TargetedUnreadable("the declared native SQL projection is unavailable")
+            ignored = set(ignore_fields) - ({identity_field} if identity_field else set())
+            projected = {k: v for k, v in target.items() if k not in ignored}
+            wanted = _native_projection(projected)
+            found = [row for row in records if _native_projection({k: v for k, v in row.items() if k not in ignored}) == wanted]
+            if len(found) != 1:
+                raise TargetedUnreadable("the native receipt projection is missing or ambiguous")
+            if identity_field:
+                if target.get(identity_field) is None:
+                    raise TargetedUnreadable("the declared native identity is unavailable")
+                identity: Any = [identity_field, _native_projection({identity_field: target[identity_field]})]
+            else:
+                identity = ["exact_projection", wanted]
+            native_macs.add(_digest("native-id", [source_sha256, surface, identity], salt))
+            if snapshot is None:
+                continue
+            names = [name for name, own in (tables or {}).items() if own == surface]
+            if len(names) != 1:
+                raise TargetedUnreadable("the native receipt table mapping is ambiguous")
+            name = names[0]
+            table = table_read(name)
+            if not table.primary_key or any(target.get(k) is None for k in table.primary_key):
+                raise TargetedUnreadable("the declared snapshot cannot bind the receipt key")
+            row_key = row_key_hash(mac_key(salt), key_text(table.primary_key, target), name)
+            stored = table.rows.get(row_key)
+            cells = unpack(table.cell_columns, stored[1]) if stored is not None else {}
+            ignored_columns = set((ignore_columns or {}).get(name, ())) | set((ignore_columns or {}).get("*", ()))
+            if stored is None or any(k not in cells or cells[k] != cell_hash(mac_key(salt), v, name, k) for k, v in projected.items() if k not in ignored_columns):
+                raise TargetedUnreadable("the native receipt projection differs from the settled row")
+            entry = {"table": name, "row_key_mac": row_key, "row_mac": stored[0], "schema": table.schema}
+            if entry not in entries:
+                entries.append(entry)
+        if entries:
+            native_macs = {_digest("native-id", [source_sha256, e["table"], e["row_key_mac"]], salt) for e in entries}
+    if not native_macs:
+        raise TargetedUnreadable("native receipt identity is unavailable")
+    checkpoint = None
+    if entries:
+        checkpoint = {
+            "schema_version": RECEIPT_RECORDS_SCHEMA,
+            "contract_sha256": contract_sha256,
+            "source_sha256": source_sha256,
+            "params_mac": _digest("native-params", dict(params), salt),
+            "targets": sorted(entries, key=lambda e: (e["table"], e["row_key_mac"])),
+        }
+        problem = receipt_records_problem(checkpoint)
+        if problem is not None:
+            raise TargetedUnreadable(problem)
+    observation = ReceiptObservation(
+        contract_sha256, source_sha256, tuple(sorted(native_macs)), at,
+        receipt_digest, "late" if issued is not None else "write",
+        "declared_database" if entries else "declared_projection",
+        _sha({e["table"]: e["schema"] for e in entries}) if entries else None,
+        "native_primary_key" if entries else "declared_identity" if identity_field else "projected_tuple",
+    )
+    return observation, checkpoint
 
 
 class FrameTargeted(BaseModel):

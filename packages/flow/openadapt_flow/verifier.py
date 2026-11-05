@@ -1971,6 +1971,10 @@ def _scope(
         not_covered.append(
             "delete tasks: UNKNOWN (targeted recheck supports create/update records)"
         )
+    native = (frame.get("hard_invariants") or {}).get("outside_guarantee") or []
+    for part in native:
+        if isinstance(part, Mapping) and part.get("status") == "UNKNOWN":
+            not_covered.append(f"{part.get('name')}: UNKNOWN ({part.get('reason')})")
     if spec is None or getattr(spec, "database", None) is None:
         not_covered.append("records outside the read set (no frame.database)")
     targeted = getattr(spec, "targeted", None)

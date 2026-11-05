@@ -441,7 +441,13 @@ class SqlRecordVerifier(VerifierAdapterBase):
             if description is None:
                 return None  # not a result-set query -> unusable
             columns = [str(col[0]) for col in description]
+            # A complete declared projection needs one unambiguous value per
+            # named column. dict(zip(...)) must not hide an ambiguous shape.
+            if not columns or any(col[0] is None or not str(col[0]) for col in description) or len(set(columns)) != len(columns):
+                return None
             rows = cursor.fetchall()
+            if any(len(row) != len(columns) for row in rows):
+                return None
             return drop_record_fields(
                 [dict(zip(columns, map(read_cell, row))) for row in rows],
                 self.drop_fields,
