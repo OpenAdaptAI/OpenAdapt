@@ -142,6 +142,7 @@ class WindowRecording:
         self.capture_dir = tmp_path / "capture"
         self.observers: list[FedObserver] = []
         self.error: BaseException | None = None
+        self.last_source_ordinal: int | None = None
         self.terminate_processing = multiprocessing.Event()
         self.terminate_recording = multiprocessing.Event()
         self._status_recv, self._status_send = multiprocessing.Pipe(duplex=False)
@@ -200,7 +201,7 @@ class WindowRecording:
     def __enter__(self) -> FedObserver:
         def run():
             try:
-                recorder_module.record(
+                self.last_source_ordinal = recorder_module.record(
                     "window input focus",
                     capture_dir=str(self.capture_dir),
                     terminate_processing=self.terminate_processing,
@@ -245,6 +246,36 @@ class WindowRecording:
         finally:
             connection.close()
         return [dict(row) for row in rows]
+
+    def seal_and_validate(self) -> None:
+        """Finish the capture as ``Recorder`` does: verify, seal, re-validate."""
+        from openadapt_capture.capture import CaptureSession
+        from openadapt_capture.db import finalize_capture_database
+
+        db_path = self.capture_dir / "recording.db"
+        finalize_capture_database(str(db_path))
+        connection = sqlite3.connect(db_path)
+        try:
+            counts = {
+                table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                for table in ("action_event", "screenshot", "window_event", "browser_event")
+            }
+        finally:
+            connection.close()
+        recorder = recorder_module.Recorder(
+            str(self.capture_dir),
+            capture_video=False,
+            capture_images=True,
+        )
+        recorder._num_action_events.value = counts["action_event"]
+        recorder._num_screen_events.value = counts["screenshot"]
+        recorder._num_window_events.value = counts["window_event"]
+        recorder._num_browser_events.value = counts["browser_event"]
+        recorder._last_source_ordinal = self.last_source_ordinal
+        recorder._verify_completed_capture()
+        recorder._stage_completed_control_state()
+        recorder._seal_completed_capture()
+        CaptureSession.validate_sealed(str(self.capture_dir))
 
     def gaps(self) -> list[dict]:
         path = self.capture_dir / WINDOW_INPUT_GAPS_FILENAME
@@ -323,6 +354,38 @@ def test_click_on_overlapping_window_inside_target_rectangle_is_dropped(
     assert left["reason"] == INPUT_POINTER_OVER_OTHER_WINDOW
     assert left["input"] == "pointer"
     assert left["coarse_point"] == [400.0, 300.0]
+
+
+def test_dropped_input_leaves_a_sealed_contiguous_source_journal(tmp_path, monkeypatch, fake):
+    """A click in another window must not make the whole recording unverifiable.
+
+    Its ordinals are named in the sealed skip record, and the capture still
+    passes the strict no-missing-ordinal check.
+    """
+    from openadapt_capture.source_skips import load_source_ordinal_skips
+
+    canary = f"pw-canary-{uuid.uuid4().hex}"
+    recording = WindowRecording(tmp_path, monkeypatch, fake)
+    with recording as observer:
+        click(observer)
+        fake.pointer_owner = SLACK  # the user clicks another app's window
+        click(observer)
+        fake.keyboard_owner = SLACK
+        type_text(observer, "x", canary=canary)
+        fake.pointer_owner = TARGET
+        fake.keyboard_owner = TARGET
+        click(observer)
+
+    assert len(_click_rows(recording.actions())) == 4
+    skips = load_source_ordinal_skips(recording.capture_dir)
+    assert sorted(set(skips.values())) == [
+        "continues_dropped_input",
+        INPUT_KEYBOARD_FOCUS_ELSEWHERE,
+        INPUT_POINTER_OVER_OTHER_WINDOW,
+    ]
+    assert len(skips) == 4  # press and release of the click and of the key
+    recording.seal_and_validate()
+    recording.assert_nowhere(canary)
 
 
 def test_password_dialog_over_target_drops_keys_and_clicks(tmp_path, monkeypatch, fake):
@@ -625,6 +688,8 @@ def fake_macos(monkeypatch):
     )
     # Accessibility is unavailable unless a test names a focused window.
     state.ax_window = None  # (window number, subrole, focused element role)
+    # The pid owning the Accessibility element at any point; None: unknown.
+    state.hit_pid = None
     success = 0
 
     def copy_attribute(element, name, _out):
@@ -650,7 +715,13 @@ def fake_macos(monkeypatch):
         kAXErrorSuccess=success,
         AXUIElementCreateApplication=lambda _pid: "app",
         AXUIElementCreateSystemWide=lambda: "system",
-        AXUIElementGetPid=lambda _element, _out: (success, state.focused_app_pid),
+        AXUIElementGetPid=lambda element, _out: (
+            success,
+            state.hit_pid if element == "hit" else state.focused_app_pid,
+        ),
+        AXUIElementCopyElementAtPosition=lambda _system, _x, _y, _out: (
+            (success, "hit") if state.hit_pid is not None else (-25211, None)
+        ),
         AXUIElementSetMessagingTimeout=lambda _element, _seconds: success,
         AXUIElementCopyAttributeValue=copy_attribute,
     )
@@ -754,6 +825,51 @@ def test_macos_probe_window_at_is_front_to_back_layer_zero(fake_macos):
     assert probe.window_at(400.0, 300.0) == FocusOwner(window_id=7, pid=555)
     assert probe.window_at(310.0, 170.0) == FocusOwner(window_id=42, pid=1234)
     assert probe.window_at(5000.0, 5000.0) is None
+
+
+def test_macos_probe_window_at_passes_through_transparent_system_chrome(fake_macos):
+    """Full-screen Dock and Notification Center windows take clicks only where they draw."""
+    from openadapt_capture.window_input_focus import MacOSInputFocusProbe
+
+    probe = MacOSInputFocusProbe()
+    dock = _quartz_window(5, 50, (0, 0, 2000, 1200), layer=20)
+    notification_center = _quartz_window(6, 51, (0, 0, 2000, 1200), layer=23)
+    fake_macos.windows = [
+        _quartz_window(1, 99, (0, 0, 2000, 25), layer=25),  # menu bar extra
+        notification_center,
+        dock,
+        _quartz_window(7, 555, (350, 250, 200, 200)),  # Slack over the target
+        _quartz_window(42, 1234, (300, 150, 800, 600)),
+    ]
+    # The system hit test lands on the target: the chrome is transparent there.
+    fake_macos.hit_pid = 1234
+    assert probe.window_at(310.0, 170.0) == FocusOwner(window_id=42, pid=1234)
+    # Another app's window still blocks, whatever the chrome does.
+    fake_macos.hit_pid = 555
+    assert probe.window_at(400.0, 300.0) == FocusOwner(window_id=7, pid=555)
+    # A Dock tile or a notification banner under the pointer takes the click.
+    fake_macos.hit_pid = 50
+    assert probe.window_at(310.0, 170.0) == FocusOwner(window_id=5, pid=50)
+    fake_macos.hit_pid = 51
+    assert probe.window_at(310.0, 170.0) == FocusOwner(window_id=6, pid=51)
+    # Without a system hit test the owner is unknown: fail closed.
+    fake_macos.hit_pid = None
+    assert probe.window_at(310.0, 170.0) is None
+    # Outside the chrome no hit test is needed.
+    fake_macos.windows = [dock, _quartz_window(42, 1234, (2100, 150, 800, 600))]
+    assert probe.window_at(2200.0, 170.0) == FocusOwner(window_id=42, pid=1234)
+
+
+def test_macos_chrome_does_not_change_keyboard_focus(fake_macos):
+    from openadapt_capture.window_input_focus import MacOSInputFocusProbe
+
+    probe = MacOSInputFocusProbe()
+    fake_macos.windows = [
+        _quartz_window(6, 51, (0, 0, 2000, 1200), layer=23),
+        _quartz_window(5, 50, (0, 0, 2000, 1200), layer=20),
+        _quartz_window(42, 1234, (300, 150, 800, 600)),
+    ]
+    assert probe.keyboard_focus() == FocusOwner(window_id=42, pid=1234)
 
 
 def test_windows_probe_uses_root_ancestor_of_foreground_and_point(monkeypatch):

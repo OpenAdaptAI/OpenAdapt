@@ -69,6 +69,12 @@ _MACOS_NORMAL_LAYER = 0
 _MACOS_STATUS_LAYER = 25
 # kCGModalPanelWindowLevel: an NSAlert or a password prompt.
 _MACOS_MODAL_PANEL_LAYER = 8
+# kCGDockWindowLevel. From here up to the status level are system chrome
+# layers: the Dock (20) and system overlays such as Notification Center (23).
+# Their windows can span a whole display while taking clicks only where they
+# draw (the Dock's tiles, a notification banner), so their bounds alone do not
+# say whether they are under the pointer.
+_MACOS_DOCK_LAYER = 20
 # Accessibility subroles of a focused window that is a dialog, not a
 # document window. Typing there never counts as typing into the target.
 _MACOS_DIALOG_SUBROLES = frozenset({"AXDialog", "AXSystemDialog"})
@@ -286,15 +292,55 @@ class MacOSInputFocusProbe:
             return FocusOwner(window_id=raised["window_id"] or None, pid=pid, dialog=True)
         return FocusOwner(window_id=window_id, pid=pid)
 
+    @staticmethod
+    def _ax_pid_at(x: float, y: float) -> int | None:
+        """Return the pid that owns the Accessibility element at a point.
+
+        This is the system's own hit test: it passes through the transparent
+        parts of a window. ``None`` when Accessibility cannot answer.
+        """
+        try:
+            import ApplicationServices as ax
+
+            success = ax.kAXErrorSuccess
+            system = ax.AXUIElementCreateSystemWide()
+            ax.AXUIElementSetMessagingTimeout(system, _MACOS_AX_FOCUS_TIMEOUT_SECONDS)
+            error, element = ax.AXUIElementCopyElementAtPosition(
+                system, float(x), float(y), None
+            )
+            if error != success or element is None:
+                return None
+            error, pid = ax.AXUIElementGetPid(element, None)
+            return int(pid) if error == success and pid else None
+        except Exception:
+            return None
+
     def window_at(self, x: float, y: float) -> FocusOwner | None:
-        """Return the first front-to-back app window containing the point.
+        """Return the first front-to-back app window that takes a click at the point.
 
         A raised panel over the target (a modal password prompt) is returned
         as itself, so a click on it never counts as a click on the target.
+
+        A system chrome window (Dock level and above, below the status level)
+        counts only where its process takes the click: the Dock's tiles count,
+        the transparent rest of a full-screen Dock or Notification Center
+        window does not. The Accessibility hit test decides. When it cannot
+        answer, the point's owner is unknown (fail closed).
         """
+        hit_pid: int | None = None
+        hit_tested = False
         for info in self._onscreen_app_windows():
-            if _point_in_bounds(x, y, info["bounds"]):
-                return FocusOwner(window_id=info["window_id"], pid=info["pid"])
+            if not _point_in_bounds(x, y, info["bounds"]):
+                continue
+            if info["layer"] >= _MACOS_DOCK_LAYER:
+                if not hit_tested:
+                    hit_pid = self._ax_pid_at(x, y)
+                    hit_tested = True
+                if hit_pid is None:
+                    return None
+                if hit_pid != info["pid"]:
+                    continue  # click-through system chrome
+            return FocusOwner(window_id=info["window_id"], pid=info["pid"])
         return None
 
 

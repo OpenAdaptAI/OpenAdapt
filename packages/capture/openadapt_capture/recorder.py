@@ -80,6 +80,11 @@ from openadapt_capture.input_observer import (
     create_input_observer,
 )
 from openadapt_capture.live import LiveEventTap, publish_live
+from openadapt_capture.source_skips import (
+    INPUT_CONTINUES_DROPPED_INPUT,
+    SOURCE_ORDINAL_SKIP_REASONS,
+    write_source_ordinal_skips,
+)
 from openadapt_capture.structural import (
     StructuralObservationRequest,
     StructuralObserver,
@@ -290,6 +295,7 @@ class _JournalEntry:
     error: BaseException | None = None
     ready: bool = False
     discarded: bool = False
+    discard_reason: str | None = None
 
 
 class EventReservation:
@@ -335,12 +341,20 @@ class EventReservation:
             self._finished = True
             self._journal._condition.notify_all()
 
-    def discard(self) -> None:
-        """Release this position without an event; the consumer skips it."""
+    def discard(self, reason: str) -> None:
+        """Release this position without an event because policy dropped it.
+
+        The consumer skips the position and the journal records the ordinal
+        with ``reason`` (one of ``SOURCE_ORDINAL_SKIP_REASONS``), so the
+        sealed journal names every intentional hole.
+        """
         if self._finished:
             raise RuntimeError("the event journal reservation is already complete")
+        if reason not in SOURCE_ORDINAL_SKIP_REASONS:
+            raise EventJournalOrderingError(f"unknown source-ordinal skip reason: {reason!r}")
         with self._journal._condition:
             self._entry.discarded = True
+            self._entry.discard_reason = reason
             self._entry.ready = True
             self._finished = True
             self._journal._condition.notify_all()
@@ -387,9 +401,9 @@ class WindowActionReservation:
         """Accept the release or drag of a press the target already received."""
         self._admitted = True
 
-    def discard(self) -> None:
+    def discard(self, reason: str) -> None:
         """Drop this input: its journal position completes without an event."""
-        self._reservation.discard()
+        self._reservation.discard(reason)
 
     @property
     def source_ordinal(self) -> int:
@@ -579,6 +593,7 @@ class OrderedEventJournal:
         self._condition = threading.Condition()
         self._entries: deque[_JournalEntry] = deque()
         self._next_sequence = 1
+        self._skipped: list[tuple[int, str]] = []
 
     def reserve(self, timestamp: float) -> EventReservation:
         timestamp = float(timestamp)
@@ -593,6 +608,24 @@ class OrderedEventJournal:
         """Return the last ordinal reserved by any source observer."""
         with self._condition:
             return self._next_sequence - 1 or None
+
+    @property
+    def skipped_source_ordinals(self) -> tuple[tuple[int, str], ...]:
+        """Return ``(ordinal, reason)`` for each dropped position consumed so far."""
+        with self._condition:
+            return tuple(self._skipped)
+
+    def _pop_discarded_head_locked(self) -> bool:
+        """Consume one ready discarded head entry and record its skip."""
+        if not (self._entries and self._entries[0].ready and self._entries[0].discarded):
+            return False
+        entry = self._entries.popleft()
+        if entry.discard_reason not in SOURCE_ORDINAL_SKIP_REASONS:
+            raise EventJournalReservationError(
+                "an ordered event reservation was dropped without a policy reason"
+            )
+        self._skipped.append((entry.sequence, entry.discard_reason))
+        return True
 
     def _reserve_locked(self, timestamp: float) -> _JournalEntry:
         entry = _JournalEntry(timestamp, self._next_sequence)
@@ -623,8 +656,9 @@ class OrderedEventJournal:
                         )
                     else:
                         binding = window_scope.generation_for_action()
-                except WindowInputNotOnTarget:
+                except WindowInputNotOnTarget as exc:
                     entry.discarded = True
+                    entry.discard_reason = exc.reason
                     entry.ready = True
                     reservation._finished = True
                     self._condition.notify_all()
@@ -702,10 +736,10 @@ class OrderedEventJournal:
         deadline = None if timeout is None else time.monotonic() + timeout
         with self._condition:
             while True:
+                if self._pop_discarded_head_locked():
+                    continue
                 if self._entries and self._entries[0].ready:
                     entry = self._entries.popleft()
-                    if entry.discarded:
-                        continue
                     if entry.error is not None:
                         raise EventJournalReservationError(
                             "an ordered event producer failed after reservation"
@@ -727,8 +761,8 @@ class OrderedEventJournal:
 
     def empty(self) -> bool:
         with self._condition:
-            while self._entries and self._entries[0].ready and self._entries[0].discarded:
-                self._entries.popleft()
+            while self._pop_discarded_head_locked():
+                pass
             return not self._entries
 
     def qsize(self) -> int:
@@ -2640,9 +2674,9 @@ class _WindowInputAdmission:
         self._held_buttons: set[str] = set()
 
     @staticmethod
-    def _discard(reservation: object | None) -> None:
+    def _discard(reservation: object | None, reason: str) -> None:
         if isinstance(reservation, WindowActionReservation):
-            reservation.discard()
+            reservation.discard(reason)
 
     def dropped(self, event: ObservedInput, reason: str) -> None:
         """Record a marker for dropped input, never its content."""
@@ -2659,13 +2693,13 @@ class _WindowInputAdmission:
         if isinstance(event, ObservedKey) and not event.pressed:
             identity = _key_identity(event)
             if identity not in self._held_keys:
-                self._discard(reservation)
+                self._discard(reservation, INPUT_CONTINUES_DROPPED_INPUT)
                 return False
             self._held_keys.discard(identity)
             continuation = True
         elif isinstance(event, ObservedMouseButton) and not event.pressed:
             if event.button not in self._held_buttons:
-                self._discard(reservation)
+                self._discard(reservation, INPUT_CONTINUES_DROPPED_INPUT)
                 return False
             self._held_buttons.discard(event.button)
             continuation = True
@@ -2688,7 +2722,7 @@ class _WindowInputAdmission:
                 else:
                     evidence = self._scope.assert_input_on_target(window, point=point)
         except WindowInputNotOnTarget as exc:
-            self._discard(reservation)
+            self._discard(reservation, exc.reason)
             self.dropped(event, exc.reason)
             return False
 
@@ -3825,6 +3859,9 @@ def record(
         _raise_for_failed_processes(task_by_name, process_errors)
         if window_scope is not None:
             window_scope.assert_current()
+            # Name every ordinal policy dropped, so the sealed journal's holes
+            # are explicit. Unrecorded holes still fail verification.
+            write_source_ordinal_skips(capture_dir, event_q.skipped_source_ordinals)
         elif desktop_scope is not None:
             # Close the interval between the last captured frame and operator stop.
             # A topology change in that interval still invalidates the session.
