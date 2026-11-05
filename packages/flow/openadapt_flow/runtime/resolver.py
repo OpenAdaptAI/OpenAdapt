@@ -175,7 +175,7 @@ def visual_resolution_evaluator_contract_sha256() -> str:
         "geometry_outline": [
             OUTLINE_SCORE,
             OUTLINE_RING_SHARE,
-            "half-size-window",
+            "width-across-half-height-down",
             "snap-one-refuse-several",
         ],
         "template_scales": list(DEFAULT_TEMPLATE_SCALES),
@@ -756,7 +756,10 @@ def _outline_corroborated(
 ) -> Point:
     """Move a geometry estimate onto the recorded control, or refuse.
 
-    The control's outline is sought within half its size of the estimate.
+    The control's outline is sought within the control's width across and
+    half its height up or down: OCR that reads a label together with the
+    glyph beside it moves the label's centre sideways, and rows above and
+    below stay outside the window.
     One place: the click moves there (by the recorded offset inside the
     crop). Several: :class:`UncorroboratedGeometryRefused`. None (a frame
     with no such outline nearby): the estimate stands, as before.
@@ -768,7 +771,7 @@ def _outline_corroborated(
         estimate[0] - (anchor.click_point[0] - x),
         estimate[1] - (anchor.click_point[1] - y),
     )
-    places = outline_matches_near(screen_png, template_png, origin, (w // 2, h // 2))
+    places = outline_matches_near(screen_png, template_png, origin, (w, h // 2))
     if not places:
         return estimate
     if len(places) > 1:
