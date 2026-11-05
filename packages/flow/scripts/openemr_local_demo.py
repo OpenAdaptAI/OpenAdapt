@@ -322,11 +322,19 @@ class OpenEMRPlaywrightBackend(_BasePlaywrightBackend):
             or located.selector != target.get("selector")
         ):
             return None
+        name = target.get("name")
+        if name is None and target.get("target_kind") == "field":
+            # The adapter's binding names no field. The generic locator read
+            # the same control's label (here its ``name`` attribute), and the
+            # risk classifier needs it: without one, a click into an empty
+            # text box is an unlabelled pointer control that certification
+            # can't clear (#1532).
+            name = located.name
         return StructuralLocator(
             selector=target.get("selector"),
             frame_path=located.frame_path,
             role=target.get("role"),
-            name=target.get("name"),
+            name=name,
         )
 
     def _confirm_point(self) -> tuple[int, int] | None:

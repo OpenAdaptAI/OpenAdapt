@@ -871,6 +871,7 @@ window.openDuplicateCheck = () => {
 _FORM_HTML = """<!doctype html><html><body>
 <p>Name: <input id="form_fname" onclick="top.actions.push('fname')">
 <input id="form_lname" onclick="top.actions.push('lname')"></p>
+<p>DOB: <input id="form_DOB" name="form_DOB"></p>
 <button id="create"
   onclick="top.actions.push('create'); top.openDuplicateCheck()">Create New Patient</button>
 </body></html>"""
@@ -967,6 +968,50 @@ def test_openemr_adapter_delivers_guarded_dom_actions_in_the_form_frame(
         "confirm_create"
     )
     assert page.evaluate("window.actions") == ["fname", "create", "confirm"]
+
+
+def test_openemr_adapter_records_the_field_name_a_click_needs_for_review(
+    openemr_shell,
+) -> None:
+    # #1532: the adapter dropped the generic locator's field name, so a click
+    # into an empty text box (no OCR text) compiled as an unlabelled pointer
+    # control that requires a reviewed risk override.
+    from openadapt_flow.ir import ActionKind, Anchor, Step
+    from openadapt_flow.risk import infer_step_risk
+
+    backend, page = openemr_shell
+    form = _form_frame(page)
+    locator = backend.structural_locator_at(*_box_center(form.locator("#form_DOB")))
+    assert locator is not None
+    assert locator.selector == "#form_DOB"
+    assert locator.role == "textbox"
+    assert locator.name == "form_DOB"
+    assert backend.locate_structural(locator) is not None
+
+    def click(structural: StructuralLocator) -> Step:
+        return Step(
+            id="step_009",
+            intent="click the DOB field",
+            action=ActionKind.CLICK,
+            anchor=Anchor(
+                template="t.png",
+                region=(0, 0, 1, 1),
+                click_point=(0, 0),
+                structural=structural,
+            ),
+        )
+
+    assert infer_step_risk(click(locator)).requires_review is False
+    # Control: the locator as recorded before the fix still needs review.
+    assert infer_step_risk(
+        click(locator.model_copy(update={"name": None}))
+    ).requires_review
+
+    # Only fields take the generic name: the adapter's own action targets
+    # keep their binding unchanged.
+    create = backend.structural_locator_at(*_box_center(form.locator("#create")))
+    assert create is not None
+    assert (create.selector, create.name) == ("#create", None)
 
 
 def test_openemr_adapter_refuses_form_control_outside_the_patient_form(
