@@ -795,7 +795,9 @@ class FirstRunCompiler:
             render_contract,
         )
 
-        proposal = propose_effects(diff_snapshots(before, after), values)
+        proposal = propose_effects(
+            diff_snapshots(before, after), values, record_fields=self.expect
+        )
         path = self.out_dir / PROPOSED_FILE
         path.parent.mkdir(parents=True, exist_ok=True)
         _write_private(path, render_contract(self.verifier_section, proposal.effects))
@@ -845,9 +847,36 @@ class FirstRunCompiler:
                         if "expected_count" in e
                         else {}
                     ),
+                    **(
+                        {
+                            "idempotency_key": (
+                                f"{{param: {e['idempotency_key']['param']}}}"
+                                if isinstance(e.get("idempotency_key"), dict)
+                                and "param" in e["idempotency_key"]
+                                else (e.get("idempotency_key") or {}).get("literal")
+                            )
+                        }
+                        if e.get("idempotency_key")
+                        else {}
+                    ),
+                    **(
+                        {
+                            "composite_key": {
+                                k: (
+                                    f"{{param: {v['param']}}}"
+                                    if "param" in v
+                                    else v.get("literal")
+                                )
+                                for k, v in (e.get("composite_key") or {}).items()
+                            }
+                        }
+                        if e.get("composite_key")
+                        else {}
+                    ),
                 }
                 for e in effects
             ],
+
         }
 
     # -- step 2: a person confirms the checks and the parameters ------------------
@@ -890,6 +919,14 @@ class FirstRunCompiler:
                 for k, v in (effect.get("match") or {}).items()
                 if k not in drop_fields
             }
+            if effect.get("composite_key"):
+                effect["composite_key"] = {
+                    k: v
+                    for k, v in (effect.get("composite_key") or {}).items()
+                    if k not in drop_fields
+                }
+                if not effect["composite_key"]:
+                    effect.pop("composite_key", None)
             if _claims_new_record(effect, count_new_only=False):
                 # A check routed to one read (scaffold-verifier's
                 # ``surface=<name>|...``) keeps its route.
