@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Start (or restart) the chaos chain on the zen lane, inside WSL. Idempotent.
+# Start (or restart) the chaos chain on the fixture host, inside WSL. Idempotent.
 #   runner -> shim (0.0.0.0:<profile port>) -> Toxiproxy (127.0.0.1:1<port>) -> app (127.0.0.1:<upstream>)
-# Usage (from the Mac):
-#   scp -i ~/.ssh/oalab_ed25519 -r benchmark/lab_chaos user@100.111.126.101:'C:/oa/lab_chaos'
-#   ssh -i ~/.ssh/oalab_ed25519 user@100.111.126.101 "wsl -d Ubuntu-24.04 -- bash /mnt/c/oa/lab_chaos/zen_up.sh"
+# Usage: copy this directory to an operator-selected path in WSL, then run
+#   OPENADAPT_LAB_HOST=fixture.example bash /path/to/lab_chaos/zen_up.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-STATE="$HOME/lab_chaos"; mkdir -p "$STATE"
+# Validate before downloads, process changes or network requests.
+export OPENADAPT_LAB_HOST
+OPENADAPT_LAB_HOST=$(PYTHONPATH="$HERE" python3 -c 'from chaos import deployment_host; print(deployment_host())')
+STATE="${OPENADAPT_LAB_CHAOS_STATE:-$HOME/lab_chaos}"; mkdir -p "$STATE"
 VER=$(python3 -c "import json;print(json.load(open('$HERE/profiles.json'))['toxiproxy_version'])")
 BIN="$STATE/toxiproxy-server-$VER"
 if [ ! -x "$BIN" ]; then
@@ -19,7 +21,7 @@ cp "$HERE/shim.py" "$STATE/shim.py"
 nohup "$BIN" -host 127.0.0.1 -port 8474 >"$STATE/toxiproxy.log" 2>&1 &
 sleep 1
 python3 - "$HERE/profiles.json" "$STATE" <<'PY'
-import json, subprocess, sys, urllib.request
+import json, os, subprocess, sys, urllib.request
 cfg = json.load(open(sys.argv[1])); state = sys.argv[2]
 api = "http://127.0.0.1:8474"
 def call(method, path, body=None):
@@ -27,7 +29,7 @@ def call(method, path, body=None):
         data=json.dumps(body).encode() if body is not None else None,
         headers={"Content-Type": "application/json"})
     return urllib.request.urlopen(req).read()
-host = cfg["host"]
+host = os.environ["OPENADAPT_LAB_HOST"]
 for app_name, app in cfg["apps"].items():
     for prof, port in app["ports"].items():
         p = cfg["profiles"][prof]

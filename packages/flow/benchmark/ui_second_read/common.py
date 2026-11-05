@@ -8,6 +8,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
+from urllib.parse import urlsplit
 
 from benchmark.lab_chaos.chaos import active_profile, chaos_url
 from openadapt_flow.runtime.effects import Effect, EffectKind, ValueExpr
@@ -55,6 +56,11 @@ class ActingBackend:
 
 
 def base(url: str) -> str:
+    host = urlsplit(url).hostname
+    if host is None or host.rstrip(".").endswith(".invalid"):
+        raise ValueError(
+            "configure the synthetic fixture URL before running the benchmark"
+        )
     return chaos_url(url)
 
 

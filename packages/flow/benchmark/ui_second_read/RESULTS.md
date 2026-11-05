@@ -3,7 +3,7 @@
 Faults and predictions were committed before any run (`PREREG.md`, including
 the chaos addendum). Raw rows are in `results/run1/` and `results/run2/`, one
 JSON line per case, with each read's `independence` evidence. Synthetic data
-only. Run on 2026-11-04 against OpenEMR 7.0.3 and Dolibarr 21.0.4 on the zen
+only. Run on 2026-11-04 against OpenEMR 7.0.3 and Dolibarr 21.0.4 on the fixture host
 fixture lane. The verifier's deployment had no API, SQL or FHIR section, and
 its session aborted any request to an API path: no API request was made (the
 guard's count was 0 in every run).

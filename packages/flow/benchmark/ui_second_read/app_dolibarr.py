@@ -10,7 +10,6 @@ compared; the list reformats phone numbers, so they aren't read.
 from __future__ import annotations
 
 import os
-
 import time
 from typing import Any
 
@@ -26,7 +25,7 @@ from benchmark.ui_second_read.common import (
 )
 from openadapt_flow.runtime.effects.ui_readback import UiReadbackSpec
 
-APP = "http://100.111.126.101:9635"
+APP = os.environ.get("UI2R_DOLIBARR_URL", "http://lab-host.invalid:9635")
 
 
 def spec(**extra: Any) -> UiReadbackSpec:
@@ -92,7 +91,9 @@ class App:
                 time.sleep(1)
         raise RuntimeError("acting sign-in failed")
 
-    def create(self, name: str, alias: str, *, save: bool = True, page: Any = None) -> None:
+    def create(
+        self, name: str, alias: str, *, save: bool = True, page: Any = None
+    ) -> None:
         page = page or self.page
         page.goto(base(APP) + "/societe/card.php?action=create&type=c")
         page.fill("#name", name)
@@ -123,15 +124,25 @@ def _row(read: Any, **extra: Any) -> dict[str, Any]:
 def correct(app: App) -> dict[str, Any]:
     name, alias = f"UI2R Corp {token()}", f"Alias {token()}"
     s = spec()
-    r = check(s, {"name": name}, written({"name": name, "alias": alias}),
-              lambda: app.create(name, alias), app.page)
+    r = check(
+        s,
+        {"name": name},
+        written({"name": name, "alias": alias}),
+        lambda: app.create(name, alias),
+        app.page,
+    )
     return _row(r)
 
 
 def wrong_value(app: App) -> dict[str, Any]:
     name, alias = f"UI2R Corp {token()}", f"Alias {token()}"
-    r = check(spec(), {"name": name}, written({"name": name, "alias": alias}),
-              lambda: app.create(name, alias + " X"), app.page)
+    r = check(
+        spec(),
+        {"name": name},
+        written({"name": name, "alias": alias}),
+        lambda: app.create(name, alias + " X"),
+        app.page,
+    )
     return _row(r)
 
 
@@ -142,15 +153,21 @@ def duplicate(app: App) -> dict[str, Any]:
         app.create(name, alias)
         app.create(name, alias)
 
-    r = check(spec(), {"name": name}, written({"name": name, "alias": alias}),
-              twice, app.page)
+    r = check(
+        spec(), {"name": name}, written({"name": name, "alias": alias}), twice, app.page
+    )
     return _row(r)
 
 
 def missing_save(app: App) -> dict[str, Any]:
     name, alias = f"UI2R Corp {token()}", f"Alias {token()}"
-    r = check(spec(), {"name": name}, written({"name": name, "alias": alias}),
-              lambda: app.create(name, alias, save=False), app.page)
+    r = check(
+        spec(),
+        {"name": name},
+        written({"name": name, "alias": alias}),
+        lambda: app.create(name, alias, save=False),
+        app.page,
+    )
     return _row(r)
 
 
@@ -164,16 +181,22 @@ def same_view(app: App) -> dict[str, Any]:
         app.create(name, alias)
         app.page.goto(base(APP) + f"/societe/list.php?search_nom={name}")
 
-    r = check(spec(), {"name": name}, written({"name": name, "alias": alias}),
-              act, app.page)
+    r = check(
+        spec(), {"name": name}, written({"name": name, "alias": alias}), act, app.page
+    )
     return _row(r)
 
 
 def _provisional(app: App, late_change: bool) -> dict[str, Any]:
     name, alias = f"UI2R Corp {token()}", f"Alias {token()}"
     s = spec(final=final_section())
-    r = check(s, {"name": name}, written({"name": name, "alias": alias}),
-              lambda: app.create(name, alias), app.page)
+    r = check(
+        s,
+        {"name": name},
+        written({"name": name, "alias": alias}),
+        lambda: app.create(name, alias),
+        app.page,
+    )
     card = app.page.url
     if late_change:
         other = app.login()  # a second session changes the record later
@@ -181,8 +204,12 @@ def _provisional(app: App, late_change: bool) -> dict[str, Any]:
         other.context.close()
     settled, secs = settle(s)
     final = ledger_state(s, r.deferred) if r.deferred else None
-    return _row(r, final=final, settle_seconds=secs,
-                settled=[(x.state, x.code) for x in settled])
+    return _row(
+        r,
+        final=final,
+        settle_seconds=secs,
+        settled=[(x.state, x.code) for x in settled],
+    )
 
 
 def provisional_then_final(app: App) -> dict[str, Any]:
@@ -200,8 +227,15 @@ def batch_settle(app: App) -> dict[str, Any]:
     reads = []
     for _ in range(5):
         name, alias = f"UI2R Corp {token()}", f"Alias {token()}"
-        reads.append(check(s, {"name": name}, written({"name": name, "alias": alias}),
-                           lambda: app.create(name, alias), app.page))
+        reads.append(
+            check(
+                s,
+                {"name": name},
+                written({"name": name, "alias": alias}),
+                lambda: app.create(name, alias),
+                app.page,
+            )
+        )
     settled, secs = settle(s)
     return {
         "verdict": ",".join(r.verdict for r in reads),
@@ -220,8 +254,18 @@ CASES = [
     ("F1", "wrong value", "refuted", wrong_value),
     ("F2", "duplicate", "refuted", duplicate),
     ("F4", "missing save", "not confirmed", missing_save),
-    ("F5c", "provisional, unchanged", "provisional then verified", provisional_then_final),
+    (
+        "F5c",
+        "provisional, unchanged",
+        "provisional then verified",
+        provisional_then_final,
+    ),
     ("F5", "late change", "provisional then reconciliation_required", late_change),
     ("F7", "same view", "not confirmed", same_view),
-    ("B5", "batch of 5 provisional", "5 provisional, 5 verified in one settle", batch_settle),
+    (
+        "B5",
+        "batch of 5 provisional",
+        "5 provisional, 5 verified in one settle",
+        batch_settle,
+    ),
 ]

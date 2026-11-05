@@ -1,4 +1,4 @@
-# Lab network chaos (zen lane)
+# Lab network chaos
 
 Shared lab infrastructure for real-app runs under bad networks. Generic: an app
 gets proxied ports by adding an entry to `profiles.json`; no app code here.
@@ -17,7 +17,7 @@ the HTTP status codes and the stale list. The shim rewrites `Location` headers
 and absolute links to its own port, so redirects stay behind the proxy. Each
 shim logs what it injected to `~/lab_chaos/<app>-<profile>.jsonl` in WSL.
 
-## Ports on 100.111.126.101
+## Configured ports
 
 | App | upstream | vpn-typical | vpn-bad | replica-lag | vpn-bad+replica-lag |
 |---|---|---|---|---|---|
@@ -26,17 +26,21 @@ shim logs what it injected to `~/lab_chaos/<app>-<profile>.jsonl` in WSL.
 
 ## Use it from a test
 
+    export OPENADAPT_LAB_HOST=fixture.example
     OPENADAPT_LAB_CHAOS=vpn-bad python benchmark/<suite>/live.py ...
     pytest -p benchmark.lab_chaos.chaos --chaos vpn-bad tests/<real-app test>
 
+The committed hostname is a reserved placeholder. Requested chaos refuses an
+unset, empty or placeholder deployment hostname, including when selected through
+the environment. Set the host to the actual fixture host before either command,
 and pass app URLs through `benchmark.lab_chaos.chaos.chaos_url(url)`.
 
 ## Start or restart (idempotent)
 
-    cd packages/flow/benchmark/lab_chaos
-    tar czf - shim.py profiles.json zen_up.sh | ssh -i ~/.ssh/oalab_ed25519 user@100.111.126.101 \
-      "wsl -d Ubuntu-24.04 -- tar xzf - -C /home/oa/lab_chaos_src"
-    ssh -i ~/.ssh/oalab_ed25519 user@100.111.126.101 "wsl -d Ubuntu-24.04 -- bash /home/oa/lab_chaos_src/zen_up.sh"
+Set `OPENADAPT_LAB_HOST` to the fixture's hostname on the deployment host.
+Copy this directory to the operator-selected `LAB_CHAOS_DIR` there, then run
+`zen_up.sh` inside WSL. The script validates the hostname before it downloads
+or starts any process. `OPENADAPT_LAB_CHAOS_STATE` selects the process/log
+state directory (default: `~/lab_chaos`). Restart after a WSL reboot.
 
-The processes don't restart after a WSL reboot; run `zen_up.sh` again. Ports
-9654 to 9656 are taken by another stack on zen; don't use them.
+Choose ports in `profiles.json` that do not overlap other deployments.

@@ -13,7 +13,7 @@ It rewrites ``Location`` headers and absolute links from the upstream origin
 to its own, so a redirect never bypasses it. Stdlib only.
 
     python3 chaos_shim.py --listen 9650 --upstream 127.0.0.1:9651 \\
-        --public 100.111.126.101:9650 --app-origin 100.111.126.101:9635 \\
+        --public lab-host.invalid:9650 --app-origin lab-host.invalid:9635 \\
         --stale-path /societe/list.php --seed 7 --log chaos.jsonl
 """
 

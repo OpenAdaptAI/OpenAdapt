@@ -12,7 +12,7 @@ and the provisional/final check) tell correct saves from planted faults?
 
 ## Setup
 
-- Apps: OpenEMR 7.0.3 and Dolibarr 21.0.4 on the zen fixture lane (synthetic
+- Apps: OpenEMR 7.0.3 and Dolibarr 21.0.4 on the fixture host (synthetic
   data only).
 - The acting session is a headless Playwright browser signed in as the acting
   user. It writes through the application's own forms.
@@ -56,10 +56,10 @@ and the provisional/final check) tell correct saves from planted faults?
 ## Addendum (before any run): the same cases behind a network chaos proxy
 
 Added at the coordinator's request, before the first live run. Every case
-above runs twice: once direct, once through this chain on the zen lane, for
+above runs twice: once direct, once through this chain on the fixture host, for
 both the acting session and the verifier's session:
 
-    runner -> chaos shim (HTTP, zen) -> Toxiproxy (TCP, zen) -> app
+    runner -> chaos shim (HTTP, fixture host) -> Toxiproxy (TCP, fixture host) -> app
 
 | Setting | Value | Where |
 |---|---|---|
@@ -87,3 +87,12 @@ Predictions under chaos:
 - An acting-side failure caused by chaos (the save itself got a 502) is a
   harness event, reported, and the case is rerun once on a fresh record.
   Verifier verdicts are never rerun.
+
+## Operator deployment configuration
+
+Set `UI2R_OPENEMR_URL` and `UI2R_DOLIBARR_URL` to the isolated synthetic
+fixture URLs before running. Set `UI2R_OPENEMR_SQL_COMMAND` to the operator's
+SQL client command for that fixture; statements are passed on stdin. It has
+no built-in host, container, account or password. Credential provisioning
+remains a separate deployment step. These configuration changes do not
+replace or add any measurements in the committed result files.

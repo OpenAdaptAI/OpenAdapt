@@ -12,7 +12,7 @@ copy of the patient is counted. The history view is the audit log
 from __future__ import annotations
 
 import os
-
+import shlex
 import subprocess
 import time
 from typing import Any
@@ -29,23 +29,28 @@ from benchmark.ui_second_read.common import (
 )
 from openadapt_flow.runtime.effects.ui_readback import UiReadbackSpec
 
-APP = "http://100.111.126.101:9640"
-SSH = ["ssh", "-i", str(__import__("pathlib").Path.home() / ".ssh/oalab_ed25519"),
-       "user@100.111.126.101"]
+APP = os.environ.get("UI2R_OPENEMR_URL", "http://lab-host.invalid:9640")
+
 
 HISTORY = {
     "url": APP + "/interface/logview/logview.php",
     "submit_selector": "a.btn-save",
     "ready_selector": "body",
     "row_selector": "table tbody tr:has(td:nth-child(10))",
-    "entry": {"record": "td:nth-child(7)", "what": "td:nth-child(2)",
-              "user": "td:nth-child(4)"},
+    "entry": {
+        "record": "td:nth-child(7)",
+        "what": "td:nth-child(2)",
+        "user": "td:nth-child(4)",
+    },
     "record": {"param": "pid"},
     # From a calibration save (not a case): the entry types one correct
     # demographics save writes. Reads are ignored; patient 0 or blank is
     # bookkeeping no record owns.
-    "explained": ["^patient-record-update$", "^http-request-update$",
-                  "^other-(insert|update)$"],
+    "explained": [
+        "^patient-record-update$",
+        "^http-request-update$",
+        "^other-(insert|update)$",
+    ],
     "unattributed_records": ["", "0"],
     "ignored": ["-Query$", "-select$", "^view$", "^login$", "^logout$"],
     "acting_user_env": "OE_ACT_USER",
@@ -53,10 +58,12 @@ HISTORY = {
 
 
 def sql(statement: str) -> str:
-    cmd = [*SSH, "wsl -d Ubuntu-24.04 -- docker exec -i zen-openemr-mysql-1 "
-           "mariadb -uroot -proot -N openemr"]
-    done = subprocess.run(cmd, input=statement, capture_output=True, text=True,
-                          timeout=60)
+    # Operator-supplied command for this isolated synthetic fixture. No
+    # deployment address, container identity or credentials are built in.
+    cmd = shlex.split(env("UI2R_OPENEMR_SQL_COMMAND"))
+    done = subprocess.run(
+        cmd, input=statement, capture_output=True, text=True, timeout=60
+    )
     if done.returncode:
         raise RuntimeError(done.stderr[-300:])
     return done.stdout.strip()
@@ -67,13 +74,15 @@ def seed(phone: str) -> tuple[int, str, str]:
 
     pubpid = f"UI2R{token(6)}"
     lname = f"Aaui{token(4).lower()}"
-    pid = int(sql(
-        "SET @p := (SELECT COALESCE(MAX(pid),0)+1 FROM patient_data); "
-        "INSERT INTO patient_data (pid, pubpid, fname, lname, DOB, phone_home, "
-        "uuid, date, regdate) VALUES (@p, '%s', 'Test', '%s', '1970-01-01', '%s', "
-        "UNHEX(REPLACE(UUID(),'-','')), NOW(), NOW()); SELECT @p;"
-        % (pubpid, lname, phone)
-    ).splitlines()[-1])
+    pid = int(
+        sql(
+            "SET @p := (SELECT COALESCE(MAX(pid),0)+1 FROM patient_data); "
+            "INSERT INTO patient_data (pid, pubpid, fname, lname, DOB, phone_home, "
+            "uuid, date, regdate) VALUES (@p, '%s', 'Test', '%s', '1970-01-01', '%s', "
+            "UNHEX(REPLACE(UUID(),'-','')), NOW(), NOW()); SELECT @p;"
+            % (pubpid, lname, phone)
+        ).splitlines()[-1]
+    )
     return pid, pubpid, f"{lname}, Test"
 
 
@@ -146,10 +155,14 @@ class App:
                 time.sleep(1)
         raise RuntimeError("acting sign-in failed")
 
-    def set_phone(self, pid: int, phone: str, *, save: bool = True,
-                  page: Any = None) -> None:
+    def set_phone(
+        self, pid: int, phone: str, *, save: bool = True, page: Any = None
+    ) -> None:
         page = page or self.page
-        page.goto(base(APP) + f"/interface/patient_file/summary/demographics.php?set_pid={pid}")
+        page.goto(
+            base(APP)
+            + f"/interface/patient_file/summary/demographics.php?set_pid={pid}"
+        )
         page.goto(base(APP) + "/interface/patient_file/summary/demographics_full.php")
         page.wait_for_selector("input[name=form_phone_home]", state="attached")
         page.eval_on_selector(
@@ -180,8 +193,13 @@ def _one(app: App, *, history: bool, act: Any, expected_phone: Any = None) -> di
     s = spec(history=HISTORY if history else None)
     expected = expected_phone(new) if expected_phone else new
     try:
-        r = check(s, {"pid": str(pid)}, written({"pubpid": pubpid, "phone": expected}),
-                  lambda: act(app, pid, new, other), app.page)
+        r = check(
+            s,
+            {"pid": str(pid)},
+            written({"pubpid": pubpid, "phone": expected}),
+            lambda: act(app, pid, new, other),
+            app.page,
+        )
     finally:
         cleanup()
     return _row(r)
@@ -192,30 +210,33 @@ def correct(app: App) -> dict:
 
 
 def wrong_value(app: App) -> dict:
-    return _one(app, history=True,
-                act=lambda a, pid, new, o: a.set_phone(pid, new + "9"))
+    return _one(
+        app, history=True, act=lambda a, pid, new, o: a.set_phone(pid, new + "9")
+    )
 
 
 def duplicate(app: App) -> dict:
     def act(a: App, pid: int, new: str, o: Any) -> None:
         a.set_phone(pid, new)
         # planted by SQL: a second copy of the patient (a double submit)
-        sql("INSERT INTO patient_data (pid, pubpid, fname, lname, DOB, phone_home, "
+        sql(
+            "INSERT INTO patient_data (pid, pubpid, fname, lname, DOB, phone_home, "
             "uuid, date, regdate) SELECT (SELECT MAX(pid)+1 FROM patient_data), "
             "pubpid, fname, lname, DOB, phone_home, UNHEX(REPLACE(UUID(),'-','')), "
-            f"NOW(), NOW() FROM patient_data WHERE pid={pid};")
+            f"NOW(), NOW() FROM patient_data WHERE pid={pid};"
+        )
 
     return _one(app, history=True, act=act)
 
 
 def wrong_record(app: App) -> dict:
-    return _one(app, history=True,
-                act=lambda a, pid, new, o: a.set_phone(o[0], new))
+    return _one(app, history=True, act=lambda a, pid, new, o: a.set_phone(o[0], new))
 
 
 def missing_save(app: App) -> dict:
-    return _one(app, history=True,
-                act=lambda a, pid, new, o: a.set_phone(pid, new, save=False))
+    return _one(
+        app, history=True, act=lambda a, pid, new, o: a.set_phone(pid, new, save=False)
+    )
 
 
 def _collateral(a: App, pid: int, new: str, o: Any) -> None:
@@ -244,8 +265,13 @@ def _provisional(app: App, late: bool) -> dict:
     pid, pubpid, _name = seed(old)
     s = spec(final=final_section())
     try:
-        r = check(s, {"pid": str(pid)}, written({"pubpid": pubpid, "phone": new}),
-                  lambda: app.set_phone(pid, new), app.page)
+        r = check(
+            s,
+            {"pid": str(pid)},
+            written({"pubpid": pubpid, "phone": new}),
+            lambda: app.set_phone(pid, new),
+            app.page,
+        )
         if late:
             other = app.login()  # a second session changes it later
             app.set_phone(pid, f"555-{token(4)}", page=other)
@@ -254,8 +280,12 @@ def _provisional(app: App, late: bool) -> dict:
     finally:
         cleanup()
     final = ledger_state(s, r.deferred) if r.deferred else None
-    return _row(r, final=final, settle_seconds=secs,
-                settled=[(x.state, x.code) for x in settled])
+    return _row(
+        r,
+        final=final,
+        settle_seconds=secs,
+        settled=[(x.state, x.code) for x in settled],
+    )
 
 
 def provisional_then_final(app: App) -> dict:
@@ -276,9 +306,19 @@ CASES = [
     ("F2", "duplicate (planted by SQL)", "refuted", duplicate),
     ("F3", "wrong record", "refuted", wrong_record),
     ("F4", "missing save", "not confirmed", missing_save),
-    ("F5c", "provisional, unchanged", "provisional then verified", provisional_then_final),
+    (
+        "F5c",
+        "provisional, unchanged",
+        "provisional then verified",
+        provisional_then_final,
+    ),
     ("F5", "late change", "provisional then reconciliation_required", late_change),
-    ("F6a", "collateral, no history view", "confirmed (expected miss)", collateral_no_history),
+    (
+        "F6a",
+        "collateral, no history view",
+        "confirmed (expected miss)",
+        collateral_no_history,
+    ),
     ("F6b", "collateral, history view", "refuted", collateral_history),
     ("F7", "same view", "not confirmed", same_view),
 ]
