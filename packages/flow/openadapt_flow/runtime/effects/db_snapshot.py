@@ -1241,7 +1241,13 @@ def _pg_definitions(
             )
         tables[int(oid)] = (name, str(schema), [kind, persistence, rls, force])
         d = out[name] = _Def(
-            [], [], None, {}, {}, "", relation=_pg_relation(str(schema), str(table)),
+            [],
+            [],
+            None,
+            {},
+            {},
+            "",
+            relation=_pg_relation(str(schema), str(table)),
             source_relation=(str(schema), str(table), int(oid)),
         )
         if kind == "f":

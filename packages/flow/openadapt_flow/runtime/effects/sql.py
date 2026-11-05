@@ -262,11 +262,16 @@ class _SourceSqliteConnection(sqlite3.Connection):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.read_sources: set[tuple[Optional[str], Optional[str], Optional[str]]] = set()
+        self.read_sources: set[tuple[Optional[str], Optional[str], Optional[str]]] = (
+            set()
+        )
 
         def observe(
-            action: int, table: Optional[str], column: Optional[str],
-            database: Optional[str], view: Optional[str],
+            action: int,
+            table: Optional[str],
+            column: Optional[str],
+            database: Optional[str],
+            view: Optional[str],
         ) -> int:
             if action == sqlite3.SQLITE_READ:
                 self.read_sources.add((database, table, view))
@@ -318,10 +323,28 @@ def _direct_table_source(query: str) -> Optional[tuple[str, ...]]:
     if tail and (tail[0] != ("word", "where") or len(tail) == 1):
         return None
     if any(
-        (kind == "word" and value in {
-            "select", "from", "join", "union", "intersect", "except", "with", "as",
-            "group", "having", "window", "order", "limit", "offset", "fetch", "for",
-        })
+        (
+            kind == "word"
+            and value
+            in {
+                "select",
+                "from",
+                "join",
+                "union",
+                "intersect",
+                "except",
+                "with",
+                "as",
+                "group",
+                "having",
+                "window",
+                "order",
+                "limit",
+                "offset",
+                "fetch",
+                "for",
+            }
+        )
         or (kind == "punct" and value == ";")
         for kind, value in tail
     ):
@@ -372,15 +395,22 @@ def _confirm_source(
         if len(conn.read_sources) != 1:
             return None
         database, table, view = next(iter(conn.read_sources))
-        if database == "main" and table and view is None and (
-            table.casefold() == prepared[1].casefold()
+        if (
+            database == "main"
+            and table
+            and view is None
+            and (table.casefold() == prepared[1].casefold())
         ):
             return (database, table, 0)
         return None
-    if type(conn).__module__.split(".")[0] == "psycopg2" and description and all(
-        getattr(column, "table_oid", None) == prepared[2]
-        and (getattr(column, "table_column", None) or 0) > 0
-        for column in description
+    if (
+        type(conn).__module__.split(".")[0] == "psycopg2"
+        and description
+        and all(
+            getattr(column, "table_oid", None) == prepared[2]
+            and (getattr(column, "table_column", None) or 0) > 0
+            for column in description
+        )
     ):
         return prepared
     return None
@@ -581,7 +611,8 @@ class SqlRecordVerifier(VerifierAdapterBase):
         try:
             prepared = (
                 _prepare_source(conn, self.query)
-                if capture_source and self._source_metadata else None
+                if capture_source and self._source_metadata
+                else None
             )
             if isinstance(conn, _SourceSqliteConnection):
                 conn.read_sources.clear()

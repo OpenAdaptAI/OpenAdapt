@@ -648,7 +648,8 @@ def _same_sql_source(source: Mapping[str, Any], read: Mapping[str, Any]) -> bool
         return bool(a and b and Path(str(a)).resolve() == Path(str(b)).resolve())
     return bool(source.get("sql_driver")) and (
         source.get("sql_driver") == read.get("sql_driver")
-        and (source.get("sql_connect_args") or {}) == (read.get("sql_connect_args") or {})
+        and (source.get("sql_connect_args") or {})
+        == (read.get("sql_connect_args") or {})
         and source.get("sql_password_env") == read.get("sql_password_env")
     )
 
@@ -1365,8 +1366,10 @@ def _sql_reader(verifier: Any, surface: str) -> Any:
     from openadapt_flow.runtime.effects.sql import SqlRecordVerifier
 
     routed = getattr(verifier, "verifiers", None)
-    reader = routed.get(surface) if isinstance(routed, dict) else (
-        verifier if not surface else None
+    reader = (
+        routed.get(surface)
+        if isinstance(routed, dict)
+        else (verifier if not surface else None)
     )
     return reader if isinstance(reader, SqlRecordVerifier) else None
 
@@ -1419,7 +1422,9 @@ def _witness_attributed_additions(
         source = (
             cfg.verifier.surfaces.get(surface)
             if cfg.verifier.surfaces
-            else cfg.verifier if surface == "" else None
+            else cfg.verifier
+            if surface == ""
+            else None
         )
         if source is None or not _same_sql_source(source.model_dump(), database.read):
             continue
@@ -1438,8 +1443,11 @@ def _witness_attributed_additions(
         ):
             continue
         relation = (
-            ("main", name, 0) if database.dialect == "sqlite"
-            else table.source_relation if database.dialect == "postgresql" else None
+            ("main", name, 0)
+            if database.dialect == "sqlite"
+            else table.source_relation
+            if database.dialect == "postgresql"
+            else None
         )
         if relation is None or reader.source_relation != relation:
             continue

@@ -22,7 +22,7 @@ def test_native_origin_belongs_to_the_executed_table(tmp_path: Path) -> None:
     path = _db(tmp_path)
     verifier = SqlRecordVerifier(
         lambda: sqlite_read_connection(str(path)),
-        'SELECT * FROM main."records" WHERE value != \'other\'',
+        "SELECT * FROM main.\"records\" WHERE value != 'other'",
         source_metadata=True,
     )
     state = verifier.capture_pre_state()
@@ -42,14 +42,15 @@ def test_an_existing_security_authorizer_is_never_replaced(tmp_path: Path) -> No
     def connect() -> sqlite3.Connection:
         con = sqlite3.connect(path)
         con.set_authorizer(
-            lambda action, *_: sqlite3.SQLITE_DENY
-            if action == sqlite3.SQLITE_READ else sqlite3.SQLITE_OK
+            lambda action, *_: (
+                sqlite3.SQLITE_DENY
+                if action == sqlite3.SQLITE_READ
+                else sqlite3.SQLITE_OK
+            )
         )
         return con
 
-    verifier = SqlRecordVerifier(
-        connect, "SELECT * FROM records", source_metadata=True
-    )
+    verifier = SqlRecordVerifier(connect, "SELECT * FROM records", source_metadata=True)
     assert not verifier.capture_pre_state().reachable
     assert verifier.source_relation is None
 
