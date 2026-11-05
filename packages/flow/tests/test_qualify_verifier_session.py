@@ -140,3 +140,37 @@ def test_build_effect_verifier_refuses_a_session_it_would_ignore():
             EffectsConfig(kind="sql", sqlite_database="/nonexistent.db"),
             session=object(),
         )
+
+
+_REST = {
+    "kind": "rest",
+    "base_url": "https://sor.invalid/api",
+    "records_path": "/patients",
+}
+
+
+@pytest.mark.parametrize("kind", [*sorted(_VERIFIERS), "rest"])
+def test_a_session_hook_that_opens_no_client_is_refused_before_any_read(
+    monkeypatch, kind
+):
+    import httpx
+
+    from openadapt_flow.qualify.config import QualifyConfigError
+
+    module = types.ModuleType("fake_sor_no_client")
+    module.open_session = lambda _config: None  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "fake_sor_no_client", module)
+
+    def no_anonymous_client(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("an anonymous client was opened")
+
+    monkeypatch.setattr(httpx, "Client", no_anonymous_client)
+    spec = _REST if kind == "rest" else _VERIFIERS[kind]
+    sor = SystemOfRecordConfig(
+        session="fake_sor_no_client:open_session",
+        verifier=EffectsConfig(**spec),
+    )
+    make_verifier = verifier_factory(SimpleNamespace(system_of_record=sor))
+
+    with pytest.raises(QualifyConfigError, match="returned no client"):
+        make_verifier({})

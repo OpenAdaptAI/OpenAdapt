@@ -148,26 +148,44 @@ def step_runner(step: ResetConfig, where: str) -> Callable[[], None]:
     return run_http
 
 
+def _hook_client(hook: Callable[..., Any], reference: str, config: Any) -> Any:
+    """The client a ``verifier.session`` hook opened. A hook that opens none
+    is refused: the verifier would fall back to an anonymous client and read
+    whatever that client can see instead of the protected view."""
+
+    client = hook(config)
+    if client is None:
+        raise QualifyConfigError(
+            f"verifier.session {reference!r} returned no client; "
+            "refusing to read back without the configured authentication"
+        )
+    return client
+
+
 def verifier_factory(config: VerifyConfig) -> Callable[[Mapping[str, object]], Any]:
     """Build the read-back verifier for one run's inputs."""
 
     sor = config.system_of_record
     cfg = sor.verifier
     if sor.session and cfg.kind != "rest":
-        session_hook = load_hook(sor.session)
+        reference = sor.session
+        session_hook = load_hook(reference)
         from openadapt_flow.deployment import build_effect_verifier
 
         def build_with_session(params: Mapping[str, object]) -> Any:
             # A fresh client per read-back, so a token that expired during a
             # long campaign is renewed rather than replayed.
-            verifier = build_effect_verifier(cfg, params, session=session_hook(config))
+            verifier = build_effect_verifier(
+                cfg, params, session=_hook_client(session_hook, reference, config)
+            )
             if verifier is None:
                 raise QualifyConfigError("verifier built no verifier")
             return verifier
 
         return build_with_session
     if sor.session:
-        hook = load_hook(sor.session)
+        rest_reference = sor.session
+        hook = load_hook(rest_reference)
         from openadapt_flow.runtime.effects import RestRecordVerifier
 
         if not cfg.base_url:
@@ -181,7 +199,7 @@ def verifier_factory(config: VerifyConfig) -> Callable[[Mapping[str, object]], A
                 cfg.base_url.rstrip("/"),  # type: ignore[union-attr]
                 records_path=records_path,
                 records_key=cfg.records_key,
-                session=hook(config),
+                session=_hook_client(hook, rest_reference, config),
                 timeout_s=10.0,
                 poll_interval_s=0.2,
             )
