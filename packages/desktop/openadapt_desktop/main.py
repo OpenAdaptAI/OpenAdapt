@@ -207,6 +207,12 @@ def main() -> None:
 
     logger.info("OpenAdapt Desktop Engine starting (v{version})", version=ENGINE_VERSION)
     logger.info("Storage mode: {mode}", mode=config.storage_mode)
+    try:
+        from openadapt_desktop.telemetry import capture as telemetry_capture
+
+        telemetry_capture("app_opened", {"app_version": ENGINE_VERSION, "surface": "engine"})
+    except Exception:
+        logger.debug("Telemetry app_opened skipped")
 
     from openadapt_desktop.audit import AuditLogger
     from openadapt_desktop.db import IndexDB

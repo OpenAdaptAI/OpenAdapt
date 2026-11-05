@@ -204,6 +204,13 @@ class RecordingController:
             state["status"] = "recording"
             state_path.write_text(json.dumps(state, indent=2))
 
+            try:
+                from openadapt_desktop.telemetry import capture as telemetry_capture
+
+                telemetry_capture("recording_started", {"surface": "controller"})
+            except Exception:
+                logger.debug("Telemetry recording_started skipped")
+
             if self._storage_manager:
                 self._storage_manager.register_capture(capture_id, capture_dir)
         except Exception as exc:
@@ -227,6 +234,12 @@ class RecordingController:
             self._started_at = None
             self._recorder = None
             self.state = RecordingState.IDLE
+            try:
+                from openadapt_desktop.telemetry import capture as telemetry_capture
+
+                telemetry_capture("recording_failed", {"surface": "controller", "error_code": "start_failed"})
+            except Exception:
+                logger.debug("Telemetry recording_failed skipped")
             raise RuntimeError(f"Could not start native recording: {exc}") from exc
 
         return capture_id
@@ -306,6 +319,12 @@ class RecordingController:
             self._started_at = None
             self._recorder = None
             self.state = RecordingState.IDLE
+            try:
+                from openadapt_desktop.telemetry import capture as telemetry_capture
+
+                telemetry_capture("recording_failed", {"surface": "controller", "error_code": "stop_failed"})
+            except Exception:
+                logger.debug("Telemetry recording_failed skipped")
             raise RuntimeError(f"Could not stop native recording cleanly: {exc}") from exc
 
         capture_id = self._current_capture_id
@@ -370,6 +389,13 @@ class RecordingController:
                     metadata["bundle_id"] = compiled.get("bundle_id")
                     metadata["bundle_path"] = compiled.get("bundle_path")
 
+            try:
+                from openadapt_desktop.telemetry import capture as telemetry_capture
+
+                telemetry_capture("recording_stopped", {"surface": "controller", "outcome": "completed"})
+            except Exception:
+                logger.debug("Telemetry recording_stopped skipped")
+
             return metadata
         except Exception as exc:
             if capture_dir:
@@ -384,6 +410,12 @@ class RecordingController:
                     (capture_dir / "state.json").write_text(json.dumps(failed_state, indent=2))
                 except Exception:
                     logger.exception("Could not persist failed recording finalization")
+            try:
+                from openadapt_desktop.telemetry import capture as telemetry_capture
+
+                telemetry_capture("recording_failed", {"surface": "controller", "error_code": "finalize_failed"})
+            except Exception:
+                logger.debug("Telemetry recording_failed skipped")
             raise RuntimeError(f"Could not finalize native recording: {exc}") from exc
         finally:
             self._current_capture_id = None

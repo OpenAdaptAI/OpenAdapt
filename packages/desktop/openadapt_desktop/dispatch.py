@@ -1359,6 +1359,15 @@ class EngineDispatcher:
         run: bool,
         first_supervised: bool = False,
     ) -> dict:
+        try:
+            from openadapt_desktop.telemetry import capture as telemetry_capture
+
+            telemetry_capture(
+                "replay_started",
+                {"surface": "dispatch", "mode": "governed" if run else "replay"},
+            )
+        except Exception:
+            pass
         workflow_id = params.get("workflow_id")
         bundle = self._bundle_dir(workflow_id)
         if bundle is None:
@@ -1787,6 +1796,20 @@ class EngineDispatcher:
                 ),
             },
         )
+        try:
+            from openadapt_desktop.telemetry import capture as telemetry_capture
+
+            failed = outcome in {"FAILED", "unknown"} or bool(error)
+            telemetry_capture(
+                "replay_failed" if failed else "replay_stopped",
+                {
+                    "surface": "dispatch",
+                    "mode": "governed" if run else "replay",
+                    "outcome": str(outcome)[:64],
+                },
+            )
+        except Exception:
+            pass
         return report
 
     @staticmethod
@@ -2378,6 +2401,12 @@ class EngineDispatcher:
 
     def teach_fix(self, **params: Any) -> dict:
         """Teach a fix for a halted workflow via ``openadapt-flow teach``."""
+        try:
+            from openadapt_desktop.telemetry import capture as telemetry_capture
+
+            telemetry_capture("teach_started", {"surface": "dispatch", "mode": "fix"})
+        except Exception:
+            pass
         workflow_id = str(params.get("workflow_id") or "")
         bundle = self._bundle_dir(workflow_id)
         if bundle is None:
@@ -2403,6 +2432,15 @@ class EngineDispatcher:
         except Exception as exc:
             return {"promoted": False, "message": str(exc)}
         message = "Fix promoted." if result.ok else (result.stderr or "Teach did not promote.")
+        try:
+            from openadapt_desktop.telemetry import capture as telemetry_capture
+
+            telemetry_capture(
+                "teach_completed",
+                {"surface": "dispatch", "mode": "fix", "outcome": "promoted" if result.ok else "not_promoted"},
+            )
+        except Exception:
+            pass
         response: dict[str, Any] = {"promoted": result.ok, "message": message}
         if result.ok:
             examples = self._remember_branch_example(workflow_id, run, fix)
