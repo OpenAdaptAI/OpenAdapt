@@ -459,7 +459,9 @@ class EffectsConfig(BaseModel):
     #: Nonsecret metadata preferences; auth/routing/framing overrides refuse.
     fhir_read_headers: Optional[dict[str, str]] = Field(default=None, repr=False)
     #: Operator-declared maximum identifying-search cache window; no default.
-    fhir_cache_bound_s: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False, strict=True)
+    fhir_cache_bound_s: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False, strict=True
+    )
     #: Name of the env var holding the OAuth2 bearer token (secret-isolated;
     #: wins over ``access_token``; missing var fails loud).
     access_token_env: Optional[str] = None

@@ -114,9 +114,16 @@ class SurfaceRoutedVerifier:
                 "reachable": state.reachable,
                 "records": state.records,
             }
-            from openadapt_flow.runtime.effects.rest import PROJECTION_DETAIL, projection_problem
+            from openadapt_flow.runtime.effects.rest import (
+                PROJECTION_DETAIL,
+                projection_problem,
+            )
 
-            facts = state.detail.get(PROJECTION_DETAIL) if isinstance(state.detail, dict) else None
+            facts = (
+                state.detail.get(PROJECTION_DETAIL)
+                if isinstance(state.detail, dict)
+                else None
+            )
             if projection_problem(facts) is None:
                 # Forward only closed factual completion observations, never
                 # arbitrary native detail or an authority supplied by a caller.

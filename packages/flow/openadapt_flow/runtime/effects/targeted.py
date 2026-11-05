@@ -7,10 +7,10 @@ These objects are not an authority or a serialized receipt format.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 import os
 import time
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Literal, Mapping, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -124,7 +124,9 @@ class ReceiptObservation:
     phase: Literal["write", "late"] = "write"
     scope: Literal["declared_projection", "declared_database"] = "declared_projection"
     schema_sha256: Optional[str] = None
-    identity_binding: Literal["declared_identity", "projected_tuple", "native_primary_key"] = "declared_identity"
+    identity_binding: Literal[
+        "declared_identity", "projected_tuple", "native_primary_key"
+    ] = "declared_identity"
 
 
 # The issued post-state contains these commitments, never the raw observations.
@@ -167,7 +169,9 @@ class _TargetedReadClock:
 def _cache_policy(spec: Any, reader: Any) -> dict[str, Any]:
     return {
         "bound_s": reader.cache_bound_s,
-        "source": "operator_declared_adapter_config" if reader.cache_bound_s is not None else "unknown",
+        "source": "operator_declared_adapter_config"
+        if reader.cache_bound_s is not None
+        else "unknown",
         "W_s": spec.quiet_s,
     }
 
@@ -182,28 +186,45 @@ def _cache_policy_problem(value: Any) -> Optional[str]:
         window = validate_fhir_cache_bound(value["W_s"])
     except ValueError:
         return "the targeted cache policy is malformed"
-    if window is None or window <= 0 or value["source"] != ("unknown" if bound is None else "operator_declared_adapter_config"):
+    if (
+        window is None
+        or window <= 0
+        or value["source"]
+        != ("unknown" if bound is None else "operator_declared_adapter_config")
+    ):
         return "the targeted cache policy is malformed"
     return None
 
 
-def bind_targeted_read_clock(post: dict[str, Any], salt: bytes, completed_ns: Optional[int]) -> Optional[_TargetedReadClock]:
+def bind_targeted_read_clock(
+    post: dict[str, Any], salt: bytes, completed_ns: Optional[int]
+) -> Optional[_TargetedReadClock]:
     """Bind an independent native read completion under existing state MACs.
 
     Only canonical write observation calls this before receipt/state issuance.
     No load/restart API restores a live witness from the persisted clock data.
     """
-    if type(completed_ns) is not int or completed_ns <= 0 or completed_ns > time.monotonic_ns():
+    if (
+        type(completed_ns) is not int
+        or completed_ns <= 0
+        or completed_ns > time.monotonic_ns()
+    ):
         return None
     if post.get("status") == "unresolved" or not post.get("targets"):
         return None
-    if any(not t.get("version_mac") or not t.get("anchor_mac") for t in post["targets"]):
+    if any(
+        not t.get("version_mac") or not t.get("anchor_mac") for t in post["targets"]
+    ):
         return None
     post["read_clock"] = {"domain": _CLOCK_DOMAIN, "completed_ns": completed_ns}
-    return _TargetedReadClock(_CLOCK_DOMAIN, completed_ns, _digest("read_clock", post, salt), _LIVE_CLOCK)
+    return _TargetedReadClock(
+        _CLOCK_DOMAIN, completed_ns, _digest("read_clock", post, salt), _LIVE_CLOCK
+    )
 
 
-def targeted_read_clock_problem(post: Mapping[str, Any], salt: bytes, clock: Any) -> Optional[str]:
+def targeted_read_clock_problem(
+    post: Mapping[str, Any], salt: bytes, clock: Any
+) -> Optional[str]:
     """Pure sealed-data/live-domain check; no public caller clock authority."""
     sealed = post.get("read_clock")
     if (
@@ -219,38 +240,54 @@ def targeted_read_clock_problem(post: Mapping[str, Any], salt: bytes, clock: Any
     return None
 
 
-def late_search_problem(spec: Any, reader: Any, post: Mapping[str, Any], salt: bytes,
-                        clock: Optional[_TargetedReadClock], started_ns: int) -> Optional[str]:
+def late_search_problem(
+    spec: Any,
+    reader: Any,
+    post: Mapping[str, Any],
+    salt: bytes,
+    clock: Optional[_TargetedReadClock],
+    started_ns: int,
+) -> Optional[str]:
     """One late identifying search's declared-policy and live-clock gate.
 
     Existing canonical issuance/receipt/target/version/config validation must
     already have admitted this exact post-state. This is never that authority.
     """
     policy = post.get("cache_policy")
-    if _cache_policy_problem(policy) is not None or policy != _cache_policy(spec, reader):
+    if _cache_policy_problem(policy) is not None or policy != _cache_policy(
+        spec, reader
+    ):
         return "late_search_cache_policy_binding_unknown"
     bound = policy["bound_s"]
     if bound is None:
         return "late_search_cache_bound_unknown"
     # Integer nanoseconds conservatively bound the two float durations. Equal
     # W and bound refuse; no rounded float/UTC conversion manufactures time.
-    from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
+    from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 
     duration = Decimal(str(spec.quiet_s)) * 1_000_000_000
     window_ns = int(duration.to_integral_value(rounding=ROUND_FLOOR))
     elapsed_window_ns = int(duration.to_integral_value(rounding=ROUND_CEILING))
-    bound_ns = int((Decimal(str(bound)) * 1_000_000_000).to_integral_value(rounding=ROUND_CEILING))
+    bound_ns = int(
+        (Decimal(str(bound)) * 1_000_000_000).to_integral_value(rounding=ROUND_CEILING)
+    )
     if window_ns <= bound_ns:
         return "late_search_window_does_not_exceed_declared_bound"
     problem = targeted_read_clock_problem(post, salt, clock)
     if problem is not None:
         return problem
-    if type(started_ns) is not int or started_ns < clock.completed_ns or started_ns - clock.completed_ns < elapsed_window_ns:
+    if (
+        type(started_ns) is not int
+        or started_ns < clock.completed_ns
+        or started_ns - clock.completed_ns < elapsed_window_ns
+    ):
         return "late_search_window_not_elapsed"
     return None
 
 
-def targeted_read_wait_s(spec: Any, post: Mapping[str, Any], salt: bytes, clock: Any) -> float:
+def targeted_read_wait_s(
+    spec: Any, post: Mapping[str, Any], salt: bytes, clock: Any
+) -> float:
     """Remaining issued live-clock obligation; never a new timing authority.
 
     Canonical preparation calls this only after its existing issued-state,
@@ -265,9 +302,13 @@ def targeted_read_wait_s(spec: Any, post: Mapping[str, Any], salt: bytes, clock:
         or targeted_read_clock_problem(post, salt, clock) is not None
     ):
         return 0.0
-    from decimal import Decimal, ROUND_CEILING
+    from decimal import ROUND_CEILING, Decimal
 
-    window_ns = int((Decimal(str(spec.quiet_s)) * 1_000_000_000).to_integral_value(rounding=ROUND_CEILING))
+    window_ns = int(
+        (Decimal(str(spec.quiet_s)) * 1_000_000_000).to_integral_value(
+            rounding=ROUND_CEILING
+        )
+    )
     remaining_ns = clock.completed_ns + window_ns - time.monotonic_ns()
     return max(0.0, remaining_ns / 1_000_000_000)
 
@@ -841,7 +882,8 @@ def observe_targeted(
     receipt_digest: str,
     at: str,
     run_actor: str,
-    *, read_clock: Optional[_TargetedReadClock] = None,
+    *,
+    read_clock: Optional[_TargetedReadClock] = None,
 ) -> TargetedObservation:
     problem = targeted_locators_problem(spec, post, locators, params, salt)
     if problem is not None:
@@ -923,7 +965,9 @@ def observe_targeted(
     search_problem = None
     try:
         if phase == "late":
-            search_problem = late_search_problem(spec, reader, post, salt, read_clock, time.monotonic_ns())
+            search_problem = late_search_problem(
+                spec, reader, post, salt, read_clock, time.monotonic_ns()
+            )
             if search_problem is not None:
                 raise TargetedUnreadable(search_problem)
         late_search = _search(spec, reader, params, at)
@@ -1100,15 +1144,23 @@ def receipt_records_problem(value: Any) -> Optional[str]:
     import re
 
     if not isinstance(value, Mapping) or set(value) != {
-        "schema_version", "contract_sha256", "source_sha256", "params_mac", "targets"
+        "schema_version",
+        "contract_sha256",
+        "source_sha256",
+        "params_mac",
+        "targets",
     }:
         return "native receipt commitments are malformed"
     if value["schema_version"] != RECEIPT_RECORDS_SCHEMA:
         return "native receipt commitment version is unsupported"
     for name in ("contract_sha256", "source_sha256"):
-        if not isinstance(value[name], str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", value[name]):
+        if not isinstance(value[name], str) or not re.fullmatch(
+            r"sha256:[0-9a-f]{64}", value[name]
+        ):
             return "native receipt digest is malformed"
-    if not isinstance(value["params_mac"], str) or not re.fullmatch(r"hmac-sha256:[0-9a-f]{64}", value["params_mac"]):
+    if not isinstance(value["params_mac"], str) or not re.fullmatch(
+        r"hmac-sha256:[0-9a-f]{64}", value["params_mac"]
+    ):
         return "native receipt parameters are malformed"
     targets = value["targets"]
     if not isinstance(targets, list) or not targets:
@@ -1116,15 +1168,22 @@ def receipt_records_problem(value: Any) -> Optional[str]:
     seen: set[tuple[str, str]] = set()
     for target in targets:
         if not isinstance(target, Mapping) or set(target) != {
-            "table", "row_key_mac", "row_mac", "schema"
+            "table",
+            "row_key_mac",
+            "row_mac",
+            "schema",
         }:
             return "native receipt target is malformed"
         if not isinstance(target["table"], str) or not target["table"]:
             return "native receipt table is malformed"
         for name in ("row_key_mac", "row_mac"):
-            if not isinstance(target[name], str) or not re.fullmatch(r"[0-9a-f]{32}", target[name]):
+            if not isinstance(target[name], str) or not re.fullmatch(
+                r"[0-9a-f]{32}", target[name]
+            ):
                 return "native receipt row commitment is malformed"
-        if not isinstance(target["schema"], str) or not re.fullmatch(r"[0-9a-f]{64}", target["schema"]):
+        if not isinstance(target["schema"], str) or not re.fullmatch(
+            r"[0-9a-f]{64}", target["schema"]
+        ):
             return "native receipt schema is malformed"
         identity = (target["table"], target["row_key_mac"])
         if identity in seen:
@@ -1147,13 +1206,21 @@ def receipt_records_binding_problem(
     problem = receipt_records_problem(issued)
     if problem is not None:
         return problem
-    if issued["contract_sha256"] != contract_sha256 or issued["source_sha256"] != source_sha256 or issued["params_mac"] != _digest("native-params", dict(params), salt):
+    if (
+        issued["contract_sha256"] != contract_sha256
+        or issued["source_sha256"] != source_sha256
+        or issued["params_mac"] != _digest("native-params", dict(params), salt)
+    ):
         return "native receipt source, contract or parameters changed"
     if not isinstance(previous, Snapshot):
         return "the issued native snapshot is unavailable"
     for bound in issued["targets"]:
         old = previous.tables.get(bound["table"])
-        if old is None or old.schema != bound["schema"] or old.rows.get(bound["row_key_mac"], [None])[0] != bound["row_mac"]:
+        if (
+            old is None
+            or old.schema != bound["schema"]
+            or old.rows.get(bound["row_key_mac"], [None])[0] != bound["row_mac"]
+        ):
             return "the native receipt row or schema is not the issued anchor"
     return None
 
@@ -1186,31 +1253,50 @@ def observe_receipt_records(
     additional query or second per-field judge is constructed.
     """
     from openadapt_flow.runtime.effects.db_snapshot import (
-        Snapshot, cell_hash, key_text, mac_key, row_key_hash, unpack,
+        Snapshot,
+        cell_hash,
+        key_text,
+        mac_key,
+        row_key_hash,
+        unpack,
     )
-    from openadapt_flow.runtime.effects.sql import SqlRecordVerifier
     from openadapt_flow.runtime.effects.rest import RestRecordVerifier
+    from openadapt_flow.runtime.effects.sql import SqlRecordVerifier
 
     def table_read(name: str) -> Any:
         if not isinstance(snapshot, Snapshot) or not snapshot.code_visible:
             raise TargetedUnreadable("the declared native database read is unavailable")
         table = snapshot.tables.get(name)
-        if table is None or table.mode != "compare" or table.non_transactional or len(table.rows) != table.count:
+        if (
+            table is None
+            or table.mode != "compare"
+            or table.non_transactional
+            or len(table.rows) != table.count
+        ):
             raise TargetedUnreadable("the declared native table read is incomplete")
         return table
 
     entries: list[dict[str, Any]] = []
     native_macs: set[str] = set()
     if issued is not None:
-        problem = receipt_records_binding_problem(issued, contract_sha256, source_sha256, params, salt, previous)
+        problem = receipt_records_binding_problem(
+            issued, contract_sha256, source_sha256, params, salt, previous
+        )
         if problem is not None:
             raise TargetedUnreadable(problem)
         for bound in issued["targets"]:
             name, row_key = bound["table"], bound["row_key_mac"]
             old = previous.tables.get(name)
             current = table_read(name)
-            if old is None or old.schema != bound["schema"] or current.schema != bound["schema"] or old.rows.get(row_key, [None])[0] != bound["row_mac"]:
-                raise TargetedUnreadable("the native receipt row or schema is not the issued anchor")
+            if (
+                old is None
+                or old.schema != bound["schema"]
+                or current.schema != bound["schema"]
+                or old.rows.get(row_key, [None])[0] != bound["row_mac"]
+            ):
+                raise TargetedUnreadable(
+                    "the native receipt row or schema is not the issued anchor"
+                )
             # Presence or absence is observed by the complete current read.
             # The unchanged frame judge adjudicates any change and its actor.
             entries.append(dict(bound))
@@ -1221,45 +1307,97 @@ def observe_receipt_records(
         for surface, target in targets:
             adapter, records = reads.get(surface, (None, None))
             if records is None:
-                raise TargetedUnreadable("the declared native projection is unavailable")
+                raise TargetedUnreadable(
+                    "the declared native projection is unavailable"
+                )
             if isinstance(adapter, RestRecordVerifier):
-                if not adapter._projection_matches_capture(records, (read_facts or {}).get(surface)):
-                    raise TargetedUnreadable("the actual REST projection capture is incomplete or unbound")
+                if not adapter._projection_matches_capture(
+                    records, (read_facts or {}).get(surface)
+                ):
+                    raise TargetedUnreadable(
+                        "the actual REST projection capture is incomplete or unbound"
+                    )
             elif not isinstance(adapter, SqlRecordVerifier):
-                raise TargetedUnreadable("the declared native projection is unsupported")
-            ignored = set(ignore_fields) - ({identity_field} if identity_field else set())
+                raise TargetedUnreadable(
+                    "the declared native projection is unsupported"
+                )
+            ignored = set(ignore_fields) - (
+                {identity_field} if identity_field else set()
+            )
             projected = {k: v for k, v in target.items() if k not in ignored}
             wanted = _native_projection(projected)
-            found = [row for row in records if _native_projection({k: v for k, v in row.items() if k not in ignored}) == wanted]
+            found = [
+                row
+                for row in records
+                if _native_projection(
+                    {k: v for k, v in row.items() if k not in ignored}
+                )
+                == wanted
+            ]
             if len(found) != 1:
-                raise TargetedUnreadable("the native receipt projection is missing or ambiguous")
+                raise TargetedUnreadable(
+                    "the native receipt projection is missing or ambiguous"
+                )
             if identity_field:
                 if target.get(identity_field) is None:
-                    raise TargetedUnreadable("the declared native identity is unavailable")
-                identity: Any = [identity_field, _native_projection({identity_field: target[identity_field]})]
+                    raise TargetedUnreadable(
+                        "the declared native identity is unavailable"
+                    )
+                identity: Any = [
+                    identity_field,
+                    _native_projection({identity_field: target[identity_field]}),
+                ]
             else:
                 identity = ["exact_projection", wanted]
-            native_macs.add(_digest("native-id", [source_sha256, surface, identity], salt))
+            native_macs.add(
+                _digest("native-id", [source_sha256, surface, identity], salt)
+            )
             if snapshot is None:
                 continue
             names = [name for name, own in (tables or {}).items() if own == surface]
             if len(names) != 1:
-                raise TargetedUnreadable("the native receipt table mapping is ambiguous")
+                raise TargetedUnreadable(
+                    "the native receipt table mapping is ambiguous"
+                )
             name = names[0]
             table = table_read(name)
-            if not table.primary_key or any(target.get(k) is None for k in table.primary_key):
-                raise TargetedUnreadable("the declared snapshot cannot bind the receipt key")
-            row_key = row_key_hash(mac_key(salt), key_text(table.primary_key, target), name)
+            if not table.primary_key or any(
+                target.get(k) is None for k in table.primary_key
+            ):
+                raise TargetedUnreadable(
+                    "the declared snapshot cannot bind the receipt key"
+                )
+            row_key = row_key_hash(
+                mac_key(salt), key_text(table.primary_key, target), name
+            )
             stored = table.rows.get(row_key)
             cells = unpack(table.cell_columns, stored[1]) if stored is not None else {}
-            ignored_columns = set((ignore_columns or {}).get(name, ())) | set((ignore_columns or {}).get("*", ()))
-            if stored is None or any(k not in cells or cells[k] != cell_hash(mac_key(salt), v, name, k) for k, v in projected.items() if k not in ignored_columns):
-                raise TargetedUnreadable("the native receipt projection differs from the settled row")
-            entry = {"table": name, "row_key_mac": row_key, "row_mac": stored[0], "schema": table.schema}
+            ignored_columns = set((ignore_columns or {}).get(name, ())) | set(
+                (ignore_columns or {}).get("*", ())
+            )
+            if stored is None or any(
+                k not in cells or cells[k] != cell_hash(mac_key(salt), v, name, k)
+                for k, v in projected.items()
+                if k not in ignored_columns
+            ):
+                raise TargetedUnreadable(
+                    "the native receipt projection differs from the settled row"
+                )
+            entry = {
+                "table": name,
+                "row_key_mac": row_key,
+                "row_mac": stored[0],
+                "schema": table.schema,
+            }
             if entry not in entries:
                 entries.append(entry)
         if entries:
-            native_macs = {_digest("native-id", [source_sha256, e["table"], e["row_key_mac"]], salt) for e in entries}
+            native_macs = {
+                _digest(
+                    "native-id", [source_sha256, e["table"], e["row_key_mac"]], salt
+                )
+                for e in entries
+            }
     if not native_macs:
         raise TargetedUnreadable("native receipt identity is unavailable")
     checkpoint = None
@@ -1275,11 +1413,19 @@ def observe_receipt_records(
         if problem is not None:
             raise TargetedUnreadable(problem)
     observation = ReceiptObservation(
-        contract_sha256, source_sha256, tuple(sorted(native_macs)), at,
-        receipt_digest, "late" if issued is not None else "write",
+        contract_sha256,
+        source_sha256,
+        tuple(sorted(native_macs)),
+        at,
+        receipt_digest,
+        "late" if issued is not None else "write",
         "declared_database" if entries else "declared_projection",
         _sha({e["table"]: e["schema"] for e in entries}) if entries else None,
-        "native_primary_key" if entries else "declared_identity" if identity_field else "projected_tuple",
+        "native_primary_key"
+        if entries
+        else "declared_identity"
+        if identity_field
+        else "projected_tuple",
     )
     return observation, checkpoint
 

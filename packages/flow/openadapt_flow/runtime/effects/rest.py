@@ -48,29 +48,55 @@ PROJECTION_SCHEMA = "openadapt.declared-projection-read/v1"
 def projection_problem(value: Any) -> Optional[str]:
     """Validate facts, without turning an arbitrary Mapping into authority."""
     if not isinstance(value, Mapping) or set(value) != {
-        "schema_version", "source_sha256", "pages_read", "termination",
-        "records_read", "declared_total",
+        "schema_version",
+        "source_sha256",
+        "pages_read",
+        "termination",
+        "records_read",
+        "declared_total",
     }:
         return "projection completion observations are malformed"
     if value["schema_version"] != PROJECTION_SCHEMA:
         return "projection completion version is unsupported"
     source = value["source_sha256"]
-    if not isinstance(source, str) or len(source) != 71 or not source.startswith("sha256:") or any(c not in "0123456789abcdef" for c in source[7:]):
+    if (
+        not isinstance(source, str)
+        or len(source) != 71
+        or not source.startswith("sha256:")
+        or any(c not in "0123456789abcdef" for c in source[7:])
+    ):
         return "projection source commitment is malformed"
     for name in ("pages_read", "records_read"):
-        if isinstance(value[name], bool) or not isinstance(value[name], int) or value[name] < (1 if name == "pages_read" else 0):
+        if (
+            isinstance(value[name], bool)
+            or not isinstance(value[name], int)
+            or value[name] < (1 if name == "pages_read" else 0)
+        ):
             return "projection completion counts are malformed"
-    if value["pages_read"] > MAX_PAGES or value["termination"] not in ("single_response", "next_exhausted"):
+    if value["pages_read"] > MAX_PAGES or value["termination"] not in (
+        "single_response",
+        "next_exhausted",
+    ):
         return "projection termination is unsupported"
     total = value["declared_total"]
-    if total is not None and (isinstance(total, bool) or not isinstance(total, int) or total != value["records_read"]):
+    if total is not None and (
+        isinstance(total, bool)
+        or not isinstance(total, int)
+        or total != value["records_read"]
+    ):
         return "projection declared total did not match"
     return None
 
 
 def _commit(value: Any) -> str:
-    return "sha256:" + hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")).hexdigest()
-
+    return (
+        "sha256:"
+        + hashlib.sha256(
+            json.dumps(
+                value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            ).encode("utf-8")
+        ).hexdigest()
+    )
 
 
 def _dotted(body: Any, path: str) -> Any:
@@ -182,16 +208,20 @@ class RestRecordVerifier(VerifierAdapterBase):
         self._captured_projection: Optional[tuple[str, dict[str, Any]]] = None
 
     def _projection_source(self) -> str:
-        return _commit({
-            "base_url": self.base_url,
-            "records_path": self.records_path,
-            "records_key": self.records_key,
-            "next_path": self.next_path,
-            "total_path": self.total_path,
-            "drop_fields": list(self.drop_fields),
-        })
+        return _commit(
+            {
+                "base_url": self.base_url,
+                "records_path": self.records_path,
+                "records_key": self.records_key,
+                "next_path": self.next_path,
+                "total_path": self.total_path,
+                "drop_fields": list(self.drop_fields),
+            }
+        )
 
-    def _projection_matches_capture(self, records: list[dict[str, Any]], facts: Any) -> bool:
+    def _projection_matches_capture(
+        self, records: list[dict[str, Any]], facts: Any
+    ) -> bool:
         """Pure binding to this adapter's actual capture; facts alone cannot pass."""
         captured = self._captured_projection
         if captured is None or projection_problem(facts) is not None:
@@ -201,8 +231,16 @@ class RestRecordVerifier(VerifierAdapterBase):
         return bool(
             facts["source_sha256"] == self._projection_source()
             and facts["records_read"] == len(records)
-            and (facts["termination"] == "single_response" and facts["pages_read"] == 1 if self.next_path is None else facts["termination"] == "next_exhausted")
-            and (facts["declared_total"] is None if self.total_path is None else facts["declared_total"] == len(records))
+            and (
+                facts["termination"] == "single_response" and facts["pages_read"] == 1
+                if self.next_path is None
+                else facts["termination"] == "next_exhausted"
+            )
+            and (
+                facts["declared_total"] is None
+                if self.total_path is None
+                else facts["declared_total"] == len(records)
+            )
         )
 
     # -- transport ----------------------------------------------------------
@@ -256,7 +294,11 @@ class RestRecordVerifier(VerifierAdapterBase):
             self.read_problem = f"GET {url} returned HTTP {resp.status_code}"
             return _UNREADABLE
         headers = getattr(resp, "headers", None)
-        if resp.status_code == 206 or isinstance(headers, Mapping) and any(str(name).casefold() == "content-range" for name in headers):
+        if (
+            resp.status_code == 206
+            or isinstance(headers, Mapping)
+            and any(str(name).casefold() == "content-range" for name in headers)
+        ):
             self.read_problem = "the declared projection response is partial"
             return _UNREADABLE
         landed = getattr(resp, "url", None)
@@ -269,8 +311,22 @@ class RestRecordVerifier(VerifierAdapterBase):
             except (TypeError, ValueError):
                 self.read_problem = "the projection response source is unreadable"
                 return _UNREADABLE
-            if (requested.scheme, requested.netloc, requested.path, requested.query, requested.fragment) != (actual.scheme, actual.netloc, actual.path, actual.query, actual.fragment):
-                self.read_problem = "the projection response source differs from the requested source"
+            if (
+                requested.scheme,
+                requested.netloc,
+                requested.path,
+                requested.query,
+                requested.fragment,
+            ) != (
+                actual.scheme,
+                actual.netloc,
+                actual.path,
+                actual.query,
+                actual.fragment,
+            ):
+                self.read_problem = (
+                    "the projection response source differs from the requested source"
+                )
                 return _UNREADABLE
             self._page_source_observed = isinstance(headers, Mapping)
         try:
@@ -314,7 +370,9 @@ class RestRecordVerifier(VerifierAdapterBase):
                 self.read_problem = f"GET {url}: no records list in the body"
                 return None
             if any(not isinstance(record, dict) for record in records):
-                self.read_problem = "the declared projection contains a non-record entry"
+                self.read_problem = (
+                    "the declared projection contains a non-record entry"
+                )
                 return None
             if page == 0 and self.total_path is not None:
                 total = _dotted(body, self.total_path)
@@ -359,7 +417,9 @@ class RestRecordVerifier(VerifierAdapterBase):
                 "schema_version": PROJECTION_SCHEMA,
                 "source_sha256": projection_source,
                 "pages_read": page + 1,
-                "termination": "single_response" if self.next_path is None else "next_exhausted",
+                "termination": "single_response"
+                if self.next_path is None
+                else "next_exhausted",
                 "records_read": len(records),
                 "declared_total": total if self.total_path is not None else None,
             }

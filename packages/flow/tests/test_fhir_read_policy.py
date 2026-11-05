@@ -33,9 +33,7 @@ def bundle(ids, *, total=101, links=None):
         "resourceType": "Bundle",
         "type": "searchset",
         "total": total,
-        "entry": [
-            {"resource": {"resourceType": "Patient", "id": str(i)}} for i in ids
-        ],
+        "entry": [{"resource": {"resourceType": "Patient", "id": str(i)}} for i in ids],
     }
     if links is not None:
         body["link"] = links

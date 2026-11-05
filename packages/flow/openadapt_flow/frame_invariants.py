@@ -12,7 +12,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from openadapt_flow.hard_invariants import HardInvariantVerdict, InvariantResult, InvariantStatus
+from openadapt_flow.hard_invariants import (
+    HardInvariantVerdict,
+    InvariantResult,
+    InvariantStatus,
+)
 from openadapt_flow.runtime.effects.frame import FrameVerdict
 
 if TYPE_CHECKING:
@@ -127,14 +131,24 @@ class ReceiptHardInvariantVerdict(HardInvariantVerdict):
     def status(self) -> InvariantStatus:
         if any(c.status == "refuted" for c in self.checks):
             return "refuted"
-        if {c.name for c in self.checks} != {"declared_scope", "at_most_one", "no_undeclared_deletes"} or len(self.checks) != 3:
+        if {c.name for c in self.checks} != {
+            "declared_scope",
+            "at_most_one",
+            "no_undeclared_deletes",
+        } or len(self.checks) != 3:
             return "not_checked"
-        return "held" if all(c.status == "held" for c in self.checks if c.name != "at_most_one") else "not_checked"
+        return (
+            "held"
+            if all(c.status == "held" for c in self.checks if c.name != "at_most_one")
+            else "not_checked"
+        )
 
     def evidence(self) -> dict[str, object]:
         result = super().evidence()
         result["schema_version"] = "openadapt.receipt-hard-invariants/v1"
-        result["checks"] = [{**c.evidence(), "required": c.name != "at_most_one"} for c in self.checks]
+        result["checks"] = [
+            {**c.evidence(), "required": c.name != "at_most_one"} for c in self.checks
+        ]
         observation = self.observation
         if observation is not None:
             projection_only = observation.identity_binding == "projected_tuple"
@@ -144,19 +158,41 @@ class ReceiptHardInvariantVerdict(HardInvariantVerdict):
                 "contract_sha256": observation.contract_sha256,
                 "source_sha256": observation.source_sha256,
                 "schema_sha256": observation.schema_sha256,
-                "projection_tuple_macs" if projection_only else "target_id_macs": list(observation.target_id_macs),
+                "projection_tuple_macs" if projection_only else "target_id_macs": list(
+                    observation.target_id_macs
+                ),
                 "read_at": observation.read_at,
                 "phase": observation.phase,
                 "receipt_sha256": observation.receipt_sha256 or None,
-                "receipt_binding": "outer_issued_receipt" if observation.phase == "write" else "original_issued_receipt",
+                "receipt_binding": "outer_issued_receipt"
+                if observation.phase == "write"
+                else "original_issued_receipt",
             }
         outside = [
-            {"name": "identifying_search_duplicates_and_side_records", "status": "UNKNOWN", "reason": "identifying_search_not_declared"},
-            {"name": "receipt_record_intermediate_history", "status": "UNKNOWN", "reason": "history_not_declared"},
-            {"name": OUTSIDE_INTERMEDIATE_HISTORY, "status": "UNKNOWN", "reason": "outside_declared_guarantee"},
+            {
+                "name": "identifying_search_duplicates_and_side_records",
+                "status": "UNKNOWN",
+                "reason": "identifying_search_not_declared",
+            },
+            {
+                "name": "receipt_record_intermediate_history",
+                "status": "UNKNOWN",
+                "reason": "history_not_declared",
+            },
+            {
+                "name": OUTSIDE_INTERMEDIATE_HISTORY,
+                "status": "UNKNOWN",
+                "reason": "outside_declared_guarantee",
+            },
         ]
         if observation is not None and observation.scope == "declared_projection":
-            outside.append({"name": "native_schema_and_whole_database", "status": "UNKNOWN", "reason": "projection_only_contract"})
+            outside.append(
+                {
+                    "name": "native_schema_and_whole_database",
+                    "status": "UNKNOWN",
+                    "reason": "projection_only_contract",
+                }
+            )
         result["outside_guarantee"] = outside
         return result
 
@@ -175,24 +211,47 @@ def _receipt_invariants(
         and all(_digest(value, "hmac-sha256:") for value in observation.target_id_macs)
         and _instant(observation.read_at) is not None
         and observation.scope in {"declared_projection", "declared_database"}
-        and observation.identity_binding in {"declared_identity", "projected_tuple", "native_primary_key"}
-        and (observation.scope != "declared_database" or observation.identity_binding == "native_primary_key" and observation.schema_sha256 is not None and _digest(observation.schema_sha256))
-        and (observation.phase == "write" and observation.receipt_sha256 == "" or observation.phase == "late" and _digest(observation.receipt_sha256, ""))
+        and observation.identity_binding
+        in {"declared_identity", "projected_tuple", "native_primary_key"}
+        and (
+            observation.scope != "declared_database"
+            or observation.identity_binding == "native_primary_key"
+            and observation.schema_sha256 is not None
+            and _digest(observation.schema_sha256)
+        )
+        and (
+            observation.phase == "write"
+            and observation.receipt_sha256 == ""
+            or observation.phase == "late"
+            and _digest(observation.receipt_sha256, "")
+        )
     )
     if scope.status != "refuted":
         scope = InvariantResult(
-            "declared_scope", "held" if binding and frame.status == "held" else "not_checked",
-            "declared_native_scope_read" if binding and frame.status == "held" else "declared_native_scope_incomplete",
+            "declared_scope",
+            "held" if binding and frame.status == "held" else "not_checked",
+            "declared_native_scope_read"
+            if binding and frame.status == "held"
+            else "declared_native_scope_incomplete",
             scope.observed_count,
         )
     if deletes.status != "refuted":
         deletes = InvariantResult(
-            "no_undeclared_deletes", "held" if binding and frame.status == "held" else "not_checked",
-            "no_observed_delete_in_declared_native_scope" if binding and frame.status == "held" else "declared_native_delete_observation_incomplete",
+            "no_undeclared_deletes",
+            "held" if binding and frame.status == "held" else "not_checked",
+            "no_observed_delete_in_declared_native_scope"
+            if binding and frame.status == "held"
+            else "declared_native_delete_observation_incomplete",
             deletes.observed_count,
         )
     return ReceiptHardInvariantVerdict(
-        (scope, InvariantResult("at_most_one", "not_checked", "identifying_search_not_declared"), deletes),
+        (
+            scope,
+            InvariantResult(
+                "at_most_one", "not_checked", "identifying_search_not_declared"
+            ),
+            deletes,
+        ),
         observation if binding else None,
     )
 

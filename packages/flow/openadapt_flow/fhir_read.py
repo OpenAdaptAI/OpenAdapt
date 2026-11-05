@@ -115,12 +115,16 @@ def check_search_outcome(outcome: Mapping[str, Any], *, has_matches: bool) -> No
             continue
         if code == "informational" and isinstance(details, dict):
             coding = details.get("coding")
-            no_match = isinstance(coding, list) and bool(coding) and all(
-                isinstance(item, dict)
-                and item.get("system")
-                == "http://terminology.hl7.org/CodeSystem/operation-outcome"
-                and item.get("code") == "MSG_NO_MATCH"
-                for item in coding
+            no_match = (
+                isinstance(coding, list)
+                and bool(coding)
+                and all(
+                    isinstance(item, dict)
+                    and item.get("system")
+                    == "http://terminology.hl7.org/CodeSystem/operation-outcome"
+                    and item.get("code") == "MSG_NO_MATCH"
+                    for item in coding
+                )
             )
             if no_match and not has_matches:
                 continue

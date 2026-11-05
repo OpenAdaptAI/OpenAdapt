@@ -106,7 +106,10 @@ from openadapt_flow.verification import (
 )
 
 if TYPE_CHECKING:
-    from openadapt_flow.runtime.effects.targeted import ReceiptObservation, TargetedObservation
+    from openadapt_flow.runtime.effects.targeted import (
+        ReceiptObservation,
+        TargetedObservation,
+    )
 
 EFFECT_RECEIPT_SCHEMA = "openadapt.effect-receipt/v1"
 EFFECT_EVIDENCE_SCHEMA = "openadapt.effect-evidence/v1"
@@ -1244,7 +1247,8 @@ def _declared_by_surface(
 
 def _apply_hard_invariants(
     frame: FrameVerdict,
-    observation: Optional["TargetedObservation | ReceiptObservation"] = None,) -> FrameVerdict:
+    observation: Optional["TargetedObservation | ReceiptObservation"] = None,
+) -> FrameVerdict:
     """Gate on the receipt/search domain, preserving independent refutations."""
     from openadapt_flow.frame_invariants import judge_frame_invariants
 
@@ -1531,62 +1535,120 @@ def judge_run_frame(
             },
         }
     if spec.targeted is None and spec.history is None:
-        from openadapt_flow.runtime.effects.targeted import observe_receipt_records
         from openadapt_flow.runtime.effects.surfaces import surface_of
+        from openadapt_flow.runtime.effects.targeted import observe_receipt_records
 
         try:
             identity = verifier_identity(verifier)
-            source_digest = sha256_tagged({"verifier": identity, "frame": spec.digest()})
+            source_digest = sha256_tagged(
+                {"verifier": identity, "frame": spec.digest()}
+            )
             own_reads = {
-                name: (routed[name] if isinstance(routed, dict) and routed else verifier, current)
+                name: (
+                    routed[name] if isinstance(routed, dict) and routed else verifier,
+                    current,
+                )
                 for name, (_old, current) in slices.items()
                 if name not in (db.slices if db is not None else {})
             }
             from openadapt_flow.runtime.effects.rest import PROJECTION_DETAIL
 
-            captured_detail = after.detail if isinstance(after, EffectState) and isinstance(after.detail, dict) else {}
+            captured_detail = (
+                after.detail
+                if isinstance(after, EffectState) and isinstance(after.detail, dict)
+                else {}
+            )
             read_facts: dict[str, Mapping[str, Any]] = {}
             for name in own_reads:
-                detail_now = captured_detail.get(name, {}) if isinstance(routed, dict) and routed else captured_detail
-                if isinstance(detail_now, Mapping) and isinstance(detail_now.get(PROJECTION_DETAIL), Mapping):
+                detail_now = (
+                    captured_detail.get(name, {})
+                    if isinstance(routed, dict) and routed
+                    else captured_detail
+                )
+                if isinstance(detail_now, Mapping) and isinstance(
+                    detail_now.get(PROJECTION_DETAIL), Mapping
+                ):
                     read_facts[name] = detail_now[PROJECTION_DETAIL]
             records: list[tuple[str, Mapping[str, Any]]] = []
             if not database_only:
                 for effect, effect_result in zip(bound_effects, receipt_verdicts):
-                    if effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count == 0:
+                    if (
+                        effect.kind is EffectKind.RECORD_WRITTEN
+                        and effect.expected_count == 0
+                    ):
                         continue
-                    if not effect_result.confirmed or effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS, EffectKind.EXACT_NEW_SET):
-                        raise ValueError("native receipt targets are not independently matched")
-                    records.extend((surface_of(effect) or "", row) for row in effect_result.matched_records)
+                    if not effect_result.confirmed or effect.kind not in (
+                        EffectKind.RECORD_WRITTEN,
+                        EffectKind.FIELD_EQUALS,
+                        EffectKind.EXACT_NEW_SET,
+                    ):
+                        raise ValueError(
+                            "native receipt targets are not independently matched"
+                        )
+                    records.extend(
+                        (surface_of(effect) or "", row)
+                        for row in effect_result.matched_records
+                    )
             elif receipt_bindings is None:
-                raise ValueError("the issued native receipt target commitments are missing")
-            if db is not None and db.post is not None and database is not None and not database_only:
+                raise ValueError(
+                    "the issued native receipt target commitments are missing"
+                )
+            if (
+                db is not None
+                and db.post is not None
+                and database is not None
+                and not database_only
+            ):
                 for surface in {surface for surface, _record in records}:
-                    read_config = cfg.verifier.surfaces.get(surface) if cfg.verifier.surfaces else cfg.verifier
-                    location = read_config.model_dump(mode="json") if read_config is not None else {}
+                    read_config = (
+                        cfg.verifier.surfaces.get(surface)
+                        if cfg.verifier.surfaces
+                        else cfg.verifier
+                    )
+                    location = (
+                        read_config.model_dump(mode="json")
+                        if read_config is not None
+                        else {}
+                    )
                     snapshot_location = dict(database.read)
                     # Absent and empty default connection arguments describe
                     # the same existing source; never alter nonempty values.
-                    location["sql_connect_args"] = location.get("sql_connect_args") or None
-                    snapshot_location["sql_connect_args"] = snapshot_location.get("sql_connect_args") or None
+                    location["sql_connect_args"] = (
+                        location.get("sql_connect_args") or None
+                    )
+                    snapshot_location["sql_connect_args"] = (
+                        snapshot_location.get("sql_connect_args") or None
+                    )
                     if not _same_connection(location, snapshot_location):
-                        raise ValueError("native receipt projection and snapshot name different sources")
+                        raise ValueError(
+                            "native receipt projection and snapshot name different sources"
+                        )
             required = {key for effect in bound_effects for key in effect.match}
-            required.update(effect.field for effect in bound_effects if effect.field is not None)
+            required.update(
+                effect.field for effect in bound_effects if effect.field is not None
+            )
             observation, checkpoint = observe_receipt_records(
                 contract_sha256=verify_config_sha256(identity, list(cfg.effects)),
                 source_sha256=source_digest,
                 params=params,
                 salt=salt,
-                at=db.post_read_at if db is not None and db.post is not None else _now(),
+                at=db.post_read_at
+                if db is not None and db.post is not None
+                else _now(),
                 reads=own_reads,
                 read_facts=read_facts,
                 targets=records,
                 identity_field=spec.identity_field,
-                ignore_fields=[name for name in spec.ignore_fields if name not in required],
+                ignore_fields=[
+                    name for name in spec.ignore_fields if name not in required
+                ],
                 snapshot=db.post if db is not None else None,
-                tables={**database.views, **database.judged_by} if database is not None else {},
-                ignore_columns=database.all_ignore_columns() if database is not None else {},
+                tables={**database.views, **database.judged_by}
+                if database is not None
+                else {},
+                ignore_columns=database.all_ignore_columns()
+                if database is not None
+                else {},
                 issued=receipt_bindings if database_only else None,
                 previous=db.old if db is not None else None,
                 receipt_digest=receipt_digest,
@@ -1595,7 +1657,11 @@ def judge_run_frame(
             if checkpoint is not None and verdict.post_state is not None:
                 verdict.post_state["receipt_records"] = checkpoint
         except Exception as exc:  # noqa: BLE001 - missing native proof stays UNKNOWN
-            verdict.targeted = {"domain": "declared_native_receipt_scope", "status": "not_checked", "problem": type(exc).__name__}
+            verdict.targeted = {
+                "domain": "declared_native_receipt_scope",
+                "status": "not_checked",
+                "problem": type(exc).__name__,
+            }
     return verdict
 
 
@@ -2398,11 +2464,11 @@ def verify_run(
             COMPARES,
             OUTSIDE_INTERMEDIATE_HISTORY,
             UNRESOLVED_TARGET_IDENTITY,
+            bind_targeted_read_clock,
             capture_targeted,
             judge_targeted,
             observe_targeted,
             unresolved_targeted,
-            bind_targeted_read_clock,
         )
 
         target_spec = frame_spec.targeted
@@ -2479,7 +2545,9 @@ def verify_run(
             detail["write_confirmation_read_at"] = observation.read_at
             frame.targeted = detail
             frame.post_state["read_at"] = observation.read_at
-            clock = bind_targeted_read_clock(checkpoint, salt, observation.read_completion_ns)
+            clock = bind_targeted_read_clock(
+                checkpoint, salt, observation.read_completion_ns
+            )
             if targeted_out is not None:
                 targeted_out["read_clock"] = clock
             if observed_status == "refuted" or (
@@ -2959,12 +3027,19 @@ def recheck_problem(
             return "the params are not the ones the write was verified with"
     if "receipt_records" in post:
         from openadapt_flow.runtime.effects.db_snapshot import Snapshot
-        from openadapt_flow.runtime.effects.targeted import receipt_records_binding_problem
+        from openadapt_flow.runtime.effects.targeted import (
+            receipt_records_binding_problem,
+        )
 
         problem = receipt_records_binding_problem(
-            post["receipt_records"], contract["contract_sha256"],
-            sha256_tagged({"verifier": identity, "frame": (cfg.frame or FrameSpec()).digest()}),
-            params, salt, Snapshot.from_json(post["snapshot"]),
+            post["receipt_records"],
+            contract["contract_sha256"],
+            sha256_tagged(
+                {"verifier": identity, "frame": (cfg.frame or FrameSpec()).digest()}
+            ),
+            params,
+            salt,
+            Snapshot.from_json(post["snapshot"]),
         )
         if problem is not None:
             return problem

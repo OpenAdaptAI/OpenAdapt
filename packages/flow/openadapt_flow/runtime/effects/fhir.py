@@ -104,7 +104,9 @@ def validate_fhir_cache_bound(value: Any) -> Optional[float]:
     try:
         bound = float(value)
     except (ValueError, OverflowError):
-        raise ValueError("FHIR cache bound must be a finite nonnegative number") from None
+        raise ValueError(
+            "FHIR cache bound must be a finite nonnegative number"
+        ) from None
     if not math.isfinite(bound) or bound < 0:
         raise ValueError("FHIR cache bound must be a finite nonnegative number")
     return bound
@@ -490,7 +492,10 @@ class FhirEffectVerifier(VerifierAdapterBase):
                     self.read_problem = "a Bundle entry has no resource"
                     return None
                 mode = (entry.get("search") or {}).get("mode")
-                if mode == "outcome" or resource.get("resourceType") == "OperationOutcome":
+                if (
+                    mode == "outcome"
+                    or resource.get("resourceType") == "OperationOutcome"
+                ):
                     outcomes.append(resource)
                     continue
                 if mode != "include":

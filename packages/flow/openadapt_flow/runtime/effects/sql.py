@@ -443,7 +443,11 @@ class SqlRecordVerifier(VerifierAdapterBase):
             columns = [str(col[0]) for col in description]
             # A complete declared projection needs one unambiguous value per
             # named column. dict(zip(...)) must not hide an ambiguous shape.
-            if not columns or any(col[0] is None or not str(col[0]) for col in description) or len(set(columns)) != len(columns):
+            if (
+                not columns
+                or any(col[0] is None or not str(col[0]) for col in description)
+                or len(set(columns)) != len(columns)
+            ):
                 return None
             rows = cursor.fetchall()
             if any(len(row) != len(columns) for row in rows):

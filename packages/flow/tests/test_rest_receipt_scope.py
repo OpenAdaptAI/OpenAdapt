@@ -3,6 +3,7 @@
 The loopback stores are component fixtures, not application qualification.
 No caller-created completion Mapping can replace an actual adapter capture.
 """
+
 from __future__ import annotations
 
 import json
@@ -33,6 +34,7 @@ def isolated_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def source():
     from openadapt_flow.mockmed.fault_server import serve
+
     base, _store, stop = serve()
     try:
         yield base.rstrip("/")
@@ -40,7 +42,9 @@ def source():
         stop()
 
 
-def test_original_rest_configuration_confirms_only_its_actual_response_projection(source: str) -> None:
+def test_original_rest_configuration_confirms_only_its_actual_response_projection(
+    source: str,
+) -> None:
     contract = Contract.from_dict(old_rest._verify_yaml(source))
     pending = begin_write(contract, old_rest.PARAMS, actor=Actor("agent", "synthetic"))
     old_rest._actor_writes(source)
@@ -53,11 +57,16 @@ def test_original_rest_configuration_confirms_only_its_actual_response_projectio
     assert domain["identity_binding"] == "projected_tuple"
     assert "target_id_macs" not in domain and domain["projection_tuple_macs"]
     assert domain["schema_sha256"] is None
-    assert any("native_schema_and_whole_database: UNKNOWN" in note for note in result.scope.not_covered)
+    assert any(
+        "native_schema_and_whole_database: UNKNOWN" in note
+        for note in result.scope.not_covered
+    )
     assert old_rest.PARAMS["note"] not in json.dumps(result.evidence)
 
 
-def test_actual_rest_capture_binds_values_source_and_adapter_instance(source: str) -> None:
+def test_actual_rest_capture_binds_values_source_and_adapter_instance(
+    source: str,
+) -> None:
     old_rest._actor_writes(source)
     reader = RestRecordVerifier(source, records_path="/api/db", records_key="records")
     state = reader.capture_pre_state()
@@ -70,41 +79,60 @@ def test_actual_rest_capture_binds_values_source_and_adapter_instance(source: st
     changed = [dict(row) for row in state.records]
     changed[0]["note"] = "a different projected value"
     assert not reader._projection_matches_capture(changed, facts)
-    assert not reader._projection_matches_capture(state.records, {**facts, "pages_read": 2})
+    assert not reader._projection_matches_capture(
+        state.records, {**facts, "pages_read": 2}
+    )
     reader.records_path = "/api/db?tenant=another"
     assert not reader._projection_matches_capture(state.records, facts)
     assert old_rest.PARAMS["note"] not in json.dumps(facts)
 
 
-def test_actual_httpx_url_object_attests_the_same_native_projection(source: str) -> None:
+def test_actual_httpx_url_object_attests_the_same_native_projection(
+    source: str,
+) -> None:
     import httpx
 
     old_rest._actor_writes(source)
     with httpx.Client() as session:
-        reader = RestRecordVerifier(source, records_path="/api/db", records_key="records", session=session)
+        reader = RestRecordVerifier(
+            source, records_path="/api/db", records_key="records", session=session
+        )
         state = reader.capture_pre_state()
         assert state.reachable and PROJECTION_DETAIL in state.detail
-        assert reader._projection_matches_capture(state.records, state.detail[PROJECTION_DETAIL])
+        assert reader._projection_matches_capture(
+            state.records, state.detail[PROJECTION_DETAIL]
+        )
 
 
 def test_missing_observed_response_source_has_no_completion_authority() -> None:
     """Structural unknown-provenance control, not a native HTTP trial."""
+
     class Response:
         status_code = 200
         headers: dict[str, str] = {}
+
         def json(self) -> dict[str, Any]:
             return {"records": [{"name": "a tuple"}]}
+
     class Session:
         def get(self, *_args: Any, **_kwargs: Any) -> Response:
             return Response()
-    reader = RestRecordVerifier("http://127.0.0.1:1", records_path="/records", records_key="records", session=Session())
+
+    reader = RestRecordVerifier(
+        "http://127.0.0.1:1",
+        records_path="/records",
+        records_key="records",
+        session=Session(),
+    )
     state = reader.capture_pre_state()
     assert state.reachable
     assert PROJECTION_DETAIL not in state.detail
     assert not reader._projection_matches_capture(state.records, {})
 
 
-def test_routed_actual_rest_capture_reaches_the_canonical_mcp_path(source: str, tmp_path: Path) -> None:
+def test_routed_actual_rest_capture_reaches_the_canonical_mcp_path(
+    source: str, tmp_path: Path
+) -> None:
     doc = old_rest._verify_yaml(source)
     native = doc["verifier"]
     doc["verifier"] = {"kind": "surfaces", "surfaces": {"records": native}}
@@ -114,7 +142,9 @@ def test_routed_actual_rest_capture_reaches_the_canonical_mcp_path(source: str, 
     # VerifyBridge loads governed YAML files; JSON is valid YAML syntax.
     (contracts / "synthetic.yaml").write_text(json.dumps(doc))
     bridge = VerifyBridge(contracts, tmp_path / "runs")
-    begun = bridge.dispatch("verify_begin", {"contract": "synthetic", "values": old_rest.PARAMS})
+    begun = bridge.dispatch(
+        "verify_begin", {"contract": "synthetic", "values": old_rest.PARAMS}
+    )
     assert begun["ok_to_write"]
     old_rest._actor_writes(source)
     checked = bridge.dispatch("verify_check", {"write_id": begun["write_id"]})
@@ -122,22 +152,55 @@ def test_routed_actual_rest_capture_reaches_the_canonical_mcp_path(source: str, 
 
 
 def _contract(base: str, *, paged: bool) -> Contract:
-    read: dict[str, Any] = {"kind": "rest", "base_url": base, "records_path": "/records", "records_key": "records"}
+    read: dict[str, Any] = {
+        "kind": "rest",
+        "base_url": base,
+        "records_path": "/records",
+        "records_key": "records",
+    }
     if paged:
         read.update({"records_next_path": "next", "records_total_path": "total"})
-    return Contract.from_dict({
-        "schema_version": "openadapt.verify/v1", "verifier": read,
-        "effects": [{"kind": "record_written", "match": {"name": {"param": "name"}}, "expected_count": 1, "count_new_only": True, "timeout_s": 0.1}],
-    })
+    return Contract.from_dict(
+        {
+            "schema_version": "openadapt.verify/v1",
+            "verifier": read,
+            "effects": [
+                {
+                    "kind": "record_written",
+                    "match": {"name": {"param": "name"}},
+                    "expected_count": 1,
+                    "count_new_only": True,
+                    "timeout_s": 0.1,
+                }
+            ],
+        }
+    )
 
 
-@pytest.mark.parametrize("fault", ["none", "later_page", "total", "missing_next", "mixed", "partial", "range", "redirect_path", "redirect_query", "cap"])
-def test_actual_http_projection_completion_and_refusals(page_server: Any, monkeypatch: pytest.MonkeyPatch, fault: str) -> None:
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "none",
+        "later_page",
+        "total",
+        "missing_next",
+        "mixed",
+        "partial",
+        "range",
+        "redirect_path",
+        "redirect_query",
+        "cap",
+    ],
+)
+def test_actual_http_projection_completion_and_refusals(
+    page_server: Any, monkeypatch: pytest.MonkeyPatch, fault: str
+) -> None:
     # The owned fixture changes its native in-memory records to model a write;
     # all observations and the public verification path use actual HTTP.
     rows = [{"id": "prior1", "name": "old1"}, {"id": "prior2", "name": "old2"}]
     phase = {"written": False}
     paged = fault in {"none", "later_page", "total", "missing_next", "cap"}
+
     def page(path: str, number: int) -> tuple:
         active = phase["written"]
         if active and fault == "later_page" and number == 1:
@@ -146,11 +209,15 @@ def test_actual_http_projection_completion_and_refusals(page_server: Any, monkey
             return 302, {}, {"Location": "/different"}
         if active and fault == "redirect_query" and path == "/records" and number == 0:
             return 302, {}, {"Location": "/records?page=1&tenant=another"}
-        selected = rows[number * 2:(number + 1) * 2] if paged else rows
+        selected = rows[number * 2 : (number + 1) * 2] if paged else rows
         body: dict[str, Any] = {"records": list(selected)}
         if paged:
             more = (number + 1) * 2 < len(rows)
-            body["next"] = f"/records?page={number + 1}" if more or active and fault == "cap" else None
+            body["next"] = (
+                f"/records?page={number + 1}"
+                if more or active and fault == "cap"
+                else None
+            )
             body["total"] = len(rows) + (1 if active and fault == "total" else 0)
         if active and fault == "missing_next":
             body.pop("next")
@@ -161,11 +228,14 @@ def test_actual_http_projection_completion_and_refusals(page_server: Any, monkey
         if active and fault == "range":
             return 200, body, {"Content-Range": "items 0-1/99"}
         return 200, body
+
     base = page_server(page)
     if fault == "cap":
         monkeypatch.setattr(rest, "MAX_PAGES", 2)
     params = {"name": "new-native-projection"}
-    pending = begin_write(_contract(base, paged=paged), params, actor=Actor("agent", "synthetic"))
+    pending = begin_write(
+        _contract(base, paged=paged), params, actor=Actor("agent", "synthetic")
+    )
     rows.append({"id": "target", "name": params["name"]})
     phase["written"] = True
     result = verify_write(pending)
@@ -178,7 +248,11 @@ def test_actual_http_projection_completion_and_refusals(page_server: Any, monkey
 
 
 def test_rest_wrong_record_stays_refuted_despite_undeclared_search(source: str) -> None:
-    pending = begin_write(Contract.from_dict(old_rest._verify_yaml(source)), old_rest.PARAMS, actor=Actor("agent", "synthetic"))
+    pending = begin_write(
+        Contract.from_dict(old_rest._verify_yaml(source)),
+        old_rest.PARAMS,
+        actor=Actor("agent", "synthetic"),
+    )
     old_rest._actor_writes(source, patient="p2")
     result = verify_write(pending)
     assert result.outcome is Outcome.REFUTED and not result.verified

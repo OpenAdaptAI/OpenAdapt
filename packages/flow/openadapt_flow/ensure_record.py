@@ -48,7 +48,14 @@ from pathlib import Path
 from typing import Any, Literal, Optional
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from openadapt_flow.fhir_read import (
     check_search_coverage,
@@ -230,7 +237,9 @@ class EnsureContract(BaseModel):
     base_url: str = Field(min_length=1)
     access_token_env: Optional[str] = None
     #: Explicit adapter cache-window declaration, never inferred from a reply.
-    cache_bound_s: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False, strict=True)
+    cache_bound_s: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False, strict=True
+    )
     #: Exact schema metadata proving which elements are FHIR References.
     reference_schema: Optional[ReferenceSchema] = None
     #: The agent's own actor references (``Practitioner/<id>``).

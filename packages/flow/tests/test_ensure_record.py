@@ -299,13 +299,15 @@ def test_a_warning_outcome_is_a_message_not_an_unreadable_search():
     """Epic answers an empty search with a warning outcome entry."""
 
     r = reader_for(
-        {"Observation": bundle(), "AuditEvent": with_outcome(bundle(), "warning", code="informational")}
+        {
+            "Observation": bundle(),
+            "AuditEvent": with_outcome(bundle(), "warning", code="informational"),
+        }
     )
     changes = read_changes(
         contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}), r, T0
     )
     assert changes == {}
-
 
 
 def test_a_processing_warning_is_an_unreadable_search():

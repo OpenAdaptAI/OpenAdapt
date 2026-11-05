@@ -3153,7 +3153,12 @@ def _prepare_recheck(
         checkpoint = state.payload["post_state"]["targeted"]
         # Validate copied issued bindings first; never reconstruct a witness
         # from saved timestamps, a caller ack or a replacement dataclass.
-        if targeted_read_clock_problem(checkpoint, bytes.fromhex(state.payload["salt"]), original_clock) is None:
+        if (
+            targeted_read_clock_problem(
+                checkpoint, bytes.fromhex(state.payload["salt"]), original_clock
+            )
+            is None
+        ):
             state._targeted_read_clock = original_clock
     wait_s = seconds_until(state.due_at)
     if cfg.frame is not None and cfg.frame.targeted is not None:
