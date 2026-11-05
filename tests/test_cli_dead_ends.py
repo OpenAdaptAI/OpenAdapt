@@ -1,11 +1,4 @@
-"""Mistyped launcher commands end in a launcher hint, not a dead end.
-
-`openadapt run`, `openadapt record` and `openadapt replay` printed only
-"No such command", and `replay` suggested `deploy`. They are Flow commands,
-spelled `openadapt flow <verb>` through the launcher. `openadapt quickstart
---brek-it` forwarded the typo to the engine, which printed its own 43-verb
-`openadapt-flow` usage instead of pointing at `--break-it`.
-"""
+"""Unknown verbs retain launcher hints; visible task names delegate directly."""
 
 from __future__ import annotations
 
@@ -56,7 +49,7 @@ def flow_calls(monkeypatch):
     return calls
 
 
-@pytest.mark.parametrize("verb", ["run", "record", "replay", "compile", "certify"])
+@pytest.mark.parametrize("verb", ["replay", "certify"])
 def test_flow_verb_at_top_level_points_at_openadapt_flow(verb):
     result = CliRunner().invoke(cli_main, [verb, "bundle"])
 
@@ -65,7 +58,7 @@ def test_flow_verb_at_top_level_points_at_openadapt_flow(verb):
     assert "deploy" not in result.output
 
 
-@pytest.mark.parametrize("verb", ["run", "record", "replay"])
+@pytest.mark.parametrize("verb", ["replay"])
 def test_flow_verb_hint_works_without_a_readable_flow_parser(monkeypatch, verb):
     monkeypatch.setattr("openadapt.cli._flow_subparsers", lambda: None, raising=False)
 
@@ -73,6 +66,16 @@ def test_flow_verb_hint_works_without_a_readable_flow_parser(monkeypatch, verb):
 
     assert result.exit_code == 2
     assert f"openadapt flow {verb}" in result.output
+
+
+@pytest.mark.parametrize("verb", ["run", "record", "compile"])
+def test_visible_tasks_resolve_directly_even_without_parser_discovery(
+    monkeypatch, flow_calls, verb
+):
+    monkeypatch.setattr("openadapt.cli._flow_subparsers", lambda: None)
+    result = CliRunner().invoke(cli_main, [verb, "literal path"])
+    assert result.exit_code == 0, result.output
+    assert flow_calls == [[verb, "literal path"]]
 
 
 def test_other_unknown_commands_keep_clicks_suggestion():
