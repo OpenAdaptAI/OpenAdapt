@@ -33,8 +33,9 @@ from openadapt_flow.runtime.effects.effect import (
 #: driver returns a number only for a numeric column). There a plain decimal
 #: expected as text compares with a stored number by value
 #: (``record_matches(text_numbers=True)``). A JSON body compares numbers by
-#: value only against a parameter passed as a number.
-TYPED_SUBSTRATES = frozenset({"sql"})
+#: value only against a parameter passed as a number. ``db`` is the reward
+#: worker's name for its SQL channel (a read through ``SqlRecordVerifier``).
+TYPED_SUBSTRATES = frozenset({"sql", "db"})
 
 
 def drop_record_fields(

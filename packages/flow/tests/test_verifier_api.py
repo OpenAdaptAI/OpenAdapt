@@ -331,11 +331,15 @@ def test_the_public_api_is_stable() -> None:
         "dialect",
         "allow_tables",
         "max_rows",
+        "read_row_budget",
         "key",
         "profile",
         "before",
         "actor_names",
     ]
+    budget = inspect.signature(capture_database).parameters["read_row_budget"]
+    assert budget.kind is inspect.Parameter.KEYWORD_ONLY
+    assert budget.default == 1_000_000
     assert list(WriteResult.__dataclass_fields__)[:5] == [
         "outcome",
         "scope",
