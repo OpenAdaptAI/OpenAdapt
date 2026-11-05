@@ -545,6 +545,27 @@ class Anchor(BaseModel):
             " tiers compare like-for-like. Set iff `identifier_crop` is set."
         ),
     )
+    dialog_region: Optional[Region] = Field(
+        default=None,
+        description=(
+            "Box of the active dialog (the topmost modal) that held the target"
+            " in the recorded frame, when it sat in one. The context band was"
+            " cut to it, so text of the page behind the dialog is not identity"
+            " evidence. Replay cuts the live band to the live dialog's box,"
+            " and fails the identity check closed when no dialog holds the"
+            " resolved point. None outside a dialog and on bundles compiled"
+            " before this capability."
+        ),
+    )
+    dialog_row: Optional[bool] = Field(
+        default=None,
+        description=(
+            "True reads the target's own row inside dialog_region. False permits"
+            " the whole dialog when teach time positively found a standalone"
+            " control with no usable row text; replay must confirm no record"
+            " row again. None conservatively uses the target's row."
+        ),
+    )
     form_identity: Optional[FormIdentity] = Field(
         default=None,
         description=(
@@ -563,6 +584,10 @@ class Anchor(BaseModel):
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         """Leave unset census metadata out, so older bundle bytes stay equal."""
         data: dict[str, Any] = handler(self)
+        if self.dialog_region is None:
+            data.pop("dialog_region", None)
+        if self.dialog_row is None:
+            data.pop("dialog_row", None)
         if self.record_key is None:
             data.pop("record_key", None)
         if self.structured_row is None:
@@ -4151,11 +4176,13 @@ class IdentityCheck(BaseModel):
             "look-alike identifier (runtime.identity_looks), in order."
         ),
     )
-    look_halt: Optional[Literal["identity_look_changed_screen"]] = Field(
+    look_halt: Optional[
+        Literal["identity_look_changed_screen", "identity_dialog_mask_failed"]
+    ] = Field(
         default=None,
         description=(
             "Set when an extra look changed the screen outside the "
-            "identifier it read. The step halts."
+            "identifier it read, or could not mask its dialog. The step halts."
         ),
     )
     candidate_count: Optional[int] = Field(
