@@ -862,9 +862,20 @@ class GovernedRunAuthorization(BaseModel):
                     "workflow effect-verification minimum changed after authorization"
                 )
 
-        from openadapt_flow.bundle_validation import compute_content_digest
+        from openadapt_flow.bundle_validation import (
+            BundleIntegrityError,
+            content_identity_digest,
+        )
 
-        recomputed = compute_content_digest(workflow, workflow.manifest.file_hashes)
+        try:
+            recomputed = content_identity_digest(
+                workflow, workflow.manifest.file_hashes
+            )
+        except BundleIntegrityError:
+            return (
+                "governed run authorization no longer matches the current "
+                "in-memory workflow semantics"
+            )
         if recomputed != self.bundle_content_digest:
             return (
                 "governed run authorization no longer matches the current "

@@ -1089,9 +1089,15 @@ def build_runtime_authorization(
     if report.policy_contract_sha256 is None:
         raise ValueError("run gate report has no exact admitted policy digest")
 
-    from openadapt_flow.bundle_validation import compute_content_digest
+    from openadapt_flow.bundle_validation import (
+        BundleIntegrityError,
+        content_identity_digest,
+    )
 
-    recomputed = compute_content_digest(workflow, workflow.manifest.file_hashes)
+    try:
+        recomputed = content_identity_digest(workflow, workflow.manifest.file_hashes)
+    except BundleIntegrityError as exc:
+        raise ValueError("workflow changed after the run gate evaluated it") from exc
     if recomputed != report.bundle_content_digest:
         raise ValueError("workflow changed after the run gate evaluated it")
 
