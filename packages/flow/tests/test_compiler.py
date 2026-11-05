@@ -2291,7 +2291,7 @@ def test_native_select_compile_requires_changed_choice_and_typed_match(
     )
     bundle = tmp_path / "bundle"
     with pytest.raises(ValueError, match="lacks demonstrated choice evidence"):
-        compile_recording(recording, bundle)
+        compile_recording(recording, bundle, name="unproved-native-choice")
     assert not (bundle / "workflow.json").exists()
 
 

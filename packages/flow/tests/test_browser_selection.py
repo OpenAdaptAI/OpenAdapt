@@ -777,5 +777,5 @@ def test_recorder_refuses_real_native_default_as_a_demonstrated_choice(
 
     bundle = tmp_path / "refused-bundle"
     with pytest.raises(ValueError, match="recording refused an unproved native selection"):
-        compile_recording(recording, bundle)
+        compile_recording(recording, bundle, name="unproved-native-choice")
     assert not (bundle / "workflow.json").exists()

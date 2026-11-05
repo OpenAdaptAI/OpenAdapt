@@ -2490,7 +2490,10 @@ def _compile_recording(
             raise ValueError("native selection lacks demonstrated choice evidence")
         try:
             choice = NativeSelectContract.model_validate(
-                {key: raw.get(key) for key in ("value", "label", "options")}
+                {
+                    "kind": raw.get("kind", "html_single_select"),
+                    **{key: raw.get(key) for key in ("value", "label", "options")},
+                }
             )
         except ValueError as exc:
             raise ValueError(
