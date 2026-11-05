@@ -256,11 +256,22 @@ def test_a_text_labelled_target_is_left_to_ocr():
     assert model.calls == 0
 
 
-def test_ocr_noise_on_an_icon_is_not_a_label():
-    # OCR reads two floppy-disk icons as "日 日"; that is not a text label.
+def test_ocr_noise_does_not_authorize_an_uncorroborated_moved_icon():
+    # Preserve the old moved input: noise is not an independent control label.
     model = _Model([_Candidate((200, 150, 60, 60), 1.5, 0.93)])
-    resolution, _region = _resolve(_icon_anchor(ocr_text="日 日"), model)
+    with pytest.raises(UncorroboratedMovedTargetRefused):
+        _resolve(_icon_anchor(ocr_text="日 日"), model)
+    assert model.calls == 1
+
+
+def test_ocr_noise_on_an_at_spot_icon_is_not_a_label():
+    # OCR reads two floppy-disk icons as "日 日"; that is not a text label.
+    model = _Model([_Candidate((100, 100, 40, 40), 1.0, 0.93)])
+    resolution, region = _resolve(_icon_anchor(ocr_text="日 日"), model)
     assert resolution.rung == "grounder"
+    assert resolution.point == (120, 120)
+    assert region == (100, 100, 40, 40)
+    assert model.calls == 1
 
 
 def test_a_surface_with_structure_never_reaches_the_rung():

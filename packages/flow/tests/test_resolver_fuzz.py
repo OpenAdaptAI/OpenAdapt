@@ -59,9 +59,11 @@ from openadapt_flow.ir import (
 from openadapt_flow.runtime.replayer import Replayer
 from openadapt_flow.runtime.resolver import (
     RUNG_ORDER,
+    UncorroboratedMovedTargetRefused,
     is_below_ocr,
     resolve,
 )
+from openadapt_flow.vision.match import moved_off_spot
 
 # Heavy fuzz search; match the repo convention of a generous timeout marker.
 pytestmark = pytest.mark.timeout(600)
@@ -204,8 +206,8 @@ def _match_rung_case(draw):
     conf = draw(_CONFIDENCE)
     rung = draw(st.sampled_from(("template", "template_global", "ocr", "grounder")))
 
-    # Labeled anchor: an ocr_text lets template_global skip the landmark guard,
-    # and drives the ocr rung.
+    # A label drives the OCR rung. It does not authorize uncorroborated
+    # movement at a template rung when target OCR has no candidate.
     anchor = Anchor(
         template="templates/a.png",
         region=region,
@@ -232,13 +234,31 @@ def _match_rung_case(draw):
     return rung, anchor, vision, grounder, template_png, viewport, matched
 
 
-# --------------------------------------------------------------------------- #
-# Invariant 1 — resolved point within the viewport (match rungs)
-# --------------------------------------------------------------------------- #
-@settings(max_examples=_MAX, **_COMMON_SETTINGS)
-@given(case=_match_rung_case())
-def test_match_rung_point_within_viewport(case):
-    rung, anchor, vision, grounder, template_png, viewport, _matched = case
+def _resolve_match_rung_case(case):
+    rung, anchor, vision, grounder, template_png, viewport, matched = case
+    # These generated template inputs have neither retained context nor a
+    # target OCR candidate. Only this known off-spot precondition may refuse;
+    # every other generated case must still resolve on its declared rung.
+    uncorroborated_move = rung in ("template", "template_global") and moved_off_spot(
+        matched[0] - anchor.region[0],
+        matched[1] - anchor.region[1],
+        anchor.region[2],
+        anchor.region[3],
+    )
+    if uncorroborated_move:
+        assert anchor.landmarks == []
+        assert vision.text_results == {}
+        with pytest.raises(UncorroboratedMovedTargetRefused):
+            resolve(
+                anchor,
+                _DUMMY_PNG,
+                vision,
+                grounder,
+                "intent",
+                template_png=template_png,
+                viewport=viewport,
+            )
+        return None
     resolved = resolve(
         anchor,
         _DUMMY_PNG,
@@ -248,6 +268,21 @@ def test_match_rung_point_within_viewport(case):
         template_png=template_png,
         viewport=viewport,
     )
+    assert resolved is not None, f"expected a {rung} resolution"
+    assert resolved[0].rung == rung
+    return resolved
+
+
+# --------------------------------------------------------------------------- #
+# Invariant 1 — resolved point within the viewport (match rungs)
+# --------------------------------------------------------------------------- #
+@settings(max_examples=_MAX, **_COMMON_SETTINGS)
+@given(case=_match_rung_case())
+def test_match_rung_point_within_viewport(case):
+    rung, anchor, _vision, _grounder, _template_png, viewport, _matched = case
+    resolved = _resolve_match_rung_case(case)
+    if resolved is None:
+        return
     assert resolved is not None, f"expected a {rung} resolution"
     resolution, _region = resolved
     assert resolution.rung == rung
@@ -303,16 +338,10 @@ def _region_within_viewport(region, viewport) -> bool:
 @settings(max_examples=_MAX, **_COMMON_SETTINGS)
 @given(case=_match_rung_case())
 def test_matched_region_within_viewport_match_rungs(case):
-    _rung, anchor, vision, grounder, template_png, viewport, _matched = case
-    resolved = resolve(
-        anchor,
-        _DUMMY_PNG,
-        vision,
-        grounder,
-        "intent",
-        template_png=template_png,
-        viewport=viewport,
-    )
+    _rung, _anchor, _vision, _grounder, _template_png, viewport, _matched = case
+    resolved = _resolve_match_rung_case(case)
+    if resolved is None:
+        return
     assert resolved is not None
     _resolution, region = resolved
     assert _region_within_viewport(region, viewport), (

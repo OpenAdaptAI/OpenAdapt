@@ -637,7 +637,10 @@ def test_happy_path_click_then_param_type(bundle, run_dir):
     assert report.results[0].elapsed_ms > 0
 
 
-def test_rich_actions_use_resolved_endpoints_and_explicit_shortcut(bundle, run_dir):
+@pytest.mark.parametrize("at_spot", [False, True], ids=["old-move-refuses", "at-spot"])
+def test_rich_actions_use_resolved_endpoints_and_explicit_shortcut(
+    bundle, run_dir, at_spot
+):
     vision = FakeVision()
     vision.template_results = [
         Match(point=(30, 40), region=(20, 30, 30, 20)),
@@ -664,7 +667,15 @@ def test_rich_actions_use_resolved_endpoints_and_explicit_shortcut(bundle, run_d
                 id="drag",
                 intent="move item",
                 action=ActionKind.DRAG,
-                anchor=anchor,
+                # Keep the old unbound moved input as a refused case. The
+                # separate positive records each endpoint at its actual spot.
+                anchor=(
+                    anchor.model_copy(
+                        update={"region": (50, 60, 30, 20), "click_point": (60, 70)}
+                    )
+                    if at_spot
+                    else anchor
+                ),
                 drag_end_anchor=anchor.model_copy(
                     update={
                         "region": (200, 140, 30, 20),
@@ -687,6 +698,14 @@ def test_rich_actions_use_resolved_endpoints_and_explicit_shortcut(bundle, run_d
         bundle_dir=bundle,
         run_dir=run_dir,
     )
+
+    if not at_spot:
+        assert report.success is False
+        assert report.results[1].safety_halt is True
+        assert "moved template target" in report.results[1].error
+        # The first at-spot action is valid; no drag or shortcut may follow.
+        assert backend.actions == [("right_click", 30, 40)]
+        return
 
     assert report.success is True
     assert backend.actions == [
@@ -885,7 +904,40 @@ def test_governed_consequential_click_requires_a_typed_remote_receipt(bundle, ru
     assert "cannot bind its exact" in (report.results[0].error or "")
 
 
-def test_consequential_remote_hover_target_movement_halts_before_input(bundle, run_dir):
+def _locate_moved_control_context(step, vision):
+    """Unit-fixture witness for a control that moved by (60, 20).
+
+    The retained marker was at (70, 105), 40 px left of the recorded
+    click. The fixture locates it at (130, 125), independently of the
+    template, so the real resolver can reach the downstream safety check.
+    This scripted unit witness is not a real-browser qualification result.
+    """
+    assert step.anchor is not None
+    step.anchor = step.anchor.model_copy(
+        update={
+            "landmarks": [
+                Landmark(
+                    relation="left_of",
+                    ocr_text="Control context",
+                    distance_px=40,
+                    dx_px=40,
+                    dy_px=0,
+                )
+            ]
+        }
+    )
+    vision.text_results["Control context"] = Match(
+        point=(130, 125), region=(115, 115, 30, 20), confidence=0.95
+    )
+    return step
+
+
+@pytest.mark.parametrize(
+    "retained_context", [False, True], ids=["old-move-refuses", "located-context"]
+)
+def test_consequential_remote_hover_target_movement_halts_before_input(
+    bundle, run_dir, retained_context
+):
     backend = RemoteLeaseBackend(
         initial_frame=make_png(color=(240, 240, 240)),
         fresh_frame=make_png(color=(239, 240, 240)),
@@ -896,8 +948,11 @@ def test_consequential_remote_hover_target_movement_halts_before_input(bundle, r
         Match(point=(170, 125), region=(160, 120, 50, 20), confidence=0.95),
     ]
 
+    step = click_step(risk="reversible")
+    if retained_context:
+        step = _locate_moved_control_context(step, vision)
     report = Replayer(backend, vision=vision).run(
-        Workflow(name="wf", steps=[click_step(risk="reversible")]),
+        Workflow(name="wf", steps=[step]),
         bundle_dir=bundle,
         run_dir=run_dir,
     )
@@ -907,7 +962,10 @@ def test_consequential_remote_hover_target_movement_halts_before_input(bundle, r
     assert backend.acquire_count == 1
     assert backend.actions == []
     assert report.results[0].safety_halt is True
-    assert "target moved before actuation" in report.results[0].error
+    if retained_context:
+        assert "target moved before actuation" in report.results[0].error
+    else:
+        assert "moved template target" in report.results[0].error
 
 
 def _remote_hover_run(bundle, run_dir, *regions):
@@ -1179,7 +1237,12 @@ def test_remote_repeated_preedge_mismatch_halts_without_delivery(bundle, run_dir
     ]
 
 
-def test_remote_preedge_retry_refuses_a_changed_target(bundle, run_dir):
+@pytest.mark.parametrize(
+    "retained_context", [False, True], ids=["old-move-refuses", "located-context"]
+)
+def test_remote_preedge_retry_refuses_a_changed_target(
+    bundle, run_dir, retained_context
+):
     frame = make_png()
     backend = FreshMismatchRemoteBackend(frame=frame, mismatch_count=1)
     vision = FakeVision()
@@ -1189,8 +1252,11 @@ def test_remote_preedge_retry_refuses_a_changed_target(bundle, run_dir):
         Match(point=(170, 125), region=(160, 120, 50, 20), confidence=0.95),
     ]
 
+    step = click_step(risk="irreversible")
+    if retained_context:
+        step = _locate_moved_control_context(step, vision)
     report = Replayer(backend, vision=vision).run(
-        Workflow(name="wf", steps=[click_step(risk="irreversible")]),
+        Workflow(name="wf", steps=[step]),
         bundle_dir=bundle,
         run_dir=run_dir,
     )
@@ -1199,7 +1265,10 @@ def test_remote_preedge_retry_refuses_a_changed_target(bundle, run_dir):
     assert report.success is False
     assert result.delivery_attempted is False
     assert result.safety_halt is True
-    assert "target moved before actuation" in result.error
+    if retained_context:
+        assert "target moved before actuation" in result.error
+    else:
+        assert "moved template target" in result.error
     assert backend.acquire_count == 2
     assert backend.click_attempts == 1
     assert backend.actions == []
@@ -1235,8 +1304,11 @@ def test_remote_preedge_mismatch_without_full_revalidation_does_not_retry(
     assert "no complete consequential revalidation contract" in (result.error or "")
 
 
+@pytest.mark.parametrize(
+    "retained_context", [False, True], ids=["old-move-refuses", "located-context"]
+)
 def test_remote_preedge_diagnostic_uses_live_translated_identity_region(
-    bundle, run_dir
+    bundle, run_dir, retained_context
 ):
     frame = make_png()
     backend = FreshMismatchRemoteBackend(
@@ -1252,12 +1324,22 @@ def test_remote_preedge_diagnostic_uses_live_translated_identity_region(
     step = click_step(risk="irreversible")
     assert step.anchor is not None
     step.anchor = step.anchor.model_copy(update={"identifier_region": (90, 80, 10, 10)})
+    if retained_context:
+        step = _locate_moved_control_context(step, vision)
 
     report = Replayer(backend, vision=vision).run(
         Workflow(name="wf", steps=[step]),
         bundle_dir=bundle,
         run_dir=run_dir,
     )
+
+    if not retained_context:
+        assert report.success is False
+        assert report.results[0].safety_halt is True
+        assert "moved template target" in report.results[0].error
+        assert report.results[0].fresh_actuation_events == []
+        assert backend.actions == []
+        return
 
     event = report.results[0].fresh_actuation_events[0]
     assert report.success is True
@@ -3800,7 +3882,10 @@ def test_type_verification_passes_with_exact_field_readback(bundle, run_dir):
     assert vision.pixels_changed_calls == []
 
 
-def test_visual_click_crop_does_not_narrow_following_type_verification(bundle, run_dir):
+@pytest.mark.parametrize("at_spot", [False, True], ids=["old-move-refuses", "at-spot"])
+def test_visual_click_crop_does_not_narrow_following_type_verification(
+    bundle, run_dir, at_spot
+):
     """A visual anchor crop is not the editable field's live bounds.
 
     Opaque-remote recordings commonly locate a field from a compact label or
@@ -3815,10 +3900,18 @@ def test_visual_click_crop_does_not_narrow_following_type_verification(bundle, r
     vision.pixels_changed_results = [True]
     vision.ocr_lines = [OcrLine("MA")]
     backend = FakeBackend(text_value_supported=False)
+    step = click_step()
+    if at_spot:
+        assert step.anchor is not None
+        # Keep the compact crop and the original computed click (22, 22),
+        # but record them at their actual spot for this verification positive.
+        step.anchor = step.anchor.model_copy(
+            update={"region": (20, 20, 12, 8), "click_point": (22, 22)}
+        )
     workflow = Workflow(
         name="wf",
         steps=[
-            click_step(),
+            step,
             Step(id="t1", intent="type state", action=ActionKind.TYPE, text="MA"),
         ],
     )
@@ -3828,6 +3921,14 @@ def test_visual_click_crop_does_not_narrow_following_type_verification(bundle, r
         bundle_dir=bundle,
         run_dir=run_dir,
     )
+
+    if not at_spot:
+        assert report.success is False
+        assert report.results[0].safety_halt is True
+        assert "moved template target" in report.results[0].error
+        assert backend.actions == []
+        assert vision.pixels_changed_calls == []
+        return
 
     assert report.success is True
     assert report.results[1].input_verified is True

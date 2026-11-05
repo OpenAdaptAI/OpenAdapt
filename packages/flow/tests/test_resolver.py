@@ -14,6 +14,7 @@ from PIL import Image
 from openadapt_flow.ir import Anchor, Landmark
 from openadapt_flow.runtime.resolver import (
     RUNG_ORDER,
+    UncorroboratedMovedTargetRefused,
     is_below_ocr,
     pad_region,
     png_size,
@@ -272,13 +273,40 @@ def test_search_region_clamped_to_viewport(screen):
     assert pad_region((280, 190, 15, 8), 30, VIEWPORT) == (250, 160, 50, 40)
 
 
-def test_template_global_fallback_with_scaled_click_point(screen, anchor):
+@pytest.mark.parametrize(
+    "retained_context", [False, True], ids=["old-move-refuses", "located-context"]
+)
+def test_template_global_fallback_with_scaled_click_point(
+    screen, anchor, retained_context
+):
     vision = FakeVision()
     # Local search misses, global finds a 2x-scaled match.
     vision.template_results = [
         None,
         Match(point=(250, 220), region=(200, 200, 100, 40), confidence=0.88),
     ]
+    if not retained_context:
+        with pytest.raises(UncorroboratedMovedTargetRefused):
+            resolve(anchor, screen, vision, template_png=b"tpl", viewport=(400, 400))
+        assert len(vision.template_calls) == 2
+        return
+
+    anchor = anchor.model_copy(
+        update={
+            "landmarks": [
+                Landmark(
+                    relation="left_of",
+                    ocr_text="Section marker",
+                    distance_px=10,
+                    dx_px=10,
+                    dy_px=0,
+                )
+            ]
+        }
+    )
+    vision.text_results["Section marker"] = Match(
+        point=(200, 210), region=(185, 200, 30, 20), confidence=0.95
+    )
     resolution, matched = resolve(
         anchor, screen, vision, template_png=b"tpl", viewport=(400, 400)
     )
@@ -361,24 +389,39 @@ def test_global_template_accepted_when_landmarks_agree(screen):
     assert matched == (100, 112, 50, 20)
 
 
-def test_global_template_accepted_when_no_landmark_locatable(screen):
-    """With no locatable landmark the global match is accepted unchallenged
-    (nothing to corroborate against)."""
+def test_moved_global_template_refuses_when_no_landmark_locatable(screen):
+    """Keep the old uncorroborated far positive as an explicit refusal."""
     vision = FakeVision()
     vision.template_results = [
         None,
         Match(point=(125, 410), region=(100, 400, 50, 20), confidence=0.99),
     ]
     vision.text_results = {"Messages": None}
+    with pytest.raises(UncorroboratedMovedTargetRefused):
+        resolve(
+            _icon_anchor(),
+            screen,
+            vision,
+            template_png=b"tpl",
+            viewport=(300, 500),
+        )
+    assert len(vision.template_calls) == 2
+
+
+def test_at_spot_global_template_accepts_when_no_landmark_locatable(screen):
+    vision = FakeVision()
+    vision.template_results = [
+        None,
+        Match(point=(125, 110), region=(100, 100, 50, 20), confidence=0.99),
+    ]
+    vision.text_results = {"Messages": None}
     resolution, matched = resolve(
-        _icon_anchor(),
-        screen,
-        vision,
-        template_png=b"tpl",
-        viewport=(300, 500),
+        _icon_anchor(), screen, vision, template_png=b"tpl", viewport=(300, 500)
     )
     assert resolution is not None
     assert resolution.rung == "template_global"
+    assert resolution.point == (110, 105)
+    assert matched == (100, 100, 50, 20)
 
 
 def test_ocr_rung_uses_match_point_directly(screen, anchor):
