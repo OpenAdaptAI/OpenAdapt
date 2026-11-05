@@ -383,7 +383,10 @@ class FhirEffectVerifier(VerifierAdapterBase):
                     self.read_problem = "a Bundle entry has no resource"
                     return None
                 mode = (entry.get("search") or {}).get("mode")
-                if mode == "outcome" or resource.get("resourceType") == "OperationOutcome":
+                if (
+                    mode == "outcome"
+                    or resource.get("resourceType") == "OperationOutcome"
+                ):
                     outcomes.append(resource)
                     continue
                 if mode != "include":
