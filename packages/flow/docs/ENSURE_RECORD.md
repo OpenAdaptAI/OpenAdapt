@@ -24,6 +24,23 @@ The outcome is one of three:
 The agent's own report is not evidence. A save that landed while the agent
 reported a timeout is judged like any other save.
 
+### The read-back is the last version written
+
+When `_history` is read, the record judged must be the newest version in the
+window, matched by `meta.versionId`. It is `needs_review` when the read-back
+is an older version, or a version saved after the window closed (by anyone),
+or carries no `versionId`; when any version in the window has no
+`versionId` or time; or when two versions share the newest time. Without
+`_history` there is nothing to bind to, and the other checks decide as
+before.
+
+The evidence lists each version in the window as `versions`: its id and its
+author, oldest first, and never its body. The author is `meta.author` where
+the server returns it. Where it doesn't (Medplum 5.2), and the audit trail
+logged exactly one timed create or update per version, the n-th logged write
+names the n-th version. Otherwise the author is `null`: unknown, not
+guessed.
+
 ### When the agent corrects its own record
 
 An agent that reads its create back may find a wrong value (a tool changed

@@ -22,8 +22,8 @@ The in-tree Patient Notes WinForms app (SQLite ground truth) on the WinRM lab:
 Every verdict is checked again against the guest's SQLite file. The lab
 database is a test copy only these runs write (``exclusive``).
 
-Usage (from packages/flow, with the lab ``.env`` loaded and ``winrm_lab`` on
-the path)::
+Usage (from packages/flow, with an explicitly configured lab profile and
+``winrm_lab`` on the path)::
 
     python scripts/desktop/qualify_lab_rollback.py --transport native \\
         --out ~/oa/scratch/winlab/runs/rollback-native-1 --evidence ev.json
@@ -465,6 +465,21 @@ def run_case(
     }
 
 
+def _required_helpers(directories: tuple[Path, ...]) -> dict[str, Path]:
+    """Resolve every required helper before any guest deployment begins."""
+    helpers = {}
+    missing = []
+    for name in ("pn_db.py", "patient_notes.ps1", "foreign_window.ps1"):
+        local = next((d / name for d in directories if (d / name).is_file()), None)
+        if local is None:
+            missing.append(name)
+        else:
+            helpers[name] = local
+    if missing:
+        raise FileNotFoundError("missing required lab helpers: " + ", ".join(missing))
+    return helpers
+
+
 def run_trial(transport: str, out: Path, row: dict[str, Any]) -> None:
     from openadapt_flow.adapters.desktop_recorder import record_desktop_demo
 
@@ -477,12 +492,12 @@ def run_trial(transport: str, out: Path, row: dict[str, Any]) -> None:
             ).stdout.strip(),
         }
     )
+    tools = Path(winrm_lab.__file__).resolve().parent
+    helpers = _required_helpers((HERE, tools))
     lab = winrm_lab.WinRMLab()
     prefix = _use_host(lab)
     row["host"] = prefix.split("_")[1].lower()  # winlab | winlap
-    tools = Path(winrm_lab.__file__).resolve().parent
-    for name in ("pn_db.py", "patient_notes.ps1", "foreign_window.ps1"):
-        local = next(p for p in (HERE / name, tools / name) if p.exists())
+    for name, local in helpers.items():
         lab.push_file(local, rf"{GUEST}\{name}")
     rdp = _rdp_backend(prefix) if transport == "rdp" else None
     if rdp is not None:
@@ -578,7 +593,6 @@ def main() -> int:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--evidence", type=Path, required=True)
     args = parser.parse_args()
-    winrm_lab.load_env_file(Path.home() / "oa/src/OpenAdapt/.env")
     args.out.mkdir(parents=True, exist_ok=True)
     row: dict[str, Any] = {}
     try:

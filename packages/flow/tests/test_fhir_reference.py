@@ -469,6 +469,11 @@ def test_reference_identity_remains_checked_in_every_corrected_version(
         c, params, [first, final]
     )
     now = datetime.now(timezone.utc)
+    first["meta"] = {"versionId": "1", "lastUpdated": now.isoformat()}
+    final["meta"] = {
+        "versionId": "2",
+        "lastUpdated": (now + timedelta(seconds=1)).isoformat(),
+    }
     change = Change(
         ref="Observation/o",
         actions={"C", "U"},
@@ -491,3 +496,58 @@ def test_reference_identity_remains_checked_in_every_corrected_version(
     )
     assert result.outcome == expected
     assert not result.evidence.get("unreadable")
+
+
+@pytest.mark.parametrize(
+    "target,read_version,expected,reason",
+    [
+        ("Patient/a", "2", "created_verified", None),
+        ("Patient/a", "1", "needs_review", "not the last version"),
+        ("Patient/b", "2", "needs_review", "wrong or missing: patient"),
+        ("Patient/a", None, "needs_review", "no versionId"),
+    ],
+)
+def test_reference_identity_and_last_written_version_are_both_required(
+    target, read_version, expected, reason
+):
+    now = datetime.now(timezone.utc)
+    written = record(
+        subject={"reference": target, "display": "Task's presentation"},
+        meta={"versionId": "2", "lastUpdated": now.isoformat()},
+    )
+    read_back = copy.deepcopy(written)
+    if read_version is None:
+        del read_back["meta"]["versionId"]
+    else:
+        read_back["meta"]["versionId"] = read_version
+    c = contract()
+    params = parameters()
+    store = Store()
+    evidence = FhirReader(c, get=store.get).reference_evidence(
+        c, params, [written, read_back]
+    )
+    calls = list(store.calls)
+    change = Change(
+        ref="Observation/o",
+        actions={"C"},
+        authors={BOT},
+        versions=1,
+        bodies=[written],
+        events=[(now, "C", frozenset({BOT}))],
+    )
+    result = judge(
+        c,
+        params,
+        Baseline(started=now, matches={}),
+        {"Observation/o": change},
+        {"o": read_back},
+        read_back,
+        references=evidence,
+    )
+    assert result.outcome == expected
+    assert not result.evidence.get("unreadable")
+    assert store.calls == calls, "pure judging must not perform reads"
+    if reason:
+        assert any(reason in item for item in result.reasons)
+    else:
+        assert result.evidence["versions"] == [{"version": "2", "author": BOT}]

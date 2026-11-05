@@ -11000,10 +11000,15 @@ class Replayer:
                 "on the fresh frame — refusing to act; run aborted"
             )
         elif check.look_halt is not None:
+            reason = (
+                "the dialog could not be masked"
+                if check.look_halt == "identity_dialog_mask_failed"
+                else "the screen changed outside the identifier"
+            )
             error = (
                 f"Step '{step.id}' ({step.intent}) took an extra look at a "
-                "look-alike identifier and the screen changed outside the "
-                f"identifier ({check.look_halt}) — refusing to act"
+                f"look-alike identifier and {reason} "
+                f"({check.look_halt}) — refusing to act"
             )
             result.safety_halt = True
         elif check.known_id_halt is not None:
@@ -15882,6 +15887,43 @@ class Replayer:
             parameter_names,
         )
 
+    def _dialog_scoped_frame(
+        self, resolution: Resolution, before_png: bytes
+    ) -> Union[bytes, IdentityCheck]:
+        """The step's frame with everything outside the live dialog blanked.
+
+        Returns a ``mismatch`` :class:`IdentityCheck` instead when no dialog
+        holds the resolved point, the backend cannot locate one, or the frame
+        cannot be masked: a target recorded inside a dialog is not the same
+        target outside one.
+        """
+        probe = getattr(self.backend, "dialog_region_at", None)
+        status, box = "unknown", None
+        if callable(probe):
+            try:
+                status, box = probe(int(resolution.point[0]), int(resolution.point[1]))
+            except Exception:
+                status, box = "unknown", None
+        masked = (
+            identity_mod.mask_outside(before_png, box)
+            if status == "dialog" and box is not None
+            else None
+        )
+        if masked is not None:
+            self._identity_dialog_box = box
+            return masked
+        observed = (
+            "no dialog holds the target"
+            if status == "none"
+            else "the dialog holding the target could not be located"
+        )
+        return IdentityCheck(
+            status="mismatch",
+            mode="context",
+            expected="the target inside the dialog it was recorded in",
+            observed=observed,
+        )
+
     @timed_span("identity")
     def _verify_identity(
         self,
@@ -15935,6 +15977,32 @@ class Replayer:
         """
         anchor = step.anchor
         assert anchor is not None
+        # The live dialog box this check reads in, for the extra looks it may
+        # take on fresh frames (see _look_again). None outside a dialog.
+        self._identity_dialog_box = None
+        unscoped_png = before_png
+        if anchor.dialog_region is not None:
+            # The target was recorded inside a dialog and its identity band
+            # was read on the dialog alone. Read the live band the same way,
+            # on the live topmost dialog, so the page behind it is not
+            # evidence (#1347). No dialog at the point, or one that cannot be
+            # located, fails the check closed.
+            scoped = self._dialog_scoped_frame(resolution, before_png)
+            if isinstance(scoped, IdentityCheck):
+                return scoped
+            before_png = scoped
+            if anchor.dialog_row is False:
+                # Whole-dialog text cannot identify a row's Select button.
+                # Reconfirm the recorded non-row role before any tier runs.
+                if (
+                    self._structured_census(step, resolution.point).verdict
+                    != "not_a_row"
+                ):
+                    return IdentityCheck(
+                        status="unreadable",
+                        mode="context",
+                        observed="the dialog control's non-row role could not be confirmed",
+                    )
         project = getattr(workflow, "qualification", None)
         if project is not None:
             identity_policy = project.identity_policies.get(step.id)
@@ -15942,10 +16010,12 @@ class Replayer:
                 identity_policy is not None
                 and identity_policy.enforcement.value == "signal_quorum"
             ):
+                # Quorum signals name their own regions (a banner outside
+                # the dialog is one), so they read the whole frame.
                 quorum = self._verify_signal_quorum(
                     step=step,
                     resolution=resolution,
-                    before_png=before_png,
+                    before_png=unscoped_png,
                     params=runtime_params_for_gui(params),
                     workflow=workflow,
                     bundle_dir=bundle_dir,
@@ -16137,13 +16207,22 @@ class Replayer:
         tmpl = anchor.identity_template
         if not (anchor.context_text or (tmpl is not None and tmpl.tokens)):
             return census_mod.CensusDecision("cannot_count")
+        if anchor.dialog_row is False and anchor.dialog_region is not None:
+            # Count through the live row probe; the dialog itself proves
+            # nothing about whether its target belongs to a record row.
+            return self._structured_census(step, resolution.point)
         today = date.today()
+        dialog_box = self.__dict__.get("_identity_dialog_box")
         try:
             lines = [
                 line
                 for line in self.vision.ocr(before_png, region=None)
                 if line.text.strip()
                 and not identity_mod.is_volatile_line(line.text, reference_date=today)
+                and (
+                    dialog_box is None
+                    or identity_mod.centered_in(line.region, dialog_box)
+                )
             ]
         except Exception:
             return census_mod.CensusDecision("cannot_count")
@@ -16679,6 +16758,11 @@ class Replayer:
         band = identity_mod.band_region(
             resolution.point, anchor.region[3], self.backend.viewport
         )
+        # Dialog pixels are scoped by _verify_identity. Row refinement still
+        # applies unless compile positively identified a standalone control.
+        dialog_box: Optional[Region] = self.__dict__.get("_identity_dialog_box")
+        if dialog_box is not None:
+            band = dialog_box
         # The recorded band was extracted EXCLUDING the target's own crop
         # (labels are mutable evidence the ladder heals through) and
         # excluding volatile lines. The live band must mirror both, or
@@ -16728,7 +16812,8 @@ class Replayer:
                         line.text, reference_date=today
                     )
                 ]
-                lines = identity_mod.lines_near_point(lines, point_y)
+                if dialog_box is None or anchor.dialog_row is not False:
+                    lines = identity_mod.lines_near_point(lines, point_y)
                 if row_lines is not None:
                     row_lines.extend(lines)
                 observed = " ".join(line.text.strip() for line in lines)
@@ -16766,7 +16851,9 @@ class Replayer:
                 # translated identifier region. OCRing the crop itself can
                 # change segmentation/glyph recognition and false-halt a
                 # healthy screen.
-                None if identifier_region is not None else live_region,
+                None
+                if identifier_region is not None or dialog_box is not None
+                else live_region,
                 resolution.point[1],
                 exclude,
                 scoped_identifier=identifier_region is not None,
@@ -16860,6 +16947,7 @@ class Replayer:
             check.status == "verified"
             or identity_read_contradicts(check)
             or identifier_region is not None
+            or dialog_box is not None
         ):
             # A read of a different record is final: the row re-read below
             # must never overrule it into "verified".
@@ -17361,6 +17449,18 @@ class Replayer:
         for _ in range(looks_mod.FRAME_LOOKS):
             time.sleep(self.poll_interval_s)
             png = self.backend.screenshot()
+            box = self.__dict__.get("_identity_dialog_box")
+            if box is not None:
+                # Read the fresh frame in the same dialog as the first look.
+                masked = identity_mod.mask_outside(png, box)
+                if masked is None:
+                    return first.model_copy(
+                        update={
+                            "status": "unreadable",
+                            "look_halt": "identity_dialog_mask_failed",
+                        }
+                    )
+                png = masked
             frames.append((read(png), sha256_bytes(png)))
             if frames[-1][0].status == "mismatch":
                 break  # final; no further looks

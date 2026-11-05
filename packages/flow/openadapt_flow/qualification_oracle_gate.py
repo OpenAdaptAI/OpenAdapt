@@ -1,8 +1,9 @@
 """Execute the qualify-proposal effect oracle. Do not only list the fault.
 
 Before ``qualify accept`` can succeed, the proposed oracle is run against a
-``--break-it`` world: the success banner says saved, the store did not change.
-MockMed is the default fixture because it has a real persistence boundary.
+``--break-it`` world: the screen says saved and shows every value the run
+typed, and the store did not change. The world is built from the workflow
+itself (its own success text and parameters), so it is the same for every app.
 
 A model must not invent an endpoint. Actor bytes and oracle bytes must be
 disjoint. Re-reading the acting screen or the same-session banner HALTs.
@@ -10,11 +11,7 @@ disjoint. Re-reading the acting screen or the same-session banner HALTs.
 
 from __future__ import annotations
 
-import json
-import urllib.error
-import urllib.request
 from typing import Any, Literal, Optional
-from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -33,7 +30,7 @@ from openadapt_flow.traversal import iter_workflow_steps
 ORACLE_GATE_SCHEMA: Literal["openadapt.qualification-oracle-gate/v1"] = (
     "openadapt.qualification-oracle-gate/v1"
 )
-DEFAULT_BREAK_IT_FIXTURE = "mockmed"
+DEFAULT_BREAK_IT_FIXTURE = "unchanged_store"
 MISSING_SECOND_READ = "do not automate until a second read exists"
 BROKEN_CASE_ACCEPTED = (
     "proposed oracle would have accepted the broken case: "
@@ -67,7 +64,8 @@ _SCREEN_CHANNELS = frozenset(
     }
 )
 _BANNER_TOKENS = ("saved", "success", "banner")
-_MOCKMED_BANNER_PREFIX = "Encounter saved — "
+#: The break-it store's base URL: an in-process read, never a network call.
+_BREAK_IT_STORE = "http://break-it.invalid"
 
 
 class BoundEffect(BaseModel):
@@ -221,8 +219,17 @@ def _step_effect(workflow: Workflow, item: BoundEffect) -> Effect:
 
 
 def _banner_text(workflow: Workflow) -> str:
-    note = str(workflow.params.get("note") or "example")
-    return _MOCKMED_BANNER_PREFIX + note[:40]
+    """What the lying screen shows: the workflow's own success text, and every
+    value the run typed, so a screen read of any of them is fooled."""
+
+    success = [
+        pc.text
+        for step in _write_steps(workflow)
+        for pc in step.expect
+        if pc.kind is PostconditionKind.TEXT_PRESENT and pc.text
+    ]
+    values = [str(v) for v in workflow.params.values() if v not in (None, "")]
+    return " — ".join([*(success or ["Saved"]), *values])
 
 
 def _png() -> bytes:
@@ -256,30 +263,23 @@ class _BreakItBannerVision:
         return [_BannerLine(self._text)]
 
 
-def _http_json(
-    url: str, *, method: str = "GET", body: Optional[dict[str, Any]] = None
-) -> tuple[int, dict[str, Any]]:
-    data = None if body is None else json.dumps(body).encode("utf-8")
-    request = urllib.request.Request(url, data=data, method=method)
-    if data is not None:
-        request.add_header("Content-Type", "application/json")
-    try:
-        with urllib.request.urlopen(request, timeout=2) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-            status = int(response.status)
-    except urllib.error.HTTPError as exc:
-        raw = exc.read().decode("utf-8") if exc.fp is not None else ""
-        try:
-            payload = json.loads(raw) if raw else {}
-        except json.JSONDecodeError:
-            payload = {}
-        return int(exc.code), payload if isinstance(payload, dict) else {}
-    return status, payload if isinstance(payload, dict) else {}
+class _UnchangedStore:
+    """A records read that returns the same empty store before and after:
+    the write the screen claims never landed."""
 
+    class _Response:
+        status_code = 200
+        headers: dict[str, str] = {}
 
-def _origin(url: str) -> str:
-    parts = urlsplit(url)
-    return f"{parts.scheme}://{parts.netloc}"
+        def json(self) -> dict[str, Any]:
+            return {"records": []}
+
+        def raise_for_status(self) -> None:
+            return None
+
+    def get(self, url: str, **kwargs: Any) -> "_UnchangedStore._Response":
+        del url, kwargs
+        return self._Response()
 
 
 def _resolved_effect(workflow: Workflow, effect: Effect) -> Effect:
@@ -326,12 +326,12 @@ def evaluate_oracle_gate(
     *,
     fixture: str = DEFAULT_BREAK_IT_FIXTURE,
 ) -> OracleGateResult:
-    """Run channel disjointness and the MockMed --break-it fault.
+    """Run channel disjointness and the --break-it fault.
 
     Status stays draft/halted when the proposed oracle would have accepted
     the lie, when actor and oracle share a channel, or when no second read
-    exists. Nothing is guessed. The MockMed ``/api/db`` URL is the fixture's
-    persistence boundary, not a production endpoint invented for the pin.
+    exists. Nothing is guessed. The break-it store is read in process; it
+    names no app's endpoint.
     """
 
     actor = actor_channel_ids(workflow)
@@ -385,50 +385,28 @@ def evaluate_oracle_gate(
             ),
         )
 
-    from openadapt_flow.mockmed.fault_server import serve
-
     banner_text = _banner_text(workflow)
-    records: list[dict[str, Any]] = []
-    store_unchanged = False
-    screen_claimed_success = False
     verdicts: list[EffectVerdict] = []
-    status = 0
-    base_url, db, stop = serve()
-    try:
-        verifier = RestRecordVerifier(
-            _origin(base_url),
-            records_path="/api/db",
-            records_key="records",
-            timeout_s=2.0,
-            poll_interval_s=0.05,
-        )
-        before = verifier.capture_pre_state()
-        encounter_url = f"{base_url.rstrip('/')}/api/encounter?fault=optimistic"
-        status, _payload = _http_json(
-            encounter_url,
-            method="POST",
-            body={
-                "patient_id": str(workflow.params.get("record_id") or "p1"),
-                "type": "Triage",
-                "note": str(workflow.params.get("note") or "example"),
-            },
-        )
-        snapshot = db.snapshot()
-        records = list(snapshot.get("records") or [])
-        store_unchanged = len(records) == 0
-        screen_claimed_success = True
-        for item in effects:
-            effect = _step_effect(workflow, item)
-            if set(item.oracle_channels) & _SCREEN_CHANNELS:
-                verdicts.append(_execute_screen_oracle(workflow, effect, banner_text))
-            else:
-                verdicts.append(
-                    _execute_sor_oracle(
-                        workflow, effect, verifier=verifier, before=before
-                    )
-                )
-    finally:
-        stop()
+    verifier = RestRecordVerifier(
+        _BREAK_IT_STORE,
+        records_path="/records",
+        records_key="records",
+        session=_UnchangedStore(),
+        timeout_s=2.0,
+        poll_interval_s=0.05,
+    )
+    before = verifier.capture_pre_state()
+    records = list(before.records or [])
+    store_unchanged = before.reachable and not records
+    screen_claimed_success = True
+    for item in effects:
+        effect = _step_effect(workflow, item)
+        if set(item.oracle_channels) & _SCREEN_CHANNELS:
+            verdicts.append(_execute_screen_oracle(workflow, effect, banner_text))
+        else:
+            verdicts.append(
+                _execute_sor_oracle(workflow, effect, verifier=verifier, before=before)
+            )
 
     dumped = [
         {
@@ -451,8 +429,8 @@ def evaluate_oracle_gate(
             "proposed oracle did not refute the lying backend; "
             "refusing to guess that it would catch --break-it"
         )
-    if status not in {409, 200} and not store_unchanged:
-        reasons.append("MockMed optimistic write did not leave the store unchanged")
+    if not store_unchanged:
+        reasons.append("the break-it store could not be read as unchanged")
     halt_reason = "; ".join(reasons) if reasons else None
     return OracleGateResult(
         fixture=fixture,
