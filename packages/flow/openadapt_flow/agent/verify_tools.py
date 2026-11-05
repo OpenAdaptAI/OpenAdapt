@@ -455,6 +455,7 @@ class VerifyBridge:
             "verified": late.verified,
             "outcome": late.outcome,
             "late": late.late,
+            "final": late.final,
             "reasons": list(late.reasons),
             "recheck_due_at": late.due_at,
             "read_at": late.read_at,

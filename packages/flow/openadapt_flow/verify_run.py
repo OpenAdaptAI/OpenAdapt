@@ -412,6 +412,32 @@ def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyCo
                 "frame.attribution.read must be one read-only system-of-record "
                 "read (rest, sql, fhir, graphql, ...)"
             )
+    history = cfg.frame.history if cfg.frame is not None else None
+    if history is not None:
+        sources = cfg.verifier.surfaces or {"": cfg.verifier}
+        if set(history.surfaces) != set(sources):
+            raise VerifyRunError("frame.history must cover every verifier surface")
+        for name, history_source in sources.items():
+            feed = history.feeds[history.surfaces[name]]
+            read = EffectsConfig.model_validate(feed.read)
+            if read.candidates or read.surfaces or read.records_drop_fields:
+                raise VerifyRunError(
+                    "history feeds cannot omit fields or route candidates"
+                )
+            if history_source.kind == "fhir" and (
+                read.kind != "fhir"
+                or read.resource_type != history_source.resource_type
+                or read.base_url != history_source.base_url
+            ):
+                raise VerifyRunError(
+                    "history must cover the same FHIR origin and type as the record read"
+                )
+        for feed in history.feeds.values():
+            read = EffectsConfig.model_validate(feed.read)
+            if read.candidates or read.surfaces or read.records_drop_fields:
+                raise VerifyRunError(
+                    "history feeds cannot omit fields or route candidates"
+                )
     database = cfg.frame.database if cfg.frame is not None else None
     if database is not None:
         surfaces = set(cfg.verifier.surfaces) or {""}
@@ -1681,6 +1707,13 @@ def capture_baseline(
     execution_id = _new_execution_id()
     _tag_reads(verifier, execution_id)
     salt = secrets.token_bytes(32)
+    history_before = None
+    history_error = None
+    if cfg.frame is not None and cfg.frame.history is not None:
+        try:
+            history_before, _history_rows = _read_history(cfg, params, _now(), salt)
+        except Exception as exc:
+            history_error = type(exc).__name__
     # The versions first: a save between this read and the record read is
     # then in the record baseline too, never hidden in the versions one.
     versions_rows = (
@@ -1695,6 +1728,12 @@ def capture_baseline(
     if cfg.ensure_record is not None:
         detail[ENSURE_DETAIL] = {**state.detail.get(ENSURE_DETAIL, {}),
                                 "params_mac": salted_digest(salt, "ensure:params", dict(params))}
+    if cfg.frame is not None and cfg.frame.history is not None:
+        from openadapt_flow.runtime.effects.history import DETAIL
+
+        detail[DETAIL] = (
+            history_before if history_before is not None else {"error": history_error}
+        )
     entries: Optional[list[dict[str, Any]]] = None
     snapshot = None
     if cfg.frame is not None and cfg.frame.database is not None:
@@ -2051,6 +2090,29 @@ def verify_run(
         )
     _tag_reads(verifier, execution_id)
 
+    history_checkpoint = None
+    history_problem = None
+    history_spec = cfg.frame.history if cfg.frame is not None else None
+    if history_spec is not None:
+        try:
+            if baseline is None:
+                raise ValueError("history requires a baseline")
+            from openadapt_flow.runtime.effects.history import (
+                DETAIL,
+                checkpoint_problem,
+            )
+
+            stored_history = baseline["state"]["detail"].get(DETAIL)
+            if checkpoint_problem(stored_history) is not None:
+                raise ValueError("history baseline is unavailable")
+            history_checkpoint, _history_rows = _read_history(
+                cfg, params, stored_history["since"], salt
+            )
+        except Exception as exc:  # unreadable or incomplete history never confirms
+            history_problem = (
+                f"history checkpoint could not be read ({type(exc).__name__})"
+            )
+
     read_at = _now()
     before: EffectState
     baseline_sha: Optional[str] = None
@@ -2165,6 +2227,46 @@ def verify_run(
             status="not_checked",
             reason="no baseline, so what else changed can't be known",
         )
+    if history_spec is not None:
+        if history_problem is not None and frame.status != "refuted":
+            frame.status = "not_checked"
+            frame.reason = history_problem
+        elif history_checkpoint is not None:
+            from openadapt_flow.runtime.effects.history import judge_initial_history
+            from openadapt_flow.runtime.effects.surfaces import surface_of
+
+            targets: set[tuple[str, str]] = set()
+            for effect, verdict in zip(bound_effects, verdicts):
+                if effect.kind not in (
+                    EffectKind.RECORD_WRITTEN,
+                    EffectKind.FIELD_EQUALS,
+                    EffectKind.EXACT_NEW_SET,
+                ):
+                    continue
+                scope = history_spec.surfaces[surface_of(effect) or ""]
+                for target_record in verdict.matched_records:
+                    target_identity = target_record.get(
+                        frame_spec.identity_field or "id"
+                    )
+                    if target_identity not in (None, ""):
+                        targets.add((scope, str(target_identity)))
+            history_frame = judge_initial_history(
+                history_spec,
+                stored_history,
+                history_checkpoint,
+                _history_rows,
+                params,
+                str(run_record.get("executor_id") or ""),
+                targets,
+            )
+            frame.collateral.extend(history_frame.collateral)
+            frame.concurrent.extend(history_frame.concurrent)
+            if history_frame.status == "refuted" or (
+                history_frame.status == "not_checked" and frame.status == "held"
+            ):
+                frame.status = history_frame.status
+                frame.reason = history_frame.reason
+            frame.post_state = {"read_at": _now(), "history": history_checkpoint}
     frame = _apply_hard_invariants(frame)
     # A known field/frame violation still refutes. Missing required in-scope
     # evidence cannot turn a field read into an overall CONFIRMED claim.
@@ -2512,16 +2614,22 @@ def recheck_problem(
     frame = evidence.get("frame") or {}
     schedule = frame.get(late_write.EVIDENCE_KEY)
     database = cfg.frame.database if cfg.frame is not None else None
-    if not isinstance(schedule, Mapping) or database is None:
+    history = cfg.frame.history if cfg.frame is not None else None
+    after_s = (
+        history.quiet_s
+        if history is not None
+        else database.recheck_after_s
+        if database is not None
+        else None
+    )
+    if not isinstance(schedule, Mapping) or after_s is None:
         return "the receipt binds no post-save state"
     post = dict(state["post_state"])
     digest = salted_digest(salt, late_write.POST_STATE_LABEL, post)
     if schedule.get("post_state_sha256") != digest:
         return "the recheck state is not the post-save state its receipt names"
     is_verified = receipt.get("outcome") == "verified"
-    if database.recheck_after_s is None or dict(schedule) != late_write.schedule(
-        post, database.recheck_after_s, digest, due=is_verified
-    ):
+    if dict(schedule) != late_write.schedule(post, after_s, digest, due=is_verified):
         return (
             "the contract's recheck_after_s is not the one the receipt was issued under"
         )
@@ -2624,6 +2732,23 @@ def _later_window(state: Mapping[str, Any]) -> Optional[Any]:
         return None
 
 
+def _read_history(
+    cfg: VerifyConfig, params: Mapping[str, object], since: str, salt: bytes
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    from openadapt_flow.runtime.effects.history import read_history
+
+    if cfg.frame is None or cfg.frame.history is None:
+        raise VerifyRunError("no history feeds are configured")
+
+    def build(read: dict[str, Any]) -> Any:
+        verifier = build_effect_verifier(EffectsConfig.model_validate(read), params)
+        if verifier is None:
+            raise VerifyRunError("history built no read-only verifier")
+        return verifier
+
+    return read_history(cfg.frame.history, since, build, _mac_key(salt))
+
+
 def recheck_run(
     cfg: VerifyConfig,
     state: Mapping[str, Any],
@@ -2655,6 +2780,29 @@ def recheck_run(
     """
 
     post = dict(state["post_state"])
+    if cfg.frame is not None and cfg.frame.history is not None:
+        from openadapt_flow.runtime.effects.history import instant, judge_history
+
+        if excused:
+            raise VerifyRunError(
+                "history rechecks require source provenance; later-write windows cannot excuse events"
+            )
+        checkpoint = post["history"]
+        now, rows = _read_history(
+            cfg, params, checkpoint["since"], bytes.fromhex(str(state["salt"]))
+        )
+        schedule = state["evidence"]["frame"][late_write.EVIDENCE_KEY]
+        verdict = judge_history(
+            cfg.frame.history,
+            checkpoint,
+            now,
+            rows,
+            params,
+            schedule["due_at"],
+            str(run_record.get("executor_id") or ""),
+        )
+        horizon = min(instant(feed["through"]) for feed in now["feeds"].values())
+        return verdict, late_write.format_time(horizon)
     since = late_write.parse_time(str(post["read_at"]))
     windows: list[Any] = []
     unjudged = 0
