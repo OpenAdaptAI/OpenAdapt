@@ -344,32 +344,45 @@ rel_validate_release_dir() {
     && -x "$release_dir/venv/bin/openadapt-flow" ]]
 }
 
+# Create $1 holding this process's pid; fails if $1 already exists. The shell
+# opens it with noclobber (O_CREAT|O_EXCL), so exclusion does not depend on
+# mkdir(1): the uutils mkdir that Ubuntu 26.04 ships reports success to both
+# callers when two processes race to create one directory.
+_rel_create_exclusive() {
+  ( set -C; printf '%s\n' "$$" > "$1" ) 2>/dev/null
+}
+
 _rel_lock_acquire() {
-  local root="$1" owner=""
+  local root="$1" owner="" current=""
   local lock="$root/releases/.update.lock"
+  local breaker="$root/releases/.update.lock-breaker"
   mkdir -p "$root/releases" || return 1
-  if mkdir "$lock" 2>/dev/null; then
-    printf '%s\n' "$$" > "$lock/pid" || {
-      rmdir "$lock" 2>/dev/null || true
-      return 1
-    }
+  if [[ -L "$lock" ]]; then
+    _rel_err "release lock is a symlink; refusing: $lock"
+    return 1
+  fi
+  mkdir -p "$lock" 2>/dev/null || true
+  if [[ -d "$lock" && ! -L "$lock" ]] && _rel_create_exclusive "$lock/pid"; then
     REL_LOCK_DIR="$lock"
     return 0
   fi
-  if [[ -d "$lock" && ! -L "$lock" && -r "$lock/pid" ]]; then
+  if [[ -d "$lock" && ! -L "$lock" && -f "$lock/pid" && ! -L "$lock/pid" ]]; then
     owner="$(cat "$lock/pid" 2>/dev/null || true)"
   fi
   if [[ "$owner" =~ ^[0-9]+$ ]] && kill -0 "$owner" 2>/dev/null; then
     _rel_err "another update or rollback is active (pid $owner)"
     return 1
   fi
-  if [[ -d "$lock" && ! -L "$lock" ]]; then
-    rm -f "$lock/pid" 2>/dev/null || true
-    if rmdir "$lock" 2>/dev/null && mkdir "$lock" 2>/dev/null; then
-      printf '%s\n' "$$" > "$lock/pid" || {
-        rmdir "$lock" 2>/dev/null || true
-        return 1
-      }
+  # The owner has exited (or left an unreadable pid). Remove its lock only
+  # under the breaker lock and only if it still names that owner, so a
+  # concurrent breaker cannot remove a lock another process has just taken.
+  if [[ -n "$owner" ]] && _rel_create_exclusive "$breaker"; then
+    current="$(cat "$lock/pid" 2>/dev/null || true)"
+    if [[ "$current" == "$owner" ]]; then
+      rm -f "$lock/pid" 2>/dev/null || true
+    fi
+    rm -f "$breaker" 2>/dev/null || true
+    if [[ -d "$lock" && ! -L "$lock" ]] && _rel_create_exclusive "$lock/pid"; then
       REL_LOCK_DIR="$lock"
       return 0
     fi
