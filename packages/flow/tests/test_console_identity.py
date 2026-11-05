@@ -6,6 +6,7 @@ not implement or qualify an OIDC/SAML provider, a passkey, or a person signer.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import socket
@@ -466,3 +467,174 @@ def test_real_loopback_server_headless_browser_and_negative_http_controls(tmp_pa
             server.should_exit = True
             thread.join(15)
             assert not thread.is_alive()
+
+
+@pytest.mark.parametrize(
+    ("headers", "chunks", "status"),
+    [
+        ([(b"content-length", b"2")], [b"{}", b" "], 400),
+        ([(b"content-length", b"4")], [b"{}"], 400),
+        ([], [b"{}"], 411),
+        ([(b"content-length", b"-1")], [b"{}"], 400),
+        ([(b"content-length", b"bad")], [b"{}"], 400),
+        ([(b"content-length", b"0"), (b"content-length", b"0")], [b""], 400),
+        ([(b"transfer-encoding", b"chunked")], [b"{}"], 400),
+        ([(b"content-length", b"20000")], [b""], 413),
+        ([(b"content-length", b"2")], [b"x" * 20000], 413),
+        ([(b"content-length", b"16384")], [b"x" * 10000, b"x" * 10000], 413),
+    ],
+)
+@pytest.mark.parametrize("method", ["GET", "POST"])
+def test_actual_asgi_chunks_refuse_bad_framing_before_resolver(
+    tmp_path, headers, chunks, status, method
+):
+    resolver = SyntheticResolver()
+    app = _app(tmp_path, resolver)
+    path = (
+        b"/api/health" if method == "GET" else b"/api/workflows/missing/actions/certify"
+    )
+    sent, calls = _framed_asgi_request(app, path, method, headers, chunks)
+    assert (
+        next(message for message in sent if message["type"] == "http.response.start")[
+            "status"
+        ]
+        == status
+    )
+    assert resolver.bindings == []
+    if status == 413 and chunks == [b""]:
+        assert calls == []
+
+
+def test_real_http_chunked_and_large_get_are_refused_before_resolver(tmp_path):
+    resolver = SyntheticResolver()
+    app = _app(tmp_path, resolver)
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        server = uvicorn.Server(
+            uvicorn.Config(app, log_level="warning", access_log=False)
+        )
+        thread = threading.Thread(
+            target=server.run, kwargs={"sockets": [listener]}, daemon=True
+        )
+        thread.start()
+        try:
+            deadline = time.monotonic() + 15
+            while (
+                not server.started and thread.is_alive() and time.monotonic() < deadline
+            ):
+                time.sleep(0.02)
+            assert server.started
+            base = f"http://127.0.0.1:{listener.getsockname()[1]}"
+            with httpx.Client(
+                base_url=base,
+                headers={"Authorization": "Bearer " + app.state.console_access_token},
+            ) as client:
+                assert (
+                    client.request(
+                        "GET", "/api/health", content=b"x" * 20000
+                    ).status_code
+                    == 413
+                )
+                assert (
+                    client.request(
+                        "GET", "/api/health", content=iter([b"{}"])
+                    ).status_code
+                    == 400
+                )
+                assert resolver.bindings == []
+                assert client.get("/api/health").status_code == 200
+        finally:
+            server.should_exit = True
+            thread.join(15)
+            assert not thread.is_alive()
+
+
+def _framed_asgi_request(app, path, method, headers, chunks):
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": method,
+        "scheme": "http",
+        "path": path.decode(),
+        "raw_path": path,
+        "query_string": b"",
+        "root_path": "",
+        "client": ("127.0.0.1", 1),
+        "server": ("127.0.0.1", 80),
+        "headers": [
+            (b"host", b"127.0.0.1"),
+            (b"origin", b"http://127.0.0.1"),
+            (b"authorization", ("Bearer " + app.state.console_access_token).encode()),
+            (b"x-openadapt-csrf", app.state.console_csrf_token.encode()),
+            (b"content-type", b"application/json"),
+            *headers,
+        ],
+    }
+    messages = [
+        {"type": "http.request", "body": chunk, "more_body": index < len(chunks) - 1}
+        for index, chunk in enumerate(chunks)
+    ]
+    sent = []
+    calls = []
+    completed = asyncio.Event()
+
+    async def receive():
+        calls.append(True)
+        if messages:
+            return messages.pop(0)
+        await completed.wait()
+        return {"type": "http.disconnect"}
+
+    async def send(message):
+        sent.append(message)
+        if message["type"] == "http.response.body" and not message.get(
+            "more_body", False
+        ):
+            completed.set()
+
+    async def invoke():
+        await asyncio.wait_for(app(scope, receive, send), timeout=10)
+
+    asyncio.run(invoke())
+    return sent, calls
+
+
+def test_bounded_multi_chunk_body_replays_exactly_to_the_signed_action_handler(
+    tmp_path,
+):
+    resolver = SyntheticResolver()
+    app, run, _capability = _attended_app(tmp_path, resolver)
+    path, payload = _task(_client(app))
+    body = json.dumps(payload, separators=(",", ":")).encode()
+    sent, calls = _framed_asgi_request(
+        app,
+        path.encode(),
+        "POST",
+        [(b"content-length", str(len(body)).encode())],
+        [body[:7], body[7:41], body[41:]],
+    )
+    assert (
+        next(message for message in sent if message["type"] == "http.response.start")[
+            "status"
+        ]
+        == 200
+    )
+    receipt = json.loads(
+        b"".join(
+            message.get("body", b"")
+            for message in sent
+            if message["type"] == "http.response.body"
+        )
+    )
+    assert receipt["state"] == "demonstration_requested"
+    assert len(calls) >= 3
+    assert (
+        resolver.bindings[-1].body_sha256
+        == "sha256:" + hashlib.sha256(body).hexdigest()
+    )
+    assert (
+        AttendedActionStore(run)._read_log().decisions[-1].operator
+        == resolver.last.operator_ref
+    )

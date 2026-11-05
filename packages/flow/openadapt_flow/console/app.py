@@ -39,6 +39,10 @@ from openadapt_flow.console import actions as actions_mod
 from openadapt_flow.console import attention as attention_mod
 from openadapt_flow.console import data, human_decisions, json_artifacts
 from openadapt_flow.console import save_approvals as save_approvals_mod
+from openadapt_flow.console.body_limit import (
+    ConsoleBodyRefused,
+    ConsoleIdentityBodyLimit,
+)
 from openadapt_flow.console.identity import (
     ConsoleIdentityPolicy,
     ConsoleIdentityRefused,
@@ -393,6 +397,11 @@ def create_app(
                 request.state.console_identity = authorize_identity(
                     identity, identity_policy, binding, role
                 )
+            except ConsoleBodyRefused as exc:
+                return JSONResponse(
+                    {"detail": "console request body framing refused"},
+                    status_code=exc.status_code,
+                )
             except Exception:
                 # IdP outages, revocation and malformed resolver output all
                 # refuse. Never expose a token, subject or provider exception.
@@ -440,7 +449,8 @@ def create_app(
                         status_code=415,
                     )
                 elif (
-                    request.headers.get("content-length", "").isdigit()
+                    identity_policy is None
+                    and request.headers.get("content-length", "").isdigit()
                     and int(request.headers["content-length"]) > _MAX_BODY_BYTES
                 ):
                     response = JSONResponse(
@@ -1003,4 +1013,6 @@ def create_app(
             _STATIC_DIR / "console.js", media_type="application/javascript"
         )
 
+    if identity_policy is not None:
+        app.add_middleware(ConsoleIdentityBodyLimit, max_body_bytes=_MAX_BODY_BYTES)
     return app
