@@ -681,6 +681,24 @@ class WindowsBackend:
 
     # -- structured-text identity (openadapt_flow.backend.IdentityBackend) --
 
+    def focused_field_label(self) -> Optional[str]:
+        """Return the focused field's UIA label, or None (never raises).
+
+        RECORD-TIME seam (:class:`openadapt_flow.backend.FieldLabelBackend`):
+        reads UIA ``LabeledBy`` then ``Name`` on the focused control via the
+        in-guest agent. Never by position; None when there is no label so
+        compile-time OCR fallback still applies.
+        """
+
+        typed = self._post_typed_read("/uia/focused-field-label", {})
+        if not typed.available or typed.payload is None:
+            return None
+        value = typed.payload.get("label")
+        if isinstance(value, str):
+            text = " ".join(value.split())
+            return text or None
+        return None
+
     def structured_text_at(self, x: int, y: int) -> Optional[str]:
         """Return the UI Automation text of the element/row under (x, y).
 
