@@ -113,3 +113,25 @@ def test_api_show_reads_the_proposal_sidecar_as_utf8(tmp_path: Path) -> None:
         _bundle(tmp_path, manifest_name="demo"),
     )
     assert json.loads(out)["not_proposed_because"] == [NAME]
+
+
+@pytest.mark.parametrize("backend", [[], ["--backend", "web"]])
+def test_config_init_reads_a_non_ascii_workflow_as_utf8(
+    tmp_path: Path, backend: list[str]
+) -> None:
+    # The workflow name itself is non-ASCII; ``init`` reads workflow.json for
+    # the surface (no --backend) and for the run name (either way).
+    bundle = tmp_path / "bundle"
+    Workflow(
+        name=NAME,
+        steps=[Step(id="s1", intent="submit", action=ActionKind.KEY, key="Enter")],
+    ).save(bundle)
+    out = tmp_path / "flow.toml"
+    _run(
+        "import sys\n"
+        "from openadapt_flow.cli_config import main\n"
+        f"code = main(['init', sys.argv[1], '--out', {str(out)!r}, *{backend!r}])\n"
+        "sys.exit(code)\n",
+        bundle,
+    )
+    assert NAME in out.read_text(encoding="utf-8")

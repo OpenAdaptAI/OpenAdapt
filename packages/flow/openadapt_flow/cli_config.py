@@ -63,7 +63,7 @@ def bundle_surface(bundle: Path) -> Optional[str]:
 
     payload = _require_bundle(bundle)
     try:
-        raw = json.loads(payload.read_text())
+        raw = json.loads(payload.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise SystemExit(f"{payload} is not valid JSON: {exc}") from exc
     surface = raw.get("surface")
@@ -75,7 +75,7 @@ def bundle_surface(bundle: Path) -> Optional[str]:
 def bundle_name(bundle: Path) -> str:
     payload = _require_bundle(bundle)
     try:
-        raw = json.loads(payload.read_text())
+        raw = json.loads(payload.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return bundle.name
     name = raw.get("name")
@@ -192,7 +192,7 @@ def init_deploy_config(
     draft = build_draft(bundle, backend=backend)
     text = render_draft(draft)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(text)
+    out.write_text(text, encoding="utf-8")
     # Draft must parse, and must be refused by the governed loader.
     parsed = load_deployment(out, allow_unresolved=True)
     if parsed.bundle_digest != draft["bundle_digest"]:
