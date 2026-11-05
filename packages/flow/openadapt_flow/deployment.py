@@ -2160,6 +2160,9 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
                     section.pop(added, None)
             if not section.get("index_lag_s"):
                 section.pop("index_lag_s", None)
+            sign_in = section.get("sign_in")
+            if isinstance(sign_in, dict) and sign_in.get("post_url") is None:
+                sign_in.pop("post_url", None)
     payload = {
         "schema": "openadapt.effect-verifier-identity/v1",
         "implementation": (

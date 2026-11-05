@@ -99,6 +99,7 @@ def _verify(app: dict[str, Any]) -> Any:
             "record_url": base + "/record",
             "sign_in": {
                 "url": base + "/signin",
+                "post_url": base + "/login",
                 "username_selector": "#u",
                 "password_selector": "#p",
                 "submit_selector": "#go",

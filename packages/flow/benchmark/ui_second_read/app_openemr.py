@@ -96,6 +96,7 @@ def spec(**extra: Any) -> UiReadbackSpec:
         "record_url": b + "/interface/main/finder/dynamic_finder.php",
         "sign_in": {
             "url": b + "/interface/login/login.php?site=default",
+            "post_url": env("UI2R_OPENEMR_SIGNIN_POST_URL"),
             "username_selector": "#authUser",
             "password_selector": "#clearPass",
             "submit_selector": "#login-button",

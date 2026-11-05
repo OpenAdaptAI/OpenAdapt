@@ -126,3 +126,10 @@ Limits:
 - Citrix: a second published-app session from the same broker may share a
   server-side cache. Qualify it before relying on it.
 - A second concurrent session may use a license seat.
+
+The browser read-back requires `ui_readback.sign_in.post_url`: the deployment's
+explicit authentication POST endpoint on the sign-in page's origin. The selected
+native form, including submitter overrides, must match that endpoint and POST
+method. One navigation POST is allowed immediately at submit, in the selected
+frame; the allowance is consumed before the request continues. Unknown or
+unconfigured authentication requests are refused.

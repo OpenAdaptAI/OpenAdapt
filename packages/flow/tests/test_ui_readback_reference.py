@@ -428,9 +428,16 @@ def test_deployment_wires_the_run_session(monkeypatch: pytest.MonkeyPatch) -> No
         {"kind": "ui_readback", "ui_readback": chart_readback_spec(BASE)}
     )
     plain_verifier = build_effect_verifier(plain, {"patient_id": "p1"})
-    assert _effect_verifier_config_identity(plain, plain_verifier) == (
+    legacy_spec = chart_readback_spec(BASE)
+    legacy_spec["sign_in"].pop("post_url")
+    legacy = EffectsConfig.model_validate(
+        {"kind": "ui_readback", "ui_readback": legacy_spec}
+    )
+    legacy_identity = _effect_verifier_config_identity(legacy, plain_verifier)
+    assert legacy_identity == (
         "sha256:b9c837bb91e9f4f75dc6ff4dff79e53fcb56e92c87ae552354d08c7296c6c1de"
     )
+    assert _effect_verifier_config_identity(plain, plain_verifier) != legacy_identity
     assert _effect_verifier_config_identity(cfg, verifier) != (
         _effect_verifier_config_identity(plain, plain_verifier)
     )

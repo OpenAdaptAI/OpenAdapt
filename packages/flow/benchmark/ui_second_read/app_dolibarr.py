@@ -35,6 +35,7 @@ def spec(**extra: Any) -> UiReadbackSpec:
         "url_params": {"name": {"param": "name"}},
         "sign_in": {
             "url": b + "/index.php",
+            "post_url": env("UI2R_DOLIBARR_SIGNIN_POST_URL"),
             "username_selector": "#username",
             "password_selector": "#password",
             "submit_selector": "input[type=submit]",

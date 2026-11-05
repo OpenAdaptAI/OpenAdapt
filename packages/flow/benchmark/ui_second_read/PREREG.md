@@ -96,3 +96,7 @@ SQL client command for that fixture; statements are passed on stdin. It has
 no built-in host, container, account or password. Credential provisioning
 remains a separate deployment step. These configuration changes do not
 replace or add any measurements in the committed result files.
+
+Set `UI2R_OPENEMR_SIGNIN_POST_URL` and `UI2R_DOLIBARR_SIGNIN_POST_URL` to each
+deployment's explicitly authorized native authentication POST endpoint. The
+benchmark does not derive this authority from the page or infer an endpoint.

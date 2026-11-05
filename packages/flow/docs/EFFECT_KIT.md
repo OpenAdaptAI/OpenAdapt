@@ -782,6 +782,7 @@ effects:
     url_params: { patient: { param: patient_id } }
     sign_in:
       url: https://app.example.org/login
+      post_url: "https://app.example.org/login"  # declared auth POST, never inferred
       username_selector: "#username"
       password_selector: "#password"
       submit_selector: "button[type=submit]"

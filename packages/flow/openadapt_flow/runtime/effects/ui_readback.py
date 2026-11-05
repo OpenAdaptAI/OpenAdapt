@@ -60,7 +60,7 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Literal, Mapping, Optional, Protocol
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, urljoin, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -137,12 +137,47 @@ class FieldReader(BaseModel):
     casefold: bool = False
 
 
+def _auth_url_key(url: str) -> tuple[str, str, int, str, str]:
+    """Canonical authority/path with the query kept verbatim, never inferred."""
+
+    try:
+        parts = urlsplit(url)
+        if (
+            parts.scheme not in {"http", "https"}
+            or not parts.hostname
+            or parts.username is not None
+            or parts.password is not None
+            or "#" in url
+            or "\\" in url
+            or any(c.isspace() for c in url)
+        ):
+            raise ValueError("invalid auth endpoint")
+        port = (
+            parts.port
+            if parts.port is not None
+            else (443 if parts.scheme == "https" else 80)
+        )
+        return (
+            parts.scheme,
+            parts.hostname.lower(),
+            port,
+            parts.path or "/",
+            parts.query,
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "sign_in requires an absolute HTTP(S) URL without userinfo or fragments"
+        ) from exc
+
+
 class SignInSpec(BaseModel):
     """The read-back session's own sign-in. Credentials are env-var names."""
 
     model_config = ConfigDict(extra="forbid")
 
     url: str
+    #: Trusted deployment authority for one native form POST; never inferred.
+    post_url: Optional[str] = None
     username_selector: str
     password_selector: str
     submit_selector: str
@@ -150,6 +185,25 @@ class SignInSpec(BaseModel):
     signed_in_selector: str
     username_env: str
     password_env: str
+
+    @model_validator(mode="after")
+    def _auth_endpoint(self) -> "SignInSpec":
+        try:
+            page = _auth_url_key(self.url)
+        except ValueError as exc:
+            raise ValueError(
+                "ui_readback.sign_in.url must be an absolute http(s) URL"
+            ) from exc
+        if self.post_url is not None:
+            try:
+                post = _auth_url_key(self.post_url)
+            except ValueError as exc:
+                raise ValueError(
+                    "sign_in.post_url must be an absolute HTTP(S) endpoint without userinfo or fragments"
+                ) from exc
+            if post[:3] != page[:3]:
+                raise ValueError("sign_in.post_url must have the sign-in page's origin")
+        return self
 
 
 class RecordIdentity(BaseModel):
@@ -611,6 +665,31 @@ def _reader_payload(reader: FieldReader) -> dict[str, Optional[str]]:
     return {"selector": reader.selector, "attribute": reader.attribute}
 
 
+_NATIVE_SIGN_IN_FORM = """
+e => {
+  const descriptor = (prototype, name, node) =>
+    Object.getOwnPropertyDescriptor(prototype, name).get.call(node);
+  let prototype;
+  if (e instanceof HTMLButtonElement) prototype = HTMLButtonElement.prototype;
+  else if (e instanceof HTMLInputElement) prototype = HTMLInputElement.prototype;
+  else return null;
+  const type = descriptor(prototype, 'type', e);
+  if (type !== 'submit' && type !== 'image') return null;
+  const form = descriptor(prototype, 'form', e);
+  if (!(form instanceof HTMLFormElement) || !form.isConnected) return null;
+  const attribute = name => Element.prototype.getAttribute.call(e, name);
+  const effective = (override, property) => attribute(override) !== null
+    ? descriptor(prototype, property, e)
+    : descriptor(HTMLFormElement.prototype, property.slice(4).toLowerCase(), form);
+  return {
+    method: effective('formmethod', 'formMethod'),
+    action: effective('formaction', 'formAction'),
+    target: effective('formtarget', 'formTarget')
+  };
+}
+"""
+
+
 class PlaywrightReadbackDriver:
     """Drive a separate browser with Playwright's sync API.
 
@@ -647,6 +726,17 @@ class _PlaywrightSession:
         self._context: Any = None
         self._page: Any = None
         self._phase = "sign_in"
+        self._auth_refused = False
+        self._auth_attempt = 0
+        self._auth_frame: Any = None
+        self._auth_read_redirect: Optional[tuple[Any, int, str]] = None
+        self._auth_get_allowance: Optional[
+            tuple[tuple[str, str, int, str, str], Any, int]
+        ] = None
+        self._auth_response_status: Optional[int] = None
+        self._auth_allowance: Optional[
+            tuple[tuple[str, str, int, str, str], Any, int]
+        ] = None
         self._blocked = 0
         self._blocked_elsewhere = 0
         #: The URL of the page being read (None outside a read).
@@ -658,6 +748,11 @@ class _PlaywrightSession:
 
     # -- context manager ------------------------------------------------------
     def __enter__(self) -> "_PlaywrightSession":
+        if self._target.spec.sign_in.post_url is None:
+            self._username = self._password = ""
+            raise ReadbackSessionError(
+                "sign_in.post_url must declare the permitted native form POST"
+            )
         try:
             from playwright.sync_api import sync_playwright
         except ModuleNotFoundError as exc:  # pragma: no cover - env specific
@@ -684,27 +779,71 @@ class _PlaywrightSession:
             fresh = fresh and self._page.evaluate(_EMPTY_CLIENT_STORE_SCRIPT)
             if not fresh:
                 raise ReadbackSessionError("the read-back context was not empty")
-            # A sign-in that fails on a transient network error (a gateway
-            # error, a timeout) is tried again, in the same fresh context,
-            # before the session gives up. It reads nothing about the record.
+            # Only a captured transient auth response permits another explicit
+            # credential submission. Unknown delivery/navigation never does.
             for attempt in range(_SIGN_IN_ATTEMPTS):
+                self._auth_attempt += 1
+                self._auth_read_redirect = None
+                self._auth_get_allowance = None
+                self._auth_response_status = None
+                self._auth_allowance = None
+                self._phase = "sign_in"
                 try:
                     if attempt:
                         time.sleep(_backoff(attempt))
                         self._page.goto(spec.sign_in.url, wait_until="domcontentloaded")
                     self._page.fill(spec.sign_in.username_selector, self._username)
                     self._page.fill(spec.sign_in.password_selector, self._password)
-                    self._page.click(spec.sign_in.submit_selector)
+                    self._arm_sign_in()
+                    try:
+                        self._page.click(spec.sign_in.submit_selector)
+                    except Exception:  # noqa: BLE001 - only our captured abort is expected
+                        if not self._current_auth_redirect():
+                            raise
+                    redirect = self._consume_auth_redirect()
+                    if redirect is not None:
+                        frame, url = redirect
+                        self._auth_get_allowance = (
+                            _auth_url_key(url),
+                            frame,
+                            self._auth_attempt,
+                        )
+                        try:
+                            frame.goto(url, wait_until="domcontentloaded")
+                        except Exception:
+                            raise ReadbackSessionError(
+                                "the explicit authentication read failed"
+                            ) from None
+                        if self._auth_get_allowance is not None or self._auth_refused:
+                            raise ReadbackSessionError(
+                                "the authentication read did not pass its guard"
+                            )
                     self._page.wait_for_selector(
                         spec.sign_in.signed_in_selector, state="attached"
                     )
+                    if self._auth_refused:
+                        raise ReadbackSessionError(
+                            "the authentication response could not be safely delivered"
+                        )
                     break
+                except ReadbackSessionError:
+                    raise
                 except Exception:  # noqa: BLE001 - retried, then fails below
+                    self._auth_allowance = None
+                    if self._auth_refused:
+                        raise ReadbackSessionError(
+                            "the authentication response could not be safely delivered"
+                        ) from None
+                    if self._auth_response_status not in _TRANSIENT:
+                        raise ReadbackSessionError(
+                            "sign-in did not complete after the declared POST"
+                        ) from None
                     if attempt == _SIGN_IN_ATTEMPTS - 1:
                         raise
             # From here on the session is read-only. The network guard
             # (``_guard``) refuses every non-read request; the init script
             # refuses them inside each page before they are sent.
+            self._auth_allowance = None
             self._phase = "read"
             self._context.add_init_script(_no_writes_script(self._target))
         except ReadbackSessionError:
@@ -729,6 +868,9 @@ class _PlaywrightSession:
         # Anything still in flight while the session closes is refused, and
         # the context goes offline first so a request released during
         # teardown cannot reach the application.
+        self._auth_allowance = None
+        self._auth_get_allowance = None
+        self._auth_read_redirect = None
         self._phase = "closed"
         if self._context is not None:
             try:
@@ -749,22 +891,150 @@ class _PlaywrightSession:
         self._context = self._browser = self._pw = None
 
     # -- read-only guard --------------------------------------------------------
+    def _arm_sign_in(self) -> None:
+        """Bind the selected native submitter to the declared deployment POST."""
+
+        self._auth_allowance = None
+        sign_in = self._target.spec.sign_in
+        if sign_in.post_url is None:
+            raise ReadbackSessionError("sign_in.post_url is not declared")
+        submitter = self._page.locator(sign_in.submit_selector).element_handle()
+        if submitter is None:
+            raise ReadbackSessionError("the selected sign-in submitter is unavailable")
+        form = submitter.evaluate(_NATIVE_SIGN_IN_FORM)
+        frame = submitter.owner_frame()
+        if (
+            not isinstance(form, dict)
+            or form.get("method") != "post"
+            or form.get("target") not in {"", "_self"}
+            or not isinstance(form.get("action"), str)
+            or _auth_url_key(form["action"]) != _auth_url_key(sign_in.post_url)
+            or frame is None
+        ):
+            raise ReadbackSessionError(
+                "the selected native sign-in form does not match its declared POST"
+            )
+        self._auth_frame = frame
+        self._auth_allowance = (
+            _auth_url_key(sign_in.post_url),
+            frame,
+            self._auth_attempt,
+        )
+
+    def _current_auth_redirect(self) -> bool:
+        token = self._auth_read_redirect
+        return (
+            token is not None
+            and not self._auth_refused
+            and token[0] is self._auth_frame
+            and token[1] == self._auth_attempt
+            and self._phase == "read"
+        )
+
+    def _consume_auth_redirect(self) -> Optional[tuple[Any, str]]:
+        token = self._auth_read_redirect
+        current = self._current_auth_redirect()
+        self._auth_read_redirect = None
+        if token is None:
+            return None
+        if not current:
+            raise ReadbackSessionError(
+                "the captured authentication read is not current"
+            )
+        return token[0], token[2]
+
+    def _send_auth_request(self, route: Any, request: Any, *, read: bool) -> None:
+        """Send one bound auth request; redirects never reach the browser."""
+
+        response = None
+        handled = False
+        try:
+            response = route.fetch(
+                max_redirects=0,
+                max_retries=0,
+                timeout=int(self._target.spec.navigation_timeout_s * 1000),
+            )
+            status = int(response.status)
+            if not read:
+                self._auth_response_status = status
+            if 300 <= status < 400:
+                if read or status not in {301, 302, 303}:
+                    self._auth_refused = True
+                else:
+                    location = response.headers.get("location")
+                    if not isinstance(location, str) or not location:
+                        raise ValueError("missing auth read Location")
+                    url = urljoin(str(request.url), location)
+                    if _auth_url_key(url)[:3] != _auth_url_key(str(request.url))[:3]:
+                        raise ValueError("auth read Location changes origin")
+                    self._auth_read_redirect = (request.frame, self._auth_attempt, url)
+                # Cancel only the captured native navigation without creating
+                # a browser error document that can race the explicit read.
+                route.abort(
+                    "aborted" if self._current_auth_redirect() else "blockedbyclient"
+                )
+                handled = True
+            else:
+                route.fulfill(response=response)
+                handled = True
+        except Exception:  # noqa: BLE001 - unknown delivery never permits a resend
+            self._auth_refused = True
+            if not handled:
+                try:
+                    route.abort("blockedbyclient")
+                except Exception:  # noqa: BLE001 - refusal remains mandatory
+                    pass
+        finally:
+            if response is not None:
+                try:
+                    response.dispose()
+                except Exception:  # noqa: BLE001 - cleanup cannot establish success
+                    self._auth_refused = True
+
     def _guard(self, route: Any, request: Any) -> None:
         method = str(request.method).upper()
         if method in READ_METHODS:
+            if self._auth_get_allowance is not None:
+                endpoint, frame, attempt = self._auth_get_allowance
+                if request.frame is frame and request.is_navigation_request():
+                    self._auth_get_allowance = None
+                    if (
+                        method == "GET"
+                        and attempt == self._auth_attempt
+                        and _auth_url_key(str(request.url)) == endpoint
+                        and self._phase == "read"
+                    ):
+                        self._send_auth_request(route, request, read=True)
+                    else:
+                        self._auth_refused = True
+                        route.abort("blockedbyclient")
+                    return
             route.continue_()
             return
         spec = self._target.spec
         url = str(request.url)
+        if method == "POST" and self._auth_allowance is not None:
+            endpoint, frame, attempt = self._auth_allowance
+            try:
+                native_auth = (
+                    request.frame is frame
+                    and attempt == self._auth_attempt
+                    and request.is_navigation_request()
+                    and request.resource_type == "document"
+                    and request.redirected_from is None
+                    and _auth_url_key(url) == endpoint
+                )
+            except Exception:  # noqa: BLE001 - unknown request authority refuses
+                native_auth = False
+            if native_auth:
+                # Consume before the request can cause redirects or background writes.
+                self._auth_allowance = None
+                self._phase = "read"
+                self._send_auth_request(route, request, read=False)
+                return
         if (
-            self._phase == "sign_in"
+            self._phase == "read"
             and method == "POST"
-            and _origin(url) == _origin(spec.sign_in.url)
-        ):
-            route.continue_()
-            return
-        if (
-            method == "POST"
             and _origin(url) == _origin(self._target.record_url)
             and any(urlsplit(url).path.startswith(p) for p in spec.read_post_paths)
         ):
@@ -1100,6 +1370,13 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         #: The history view as read before the save (None: not read).
         self._history_before: Optional[list[dict[str, Optional[str]]]] = None
         sign_in = target.spec.sign_in
+        if (
+            isinstance(self._driver, PlaywrightReadbackDriver)
+            and sign_in.post_url is None
+        ):
+            raise ValueError(
+                "sign_in.post_url must declare the permitted native form POST"
+            )
         for name in (sign_in.username_env, sign_in.password_env):
             if not self._environ.get(name):
                 raise ValueError(
