@@ -1,21 +1,15 @@
-"""The golden free path with egress blocked: VERIFIED with no route off the machine.
+"""Golden free path inside a loopback-only Linux network namespace.
 
-The on-prem promise is that a run needs nothing outside the building. These
-tests prove it on the real free path (record, compile, certify, run, verify
-the write by an independent read) inside
-``deploy/on-prem/bin/run-egress-blocked.sh``, a Linux network namespace that
-holds only loopback. The kernel refuses every packet bound off the machine,
-from Python, native code and the browser alike.
+Run through ``deploy/on-prem/bin/run-egress-blocked.sh``. The first test
+checks direct IP connections independently of the location environment
+variable. The real tutorial still records, compiles, certifies, runs and
+verifies a write through independent read-back.
 
-They run only inside that namespace (``OPENADAPT_EGRESS_BLOCKED=netns``), and
-the first test does not trust the variable: it shows that public hosts,
-public DNS resolvers included, are unreachable, so on a connected machine it
-fails instead of passing.
-
-The run also goes through strict no-outbound mode (:mod:`openadapt_flow.no_outbound`)
-with its refusal log on. An empty log means the engine did not even try to
-reach another machine; the second test shows that the log does fill when
-something tries, so the empty log is not vacuous.
+Strict no-outbound mode adds a Python audit hook. Its empty refusal log means
+no refusal was recorded by that hook. Native sockets, children without the
+hook and allowed pathname Unix brokers are outside that observation. The
+native-child positive control demonstrates this limit with a real attempt
+that the network namespace refuses.
 """
 
 from __future__ import annotations
@@ -45,7 +39,7 @@ def _strict_env(log: Path) -> dict[str, str]:
     env = {k: v for k, v in os.environ.items() if not k.startswith("OPENADAPT_NO_")}
     env.update(
         OPENADAPT_NO_OUTBOUND="1",
-        # The namespace contains every child, the browser included.
+        # Children inherit the direct-IP restriction; their sockets are not audited.
         OPENADAPT_NO_OUTBOUND_CHILDREN="sandbox",
         OPENADAPT_NO_OUTBOUND_LOG=str(log),
         PYTHONPATH=os.pathsep.join(
@@ -114,5 +108,32 @@ def test_the_free_path_verifies_without_reaching_another_machine(
     assert envelope["external_network_calls"] == "none"
     assert envelope["passed_contracts"]["effect"] >= 1
     assert (out / "run" / "receipt.json").is_file()
-    # Not one refused attempt: the engine never tried to leave.
+    # No refusal was recorded by the Python hook; native attempts are not logged.
+    assert not log.exists() or log.read_text() == ""
+
+
+def test_native_child_attempt_is_blocked_without_a_python_refusal(tmp_path: Path) -> None:
+    log = tmp_path / "native-outbound-blocked.jsonl"
+    probe = textwrap.dedent(
+        """\
+        import json
+        import subprocess
+        import openadapt_flow
+        proc = subprocess.run(
+            ["/bin/bash", "-c", "printf native-marker >/dev/tcp/192.0.2.123/443"],
+            capture_output=True, text=True, timeout=5,
+        )
+        print(json.dumps({"returncode": proc.returncode, "stderr": proc.stderr}))
+        """
+    )
+    env = _strict_env(log)
+    env["LC_ALL"] = "C"
+    proc = subprocess.run(
+        [sys.executable, "-c", probe], env=env,
+        capture_output=True, text=True, timeout=30,
+    )
+    assert proc.returncode == 0, proc.stderr
+    child = json.loads(proc.stdout)
+    assert child["returncode"] != 0
+    assert "Network is unreachable" in child["stderr"]
     assert not log.exists() or log.read_text() == ""

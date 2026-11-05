@@ -531,3 +531,18 @@ def test_clean_machine_lifecycle_declares_utf8_on_every_os() -> None:
 
     assert 'PYTHONUTF8: "1"' in lifecycle_header
     assert 'PYTHONIOENCODING: "utf-8"' in lifecycle_header
+
+
+
+def test_egress_boundary_controls_are_required_without_skips() -> None:
+    workflow = ROOT_PACKAGES.read_text(encoding="utf-8")
+    start = workflow.index("\n  flow-critical:")
+    end = workflow.index("\n  flow-agent-frameworks:", start)
+    critical = workflow[start:end]
+    assert "tests/e2e/test_egress_blocked_e2e.py" in critical
+    assert "tests/e2e/test_egress_namespace_e2e.py" in critical
+    assert 'OPENADAPT_TEST_NETNS: "1"' in critical
+    assert "--junitxml=runs/onprem-boundary-junit.xml" in critical
+    gate = critical[critical.index("- name: Fail if any critical test") :]
+    assert '"onprem-egress", "onprem-boundary"' in gate
+    assert "if tests == 0 or skipped:" in gate
