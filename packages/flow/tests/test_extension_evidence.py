@@ -9,7 +9,7 @@ import pytest
 
 from openadapt_flow.extension_evidence import (
     SCHEMA,
-    SECRET,
+    REDACTED_VALUE,
     ExtensionEvidenceBuffer,
     load_extension_evidence,
     merge_target_path,
@@ -58,7 +58,7 @@ def test_redact_withholds_password_value():
         }
     )
     assert line["secret_field"] is True
-    assert line["value"] == SECRET
+    assert line["value"] == REDACTED_VALUE
 
 
 def test_redact_honours_declared_secret_names():
@@ -66,7 +66,7 @@ def test_redact_honours_declared_secret_names():
         {"kind": "target", "name": "mrn", "value": "999"},
         secret_names=["mrn"],
     )
-    assert line["value"] == SECRET
+    assert line["value"] == REDACTED_VALUE
 
 
 def test_shadow_targets_filters():
@@ -101,7 +101,7 @@ def test_validate_native_message_accepts_target_and_redacts():
             },
         }
     )
-    assert evidence["value"] == SECRET
+    assert evidence["value"] == REDACTED_VALUE
 
 
 def test_validate_native_message_refuses_wrong_type():
@@ -147,5 +147,5 @@ def test_native_host_validate_and_write_via_buffer(tmp_path: Path):
     buf.append(evidence)
     buf.write(tmp_path)
     loaded = load_extension_evidence(tmp_path)
-    assert loaded[0]["value"] == SECRET
+    assert loaded[0]["value"] == REDACTED_VALUE
     assert loaded[0]["in_shadow"] is True

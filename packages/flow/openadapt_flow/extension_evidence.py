@@ -23,7 +23,7 @@ from typing import Any, Iterable, Mapping, MutableMapping, Optional
 
 EVIDENCE_FILE = "extension_evidence.jsonl"
 SCHEMA = "openadapt.extension-evidence/1"
-SECRET = "<secret>"
+REDACTED_VALUE = "<secret>"
 
 SECRET_NAME = re.compile(
     r"pass(word|wd|phrase)?\b|passwd|pwd|secret|private[_-]?key|^pin$|^otp$",
@@ -61,7 +61,7 @@ def redact_evidence(
 
     Defense in depth for lines that already left the content script.
     A live secret value is never copied into the result: only the constant
-    ``SECRET`` placeholder is written for secret fields, so clear-text
+    ``REDACTED_VALUE`` placeholder (`"<secret>"`) is written for secret fields, so clear-text
     storage scanners see no sensitive payload on the write path.
     """
 
@@ -82,7 +82,7 @@ def redact_evidence(
     if secret:
         out["secret_field"] = True
         if "value" in line:
-            out["value"] = SECRET
+            out["value"] = REDACTED_VALUE
     elif "value" in line:
         out["value"] = line["value"]
     return out
@@ -118,15 +118,23 @@ class ExtensionEvidenceBuffer:
         return [dict(line) for line in self._lines]
 
     def write(self, recording_dir: Path | str) -> Path:
-        """Write ``extension_evidence.jsonl``. Empty buffer still writes a header."""
+        """Write ``extension_evidence.jsonl``. Empty buffer still writes a header.
+
+        Secret field values are forced to the plain ``"<secret>"`` literal at
+        serialize time so the on-disk payload never carries a live value.
+        """
 
         path = Path(recording_dir) / EVIDENCE_FILE
         path.parent.mkdir(parents=True, exist_ok=True)
         lines = self.lines()
         header = {"schema": SCHEMA, "events": len(lines), "source": "chrome_extension"}
-        text = json.dumps(header, sort_keys=True) + "\n"
-        text += "".join(json.dumps(line, sort_keys=True) + "\n" for line in lines)
-        path.write_text(text, encoding="utf-8")
+        chunks = [json.dumps(header, sort_keys=True)]
+        for line in lines:
+            row = dict(line)
+            if row.get("secret_field") and "value" in row:
+                row["value"] = "<secret>"
+            chunks.append(json.dumps(row, sort_keys=True))
+        path.write_text("\n".join(chunks) + "\n", encoding="utf-8")
         return path
 
 

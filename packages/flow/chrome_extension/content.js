@@ -5,7 +5,7 @@
 
 (function () {
   const SCHEMA = 'openadapt.extension-evidence/1';
-  const SECRET = '<secret>';
+  const REDACTED_VALUE = '<secret>';
   const SECRET_NAME = /pass(word|wd|phrase)?\b|passwd|pwd|secret|private[_-]?key|^pin$|^otp$/i;
 
   let recording = false;
@@ -104,12 +104,12 @@
       frame_url: (typeof location !== 'undefined' && location.href) || null,
       is_iframe: (typeof window !== 'undefined' && window.top !== window) || false,
       secret_field: secret,
-      value: secret ? SECRET : null,
+      value: secret ? REDACTED_VALUE : null,
       seq: seq++,
       t_ms: Date.now(),
     };
     // Never put a live secret value on the wire.
-    if (secret) evidence.value = SECRET;
+    if (secret) evidence.value = REDACTED_VALUE;
     else if (typeof el.value === 'string' && el.value && eventType === 'input') {
       evidence.value = el.value;
     }
