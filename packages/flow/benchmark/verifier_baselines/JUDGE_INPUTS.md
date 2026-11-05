@@ -20,8 +20,12 @@ itself establish a durable record change.
 
 The original [protocol](PROTOCOL.md) and historical results describe the earlier
 judge. This source change does not rescore runs or change the population selected
-by that protocol. New runs need a new preregistration and separate results; old
-views must not be treated as if they contained these new observation fields.
+by that protocol. The historical Medplum UV-class protocol supplied final replies
+and per-step narration to the judge. Committed aggregates do not pin the judge
+source revision for each call, so exact execution provenance is unknown; those
+results cannot establish claim-blind performance. New runs need a new
+preregistration and separate results. Old views must not be treated as if they
+contained these new observation fields.
 
 The offline regression tests capture actual model messages with a fake client.
 They cover the normal batched screenshot path and its single-pair fallback,
