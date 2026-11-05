@@ -624,3 +624,54 @@ def test_recorded_agent_refuses_other_inputs() -> None:
 def test_fixture_trajectories_are_well_formed(name: str) -> None:
     agent = RecordedTrajectoryAgent.from_file(FIXTURES / f"{name}.json")
     assert agent.actions and agent.task_id == "mockmed.add_note"
+
+
+@pytest.mark.parametrize(
+    "native",
+    [
+        {"actions": [{"type": "click", "x": 1, "y": 2}, {"type": "type", "text": "x"}]},
+        {"type": "double_click", "x": 1, "y": 2},
+        {"type": "keypress", "keys": ["ENTER"]},
+    ],
+)
+def test_a_node_binding_cannot_cover_other_steps(native: dict) -> None:
+    session = FakeSession()
+    computer = CaptureComputer(session, dialect="openai")
+    with pytest.raises(UnsupportedAction, match="one click"):
+        computer.execute(native, node_id="n_00000001")
+    assert session.calls == []
+    assert computer.actions == 0
+
+
+@pytest.mark.parametrize("center", [(70, 80), None])
+def test_a_node_click_binds_scope_checks_and_pointer_to_its_center(center: Any) -> None:
+    checked: list[tuple[int, int]] = []
+
+    class Session(FakeSession):
+        def node_center(self, node_id: str) -> Any:
+            assert node_id == "n_00000001"
+            return center
+
+        def click(self, *, node_id: str) -> None:
+            self.calls.append(("click_node", node_id))
+
+    class Guard:
+        def check_ops(self, ops: list[Op], **kwargs: Any) -> None:
+            checked.extend((op.x, op.y) for op in ops)
+
+        def after_action(self, page: Any) -> None:
+            pass
+
+    session = Session()
+    computer = CaptureComputer(session, dialect="generic", guard=Guard())
+    native = {"kind": "click", "x": 1, "y": 2}
+    if center is None:
+        with pytest.raises(UnsupportedAction, match="no current center"):
+            computer.execute(native, node_id="n_00000001")
+        assert session.calls == checked == []
+        assert computer.pointer is None
+    else:
+        computer.execute(native, node_id="n_00000001")
+        assert session.calls == [("click_node", "n_00000001")]
+        assert checked == [center]
+        assert computer.pointer == center
