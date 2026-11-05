@@ -59,7 +59,11 @@ def test_real_namespace_and_invoking_identity(root: bool, tmp_path: Path) -> Non
     proc = _invoke(argv)
     (tmp_path / "namespace-identity.json").write_text(
         json.dumps(
-            {"returncode": proc.returncode, "stdout": proc.stdout, "stderr": proc.stderr}
+            {
+                "returncode": proc.returncode,
+                "stdout": proc.stdout,
+                "stderr": proc.stderr,
+            }
         )
     )
     assert proc.returncode == 0, proc.stderr

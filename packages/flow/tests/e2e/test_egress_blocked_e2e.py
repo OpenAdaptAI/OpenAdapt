@@ -146,7 +146,11 @@ def test_native_child_attempt_is_blocked_without_a_python_refusal(
     )
     (tmp_path / "native-child-result.json").write_text(
         json.dumps(
-            {"returncode": proc.returncode, "stdout": proc.stdout, "stderr": proc.stderr}
+            {
+                "returncode": proc.returncode,
+                "stdout": proc.stdout,
+                "stderr": proc.stderr,
+            }
         )
     )
     assert proc.returncode == 0, proc.stderr
