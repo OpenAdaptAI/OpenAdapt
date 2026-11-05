@@ -371,10 +371,14 @@ def _prepare_source(conn: Any, query: str) -> Optional[tuple[str, str, int]]:
         relation = ".".join('"' + name.replace('"', '""') + '"' for name in names)
         # Resolve before executing the read: a function in its WHERE clause
         # cannot change search_path and make a view look like its base table.
+        # An inherited read can return child rows while native column OIDs
+        # name the parent; only a relation without descendants proves origin.
         cur.execute(
             "SELECT n.nspname, c.relname, c.oid FROM pg_catalog.pg_class c "
             "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-            "WHERE c.oid = pg_catalog.to_regclass(%s) AND c.relkind = 'r'",
+            "WHERE c.oid = pg_catalog.to_regclass(%s) AND c.relkind = 'r' "
+            "AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_inherits i "
+            "WHERE i.inhparent = c.oid)",
             (relation,),
         )
         row = cur.fetchone()
