@@ -876,7 +876,6 @@ class FirstRunCompiler:
                 }
                 for e in effects
             ],
-
         }
 
     # -- step 2: a person confirms the checks and the parameters ------------------
