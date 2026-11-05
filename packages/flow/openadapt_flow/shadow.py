@@ -11,8 +11,6 @@ with the whole-database frame). Anything that can't be read is UNCERTAIN.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-
 import http.client
 import json
 import re
@@ -20,6 +18,7 @@ import secrets
 import threading
 import time
 import traceback
+from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -517,7 +516,7 @@ class Shadow:
         return ep
 
     def _fhir_baseline(self, contract: Any, params: dict[str, Any]) -> Any:
-        from openadapt_flow.ensure_record import capture_baseline, Unreadable
+        from openadapt_flow.ensure_record import Unreadable, capture_baseline
         from openadapt_flow.verifier import Actor
 
         source = self._ensure_sources.get(contract.resource_type)
@@ -526,8 +525,14 @@ class Shadow:
             if source.params != sorted(params):
                 raise Unreadable("ensure_baseline_parameter_names_changed")
             targeted = getattr(source.config.frame, "targeted", None)
-        return capture_baseline(contract, params, actor=Actor("agent", self.actor_id),
-                                workdir=self.out / "writes", targeted=targeted, ledger=None)
+        return capture_baseline(
+            contract,
+            params,
+            actor=Actor("agent", self.actor_id),
+            workdir=self.out / "writes",
+            targeted=targeted,
+            ledger=None,
+        )
 
     def _sql_episode(self, method: str, path: str, doc: Any) -> Episode:
         line = f"{method} {urlsplit(path).path}"
@@ -659,23 +664,37 @@ class Shadow:
         from datetime import datetime
 
         result = self._canonical_result(ep)
-        if ep.verdict == REFUTED or (result is not None and getattr(result, "final", False)):
+        if ep.verdict == REFUTED or (
+            result is not None and getattr(result, "final", False)
+        ):
             return
         state = getattr(result, "recheck", None)
         due = getattr(state, "due_at", "") or getattr(result, "recheck_due_at", None)
         existing = (getattr(result, "evidence", None) or {}).get("reconciliation")
-        unresolved = isinstance(existing, Mapping) and existing.get("executable") is False
-        obligation = {"status": "owed", "purpose": "read_only_reconciliation",
-                      "reason": "independent_target_identity_unknown" if result is None
-                      else existing["reason"] if unresolved else "recheck_proof_owed",
-                      "executable": bool(state and due) and not unresolved}
+        unresolved = (
+            isinstance(existing, Mapping) and existing.get("executable") is False
+        )
+        obligation = {
+            "status": "owed",
+            "purpose": "read_only_reconciliation",
+            "reason": "independent_target_identity_unknown"
+            if result is None
+            else existing["reason"]
+            if unresolved
+            else "recheck_proof_owed",
+            "executable": bool(state and due) and not unresolved,
+        }
         ep.evidence["reconciliation"] = obligation
         if due:
             try:
-                ep.recheck_at = datetime.fromisoformat(str(due).replace("Z", "+00:00")).timestamp()
+                ep.recheck_at = datetime.fromisoformat(
+                    str(due).replace("Z", "+00:00")
+                ).timestamp()
                 return
             except ValueError:
-                obligation.update(reason="recheck_due_time_unreadable", executable=False)
+                obligation.update(
+                    reason="recheck_due_time_unreadable", executable=False
+                )
         # Unknown/no-state is still an owed obligation. A bounded scheduled
         # attempt records its refusal; it never guesses a target or polls a row.
         if self.recheck_s is not None:
@@ -691,7 +710,8 @@ class Shadow:
             return sum(
                 1
                 for e in self.episodes
-                if not e.checked or (e.recheck_at and not e.late_verdict)
+                if not e.checked
+                or (e.recheck_at and not e.late_verdict)
                 or (e.evidence.get("reconciliation") or {}).get("status") == "owed"
             )
 
@@ -781,7 +801,10 @@ class Shadow:
 
         result = self._canonical_result(ep)
         if ep.verdict == REFUTED:
-            ep.late_verdict, ep.late_reasons = REFUTED, ["initial_refutation_is_terminal"]
+            ep.late_verdict, ep.late_reasons = (
+                REFUTED,
+                ["initial_refutation_is_terminal"],
+            )
             return
         if result is None or getattr(result, "recheck", None) is None:
             ep.late_verdict = UNCERTAIN
@@ -793,12 +816,22 @@ class Shadow:
 
             contract = canonical_contract(ep.base)
         with self._lock:
-            later = [self._canonical_result(o) for o in self._later(ep)
-                     if o.kind == ep.kind and o.contract is ep.contract
-                     and self._canonical_result(o) is not None]
-        late = recheck(contract, result, params=ep.params,
-                       actor=Actor("agent", self.actor_id), excused_by=later,
-                       wait=True, ledger=None)
+            later = [
+                self._canonical_result(o)
+                for o in self._later(ep)
+                if o.kind == ep.kind
+                and o.contract is ep.contract
+                and self._canonical_result(o) is not None
+            ]
+        late = recheck(
+            contract,
+            result,
+            params=ep.params,
+            actor=Actor("agent", self.actor_id),
+            excused_by=later,
+            wait=True,
+            ledger=None,
+        )
         ep.late_verdict = str(late.outcome)
         ep.late_read_at = late.read_at
         ep.late_reasons = [r for r in late.reasons if "ledger" not in r]
@@ -814,7 +847,6 @@ class Shadow:
     def _recheck_fhir(self, ep: Episode) -> None:
         """Compatibility entry point; the canonical fence owns every read."""
         self._recheck(ep)
-
 
     def _check(self, ep: Episode) -> None:
         statuses = [w.status for w in ep.writes]
@@ -838,10 +870,14 @@ class Shadow:
             self._check_sql(ep, base)
 
     def _check_fhir(self, ep: Episode, base: Any, statuses: list[int]) -> None:
-        from openadapt_flow.ensure_record import extra_elements, extract, wrong_fields, verify_ensure
         from openadapt_flow.ensure_bridge import canonical_observation, canonical_result
+        from openadapt_flow.ensure_record import (
+            extra_elements,
+            extract,
+            verify_ensure,
+            wrong_fields,
+        )
         from openadapt_flow.fhir_reference import ReferenceUnreadable
-
 
         contract = ep.contract
         # Response/request IDs remain grouping/report hints only. They cannot
@@ -857,12 +893,18 @@ class Shadow:
             ep.evidence["frame"] = dict(canonical.evidence.get("frame") or {})
             ep.evidence["readback"] = dict(canonical.evidence.get("readback") or {})
         # Reporting reuses the independent collector; no second read path.
-        ep.evidence["before"] = sorted(f"{contract.resource_type}/{i}" for i in base.matches)
+        ep.evidence["before"] = sorted(
+            f"{contract.resource_type}/{i}" for i in base.matches
+        )
         observation = canonical_observation(base)
-        stored = {} if observation is None else {
-            f"{contract.resource_type}/{i}": dict(resource)
-            for i, resource in observation.after_matches.items()
-        }
+        stored = (
+            {}
+            if observation is None
+            else {
+                f"{contract.resource_type}/{i}": dict(resource)
+                for i, resource in observation.after_matches.items()
+            }
+        )
         if observation is not None and observation.created is not None:
             resource = observation.created
             stored[f"{contract.resource_type}/{resource.get('id')}"] = dict(resource)
@@ -1009,20 +1051,25 @@ class Shadow:
             checked = {}
             hard = (
                 ep.evidence.get("late_hard_invariants", ev.get("hard_invariants"))
-                if late else ev.get("hard_invariants")
+                if late
+                else ev.get("hard_invariants")
             )
             if isinstance(hard, dict):
                 status = hard.get("status")
                 if late and "late_hard_invariants" not in ep.evidence:
                     status = "not_checked"
-                checked["frame"] = status if status in {"held", "refuted"} else "not_checked"
+                checked["frame"] = (
+                    status if status in {"held", "refuted"} else "not_checked"
+                )
                 # Named omissions belong in each signed receipt's visible
                 # scope, in addition to its committed evidence attachment.
                 omissions = hard.get("outside_guarantee")
                 if isinstance(omissions, list):
                     names = {
-                        row.get("name") for row in omissions
-                        if isinstance(row, dict) and isinstance(row.get("name"), str)
+                        row.get("name")
+                        for row in omissions
+                        if isinstance(row, dict)
+                        and isinstance(row.get("name"), str)
                         and row.get("status") == "UNKNOWN"
                     }
                     for name in (

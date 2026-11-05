@@ -6,9 +6,17 @@ import pytest
 
 from openadapt_flow.frame_invariants import judge_frame_invariants
 from openadapt_flow.runtime.effects.effect import Effect, EffectKind, EffectState
-from openadapt_flow.runtime.effects.frame import FrameChange, FrameSpec, FrameVerdict, judge_frame
+from openadapt_flow.runtime.effects.frame import (
+    FrameChange,
+    FrameSpec,
+    FrameVerdict,
+    judge_frame,
+)
 from openadapt_flow.runtime.effects.targeted import (
-    SearchObservation, TargetedObservation, TargetObservation, VersionObservation,
+    SearchObservation,
+    TargetedObservation,
+    TargetObservation,
+    VersionObservation,
 )
 
 
@@ -17,9 +25,25 @@ def checks(verdict):
 
 
 def test_existing_frame_scope_refutation_gets_its_own_named_reason():
-    before = EffectState(substrate="rest", reachable=True, records=[{"id": "other", "key": "another", "value": "original"}])
-    after = [{"id": "other", "key": "another", "value": "changed"}, {"id": "target", "key": "task", "value": "expected"}]
-    frame = judge_frame(FrameSpec(), [Effect(kind=EffectKind.RECORD_WRITTEN, match={"key": "task", "value": "expected"})], {"": (before, after)})
+    before = EffectState(
+        substrate="rest",
+        reachable=True,
+        records=[{"id": "other", "key": "another", "value": "original"}],
+    )
+    after = [
+        {"id": "other", "key": "another", "value": "changed"},
+        {"id": "target", "key": "task", "value": "expected"},
+    ]
+    frame = judge_frame(
+        FrameSpec(),
+        [
+            Effect(
+                kind=EffectKind.RECORD_WRITTEN,
+                match={"key": "task", "value": "expected"},
+            )
+        ],
+        {"": (before, after)},
+    )
     assert frame.status == "refuted"
     result = checks(judge_frame_invariants(frame))
     assert result["declared_scope"].reason == "outside_scope_changes"
@@ -28,16 +52,29 @@ def test_existing_frame_scope_refutation_gets_its_own_named_reason():
 
 
 def test_actual_removed_row_is_an_observed_delete():
-    before = EffectState(substrate="rest", reachable=True, records=[{"id": "other", "key": "another"}])
+    before = EffectState(
+        substrate="rest", reachable=True, records=[{"id": "other", "key": "another"}]
+    )
     after = [{"id": "target", "key": "task"}]
-    frame = judge_frame(FrameSpec(), [Effect(kind=EffectKind.RECORD_WRITTEN, match={"key": "task"})], {"": (before, after)})
+    frame = judge_frame(
+        FrameSpec(),
+        [Effect(kind=EffectKind.RECORD_WRITTEN, match={"key": "task"})],
+        {"": (before, after)},
+    )
     assert frame.status == "refuted"
     assert frame.collateral[0].observed_delete is True
-    assert checks(judge_frame_invariants(frame))["no_undeclared_deletes"].status == "refuted"
+    assert (
+        checks(judge_frame_invariants(frame))["no_undeclared_deletes"].status
+        == "refuted"
+    )
 
 
 def test_missing_expected_side_row_is_not_a_claimed_actual_delete():
-    frame = FrameVerdict("refuted", "missing expected side row", collateral=[FrameChange("side", "removed", "unattributed")])
+    frame = FrameVerdict(
+        "refuted",
+        "missing expected side row",
+        collateral=[FrameChange("side", "removed", "unattributed")],
+    )
     result = checks(judge_frame_invariants(frame))
     assert result["declared_scope"].status == "refuted"
     assert result["no_undeclared_deletes"].status == "not_checked"
@@ -45,7 +82,11 @@ def test_missing_expected_side_row_is_not_a_claimed_actual_delete():
 
 
 def test_authoritative_other_actor_never_becomes_this_runs_scope_or_delete():
-    frame = FrameVerdict("held", "other actor", concurrent=[FrameChange("records", "removed", "other", observed_delete=True)])
+    frame = FrameVerdict(
+        "held",
+        "other actor",
+        concurrent=[FrameChange("records", "removed", "other", observed_delete=True)],
+    )
     result = checks(judge_frame_invariants(frame))
     assert result["declared_scope"].status == "not_checked"
     assert result["no_undeclared_deletes"].status == "not_checked"
@@ -70,38 +111,63 @@ READ_AT = "2026-11-05T10:00:30Z"
 
 
 def search(*identities, **over):
-    values = dict(contract_sha256=CONTRACT, schema_sha256=SCHEMA,
-                  matched_ids=frozenset(identities), candidate_count=len(identities),
-                  complete=True, observed_at=WRITE_AT)
+    values = dict(
+        contract_sha256=CONTRACT,
+        schema_sha256=SCHEMA,
+        matched_ids=frozenset(identities),
+        candidate_count=len(identities),
+        complete=True,
+        observed_at=WRITE_AT,
+    )
     return SearchObservation(**(values | over))
 
 
 def target(**over):
-    values = dict(identity="Patient/synthetic-target", target_id_mac=MAC,
-                  receipt_bound=True, current_status="present", matches_receipt=True,
-                  current={"resourceType": "Patient", "id": "synthetic-target"},
-                  history_status="complete", history_anchor_bound=True, versions=())
+    values = dict(
+        identity="Patient/synthetic-target",
+        target_id_mac=MAC,
+        receipt_bound=True,
+        current_status="present",
+        matches_receipt=True,
+        current={"resourceType": "Patient", "id": "synthetic-target"},
+        history_status="complete",
+        history_anchor_bound=True,
+        versions=(),
+    )
     return TargetObservation(**(values | over))
 
 
 def observation(**over):
-    values = dict(receipt_sha256=RECEIPT, targets=(target(),),
-                  write_search=search("Patient/synthetic-target"),
-                  late_search=search("Patient/synthetic-target", observed_at=READ_AT),
-                  read_at=READ_AT, history_required=True, phase="late")
+    values = dict(
+        receipt_sha256=RECEIPT,
+        targets=(target(),),
+        write_search=search("Patient/synthetic-target"),
+        late_search=search("Patient/synthetic-target", observed_at=READ_AT),
+        read_at=READ_AT,
+        history_required=True,
+        phase="late",
+    )
     return TargetedObservation(**(values | over))
 
 
 def version(**over):
-    values = dict(version_id="synthetic-post-anchor-version", operation="delete",
-                  body=None, author="synthetic-actor", author_trusted=True,
-                  by_run=True, occurred_at=READ_AT, matches_receipt=False)
+    values = dict(
+        version_id="synthetic-post-anchor-version",
+        operation="delete",
+        body=None,
+        author="synthetic-actor",
+        author_trusted=True,
+        by_run=True,
+        occurred_at=READ_AT,
+        matches_receipt=False,
+    )
     return VersionObservation(**(values | over))
 
 
 def judged(proof=None, **over):
-    return judge_frame_invariants(FrameVerdict("held", "independent frame held"),
-                                  proof or observation(**over))
+    return judge_frame_invariants(
+        FrameVerdict("held", "independent frame held"), proof or observation(**over)
+    )
 
 
 def test_complete_target_domain_holds_without_global_historical_absence_claim():
@@ -110,10 +176,13 @@ def test_complete_target_domain_holds_without_global_historical_absence_claim():
     assert all(check.status == "held" for check in result.checks)
     evidence = result.evidence()
     assert evidence["schema_version"] == "openadapt.targeted-hard-invariants/v1"
-    assert evidence["outside_guarantee"] == [{
-        "name": "outside_receipt_intermediate_history", "status": "UNKNOWN",
-        "reason": "outside_declared_guarantee",
-    }]
+    assert evidence["outside_guarantee"] == [
+        {
+            "name": "outside_receipt_intermediate_history",
+            "status": "UNKNOWN",
+            "reason": "outside_declared_guarantee",
+        }
+    ]
     assert evidence["guarantee"]["receipt_sha256"] == RECEIPT
     assert evidence["guarantee"]["target_id_macs"] == [MAC]
     assert evidence["guarantee"]["read_at"] == READ_AT
@@ -129,10 +198,16 @@ def test_identifying_search_candidates_are_not_matched_business_records():
 
 @pytest.mark.parametrize("which", ["write_search", "late_search"])
 def test_duplicate_in_either_declared_search_refutes_despite_missing_history(which):
-    result = judged(**{
-        which: search("Patient/synthetic-target", "Patient/synthetic-duplicate", complete=False),
-        "targets": (target(history_status="incomplete"),),
-    })
+    result = judged(
+        **{
+            which: search(
+                "Patient/synthetic-target",
+                "Patient/synthetic-duplicate",
+                complete=False,
+            ),
+            "targets": (target(history_status="incomplete"),),
+        }
+    )
     assert result.status == "refuted"
     assert checks(result)["at_most_one"].reason == "duplicate_business_key"
 
@@ -144,24 +219,39 @@ def test_partial_identifying_search_cannot_hold(which):
     assert checks(result)["at_most_one"].status == "not_checked"
 
 
-@pytest.mark.parametrize("override", [
-    {"receipt_sha256": "sha256:" + RECEIPT},
-    {"receipt_sha256": ""},
-    {"phase": "write"},
-    {"phase": "unknown"},
-    {"receipt_sha256": "untrusted-raw-identity"},
-    {"targets": ()},
-    {"targets": (target(receipt_bound=False),)},
-    {"targets": (target(target_id_mac="sha256:" + "c" * 64),)},
-    {"targets": (target(identity="Patient/a/_history/1"),)},
-    {"targets": (target(), target())},
-    {"late_search": search("Patient/synthetic-target", contract_sha256="sha256:" + "e" * 64)},
-    {"late_search": search("Patient/synthetic-target", schema_sha256="sha256:" + "e" * 64)},
-    {"late_search": search("Patient/synthetic-target", candidate_count=0)},
-    {"late_search": search("Patient/synthetic-target", candidate_count=True)},
-    {"late_search": search("Patient/synthetic-target", observed_at="2026-11-05T09:59:59Z")},
-    {"read_at": "2026-11-05T10:00:00"},
-])
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"receipt_sha256": "sha256:" + RECEIPT},
+        {"receipt_sha256": ""},
+        {"phase": "write"},
+        {"phase": "unknown"},
+        {"receipt_sha256": "untrusted-raw-identity"},
+        {"targets": ()},
+        {"targets": (target(receipt_bound=False),)},
+        {"targets": (target(target_id_mac="sha256:" + "c" * 64),)},
+        {"targets": (target(identity="Patient/a/_history/1"),)},
+        {"targets": (target(), target())},
+        {
+            "late_search": search(
+                "Patient/synthetic-target", contract_sha256="sha256:" + "e" * 64
+            )
+        },
+        {
+            "late_search": search(
+                "Patient/synthetic-target", schema_sha256="sha256:" + "e" * 64
+            )
+        },
+        {"late_search": search("Patient/synthetic-target", candidate_count=0)},
+        {"late_search": search("Patient/synthetic-target", candidate_count=True)},
+        {
+            "late_search": search(
+                "Patient/synthetic-target", observed_at="2026-11-05T09:59:59Z"
+            )
+        },
+        {"read_at": "2026-11-05T10:00:00"},
+    ],
+)
 def test_unbound_or_contradictory_facts_never_hold(override):
     assert judged(**override).status == "not_checked"
 
@@ -178,17 +268,22 @@ def test_missing_anchor_cannot_turn_post_anchor_tuple_into_complete_proof():
 
 
 def test_explicit_final_state_only_domain_names_unclaimed_record_history():
-    result = judged(history_required=False, targets=(target(history_status="unavailable"),))
+    result = judged(
+        history_required=False, targets=(target(history_status="unavailable"),)
+    )
     assert result.status == "held"
     assert result.evidence()["outside_guarantee"][1] == {
-        "name": "receipt_record_intermediate_history", "status": "UNKNOWN",
+        "name": "receipt_record_intermediate_history",
+        "status": "UNKNOWN",
         "reason": "final_state_only_contract",
     }
     assert result.evidence()["guarantee"]["history_required"] is False
 
 
 def test_authenticated_own_delete_refutes_even_with_incomplete_history():
-    result = judged(targets=(target(history_status="incomplete", versions=(version(),)),))
+    result = judged(
+        targets=(target(history_status="incomplete", versions=(version(),)),)
+    )
     assert result.status == "refuted"
     assert checks(result)["no_undeclared_deletes"].reason == "undeclared_deletes"
 
@@ -198,9 +293,14 @@ def test_other_actors_delete_is_not_agent_harm():
     assert result.status == "held"
 
 
-@pytest.mark.parametrize("changes", [
-    {"author_trusted": False}, {"by_run": None}, {"by_run": 0},
-])
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"author_trusted": False},
+        {"by_run": None},
+        {"by_run": 0},
+    ],
+)
 def test_unknown_delete_actor_does_not_become_other_user_evidence(changes):
     result = judged(targets=(target(versions=(version(**changes),)),))
     assert result.status == "not_checked"
@@ -208,13 +308,20 @@ def test_unknown_delete_actor_does_not_become_other_user_evidence(changes):
 
 
 def test_unreadable_receipt_target_prevents_complete_final_state_claim():
-    assert judged(targets=(target(current_status="unreadable", current=None),)).status == "not_checked"
+    assert (
+        judged(targets=(target(current_status="unreadable", current=None),)).status
+        == "not_checked"
+    )
 
 
 def test_known_frame_refutations_survive_targeted_positive():
-    frame = FrameVerdict("refuted", "existing refusal", collateral=[
-        FrameChange("records", "removed", "self", observed_delete=True),
-    ])
+    frame = FrameVerdict(
+        "refuted",
+        "existing refusal",
+        collateral=[
+            FrameChange("records", "removed", "self", observed_delete=True),
+        ],
+    )
     result = judge_frame_invariants(frame, observation())
     assert result.status == "refuted"
     assert checks(result)["declared_scope"].status == "refuted"
@@ -246,7 +353,6 @@ def test_complete_targeted_positive_does_not_erase_independent_unknown_frame():
     assert _apply_hard_invariants(frame, observation()).status == "not_checked"
 
 
-
 def test_write_phase_is_bound_by_outer_receipt_without_fabricated_receipt_hash():
     result = judged(phase="write", receipt_sha256="")
     assert result.status == "held"
@@ -270,7 +376,6 @@ def test_late_phase_names_actual_completed_search_and_original_receipt():
     assert guarantee["late_search_observed_at"] == READ_AT
     assert guarantee["future_late_search"] is None
     assert guarantee["write_confirmation_count"] is None
-
 
 
 @pytest.mark.parametrize("which", ["write_search", "late_search"])

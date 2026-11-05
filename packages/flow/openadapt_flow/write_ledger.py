@@ -363,7 +363,12 @@ class Attempt:
             and set(reconciliation) == {"status", "purpose", "reason", "executable"}
             and reconciliation.get("status") == "owed"
             and reconciliation.get("purpose") == "read_only_reconciliation"
-            and reconciliation.get("reason") in {"independent_proof_incomplete", "independent_target_identity_unknown", "independent_readback_unavailable"}
+            and reconciliation.get("reason")
+            in {
+                "independent_proof_incomplete",
+                "independent_target_identity_unknown",
+                "independent_readback_unavailable",
+            }
             and isinstance(reconciliation.get("executable"), bool)
         )
         owed = result.get("provisional") or (

@@ -44,8 +44,8 @@ mirrors the real FHIR wire shape, never MockMed's screen.
 
 from __future__ import annotations
 
-import time
 import re
+import time
 from collections.abc import Mapping
 from typing import Any, Optional, Protocol
 
@@ -106,22 +106,77 @@ def validate_fhir_read_headers(value: Optional[Mapping[str, str]]) -> dict[str, 
     if not isinstance(value, Mapping):
         raise ValueError("FHIR read headers must be a mapping")
     reserved = {
-        "accept", "authorization", "www-authenticate", "cookie", "set-cookie",
-        "host", "origin", "referer", "forwarded", "proxy", "content-type", "content-length",
-        "transfer-encoding", "connection", "trailer", "upgrade", "te", "keep-alive",
-        "expect", "range", "if-match", "if-none-match", "if-modified-since",
-        "if-unmodified-since", "cache-control", "pragma", "date",
+        "accept",
+        "authorization",
+        "www-authenticate",
+        "cookie",
+        "set-cookie",
+        "host",
+        "origin",
+        "referer",
+        "forwarded",
+        "proxy",
+        "content-type",
+        "content-length",
+        "transfer-encoding",
+        "connection",
+        "trailer",
+        "upgrade",
+        "te",
+        "keep-alive",
+        "expect",
+        "range",
+        "if-match",
+        "if-none-match",
+        "if-modified-since",
+        "if-unmodified-since",
+        "cache-control",
+        "pragma",
+        "date",
     }
     out: dict[str, str] = {}
     seen: set[str] = set()
     for name, text in value.items():
-        if not isinstance(name, str) or not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", name):
+        if not isinstance(name, str) or not re.fullmatch(
+            r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", name
+        ):
             raise ValueError("FHIR read header name is invalid")
         lower = name.lower()
-        if (lower in seen or lower in reserved or lower.startswith(("proxy-", "x-forwarded-", "x-openadapt-", "x-auth", "access-control-", "x-original-", "x-rewrite-"))
-                or any(part in lower for part in ("authorization", "authenticate", "auth-token", "api-key", "apikey", "csrf", "xsrf", "session", "method"))):
+        if (
+            lower in seen
+            or lower in reserved
+            or lower.startswith(
+                (
+                    "proxy-",
+                    "x-forwarded-",
+                    "x-openadapt-",
+                    "x-auth",
+                    "access-control-",
+                    "x-original-",
+                    "x-rewrite-",
+                )
+            )
+            or any(
+                part in lower
+                for part in (
+                    "authorization",
+                    "authenticate",
+                    "auth-token",
+                    "api-key",
+                    "apikey",
+                    "csrf",
+                    "xsrf",
+                    "session",
+                    "method",
+                )
+            )
+        ):
             raise ValueError("FHIR read header is reserved or repeated")
-        if not isinstance(text, str) or not text or any(ord(c) < 32 or ord(c) > 126 for c in text):
+        if (
+            not isinstance(text, str)
+            or not text
+            or any(ord(c) < 32 or ord(c) > 126 for c in text)
+        ):
             raise ValueError("FHIR read header value is invalid")
         seen.add(lower)
         out[name] = text

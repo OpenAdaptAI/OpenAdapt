@@ -13,7 +13,12 @@ from typing import TYPE_CHECKING, Any
 from openadapt_flow.hard_invariants import HardInvariantVerdict, judge_hard_invariants
 
 if TYPE_CHECKING:
-    from openadapt_flow.ensure_record import Baseline, Change, EnsureContract, EnsureResult
+    from openadapt_flow.ensure_record import (
+        Baseline,
+        Change,
+        EnsureContract,
+        EnsureResult,
+    )
     from openadapt_flow.runtime.effects.targeted import TargetedObservation
 
 
@@ -168,7 +173,8 @@ def enforce_ensure_invariants(
     )
     verdict = judge_frame_invariants(
         FrameVerdict(
-            "held" if result.outcome in {"created_verified", "found_existing"}
+            "held"
+            if result.outcome in {"created_verified", "found_existing"}
             else "not_checked",
             "independent ensure field/operation judgment",
         ),
@@ -177,27 +183,29 @@ def enforce_ensure_invariants(
     # Preserve existing adjudicated scope/delete failures. A duplicate only
     # seen in wider history remains part of the optional global predicate.
     known_failures = {
-        check.name: check for check in observed.checks
+        check.name: check
+        for check in observed.checks
         if check.status == "refuted" and check.name != "at_most_one"
     }
-    verdict = replace(verdict, checks=tuple(
-        known_failures.get(check.name, check) for check in verdict.checks
-    ))
+    verdict = replace(
+        verdict,
+        checks=tuple(known_failures.get(check.name, check) for check in verdict.checks),
+    )
     selves = {_ref(actor) for actor in contract.self_actors}
     transient = sum(
         ref.startswith(contract.resource_type + "/")
         and {"C", "D"} <= change.actions
         and (
-            not change.attributed
-            or not change.authors
-            or bool(change.authors & selves)
+            not change.attributed or not change.authors or bool(change.authors & selves)
         )
         for ref, change in changes.items()
     )
     if transient and contract.operations.cardinality.own_transient:
         # Actor equality and search absence do not bind a resource to this
         # run's write receipts. No such authenticated input exists here.
-        verdict = replace(verdict, checks=tuple(
+        verdict = replace(
+            verdict,
+            checks=tuple(
                 replace(
                     check,
                     status="refuted",
@@ -207,7 +215,7 @@ def enforce_ensure_invariants(
                 if check.name in {"declared_scope", "no_undeclared_deletes"}
                 else check
                 for check in verdict.checks
-            )
+            ),
         )
     evidence = {**result.evidence, "hard_invariants": verdict.evidence()}
     reasons = list(result.reasons)

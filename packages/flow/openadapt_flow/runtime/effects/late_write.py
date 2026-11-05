@@ -120,14 +120,22 @@ def schedule(
 
     read_at = str(post_state["read_at"])
     block = {
-        "compares": "receipt_records_and_identifying_search" if "targeted" in post_state else "history_since_checkpoint" if "history" in post_state else COMPARES,
+        "compares": "receipt_records_and_identifying_search"
+        if "targeted" in post_state
+        else "history_since_checkpoint"
+        if "history" in post_state
+        else COMPARES,
         "after_s": after_s,
         "post_save_read_at": read_at,
         "due_at": due_at(read_at, after_s) if due else None,
         "post_state_sha256": post_state_sha256,
     }
     if "targeted" in post_state:
-        if purpose not in ("late_recheck", "read_only_reconciliation", "observation_only"):
+        if purpose not in (
+            "late_recheck",
+            "read_only_reconciliation",
+            "observation_only",
+        ):
             raise ValueError("targeted rechecks need an explicit owed purpose")
         block["purpose"] = purpose
     return block

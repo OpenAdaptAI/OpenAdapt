@@ -95,8 +95,8 @@ from openadapt_flow.runtime.effects.learned import (
     covers,
     set_columns,
 )
-from openadapt_flow.runtime.effects.versions import FrameVersions, VersionVerdict
 from openadapt_flow.runtime.effects.targeted import FrameTargeted
+from openadapt_flow.runtime.effects.versions import FrameVersions, VersionVerdict
 
 FrameStatus = Literal["held", "refuted", "not_checked"]
 Attribution = Literal["other", "self", "unattributed"]
@@ -540,7 +540,10 @@ class FrameSpec(BaseModel):
     @model_validator(mode="after")
     def _database_attribution(self) -> "FrameSpec":
         a = self.attribution
-        if self.targeted is not None and (self.history is not None or (self.database is not None and self.database.recheck_after_s is not None)):
+        if self.targeted is not None and (
+            self.history is not None
+            or (self.database is not None and self.database.recheck_after_s is not None)
+        ):
             raise ValueError("choose targeted, history or database recheck scheduling")
         if (
             self.history is not None

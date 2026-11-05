@@ -308,7 +308,10 @@ class VerifyBridge:
                 self._checked.append((entry, result))
         if result.recheck is not None and (
             out.get("provisional")
-            or (result.recheck_purpose == "read_only_reconciliation" and result.recheck_due_at)
+            or (
+                result.recheck_purpose == "read_only_reconciliation"
+                and result.recheck_due_at
+            )
         ):
             with self._lock:
                 self._rechecks[write_id] = (entry, result)
@@ -468,10 +471,15 @@ class VerifyBridge:
         else:
             nxt = "Not a pass. The read-only obligation remains owed; a person reconciles the missing proof. Don't retry the write."
         return {
-            **({"recheck_purpose": result.recheck_purpose,
-                "reconciliation": dict(result.evidence["reconciliation"])}
-               if result.recheck_purpose == "read_only_reconciliation"
-               and isinstance(result.evidence.get("reconciliation"), Mapping) else {}),
+            **(
+                {
+                    "recheck_purpose": result.recheck_purpose,
+                    "reconciliation": dict(result.evidence["reconciliation"]),
+                }
+                if result.recheck_purpose == "read_only_reconciliation"
+                and isinstance(result.evidence.get("reconciliation"), Mapping)
+                else {}
+            ),
             "due": True,
             "write_id": write_id,
             "verified": late.verified,

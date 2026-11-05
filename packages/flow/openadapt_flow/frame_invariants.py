@@ -71,17 +71,28 @@ class TargetedHardInvariantVerdict(HardInvariantVerdict):
             "contract_sha256": self.contract_sha256,
             "schema_sha256": self.schema_sha256,
             "write_search_count": self.write_search_count,
-            "late_search_count": self.late_search_count if self.phase == "late" else None,
-            "write_confirmation_count": self.late_search_count if self.phase == "write" else None,
+            "late_search_count": self.late_search_count
+            if self.phase == "late"
+            else None,
+            "write_confirmation_count": self.late_search_count
+            if self.phase == "write"
+            else None,
             "phase": self.phase,
-            "receipt_binding": "outer_issued_receipt" if self.phase == "write"
-            else "original_issued_receipt" if self.phase == "late" else "UNKNOWN",
+            "receipt_binding": "outer_issued_receipt"
+            if self.phase == "write"
+            else "original_issued_receipt"
+            if self.phase == "late"
+            else "UNKNOWN",
             "future_late_search": "owed" if self.phase == "write" else None,
             "history_required": self.history_required,
             "histories_covered": self.histories_covered,
             "write_search_observed_at": self.write_search_observed_at,
-            "late_search_observed_at": self.late_search_observed_at if self.phase == "late" else None,
-            "write_confirmation_observed_at": self.late_search_observed_at if self.phase == "write" else None,
+            "late_search_observed_at": self.late_search_observed_at
+            if self.phase == "late"
+            else None,
+            "write_confirmation_observed_at": self.late_search_observed_at
+            if self.phase == "write"
+            else None,
             "read_at": self.read_at,
         }
         result["outside_guarantee"] = [
@@ -91,11 +102,13 @@ class TargetedHardInvariantVerdict(HardInvariantVerdict):
                 "reason": "outside_declared_guarantee",
             },
             *(
-                [{
-                    "name": "receipt_record_intermediate_history",
-                    "status": "UNKNOWN",
-                    "reason": "final_state_only_contract",
-                }]
+                [
+                    {
+                        "name": "receipt_record_intermediate_history",
+                        "status": "UNKNOWN",
+                        "reason": "final_state_only_contract",
+                    }
+                ]
                 if not self.history_required
                 else []
             ),
@@ -133,11 +146,13 @@ def judge_frame_invariants(
     """
     outside = sum(not change.other_on_target for change in frame.collateral)
     removed = sum(
-        change.observed_delete for change in frame.collateral
+        change.observed_delete
+        for change in frame.collateral
         if not change.other_on_target
     )
     scope = InvariantResult(
-        "declared_scope", "refuted" if outside else "not_checked",
+        "declared_scope",
+        "refuted" if outside else "not_checked",
         "outside_scope_changes" if outside else "receipt_target_observation_missing",
         outside,
     )
@@ -145,7 +160,8 @@ def judge_frame_invariants(
         "at_most_one", "not_checked", "identifying_search_observation_missing"
     )
     deletes = InvariantResult(
-        "no_undeclared_deletes", "refuted" if removed else "not_checked",
+        "no_undeclared_deletes",
+        "refuted" if removed else "not_checked",
         "undeclared_deletes" if removed else "receipt_target_observation_missing",
         removed,
     )
@@ -154,23 +170,29 @@ def judge_frame_invariants(
 
     write, late = observation.write_search, observation.late_search
     searches_bound = (
-        _search_valid(write) and _search_valid(late)
+        _search_valid(write)
+        and _search_valid(late)
         and write.contract_sha256 == late.contract_sha256
         and write.schema_sha256 == late.schema_sha256
     )
     write_at, late_at, read_at = (
-        _instant(write.observed_at), _instant(late.observed_at),
+        _instant(write.observed_at),
+        _instant(late.observed_at),
         _instant(observation.read_at),
     )
     ordered = (
-        write_at is not None and late_at is not None and read_at is not None
+        write_at is not None
+        and late_at is not None
+        and read_at is not None
         and write_at <= late_at <= read_at
     )
     targets = observation.targets
     phase = observation.phase
     receipt_bound = (
-        phase == "late" and _digest(observation.receipt_sha256, "")
-        or phase == "write" and observation.receipt_sha256 == ""
+        phase == "late"
+        and _digest(observation.receipt_sha256, "")
+        or phase == "write"
+        and observation.receipt_sha256 == ""
     )
     binding = (
         receipt_bound
@@ -178,32 +200,43 @@ def judge_frame_invariants(
         and len({target.identity for target in targets}) == len(targets)
         and len({target.target_id_mac for target in targets}) == len(targets)
         and all(
-            target.receipt_bound is True and _identity(target.identity)
+            target.receipt_bound is True
+            and _identity(target.identity)
             and _digest(target.target_id_mac, "hmac-sha256:")
             for target in targets
         )
-        and searches_bound and ordered
+        and searches_bound
+        and ordered
         and all(target.identity in write.matched_ids for target in targets)
         and all(
-            target.identity in late.matched_ids for target in targets
+            target.identity in late.matched_ids
+            for target in targets
             if target.current_status == "present" and target.matches_receipt is True
         )
     )
     if not outside:
         scope = InvariantResult(
             "declared_scope",
-            "held" if binding and frame.status == "held" and all(
+            "held"
+            if binding
+            and frame.status == "held"
+            and all(
                 target.current_status in {"present", "absent"} for target in targets
-            ) else "not_checked",
+            )
+            else "not_checked",
             "receipt_targets_and_declared_scope_read"
-            if binding and frame.status == "held" and all(
+            if binding
+            and frame.status == "held"
+            and all(
                 target.current_status in {"present", "absent"} for target in targets
-            ) else "receipt_scope_or_final_state_incomplete",
+            )
+            else "receipt_scope_or_final_state_incomplete",
             0,
         )
 
-    known_counts = [len(search.matched_ids) for search in (write, late)
-                    if _search_valid(search)]
+    known_counts = [
+        len(search.matched_ids) for search in (write, late) if _search_valid(search)
+    ]
     maximum = max(known_counts) if known_counts else None
     if binding and maximum is not None and maximum > 1:
         cardinality = InvariantResult(
@@ -211,13 +244,18 @@ def judge_frame_invariants(
         )
     elif binding and write.complete is True and late.complete is True:
         cardinality = InvariantResult(
-            "at_most_one", "held",
-            "at_most_one_in_write_searches" if phase == "write"
-            else "at_most_one_in_declared_searches", maximum
+            "at_most_one",
+            "held",
+            "at_most_one_in_write_searches"
+            if phase == "write"
+            else "at_most_one_in_declared_searches",
+            maximum,
         )
     else:
         cardinality = InvariantResult(
-            "at_most_one", "not_checked", "identifying_search_incomplete_or_unbound",
+            "at_most_one",
+            "not_checked",
+            "identifying_search_incomplete_or_unbound",
             maximum,
         )
 
@@ -226,19 +264,23 @@ def judge_frame_invariants(
         for target in targets
     )
     history_known = (
-        binding and histories == len(targets)
+        binding
+        and histories == len(targets)
         and all(
             version.author_trusted is True
             and (version.by_run is True or version.by_run is False)
-            for target in targets for version in target.versions
+            for target in targets
+            for version in target.versions
             if version.operation == "delete"
         )
     )
     if binding:
         removed += sum(
-            version.operation == "delete" and version.author_trusted is True
+            version.operation == "delete"
+            and version.author_trusted is True
             and version.by_run is True
-            for target in targets if target.history_anchor_bound is True
+            for target in targets
+            if target.history_anchor_bound is True
             for version in target.versions
         )
     if removed:
@@ -247,24 +289,35 @@ def judge_frame_invariants(
         )
     elif binding and (history_known or observation.history_required is False):
         deletes = InvariantResult(
-            "no_undeclared_deletes", "held",
-            "no_undeclared_deletes_in_receipt_history" if history_known
-            else "no_observed_delete_final_state_only", 0,
+            "no_undeclared_deletes",
+            "held",
+            "no_undeclared_deletes_in_receipt_history"
+            if history_known
+            else "no_observed_delete_final_state_only",
+            0,
         )
     else:
         deletes = InvariantResult(
-            "no_undeclared_deletes", "not_checked",
-            "receipt_delete_history_incomplete_or_unbound", 0,
+            "no_undeclared_deletes",
+            "not_checked",
+            "receipt_delete_history_incomplete_or_unbound",
+            0,
         )
     return TargetedHardInvariantVerdict(
         (scope, cardinality, deletes),
         receipt_sha256=observation.receipt_sha256
-        if _digest(observation.receipt_sha256, "") else None,
-        target_id_macs=tuple(sorted(
-            target.target_id_mac for target in targets
-            if _digest(target.target_id_mac, "hmac-sha256:")
-        )),
-        contract_sha256=write.contract_sha256 if _digest(write.contract_sha256) else None,
+        if _digest(observation.receipt_sha256, "")
+        else None,
+        target_id_macs=tuple(
+            sorted(
+                target.target_id_mac
+                for target in targets
+                if _digest(target.target_id_mac, "hmac-sha256:")
+            )
+        ),
+        contract_sha256=write.contract_sha256
+        if _digest(write.contract_sha256)
+        else None,
         schema_sha256=write.schema_sha256 if _digest(write.schema_sha256) else None,
         write_search_count=len(write.matched_ids) if _search_valid(write) else None,
         late_search_count=len(late.matched_ids) if _search_valid(late) else None,

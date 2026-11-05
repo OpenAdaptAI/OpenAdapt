@@ -2106,7 +2106,10 @@ def _collect_ensure(
     )
     # Where the read window closed, for a write receipt's scope.
     result.evidence["window_until"] = until.isoformat()
-    return EnsureObservation(result, baseline, changes, after_matches, created, existing_now, references)
+    return EnsureObservation(
+        result, baseline, changes, after_matches, created, existing_now, references
+    )
+
 
 def capture_baseline(
     contract: EnsureContract,
@@ -2140,9 +2143,9 @@ def verify_ensure(
     """
     from openadapt_flow.ensure_bridge import finish_ensure
 
-    return finish_ensure(contract, params, baseline, reader=reader,
-                         sleep=sleep, declared=declared)
-
+    return finish_ensure(
+        contract, params, baseline, reader=reader, sleep=sleep, declared=declared
+    )
 
 
 __all__ = [

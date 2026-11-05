@@ -4,15 +4,16 @@ This is a synthetic protocol server, not a real-app qualification. It retains
 all intermediate versions so an immediately restored wrong write remains
 observable. No evaluation delay chooses the configured quiet window.
 """
+
 from __future__ import annotations
 
 import copy
 import json
 import threading
 import time
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
@@ -44,16 +45,26 @@ class Store:
         self.audit_events: list[dict[str, Any]] = []
         self.reply_id_override: str | None = None
 
-    def save(self, identity: str = RECORD_ID, *, name: str = PARAMS["name"],
-             author: str | None = "actor/run", timestamp: str | None = None,
-             fields: dict[str, Any] | None = None) -> None:
+    def save(
+        self,
+        identity: str = RECORD_ID,
+        *,
+        name: str = PARAMS["name"],
+        author: str | None = "actor/run",
+        timestamp: str | None = None,
+        fields: dict[str, Any] | None = None,
+    ) -> None:
         versions = self.history.setdefault(identity, [])
         if self.bridge_mode and timestamp is None:
             timestamp = datetime.now(timezone.utc).isoformat()
         resource = {
-            "resourceType": "Basic", "id": identity, "name": name,
-            "meta": {"versionId": f"v{len(versions) + 1}",
-                     "lastUpdated": timestamp or f"2026-01-01T00:00:{len(versions):02d}Z"},
+            "resourceType": "Basic",
+            "id": identity,
+            "name": name,
+            "meta": {
+                "versionId": f"v{len(versions) + 1}",
+                "lastUpdated": timestamp or f"2026-01-01T00:00:{len(versions):02d}Z",
+            },
         }
         resource.update(copy.deepcopy(fields or {}))
         if author is not None:
@@ -61,13 +72,16 @@ class Store:
         self.current[identity] = copy.deepcopy(resource)
         versions.append(copy.deepcopy(resource))
         if self.bridge_mode:
-            self.audit_events.append({
-                "resourceType": "AuditEvent", "id": f"audit-{len(self.audit_events)}",
-                "action": "C" if len(versions) == 1 else "U",
-                "recorded": resource["meta"]["lastUpdated"],
-                "agent": [{"who": {"reference": author}}] if author else [],
-                "entity": [{"what": {"reference": f"Basic/{identity}"}}],
-            })
+            self.audit_events.append(
+                {
+                    "resourceType": "AuditEvent",
+                    "id": f"audit-{len(self.audit_events)}",
+                    "action": "C" if len(versions) == 1 else "U",
+                    "recorded": resource["meta"]["lastUpdated"],
+                    "agent": [{"who": {"reference": author}}] if author else [],
+                    "entity": [{"what": {"reference": f"Basic/{identity}"}}],
+                }
+            )
 
 
 @pytest.fixture
@@ -92,15 +106,37 @@ def server():
                 for bound in params.get("date", []):
                     instant = datetime.fromisoformat(bound[2:].replace("Z", "+00:00"))
                     if bound.startswith("ge"):
-                        events = [e for e in events if datetime.fromisoformat(e["recorded"].replace("Z", "+00:00")) >= instant]
+                        events = [
+                            e
+                            for e in events
+                            if datetime.fromisoformat(
+                                e["recorded"].replace("Z", "+00:00")
+                            )
+                            >= instant
+                        ]
                     elif bound.startswith("le"):
-                        events = [e for e in events if datetime.fromisoformat(e["recorded"].replace("Z", "+00:00")) <= instant]
+                        events = [
+                            e
+                            for e in events
+                            if datetime.fromisoformat(
+                                e["recorded"].replace("Z", "+00:00")
+                            )
+                            <= instant
+                        ]
                 if "action" in params:
                     events = [e for e in events if e["action"] == params["action"][0]]
                 if "entity" in params:
-                    events = [e for e in events if e["entity"][0]["what"]["reference"] == params["entity"][0]]
-                body = {"resourceType": "Bundle", "type": "searchset", "total": len(events),
-                        "entry": [{"resource": e} for e in events]}
+                    events = [
+                        e
+                        for e in events
+                        if e["entity"][0]["what"]["reference"] == params["entity"][0]
+                    ]
+                body = {
+                    "resourceType": "Bundle",
+                    "type": "searchset",
+                    "total": len(events),
+                    "entry": [{"resource": e} for e in events],
+                }
             elif parts == ["Basic"]:
                 params = parse_qs(route.query)
                 records = list(store.current.values())
@@ -109,11 +145,18 @@ def server():
                         records = [r for r in records if r["name"] == params["name"][0]]
                     if store.omit_identifying_search:
                         records = []
-                body = {"resourceType": "Bundle", "type": "searchset", "total": len(records),
-                        "entry": [{"resource": copy.deepcopy(r)} for r in records]}
+                body = {
+                    "resourceType": "Bundle",
+                    "type": "searchset",
+                    "total": len(records),
+                    "entry": [{"resource": copy.deepcopy(r)} for r in records],
+                }
                 if "name" in params and store.fail_identifying_search:
                     status = 503
-                    body = {"resourceType": "OperationOutcome", "issue": [{"severity": "error", "code": "transient"}]}
+                    body = {
+                        "resourceType": "OperationOutcome",
+                        "issue": [{"severity": "error", "code": "transient"}],
+                    }
                 if "name" in params and store.change_during_identifying_search:
                     store.change_during_identifying_search = False
                     store.save(name="changed-during-identifying-search")
@@ -126,24 +169,41 @@ def server():
                     versions = []
                 if store.history_mode == "unstable" and store.history_reads % 2:
                     versions = versions[:-1]
-                body = {"resourceType": "Bundle", "type": "history", "total": len(versions),
-                        "entry": [{"resource": r, "request": {"method": "PUT", "url": f"Basic/{parts[1]}"}} for r in reversed(versions)]}
+                body = {
+                    "resourceType": "Bundle",
+                    "type": "history",
+                    "total": len(versions),
+                    "entry": [
+                        {
+                            "resource": r,
+                            "request": {"method": "PUT", "url": f"Basic/{parts[1]}"},
+                        }
+                        for r in reversed(versions)
+                    ],
+                }
                 if store.history_mode == "paged":
                     body["link"] = [{"relation": "next", "url": self.path + "&page=2"}]
             elif len(parts) == 2 and parts[0] == "Basic" and parts[1] in store.current:
                 body = store.current[parts[1]]
                 if store.bridge_mode:
-                    store.audit_events.append({
-                        "resourceType": "AuditEvent", "id": f"audit-{len(store.audit_events)}",
-                        "action": "R", "recorded": datetime.now(timezone.utc).isoformat(),
-                        "agent": [{"who": {"reference": "actor/run"}}],
-                        "entity": [{"what": {"reference": f"Basic/{parts[1]}"}}],
-                    })
+                    store.audit_events.append(
+                        {
+                            "resourceType": "AuditEvent",
+                            "id": f"audit-{len(store.audit_events)}",
+                            "action": "R",
+                            "recorded": datetime.now(timezone.utc).isoformat(),
+                            "agent": [{"who": {"reference": "actor/run"}}],
+                            "entity": [{"what": {"reference": f"Basic/{parts[1]}"}}],
+                        }
+                    )
             elif "/".join(parts) in store.extra_resources:
                 body = store.extra_resources["/".join(parts)]
             else:
                 status = 404
-                body = {"resourceType": "OperationOutcome", "issue": [{"severity": "error", "code": "not-found"}]}
+                body = {
+                    "resourceType": "OperationOutcome",
+                    "issue": [{"severity": "error", "code": "not-found"}],
+                }
             encoded = json.dumps(body).encode()
             self.send_response(status)
             self.send_header("Content-Type", "application/fhir+json")
@@ -159,7 +219,11 @@ def server():
                 self.send_error(405)
                 return
             identity = RECORD_ID
-            fields = {k: v for k, v in document.items() if k not in {"resourceType", "id", "meta", "name"}}
+            fields = {
+                k: v
+                for k, v in document.items()
+                if k not in {"resourceType", "id", "meta", "name"}
+            }
             store.save(identity, name=document["name"], fields=fields)
             body = copy.deepcopy(store.current[identity])
             if store.reply_id_override is not None:
@@ -184,24 +248,59 @@ def server():
 
 def contract(base: str, **options: Any) -> api.Contract:
     definition = {
-        "resourceType": "StructureDefinition", "kind": "resource", "type": "Basic",
+        "resourceType": "StructureDefinition",
+        "kind": "resource",
+        "type": "Basic",
         "url": "http://hl7.org/fhir/StructureDefinition/Basic",
-        "snapshot": {"element": [{"path": "Basic"}, {"path": "Basic.name", "type": [{"code": "string"}]}]},
+        "snapshot": {
+            "element": [
+                {"path": "Basic"},
+                {"path": "Basic.name", "type": [{"code": "string"}]},
+            ]
+        },
     }
-    return api.Contract.from_dict({
-        "verifier": {"kind": "fhir", "base_url": base, "resource_type": "Basic",
-                     "field_paths": {"id": "id", "name": "name"}},
-        "effects": [{"kind": "record_written", "match": {"name": {"param": "name"}}, "expected_count": 1}],
-        "frame": {"identity_field": "id", "targeted": {
-            "quiet_s": 0.01, "setup_evidence_sha256": "sha256:" + "a" * 64,
-            "search": {"resource_type": "Basic", "base_url": base, "self": ["actor/run"],
-                       "fields": {"name": {"path": "name"}}, "identity": [["name"]], "search": {"name": "name"},
-                       "reference_schema": {"definition": definition, "sha256": definition_digest(definition)}},
-            "history_retention_qualified": True, "author_path": "meta.author.reference",
-            "author_server_set": True, "self": [{"param": "actor"}], "not_found_qualified": True,
-            **options,
-        }},
-    })
+    return api.Contract.from_dict(
+        {
+            "verifier": {
+                "kind": "fhir",
+                "base_url": base,
+                "resource_type": "Basic",
+                "field_paths": {"id": "id", "name": "name"},
+            },
+            "effects": [
+                {
+                    "kind": "record_written",
+                    "match": {"name": {"param": "name"}},
+                    "expected_count": 1,
+                }
+            ],
+            "frame": {
+                "identity_field": "id",
+                "targeted": {
+                    "quiet_s": 0.01,
+                    "setup_evidence_sha256": "sha256:" + "a" * 64,
+                    "search": {
+                        "resource_type": "Basic",
+                        "base_url": base,
+                        "self": ["actor/run"],
+                        "fields": {"name": {"path": "name"}},
+                        "identity": [["name"]],
+                        "search": {"name": "name"},
+                        "reference_schema": {
+                            "definition": definition,
+                            "sha256": definition_digest(definition),
+                        },
+                    },
+                    "history_retention_qualified": True,
+                    "author_path": "meta.author.reference",
+                    "author_server_set": True,
+                    "self": [{"param": "actor"}],
+                    "not_found_qualified": True,
+                    **options,
+                },
+            },
+        }
+    )
 
 
 @pytest.fixture
@@ -212,7 +311,9 @@ def issued(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any):
     store, base = server
     cfg = contract(base)
     ledger = api.Ledger(api.MemoryLedger())
-    pending = api.begin_write(cfg, PARAMS, actor=ACTOR, ledger=ledger, workdir=tmp_path / "runs")
+    pending = api.begin_write(
+        cfg, PARAMS, actor=ACTOR, ledger=ledger, workdir=tmp_path / "runs"
+    )
     store.save()
     write = api.verify_write(pending, write_attempted=True)
     return store, cfg, write, ledger
@@ -236,13 +337,23 @@ def test_clean_targeted_recheck_is_final_and_store_unchanged(issued: Any) -> Non
     assert result.final
     assert result.evidence["targeted"]["phase"] == "late"
     assert before == (store.current, store.history)
-    assert result.evidence["targeted"]["outside_intermediate_history"] == OUTSIDE_INTERMEDIATE_HISTORY
+    assert (
+        result.evidence["targeted"]["outside_intermediate_history"]
+        == OUTSIDE_INTERMEDIATE_HISTORY
+    )
     assert store.history_reads == prior_history_reads + 2
-    assert not any("/_history" in p and p.startswith("/Basic/_history") for p in store.calls)
+    assert not any(
+        "/_history" in p and p.startswith("/Basic/_history") for p in store.calls
+    )
 
 
-@pytest.mark.parametrize("author,expected", [("actor/run", "REFUTED"), ("actor/colleague", "CONFIRMED"), (None, "UNCERTAIN")])
-def test_same_record_later_version_requires_trusted_actor(issued: Any, author: str | None, expected: str) -> None:
+@pytest.mark.parametrize(
+    "author,expected",
+    [("actor/run", "REFUTED"), ("actor/colleague", "CONFIRMED"), (None, "UNCERTAIN")],
+)
+def test_same_record_later_version_requires_trusted_actor(
+    issued: Any, author: str | None, expected: str
+) -> None:
     store, cfg, write, ledger = issued
     store.save(name="later-private-value", author=author)
     result = late(cfg, write, ledger)
@@ -290,7 +401,9 @@ def test_missing_record_without_deleted_actor_proof_never_confirms(issued: Any) 
     assert not result.final
 
 
-def test_persisted_state_and_receipt_never_contain_locators_or_values(issued: Any, tmp_path: Path) -> None:
+def test_persisted_state_and_receipt_never_contain_locators_or_values(
+    issued: Any, tmp_path: Path
+) -> None:
     _, cfg, write, ledger = issued
     assert write.recheck is not None
     state = write.recheck
@@ -301,7 +414,9 @@ def test_persisted_state_and_receipt_never_contain_locators_or_values(issued: An
     assert path.stat().st_mode & 0o777 == 0o600
     missing = api.RecheckState.load(path, params=PARAMS)
     assert late(cfg, missing, ledger).outcome == "UNCERTAIN"
-    correct = api.RecheckState.load(path, params=PARAMS, target_ids=[f"Basic/{RECORD_ID}"])
+    correct = api.RecheckState.load(
+        path, params=PARAMS, target_ids=[f"Basic/{RECORD_ID}"]
+    )
     assert late(cfg, correct, ledger).outcome == "CONFIRMED"
 
 
@@ -315,17 +430,27 @@ def test_foreign_locator_cannot_replace_issued_identity(issued: Any) -> None:
 
 def test_params_used_for_actor_binding_cannot_change(issued: Any) -> None:
     _, cfg, write, ledger = issued
-    result = api.recheck(cfg, write, params={**PARAMS, "actor": "actor/colleague"}, actor=ACTOR, ledger=ledger)
+    result = api.recheck(
+        cfg,
+        write,
+        params={**PARAMS, "actor": "actor/colleague"},
+        actor=ACTOR,
+        ledger=ledger,
+    )
     assert result.outcome == "UNCERTAIN"
 
 
-def test_initial_unknown_history_has_distinct_read_only_obligation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any) -> None:
+def test_initial_unknown_history_has_distinct_read_only_obligation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any
+) -> None:
     monkeypatch.setenv("OPENADAPT_VERIFIER_STATE_DIR", str(tmp_path / "authority"))
     monkeypatch.setattr(api, "seconds_until", lambda due: 0)
     store, base = server
     cfg = contract(base, history_available=False, history_retention_qualified=False)
     ledger = api.Ledger(api.MemoryLedger())
-    pending = api.begin_write(cfg, PARAMS, actor=ACTOR, ledger=ledger, workdir=tmp_path / "runs")
+    pending = api.begin_write(
+        cfg, PARAMS, actor=ACTOR, ledger=ledger, workdir=tmp_path / "runs"
+    )
     store.save()
     write = api.verify_write(pending, write_attempted=True)
     assert write.outcome is api.Outcome.UNCERTAIN
@@ -339,24 +464,38 @@ def test_initial_unknown_history_has_distinct_read_only_obligation(tmp_path: Pat
     assert ledger.latest(write.write_key).recheck_owed == write.recheck_due_at
 
 
-def test_final_state_only_contract_names_unavailable_intermediate_history(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any) -> None:
+def test_final_state_only_contract_names_unavailable_intermediate_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any
+) -> None:
     monkeypatch.setenv("OPENADAPT_VERIFIER_STATE_DIR", str(tmp_path / "authority"))
     monkeypatch.setattr(api, "seconds_until", lambda due: 0)
     store, base = server
-    cfg = contract(base, history_available=False, history_retention_qualified=False, history_required=False)
-    pending = api.begin_write(cfg, PARAMS, actor=ACTOR, ledger=None, workdir=tmp_path / "runs")
+    cfg = contract(
+        base,
+        history_available=False,
+        history_retention_qualified=False,
+        history_required=False,
+    )
+    pending = api.begin_write(
+        cfg, PARAMS, actor=ACTOR, ledger=None, workdir=tmp_path / "runs"
+    )
     store.save()
     write = api.verify_write(pending, write_attempted=True)
     assert write.outcome is api.Outcome.CONFIRMED
     assert OUTSIDE_INTERMEDIATE_HISTORY in write.scope.not_covered
-    assert any("per-record intermediate history: UNKNOWN/BLOCKED" in line for line in write.scope.not_covered)
+    assert any(
+        "per-record intermediate history: UNKNOWN/BLOCKED" in line
+        for line in write.scope.not_covered
+    )
     result = late(cfg, write, None)
     assert result.outcome == "CONFIRMED", result.reasons
     assert result.evidence["targeted"]["history_status"] == "UNKNOWN/BLOCKED"
 
 
 @pytest.mark.parametrize("ledger_mode", ["original", "none"])
-def test_refuted_targeted_recheck_cannot_be_cleared_by_cleaning_duplicate(issued: Any, ledger_mode: str) -> None:
+def test_refuted_targeted_recheck_cannot_be_cleared_by_cleaning_duplicate(
+    issued: Any, ledger_mode: str
+) -> None:
     store, cfg, write, ledger = issued
     store.save("duplicate-before-cleanup")
     selected = ledger if ledger_mode == "original" else None
@@ -369,7 +508,9 @@ def test_refuted_targeted_recheck_cannot_be_cleared_by_cleaning_duplicate(issued
         assert ledger.latest(write.write_key).resolved["outcome"] == "REFUTED"
 
 
-def test_due_time_blocks_all_late_reads_before_the_frozen_window(issued: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_due_time_blocks_all_late_reads_before_the_frozen_window(
+    issued: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
     store, cfg, write, ledger = issued
     before = list(store.calls)
     monkeypatch.setattr(api, "seconds_until", lambda due: 10)
@@ -378,7 +519,9 @@ def test_due_time_blocks_all_late_reads_before_the_frozen_window(issued: Any, mo
     assert store.calls == before
 
 
-def test_unqualified_sql_identifying_search_cannot_claim_targeted_proof(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any) -> None:
+def test_unqualified_sql_identifying_search_cannot_claim_targeted_proof(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any
+) -> None:
     import sqlite3
 
     monkeypatch.setenv("OPENADAPT_VERIFIER_STATE_DIR", str(tmp_path / "authority"))
@@ -387,31 +530,48 @@ def test_unqualified_sql_identifying_search_cannot_claim_targeted_proof(tmp_path
     with sqlite3.connect(db) as con:
         con.execute("CREATE TABLE records (id TEXT PRIMARY KEY, name TEXT)")
     doc = contract(base).config.model_dump(mode="json", by_alias=True)
-    doc["verifier"] = {"kind": "sql", "sqlite_database": str(db), "sql_query": "SELECT * FROM records"}
+    doc["verifier"] = {
+        "kind": "sql",
+        "sqlite_database": str(db),
+        "sql_query": "SELECT * FROM records",
+    }
     cfg = api.Contract.from_dict(doc)
-    pending = api.begin_write(cfg, PARAMS, actor=ACTOR, ledger=None, workdir=tmp_path / "runs")
+    pending = api.begin_write(
+        cfg, PARAMS, actor=ACTOR, ledger=None, workdir=tmp_path / "runs"
+    )
     with sqlite3.connect(db) as con:
         con.execute("INSERT INTO records VALUES (?, ?)", (RECORD_ID, PARAMS["name"]))
     result = api.verify_write(pending, write_attempted=True)
     assert result.outcome is api.Outcome.UNCERTAIN
     assert not result.final
     assert result.evidence["frame"]["targeted"]["problem"] == "TargetedUnreadable"
-    assert result.evidence["frame"]["targeted"]["reason"] == "independent_target_identity_unknown"
+    assert (
+        result.evidence["frame"]["targeted"]["reason"]
+        == "independent_target_identity_unknown"
+    )
     assert result.recheck is not None
-    assert result.recheck_due_at and result.recheck_purpose == "read_only_reconciliation"
+    assert (
+        result.recheck_due_at and result.recheck_purpose == "read_only_reconciliation"
+    )
     unresolved = result.recheck.payload["post_state"]["targeted"]
     assert unresolved["status"] == "unresolved" and unresolved["targets"] == []
     again = late(cfg, result, None)
     assert again.outcome == "UNCERTAIN" and not again.final
-    assert any("independent_target_identity_unknown" in reason for reason in again.reasons)
+    assert any(
+        "independent_target_identity_unknown" in reason for reason in again.reasons
+    )
 
 
-def test_complete_http_body_does_not_replace_retention_qualification(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any) -> None:
+def test_complete_http_body_does_not_replace_retention_qualification(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any
+) -> None:
     monkeypatch.setenv("OPENADAPT_VERIFIER_STATE_DIR", str(tmp_path / "authority"))
     monkeypatch.setattr(api, "seconds_until", lambda due: 0)
     store, base = server
     cfg = contract(base, history_retention_qualified=False)
-    pending = api.begin_write(cfg, PARAMS, actor=ACTOR, ledger=None, workdir=tmp_path / "runs")
+    pending = api.begin_write(
+        cfg, PARAMS, actor=ACTOR, ledger=None, workdir=tmp_path / "runs"
+    )
     store.save()
     result = api.verify_write(pending, write_attempted=True)
     assert result.outcome is api.Outcome.UNCERTAIN
@@ -419,7 +579,9 @@ def test_complete_http_body_does_not_replace_retention_qualification(tmp_path: P
     assert not result.final
 
 
-def test_late_empty_search_cannot_contradict_current_matching_target(issued: Any) -> None:
+def test_late_empty_search_cannot_contradict_current_matching_target(
+    issued: Any,
+) -> None:
     store, cfg, write, ledger = issued
     store.omit_identifying_search = True
     result = late(cfg, write, ledger)
@@ -427,7 +589,9 @@ def test_late_empty_search_cannot_contradict_current_matching_target(issued: Any
     assert not result.final
 
 
-def test_bookkeeping_ignore_cannot_erase_a_declared_effect_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any) -> None:
+def test_bookkeeping_ignore_cannot_erase_a_declared_effect_value(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any
+) -> None:
     monkeypatch.setenv("OPENADAPT_VERIFIER_STATE_DIR", str(tmp_path / "authority"))
     monkeypatch.setattr(api, "seconds_until", lambda due: 0)
     store, base = server
@@ -436,7 +600,9 @@ def test_bookkeeping_ignore_cannot_erase_a_declared_effect_value(tmp_path: Path,
     doc["effects"][0]["match"]["phone"] = {"literal": "declared-phone"}
     doc["frame"]["ignore_fields"] = ["phone"]
     cfg = api.Contract.from_dict(doc)
-    pending = api.begin_write(cfg, PARAMS, actor=ACTOR, ledger=None, workdir=tmp_path / "runs")
+    pending = api.begin_write(
+        cfg, PARAMS, actor=ACTOR, ledger=None, workdir=tmp_path / "runs"
+    )
     store.save()
     store.current[RECORD_ID]["phone"] = "declared-phone"
     store.history[RECORD_ID][-1]["phone"] = "declared-phone"
@@ -448,8 +614,12 @@ def test_bookkeeping_ignore_cannot_erase_a_declared_effect_value(tmp_path: Path,
     assert late(cfg, write, None).outcome == "REFUTED"
 
 
-@pytest.mark.parametrize("change", ["none", "params", "foreign", "missing", "duplicate", "versioned", "post"])
-def test_locator_preparation_is_pure_and_exact(issued: Any, monkeypatch: pytest.MonkeyPatch, change: str) -> None:
+@pytest.mark.parametrize(
+    "change", ["none", "params", "foreign", "missing", "duplicate", "versioned", "post"]
+)
+def test_locator_preparation_is_pure_and_exact(
+    issued: Any, monkeypatch: pytest.MonkeyPatch, change: str
+) -> None:
     from openadapt_flow.runtime.effects import targeted
 
     _, cfg, write, _ = issued
@@ -477,12 +647,16 @@ def test_locator_preparation_is_pure_and_exact(issued: Any, monkeypatch: pytest.
 
     monkeypatch.setattr(targeted, "_reader", forbidden)
     monkeypatch.setattr(targeted, "_transport", forbidden)
-    problem = targeted.targeted_locators_problem(spec, post, locators, params, bytes.fromhex(state.payload["salt"]))
+    problem = targeted.targeted_locators_problem(
+        spec, post, locators, params, bytes.fromhex(state.payload["salt"])
+    )
     assert (problem is None) == (change == "none")
 
 
 @pytest.mark.parametrize("locators", [(), ("Basic/reply-is-not-authority",)])
-def test_unresolved_identity_never_becomes_observable_from_caller_ids(issued: Any, monkeypatch: pytest.MonkeyPatch, locators: tuple[str, ...]) -> None:
+def test_unresolved_identity_never_becomes_observable_from_caller_ids(
+    issued: Any, monkeypatch: pytest.MonkeyPatch, locators: tuple[str, ...]
+) -> None:
     from openadapt_flow.runtime.effects import targeted
 
     _, cfg, write, _ = issued
@@ -497,21 +671,34 @@ def test_unresolved_identity_never_becomes_observable_from_caller_ids(issued: An
 
     monkeypatch.setattr(targeted, "_reader", forbidden)
     monkeypatch.setattr(targeted, "_transport", forbidden)
-    assert targeted.targeted_locators_problem(cfg.config.frame.targeted, post, locators, PARAMS, salt) == targeted.UNRESOLVED_TARGET_IDENTITY
-    with pytest.raises(targeted.TargetedUnreadable, match=targeted.UNRESOLVED_TARGET_IDENTITY):
-        targeted.observe_targeted(cfg.config.frame.targeted, None, post, locators, PARAMS, salt, "", "", "")
+    assert (
+        targeted.targeted_locators_problem(
+            cfg.config.frame.targeted, post, locators, PARAMS, salt
+        )
+        == targeted.UNRESOLVED_TARGET_IDENTITY
+    )
+    with pytest.raises(
+        targeted.TargetedUnreadable, match=targeted.UNRESOLVED_TARGET_IDENTITY
+    ):
+        targeted.observe_targeted(
+            cfg.config.frame.targeted, None, post, locators, PARAMS, salt, "", "", ""
+        )
     post["search"] = write.recheck.payload["post_state"]["targeted"]["search"]
     assert targeted.targeted_state_problem(post) is not None
 
 
 @pytest.mark.parametrize("ledger_mode", ["original", "none", "alternate"])
-def test_initial_unknown_late_observation_does_not_promote_overall_verdict(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any, ledger_mode: str) -> None:
+def test_initial_unknown_late_observation_does_not_promote_overall_verdict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any, ledger_mode: str
+) -> None:
     monkeypatch.setenv("OPENADAPT_VERIFIER_STATE_DIR", str(tmp_path / "authority"))
     monkeypatch.setattr(api, "seconds_until", lambda due: 0)
     store, base = server
     cfg = contract(base)
     ledger = api.Ledger(api.MemoryLedger())
-    pending = api.begin_write(cfg, PARAMS, actor=ACTOR, ledger=ledger, workdir=tmp_path / "runs")
+    pending = api.begin_write(
+        cfg, PARAMS, actor=ACTOR, ledger=ledger, workdir=tmp_path / "runs"
+    )
     store.save()
     store.history_mode = "empty"
     write = api.verify_write(pending, write_attempted=True)
@@ -520,7 +707,13 @@ def test_initial_unknown_late_observation_does_not_promote_overall_verdict(tmp_p
     assert write.recheck_purpose == "read_only_reconciliation"
     assert ledger.latest(write.write_key).resolved["outcome"] == "UNCERTAIN"
     store.history_mode = "normal"
-    selected = ledger if ledger_mode == "original" else api.Ledger(api.MemoryLedger()) if ledger_mode == "alternate" else None
+    selected = (
+        ledger
+        if ledger_mode == "original"
+        else api.Ledger(api.MemoryLedger())
+        if ledger_mode == "alternate"
+        else None
+    )
     result = late(cfg, write, selected)
     assert result.evidence["targeted"]["phase"] == "late"
     assert result.evidence["targeted"]["status"] == "held"
@@ -528,12 +721,19 @@ def test_initial_unknown_late_observation_does_not_promote_overall_verdict(tmp_p
     assert result.reasons
     assert write.outcome is api.Outcome.UNCERTAIN and not write.final
     attempt = ledger.latest(write.write_key)
-    assert attempt.resolved["outcome"] == "UNCERTAIN" and attempt.resolved["review"] is True
+    assert (
+        attempt.resolved["outcome"] == "UNCERTAIN"
+        and attempt.resolved["review"] is True
+    )
     assert attempt.recheck_owed == write.recheck_due_at
 
 
-@pytest.mark.parametrize("author,expected", [("actor/run", "REFUTED"), (None, "UNCERTAIN")])
-def test_failed_search_preserves_authenticated_wrong_version_only(issued: Any, author: str | None, expected: str) -> None:
+@pytest.mark.parametrize(
+    "author,expected", [("actor/run", "REFUTED"), (None, "UNCERTAIN")]
+)
+def test_failed_search_preserves_authenticated_wrong_version_only(
+    issued: Any, author: str | None, expected: str
+) -> None:
     store, cfg, write, ledger = issued
     store.save(name="wrong-own-field", author=author)
     store.fail_identifying_search = True
@@ -544,9 +744,21 @@ def test_failed_search_preserves_authenticated_wrong_version_only(issued: Any, a
     assert "identifying_search_unknown" in result.evidence["targeted"]["problems"]
     assert "late_search_count" not in result.evidence["targeted"]
     calls = store.calls[before:]
-    current_index = next(i for i, path in enumerate(calls) if urlsplit(path).path == f"/Basic/{RECORD_ID}")
-    history_index = next(i for i, path in enumerate(calls) if urlsplit(path).path == f"/Basic/{RECORD_ID}/_history")
-    search_index = next(i for i, path in enumerate(calls) if urlsplit(path).path == "/Basic" and "name" in parse_qs(urlsplit(path).query))
+    current_index = next(
+        i
+        for i, path in enumerate(calls)
+        if urlsplit(path).path == f"/Basic/{RECORD_ID}"
+    )
+    history_index = next(
+        i
+        for i, path in enumerate(calls)
+        if urlsplit(path).path == f"/Basic/{RECORD_ID}/_history"
+    )
+    search_index = next(
+        i
+        for i, path in enumerate(calls)
+        if urlsplit(path).path == "/Basic" and "name" in parse_qs(urlsplit(path).query)
+    )
     assert current_index < search_index and history_index < search_index
     if expected == "UNCERTAIN":
         assert not result.verified and not result.final
@@ -561,7 +773,9 @@ def test_current_changed_during_search_cannot_confirm_stale_target(issued: Any) 
 
 
 @pytest.mark.parametrize("binding", ["locator", "params"])
-def test_bad_pure_binding_reads_nothing_and_creates_no_fence(issued: Any, tmp_path: Path, binding: str) -> None:
+def test_bad_pure_binding_reads_nothing_and_creates_no_fence(
+    issued: Any, tmp_path: Path, binding: str
+) -> None:
     store, cfg, write, ledger = issued
     assert write.recheck is not None
     before = list(store.calls)
@@ -578,7 +792,10 @@ def test_bad_pure_binding_reads_nothing_and_creates_no_fence(issued: Any, tmp_pa
 
 @pytest.mark.parametrize("caller_ids", [(), ("Basic/reply-only-id",)])
 def test_unresolved_owed_deadline_survives_pure_refusal_without_landed_claim(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any, caller_ids: tuple[str, ...],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    server: Any,
+    caller_ids: tuple[str, ...],
 ) -> None:
     import sqlite3
 
@@ -588,14 +805,26 @@ def test_unresolved_owed_deadline_survives_pure_refusal_without_landed_claim(
     with sqlite3.connect(db) as connection:
         connection.execute("CREATE TABLE records (id TEXT PRIMARY KEY, name TEXT)")
     document = contract(base).config.model_dump(mode="json", by_alias=True)
-    document["verifier"] = {"kind": "sql", "sqlite_database": str(db), "sql_query": "SELECT * FROM records"}
+    document["verifier"] = {
+        "kind": "sql",
+        "sqlite_database": str(db),
+        "sql_query": "SELECT * FROM records",
+    }
     cfg = api.Contract.from_dict(document)
     ledger = api.Ledger(api.MemoryLedger())
-    pending = api.begin_write(cfg, PARAMS, actor=ACTOR, ledger=ledger, workdir=tmp_path / "runs")
+    pending = api.begin_write(
+        cfg, PARAMS, actor=ACTOR, ledger=ledger, workdir=tmp_path / "runs"
+    )
     with sqlite3.connect(db) as connection:
-        connection.execute("INSERT INTO records VALUES (?, ?)", (RECORD_ID, PARAMS["name"]))
+        connection.execute(
+            "INSERT INTO records VALUES (?, ?)", (RECORD_ID, PARAMS["name"])
+        )
     write = api.verify_write(pending, write_attempted=True)
-    assert write.outcome is api.Outcome.UNCERTAIN and not write.verified and not write.final
+    assert (
+        write.outcome is api.Outcome.UNCERTAIN
+        and not write.verified
+        and not write.final
+    )
     assert not write.landed and write.review and not write.provisional
     assert write.recheck is not None and write.recheck_due_at
     assert "recheck_due_at" not in write.receipt
@@ -609,7 +838,9 @@ def test_unresolved_owed_deadline_survives_pure_refusal_without_landed_claim(
     monkeypatch.setattr(sqlite3, "connect", forbidden)
     result = late(cfg, write, ledger)
     assert result.outcome == "UNCERTAIN" and not result.verified and not result.final
-    assert any("independent_target_identity_unknown" in reason for reason in result.reasons)
+    assert any(
+        "independent_target_identity_unknown" in reason for reason in result.reasons
+    )
     attempt = ledger.latest(write.write_key)
     assert attempt.resolved["landed"] is False and attempt.review
     assert attempt.resolved["outcome"] == "UNCERTAIN"

@@ -63,10 +63,22 @@ from openadapt_types.approval import (
     CHECKED_HOW_VALUES,
     checked_how_for_flow_tier,
 )
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_serializer, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    model_serializer,
+    model_validator,
+)
 
 from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
-from openadapt_flow.ensure_bridge import EnsureBinding, EnsureContext, EnsureEffectVerifier, DETAIL as ENSURE_DETAIL
+from openadapt_flow.ensure_bridge import DETAIL as ENSURE_DETAIL
+from openadapt_flow.ensure_bridge import (
+    EnsureBinding,
+    EnsureContext,
+    EnsureEffectVerifier,
+)
 from openadapt_flow.fault_gate import (
     AdmissionPolicy,
     CoverageRecord,
@@ -256,29 +268,47 @@ class VerifyConfig(BaseModel):
     def _ensure_adapter_shape(self) -> "VerifyConfig":
         if self.ensure_record is not None:
             source = self.ensure_record.contract
-            if (self.verifier.kind != "fhir" or self.verifier.surfaces
-                    or self.verifier.base_url != source.base_url
-                    or self.verifier.resource_type != source.resource_type
-                    or self.verifier.access_token_env != source.access_token_env
-                    or self.verifier.access_token is not None
-                    or self.verifier.smart_backend is not None
-                    or len(self.effects) != 1
-                    or self.effects[0].kind is not EffectKind.RECORD_WRITTEN
-                    or self.effects[0].match or self.effects[0].expected_count != 1):
-                raise ValueError("ensure adapter needs its exact native source and one record effect")
+            if (
+                self.verifier.kind != "fhir"
+                or self.verifier.surfaces
+                or self.verifier.base_url != source.base_url
+                or self.verifier.resource_type != source.resource_type
+                or self.verifier.access_token_env != source.access_token_env
+                or self.verifier.access_token is not None
+                or self.verifier.smart_backend is not None
+                or len(self.effects) != 1
+                or self.effects[0].kind is not EffectKind.RECORD_WRITTEN
+                or self.effects[0].match
+                or self.effects[0].expected_count != 1
+            ):
+                raise ValueError(
+                    "ensure adapter needs its exact native source and one record effect"
+                )
             ignored = set(self.frame.ignore_fields if self.frame is not None else ())
-            if ignored - {"meta"} or ("meta" in ignored and any(
+            if ignored - {"meta"} or (
+                "meta" in ignored
+                and any(
                     rule.path == "meta" or rule.path.startswith("meta.")
-                    for rule in source.fields.values())):
+                    for rule in source.fields.values()
+                )
+            ):
                 raise ValueError("ensure frame cannot ignore declared fields")
             targeted = getattr(self.frame, "targeted", None)
             allowed = set(source.fields)
             if targeted is not None:
-                allowed.update(expr.param for expr in targeted.self_actors if expr.param is not None)
+                allowed.update(
+                    expr.param
+                    for expr in targeted.self_actors
+                    if expr.param is not None
+                )
             if set(self.ensure_record.parameters) - allowed:
-                raise ValueError("ensure parameters name neither fields nor declared actor bindings")
+                raise ValueError(
+                    "ensure parameters name neither fields nor declared actor bindings"
+                )
             if targeted is not None and targeted.search != source:
-                raise ValueError("ensure adapter and targeted search must bind the same full contract")
+                raise ValueError(
+                    "ensure adapter and targeted search must bind the same full contract"
+                )
         return self
 
     def coverage_path(self) -> Optional[Path]:
@@ -1224,8 +1254,12 @@ def _apply_hard_invariants(
     if frame.hard_invariants is not None:
         from dataclasses import replace
 
-        refuted = {c.name: c for c in frame.hard_invariants.checks if c.status == "refuted"}
-        verdict = replace(verdict, checks=tuple(refuted.get(c.name, c) for c in verdict.checks))
+        refuted = {
+            c.name: c for c in frame.hard_invariants.checks if c.status == "refuted"
+        }
+        verdict = replace(
+            verdict, checks=tuple(refuted.get(c.name, c) for c in verdict.checks)
+        )
     frame.hard_invariants = verdict
     if frame.status == "refuted":
         return frame
@@ -1643,8 +1677,12 @@ def _new_execution_id() -> str:
 # -- verifier -----------------------------------------------------------------
 
 
-def _build_verifier(cfg: VerifyConfig, params: Mapping[str, object], *,
-                    ensure_context: Optional[EnsureContext] = None) -> Any:
+def _build_verifier(
+    cfg: VerifyConfig,
+    params: Mapping[str, object],
+    *,
+    ensure_context: Optional[EnsureContext] = None,
+) -> Any:
     try:
         verifier = build_effect_verifier(cfg.verifier, params)
     except ValueError as exc:
@@ -1658,7 +1696,9 @@ def _build_verifier(cfg: VerifyConfig, params: Mapping[str, object], *,
             raise VerifyRunError("ensure adapter needs the native FHIR reader")
         if sorted(params) != cfg.ensure_record.parameters:
             raise VerifyRunError("ensure adapter parameter names changed")
-        verifier = EnsureEffectVerifier(verifier, cfg.ensure_record, params, ensure_context)
+        verifier = EnsureEffectVerifier(
+            verifier, cfg.ensure_record, params, ensure_context
+        )
     return verifier
 
 
@@ -1690,7 +1730,10 @@ def _tag_reads(verifier: Any, execution_id: str) -> None:
 
 
 def capture_baseline(
-    cfg: VerifyConfig, params: Mapping[str, object], out: Path, *,
+    cfg: VerifyConfig,
+    params: Mapping[str, object],
+    out: Path,
+    *,
     ensure_context: Optional[EnsureContext] = None,
 ) -> dict[str, Any]:
     """Read the system of record before the executor starts.
@@ -1702,7 +1745,11 @@ def capture_baseline(
     the run: ``execution_id`` is generated here and the read step reuses it.
     """
 
-    verifier = _build_verifier(cfg, params) if ensure_context is None else _build_verifier(cfg, params, ensure_context=ensure_context)
+    verifier = (
+        _build_verifier(cfg, params)
+        if ensure_context is None
+        else _build_verifier(cfg, params, ensure_context=ensure_context)
+    )
     identity = verifier_identity(verifier)
     execution_id = _new_execution_id()
     _tag_reads(verifier, execution_id)
@@ -1726,8 +1773,10 @@ def capture_baseline(
         raise VerifyRunError("verifier returned no readable baseline")
     detail: dict[str, Any] = {}
     if cfg.ensure_record is not None:
-        detail[ENSURE_DETAIL] = {**state.detail.get(ENSURE_DETAIL, {}),
-                                "params_mac": salted_digest(salt, "ensure:params", dict(params))}
+        detail[ENSURE_DETAIL] = {
+            **state.detail.get(ENSURE_DETAIL, {}),
+            "params_mac": salted_digest(salt, "ensure:params", dict(params)),
+        }
     if cfg.frame is not None and cfg.frame.history is not None:
         from openadapt_flow.runtime.effects.history import DETAIL
 
@@ -2065,7 +2114,11 @@ def verify_run(
     approver_doc = _approver(approver)
     executor_kind, executor_ref, build_digest = _executor(run_record)
 
-    verifier = _build_verifier(cfg, params) if ensure_context is None else _build_verifier(cfg, params, ensure_context=ensure_context)
+    verifier = (
+        _build_verifier(cfg, params)
+        if ensure_context is None
+        else _build_verifier(cfg, params, ensure_context=ensure_context)
+    )
     identity = verifier_identity(verifier)
 
     baseline: Optional[dict[str, Any]] = None
@@ -2124,7 +2177,9 @@ def verify_run(
         ).total_seconds()
         if 0 <= elapsed <= cfg.max_execution_window_s:
             before = EffectState.model_validate(baseline["state"])
-            if cfg.ensure_record is not None and (before.detail.get(ENSURE_DETAIL) or {}).get("params_mac") != salted_digest(salt, "ensure:params", dict(params)):
+            if cfg.ensure_record is not None and (
+                before.detail.get(ENSURE_DETAIL) or {}
+            ).get("params_mac") != salted_digest(salt, "ensure:params", dict(params)):
                 raise VerifyRunError("ensure baseline parameter binding changed")
             before = _unseal_state(cfg, before, verifier, salt)
             baseline_sha = baseline_digest(baseline, salt)
@@ -2270,32 +2325,49 @@ def verify_run(
             frame.post_state = {"read_at": _now(), "history": history_checkpoint}
     if frame_spec.targeted is not None:
         from openadapt_flow.runtime.effects.targeted import (
-            COMPARES, OUTSIDE_INTERMEDIATE_HISTORY, capture_targeted,
-            observe_targeted, judge_targeted, unresolved_targeted,
+            COMPARES,
+            OUTSIDE_INTERMEDIATE_HISTORY,
             UNRESOLVED_TARGET_IDENTITY,
+            capture_targeted,
+            judge_targeted,
+            observe_targeted,
+            unresolved_targeted,
         )
+
         target_spec = frame_spec.targeted
         initial_frame_status = frame.status
         frame.targeted = {
             "domain": COMPARES,
             "outside_intermediate_history": OUTSIDE_INTERMEDIATE_HISTORY,
             "history_required": target_spec.history_required,
-            "history_status": "pending" if target_spec.history_available else "UNKNOWN/BLOCKED",
+            "history_status": "pending"
+            if target_spec.history_available
+            else "UNKNOWN/BLOCKED",
         }
         try:
             from openadapt_flow.runtime.effects.surfaces import surface_of
 
             targets = []
             for effect, verdict in zip(bound_effects, verdicts):
-                if effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS):
-                    raise ValueError("targeted rechecks support create/update record effects only")
-                if effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count == 0:
+                if effect.kind not in (
+                    EffectKind.RECORD_WRITTEN,
+                    EffectKind.FIELD_EQUALS,
+                ):
+                    raise ValueError(
+                        "targeted rechecks support create/update record effects only"
+                    )
+                if (
+                    effect.kind is EffectKind.RECORD_WRITTEN
+                    and effect.expected_count == 0
+                ):
                     continue
                 if surface_of(effect) != target_spec.surface or not verdict.confirmed:
                     raise ValueError("a written target is not independently bound")
                 targets.extend(verdict.matched_records)
             required_fields = {k for effect in bound_effects for k in effect.match}
-            required_fields.update(effect.field for effect in bound_effects if effect.field is not None)
+            required_fields.update(
+                effect.field for effect in bound_effects if effect.field is not None
+            )
             ignored = [k for k in frame_spec.ignore_fields if k not in required_fields]
             checkpoint, locators, target_status = capture_targeted(
                 target_spec, verifier, targets, params, salt, ignored, _now()
@@ -2304,7 +2376,9 @@ def verify_run(
             frame.post_state = {"read_at": _now(), "targeted": checkpoint}
             if targeted_out is not None:
                 targeted_out["locators"] = locators
-            frame.targeted["write_search_count"] = len(checkpoint["search"]["matched_id_macs"])
+            frame.targeted["write_search_count"] = len(
+                checkpoint["search"]["matched_id_macs"]
+            )
             frame.targeted["status"] = target_status
             if target_status == "refuted":
                 frame.status = "refuted"
@@ -2313,7 +2387,14 @@ def verify_run(
             from dataclasses import replace
 
             observation = observe_targeted(
-                target_spec, verifier, checkpoint, locators, params, salt, "", _now(),
+                target_spec,
+                verifier,
+                checkpoint,
+                locators,
+                params,
+                salt,
+                "",
+                _now(),
                 str(run_record.get("executor_id") or ""),
             )
             observation = replace(observation, phase="write")
@@ -2321,25 +2402,39 @@ def verify_run(
             observed_status, detail = judge_targeted(observation)
             detail["write_search_count"] = len(observation.write_search.matched_ids)
             if observation.late_search.complete:
-                detail["write_confirmation_search_count"] = len(observation.late_search.matched_ids)
+                detail["write_confirmation_search_count"] = len(
+                    observation.late_search.matched_ids
+                )
             detail["write_confirmation_read_at"] = observation.read_at
             frame.targeted = detail
             frame.post_state["read_at"] = observation.read_at
-            if observed_status == "refuted" or (observed_status == "not_checked" and target_status != "refuted"):
+            if observed_status == "refuted" or (
+                observed_status == "not_checked" and target_status != "refuted"
+            ):
                 target_status = observed_status
-            if target_status == "refuted" or (target_status == "not_checked" and frame.status != "refuted"):
+            if target_status == "refuted" or (
+                target_status == "not_checked" and frame.status != "refuted"
+            ):
                 frame.status = target_status
                 frame.reason = "the targeted record or identifying-search proof is incomplete or refuted"
         except Exception as exc:  # noqa: BLE001 - unsupported or unreadable cannot pass
-            if not isinstance(frame.post_state, dict) or "targeted" not in frame.post_state:
-                frame.post_state = {"read_at": _now(), "targeted": unresolved_targeted(params, salt, initial_frame_status)}
+            if (
+                not isinstance(frame.post_state, dict)
+                or "targeted" not in frame.post_state
+            ):
+                frame.post_state = {
+                    "read_at": _now(),
+                    "targeted": unresolved_targeted(params, salt, initial_frame_status),
+                }
                 if targeted_out is not None:
                     targeted_out["locators"] = ()
                 frame.targeted["identity_status"] = "unresolved"
                 frame.targeted["reason"] = UNRESOLVED_TARGET_IDENTITY
                 frame.targeted["phase"] = "write"
                 frame.targeted["future_late_search"] = "owed"
-            frame.targeted["status"] = "refuted" if frame.status == "refuted" else "not_checked"
+            frame.targeted["status"] = (
+                "refuted" if frame.status == "refuted" else "not_checked"
+            )
             frame.targeted["problem"] = type(exc).__name__
             if frame.status != "refuted":
                 frame.status = "not_checked"
@@ -2351,8 +2446,7 @@ def verify_run(
         "REFUTED"
         if frame.status == "refuted" or delta_verdict == "REFUTED"
         else "INDETERMINATE"
-        if frame.hard_invariants is not None
-        and frame.hard_invariants.status != "held"
+        if frame.hard_invariants is not None and frame.hard_invariants.status != "held"
         else delta_verdict
     )
     if frame.status == "refuted" and observed_effect in ("absent", "present"):
@@ -2508,14 +2602,20 @@ def verify_run(
         "effect_verdict": effect_verdict,
     }
     if cfg.ensure_record is not None:
-        cast(dict[str, Any], evidence["readback"])["ensure_params_mac"] = salted_digest(salt, "ensure:params", dict(params))
+        cast(dict[str, Any], evidence["readback"])["ensure_params_mac"] = salted_digest(
+            salt, "ensure:params", dict(params)
+        )
     database_spec = frame_spec.database
     targeted_spec = getattr(frame_spec, "targeted", None)
     history_spec = getattr(frame_spec, "history", None)
     recheck_after_s = (
-        targeted_spec.quiet_s if targeted_spec is not None
-        else history_spec.quiet_s if history_spec is not None
-        else database_spec.recheck_after_s if database_spec is not None else None
+        targeted_spec.quiet_s
+        if targeted_spec is not None
+        else history_spec.quiet_s
+        if history_spec is not None
+        else database_spec.recheck_after_s
+        if database_spec is not None
+        else None
     )
     recheck_due_at: Optional[str] = None
     from openadapt_flow.verifier import Outcome, classify
@@ -2530,8 +2630,17 @@ def verify_run(
             recheck_after_s,
             salted_digest(salt, late_write.POST_STATE_LABEL, frame.post_state),
             due=verified or nonfinal,
-            **({"purpose": "late_recheck" if verified else "read_only_reconciliation"
-                if nonfinal else "observation_only"} if targeted_spec is not None else {}),
+            **(
+                {
+                    "purpose": "late_recheck"
+                    if verified
+                    else "read_only_reconciliation"
+                    if nonfinal
+                    else "observation_only"
+                }
+                if targeted_spec is not None
+                else {}
+            ),
         )
         cast(dict[str, Any], evidence["frame"])[late_write.EVIDENCE_KEY] = schedule
         recheck_due_at = schedule["due_at"]
@@ -2542,13 +2651,18 @@ def verify_run(
         # No locator, missing initial proof or no configured schedule remains
         # visibly owed; a deadline never manufactures authority to execute it.
         eligible = bool(
-            target and target.get("status") != "unresolved"
-            and landed and checked["delta"] == "held"
+            target
+            and target.get("status") != "unresolved"
+            and landed
+            and checked["delta"] == "held"
             and checked["source"] in ("held", "instruction")
-            and frame.status != "refuted" and admitted and self_approved is not True
+            and frame.status != "refuted"
+            and admitted
+            and self_approved is not True
         )
         evidence["reconciliation"] = {
-            "status": "owed", "purpose": "read_only_reconciliation",
+            "status": "owed",
+            "purpose": "read_only_reconciliation",
             "reason": target.get("reason", "independent_proof_incomplete"),
             "executable": eligible and bool(recheck_due_at),
         }
@@ -2671,8 +2785,12 @@ def recheck_problem(
     if receipt_problem(receipt) or evidence_problem(evidence, receipt):
         return "the recheck state's receipt and evidence don't match"
     targeted = cfg.frame.targeted if cfg.frame is not None else None
-    purpose = (evidence.get("frame") or {}).get(late_write.EVIDENCE_KEY, {}).get("purpose")
-    targeted_reconciliation = targeted is not None and purpose == "read_only_reconciliation"
+    purpose = (
+        (evidence.get("frame") or {}).get(late_write.EVIDENCE_KEY, {}).get("purpose")
+    )
+    targeted_reconciliation = (
+        targeted is not None and purpose == "read_only_reconciliation"
+    )
     if receipt.get("execution_id") != state["execution_id"]:
         return "the recheck state belongs to another run"
     salt = bytes.fromhex(str(state["salt"]))
@@ -2687,8 +2805,10 @@ def recheck_problem(
     if cfg.ensure_record is not None:
         committed = salted_digest(salt, "ensure:params", dict(params))
         detail = (baseline.get("state") or {}).get("detail") or {}
-        if (readback.get("ensure_params_mac") != committed
-                or (detail.get(ENSURE_DETAIL) or {}).get("params_mac") != committed):
+        if (
+            readback.get("ensure_params_mac") != committed
+            or (detail.get(ENSURE_DETAIL) or {}).get("params_mac") != committed
+        ):
             return "ensure_baseline_parameter_binding_changed"
     frame = evidence.get("frame") or {}
     schedule = frame.get(late_write.EVIDENCE_KEY)
@@ -2710,7 +2830,13 @@ def recheck_problem(
     if schedule.get("post_state_sha256") != digest:
         return "the recheck state is not the post-save state its receipt names"
     is_verified = receipt.get("outcome") == "verified"
-    if dict(schedule) != late_write.schedule(post, after_s, digest, due=is_verified or targeted_reconciliation, purpose=purpose if targeted is not None else None):
+    if dict(schedule) != late_write.schedule(
+        post,
+        after_s,
+        digest,
+        due=is_verified or targeted_reconciliation,
+        purpose=purpose if targeted is not None else None,
+    ):
         return (
             "the contract's recheck_after_s is not the one the receipt was issued under"
         )
@@ -2765,7 +2891,11 @@ def recheck_problem(
         )
         if problem is not None:
             return problem
-    if verified and receipt.get("outcome") != "verified" and not targeted_reconciliation:
+    if (
+        verified
+        and receipt.get("outcome") != "verified"
+        and not targeted_reconciliation
+    ):
         return "the write was not verified, so there is nothing to recheck"
     if targeted_reconciliation and not (
         receipt.get("outcome") == "reconciliation_required"
@@ -2773,7 +2903,8 @@ def recheck_problem(
         and (receipt.get("checked") or {}).get("source") in ("held", "instruction")
         and (receipt.get("checked") or {}).get("frame") != "refuted"
         and (evidence.get("authorization") or {}).get("self_approved") is not True
-        and ((receipt.get("checked") or {}).get("coverage") or {}).get("policy", "met") == "met"
+        and ((receipt.get("checked") or {}).get("coverage") or {}).get("policy", "met")
+        == "met"
     ):
         return "the targeted reconciliation lacks independently bound landed evidence"
     return None
@@ -2865,7 +2996,9 @@ def recheck_excuses(
     post = dict(state["post_state"])
     if excused and cfg.frame is not None:
         if cfg.frame.targeted is not None:
-            raise VerifyRunError("targeted rechecks require authenticated per-record provenance")
+            raise VerifyRunError(
+                "targeted rechecks require authenticated per-record provenance"
+            )
         if cfg.frame.history is not None:
             raise VerifyRunError(
                 "history rechecks require source provenance; later-write windows cannot excuse events"
@@ -2931,15 +3064,26 @@ def recheck_run(
 
     post = dict(state["post_state"])
     if cfg.frame is not None and cfg.frame.targeted is not None:
-        from openadapt_flow.runtime.effects.targeted import observe_targeted, judge_targeted
+        from openadapt_flow.runtime.effects.targeted import (
+            judge_targeted,
+            observe_targeted,
+        )
 
         if excused:
-            raise VerifyRunError("targeted rechecks require authenticated per-record provenance")
+            raise VerifyRunError(
+                "targeted rechecks require authenticated per-record provenance"
+            )
         verifier = _build_verifier(cfg, params)
         _tag_reads(verifier, str(state["execution_id"]))
         observation = observe_targeted(
-            cfg.frame.targeted, verifier, post["targeted"], tuple(target_ids), params,
-            bytes.fromhex(str(state["salt"])), receipt_sha256(state["receipt"]), _now(),
+            cfg.frame.targeted,
+            verifier,
+            post["targeted"],
+            tuple(target_ids),
+            params,
+            bytes.fromhex(str(state["salt"])),
+            receipt_sha256(state["receipt"]),
+            _now(),
             str(run_record.get("executor_id") or ""),
         )
         status, detail = judge_targeted(observation)
@@ -2948,7 +3092,11 @@ def recheck_run(
             status = original
             detail["status"] = status
             detail["problems"].append("initial_frame_not_established")
-        verdict = FrameVerdict(status=status, reason="targeted record, history or identifying-search check did not hold", targeted=detail)
+        verdict = FrameVerdict(
+            status=status,
+            reason="targeted record, history or identifying-search check did not hold",
+            targeted=detail,
+        )
         verdict.targeted_observation = observation
         verdict = _apply_hard_invariants(verdict, observation)
         return verdict, _now()
@@ -3117,7 +3265,9 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
 
 
 def _owed_reconciliation(
-    evidence: Mapping[str, Any], receipt: Mapping[str, Any], schedule: Any,
+    evidence: Mapping[str, Any],
+    receipt: Mapping[str, Any],
+    schedule: Any,
 ) -> bool:
     """A private owed deadline is not a public positive receipt claim.
 
@@ -3133,40 +3283,66 @@ def _owed_reconciliation(
         and set(owed) == {"status", "purpose", "reason", "executable"}
         and owed.get("status") == "owed"
         and owed.get("purpose") == "read_only_reconciliation"
-        and owed.get("reason") in {"independent_proof_incomplete", "independent_target_identity_unknown", "independent_readback_unavailable"}
+        and owed.get("reason")
+        in {
+            "independent_proof_incomplete",
+            "independent_target_identity_unknown",
+            "independent_readback_unavailable",
+        }
         and isinstance(owed.get("executable"), bool)
         and receipt.get("outcome") == "reconciliation_required"
         and receipt.get("delivery_uncertain") is True
         and isinstance(receipt.get("checked"), Mapping)
         and RECHECK_RECEIPT_FIELD not in receipt
-        and classify(str(receipt.get("outcome")), receipt.get("checked") or {}, evidence)[0] is Outcome.UNCERTAIN
+        and classify(
+            str(receipt.get("outcome")), receipt.get("checked") or {}, evidence
+        )[0]
+        is Outcome.UNCERTAIN
         and isinstance(schedule, Mapping)
-        and schedule.get("compares") in {late_write.COMPARES, "history_since_checkpoint", "receipt_records_and_identifying_search"}
+        and schedule.get("compares")
+        in {
+            late_write.COMPARES,
+            "history_since_checkpoint",
+            "receipt_records_and_identifying_search",
+        }
         and schedule.get("purpose") in (None, "read_only_reconciliation")
         and isinstance(schedule.get("post_state_sha256"), str)
         and _SALTED.fullmatch(schedule["post_state_sha256"])
     ):
         return False
-    schedule_keys = {"compares", "after_s", "post_save_read_at", "due_at", "post_state_sha256"}
+    schedule_keys = {
+        "compares",
+        "after_s",
+        "post_save_read_at",
+        "due_at",
+        "post_state_sha256",
+    }
     targeted = schedule["compares"] == "receipt_records_and_identifying_search"
     if targeted:
         schedule_keys.add("purpose")
-    if set(schedule) != schedule_keys or (targeted and schedule.get("purpose") != "read_only_reconciliation"):
+    if set(schedule) != schedule_keys or (
+        targeted and schedule.get("purpose") != "read_only_reconciliation"
+    ):
         return False
     try:
         after = schedule["after_s"]
         if isinstance(after, bool) or not isinstance(after, (int, float)) or after <= 0:
             return False
-        if schedule["due_at"] != late_write.due_at(schedule["post_save_read_at"], after):
+        if schedule["due_at"] != late_write.due_at(
+            schedule["post_save_read_at"], after
+        ):
             return False
     except (KeyError, TypeError, ValueError, OverflowError):
         return False
     if owed["executable"]:
         parts = receipt.get("checked") or {}
-        if not (parts.get("delta") == "held" and parts.get("source") in ("held", "instruction")
-                and parts.get("frame") != "refuted"
-                and (evidence.get("authorization") or {}).get("self_approved") is not True
-                and (parts.get("coverage") or {}).get("policy", "met") == "met"):
+        if not (
+            parts.get("delta") == "held"
+            and parts.get("source") in ("held", "instruction")
+            and parts.get("frame") != "refuted"
+            and (evidence.get("authorization") or {}).get("self_approved") is not True
+            and (parts.get("coverage") or {}).get("policy", "met") == "met"
+        ):
             return False
     return True
 
@@ -3200,7 +3376,9 @@ def evidence_problem(
         frame.get(late_write.EVIDENCE_KEY) if isinstance(frame, Mapping) else None
     )
     due = schedule.get("due_at") if isinstance(schedule, Mapping) else None
-    if receipt.get(RECHECK_RECEIPT_FIELD) != due and not _owed_reconciliation(evidence, receipt, schedule):
+    if receipt.get(RECHECK_RECEIPT_FIELD) != due and not _owed_reconciliation(
+        evidence, receipt, schedule
+    ):
         return "evidence_mismatch"
     if salting.get("scheme") != SALT_SCHEME or not _DIGEST.match(
         str(salting.get("salt_commitment", ""))

@@ -324,7 +324,9 @@ def test_production_does_not_upgrade_snapshot_only_create_to_verified():
 
 
 def test_production_search_only_admission_is_unknown():
-    c = contract(change_feed={"audit": None, "history": False, "sweep_types": ["Patient"]})
+    c = contract(
+        change_feed={"audit": None, "history": False, "sweep_types": ["Patient"]}
+    )
     original, guarded = production(created(), c=c)
     assert original.outcome == "created_verified"
     assert guarded.outcome == "needs_review"
@@ -339,7 +341,11 @@ def test_production_found_existing_also_needs_authenticated_target_proof():
 
 
 def test_production_known_scope_failure_remains_refuted_when_history_unknown():
-    outside = change("Observation/outside", "U", bodies=[{"resourceType": "Observation", "id": "outside"}])
+    outside = change(
+        "Observation/outside",
+        "U",
+        bodies=[{"resourceType": "Observation", "id": "outside"}],
+    )
     original, guarded = production({**created(), outside.ref: outside})
     assert original.outcome == guarded.outcome == "needs_review"
     assert guarded.evidence["invariants_refuted"] is True
@@ -348,7 +354,9 @@ def test_production_known_scope_failure_remains_refuted_when_history_unknown():
 
 def test_production_unknown_history_does_not_excuse_wrong_scalar():
     bad = patient("x", telecom=[{"system": "phone", "value": "5550199"}])
-    original, guarded = production(created(telecom=bad["telecom"]), after={"x": bad}, body=bad)
+    original, guarded = production(
+        created(telecom=bad["telecom"]), after={"x": bad}, body=bad
+    )
     assert original.outcome == guarded.outcome == "needs_review"
     assert any("phone" in reason for reason in guarded.reasons)
     assert "invariants_unknown" not in guarded.evidence
@@ -361,5 +369,7 @@ def test_production_actor_and_search_absence_are_not_run_receipt_binding():
     assert original.outcome == "created_verified"
     assert guarded.outcome == "needs_review"
     assert guarded.evidence["invariants_refuted"] is True
-    assert any("own_transient_receipt_binding_missing" in reason for reason in guarded.reasons)
+    assert any(
+        "own_transient_receipt_binding_missing" in reason for reason in guarded.reasons
+    )
     assert "invariants_unknown" not in guarded.evidence

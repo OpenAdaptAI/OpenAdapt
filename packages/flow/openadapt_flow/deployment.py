@@ -648,7 +648,9 @@ class EffectsConfig(BaseModel):
                 raise ValueError("fhir_read_headers applies only to FHIR")
             from openadapt_flow.runtime.effects.fhir import validate_fhir_read_headers
 
-            self.fhir_read_headers = validate_fhir_read_headers(self.fhir_read_headers) or None
+            self.fhir_read_headers = (
+                validate_fhir_read_headers(self.fhir_read_headers) or None
+            )
         return self
 
     @model_validator(mode="after")

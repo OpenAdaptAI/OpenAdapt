@@ -453,7 +453,6 @@ def test_a_moved_target_still_refutes_beside_unknown_invariant_history(
     assert env["sh"].episodes[0].late_verdict == "REFUTED"
 
 
-
 @pytest.mark.parametrize("late", [False, True])
 def test_each_fhir_receipt_names_unknown_domain_and_its_own_hard_verdict(
     env: dict[str, Any], monkeypatch: pytest.MonkeyPatch, late: bool
@@ -462,16 +461,21 @@ def test_each_fhir_receipt_names_unknown_domain_and_its_own_hard_verdict(
     ep = env["sh"].episodes[0]
     initial = {
         "status": "not_checked",
-        "outside_guarantee": [{
-            "name": "outside_receipt_intermediate_history", "status": "UNKNOWN",
-        }],
+        "outside_guarantee": [
+            {
+                "name": "outside_receipt_intermediate_history",
+                "status": "UNKNOWN",
+            }
+        ],
     }
     ep.result.evidence["hard_invariants"] = initial
     ep.evidence["late_hard_invariants"] = {**initial, "status": "refuted"}
     fields = env["sh"]._receipt_fields(ep, late)
     assert fields["checked"]["frame"] == ("refuted" if late else "not_checked")
-    assert "outside_receipt_intermediate_history: UNKNOWN" in fields["scope"]["not_covered"]
-
+    assert (
+        "outside_receipt_intermediate_history: UNKNOWN"
+        in fields["scope"]["not_covered"]
+    )
 
 
 def test_missing_late_hard_observation_does_not_reuse_initial_held_claim(
@@ -482,7 +486,10 @@ def test_missing_late_hard_observation_does_not_reuse_initial_held_claim(
     ep.result.evidence["hard_invariants"] = {"status": "held"}
     fields = env["sh"]._receipt_fields(ep, True)
     assert fields["checked"]["frame"] == "not_checked"
-    assert "outside_receipt_intermediate_history: UNKNOWN" in fields["scope"]["not_covered"]
+    assert (
+        "outside_receipt_intermediate_history: UNKNOWN"
+        in fields["scope"]["not_covered"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -593,4 +600,3 @@ def test_invalid_singular_reference_array_is_refused(env, monkeypatch):
     env["sh"].run_rechecks(now=True)
     assert ep.late_verdict == "REFUTED"
     assert any("no longer the person" in reason for reason in ep.late_reasons)
-
