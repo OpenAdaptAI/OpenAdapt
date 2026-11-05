@@ -549,6 +549,7 @@ def build_binding(
 ) -> NamedPersonBindingV1:
     """Build a Seal-safe binding from in-memory assertion material."""
 
+    evidence: Union[WebAuthnEvidenceV1, OidcEvidenceV1, SamlEvidenceV1]
     if isinstance(assertion, WebAuthnAssertionMaterial):
         if method is not BindingMethod.WEBAUTHN_PASSKEY:
             raise NamedPersonBindingError(
