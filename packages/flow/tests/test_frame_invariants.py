@@ -1,8 +1,15 @@
 """Named failures and the targeted guarantee, independent of field matching."""
 
+import json
+
+import pytest
+
 from openadapt_flow.frame_invariants import judge_frame_invariants
 from openadapt_flow.runtime.effects.effect import Effect, EffectKind, EffectState
 from openadapt_flow.runtime.effects.frame import FrameChange, FrameSpec, FrameVerdict, judge_frame
+from openadapt_flow.runtime.effects.targeted import (
+    SearchObservation, TargetedObservation, TargetObservation, VersionObservation,
+)
 
 
 def checks(verdict):
@@ -54,15 +61,6 @@ def test_snapshot_or_targeted_domain_cannot_claim_global_history_held():
 
 # These controls use the shared producer's DTOs, not an alternative reader.
 # Production authority is tested through that producer after integration.
-from dataclasses import replace
-import json
-
-import pytest
-
-from openadapt_flow.runtime.effects.targeted import (
-    SearchObservation, TargetedObservation, TargetObservation, VersionObservation,
-)
-
 CONTRACT = "sha256:" + "a" * 64
 SCHEMA = "sha256:" + "b" * 64
 MAC = "hmac-sha256:" + "c" * 64
@@ -272,3 +270,17 @@ def test_late_phase_names_actual_completed_search_and_original_receipt():
     assert guarantee["late_search_observed_at"] == READ_AT
     assert guarantee["future_late_search"] is None
     assert guarantee["write_confirmation_count"] is None
+
+
+
+@pytest.mark.parametrize("which", ["write_search", "late_search"])
+def test_empty_search_cannot_contradict_independently_matching_written_target(which):
+    result = judged(**{which: search()})
+    assert result.status == "not_checked"
+    assert checks(result)["at_most_one"].status == "not_checked"
+
+
+def test_legitimate_other_edit_need_not_remain_in_identifying_search():
+    # The independent targeted judge must still prove this is a later user edit.
+    result = judged(targets=(target(matches_receipt=False),), late_search=search())
+    assert result.status == "held"

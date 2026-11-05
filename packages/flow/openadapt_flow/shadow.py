@@ -817,6 +817,8 @@ class Shadow:
         # be the only record that is the person.
         since = Baseline(started=ep.recheck_from, matches={rid: now})
         r = verify_ensure(contract, ep.params, since, declared=declared)
+        if "hard_invariants" in r.evidence:
+            ep.evidence["late_hard_invariants"] = r.evidence["hard_invariants"]
         reasons = list(moved)
         with self._lock:
             again = any(ref in o.refs for o in self._later(ep))
@@ -1072,6 +1074,30 @@ class Shadow:
             )
             subject = {"contract_sha256": None, "verify_run_receipt_sha256": None}
             checked = {}
+            hard = (
+                ep.evidence.get("late_hard_invariants", ev.get("hard_invariants"))
+                if late else ev.get("hard_invariants")
+            )
+            if isinstance(hard, dict):
+                status = hard.get("status")
+                if late and "late_hard_invariants" not in ep.evidence:
+                    status = "not_checked"
+                checked["frame"] = status if status in {"held", "refuted"} else "not_checked"
+                # Named omissions belong in each signed receipt's visible
+                # scope, in addition to its committed evidence attachment.
+                omissions = hard.get("outside_guarantee")
+                if isinstance(omissions, list):
+                    names = {
+                        row.get("name") for row in omissions
+                        if isinstance(row, dict) and isinstance(row.get("name"), str)
+                        and row.get("status") == "UNKNOWN"
+                    }
+                    for name in (
+                        "outside_receipt_intermediate_history",
+                        "receipt_record_intermediate_history",
+                    ):
+                        if name in names:
+                            scope["not_covered"].append(f"{name}: UNKNOWN")
         else:
             scope = {
                 "read_paths": [],
@@ -1091,6 +1117,9 @@ class Shadow:
             subject = {"contract_sha256": None, "verify_run_receipt_sha256": None}
             checked = {}
             verdict = UNCERTAIN
+        outside_history = "outside_receipt_intermediate_history: UNKNOWN"
+        if outside_history not in scope["not_covered"]:
+            scope["not_covered"].append(outside_history)
         if late:
             # The window stays the check's; a line says what the recheck
             # read again, and until when.

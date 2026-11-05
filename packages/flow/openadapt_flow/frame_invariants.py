@@ -183,6 +183,11 @@ def judge_frame_invariants(
             for target in targets
         )
         and searches_bound and ordered
+        and all(target.identity in write.matched_ids for target in targets)
+        and all(
+            target.identity in late.matched_ids for target in targets
+            if target.current_status == "present" and target.matches_receipt is True
+        )
     )
     if not outside:
         scope = InvariantResult(

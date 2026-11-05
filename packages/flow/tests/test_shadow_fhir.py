@@ -451,3 +451,35 @@ def test_a_moved_target_still_refutes_beside_unknown_invariant_history(
     env["calls"]["ev"] = {"invariants_unknown": True}
     env["sh"].run_rechecks(now=True)
     assert env["sh"].episodes[0].late_verdict == "REFUTED"
+
+
+
+@pytest.mark.parametrize("late", [False, True])
+def test_each_fhir_receipt_names_unknown_domain_and_its_own_hard_verdict(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch, late: bool
+) -> None:
+    _confirmed(env, monkeypatch)
+    ep = env["sh"].episodes[0]
+    initial = {
+        "status": "not_checked",
+        "outside_guarantee": [{
+            "name": "outside_receipt_intermediate_history", "status": "UNKNOWN",
+        }],
+    }
+    ep.result.evidence["hard_invariants"] = initial
+    ep.evidence["late_hard_invariants"] = {**initial, "status": "refuted"}
+    fields = env["sh"]._receipt_fields(ep, late)
+    assert fields["checked"]["frame"] == ("refuted" if late else "not_checked")
+    assert "outside_receipt_intermediate_history: UNKNOWN" in fields["scope"]["not_covered"]
+
+
+
+def test_missing_late_hard_observation_does_not_reuse_initial_held_claim(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _confirmed(env, monkeypatch)
+    ep = env["sh"].episodes[0]
+    ep.result.evidence["hard_invariants"] = {"status": "held"}
+    fields = env["sh"]._receipt_fields(ep, True)
+    assert fields["checked"]["frame"] == "not_checked"
+    assert "outside_receipt_intermediate_history: UNKNOWN" in fields["scope"]["not_covered"]
