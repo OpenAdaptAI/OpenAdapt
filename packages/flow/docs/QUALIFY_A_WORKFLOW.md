@@ -167,7 +167,9 @@ What each part does:
   lists inputs to suffix per campaign, so reruns against a database that was
   not reset do not collide.
 - **campaign**: the id written into the report, trials per case, the cases
-  (all six by default) and the policy `--certify` uses when given no name.
+  (all six by default) and the policy `--certify` uses when given no name
+  (`clinical-write` by default; `record-write` is the same gate for a system
+  of record that is not clinical).
 - **business_rules** (optional): rules the application itself enforces, which
   the workflow must not click through. The six cases inject faults; a
   business-rule case injects nothing. After the reset, `seed` (one of
