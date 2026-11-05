@@ -391,7 +391,7 @@ SERVER_FAULT_MODES: dict[str, str] = {
     "no_persist": "optimistic_success",
     "collateral": "unauthorized_side_effect",
 }
-"""The MockMed and MockLoan fault-server modes (``?fault=``) that produce the
+"""Fault-server modes (``?fault=``) of the bundled lab apps that produce the
 same wrong end state as a family here, so a packaged task's ``fault: <mode>``
 names a family. ``ok`` and ``idempotent`` are controls; ``timeout``,
 ``session`` and ``stale`` have no trajectory-edit counterpart."""

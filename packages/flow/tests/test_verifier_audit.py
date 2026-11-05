@@ -189,6 +189,23 @@ def test_resume_retries_harness_errors(tmp_path):
     assert all(c["status"] != "HARNESS_ERROR" for c in again["cells"])
 
 
+def test_resume_retries_a_control_the_scorer_errored_on(tmp_path):
+    run_audit(ToyPayments(), AuditConfig(out_dir=tmp_path, tasks=["pay-bob"]))
+    ledger = tmp_path / "cells.jsonl"
+    errored = {
+        "task": "pay-bob",
+        "family": "__control__",
+        "reason": "REFERENCE_NOT_ACCEPTED:ERROR",
+    }
+    failed = dict(errored, reason="REFERENCE_NOT_ACCEPTED:FAIL")
+    ledger.write_text(json.dumps(errored) + "\n")
+    again = run_audit(ToyPayments(), AuditConfig(out_dir=tmp_path, tasks=["pay-bob"]))
+    assert again["tasks_excluded"] == 0 and again["cells"]
+    ledger.write_text(json.dumps(failed) + "\n")
+    kept = run_audit(ToyPayments(), AuditConfig(out_dir=tmp_path, tasks=["pay-bob"]))
+    assert kept["tasks_excluded"] == 1 and not kept["cells"]
+
+
 @pytest.mark.parametrize(
     ("hits", "n", "lo", "hi"),
     [(0, 10, 0.0, 0.2775), (5, 10, 0.2366, 0.7634), (10, 10, 0.7225, 1.0)],

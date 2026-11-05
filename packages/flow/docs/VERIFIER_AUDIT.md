@@ -90,7 +90,7 @@ python -m openadapt_flow.verifier_audit run \
 
 The output directory holds `cells.jsonl` (an append-only ledger; a rerun
 resumes and does not rescore finished cells, but retries harness and scorer
-errors), `ledger.json` (the target, kit version, families and redaction mode;
+errors, including a task excluded only because the reference scorer errored), `ledger.json` (the target, kit version, families and redaction mode;
 a rerun with a different target or mode refuses), `report.json` and
 `REPORT.md`.
 Rates are per family, with Wilson 95% intervals, and are not pooled. The report

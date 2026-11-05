@@ -211,6 +211,18 @@ def _audit_family(
 _RETRY = ("HARNESS_ERROR", "SCORER_ERROR")
 
 
+def _control_errored(cell: dict[str, Any]) -> bool:
+    """An exclusion caused by the reference scorer erroring, not by its verdict.
+
+    A scorer crash or timeout says nothing about the reference, so resume runs
+    the control again instead of dropping the task for good. A FAIL verdict,
+    an effect that does not reproduce, or no effect at all stays excluded.
+    """
+    return cell.get("family") == "__control__" and str(cell.get("reason")).endswith(
+        (":ERROR", ":None")
+    )
+
+
 def _check_fingerprint(out_dir: Path, target: AuditTarget, cfg: AuditConfig) -> None:
     """Refuse to resume a ledger written for another target, family set or
     redaction mode: its cells are keyed only by (task, family)."""
@@ -308,7 +320,7 @@ def run_audit(target: AuditTarget, cfg: Optional[AuditConfig] = None) -> dict[st
             if line.strip():
                 cell = json.loads(line)
                 key = (cell["task"], cell["family"])
-                if cell.get("status") in _RETRY:
+                if cell.get("status") in _RETRY or _control_errored(cell):
                     done.pop(key, None)  # a later run may get past it
                 else:
                     done[key] = cell
