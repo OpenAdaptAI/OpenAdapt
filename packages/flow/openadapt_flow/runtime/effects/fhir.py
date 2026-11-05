@@ -49,6 +49,7 @@ from typing import Any, Optional, Protocol
 
 from openadapt_flow.fhir_read import (
     check_search_coverage,
+    check_search_outcome,
     fhir_read_headers,
     next_page_url,
     search_total,
@@ -360,6 +361,7 @@ class FhirEffectVerifier(VerifierAdapterBase):
         if bundle is None:
             return None
         out: list[dict[str, Any]] = []
+        outcomes: list[dict[str, Any]] = []
         matches = 0
         total: Optional[int] = None
         for _page in range(MAX_PAGES):
@@ -381,24 +383,18 @@ class FhirEffectVerifier(VerifierAdapterBase):
                     self.read_problem = "a Bundle entry has no resource"
                     return None
                 mode = (entry.get("search") or {}).get("mode")
-                if mode == "outcome" or (
-                    mode is None and resource.get("resourceType") == "OperationOutcome"
-                ):
-                    # A message about the search, not a record (Epic sends a
-                    # warning "returns no results" on an empty search). An
-                    # error in it means the set may be partial.
-                    issues = resource.get("issue") or []
-                    if not isinstance(issues, list) or any(
-                        not isinstance(i, dict)
-                        or i.get("severity") not in ("warning", "information")
-                        for i in issues
-                    ):
-                        self.read_problem = "the search returned an error outcome"
-                        return None
+                if mode == "outcome" or resource.get("resourceType") == "OperationOutcome":
+                    outcomes.append(resource)
                     continue
                 if mode != "include":
                     matches += 1
                 out.append(self._flatten(resource))
+            try:
+                for outcome in outcomes:
+                    check_search_outcome(outcome, has_matches=matches > 0)
+            except ValueError as exc:
+                self.read_problem = str(exc)
+                return None
             try:
                 next_url = next_page_url(bundle)
             except ValueError as exc:

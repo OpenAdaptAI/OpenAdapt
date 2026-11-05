@@ -74,8 +74,51 @@ def search_total(bundle: Mapping[str, Any], previous: Optional[int]) -> Optional
 
 
 def check_search_coverage(total: Optional[int], matches: int) -> None:
-    """An observable cap or contradictory count is incomplete, never absent."""
+    """Reject observed caps/count conflicts, without certifying native coverage.
+
+    No total or terminal page alone proves an uncapped search. The adapter
+    still needs an independently qualified native complete-search profile.
+    """
     if total is not None and total != matches:
         raise ValueError(
             f"the Bundle's total is {total}, the read returned {matches} matches"
         )
+
+
+def check_search_outcome(outcome: Mapping[str, Any], *, has_matches: bool) -> None:
+    """Only understood informational notes can accompany a complete search.
+
+    Severity alone and absence of a partial-results code are not completeness
+    evidence. A no-match message cannot coexist with actual matching records.
+    """
+    issues = outcome.get("issue")
+    if not isinstance(issues, list) or not issues:
+        raise ValueError("the search returned an unreadable outcome")
+    for issue in issues:
+        if not isinstance(issue, dict) or issue.get("severity") not in (
+            "warning",
+            "information",
+        ):
+            raise ValueError("the search returned an error outcome")
+        code = issue.get("code")
+        details = issue.get("details")
+        if (
+            code == "informational"
+            and details is None
+            and issue.get("diagnostics") is None
+        ):
+            continue
+        if code in ("informational", "not-found", "processing") and isinstance(
+            details, dict
+        ):
+            coding = details.get("coding")
+            no_match = isinstance(coding, list) and bool(coding) and all(
+                isinstance(item, dict)
+                and item.get("system")
+                == "http://terminology.hl7.org/CodeSystem/operation-outcome"
+                and item.get("code") == "MSG_NO_MATCH"
+                for item in coding
+            )
+            if no_match and not has_matches:
+                continue
+        raise ValueError("the search returned an unqualified or incomplete outcome")

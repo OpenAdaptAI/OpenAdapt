@@ -52,6 +52,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_valid
 
 from openadapt_flow.fhir_read import (
     check_search_coverage,
+    check_search_outcome,
     fhir_read_headers,
     next_page_url,
     search_total,
@@ -1110,21 +1111,23 @@ class FhirReader:
             if not isinstance(page, list):
                 raise Unreadable(f"{path}: entry is not a list")
             entries += [e for e in page if isinstance(e, dict)]
-            for e in page:
-                res = e.get("resource") if isinstance(e, dict) else None
-                if (e.get("search") or {}).get("mode") != "outcome" or not isinstance(
-                    res, dict
+            has_matches = any(
+                isinstance(e.get("resource"), dict)
+                and e["resource"].get("resourceType") != "OperationOutcome"
+                and (e.get("search") or {}).get("mode", "match") == "match"
+                for e in entries
+            )
+            for e in entries:
+                res = e.get("resource")
+                if not isinstance(res, dict) or (
+                    (e.get("search") or {}).get("mode") != "outcome"
+                    and res.get("resourceType") != "OperationOutcome"
                 ):
                     continue
-                # A warning ("no results") is a message; an error means the
-                # search may be partial, and a missed match is a duplicate.
-                issues = res.get("issue") or []
-                if not isinstance(issues, list) or any(
-                    not isinstance(i, dict)
-                    or i.get("severity") not in ("warning", "information")
-                    for i in issues
-                ):
-                    raise Unreadable(f"{path}: the search returned an error outcome")
+                try:
+                    check_search_outcome(res, has_matches=has_matches)
+                except ValueError as exc:
+                    raise Unreadable(f"{path}: {exc}") from exc
             try:
                 nxt = next_page_url(body)
                 if body.get("type") == "searchset":
@@ -1140,6 +1143,8 @@ class FhirReader:
                             )
                             for e in entries
                             if (e.get("search") or {}).get("mode", "match") == "match"
+                            and (e.get("resource") or {}).get("resourceType")
+                            != "OperationOutcome"
                         }
                     )
                     check_search_coverage(total, found)
@@ -1160,6 +1165,8 @@ class FhirReader:
             if (entry.get("search") or {}).get("mode", "match") != "match":
                 continue
             res = entry.get("resource")
+            if isinstance(res, dict) and res.get("resourceType") == "OperationOutcome":
+                continue
             if not isinstance(res, dict) or not res.get("id"):
                 raise Unreadable(f"{path}: an entry has no resource id")
             out.append(res)
