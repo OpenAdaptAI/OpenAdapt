@@ -31,6 +31,11 @@ Each lab host is a *profile*: a set of environment variables with the prefix
 ``winlab``), so a harness written for one lab host runs on another by
 changing that variable. Nothing here prints a credential. ``pywinrm`` is a lab
 dependency only and is imported lazily, so nothing ships with it.
+
+SSH commands default to a finite 600-second budget. The three desktop task
+preparation calls use 30 seconds. A local SSH timeout does not confirm guest
+exit: ``SSHTimeoutError`` retains ``MAY_STILL_RUN`` and requires reconciliation.
+It does not attempt remote cancellation.
 """
 
 from __future__ import annotations
@@ -83,6 +88,32 @@ _SSH_BOOTSTRAP = base64.b64encode(
 
 class WinRMLabError(RuntimeError):
     """A lab host command failed; carries the exit status and stderr tail."""
+
+
+class SSHTimeoutError(WinRMLabError):
+    """The local SSH deadline expired; the guest outcome remains unknown."""
+
+    def __init__(self, host: str, operation: str, timeout_s: float) -> None:
+        self.host = host
+        self.operation = operation
+        self.timeout_s = timeout_s
+        super().__init__(
+            f"{operation} over SSH to {host} timed out after {timeout_s:g}s; "
+            "guest state unknown (MAY_STILL_RUN); ownership unverified; "
+            "no cancellation attempted; reconciliation required"
+        )
+
+    def as_dict(self) -> dict[str, str | float | bool]:
+        """Retain the unknown guest outcome without payload or partial output."""
+        return {
+            "host": self.host,
+            "operation": self.operation,
+            "timeout_s": self.timeout_s,
+            "guest_state": "MAY_STILL_RUN",
+            "identity_verified": False,
+            "cancellation_attempted": False,
+            "reconciliation_required": True,
+        }
 
 
 @dataclass
@@ -221,7 +252,7 @@ class WinRMLab:
         remote_command: str,
         stdin: bytes = b"",
         *,
-        timeout_s: float = 60.0,
+        timeout_s: float = 600.0,
         operation: str = "PowerShell command",
     ) -> Result:
         if not math.isfinite(timeout_s) or timeout_s <= 0:
@@ -235,9 +266,7 @@ class WinRMLab:
             )
         except subprocess.TimeoutExpired:
             # The exception's own text repeats the command line.
-            raise WinRMLabError(
-                f"{operation} over SSH to {self.host} timed out after {timeout_s:g}s"
-            ) from None
+            raise SSHTimeoutError(self.host, operation, timeout_s) from None
         return Result(
             proc.returncode,
             proc.stdout.decode("utf-8", "replace"),
@@ -249,7 +278,7 @@ class WinRMLab:
         script: str,
         *,
         check: bool = True,
-        timeout_s: float = 60.0,
+        timeout_s: float = 600.0,
         operation: str = "PowerShell command",
     ) -> Result:
         if self._session is not None:
@@ -276,7 +305,15 @@ class WinRMLab:
             )
         return result
 
-    def run_cmd(self, command: str, *args: str, check: bool = True) -> Result:
+    def run_cmd(
+        self,
+        command: str,
+        *args: str,
+        check: bool = True,
+        timeout_s: float = 600.0,
+        operation: str = "guest command",
+    ) -> Result:
+        """Run a command, forwarding its finite budget and phase on SSH."""
         if self._session is not None:
             raw = self._session.run_cmd(command, list(args))
             result = Result(
@@ -289,7 +326,12 @@ class WinRMLab:
             quoted = " ".join(
                 "'" + a.replace("'", "''") + "'" for a in (command, *args)
             )
-            result = self.run_ps(f"& {quoted}; exit $LASTEXITCODE", check=False)
+            result = self.run_ps(
+                f"& {quoted}; exit $LASTEXITCODE",
+                check=False,
+                timeout_s=timeout_s,
+                operation=operation,
+            )
         if check and result.status != 0:
             raise WinRMLabError(
                 f"guest command exited {result.status}: {result.stderr[-600:]}"
