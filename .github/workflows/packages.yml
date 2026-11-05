@@ -116,6 +116,7 @@ jobs:
       flow: ${{ steps.classify.outputs.flow }}
       types: ${{ steps.classify.outputs.types }}
       agent: ${{ steps.classify.outputs.agent }}
+      verify: ${{ steps.classify.outputs.verify }}
       capture: ${{ steps.classify.outputs.capture }}
       privacy: ${{ steps.classify.outputs.privacy }}
       desktop: ${{ steps.classify.outputs.desktop }}
@@ -137,7 +138,7 @@ jobs:
         run: |
           set -euo pipefail
           all() {
-            for pkg in flow types agent capture privacy desktop tray program_graph weight; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
+            for pkg in flow types agent verify capture privacy desktop tray program_graph weight; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
             exit 0
           }
           case "$EVENT_NAME" in
@@ -170,6 +171,7 @@ jobs:
           types="$(hit "^packages/types/|$wf")"
           # The agent shim is tested against the in-tree core.
           agent="$(hit "^packages/(agent|flow|types)/|$wf")"
+          verify="$(hit "^packages/(verify|flow|types)/|$wf")"
           capture="$(hit "^packages/capture/|$wf")"
           privacy="$(hit "^packages/privacy/|$wf")"
           # Desktop bundles the program map from packages/program-graph.
@@ -186,6 +188,7 @@ jobs:
             echo "flow=$flow"
             echo "types=$types"
             echo "agent=$agent"
+            echo "verify=$verify"
             echo "capture=$capture"
             echo "privacy=$privacy"
             echo "desktop=$desktop"
@@ -324,6 +327,61 @@ jobs:
           uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Test
         run: pytest -q
+
+  verify:
+    name: verify facade (py${{ matrix.python-version }})
+    needs: scope
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.verify == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.12"]') }}
+    defaults:
+      run:
+        working-directory: packages/verify
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            packages/verify/uv.lock
+            packages/flow/uv.lock
+          cache-suffix: verify-py${{ matrix.python-version }}
+      - name: Install the facade against the in-tree core and SDK callbacks
+        # The broader core/dev lock wins shared dependency versions.
+        run: >-
+          python ../../scripts/ci/locked_install.py
+          --lock 'packages/verify[dev,openai,claude,mcp]'
+          --lock 'packages/flow[dev,agent,openai-agents,claude-agent-sdk]'
+          --editable packages/types --editable packages/flow --editable packages/verify
+      - name: Lint, format and types
+        run: |
+          python -m ruff check src tests scripts
+          python -m ruff format --check src tests scripts
+          python -m mypy src/openadapt_verify
+      - name: Independent-store and scripted SDK/MCP controls
+        run: |
+          python -m pytest -q --junitxml=tests.xml
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          cases = ET.parse("tests.xml").getroot().findall(".//testcase")
+          assert len(cases) == 20, "all independent-store controls must run"
+          assert not any(c.find("skipped") is not None for c in cases), "SDK/MCP controls must not skip"
+          PY
+      - name: Build and verify the public distribution
+        if: matrix.python-version == '3.12'
+        run: |
+          uv build --out-dir dist
+          python scripts/check_distribution.py --dist dist
+          python ../../scripts/check_source_boundary.py --repo OpenAdapt --root ../.. --dist dist
 
   flow-lint:
     name: flow core lint (ruff, mypy)
@@ -1411,6 +1469,7 @@ jobs:
       - scope
       - types
       - agent
+      - verify
       - flow-lint
       - flow-unit
       - flow-critical
@@ -1464,6 +1523,7 @@ jobs:
           selects = {
               "types": "types",
               "agent": "agent",
+              "verify": "verify",
               "flow-lint": "flow",
               "flow-unit": "flow",
               "flow-critical": "flow",

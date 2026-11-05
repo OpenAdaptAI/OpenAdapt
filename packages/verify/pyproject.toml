@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openadapt-verify"
+version = "0.1.0"
+description = "Verify an agent's writes through an independent system-of-record read path"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = "MIT"
+dependencies = [
+    "openadapt-flow[receipts]>=2.6.0,<3",
+    "cryptography>=50.0.0",
+]
+
+[project.optional-dependencies]
+openai = ["openadapt-flow[openai-agents]>=2.6.0,<3"]
+claude = ["openadapt-flow[claude-agent-sdk]>=2.6.0,<3"]
+mcp = ["openadapt-flow[agent]>=2.6.0,<3"]
+dev = ["pytest>=8", "ruff>=0.4", "mypy>=1.10", "build>=1.2"]
+
+[project.scripts]
+openadapt-verify = "openadapt_verify.cli:main"
+
+[project.urls]
+Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/verify"
+
+[tool.hatch.build]
+dev-mode-dirs = ["src"]
+
+[tool.hatch.build.targets.wheel]
+ignore-vcs = true
+exclude = ["**/__pycache__/**", "**/*.pyc"]
+packages = ["src/openadapt_verify"]
+core-metadata-version = "2.4"
+
+[tool.hatch.build.targets.sdist]
+ignore-vcs = true
+include = ["/src/openadapt_verify/**/*.py", "/tests/*.py", "/scripts/*.py", "/README.md", "/LICENSE", "/pyproject.toml", "/uv.lock"]
+core-metadata-version = "2.4"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.mypy]
+files = ["src/openadapt_verify"]
+ignore_missing_imports = true
+
+[tool.uv]
+required-environments = [
+    "python_version == '3.10' and sys_platform == 'linux'",
+    "python_version == '3.10' and sys_platform == 'darwin'",
+    "python_version == '3.10' and sys_platform == 'win32'",
+]

@@ -111,7 +111,7 @@ def test_types_allows_only_pydantic_and_itself() -> None:
 
 
 def test_every_package_has_a_budget_and_no_allow_forbid_overlap() -> None:
-    assert set(PACKAGES) == {"types", "privacy", "capture", "flow", "agent", "desktop", "launcher"}
+    assert set(PACKAGES) == {"types", "privacy", "capture", "flow", "agent", "verify", "desktop", "launcher"}
     for label, budget in PACKAGES.items():
         assert {"path", "module", "max_mb", "max_dists", "allow"} <= set(budget), label
         overlap = [
