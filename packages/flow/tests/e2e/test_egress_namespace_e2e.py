@@ -32,13 +32,24 @@ def _invoke(
     return subprocess.run(argv, env=env, capture_output=True, text=True, timeout=30)
 
 
-def _namespace(*argv: str) -> list[str]:
+def _namespace(*argv: str, forward: dict[str, str] | None = None) -> list[str]:
+    """Build a sudo + env + wrapper argv that does not rely on sudo -E.
+
+    GitHub-hosted runners ignore sudo -E ("preserving the entire environment
+    is not supported"). Every variable the child needs must appear as an
+    explicit KEY=VAL on the env command line.
+    """
+    assignments = [f"PATH={os.environ['PATH']}"]
+    if forward:
+        for key, value in forward.items():
+            if key == "PATH":
+                continue
+            assignments.append(f"{key}={value}")
     return [
         "sudo",
         "-n",
-        "-E",
         "env",
-        f"PATH={os.environ['PATH']}",
+        *assignments,
         str(WRAPPER),
         *argv,
     ]
@@ -236,14 +247,18 @@ def test_owned_pathname_unix_relay_remains_outside_the_ip_restriction(
                     f"\ntry: s.connect({address!r}); raise AssertionError('host TCP reachable')"
                     "\nexcept OSError as exc: assert exc.errno in (errno.ENETUNREACH,errno.ECONNREFUSED), exc"
                 )
-                direct = _invoke(_namespace(sys.executable, "-c", direct_code), env=env)
+                direct = _invoke(
+                    _namespace(sys.executable, "-c", direct_code, forward=env), env=env
+                )
                 observations["direct"] = {
                     "returncode": direct.returncode,
                     "stdout": direct.stdout,
                     "stderr": direct.stderr,
                 }
                 assert direct.returncode == 0, direct.stderr
-                isolated = _invoke(_namespace(sys.executable, "-c", code), env=env)
+                isolated = _invoke(
+                    _namespace(sys.executable, "-c", code, forward=env), env=env
+                )
                 observations["isolated"] = {
                     "returncode": isolated.returncode,
                     "stdout": isolated.stdout,

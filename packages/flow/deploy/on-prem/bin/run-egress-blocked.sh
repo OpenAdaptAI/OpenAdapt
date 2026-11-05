@@ -16,8 +16,10 @@
 # sudo user, with OPENADAPT_EGRESS_BLOCKED=netns as a test-location hint. Tests
 # independently check the restriction rather than trusting that variable.
 #
-# Usage (as root, normally through sudo -E so PATH and HOME are kept):
-#   sudo -E env "PATH=$PATH" deploy/on-prem/bin/run-egress-blocked.sh CMD [ARGS...]
+# Usage (as root). Pass every needed variable on the env command line; do not
+# rely on sudo -E (GitHub-hosted runners ignore it):
+#   sudo -n env "PATH=$PATH" "HOME=$HOME" KEY=VAL \
+#     deploy/on-prem/bin/run-egress-blocked.sh CMD [ARGS...]
 #
 # Exit code: the command's, or 2 when the namespace cannot be set up.
 

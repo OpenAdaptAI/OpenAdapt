@@ -607,7 +607,7 @@ jobs:
         # must still reach VERIFIED with no Python-hook refusal recorded.
         # A native-child control measures the hook observation boundary.
         run: |
-          sudo -E env "PATH=$PATH" "HOME=$HOME" \
+          sudo -n env "PATH=$PATH" "HOME=$HOME" \
             deploy/on-prem/bin/run-egress-blocked.sh \
             python -m pytest -v tests/e2e/test_egress_blocked_e2e.py \
             --basetemp=runs/ci-onprem-egress --junitxml=runs/onprem-egress-junit.xml
