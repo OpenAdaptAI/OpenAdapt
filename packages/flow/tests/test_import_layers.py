@@ -4,8 +4,10 @@
 four forbidden groups: app-specific, benchmark, desktop-UI, and lab and
 harness code. The checks here read every module's imports from its source, so
 nothing is imported to run them. A lazy import inside a function counts: it
-runs on the same code path, just later. Imports a package ``__getattr__``
-re-exports count where a caller asks for the name.
+runs on the same code path, just later. So does ``importlib.import_module`` or
+``__import__`` with a literal module name; one built at run time can't be
+read. Imports a package ``__getattr__`` re-exports (including through a
+``_LAZY_EXPORTS``-style table) count where a caller asks for the name.
 
 Core may not import a forbidden module directly, with no exceptions. Core may
 not reach one through any chain of ``openadapt_flow`` imports either; an edge
@@ -42,16 +44,163 @@ def _module_names(root: Path, package: str) -> dict[str, Path]:
     return mods
 
 
-def _lazy_exports(tree: ast.Module, module: str) -> dict[str, str]:
-    """Names a package ``__getattr__`` imports on demand, mapped to modules."""
+_DYNAMIC = {"import_module", "__import__"}
 
-    out: dict[str, str] = {}
+
+def _str(node: ast.AST | None) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
+
+
+def _arg(call: ast.Call, index: int, keyword: str) -> ast.AST | None:
+    if len(call.args) > index:
+        return call.args[index]
+    return next((k.value for k in call.keywords if k.arg == keyword), None)
+
+
+def _dynamic_targets(node: ast.AST, module: str, *, is_package: bool) -> list[str]:
+    """Modules a call ``import_module(...)`` or ``__import__(...)`` loads, when
+    its module name is a string literal; ``[]`` when it can't be read."""
+
+    if not isinstance(node, ast.Call) or not node.args:
+        return []
+    func = node.func
+    called = (
+        func.id
+        if isinstance(func, ast.Name)
+        else func.attr
+        if isinstance(func, ast.Attribute)
+        else None
+    )
+    name = _str(node.args[0])
+    if called not in _DYNAMIC or not name:
+        return []
+    if called == "import_module" and name.startswith("."):
+        package = _arg(node, 1, "package")
+        if _str(package):
+            base = _str(package)
+        elif isinstance(package, ast.Name) and package.id == "__name__":
+            base = module
+        elif isinstance(package, ast.Name) and package.id == "__package__":
+            base = module if is_package else module.rpartition(".")[0]
+        else:
+            return []
+        level = len(name) - len(name.lstrip("."))
+        parts = base.split(".")
+        parts = parts[: len(parts) - (level - 1)]
+        name = ".".join(parts + ([name.lstrip(".")] if name.lstrip(".") else []))
+    out = [name]
+    if called == "__import__":
+        fromlist = _arg(node, 3, "fromlist")
+        if isinstance(fromlist, (ast.List, ast.Tuple)):
+            out += [f"{name}.{_str(e)}" for e in fromlist.elts if _str(e)]
+    return out
+
+
+def _const_table(node: ast.AST) -> dict[str, str]:
+    """A dict literal of strings, or ``{n: "mod" for n in ("a", "b")}``."""
+
+    if isinstance(node, ast.Dict):
+        return {
+            _str(k): _str(v)
+            for k, v in zip(node.keys, node.values)
+            if _str(k) and _str(v)
+        }
+    if (
+        isinstance(node, ast.DictComp)
+        and len(node.generators) == 1
+        and isinstance(node.generators[0].target, ast.Name)
+        and isinstance(node.key, ast.Name)
+        and node.key.id == node.generators[0].target.id
+        and _str(node.value)
+        and isinstance(node.generators[0].iter, (ast.Tuple, ast.List))
+    ):
+        names = [_str(e) for e in node.generators[0].iter.elts]
+        return {n: _str(node.value) for n in names if n}
+    return {}
+
+
+def _module_tables(tree: ast.Module) -> dict[str, dict[str, str]]:
+    """Top-level string tables (``_LAZY_EXPORTS = {...}`` and its ``.update``)."""
+
+    tables: dict[str, dict[str, str]] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target, value = node.targets[0], node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            target, value = node.target, node.value
+        elif (
+            isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Attribute)
+            and node.value.func.attr == "update"
+            and isinstance(node.value.func.value, ast.Name)
+            and len(node.value.args) == 1
+        ):
+            name = node.value.func.value.id
+            tables.setdefault(name, {}).update(_const_table(node.value.args[0]))
+            continue
+        else:
+            continue
+        if isinstance(target, ast.Name):
+            tables[target.id] = _const_table(value)
+    return tables
+
+
+def _guard_names(test: ast.AST) -> set[str]:
+    """String literals an ``if`` compares against: ``name == "X"``, ``in (...)``."""
+
+    found: set[str] = set()
+    for sub in ast.walk(test):
+        if isinstance(sub, ast.Compare):
+            for side in [sub.left, *sub.comparators]:
+                elts = (
+                    side.elts
+                    if isinstance(side, (ast.Tuple, ast.List, ast.Set))
+                    else [side]
+                )
+                found |= {_str(e) for e in elts if _str(e)}
+    return found
+
+
+def _lazy_exports(tree: ast.Module, module: str) -> dict[str, set[str]]:
+    """Names a package ``__getattr__`` imports on demand, mapped to modules.
+
+    Read from ``from m import n`` (name ``n``), ``import a.b`` and literal
+    ``import_module``/``__import__`` calls (the module's last name, any
+    ``as`` name, and every name an enclosing ``if`` compares against), and
+    the string tables ``__getattr__`` reads, such as ``_LAZY_EXPORTS``.
+    """
+
+    out: dict[str, set[str]] = {}
+    tables = _module_tables(tree)
+
+    def add(key: str, target: str) -> None:
+        out.setdefault(key, set()).add(target)
+
+    def visit(node: ast.AST, guards: set[str]) -> None:
+        if isinstance(node, ast.ImportFrom):
+            for target in _from_targets(node, module, is_package=True):
+                add(target.rpartition(".")[2], target)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                for key in {alias.name.rpartition(".")[2], alias.asname, *guards}:
+                    if key:
+                        add(key, alias.name)
+        elif isinstance(node, ast.Name) and node.id in tables:
+            for key, target in tables[node.id].items():
+                add(key, target)
+        for target in _dynamic_targets(node, module, is_package=True):
+            for key in {target.rpartition(".")[2], *guards}:
+                add(key, target)
+        inner = guards | _guard_names(node.test) if isinstance(node, ast.If) else guards
+        for child in ast.iter_child_nodes(node):
+            visit(child, inner)
+
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and node.name == "__getattr__":
-            for sub in ast.walk(node):
-                if isinstance(sub, ast.ImportFrom):
-                    for target in _from_targets(sub, module, is_package=True):
-                        out[target.rpartition(".")[2]] = target
+            visit(node, set())
     return out
 
 
@@ -102,8 +251,9 @@ def build_graph(root: Path, package: str) -> Graph:
                 raw = _from_targets(node, name, is_package=is_package)
                 prefix = raw[-1]
                 for alias in node.names:
-                    if alias.name in lazy.get(prefix, {}):
-                        raw.append(lazy[prefix][alias.name])
+                    raw.extend(sorted(lazy.get(prefix, {}).get(alias.name, ())))
+            else:
+                raw = _dynamic_targets(node, name, is_package=is_package)
             for target in raw:
                 if target == "benchmark" or target.startswith("benchmark."):
                     out.setdefault("benchmark", set()).add(node.lineno)
@@ -299,3 +449,82 @@ def test_checker_follows_a_lazy_package_reexport(tmp_path: Path) -> None:
     assert transitive_violations(graph, _PLANTED_CONTRACT) == [
         "planted.core.engine > planted.helper > planted.ui.window"
     ]
+
+
+# Dynamic imports with a literal module name are imports too.
+
+
+@pytest.mark.parametrize(
+    "engine",
+    [
+        "import importlib\n"
+        "def go():\n    return importlib.import_module('planted.demo.app')\n",
+        "from importlib import import_module\n"
+        "def go():\n    return import_module('.app', 'planted.demo')\n",
+        "from importlib import import_module\n"
+        "def go():\n    return import_module('planted.demo.app', package=None)\n",
+        "import sys\ndef go():\n    return __import__('planted.demo.app')\n",
+        "import sys\ndef go():\n    return __import__('planted.demo', fromlist=['app'])\n",
+    ],
+)
+def test_checker_finds_a_literal_dynamic_import(tmp_path: Path, engine: str) -> None:
+    graph = _plant(tmp_path, **{"core/engine.py": engine})
+    assert direct_violations(graph, _PLANTED_CONTRACT) == [
+        "planted.core.engine -> planted.demo.app (app, lines [3])",
+    ]
+
+
+def test_checker_ignores_a_dynamic_import_it_cannot_read(tmp_path: Path) -> None:
+    engine = (
+        "import importlib\ndef go(name):\n    return importlib.import_module(name)\n"
+    )
+    graph = _plant(tmp_path, **{"core/engine.py": engine})
+    assert direct_violations(graph, _PLANTED_CONTRACT) == []
+
+
+@pytest.mark.parametrize(
+    "ui",
+    [
+        # import x.y inside the package __getattr__
+        "def __getattr__(name):\n"
+        "    if name == 'Window':\n"
+        "        import planted.ui.window\n"
+        "        return planted.ui.window.window\n"
+        "    raise AttributeError(name)\n",
+        # a guard name that is not the module's own name
+        "def __getattr__(name):\n"
+        "    if name in ('Window', 'other'):\n"
+        "        import planted.ui.window as w\n"
+        "        return w.window\n"
+        "    raise AttributeError(name)\n",
+        # a literal import_module inside __getattr__
+        "import importlib\n"
+        "def __getattr__(name):\n"
+        "    if name == 'Window':\n"
+        "        return importlib.import_module('planted.ui.window').window\n"
+        "    raise AttributeError(name)\n",
+        # a _LAZY_EXPORTS table, as openadapt_flow.runtime does
+        "from importlib import import_module\n"
+        "_LAZY_EXPORTS = {'TEXT': 'planted.ui.text'}\n"
+        "_LAZY_EXPORTS.update({n: 'planted.ui.window' for n in ('Window', 'Frame')})\n"
+        "def __getattr__(name):\n"
+        "    module_name = _LAZY_EXPORTS.get(name)\n"
+        "    if module_name is None:\n"
+        "        raise AttributeError(name)\n"
+        "    return getattr(import_module(module_name), name)\n",
+    ],
+)
+def test_checker_follows_every_kind_of_lazy_reexport(tmp_path: Path, ui: str) -> None:
+    # Window is an exported name, not a module, so only the lazy table finds it.
+    graph = _plant(
+        tmp_path,
+        **{"ui/__init__.py": ui, "helper.py": "from planted.ui import Window\n"},
+    )
+    assert transitive_violations(graph, _PLANTED_CONTRACT) == [
+        "planted.core.engine > planted.helper > planted.ui.window"
+    ]
+    clean = _plant(
+        tmp_path,
+        **{"ui/__init__.py": ui, "helper.py": "from planted.ui import text\n"},
+    )
+    assert transitive_violations(clean, _PLANTED_CONTRACT) == []
