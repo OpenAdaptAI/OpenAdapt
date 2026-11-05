@@ -24,3 +24,20 @@ is unchanged.
    (c), so it is deferred.
 
 Thresholds and arms are otherwise unchanged.
+
+# Amendment 2: category of this round's results
+
+Written on 2026-11-05, while the measured arms were running and before any
+result was read.
+
+- The held-out seed is **not** the seed behind the #1919 NO-GO. That
+  measurement used the private `test_registered_controls.py` fixture. This
+  round's pages come from `PREREGISTRATION_2.md`'s own hash and were never
+  rendered before the code freeze at `5de7433a9`.
+- The code changes in this round were informed by the NO-GO results: the
+  refusal breakdown, the post-click heal quarantine, and the two dark-theme
+  geometry points. The outline threshold was checked on the first round's
+  development pages.
+- These arms are therefore labelled **development**, not confirmatory. No GO
+  claim is made from them. A GO needs a fresh held-out seed drawn after the
+  code freeze, under a new pre-registration.
