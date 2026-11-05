@@ -61,11 +61,20 @@ _INSTRUMENT_JS = """
 (() => {
   const pairs = (f, s) => Array.from(s ? new FormData(f, s) : new FormData(f)).map(
     ([k, v]) => [k, typeof v === 'string' ? v : (v && v.size === 0 && v.name === '' ? '' : '<file>')]);
-  const state = { programmatic: [], channels: [], clickTargets: [], pairs,
+  const native = (f, key) => Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, key).get.call(f);
+  const submission = (f, s) => ({
+    fields: pairs(f, s),
+    destination: s && s.hasAttribute('formaction') ? s.formAction : native(f, 'action'),
+    method: s && s.hasAttribute('formmethod') ? s.formMethod : native(f, 'method'),
+    encoding: s && s.hasAttribute('formenctype') ? s.formEnctype : native(f, 'enctype'),
+    target: (s && s.hasAttribute('formtarget') ? s.formTarget : native(f, 'target'))
+      || (document.querySelector('base[target]') || {}).target || ''
+  });
+  const state = { programmatic: [], channels: [], clickTargets: [], pairs, submission,
                   submits: [], reached: 0, prevented: 0 };
   Object.defineProperty(window, '__openadaptFormEval', { value: state });
   HTMLFormElement.prototype.submit = function () {
-    try { state.programmatic.push(pairs(this)); } catch (e) { state.programmatic.push(null); }
+    try { state.programmatic.push(submission(this, null)); } catch (e) { state.programmatic.push(null); }
   };
   window.open = function (url) { state.channels.push('window.open ' + String(url || '')); return null; };
   for (const name of ['WebSocket', 'EventSource', 'RTCPeerConnection', 'webkitRTCPeerConnection']) {
@@ -89,22 +98,21 @@ _INSTRUMENT_JS = """
 #: Finds the form, marks it for the locators, and adds the last submit
 #: listener (it records each submit that gets through, then stops it).
 _SETUP_JS = """
-({ actionPath, leaf, formAction }) => {
+({ actionPath, formAction }) => {
   const state = window.__openadaptFormEval;
   if (!state) return { unevaluable: 'the scratch page could not be instrumented' };
-  const form = formAction ? Array.from(document.forms).find((f) =>
-    new URL(f.getAttribute('action') || location.href, location.href).pathname === formAction
-  ) : Array.from(document.forms).find((f) => {
-    const p = new URL(f.getAttribute('action') || location.href, location.href).pathname;
-    return p === actionPath || (leaf && p.split('/').pop() === leaf);
+  const forms = Array.from(document.forms).filter((f) => {
+    const p = new URL(f.getAttribute('action') || location.href, document.baseURI).pathname;
+    return p === (formAction || actionPath);
   });
-  if (!form) return { unevaluable: 'the scratch page has no form that posts to the save' };
+  if (forms.length !== 1) return { unevaluable: 'the scratch page has no unique form that posts to the save' };
+  const form = forms[0];
   form.setAttribute('data-openadapt-eval', '1');
   window.addEventListener('submit', (e) => {
     if (e.target !== form) return;
     state.reached += 1;
     if (e.defaultPrevented) { state.prevented += 1; return; }
-    try { state.submits.push(state.pairs(form, e.submitter || null)); } catch (x) { state.submits.push(state.pairs(form)); }
+    try { state.submits.push(state.submission(form, e.submitter || null)); } catch (x) { state.submits.push(null); }
     e.preventDefault();
   });
   return {};
@@ -181,6 +189,33 @@ def _summary(method: str, url: str) -> str:
     return f"{method} {up.urlsplit(url).path}"
 
 
+def _destination(url: str) -> Optional[tuple[str, str, int, str, str]]:
+    """An explicit HTTP destination, never an assumed local origin."""
+    try:
+        parts = up.urlsplit(url)
+        if (
+            parts.scheme not in ("http", "https")
+            or not parts.hostname
+            or parts.username
+            or parts.password
+        ):
+            return None
+        port = (
+            parts.port
+            if parts.port is not None
+            else (443 if parts.scheme == "https" else 80)
+        )
+        return (
+            parts.scheme,
+            parts.hostname.lower(),
+            port,
+            parts.path or "/",
+            parts.query,
+        )
+    except (TypeError, ValueError):
+        return None
+
+
 def _control(scratch: Any, name: str) -> Any:
     return scratch.locator(f"form[data-openadapt-eval] [name={json.dumps(name)}]").first
 
@@ -197,16 +232,19 @@ def evaluate_form(
     confirm: Optional[str] = None,
     step_writes: tuple[str, ...] = (),
     form_action: Optional[str] = None,
+    encoding: str = URLENCODED,
     timeout_s: float = 20.0,
     settle_ms: int = 300,
 ) -> FormEvaluation:
-    """Run the form's script in a scratch copy of ``page``'s session.
+    """Observe native submission and script in a scratch session copy.
 
     ``fields`` are the values the person would type or pick (the API step's
     ``param`` and ``select_label`` fields). ``form_action`` is the form's own
     action when the page's script sends the save to ``action_path`` instead
     of submitting the form: the form is found by it, and the script's
-    request to ``action_path`` (blocked) is the save compared. Never raises:
+    request to ``action_path`` (blocked) is the save compared. The path may
+    include its bound query. Native submitter overrides and script requests
+    must match the complete destination, method and ``encoding``. Never raises:
     a failure to run the script is an ``unevaluable`` result.
     """
 
@@ -216,7 +254,9 @@ def evaluate_form(
     dialogs: list[str] = []
     stray: list[str] = []
     phase = {"loaded": False}
-    origin = up.urlsplit(base_url).netloc
+    origin = _destination(base_url)
+    expected_url = up.urljoin(base_url + form_path, action_path)
+    expected = _destination(expected_url)
     reads = {r.split(" ", 1)[1] for r in submitter_requests if r.startswith("GET ")}
     #: Exact script and stylesheet URLs the form page loaded.
     loaded_code: set[str] = set()
@@ -253,7 +293,12 @@ def evaluate_form(
     def route(r: Any) -> None:
         req = r.request
         parts = up.urlsplit(req.url)
-        same_origin = parts.netloc == origin
+        destination = _destination(req.url)
+        same_origin = (
+            destination is not None
+            and origin is not None
+            and destination[:3] == origin[:3]
+        )
         if req.resource_type in ("image", "media", "font") and (
             not phase["loaded"] or _STATIC.search(parts.path)
         ):
@@ -275,6 +320,7 @@ def evaluate_form(
         except Exception:  # noqa: BLE001 - a binary body has no text
             body = None
         content_type = (req.headers or {}).get("content-type", "")
+        request_encoding = content_type.split(";", 1)[0].strip().lower()
         if body is not None and content_type.startswith("multipart/form-data"):
             # Compared as fields; a body that carries a file isn't comparable.
             from openadapt_flow.network_capture import parse_multipart
@@ -294,11 +340,14 @@ def evaluate_form(
                 "path": parts.path,
                 "body": body,
                 "content_type": content_type,
+                "encoding": request_encoding,
+                "save": same_origin
+                and destination == expected
+                and req.method == "POST",
+                "step": same_origin and not parts.query and what in step_writes,
             }
         )
-        if what in step_writes or (
-            form_action and req.method == "POST" and parts.path == action_path
-        ):
+        if late[-1]["step"] or late[-1]["save"]:
             # A declared step write, or the save a page script sends itself:
             # it never leaves, but the page sees it accepted, as it was in
             # the recording (a refused request would raise in the script).
@@ -319,6 +368,10 @@ def evaluate_form(
         )
 
     try:
+        if origin is None or expected is None or origin[:3] != expected[:3]:
+            return done(
+                "unevaluable", "the save has no bound same-origin HTTP destination"
+            )
         live = page.context
         browser = getattr(live, "browser", None)
         if browser is None:
@@ -378,8 +431,7 @@ def evaluate_form(
         setup = scratch.evaluate(
             _SETUP_JS,
             {
-                "actionPath": action_path,
-                "leaf": action_path.rsplit("/", 1)[-1],
+                "actionPath": expected[3],
                 "formAction": form_action,
             },
         )
@@ -391,10 +443,11 @@ def evaluate_form(
         scratch.wait_for_timeout(settle_ms)
         pre = scratch.evaluate(_PRESUBMIT_JS)
         if submitter:
-            target = scratch.locator(submitter).first
-            if target.count() == 0:
+            target = scratch.locator(submitter)
+            if target.count() != 1:
                 return done(
-                    "unevaluable", f"the scratch page has no {submitter} to click"
+                    "unevaluable",
+                    f"the scratch page has no unique {submitter} to click",
                 )
             target.click(timeout=_ACT_TIMEOUT_MS)
         elif pre.get("buttonScript"):
@@ -419,7 +472,7 @@ def evaluate_form(
             )
         scratch.wait_for_timeout(settle_ms)
         state = _collect(scratch)
-        if confirm and not _submitted(state, late, action_path):
+        if confirm and not _submitted(state, late):
             # The recorded reads ran; the person confirmed in what they
             # showed. Confirm the same way, wherever the control is.
             try:
@@ -433,14 +486,15 @@ def evaluate_form(
                 state = _collect(scratch)
         # The declared step writes the page's own script sent (blocked), with
         # their bodies, for the caller to compare; they aren't stray sends.
-        writes = [b for b in late if b["what"] in step_writes]
+        writes = [b for b in late if b["step"]]
         verdict = _verdict(
             state,
-            [b for b in late if b["what"] not in step_writes],
+            [b for b in late if not b["step"]],
             errors,
             dialogs,
             stray,
-            action_path,
+            expected_url,
+            encoding,
             done,
         )
         verdict.writes = [
@@ -546,10 +600,8 @@ def _frame_with(scratch: Any, selector: str) -> Any:
     return None
 
 
-def _submitted(
-    state: dict[str, Any], late: list[dict[str, Any]], action_path: str
-) -> bool:
-    saves = [b for b in late if b["method"] == "POST" and b["path"] == action_path]
+def _submitted(state: dict[str, Any], late: list[dict[str, Any]]) -> bool:
+    saves = [b for b in late if b["save"]]
     return bool(state.get("submits") or state.get("programmatic") or saves)
 
 
@@ -563,12 +615,13 @@ def _verdict(
     errors: list[str],
     dialogs: list[str],
     stray: list[str],
-    action_path: str,
+    expected_url: str,
+    encoding: str,
     done: Any,
 ) -> FormEvaluation:
     """Decide from what the page did; any doubt is a reason for the GUI."""
 
-    saves = [b for b in late if b["method"] == "POST" and b["path"] == action_path]
+    saves = [b for b in late if b["save"]]
     others = [b for b in late if b not in saves]
     if others:
         sent = sorted({b["what"] for b in others})
@@ -598,16 +651,32 @@ def _verdict(
     # What the page submits, at the moment it submits; exactly once.
     bodies: list[tuple[str, list[tuple[str, str]]]] = []
     for save in saves:
-        if save["body"] is None or "x-www-form-urlencoded" not in save["content_type"]:
+        if (
+            save["body"] is None
+            or "x-www-form-urlencoded" not in save["content_type"]
+            or save["encoding"] != encoding
+        ):
             return done(
                 "unevaluable", "the page submitted a body the API step can't compare"
             )
         bodies.append(("POST", up.parse_qsl(save["body"], keep_blank_values=True)))
-    bodies += [("listener", _pairs(b)) for b in state.get("submits") or []]
-    for b in state.get("programmatic") or []:
-        if b is None:
-            return done("unevaluable", "the page's own submit could not be read")
-        bodies.append(("form.submit()", _pairs(b)))
+    for via, entries in (
+        ("listener", state.get("submits") or []),
+        ("form.submit()", state.get("programmatic") or []),
+    ):
+        for entry in entries:
+            if (
+                not isinstance(entry, dict)
+                or _destination(entry.get("destination")) != _destination(expected_url)
+                or entry.get("method", "").lower() != "post"
+                or entry.get("encoding") != encoding
+                or entry.get("target", "").lower() not in ("", "_self")
+            ):
+                return done(
+                    "unevaluable",
+                    "the page's effective submission destination, method or encoding differs from the API save",
+                )
+            bodies.append((via, _pairs(entry.get("fields"))))
     if len(bodies) > 1:
         return done(
             "unevaluable",
