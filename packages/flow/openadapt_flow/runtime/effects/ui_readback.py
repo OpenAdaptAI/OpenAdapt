@@ -50,6 +50,7 @@ REFUTED. Nothing here guesses CONFIRMED.
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import os
 import re
@@ -81,6 +82,7 @@ from openadapt_flow.runtime.effects.ui_read_checks import (
     assess_independence,
     judge_history,
     record_digest_payload,
+    view_key,
 )
 from openadapt_flow.verification import VerificationTier
 
@@ -1192,10 +1194,13 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
 
         if self._backend is None:
             return False, False, None
-        url = getattr(self._backend, "url", None)
-        if url is None:
-            return True, False, None
+        missing = object()
         try:
+            url = getattr(self._backend, "url", missing)
+            if url is missing:
+                if inspect.getattr_static(self._backend, "url", missing) is not missing:
+                    return True, True, None
+                return True, False, None
             value = url() if callable(url) else url
         except Exception:  # noqa: BLE001 - unknown, never a pass by itself
             return True, True, None
@@ -1287,7 +1292,7 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         """
 
         final = self._target.spec.final
-        if final is None or not self._params:
+        if final is None:
             return None
         from openadapt_flow.runtime.effects.deferred_report import (
             UI_READBACK_FORMAT,
@@ -1299,11 +1304,38 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
             digest = self._params_digest(ledger)
             for entry in ledger.entries():
                 if (
-                    entry.state == "waiting"
-                    and entry.report_format == UI_READBACK_FORMAT
-                    and entry.params_digest == digest
+                    entry.state != "waiting"
+                    or entry.report_format != UI_READBACK_FORMAT
                 ):
+                    continue
+                if entry.params_digest == digest:
                     return entry.id
+                if entry.params_digest is None:
+                    # Older fixed-target entries omitted the empty-input digest.
+                    # A changed config alone cannot release the same record.
+                    # Unknown or incomplete legacy identity requires a stop.
+                    locator = entry.locator or {}
+                    reader = self._target.spec.identity.reader
+                    old_identity, old_readable = normalize_value(
+                        locator.get("identity"), reader
+                    )
+                    identity, readable = normalize_value(
+                        self._target.identity_value, reader
+                    )
+                    other_target = (
+                        view_key(self._target.record_url) is not None
+                        and view_key(locator.get("record_url")) is not None
+                        and old_readable
+                        and readable
+                        and bool(old_identity)
+                        and bool(identity)
+                        and old_identity != identity
+                    )
+                    if (
+                        not other_target
+                        or entry.report_format_digest == self._final_digest()
+                    ):
+                        return entry.id
         except (OSError, ValueError):
             return "unreadable-ledger"  # can't rule it out: refuse
         return None
@@ -1371,7 +1403,7 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
                     "identity": target.identity_value,
                 },
                 record_payload=record_digest_payload(page.records, exclude=exclude),
-                params_digest=self._params_digest(ledger) if self._params else None,
+                params_digest=self._params_digest(ledger),
             )
         except (OSError, ValueError) as exc:
             return (
@@ -1992,7 +2024,20 @@ def settle_ui_readback(
     def work(session: ReadbackSession) -> list[tuple[Any, Any, str, str]]:
         decisions = []
         for entry, target in due:
-            page = verifier._normalize(session.read(target), target)  # type: ignore[call-arg]
+            raw = session.read(target)  # type: ignore[call-arg]
+            independence = assess_independence(
+                own_browser=session.facts.own_browser,
+                fresh_context=session.facts.fresh_context,
+                signed_in=session.facts.signed_in,
+                fetched=raw.fetched,
+                read_url=raw.view_url or target.record_url,
+                acting_url=None,
+                acting_bound=False,
+                acting_has_url=False,
+            )
+            if not independence.qualifies:
+                continue  # refused document: keep waiting until the deadline
+            page = verifier._normalize(raw, target)
             if not page.readable:
                 continue  # can't tell now; the deadline still applies
             if page.not_found or not page.records:

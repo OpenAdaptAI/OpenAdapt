@@ -169,7 +169,7 @@ def test_reads_the_reference_from_the_run_url_and_opens_that_record() -> None:
 def test_reads_the_reference_from_the_run_screen() -> None:
     driver = RecordingDriver(_saved())
     vision = FakeVision("Claim submitted", "Reference: CLM-20431", "Thank you")
-    run = RunSession()
+    run = RunSession(url=BASE + "/submitted")
     verifier = _verifier(
         driver,
         backend=run,
@@ -243,7 +243,7 @@ def test_the_same_reference_shown_twice_is_one_reference() -> None:
     driver = RecordingDriver(_saved())
     verifier = _verifier(
         driver,
-        backend=RunSession(),
+        backend=RunSession(url=BASE + "/submitted"),
         vision=FakeVision("Reference: CLM-20431", "Your Reference: CLM-20431"),
         source="screen",
         pattern=SCREEN_PATTERN,

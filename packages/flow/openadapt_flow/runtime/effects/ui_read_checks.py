@@ -23,8 +23,9 @@ Independence (:func:`assess_independence`). A read counts toward
 A read that fails any rule can't confirm a save: a CONFIRMED becomes
 INDETERMINATE (the run halts for a person). A contradiction still refutes. A
 rule that can't be established from the evidence is recorded as ``unknown``;
-``distinct_view`` is unknown only when no acting session is bound (the
-verifier used outside a run) and then doesn't block.
+``distinct_view`` can be unknown when a bound browser's URL is unavailable.
+That cannot qualify; only a standalone read with no acting session bound may
+leave the comparison unknown.
 
 History (:class:`HistoryView`). Where the application has an audit, history
 or activity screen, the separate session reads it before and after the save.
@@ -127,16 +128,20 @@ class ReadIndependence:
     basis: dict[str, str] = field(default_factory=dict)
     #: Seconds the separate session spent (launch, sign-in, reads).
     read_seconds: Optional[float] = None
+    #: A bound browser must positively establish a distinct view.
+    acting_bound: bool = False
 
     @property
     def qualifies(self) -> bool:
-        """All three rules hold; ``distinct_view`` may be unknown (no acting
-        session bound), never ``no``."""
+        """All three rules hold; only an unbound read may leave its view unknown."""
 
         return (
             self.separate_session == "yes"
             and self.requery == "yes"
-            and self.distinct_view != "no"
+            and (
+                self.distinct_view == "yes"
+                or (self.distinct_view == "unknown" and not self.acting_bound)
+            )
         )
 
     @property
@@ -146,7 +151,9 @@ class ReadIndependence:
             out.append("separate_session")
         if self.requery != "yes":
             out.append("requery")
-        if self.distinct_view == "no":
+        if self.distinct_view == "no" or (
+            self.distinct_view == "unknown" and self.acting_bound
+        ):
             out.append("distinct_view")
         return out
 
@@ -228,6 +235,7 @@ def assess_independence(
         distinct_view=distinct,
         basis=basis,
         read_seconds=read_seconds,
+        acting_bound=acting_bound,
     )
 
 

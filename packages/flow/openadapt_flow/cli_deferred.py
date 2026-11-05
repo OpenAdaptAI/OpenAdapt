@@ -150,7 +150,7 @@ def cmd_deferred_settle(args: argparse.Namespace) -> int:
         for item in settled_ui:
             word = "VERIFIED" if item.state == "verified" else "RECONCILIATION_REQUIRED"
             print(f"{item.id}: {word} ({item.reason}; code {item.code})")
-        waiting = sum(
+        waiting_count = sum(
             1
             for ui_spec in ui_specs
             for e in PendingLedger(ui_spec.final.ledger).entries()
@@ -165,7 +165,7 @@ def cmd_deferred_settle(args: argparse.Namespace) -> int:
                     f"{entry.id}: ALERT provisional for over {hours:g} h "
                     f"(saved {entry.created_at}; deadline {entry.deadline})"
                 )
-        print(f"Settled {len(settled_ui)}; {waiting} still waiting.")
+        print(f"Settled {len(settled_ui)}; {waiting_count} still waiting.")
         return 0
     try:
         spec = _from_config(args.config)
