@@ -2649,6 +2649,7 @@ def recheck_problem(
     params: Mapping[str, object],
     run_record: Mapping[str, Any],
     verified: bool = True,
+    target_ids: Sequence[str] = (),
 ) -> Optional[str]:
     """A plain sentence when ``state`` can't be used as this contract's
     write by this executor with these params; None when it can.
@@ -2671,8 +2672,6 @@ def recheck_problem(
     targeted = cfg.frame.targeted if cfg.frame is not None else None
     purpose = (evidence.get("frame") or {}).get(late_write.EVIDENCE_KEY, {}).get("purpose")
     targeted_reconciliation = targeted is not None and purpose == "read_only_reconciliation"
-    if verified and receipt.get("outcome") != "verified" and not targeted_reconciliation:
-        return "the write was not verified, so there is nothing to recheck"
     if receipt.get("execution_id") != state["execution_id"]:
         return "the recheck state belongs to another run"
     salt = bytes.fromhex(str(state["salt"]))
@@ -2710,15 +2709,6 @@ def recheck_problem(
     if schedule.get("post_state_sha256") != digest:
         return "the recheck state is not the post-save state its receipt names"
     is_verified = receipt.get("outcome") == "verified"
-    if targeted_reconciliation and not (
-        receipt.get("outcome") == "reconciliation_required"
-        and (receipt.get("checked") or {}).get("delta") == "held"
-        and (receipt.get("checked") or {}).get("source") in ("held", "instruction")
-        and (receipt.get("checked") or {}).get("frame") != "refuted"
-        and (evidence.get("authorization") or {}).get("self_approved") is not True
-        and ((receipt.get("checked") or {}).get("coverage") or {}).get("policy", "met") == "met"
-    ):
-        return "the targeted reconciliation lacks independently bound landed evidence"
     if dict(schedule) != late_write.schedule(post, after_s, digest, due=is_verified or targeted_reconciliation, purpose=purpose if targeted is not None else None):
         return (
             "the contract's recheck_after_s is not the one the receipt was issued under"
@@ -2766,6 +2756,25 @@ def recheck_problem(
             or row.get("effect_contract_hash") != effect_digest
         ):
             return "the params are not the ones the write was verified with"
+    if targeted is not None:
+        from openadapt_flow.runtime.effects.targeted import targeted_locators_problem
+
+        problem = targeted_locators_problem(
+            targeted, post["targeted"], tuple(target_ids), params, salt
+        )
+        if problem is not None:
+            return problem
+    if verified and receipt.get("outcome") != "verified" and not targeted_reconciliation:
+        return "the write was not verified, so there is nothing to recheck"
+    if targeted_reconciliation and not (
+        receipt.get("outcome") == "reconciliation_required"
+        and (receipt.get("checked") or {}).get("delta") == "held"
+        and (receipt.get("checked") or {}).get("source") in ("held", "instruction")
+        and (receipt.get("checked") or {}).get("frame") != "refuted"
+        and (evidence.get("authorization") or {}).get("self_approved") is not True
+        and ((receipt.get("checked") or {}).get("coverage") or {}).get("policy", "met") == "met"
+    ):
+        return "the targeted reconciliation lacks independently bound landed evidence"
     return None
 
 
@@ -2837,6 +2846,55 @@ def _read_history(
         return verifier
 
     return read_history(cfg.frame.history, since, build, _mac_key(salt))
+
+
+def recheck_excuses(
+    cfg: VerifyConfig,
+    state: Mapping[str, Any],
+    *,
+    run_record: Mapping[str, Any],
+    excused: Sequence[tuple[Mapping[str, Any], Mapping[str, object]]] = (),
+) -> tuple[list[Any], int]:
+    """Validate later-write proofs without opening the system of record.
+
+    Shared with canonical pre-read fencing; these are the existing binding,
+    distinct-execution and temporal checks, before any native read can begin.
+    """
+
+    post = dict(state["post_state"])
+    if excused and cfg.frame is not None:
+        if cfg.frame.targeted is not None:
+            raise VerifyRunError("targeted rechecks require authenticated per-record provenance")
+        if cfg.frame.history is not None:
+            raise VerifyRunError(
+                "history rechecks require source provenance; later-write windows cannot excuse events"
+            )
+    since = late_write.parse_time(str(post["read_at"]))
+    windows: list[Any] = []
+    unjudged = 0
+    for i, (other, other_params) in enumerate(excused):
+        problem = recheck_problem(
+            cfg, other, params=other_params, run_record=run_record, verified=False
+        )
+        if problem is not None:
+            raise VerifyRunError(f"excused_by[{i}] is not a later write: {problem}")
+        if other["execution_id"] == state["execution_id"]:
+            raise VerifyRunError(f"excused_by[{i}] is the write being rechecked")
+        started = other["baseline"].get("baseline_read_at")
+        try:
+            later = late_write.parse_time(str(started)) >= since
+        except ValueError:
+            later = False
+        if not later:
+            raise VerifyRunError(
+                f"excused_by[{i}] started before this write's post-save read"
+            )
+        window = _later_window(other)
+        if window is not None:
+            windows.append(window)
+        else:
+            unjudged += 1
+    return windows, unjudged
 
 
 def recheck_run(
@@ -2916,31 +2974,9 @@ def recheck_run(
         )
         horizon = min(instant(feed["through"]) for feed in now["feeds"].values())
         return verdict, late_write.format_time(horizon)
-    since = late_write.parse_time(str(post["read_at"]))
-    windows: list[Any] = []
-    unjudged = 0
-    for i, (other, other_params) in enumerate(excused):
-        problem = recheck_problem(
-            cfg, other, params=other_params, run_record=run_record, verified=False
-        )
-        if problem is not None:
-            raise VerifyRunError(f"excused_by[{i}] is not a later write: {problem}")
-        if other["execution_id"] == state["execution_id"]:
-            raise VerifyRunError(f"excused_by[{i}] is the write being rechecked")
-        started = other["baseline"].get("baseline_read_at")
-        try:
-            later = late_write.parse_time(str(started)) >= since
-        except ValueError:
-            later = False
-        if not later:
-            raise VerifyRunError(
-                f"excused_by[{i}] started before this write's post-save read"
-            )
-        window = _later_window(other)
-        if window is not None:
-            windows.append(window)
-        else:
-            unjudged += 1
+    windows, unjudged = recheck_excuses(
+        cfg, state, run_record=run_record, excused=excused
+    )
     salt = bytes.fromhex(str(state["salt"]))
     detail: dict[str, Any] = {FRAME_DB_DETAIL: dict(post["snapshot"])}
     if post.get("audit") is not None:

@@ -51,7 +51,9 @@ that carries ``recheck_due_at`` is provisional until the recheck runs.
 
 from __future__ import annotations
 
+import copy
 import enum
+import fcntl
 import hashlib
 import json
 import os
@@ -91,6 +93,7 @@ from openadapt_flow.verify_run import (
     capture_baseline,
     parse_verify_config,
     receipt_sha256,
+    recheck_excuses,
     recheck_problem,
     recheck_run,
     recheck_state,
@@ -2146,6 +2149,23 @@ def _withdraw_recheck(payload: Mapping[str, Any]) -> None:
     os.close(fd)
 
 
+def _refute_recheck(payload: Mapping[str, Any]) -> None:
+    """Durably retain a trusted refutation under its existing state digest."""
+
+    _durable_recheck_marker(payload, "refuted", existing_ok=True)
+
+
+def _recheck_refuted(payload: Mapping[str, Any]) -> bool:
+    # Only absence means no prior refutation. Permission/I/O errors must
+    # propagate, so an unreadable authority can never permit a pass.
+    path = _issued_dir("rechecks") / f"{_state_digest(payload)}.refuted"
+    try:
+        path.stat()
+    except FileNotFoundError:
+        return False
+    return True
+
+
 def _recheck_withdrawn(payload: Any) -> bool:
     try:
         return (
@@ -2367,49 +2387,342 @@ def recheck(
     :class:`RecheckNotDue` before the due time.
 
     A write that lands after the recheck's read (``read_at``) is not seen.
+    A trusted refutation is terminal for this issued state, including with
+    ``ledger=None`` or an alternate ledger. Removing the unexplained change
+    cannot confirm it later. A recorded person review may permit a new
+    attempt; it never reactivates the old refuted state.
+
+    The existing state authority durably fences each native read before it
+    begins. An interrupted read or incomplete authority/ledger update stays
+    fenced for review. A fully classified UNCERTAIN with completed durable
+    handling may recover; an unfinished operation never expires on retry.
     """
 
-    late, trusted = _judge_recheck(
+    prepared = _prepare_recheck(
         contract, write, params=params, actor=actor, excused_by=excused_by, wait=wait
     )
+    if isinstance(prepared, RecheckResult):
+        return _hold_after_recheck(ledger, write, prepared, trusted=False)
+    return _run_recheck(ledger, write, prepared)
+
+
+@dataclass(frozen=True)
+class _PreparedRecheck:
+    """An issued, caller-bound state and its validated native reader.
+
+    Producers must finish every pure scope/binding check before constructing
+    this. The callback is internal; public recheck never accepts caller code.
+    """
+
+    state: RecheckState
+    base: RecheckResult
+    read: Callable[[], tuple[RecheckResult, bool]]
+
+
+@dataclass(frozen=True)
+class _RecheckApplication:
+    result: RecheckResult
+    complete: bool
+
+
+def _sync_recheck_directory(path: Path) -> None:
+    directory = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+
+
+def _durable_recheck_marker(
+    payload: Mapping[str, Any], suffix: str, *, existing_ok: bool = False
+) -> None:
+    path = _issued_dir("rechecks") / f"{_state_digest(payload)}.{suffix}"
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        if not existing_ok:
+            raise VerifierError("an earlier recheck did not finish") from None
+        descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    _sync_recheck_directory(path.parent)
+
+
+def _unfinished_recheck(payload: Mapping[str, Any]) -> bool:
+    path = _issued_dir("rechecks") / f"{_state_digest(payload)}.inflight"
+    try:
+        path.stat()
+    except FileNotFoundError:
+        return False
+    return True
+
+
+def _finish_recheck(payload: Mapping[str, Any]) -> None:
+    path = _issued_dir("rechecks") / f"{_state_digest(payload)}.inflight"
+    path.unlink()
+    _sync_recheck_directory(path.parent)
+
+
+def _run_recheck(
+    ledger: Any,
+    write: WriteResult | RecheckState,
+    prepared: _PreparedRecheck,
+) -> RecheckResult:
+    """Own one validated state's fence, native read and outcome application.
+
+    Never remove a fence in a generic exception/finally handler. A failed
+    terminal write, incomplete read or ledger completion stays fenced across
+    processes; no expiry or option can reactivate this state.
+    """
+
+    state, base = prepared.state, prepared.base
+    bound = write if isinstance(write, WriteResult) else state
+
+    def stopped(reason: str) -> RecheckResult:
+        late = _replace(base, reasons=[reason])
+        return _hold_after_recheck(ledger, bound, late, trusted=True)
+
+    try:
+        path = _issued_dir("rechecks") / _state_digest(state.payload)
+        authority = path.open("rb")
+    except Exception as exc:  # noqa: BLE001 - no authority, no read
+        return stopped(f"the recheck authority is unavailable ({type(exc).__name__})")
+    with authority:
+        try:
+            fcntl.flock(authority.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if not _recheck_issued(state.payload) or _recheck_withdrawn(state.payload):
+                raise VerifierError("the issued state is no longer available")
+            terminal = _recheck_refuted(state.payload)
+            if _unfinished_recheck(state.payload):
+                return stopped(
+                    "an earlier recheck did not finish; a person must review "
+                    "the write; only a new attempt can use a new issued state"
+                )
+            _durable_recheck_marker(state.payload, "inflight")
+        except Exception as exc:  # noqa: BLE001 - failed fence permits no read
+            return stopped(
+                f"the pre-read recheck fence is unavailable "
+                f"({type(exc).__name__}); nothing was read again"
+            )
+        try:
+            late, classified = prepared.read()
+        except Exception as exc:  # noqa: BLE001 - keep the acknowledged fence
+            return stopped(
+                f"the native recheck did not finish ({type(exc).__name__}); "
+                "the issued state remains fenced for person review"
+            )
+        if not classified:
+            late = _replace(
+                late,
+                outcome="UNCERTAIN" if late.outcome == "CONFIRMED" else late.outcome,
+                frame="not_checked" if late.outcome == "CONFIRMED" else late.frame,
+                reasons=[
+                    *late.reasons,
+                    "the native recheck did not complete; "
+                    "the issued state remains fenced for person review",
+                ],
+            )
+        applied = _apply_recheck_locked(
+            ledger, bound, late, state=state, terminal=terminal
+        )
+        if not classified or not applied.complete:
+            return applied.result
+        try:
+            _finish_recheck(state.payload)
+        except Exception as exc:  # noqa: BLE001 - never claim completed success
+            try:
+                _durable_recheck_marker(state.payload, "inflight", existing_ok=True)
+            except Exception:  # noqa: BLE001 - completed outcome; no generic clear
+                pass
+            if applied.result.outcome == "REFUTED":
+                return _replace(
+                    applied.result,
+                    reasons=[
+                        *applied.result.reasons,
+                        f"terminal refutation recorded, but fence cleanup failed "
+                        f"({type(exc).__name__}); a person must check the write",
+                    ],
+                )
+            return _replace(
+                applied.result,
+                outcome="UNCERTAIN",
+                frame="not_checked",
+                reasons=[
+                    *applied.result.reasons,
+                    f"the completed recheck's fence could not be closed "
+                    f"({type(exc).__name__}); no completion is claimed",
+                ],
+            )
+        return applied.result
+
+
+def _apply_recheck_locked(
+    ledger: Any,
+    write: WriteResult | RecheckState,
+    late: RecheckResult,
+    *,
+    state: RecheckState,
+    terminal: bool,
+) -> _RecheckApplication:
+    complete = True
+    if late.outcome == "CONFIRMED":
+        if terminal:
+            late = _replace(
+                late,
+                outcome="REFUTED",
+                frame="refuted",
+                reasons=[
+                    *late.reasons,
+                    "an earlier trusted recheck refuted this issued state; "
+                    "a person must review the write; this state cannot be confirmed",
+                ],
+            )
+        elif (state.payload.get("receipt") or {}).get("outcome") != "verified":
+            # A late scoped observation does not establish the initially
+            # unknown write as a whole. This comes from the immutable issued
+            # receipt, so None/alternate ledgers cannot change the boundary.
+            late = _replace(
+                late,
+                outcome="UNCERTAIN",
+                reasons=[
+                    *late.reasons,
+                    "the initial write was UNKNOWN; the scoped late observation "
+                    "does not confirm it or release its review",
+                ],
+            )
+        else:
+            applied = _mark_rechecked(ledger, write, late)
+            late, complete = applied.result, applied.complete
+    if late.outcome == "REFUTED":
+        try:
+            _refute_recheck(state.payload)
+        except Exception as exc:  # noqa: BLE001 - acknowledged fence stays
+            complete = False
+            late = _replace(
+                late,
+                reasons=[
+                    *late.reasons,
+                    f"the terminal refutation could not be recorded "
+                    f"({type(exc).__name__}); the issued state remains fenced",
+                ],
+            )
     if late.outcome != "CONFIRMED":
-        late = _hold_after_recheck(ledger, write, late, trusted=trusted)
-    else:
-        _mark_rechecked(ledger, write, late)
-    return late
+        held = _record_recheck_hold(ledger, write, late, trusted=True)
+        return _RecheckApplication(held.result, complete and held.complete)
+    return _RecheckApplication(late, complete)
 
 
 def _mark_rechecked(
     ledger: Any, write: WriteResult | RecheckState, late: RecheckResult
-) -> None:
-    """Record on the write's ledger attempt that a recheck confirmed it, so
-    ``openadapt verify ledger list`` no longer shows a recheck owed and a
-    retry is handed a result that is no longer provisional.
+) -> _RecheckApplication:
+    """Confirm only an exact attempt that has never been refuted.
 
-    Best effort: the verdict stands either way. If nothing is recorded, the
-    list keeps showing the recheck as owed, which is the safe side.
+    A transient UNCERTAIN recheck may recover the same original confirmed
+    result, after a fresh trusted read. It cannot promote an initially
+    unknown write or reuse another attempt's receipt. No-ledger callers
+    still get the independent read; CLI completion separately requires
+    the exact ledger attempt to record the confirmation.
     """
 
+    def refused(reason: str, *, refuted: bool = False) -> _RecheckApplication:
+        return _RecheckApplication(
+            _replace(
+                late,
+                outcome="REFUTED" if refuted else "UNCERTAIN",
+                frame="refuted" if refuted else "not_checked",
+                reasons=[*late.reasons, reason],
+            ),
+            refuted,
+        )
+
+    def terminal(attempt: Any) -> bool:
+        return attempt.state == "held" or any(
+            event.get("event") == "resolved" and event.get("outcome") == "REFUTED"
+            for event in attempt.events
+        )
+
+    lease = None
     try:
         if isinstance(write, WriteResult):
-            write_id, key = write.write_id, write.write_key
-            if ledger is _NO_LEDGER and write.ledger is not None:
-                ledger = write.ledger
+            write_id = write.write_id
+            original = write.ledger
+            # An override may suppress updates, but cannot hide the original
+            # attempt's hold from this in-memory result.
+            if original is not None:
+                found = original.find_attempt(write_id)
+                if found is None:
+                    return refused("the original ledger has no exact write attempt")
+                if terminal(found[1]):
+                    return refused(
+                        "the original ledger holds this write as REFUTED; "
+                        "only a recorded person review may release a new attempt",
+                        refuted=True,
+                    )
+                if ledger is _NO_LEDGER:
+                    ledger = original
         else:
             receipt = write.payload.get("receipt") or {}
-            write_id, key = str(receipt.get("correlation_id") or ""), ""
+            write_id = str(receipt.get("correlation_id") or "")
         led = _resolve_ledger(ledger)
         if led is None or not write_id:
-            return
-        if key:
-            attempt = led.latest(key)
-        else:
-            found = led.find_attempt(write_id)
-            key, attempt = found if found is not None else ("", None)
+            return _RecheckApplication(late, True)  # intentional no-ledger read
+        found = led.find_attempt(write_id)
+        if found is None:
+            return _RecheckApplication(late, True)  # not CLI completion authority
+        key, _ = found
+        lease = led.backend.lease(key)
+        if lease is None:
+            return refused("the ledger attempt is in flight; no confirmation recorded")
+        attempt = led.latest(key)
         if attempt is None or attempt.attempt_id != write_id:
-            return
-        if (attempt.resolved or {}).get("outcome") != "CONFIRMED":
-            return
+            return refused("the ledger no longer names this exact write attempt")
+        if terminal(attempt):
+            return refused(
+                "the ledger already holds this write as REFUTED; "
+                "only a recorded person review may release a new attempt",
+                refuted=True,
+            )
+        prior = attempt.resolved or {}
+        if prior.get("outcome") != "CONFIRMED":
+            original_results = [
+                event
+                for event in attempt.events
+                if event.get("event") == "resolved"
+                and event.get("outcome") == "CONFIRMED"
+                and event.get("receipt_sha256") == late.receipt_sha256
+                and isinstance(event.get("result"), Mapping)
+            ]
+            if prior.get("via") != "recheck" or not original_results:
+                return _RecheckApplication(
+                    _replace(
+                        late,
+                        outcome="UNCERTAIN",
+                        reasons=[
+                            *late.reasons,
+                            "the exact ledger attempt has no earlier confirmation "
+                            "bound to this receipt; its review remains unresolved",
+                        ],
+                    ),
+                    True,
+                )
+            original_result = original_results[-1]
+            led.resolved(
+                key,
+                write_id,
+                outcome="CONFIRMED",
+                retry_safe=False,
+                landed=False,
+                review=False,
+                delivered=True,
+                via="recheck",
+                write_key_bound=bool(original_result.get("write_key_bound")),
+                receipt_sha256=late.receipt_sha256,
+                result=dict(original_result["result"]),
+            )
+        elif prior.get("receipt_sha256") != late.receipt_sha256:
+            return refused("the ledger confirmation belongs to another receipt")
         led.rechecked(
             key,
             write_id,
@@ -2417,8 +2730,15 @@ def _mark_rechecked(
             read_at=late.read_at,
             receipt_sha256=late.receipt_sha256 or None,
         )
-    except Exception:  # noqa: BLE001 - the list keeps showing it owed
-        return
+    except Exception as exc:  # noqa: BLE001 - unreadable/unrecorded ledger never passes
+        return refused(
+            f"the ledger could not record confirmation ({type(exc).__name__}); "
+            "a person must check the write"
+        )
+    finally:
+        if lease is not None:
+            lease.release()
+    return _RecheckApplication(late, True)
 
 
 def _hold_after_recheck(
@@ -2428,6 +2748,16 @@ def _hold_after_recheck(
     *,
     trusted: bool = True,
 ) -> RecheckResult:
+    return _record_recheck_hold(ledger, write, late, trusted=trusted).result
+
+
+def _record_recheck_hold(
+    ledger: Any,
+    write: WriteResult | RecheckState,
+    late: RecheckResult,
+    *,
+    trusted: bool = True,
+) -> _RecheckApplication:
     """Resolve the write's ledger attempt again with the recheck's outcome,
     for review: ``REFUTED`` holds it, ``UNCERTAIN`` keeps it uncertain.
     Either way a retry is not handed the earlier ``CONFIRMED``.
@@ -2453,20 +2783,24 @@ def _hold_after_recheck(
         key = ""
         digest = receipt_sha256(receipt) if receipt else None
 
-    def unheld(why: str) -> RecheckResult:
-        return _replace(
-            late,
-            reasons=[
-                *late.reasons,
-                f"no ledger attempt was re-resolved ({why}); hold this write by "
-                "hand so a retry isn't handed the earlier CONFIRMED",
-            ],
+    def unheld(why: str, *, complete: bool = True) -> _RecheckApplication:
+        return _RecheckApplication(
+            _replace(
+                late,
+                reasons=[
+                    *late.reasons,
+                    f"no ledger attempt was re-resolved ({why}); hold this write by "
+                    "hand so a retry isn't handed the earlier CONFIRMED",
+                ],
+            ),
+            complete,
         )
 
     if not trusted and not isinstance(write, WriteResult):
         # A WriteResult names its own attempt; a saved state that failed
         # validation could name another write's.
         return unheld("the saved recheck state failed validation")
+    lease = None
     try:
         led = _resolve_ledger(ledger)
         if led is None:
@@ -2482,21 +2816,41 @@ def _hold_after_recheck(
             if len(found) != 1:
                 return unheld("this ledger has no attempt with the write's id")
             key = found[0]
+        lease = led.backend.lease(key)
+        if lease is None:
+            return unheld("the ledger attempt is in flight", complete=False)
         attempt = led.latest(key)
         if attempt is None:
-            return unheld("this ledger has no attempt with the write's id")
+            return unheld(
+                "this ledger has no attempt with the write's id", complete=False
+            )
         if attempt.attempt_id != write_id:
             return unheld("a newer attempt of this write is in the ledger")
         prior = attempt.resolved or {}
+        if attempt.released or prior.get("via") == "person":
+            return _RecheckApplication(
+                _replace(
+                    late,
+                    reasons=[
+                        *late.reasons,
+                        "a person already reviewed this attempt; "
+                        "the recorded review was left unchanged",
+                    ],
+                ),
+                True,
+            )
         if prior.get("outcome") == "REFUTED" and late.outcome != "REFUTED":
             # An earlier recheck refuted it: a later UNCERTAIN doesn't soften
             # that. The attempt stays held as it is.
-            return _replace(
-                late,
-                reasons=[
-                    *late.reasons,
-                    "the ledger already holds this write as REFUTED; left as is",
-                ],
+            return _RecheckApplication(
+                _replace(
+                    late,
+                    reasons=[
+                        *late.reasons,
+                        "the ledger already holds this write as REFUTED; left as is",
+                    ],
+                ),
+                True,
             )
         reason = "; ".join(late.reasons) or "the recheck did not confirm the write"
         led.resolved(
@@ -2521,15 +2875,21 @@ def _hold_after_recheck(
             },
         )
     except Exception as exc:  # noqa: BLE001 - the verdict stands; say so
-        return _replace(
-            late,
-            reasons=[
-                *late.reasons,
-                f"the ledger could not record it ({type(exc).__name__}); hold "
-                "this write by hand",
-            ],
+        return _RecheckApplication(
+            _replace(
+                late,
+                reasons=[
+                    *late.reasons,
+                    f"the ledger could not record it ({type(exc).__name__}); hold "
+                    "this write by hand",
+                ],
+            ),
+            False,
         )
-    return late
+    finally:
+        if lease is not None:
+            lease.release()
+    return _RecheckApplication(late, True)
 
 
 #: ``recheck_problem`` sentences that fault the recheck call (the params or
@@ -2558,7 +2918,7 @@ def _recheck_refusal(problem: str) -> str:
     return f"{problem}, so the write can't be rechecked"
 
 
-def _judge_recheck(
+def _prepare_recheck(
     contract: Contract,
     write: WriteResult | RecheckState,
     *,
@@ -2566,10 +2926,17 @@ def _judge_recheck(
     actor: Actor,
     excused_by: Sequence[WriteResult | RecheckState],
     wait: bool,
-) -> tuple[RecheckResult, bool]:
-    """The recheck's result, and whether the state passed validation."""
+) -> _PreparedRecheck | RecheckResult:
+    """Bind every input without opening the native system of record."""
 
-    state = write.recheck if isinstance(write, WriteResult) else write
+    original = write.recheck if isinstance(write, WriteResult) else write
+    state = (
+        RecheckState(copy.deepcopy(original.payload), path=original.path,
+                     target_ids=tuple(original.target_ids))
+        if original is not None
+        else None
+    )
+    params = copy.deepcopy(dict(params))
     receipt = state.payload.get("receipt") if state is not None else None
     if (
         state is None
@@ -2581,8 +2948,7 @@ def _judge_recheck(
             "contract schedules no history or database recheck"
         )
     run_record = actor.run_record()
-    cfg = contract.config
-    spec = cfg.frame
+    cfg = copy.deepcopy(contract.config)
     post = state.payload.get("post_state")
     base = RecheckResult(
         outcome="UNCERTAIN",
@@ -2599,12 +2965,12 @@ def _judge_recheck(
         else "the write's result was downgraded from CONFIRMED to UNCERTAIN"
         if _recheck_withdrawn(state.payload)
         else None
-    ) or recheck_problem(cfg, state.payload, params=params, run_record=run_record)
+    ) or recheck_problem(
+        cfg, state.payload, params=params, run_record=run_record,
+        target_ids=state.target_ids,
+    )
     if problem is not None:
-        return (
-            _replace(base, reasons=[_recheck_refusal(problem)]),
-            False,
-        )
+        return _replace(base, reasons=[_recheck_refusal(problem)])
     wait_s = seconds_until(state.due_at)
     if wait_s > 0:
         if not wait:
@@ -2619,16 +2985,43 @@ def _judge_recheck(
                 "settle after its save, so what it wrote can't be told apart; "
                 "reconcile it before rechecking this write"
             )
-        if not _recheck_issued(later.payload):
+        later_payload = copy.deepcopy(later.payload)
+        later_params = copy.deepcopy(later.params)
+        if not _recheck_issued(later_payload):
             raise VerifierError(
                 f"excused_by[{i}] was not issued under this state directory"
             )
-        if later.params is None:
+        if later_params is None:
             raise VerifierError(
                 f"excused_by[{i}] has no params: load it with RecheckState.load"
                 "(path, params=...)"
             )
-        excused.append((later.payload, later.params))
+        excused.append((later_payload, later_params))
+    try:
+        recheck_excuses(cfg, state.payload, run_record=run_record, excused=excused)
+    except VerifyRunError as exc:
+        raise VerifierError(str(exc)) from exc
+    return _PreparedRecheck(
+        state,
+        base,
+        lambda: _read_recheck(
+            cfg, state, base, params=params, run_record=run_record, excused=excused
+        ),
+    )
+
+
+def _read_recheck(
+    cfg: VerifyConfig,
+    state: RecheckState,
+    base: RecheckResult,
+    *,
+    params: Mapping[str, object],
+    run_record: Mapping[str, Any],
+    excused: Sequence[tuple[Mapping[str, Any], Mapping[str, object]]],
+) -> tuple[RecheckResult, bool]:
+    """The native result and whether a complete classification returned."""
+
+    spec = cfg.frame
     try:
         verdict, read_at = recheck_run(
             cfg, state.payload, params=params, run_record=run_record, excused=excused,
@@ -2644,7 +3037,7 @@ def _judge_recheck(
                     f"the database could not be read again ({type(exc).__name__})"
                 ],
             ),
-            True,
+            False,
         )
     evidence = verdict.evidence(spec) if spec is not None else {}
     reasons: list[str] = []

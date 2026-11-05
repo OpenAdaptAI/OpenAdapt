@@ -293,7 +293,7 @@ def test_a_later_verified_write_excuses_its_own_rows(
     # Without the excuse, the next patient's rows are unexplained.
     assert _recheck(contract, first).outcome == "REFUTED"
     late = _recheck(contract, first, excused_by=[second])
-    assert late.outcome == "CONFIRMED", late.reasons
+    assert late.outcome == "REFUTED", late.reasons
     assert late.excused == 1
 
 
@@ -398,7 +398,7 @@ def test_a_removal_a_verified_later_window_explained_is_excused(
     assert second.verified, second.reasons  # the nurse's delete, attributed
     assert _recheck(contract, first).outcome == "REFUTED"
     late = _recheck(contract, first, excused_by=[second])
-    assert late.outcome == "CONFIRMED", late.reasons
+    assert late.outcome == "REFUTED", late.reasons
 
 
 def test_a_removal_no_later_window_recorded_refutes(
@@ -1119,3 +1119,33 @@ def test_a_later_uncertain_recheck_does_not_replace_a_held_refuted(
     assert attempt is not None and attempt.resolved["outcome"] == "REFUTED"
     with pytest.raises(verifier.WriteHeld):
         begin_write(contract, _params(2), actor=BOT, write_key="k-keep")
+
+
+def test_a_later_verified_write_excuses_its_own_rows_before_any_refutation(
+    tmp_path: Path, due_now: None
+) -> None:
+    contract, db, first = _first(tmp_path)
+    second = _save(contract, db, 3)
+    assert second.verified, second.reasons
+    # Supply the bound proof before any terminal refutation.
+    late = _recheck(contract, first, excused_by=[second])
+    assert late.outcome == "CONFIRMED", late.reasons
+    assert late.excused == 1
+
+
+def test_a_removal_a_verified_later_window_explained_is_excused_before_any_refutation(
+    tmp_path: Path, due_now: None
+) -> None:
+    contract, db, first = _first(tmp_path)
+    before = begin_write(contract, _params(3), actor=BOT)
+    _sql(
+        db,
+        *_save_sql(3),
+        "DELETE FROM history_data WHERE pid = 1",
+        "INSERT INTO log (user, patient_id, event, tbl) "
+        "VALUES ('nurse', 1, 'delete', 'history_data')",
+    )
+    second = verify_write(before)
+    assert second.verified, second.reasons  # the nurse's delete, attributed
+    late = _recheck(contract, first, excused_by=[second])
+    assert late.outcome == "CONFIRMED", late.reasons
