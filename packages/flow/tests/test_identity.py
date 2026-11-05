@@ -347,6 +347,23 @@ class TestBandMatch:
         assert tokenize("  Jane   Li \n panel ") == ["jane", "li", "panel"]
         assert tokenize("") == []
 
+    def test_comma_period_name_punctuation_is_ocr_noise(self):
+        # Recorded thin-band context often stores "Smith." while the live
+        # band (or another engine) returns "Smith," — same patient row.
+        match = band_match(
+            "100512 Smith. John 01/15/1980 Active",
+            "100512 Smith, John 01/15/1980 Active",
+        )
+        assert match.coverage == 1.0
+        assert match.contradicted_chars == 0
+        assert match.unexplained_name_tokens == 0
+        # A real near-name sibling must still mismatch.
+        bad = band_match(
+            "100512 Smith. John 01/15/1980 Active",
+            "100512 Smith, Joan 01/15/1980 Active",
+        )
+        assert bad.contradicted_chars > 0 or bad.unexplained_name_tokens > 0
+
 
 class TestOperatingPoint:
     """Pin the ROC-chosen decision parameters and their boundaries
@@ -455,6 +472,14 @@ class TestHelpers:
         assert coverage("abcxyzdef", "abc123def") == pytest.approx(6 / 9)
         assert coverage("abcdef", "abcdef") == 1.0
         assert coverage("", "x") == 0.0
+
+    def test_squash_drops_comma_period(self):
+        # Thin identity-band crops make RapidOCR read "Smith," as "Smith."
+        # (Windows native); both must compare equal so glyph abstain is not
+        # overwritten by a false punctuation mismatch.
+        assert squash("Smith,") == squash("Smith.")
+        assert squash("Smith, John") == "smithjohn"
+        assert squash("Jr.") == "jr"
 
     def test_band_region_clamps_to_viewport(self):
         assert band_region((500, 10), 64, (1280, 800)) == (0, 0, 1280, 64)
