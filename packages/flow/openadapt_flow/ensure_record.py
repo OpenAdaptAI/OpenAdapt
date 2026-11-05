@@ -1008,8 +1008,22 @@ def _when(value: Any) -> Optional[datetime]:
 # -- snapshots -------------------------------------------------------------------
 
 
+class _BaselineRuntime:
+    """Authority is process-local and is never part of a data snapshot."""
+
+    __slots__ = ("_pending_authority",)
+
+    def __getstate__(self) -> dict[str, Any]:
+        # dataclasses.asdict sees only data fields; pickle/copy use this state.
+        return dict(vars(self))
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        vars(self).update(state)
+        self._pending_authority = None
+
+
 @dataclass
-class Baseline:
+class Baseline(_BaselineRuntime):
     """What was true before the write: the window start and the matches."""
 
     started: datetime
@@ -1076,7 +1090,7 @@ def find_matches(
     return matches, len(seen)
 
 
-def capture_baseline(
+def _capture_ensure(
     contract: EnsureContract,
     params: Mapping[str, Any],
     reader: Optional[FhirReader] = None,
@@ -1583,6 +1597,126 @@ def _fingerprint(
     }
 
 
+@dataclass
+class EnsureObservation:
+    """Native observations consumed once by the canonical adapter, in memory."""
+
+    result: EnsureResult = field(repr=False)
+    baseline: Baseline = field(repr=False)
+    changes: Mapping[str, Change] = field(repr=False)
+    after_matches: Mapping[str, Mapping[str, Any]] = field(repr=False)
+    created: Optional[Mapping[str, Any]] = field(repr=False)
+    existing_now: Optional[Mapping[str, Any]] = field(repr=False)
+
+
+def _collect_ensure(
+    contract: EnsureContract,
+    params: Mapping[str, Any],
+    baseline: Baseline,
+    *,
+    reader: Optional[FhirReader] = None,
+    sleep: Callable[[float], None] = time.sleep,
+    declared: Collection[str] = (),
+) -> EnsureObservation:
+    """Collect the existing native reads and invoke the unchanged pure judge."""
+    reader = reader or FhirReader(contract)
+    skip = {_ref(r) for r in declared}
+
+    def changes_since(until: Optional[datetime]) -> dict[str, Change]:
+        found = read_changes(contract, reader, baseline.started, until)
+        return {r: c for r, c in found.items() if r not in skip}
+
+    # The window closes now (the Date header counts whole seconds).
+    until = reader.server_time() + timedelta(seconds=1)
+    sleep(contract.settle_s)
+    changes = changes_since(until)
+    for _ in range(contract.stable_reads):
+        sleep(contract.settle_s)
+        again = changes_since(until)
+        if _fingerprint(again) == _fingerprint(changes):
+            break
+        changes = again
+    else:
+        raise Unreadable(
+            f"the change feed was still changing after {contract.stable_reads} reads"
+        )
+    after_matches, _ = find_matches(contract, reader, params)
+    selfs = {_ref(a) for a in contract.self_actors}
+    own = [
+        r
+        for r, c in changes.items()
+        if r.startswith(contract.resource_type + "/")
+        and "C" in c.actions
+        and (not c.authors or c.authors & selfs or not c.attributed)
+    ]
+    created = None
+    removed = []
+    if contract.operations.cardinality.own_transient and len(own) > 1:
+        # A record the agent deleted again may count as not created
+        # (judged in ``judge``); the record the task wrote is the one left.
+        removed = [r for r in own if "D" in changes[r].actions]
+        own = [r for r in own if r not in removed]
+    if len(own) == 1:
+        try:
+            _, created = reader.fetch(f"{reader.base_url}/{own[0]}")
+        except Unreadable:
+            created = None  # gone (deleted) or unreadable: judged below
+        audit = contract.change_feed.audit
+        if (
+            created is not None
+            and ("U" in changes[own[0]].actions or removed)
+            and audit is not None
+            and audit.heartbeat
+        ):
+            # A correction is accepted only on the trail's word that no
+            # one else read the record; check the trail logs reads at all.
+            _hear_own_read(contract, reader, own[0], until, sleep)
+    existing_now = None
+    if len(baseline.matches) == 1 and not own:
+        (rid,) = baseline.matches
+        try:
+            _, existing_now = reader.fetch(
+                f"{reader.base_url}/{contract.resource_type}/{rid}"
+            )
+        except Unreadable:
+            existing_now = None  # gone or unreadable: not found
+            if rid in after_matches:
+                # A search still finds it: the read by id failed, so the
+                # heartbeat and the void check can't run on it.
+                raise
+        audit = contract.change_feed.audit
+        if existing_now is not None and audit is not None and audit.heartbeat:
+            _hear_own_read(
+                contract, reader, f"{contract.resource_type}/{rid}", until, sleep
+            )
+    # Last, with no upper bound: a save of the agent's still in flight
+    # when the window closed (a lost response) lands outside it.
+    late = _agents_part(changes_since(None), selfs)
+    if late != _agents_part(changes, selfs):
+        raise Unreadable("the agent wrote after the window closed")
+    result = judge(
+        contract, params, baseline, changes, after_matches, created, existing_now
+    )
+    result.evidence["window_until"] = until.isoformat()
+    return EnsureObservation(result, baseline, changes, after_matches, created, existing_now)
+
+
+def capture_baseline(
+    contract: EnsureContract,
+    params: Mapping[str, Any],
+    reader: Optional[FhirReader] = None,
+    **options: Any,
+) -> Baseline:
+    """Begin one canonical write; only this live snapshot carries authority.
+
+    Data copies retain observations but never retain the pending write. A
+    caller that needs to save/resume uses the canonical verifier APIs directly.
+    """
+    from openadapt_flow.ensure_bridge import begin_ensure
+
+    return begin_ensure(contract, params, reader=reader, **options)
+
+
 def verify_ensure(
     contract: EnsureContract,
     params: Mapping[str, Any],
@@ -1592,113 +1726,15 @@ def verify_ensure(
     sleep: Callable[[float], None] = time.sleep,
     declared: Collection[str] = (),
 ) -> EnsureResult:
-    """Read the server after the write and judge it against ``baseline``.
+    """Consume the canonical pending write, retaining the legacy vocabulary.
 
-    ``declared`` names resources (``Type/id``) the caller saw the agent write
-    as other writes, each judged on its own (shadow mode's other episodes).
-    They are left out of this judgment; every other change still counts.
+    Caller-supplied resource IDs cannot authorize omitted writes. Independent
+    plan/receipt evidence is required by the canonical producer instead.
     """
+    from openadapt_flow.ensure_bridge import finish_ensure
 
-    reader = reader or FhirReader(contract)
-    skip = {_ref(r) for r in declared}
-
-    def changes_since(until: Optional[datetime]) -> dict[str, Change]:
-        found = read_changes(contract, reader, baseline.started, until)
-        return {r: c for r, c in found.items() if r not in skip}
-
-    try:
-        # The window closes now (the Date header counts whole seconds).
-        until = reader.server_time() + timedelta(seconds=1)
-        sleep(contract.settle_s)
-        changes = changes_since(until)
-        for _ in range(contract.stable_reads):
-            sleep(contract.settle_s)
-            again = changes_since(until)
-            if _fingerprint(again) == _fingerprint(changes):
-                break
-            changes = again
-        else:
-            raise Unreadable(
-                f"the change feed was still changing after {contract.stable_reads} reads"
-            )
-        after_matches, _ = find_matches(contract, reader, params)
-        selfs = {_ref(a) for a in contract.self_actors}
-        own = [
-            r
-            for r, c in changes.items()
-            if r.startswith(contract.resource_type + "/")
-            and "C" in c.actions
-            and (not c.authors or c.authors & selfs or not c.attributed)
-        ]
-        created = None
-        removed = []
-        if contract.operations.cardinality.own_transient and len(own) > 1:
-            # A record the agent deleted again may count as not created
-            # (judged in ``judge``); the record the task wrote is the one left.
-            removed = [r for r in own if "D" in changes[r].actions]
-            own = [r for r in own if r not in removed]
-        if len(own) == 1:
-            try:
-                _, created = reader.fetch(f"{reader.base_url}/{own[0]}")
-            except Unreadable:
-                created = None  # gone (deleted) or unreadable: judged below
-            audit = contract.change_feed.audit
-            if (
-                created is not None
-                and ("U" in changes[own[0]].actions or removed)
-                and audit is not None
-                and audit.heartbeat
-            ):
-                # A correction is accepted only on the trail's word that no
-                # one else read the record; check the trail logs reads at all.
-                _hear_own_read(contract, reader, own[0], until, sleep)
-        existing_now = None
-        if len(baseline.matches) == 1 and not own:
-            (rid,) = baseline.matches
-            try:
-                _, existing_now = reader.fetch(
-                    f"{reader.base_url}/{contract.resource_type}/{rid}"
-                )
-            except Unreadable:
-                existing_now = None  # gone or unreadable: not found
-                if rid in after_matches:
-                    # A search still finds it: the read by id failed, so the
-                    # heartbeat and the void check can't run on it.
-                    raise
-            audit = contract.change_feed.audit
-            if existing_now is not None and audit is not None and audit.heartbeat:
-                _hear_own_read(
-                    contract, reader, f"{contract.resource_type}/{rid}", until, sleep
-                )
-        # Last, with no upper bound: a save of the agent's still in flight
-        # when the window closed (a lost response) lands outside it.
-        late = _agents_part(changes_since(None), selfs)
-        if late != _agents_part(changes, selfs):
-            raise Unreadable("the agent wrote after the window closed")
-        result = judge(
-            contract, params, baseline, changes, after_matches, created, existing_now
-        )
-        from openadapt_flow.ensure_invariants import enforce_ensure_invariants
-
-        result = enforce_ensure_invariants(
-            result, contract, params, baseline, changes, after_matches
-        )
-        # Where the read window closed, for a write receipt's scope.
-        result.evidence["window_until"] = until.isoformat()
-        return result
-    except Unreadable as exc:
-        from openadapt_flow.frame_invariants import judge_frame_invariants
-        from openadapt_flow.runtime.effects.frame import FrameVerdict
-
-        unknown = judge_frame_invariants(FrameVerdict("not_checked", "unreadable"))
-        return _review(
-            [f"unreadable: {exc}"],
-            {
-                "unreadable": True,
-                "invariants_unknown": True,
-                "hard_invariants": unknown.evidence(),
-            },
-        )
+    return finish_ensure(contract, params, baseline, reader=reader,
+                         sleep=sleep, declared=declared)
 
 
 __all__ = [

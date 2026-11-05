@@ -63,9 +63,10 @@ from openadapt_types.approval import (
     CHECKED_HOW_VALUES,
     checked_how_for_flow_tier,
 )
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_serializer, model_validator
 
 from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
+from openadapt_flow.ensure_bridge import EnsureBinding, EnsureContext, EnsureEffectVerifier, DETAIL as ENSURE_DETAIL
 from openadapt_flow.fault_gate import (
     AdmissionPolicy,
     CoverageRecord,
@@ -240,6 +241,40 @@ class VerifyConfig(BaseModel):
     admission: Optional[AdmissionPolicy] = None
     #: Where ``admission.coverage`` resolves (the file's directory).
     _base_dir: Optional[Path] = PrivateAttr(default=None)
+
+    #: Original Ensure rules, used only by the legacy adapter. Absent in old contracts.
+    ensure_record: Optional[EnsureBinding] = None
+
+    @model_serializer(mode="wrap")
+    def _legacy_ensure_dump(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.ensure_record is None:
+            data.pop("ensure_record", None)
+        return data
+
+    @model_validator(mode="after")
+    def _ensure_adapter_shape(self) -> "VerifyConfig":
+        if self.ensure_record is not None:
+            source = self.ensure_record.contract
+            if (self.verifier.kind != "fhir" or self.verifier.surfaces
+                    or self.verifier.base_url != source.base_url
+                    or self.verifier.resource_type != source.resource_type
+                    or self.verifier.access_token_env != source.access_token_env
+                    or self.verifier.access_token is not None
+                    or self.verifier.smart_backend is not None
+                    or len(self.effects) != 1
+                    or self.effects[0].kind is not EffectKind.RECORD_WRITTEN
+                    or self.effects[0].match or self.effects[0].expected_count != 1):
+                raise ValueError("ensure adapter needs its exact native source and one record effect")
+            ignored = set(self.frame.ignore_fields if self.frame is not None else ())
+            if ignored - {"meta"} or ("meta" in ignored and any(
+                    rule.path == "meta" or rule.path.startswith("meta.")
+                    for rule in source.fields.values())):
+                raise ValueError("ensure frame cannot ignore declared fields")
+            targeted = getattr(self.frame, "targeted", None)
+            if targeted is not None and targeted.search != source:
+                raise ValueError("ensure adapter and targeted search must bind the same full contract")
+        return self
 
     def coverage_path(self) -> Optional[Path]:
         if self.admission is None:
@@ -1155,6 +1190,11 @@ def _apply_hard_invariants(
     if observation is None:
         observation = getattr(frame, "targeted_observation", None)
     verdict = judge_frame_invariants(frame, observation)
+    if frame.hard_invariants is not None:
+        from dataclasses import replace
+
+        refuted = {c.name: c for c in frame.hard_invariants.checks if c.status == "refuted"}
+        verdict = replace(verdict, checks=tuple(refuted.get(c.name, c) for c in verdict.checks))
     frame.hard_invariants = verdict
     if frame.status == "refuted":
         return frame
@@ -1364,9 +1404,11 @@ def judge_run_frame(
                 return None
             return profile_excuse(name, before, after, fields)
 
+    if isinstance(verifier, EnsureEffectVerifier) and not database_only:
+        declared_rows[""] = verifier.declared_ids()
     verdict = judge_frame(
         spec,
-        bound_effects,
+        [] if isinstance(verifier, EnsureEffectVerifier) else bound_effects,
         slices,
         params=params,
         routes=routes,
@@ -1385,6 +1427,8 @@ def judge_run_frame(
         user_ids=None if db is None else db.users_map,
         declared_rows=declared_rows,
     )
+    if isinstance(verifier, EnsureEffectVerifier) and not database_only:
+        verdict = verifier.frame(verdict)
     profile = db.evidence.get("profile") if db is not None else None
     if profile is not None:
         # The rules that actually excused something: unconditional ones seen
@@ -1568,13 +1612,22 @@ def _new_execution_id() -> str:
 # -- verifier -----------------------------------------------------------------
 
 
-def _build_verifier(cfg: VerifyConfig, params: Mapping[str, object]) -> Any:
+def _build_verifier(cfg: VerifyConfig, params: Mapping[str, object], *,
+                    ensure_context: Optional[EnsureContext] = None) -> Any:
     try:
         verifier = build_effect_verifier(cfg.verifier, params)
     except ValueError as exc:
         raise VerifyRunError(f"cannot build the verifier: {exc}") from exc
     if verifier is None:
         raise VerifyRunError("verify config built no verifier")
+    if cfg.ensure_record is not None:
+        from openadapt_flow.runtime.effects.fhir import FhirEffectVerifier
+
+        if not isinstance(verifier, FhirEffectVerifier):
+            raise VerifyRunError("ensure adapter needs the native FHIR reader")
+        if sorted(params) != cfg.ensure_record.parameters:
+            raise VerifyRunError("ensure adapter parameter names changed")
+        verifier = EnsureEffectVerifier(verifier, cfg.ensure_record, params, ensure_context)
     return verifier
 
 
@@ -1606,7 +1659,8 @@ def _tag_reads(verifier: Any, execution_id: str) -> None:
 
 
 def capture_baseline(
-    cfg: VerifyConfig, params: Mapping[str, object], out: Path
+    cfg: VerifyConfig, params: Mapping[str, object], out: Path, *,
+    ensure_context: Optional[EnsureContext] = None,
 ) -> dict[str, Any]:
     """Read the system of record before the executor starts.
 
@@ -1617,7 +1671,7 @@ def capture_baseline(
     the run: ``execution_id`` is generated here and the read step reuses it.
     """
 
-    verifier = _build_verifier(cfg, params)
+    verifier = _build_verifier(cfg, params) if ensure_context is None else _build_verifier(cfg, params, ensure_context=ensure_context)
     identity = verifier_identity(verifier)
     execution_id = _new_execution_id()
     _tag_reads(verifier, execution_id)
@@ -1633,6 +1687,9 @@ def capture_baseline(
     if not isinstance(state, EffectState):
         raise VerifyRunError("verifier returned no readable baseline")
     detail: dict[str, Any] = {}
+    if cfg.ensure_record is not None:
+        detail[ENSURE_DETAIL] = {**state.detail.get(ENSURE_DETAIL, {}),
+                                "params_mac": salted_digest(salt, "ensure:params", dict(params))}
     entries: Optional[list[dict[str, Any]]] = None
     snapshot = None
     if cfg.frame is not None and cfg.frame.database is not None:
@@ -1920,6 +1977,7 @@ def verify_run(
     documents: Optional[Mapping[str, Any]] = None,
     second_extractor: Optional[Any] = None,
     post_state_out: Optional[dict[str, Any]] = None,
+    ensure_context: Optional[EnsureContext] = None,
 ) -> dict[str, Any]:
     """Read the system of record and return ``{"receipt", "evidence"}``.
 
@@ -1962,7 +2020,7 @@ def verify_run(
     approver_doc = _approver(approver)
     executor_kind, executor_ref, build_digest = _executor(run_record)
 
-    verifier = _build_verifier(cfg, params)
+    verifier = _build_verifier(cfg, params) if ensure_context is None else _build_verifier(cfg, params, ensure_context=ensure_context)
     identity = verifier_identity(verifier)
 
     baseline: Optional[dict[str, Any]] = None
@@ -1998,6 +2056,8 @@ def verify_run(
         ).total_seconds()
         if 0 <= elapsed <= cfg.max_execution_window_s:
             before = EffectState.model_validate(baseline["state"])
+            if cfg.ensure_record is not None and (before.detail.get(ENSURE_DETAIL) or {}).get("params_mac") != salted_digest(salt, "ensure:params", dict(params)):
+                raise VerifyRunError("ensure baseline parameter binding changed")
             before = _unseal_state(cfg, before, verifier, salt)
             baseline_sha = baseline_digest(baseline, salt)
             baseline_read_at = str(baseline["baseline_read_at"])
@@ -2263,6 +2323,8 @@ def verify_run(
         },
         "effect_verdict": effect_verdict,
     }
+    if cfg.ensure_record is not None:
+        cast(dict[str, Any], evidence["readback"])["ensure_params_mac"] = salted_digest(salt, "ensure:params", dict(params))
     database_spec = frame_spec.database
     recheck_due_at: Optional[str] = None
     if (
@@ -2285,6 +2347,13 @@ def verify_run(
         recheck_due_at = schedule["due_at"]
         if post_state_out is not None:
             post_state_out.update(frame.post_state)
+    if not verified and effect_verdict != "REFUTED":
+        target = (frame.post_state or {}).get("targeted") or {}
+        evidence["reconciliation"] = {
+            "status": "owed", "purpose": "read_only_reconciliation",
+            "reason": target.get("reason", "independent_proof_incomplete"),
+            "executable": bool(frame.post_state is not None and recheck_due_at),
+        }
     contracts = ExecuteEvidenceContractV1(
         # A reference was bound and the approver is not the executor;
         # verify-run did not evaluate a policy (evidence.authorization says so).
@@ -2415,6 +2484,12 @@ def recheck_problem(
         "baseline_sha256"
     ) != baseline_digest(baseline, salt):
         return "the recheck state's baseline is not the one its receipt names"
+    if cfg.ensure_record is not None:
+        committed = salted_digest(salt, "ensure:params", dict(params))
+        detail = (baseline.get("state") or {}).get("detail") or {}
+        if (readback.get("ensure_params_mac") != committed
+                or (detail.get(ENSURE_DETAIL) or {}).get("params_mac") != committed):
+            return "ensure_baseline_parameter_binding_changed"
     frame = evidence.get("frame") or {}
     schedule = frame.get(late_write.EVIDENCE_KEY)
     database = cfg.frame.database if cfg.frame is not None else None

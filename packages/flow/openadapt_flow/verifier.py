@@ -292,6 +292,35 @@ class Contract:
             raise VerifierError(str(exc)) from exc
         return cls(config, name=name, writes=[str(w) for w in writes])
 
+    @classmethod
+    def from_ensure(cls, ensure: Any, params: Mapping[str, object], *,
+                    targeted: Any = None) -> "Contract":
+        """Bind the complete Ensure contract to the canonical native adapter.
+
+        Values remain runtime inputs, including structured References. Only
+        their names enter this public configuration; the baseline binds the
+        exact inputs with a run-salted MAC before any write.
+        """
+        from openadapt_flow.ensure_bridge import EnsureBinding
+        from openadapt_flow.runtime.effects.effect import Effect, EffectKind
+        from openadapt_flow.runtime.effects.frame import FrameSpec
+
+        declares_meta = any(r.path == "meta" or r.path.startswith("meta.")
+                            for r in ensure.fields.values())
+        frame_data: dict[str, Any] = {"ignore_fields": [] if declares_meta else ["meta"]}
+        if targeted is not None:
+            frame_data["targeted"] = targeted
+        binding = EnsureBinding(contract=ensure, parameters=sorted(params))
+        cfg = VerifyConfig(
+            verifier={"kind": "fhir", "base_url": ensure.base_url,
+                      "resource_type": ensure.resource_type,
+                      "access_token_env": ensure.access_token_env,
+                      "field_paths": {"id": "id"}, "timeout_s": ensure.timeout_s},
+            effects=[Effect(kind=EffectKind.RECORD_WRITTEN)],
+            frame=FrameSpec.model_validate(frame_data), ensure_record=binding,
+        )
+        return cls(cfg)
+
     @property
     def digest(self) -> str:
         """SHA-256 of the contract as parsed: part of a write's identity."""
@@ -365,6 +394,8 @@ class Contract:
                 "kind": verifier.get("kind"),
                 "environment": self.config.environment_id,
                 "hosts": sorted(hosts),
+                **({"ensure_record": self.config.ensure_record.model_dump(mode="json", by_alias=True)}
+                   if self.config.ensure_record is not None else {}),
             }
         )
 
@@ -381,6 +412,8 @@ class Contract:
                     _strip(e.model_dump(mode="json")) for e in self.config.effects
                 ],
                 "store": self.store,
+                **({"ensure_record": self.config.ensure_record.model_dump(mode="json", by_alias=True)}
+                   if self.config.ensure_record is not None else {}),
             }
         )
 
@@ -401,7 +434,9 @@ class Contract:
                 for item in value:
                     walk(item)
 
-        walk(self.config.model_dump(mode="json"))
+        walk(self.config.model_dump(mode="json", exclude={"ensure_record"}))
+        if self.config.ensure_record is not None:
+            found.update(self.config.ensure_record.parameters)
         return sorted(found)
 
     def null_unsafe_params(self) -> dict[str, str]:
@@ -664,6 +699,8 @@ class WriteResult:
 
         return {
             "verified": self.verified,
+            **({"reconciliation": dict(self.evidence["reconciliation"])}
+               if isinstance(self.evidence.get("reconciliation"), Mapping) else {}),
             "outcome": self.outcome.value,
             "verdict": self.verdict,
             "retry_safe": self.retry_safe,
@@ -853,6 +890,7 @@ def begin_write(
     authorization_ref: str = "",
     workdir: Union[str, Path, None] = None,
     declared_by: DeclaredBy = "agent",
+    _ensure_context: Any = None,
 ) -> PendingWrite:
     """Consult the ledger, then read the system of record before the write.
 
@@ -925,7 +963,8 @@ def begin_write(
     if led is None:
         folder = _new_folder(Path(workdir or DEFAULT_WORKDIR), write_id)
         return _capture(
-            contract, params, actor, write_id, folder, authorization_ref, declared_by
+            contract, params, actor, write_id, folder, authorization_ref, declared_by,
+            **({"ensure_context": _ensure_context} if _ensure_context is not None else {}),
         )
     try:
         key = led.key_for(contract.identity, values, write_key)
@@ -951,7 +990,8 @@ def begin_write(
         )
         started = time.time()  # before the baseline: this attempt's window opens
         pending = _capture(
-            contract, params, actor, write_id, folder, authorization_ref, declared_by
+            contract, params, actor, write_id, folder, authorization_ref, declared_by,
+            **({"ensure_context": _ensure_context} if _ensure_context is not None else {}),
         )
         pending.started = started
         _write_private(
@@ -1005,6 +1045,7 @@ def _capture(
     folder: Path,
     authorization_ref: str,
     declared_by: DeclaredBy,
+    *, ensure_context: Any = None,
 ) -> PendingWrite:
     pending = PendingWrite(
         contract=contract,
@@ -1018,7 +1059,8 @@ def _capture(
     )
     try:
         payload = capture_baseline(
-            contract.config, pending.params, pending.baseline_path
+            contract.config, pending.params, pending.baseline_path,
+            **({"ensure_context": ensure_context} if ensure_context is not None else {})
         )
     except Exception as exc:  # a store that can't be reached, a bad binding
         raise BaselineUnreadable(
@@ -1270,6 +1312,7 @@ def verify_write(
     actor: Optional[Actor] = None,
     authorization_ref: str = "verify_write",
     write_receipt: bool = False,
+    _ensure_context: Any = None,
 ) -> WriteResult:
     """Read the system of record now and judge the write against the
     baseline :func:`begin_write` took. Never resends the write.
@@ -1323,7 +1366,8 @@ def verify_write(
     holds_lease = pending.ledger is not None and pending._lease is not None
     try:
         result = _judge(
-            pending, write_attempted=write_attempted, source=source, seal=seal
+            pending, write_attempted=write_attempted, source=source, seal=seal,
+            **({"ensure_context": _ensure_context} if _ensure_context is not None else {}),
         )
         if holds_lease and pending.ledger is not None:
             result = _check_overlap(
@@ -1589,6 +1633,7 @@ def _judge(
     source: Optional[Source],
     seal: bool,
     remediates: Optional[str] = None,
+    ensure_context: Any = None,
 ) -> WriteResult:
     run_record = pending.actor.run_record()
     base: dict[str, Any] = {
@@ -1613,12 +1658,16 @@ def _judge(
             provenance=None if source is None else source.provenance,
             documents=None if source is None else source.documents,
             post_state_out=post_state,
+            **({"ensure_context": ensure_context} if ensure_context is not None else {}),
         )
         path: Optional[str] = str(write_result(doc, pending.workdir))
     except Exception as exc:  # noqa: BLE001 - unreadable store, timeout, used baseline
         return WriteResult(
             outcome=Outcome.UNCERTAIN,
             scope=_scope(pending.contract, {}),
+            evidence={"reconciliation": {"status": "owed",
+                      "purpose": "read_only_reconciliation", "executable": False,
+                      "reason": "independent_readback_unavailable"}},
             reasons=[
                 "the system of record could not be read back "
                 f"({type(exc).__name__}); the write may still land"
@@ -1763,6 +1812,14 @@ def _scope(
     ]
     if spec is None or getattr(spec, "database", None) is None:
         not_covered.append("records outside the read set (no frame.database)")
+    targeted = getattr(spec, "targeted", None)
+    if targeted is not None or contract.config.ensure_record is not None:
+        not_covered.append("outside_receipt_intermediate_history: UNKNOWN")
+    if targeted is not None and not targeted.history_required:
+        not_covered.append("receipt_record_intermediate_history: UNKNOWN")
+    obligation = evidence.get("reconciliation")
+    if isinstance(obligation, Mapping) and obligation.get("status") == "owed":
+        not_covered.append("read_only_reconciliation: owed; initial proof remains incomplete")
     return Scope(
         read_paths=tuple(paths),
         stores=tuple(stores),
@@ -1803,6 +1860,9 @@ _VERSION_REASONS = {
 
 def _reasons(evidence: Mapping[str, Any], receipt_outcome: str) -> list[str]:
     out: list[str] = []
+    for check in ((evidence.get("frame") or {}).get("hard_invariants") or {}).get("checks", []):
+        if check.get("status") in {"refuted", "not_checked"}:
+            out.append(f"hard_invariant:{check.get('name')}:{check.get('reason')}")
     for row in (evidence.get("readback") or {}).get("effects") or []:
         if not isinstance(row, Mapping) or str(row.get("verdict")) == "CONFIRMED":
             continue

@@ -175,7 +175,14 @@ class Shadow:
             raise ShadowConfigError(f"upstream {upstream!r} is not an http(s) URL")
         self.mode = mode
         self.upstream = parts
-        self.contracts = {c.resource_type: c for c in contracts or []}
+        self.contracts: dict[str, Any] = {}
+        self._ensure_sources: dict[str, Any] = {}
+        for source in contracts or []:
+            binding = getattr(getattr(source, "config", None), "ensure_record", None)
+            ensure = binding.contract if binding is not None else source
+            self.contracts[ensure.resource_type] = ensure
+            if binding is not None:
+                self._ensure_sources[ensure.resource_type] = source
         self.routes = list(routes or [])
         if mode == "fhir" and not self.contracts:
             raise ShadowConfigError(
@@ -492,11 +499,18 @@ class Shadow:
             self._by_ref[ref] = ep
         return ep
 
-    @staticmethod
-    def _fhir_baseline(contract: Any, params: dict[str, Any]) -> Any:
-        from openadapt_flow.ensure_record import capture_baseline
+    def _fhir_baseline(self, contract: Any, params: dict[str, Any]) -> Any:
+        from openadapt_flow.ensure_record import capture_baseline, Unreadable
+        from openadapt_flow.verifier import Actor
 
-        return capture_baseline(contract, params)
+        source = self._ensure_sources.get(contract.resource_type)
+        targeted = None
+        if source is not None:
+            if source.params != sorted(params):
+                raise Unreadable("ensure_baseline_parameter_names_changed")
+            targeted = getattr(source.config.frame, "targeted", None)
+        return capture_baseline(contract, params, actor=Actor("agent", self.actor_id),
+                                workdir=self.out / "writes", targeted=targeted)
 
     def _sql_episode(self, method: str, path: str, doc: Any) -> Episode:
         line = f"{method} {urlsplit(path).path}"
@@ -616,33 +630,38 @@ class Shadow:
                     self._schedule_recheck(ep)
                 self._receipt(ep)
 
-    def _schedule_recheck(self, ep: Episode) -> None:
-        if ep.verdict != CONFIRMED or ep.result is None:
-            return
-        if ep.kind == "fhir" and self.recheck_s is not None:
-            if not ep.recheck_from:
-                ep.late_verdict = UNCERTAIN
-                ep.late_reasons = [
-                    "the recheck couldn't be scheduled: the server's clock "
-                    "couldn't be read after the check"
-                ]
-                return
-            ep.recheck_at = ep.checked_at + self.recheck_s
-        elif ep.kind == "sql" and getattr(ep.result, "recheck_due_at", None):
-            from datetime import datetime
+    def _canonical_result(self, ep: Episode) -> Any:
+        if ep.kind == "fhir":
+            from openadapt_flow.ensure_bridge import canonical_result
 
+            return canonical_result(ep.base) if ep.base is not None else None
+        return ep.result
+
+    def _schedule_recheck(self, ep: Episode) -> None:
+        """Retain every nonfinal obligation, including non-executable UNKNOWN."""
+        from datetime import datetime
+
+        result = self._canonical_result(ep)
+        if ep.verdict == REFUTED or (result is not None and getattr(result, "final", False)):
+            return
+        state = getattr(result, "recheck", None)
+        due = getattr(state, "due_at", "") or getattr(result, "recheck_due_at", None)
+        obligation = {"status": "owed", "purpose": "read_only_reconciliation",
+                      "reason": "independent_target_identity_unknown" if result is None
+                      else "recheck_proof_owed", "executable": bool(state and due)}
+        ep.evidence["reconciliation"] = obligation
+        if due:
             try:
-                due = datetime.fromisoformat(
-                    str(ep.result.recheck_due_at).replace("Z", "+00:00")
-                )
-            except ValueError:
-                ep.late_verdict = UNCERTAIN
-                ep.late_reasons = [
-                    "the recheck couldn't be scheduled: its due time "
-                    f"{ep.result.recheck_due_at!r} can't be read"
-                ]
+                ep.recheck_at = datetime.fromisoformat(str(due).replace("Z", "+00:00")).timestamp()
                 return
-            ep.recheck_at = due.timestamp()
+            except ValueError:
+                obligation.update(reason="recheck_due_time_unreadable", executable=False)
+        # Unknown/no-state is still an owed obligation. A bounded scheduled
+        # attempt records its refusal; it never guesses a target or polls a row.
+        if self.recheck_s is not None:
+            ep.recheck_at = ep.checked_at + self.recheck_s
+        else:
+            obligation["reason"] = "reconciliation_schedule_unconfigured"
 
     def pending_rechecks(self) -> int:
         """Checks or rechecks still to run: an unchecked episode may
@@ -653,10 +672,11 @@ class Shadow:
                 1
                 for e in self.episodes
                 if not e.checked or (e.recheck_at and not e.late_verdict)
+                or (e.evidence.get("reconciliation") or {}).get("status") == "owed"
             )
 
     def run_rechecks(self, *, now: bool = False, only: Optional[list] = None) -> None:
-        """Check each CONFIRMED again once it is due. ``now`` runs whatever
+        """Attempt each owed nonfinal reconciliation once it is due. ``now`` runs whatever
         is scheduled without waiting for ``recheck_s`` (fhir), as a test
         harness does before it resets the store; a SQL recheck still waits
         for the contract's due time. The first verdict stays as it was."""
@@ -737,116 +757,43 @@ class Shadow:
         return n
 
     def _recheck(self, ep: Episode) -> None:
-        if ep.kind == "fhir":
-            self._recheck_fhir(ep)
-            return
         from openadapt_flow.verifier import Actor, recheck
 
+        result = self._canonical_result(ep)
+        if ep.verdict == REFUTED:
+            ep.late_verdict, ep.late_reasons = REFUTED, ["initial_refutation_is_terminal"]
+            return
+        if result is None or getattr(result, "recheck", None) is None:
+            ep.late_verdict = UNCERTAIN
+            ep.late_reasons = ["independent_target_identity_unknown"]
+            return
+        contract = ep.contract
+        if ep.kind == "fhir":
+            from openadapt_flow.ensure_bridge import canonical_contract
+
+            contract = canonical_contract(ep.base)
         with self._lock:
-            later = [
-                o.result
-                for o in self._later(ep)
-                if o.kind == "sql" and o.contract is ep.contract and o.result
-            ]
-        late = recheck(
-            ep.contract,
-            ep.result,
-            params=ep.params,
-            actor=Actor("agent", self.actor_id),
-            excused_by=later,
-            wait=True,  # due by now; never refuse for a clock a second early
-            ledger=None,
-        )
+            later = [self._canonical_result(o) for o in self._later(ep)
+                     if o.kind == ep.kind and o.contract is ep.contract
+                     and self._canonical_result(o) is not None]
+        late = recheck(contract, result, params=ep.params,
+                       actor=Actor("agent", self.actor_id), excused_by=later,
+                       wait=True, ledger=None)
         ep.late_verdict = str(late.outcome)
         ep.late_read_at = late.read_at
-        # Shadow mode keeps no ledger, so the verifier's note about one is
-        # noise here.
         ep.late_reasons = [r for r in late.reasons if "ledger" not in r]
+        hard = late.evidence.get("hard_invariants")
+        if isinstance(hard, dict):
+            ep.evidence["late_hard_invariants"] = hard
+        if ep.verdict == UNCERTAIN and ep.late_verdict == CONFIRMED:
+            ep.late_verdict = UNCERTAIN
+            ep.late_reasons.append("initial_proof_unknown_requires_review")
+        if ep.late_verdict != UNCERTAIN:
+            (ep.evidence.get("reconciliation") or {}).update(status="complete")
 
     def _recheck_fhir(self, ep: Episode) -> None:
-        from openadapt_flow.ensure_record import (
-            Baseline,
-            FhirReader,
-            Unreadable,
-            extra_elements,
-            is_person,
-            verify_ensure,
-            wrong_fields,
-        )
-
-        contract = ep.contract
-        rid = str(ep.result.record_id or "")
-        ref = f"{contract.resource_type}/{rid}"
-        with self._lock:
-            # Every other write the agent sent is judged on its own, except
-            # one to this record.
-            declared = [
-                r for o in self.episodes if o is not ep for r in o.refs if r != ref
-            ]
-        reader = FhirReader(contract)
-        try:
-            _, now = reader.fetch(f"{reader.base_url}/{ref}")
-        except Unreadable as exc:
-            gone = re.search(r"returned HTTP (404|410)\b", str(exc))
-            ep.late_moved = bool(gone)
-            ep.late_verdict = REFUTED if gone else UNCERTAIN
-            ep.late_reasons = [
-                f"since the first check: the confirmed record is gone (HTTP {gone[1]})"
-                if gone
-                else f"the confirmed record can't be read again: {exc}"
-            ]
-            return
-        moved: list[str] = []
-        if not isinstance(now, dict) or not is_person(contract, now, ep.params):
-            moved.append("the confirmed record is no longer the person")
-        else:
-            wrong = wrong_fields(contract, now, ep.params)
-            if wrong:
-                moved.append(
-                    "the confirmed record now holds other values: " + ", ".join(wrong)
-                )
-            extra = extra_elements(contract, now, ep.params) if contract.closed else []
-            if extra:
-                moved.append(
-                    "the confirmed record now holds values the agent didn't send: "
-                    + ", ".join(extra)
-                )
-        ep.late_moved = bool(moved)
-        # Since the first check, the confirmed record is the one that was
-        # already there: the agent may write nothing more, and it must still
-        # be the only record that is the person.
-        since = Baseline(started=ep.recheck_from, matches={rid: now})
-        r = verify_ensure(contract, ep.params, since, declared=declared)
-        if "hard_invariants" in r.evidence:
-            ep.evidence["late_hard_invariants"] = r.evidence["hard_invariants"]
-        reasons = list(moved)
-        with self._lock:
-            again = any(ref in o.refs for o in self._later(ep))
-        if again and r.outcome != "found_existing":
-            reasons.append(
-                "the agent wrote to the confirmed record again after the check"
-            )
-        if r.outcome != "found_existing":
-            n = int(r.evidence.get("agent_writes") or 0)
-            if n:
-                reasons.append(
-                    f"the agent's credential wrote {n} resource(s) since the check "
-                    "that no write through the shadow explains"
-                )
-            reasons += list(r.reasons)
-        ep.late_reasons = [f"since the first check: {x}" for x in reasons]
-        ep.late_read_at = str(r.evidence.get("window_until") or "")
-        # The record read directly outranks a change feed that can't be read.
-        if moved:
-            ep.late_verdict = REFUTED
-        elif r.evidence.get("invariants_refuted"):
-            ep.late_verdict = REFUTED
-        elif r.evidence.get("unreadable") or r.evidence.get("invariants_unknown"):
-            ep.late_verdict = UNCERTAIN
-        elif r.outcome != "found_existing":
-            ep.late_verdict = REFUTED
-        else:
-            ep.late_verdict = CONFIRMED
+        """Compatibility entry point; the canonical fence owns every read."""
+        self._recheck(ep)
 
     def _check(self, ep: Episode) -> None:
         statuses = [w.status for w in ep.writes]
@@ -870,74 +817,32 @@ class Shadow:
             self._check_sql(ep, base)
 
     def _check_fhir(self, ep: Episode, base: Any, statuses: list[int]) -> None:
-        from openadapt_flow.ensure_record import (
-            FhirReader,
-            Unreadable,
-            extra_elements,
-            extract,
-            same,
-            verify_ensure,
-        )
+        from openadapt_flow.ensure_record import extra_elements, extract, same, verify_ensure
+        from openadapt_flow.ensure_bridge import canonical_observation, canonical_result
 
         contract = ep.contract
-        with self._lock:
-            # Only episodes not yet checked: a record checked earlier that
-            # moves again counts in this window like any other change.
-            declared = [
-                r
-                for o in self.episodes
-                if o is not ep and not o.checked
-                for r in o.refs
-            ]
-        # Where a recheck's window starts: after every write of this episode
-        # (whole seconds: an instant search is to the second), and no later
-        # than this check's own window closes.
-        time.sleep(1.1)
-        try:
-            ep.recheck_from = FhirReader(contract).server_time()
-        except Unreadable:
-            ep.recheck_from = None
-        result = verify_ensure(contract, ep.params, base, declared=declared)
+        # Response/request IDs remain grouping/report hints only. They cannot
+        # authorize excluding another episode's writes from this judgment.
+        result = verify_ensure(contract, ep.params, base)
         ep.result, ep.base = result, base
         self._notify(ep, result)
-        ev = result.evidence
-        ep.evidence["verifier"] = {"outcome": result.outcome, **ev}
-        landed = int(ev.get("agent_writes") or 0)
-        if result.outcome == "created_verified":
-            ep.verdict, ep.reasons = CONFIRMED, list(result.reasons)
-            if any(s // 100 != 2 for s in statuses):
-                ep.reasons.append(
-                    f"the agent got an error reply ({', '.join(map(str, statuses))}) "
-                    "but the write landed"
-                )
-        elif result.outcome == "found_existing":
-            # A conditional create answered with the record already there.
-            ep.verdict, ep.reasons = CONFIRMED, list(result.reasons)
-        elif ev.get("invariants_refuted"):
-            ep.verdict, ep.reasons = REFUTED, list(result.reasons)
-        elif ev.get("unreadable") or ev.get("invariants_unknown"):
-            ep.verdict, ep.reasons = UNCERTAIN, list(result.reasons)
-        elif result.outcome == "needs_review" and landed == 0 and "agent_writes" in ev:
-            # Nothing of the agent's landed: never CONFIRMED (the write isn't
-            # there), never REFUTED (nothing landed wrong).
-            ep.verdict = UNCERTAIN
-            ep.reasons = [
-                f"the reply was {', '.join(map(str, statuses)) or 'none'} and the "
-                "store shows no write by the agent"
-            ] + list(result.reasons)
-        else:
-            ep.verdict, ep.reasons = REFUTED, list(result.reasons)
-        # Evidence: what the agent sent, and what the store holds now.
-        reader = FhirReader(contract)
-        ep.evidence["before"] = sorted(
-            f"{contract.resource_type}/{i}" for i in base.matches
-        )
-        stored: dict[str, Any] = {}
-        for ref in sorted(ep.refs):
-            try:
-                _, stored[ref] = reader.fetch(f"{reader.base_url}/{ref}")
-            except Unreadable as exc:
-                stored[ref] = {"unreadable": str(exc)}
+        canonical = canonical_result(base)
+        ep.verdict = canonical.outcome.value if canonical is not None else UNCERTAIN
+        ep.reasons = list(result.reasons)
+        ep.evidence["verifier"] = {"outcome": result.outcome, **result.evidence}
+        if canonical is not None:
+            ep.evidence["frame"] = dict(canonical.evidence.get("frame") or {})
+            ep.evidence["readback"] = dict(canonical.evidence.get("readback") or {})
+        # Reporting reuses the independent collector; no second read path.
+        ep.evidence["before"] = sorted(f"{contract.resource_type}/{i}" for i in base.matches)
+        observation = canonical_observation(base)
+        stored = {} if observation is None else {
+            f"{contract.resource_type}/{i}": dict(resource)
+            for i, resource in observation.after_matches.items()
+        }
+        if observation is not None and observation.created is not None:
+            resource = observation.created
+            stored[f"{contract.resource_type}/{resource.get('id')}"] = dict(resource)
         ep.evidence["after"] = stored
         fields = []
         for ref, res in stored.items():
@@ -1051,17 +956,18 @@ class Shadow:
         elif verdict == CONFIRMED and ep.recheck_at:
             due = wr.iso(datetime.fromtimestamp(ep.recheck_at, timezone.utc))
         write_id = f"shadow-{self.session}-{ep.id}"
-        if ep.kind == "sql" and ep.result is not None:
-            scope = wr.scope_of_result(ep.result)
-            write_id = ep.result.write_id or write_id
+        canonical = self._canonical_result(ep)
+        if canonical is not None:
+            scope = wr.scope_of_result(canonical)
+            write_id = canonical.write_id or write_id
             subject = {
                 "contract_sha256": None,
-                "verify_run_receipt_sha256": ep.result.receipt_sha256 or None,
+                "verify_run_receipt_sha256": canonical.receipt_sha256 or None,
             }
-            value = str((ep.result.receipt or {}).get("workflow_digest") or "")
+            value = str((canonical.receipt or {}).get("workflow_digest") or "")
             if re.fullmatch(r"sha256:[0-9a-f]{64}", value):
                 subject["contract_sha256"] = value[7:]
-            checked = dict(ep.result.checked)
+            checked = dict(canonical.checked)
         elif ep.kind == "fhir" and ep.result is not None:
             ev = ep.result.evidence or {}
             started = getattr(ep.base, "started", None)

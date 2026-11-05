@@ -84,3 +84,25 @@ complete coverage from a snapshot.
 The targeted adapter's synthetic controls are component checks. They do not
 qualify a real application or establish wider historical absence. Per-field
 matching and the optional global callable's controls are unchanged.
+
+## Canonical Ensure bridge
+
+`Contract.from_ensure` binds the complete Ensure contract and the supplied
+parameter names to the canonical verifier. The existing Ensure field and
+operation judge consumes one native observation collection. It supplies actual
+independently read target IDs to the frame; empty generic selectors never
+declare the entire read set. Structured Reference inputs remain structured.
+A run-salted commitment binds the exact inputs before baseline reconstruction.
+
+The legacy `capture_baseline` and `verify_ensure` calls begin and consume that
+same canonical write. Their live pending authority is excluded from snapshot
+data fields, representations and pickle/copy state. A reconstructed or edited
+snapshot cannot recover it. Canonical APIs provide the explicit durable path.
+Shadow uses the canonical recheck fence for both FHIR and SQL. Reply IDs remain
+reporting and grouping hints; they cannot authorize omitted writes or targets.
+
+Every nonfinal result retains an owed read-only reconciliation obligation.
+Missing identity remains named UNKNOWN, including when no native read can be
+scheduled. An unavailable baseline, or inputs changed after dispatch, cannot
+become positive from a later matching row. A refuted attempt remains refuted;
+recorded review may authorize a new attempt.
