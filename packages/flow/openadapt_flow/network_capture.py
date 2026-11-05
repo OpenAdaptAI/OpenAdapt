@@ -37,11 +37,13 @@ Request and response bodies are cut at :data:`MAX_REQUEST_BYTES` and
 
 from __future__ import annotations
 
+import html
 import json
 import re
 import threading
 import time
 import urllib.parse as up
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
@@ -347,6 +349,41 @@ def _json_pairs(value: Any) -> Iterable[tuple[str, str]]:
             yield from _json_pairs(item)
 
 
+class _PageFields(HTMLParser):
+    """A page's hidden inputs and ``<meta>`` values, and its field names."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.pairs: list[tuple[str, str]] = []
+        self.names: set[str] = set()
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
+        a = {k.lower(): v or "" for k, v in attrs}
+        if tag in ("input", "select", "textarea", "button") and a.get("name"):
+            self.names.add(a["name"])
+        if tag == "input" and a.get("type", "").lower() == "hidden" and a.get("name"):
+            self.pairs.append((a["name"], a.get("value", "")))
+        elif tag == "meta" and a.get("name"):
+            self.pairs.append((a["name"], a.get("content", "")))
+
+    handle_startendtag = handle_starttag
+
+
+def _html_fields(text: Any) -> tuple[list[tuple[str, str]], set[str]]:
+    """The (name, value) pairs of an HTML page's hidden inputs and named
+    ``<meta>`` tags, sent or not, and the page's form field names."""
+
+    if not isinstance(text, str) or "<" not in text:
+        return [], set()
+    parser = _PageFields()
+    try:
+        parser.feed(text)
+        parser.close()
+    except Exception:  # noqa: BLE001 - malformed markup: keep what parsed
+        pass
+    return parser.pairs, parser.names
+
+
 def redact(
     lines: list[dict[str, Any]],
     *,
@@ -379,10 +416,13 @@ def redact(
     for v in auth_values:
         if v:
             replace.setdefault(v, session_placeholder("authorization"))
+    pages: list[tuple[str, str]] = []
+    field_names: set[str] = set()
     for line in lines:
         pairs = list(line.get("form") or []) + up.parse_qsl(
             up.urlsplit(line["url"]).query, keep_blank_values=True
         )
+        field_names.update(name for name, _ in line.get("form") or [])
         for key in ("body", "response_text"):
             pairs += list(_json_pairs(_json(line.get(key))))
         for name, value in pairs:
@@ -393,6 +433,24 @@ def redact(
                 replace[value] = SECRET
             elif placeholder is not None and len(value) >= 8:
                 replace.setdefault(value, placeholder)
+        page_pairs, page_names = _html_fields(line.get("response_text"))
+        pages += page_pairs
+        field_names |= page_names
+    # A page's hidden token inputs and token meta tags, withheld whether or
+    # not that token was sent (a per-form token the save did not send is
+    # still a live token). A value that is itself a field name (Rails'
+    # ``csrf-param`` meta names the token field) is a name, not a token.
+    for name, value in pages:
+        if not value or len(value) < 4 or value in field_names:
+            continue
+        placeholder = kind(name)
+        if placeholder is None or (placeholder != SECRET and len(value) < 8):
+            continue
+        for form in {value, html.escape(value)}:
+            if placeholder == SECRET:
+                replace[form] = SECRET
+            else:
+                replace.setdefault(form, placeholder)
 
     def scrub_json(value: Any) -> Any:
         # A JSON body's secret and token fields, replaced whatever their
