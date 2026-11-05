@@ -613,3 +613,25 @@ def test_clean_removes_values_from_store_reasons() -> None:
     for value in ("M1234", "M9", "M5678", "SYNM00042"):
         assert value not in text
     assert "503" in text
+
+
+def test_a_mapped_decision_word_is_compared_as_a_code(world) -> None:
+    # The PAS reference implementation states its decision as a disposition
+    # word; the 278 carries HCR01. A word the map doesn't know is never
+    # taken for agreement.
+    from openadapt_flow.reconcile import Provide
+
+    spec = world()
+    spec.legs["payer"].provides["review_action"] = Provide(
+        field="outcome", map={"complete": "A1", "queued": "A4"}
+    )
+    result = reconcile(spec, {"submission_id": "PA-1"}, now=NOW)
+    assert result.outcome is Outcome.CONFIRMED, result.reasons
+    spec.legs["payer"].provides["review_action"] = Provide(
+        field="outcome", map={"queued": "A4"}
+    )
+    result = reconcile(spec, {"submission_id": "PA-1"}, now=NOW)
+    assert result.outcome is Outcome.UNCERTAIN
+    assert not [b for b in result.breaks if b.outcome is Outcome.REFUTED]
+    leg = next(leg for leg in result.legs if leg.name == "clearinghouse")
+    assert leg.checked["field:decision"] == "not_checked"

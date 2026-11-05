@@ -121,6 +121,17 @@ class RequiredWhen(BaseModel):
     values: list[str] = Field(min_length=1)
 
 
+class Provide(BaseModel):
+    """A provided value translated through ``map`` (one system's decision
+    word to another's code). A value with no entry in ``map``, or none at
+    all, is not provided, so a compare that reads it is left unchecked."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    field: str
+    map: dict[str, str] = Field(min_length=1)
+
+
 class Leg(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -136,7 +147,7 @@ class Leg(BaseModel):
     #: than one is a duplicate, even under different identities.
     duplicate_key: dict[str, ValueExpr] = Field(default_factory=dict)
     #: Values later legs read as ``{param: "<leg>.<name>"}``: name -> field.
-    provides: dict[str, str] = Field(default_factory=dict)
+    provides: dict[str, Union[str, Provide]] = Field(default_factory=dict)
     join: dict[str, Join] = Field(default_factory=dict)
     due: Optional[Due] = None
     required_when: Optional[RequiredWhen] = None
@@ -684,7 +695,16 @@ def _check_leg(
         result.checked["presence"] = "held"
         record = matched[0]
         for key, source in leg.provides.items():
-            params[f"{name}.{key}"] = record.get(source)
+            if isinstance(source, str):
+                params[f"{name}.{key}"] = record.get(source)
+                continue
+            value = record.get(source.field)
+            mapped = source.map.get(str(value)) if value is not None else None
+            if mapped is None:
+                params.pop(f"{name}.{key}", None)
+                result.reasons.append(f"{key}: the record's value has no mapping")
+            else:
+                params[f"{name}.{key}"] = mapped
 
     one = result.checked.get("presence") == "held" and count == 1
     differing: list[str] = []

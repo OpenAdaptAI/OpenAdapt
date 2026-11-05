@@ -123,6 +123,10 @@ def up() -> None:
         "BYPASS_AUTH=true",
         "-e",
         "TOKEN_BASE_URI=http://localhost:9015",
+        # It grants a pended request on a timer (15 s by default): sooner,
+        # so the run waits less.
+        "-e",
+        "DELAY=2000",
         PAS_IMAGE,
     )
     deadline = time.monotonic() + 900
@@ -270,7 +274,42 @@ def pas_submit(u: dict, *, sid: str, code: str, day: str, created: str) -> dict:
     return reply
 
 
-HCR = {"complete": "A1", "partial": "A6", "queued": "A4", "error": "A3"}
+#: X12 HCR01 for a PAS disposition: the reference implementation's own
+#: table (FhirUtils.dispositionToReviewAction).
+HCR = {
+    "Granted": "A1",
+    "Partial": "A2",
+    "Denied": "A3",
+    "Pending": "A4",
+    "Cancelled": "A6",
+}
+
+
+def pas_decision(member_id: str, sid: str, first: dict) -> dict:
+    """The latest ClaimResponse for ``sid``: the reference implementation
+    pends a request whose code its rules don't know, then grants it on a
+    timer as a new ClaimResponse."""
+
+    if first.get("outcome") != "queued":
+        return first
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        found = _http(
+            "GET", f"{pas_url()}/ClaimResponse?patient.identifier={member_id}"
+        )
+        mine = [
+            r
+            for e in found.get("entry", [])
+            for r in [e["resource"]]
+            if r.get("resourceType") == "Bundle"
+            for r in [r["entry"][0]["resource"]]
+            if any(i.get("value") == sid for i in r.get("identifier", []))
+        ]
+        done = [r for r in mine if r.get("outcome") != "queued"]
+        if done:
+            return max(done, key=lambda r: r.get("created", ""))
+        time.sleep(1)
+    raise SystemExit(f"PAS never decided {sid}")
 
 
 def seed(fixtures: dict, start: datetime, inbox: Path, log: list) -> dict[int, dict]:
@@ -350,7 +389,9 @@ def seed(fixtures: dict, start: datetime, inbox: Path, log: list) -> dict[int, d
             if fault == "drop_payer" and w_sid == sid:
                 continue
             reply = pas_submit(u, sid=w_sid, code=p_code, day=p_day, created=created)
+            reply = pas_decision(u["member_id"], w_sid, reply)
             outcome, auth = reply.get("outcome"), reply.get("preAuthRef")
+            disposition = reply.get("disposition")
             note["decisions"].append(outcome)
             log.append(
                 {
@@ -370,7 +411,7 @@ def seed(fixtures: dict, start: datetime, inbox: Path, log: list) -> dict[int, d
                     x_member,
                     x_code,
                     x_day,
-                    decision=HCR.get(outcome, "A3"),
+                    decision=HCR[disposition],
                     auth_number=auth,
                 )
                 name = f"p{n:03d}-{w_sid}.x12"
@@ -397,6 +438,7 @@ def seed(fixtures: dict, start: datetime, inbox: Path, log: list) -> dict[int, d
                     "insurer": {"display": "Synthetic payer"},
                     "request": {"reference": f"Claim/{ehr_claim['id']}"},
                     "outcome": outcome,
+                    "disposition": disposition,
                     "preAuthRef": auth,
                 },
                 token,
@@ -429,7 +471,7 @@ def score(u: dict, result: dict) -> dict:
     }
 
 
-def run(out: Path) -> None:
+def run(out: Path, only: Optional[set[int]] = None) -> None:
     sys.path.insert(0, str(FLOW))
     from openadapt_flow.reconcile import ReconcileSpec, reconcile
 
@@ -439,6 +481,10 @@ def run(out: Path) -> None:
     if got != want:
         raise SystemExit(f"fixtures.json sha256 {got} != pre-registered {want}")
     fixtures = json.loads(body)
+    if only:
+        # A smoke run on a few units: its summary says so, and it is never
+        # the measured run.
+        fixtures["units"] = [u for u in fixtures["units"] if u["n"] in only]
     out.mkdir(parents=True, exist_ok=True)
     start = datetime.now(timezone.utc).replace(microsecond=0)
     inbox = out / "x12-inbox"
@@ -487,6 +533,7 @@ def run(out: Path) -> None:
             }
         )
     summary = {
+        "smoke_units": sorted(only) if only else None,
         "fixtures_sha256": want,
         "pas_commit": PAS_COMMIT,
         "medplum": medplum.MedplumFixture.__module__
@@ -535,9 +582,13 @@ def main(argv: Optional[list[str]] = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=["build-pas", "up", "run", "down"])
     parser.add_argument("--out", type=Path, default=STATE / "run")
+    parser.add_argument(
+        "--only", default="", help="smoke run: comma-separated unit numbers"
+    )
     args = parser.parse_args(argv)
     {"build-pas": build_pas, "up": up, "down": down}.get(
-        args.command, lambda: run(args.out)
+        args.command,
+        lambda: run(args.out, {int(n) for n in args.only.split(",") if n.strip()}),
     )()
 
 

@@ -54,7 +54,7 @@ legs:
         patient.identifier: {param: ehr.member_id}
       field_paths:
         id: id
-        submission_id: identifier.value
+        submission_id: identifier[system=urn:openadapt:synthetic:submission].value
         use: use
         status: status
         service_code: item.productOrService.coding.code
@@ -68,8 +68,6 @@ legs:
       service_code: {param: ehr.service_code}
       service_date: {param: ehr.service_date}
       status: active
-    provides:
-      claim_id: id
     # CMS-0057-F: 7 calendar days for a standard request.
     due: {after: ehr.submitted_at, within_s: 604800}
 
@@ -82,18 +80,29 @@ legs:
       resource_type: ClaimResponse
       search_param_exprs:
         patient.identifier: {param: ehr.member_id}
+      # The reference implementation answers a ClaimResponse search with
+      # its response Bundles, the ClaimResponse inside each.
       field_paths:
-        id: id
-        request: request.reference
-        outcome: outcome
-        auth_number: preAuthRef
-        decided_at: created
-    # The reference implementation gives a request's Claim and its
-    # ClaimResponse the same id.
+        id: entry[resource.resourceType=ClaimResponse].resource.id
+        submission_id: entry[resource.resourceType=ClaimResponse].resource.identifier[system=urn:openadapt:synthetic:submission].value
+        outcome: entry[resource.resourceType=ClaimResponse].resource.outcome
+        disposition: entry[resource.resourceType=ClaimResponse].resource.disposition
+        auth_number: entry[resource.resourceType=ClaimResponse].resource.preAuthRef
+        decided_at: entry[resource.resourceType=ClaimResponse].resource.created
     identity:
-      id: {param: payer.claim_id}
+      submission_id: {param: submission_id}
+    # A pended response, then the decision: each is a new ClaimResponse
+    # (with its own preAuthRef). Judge the latest.
+    group_by: [submission_id]
+    latest_by: decided_at
     provides:
       outcome: outcome
+      disposition: disposition
+      # X12 HCR01, by the reference implementation's own table
+      # (FhirUtils.dispositionToReviewAction).
+      decision:
+        field: disposition
+        map: {Granted: A1, Partial: A2, Denied: A3, Pending: A4, Cancelled: A6}
       auth_number: auth_number
       decided_at: decided_at
     due: {after: ehr.submitted_at, within_s: 604800}
@@ -108,12 +117,13 @@ legs:
       trace: {param: submission_id}
       purpose: "11"
     # The 278 must carry what the clinic ordered and the payer's own
-    # decision: its auth number (none for a denial or a pended review).
+    # decision: its auth number and its review action (HCR01).
     compare:
       member_id: {param: ehr.member_id}
       service_code: {param: ehr.service_code}
       service_date: {param: ehr.service_date}
       auth_number: {param: payer_decision.auth_number}
+      decision: {param: payer_decision.decision}
     duplicate_key:
       member_id: {param: ehr.member_id}
       service_code: {param: ehr.service_code}
@@ -140,11 +150,13 @@ legs:
         id: id
         submission_id: identifier[system=urn:openadapt:synthetic:submission].value
         outcome: outcome
+        disposition: disposition
         auth_number: preAuthRef
     identity:
       submission_id: {param: submission_id}
     compare:
       outcome: {param: payer_decision.outcome}
+      disposition: {param: payer_decision.disposition}
       auth_number: {param: payer_decision.auth_number}
     # A copy is due once the payer has decided; one that is there is always
     # compared, so a stale approval is caught while the payer pends.
