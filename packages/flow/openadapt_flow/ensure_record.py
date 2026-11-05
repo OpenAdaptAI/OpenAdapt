@@ -1461,7 +1461,10 @@ def version_trail(change: Change) -> list[dict[str, Optional[str]]]:
     The author is ``meta.author`` when the server returns it. When it
     doesn't (some servers omit it), and the audit trail logged exactly one
     timed create or update per version, the n-th logged write names the
-    n-th version. Otherwise ``author`` is None: unknown, never guessed.
+    n-th version, but only when that order is unambiguous: every version
+    has a time, and no two versions and no two logged writes share one (a
+    tie keeps whatever order the server returned). Otherwise ``author`` is
+    None: unknown, never guessed.
     """
 
     rows: list[tuple[Optional[datetime], str, Optional[str]]] = []
@@ -1484,8 +1487,14 @@ def version_trail(change: Change) -> list[dict[str, Optional[str]]]:
         if action in ("C", "U") and when is not None
     ]
     logged: list[Optional[str]] = [None] * len(rows)
-    if len(writes) == len(rows) and len(writes) == sum(
-        1 for _, a, _ in change.events if a in ("C", "U")
+    version_times = [r[0] for r in rows]
+    write_times = [w[0] for w in writes]
+    if (
+        len(writes) == len(rows)
+        and len(writes) == sum(1 for _, a, _ in change.events if a in ("C", "U"))
+        and None not in version_times
+        and len(set(version_times)) == len(version_times)
+        and len(set(write_times)) == len(write_times)
     ):
         logged = [
             ", ".join(sorted(who)) if who else None
