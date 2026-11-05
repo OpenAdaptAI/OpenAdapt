@@ -92,7 +92,9 @@ if [[ -z "$victim" ]]; then
 else
   rm -f "$victim"
   tar -C "$ONPREM" -cf - . | tar -C "$work/missing/on-prem" -xf -
-  if docker build --network none --pull=false -q -f "$work/missing/on-prem/Dockerfile" \
+  # --progress=plain keeps pip's own error in the log; -q would drop it.
+  if docker build --network none --pull=false --progress=plain \
+      -f "$work/missing/on-prem/Dockerfile" \
       -t "$tag-missing" "$work/missing" >"$work/missing.log" 2>&1; then
     bad "build without $(basename "$victim") fails (it reached a package index?)"
   else
@@ -153,7 +155,10 @@ if [[ -f "$store/jobs/failed/no-bundle.job" ]]; then
 else
   bad "malformed job filed under failed/"
 fi
-if grep -q "no-bundle" "$store/audit/audit.log" 2>/dev/null; then
+# The runner is root in the image and audit-log.sh makes the audit directory
+# 0700, so read the log the way the deployment does: from inside the image.
+if run -v "$store:/srv/openadapt" "$tag" cat /srv/openadapt/audit/audit.log 2>/dev/null \
+    | grep -q '"job":"no-bundle"'; then
   ok "audit log records the job"
 else
   bad "audit log records the job"
