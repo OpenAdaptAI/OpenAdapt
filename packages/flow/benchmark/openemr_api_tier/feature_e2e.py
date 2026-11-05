@@ -51,7 +51,7 @@ NO_MATCH_TEXT = "No matches were found."
 
 
 def cmd_record(a: argparse.Namespace) -> None:
-    from openadapt_flow.benchmark.openemr_local import SyntheticPatientSpec
+    from benchmark.harness.openemr_local import SyntheticPatientSpec
     from openadapt_flow.network_capture import NetworkCapture
     from openadapt_flow.recorder import Recorder
 
@@ -191,7 +191,7 @@ COLS = ["arm", "block", "pos", "ref", "mismatch", "correct", "new_charts", "read
 
 
 def run_one(env: dict[str, Any], arm: str, ref_idx: int, bundle: Path, out: Path) -> dict[str, Any]:
-    from openadapt_flow.benchmark.openemr_local import OpenEMRPatientOracle
+    from benchmark.harness.openemr_local import OpenEMRPatientOracle
     from openadapt_flow.ir import Workflow
     from openadapt_flow.runtime import Replayer
 

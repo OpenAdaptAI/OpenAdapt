@@ -27,6 +27,8 @@ agent calls:
     again and returns ``CONFIRMED`` (the earlier verdict stands), ``REFUTED``
     (something moved since that nothing explains: the earlier ``CONFIRMED``
     no longer stands) or ``UNCERTAIN``. A write after this read is not seen.
+    An owed recheck is also in the uncertain-write ledger, so ``openadapt
+    verify ledger list`` shows it after a restart, until a recheck settles it.
 
 ``verify_begin`` consults the uncertain-write ledger, so a write whose
 outcome is unknown is refused, also after a restart or in another server.
@@ -55,6 +57,7 @@ from openadapt_flow.verifier import (
     recheck,
     verify_write,
 )
+from openadapt_flow.write_ledger import default_ledger
 
 __all__ = ["VERIFY_TOOLS", "VerifyBridge", "contract_params"]
 
@@ -113,9 +116,13 @@ class VerifyBridge:
             raise ValueError(f"no write contracts (*.yaml) in {self.contracts_dir}")
         self._pending: dict[str, PendingWrite] = {}
         #: Provisional results whose recheck is still to run, by write_id.
-        #: Held in this server's memory only: after a restart, recheck from
-        #: Python with the saved ``recheck.json`` (``RecheckState.load``).
+        #: This server can run them only while it holds them; the ledger
+        #: records each one owed (``openadapt verify ledger list``), and
+        #: after a restart it is rechecked from Python with the saved
+        #: ``recheck.json`` (``RecheckState.load``).
         self._rechecks: dict[str, tuple[PendingWrite, WriteResult]] = {}
+        #: Rechecks this server already ran, by write_id: their outcome.
+        self._spent: dict[str, str] = {}
         #: Every checked write with a recheck state, of any outcome.
         self._checked: list[tuple[PendingWrite, WriteResult]] = []
         self._lock = threading.Lock()
@@ -128,7 +135,7 @@ class VerifyBridge:
     def hold_needed(
         self, arguments: Mapping[str, Any], tool: str = "teach_act"
     ) -> None:
-        """The MCP layer passes the tool name (``teach_act`` or ``teach_run``)."""
+        """Always None: this bridge has no person holds. ``tool`` is ignored."""
 
         return None
 
@@ -204,10 +211,11 @@ class VerifyBridge:
                     "Reads the whole database again: CONFIRMED (the verdict "
                     "stands), REFUTED (something moved after it that nothing "
                     "explains: the write is no longer verified) or UNCERTAIN. "
-                    "Your later writes under the same contract, checked with "
-                    "verify_check, account for their own rows; a write under "
-                    "another contract does not, and refutes it. Before the due "
-                    "time it returns due: false and the time to call again."
+                    "Your later writes under the same contract and agent_id, "
+                    "checked with verify_check, account for their own rows; a "
+                    "write under another contract or another agent_id does "
+                    "not, and refutes it. Before the due time it returns due: "
+                    "false and the time to call again."
                 ),
                 input_schema=_obj(
                     {"write_id": {"type": "string", "maxLength": 64}}, ["write_id"]
@@ -261,11 +269,14 @@ class VerifyBridge:
                 write_key=None if write_key is None else str(write_key),
             )
         except AlreadyWritten as exc:
-            return {
+            out: dict[str, Any] = {
                 "ok_to_write": False,
                 "reason": f"{exc}; don't make the write",
                 "earlier_result": exc.result,
             }
+            if exc.result.get("provisional"):
+                out["next"] = self._owed_next(str(exc.result.get("write_id") or ""))
+            return out
         except WriteBlocked as exc:
             return {"ok_to_write": False, "reason": f"{exc}; don't make the write"}
         with self._lock:
@@ -302,6 +313,53 @@ class VerifyBridge:
                 "it; a write after the recheck is not seen."
             )
         return out
+
+    def _owed_next(self, write_id: str) -> str:
+        """What a retry handed a provisional result should do next."""
+
+        with self._lock:
+            held = write_id in self._rechecks
+        if held:
+            return (
+                "The earlier result is provisional: call verify_recheck with "
+                f"write_id {write_id} at or after recheck_due_at."
+            )
+        return (
+            "The earlier result is provisional and its recheck is owed, but "
+            "this server doesn't hold it (it restarted, or another server "
+            "checked the write): a person rechecks it from the saved "
+            "recheck.json. openadapt verify ledger list shows it until then."
+        )
+
+    def _unheld(self, write_id: str) -> str:
+        """Why this server has no recheck to run for ``write_id``."""
+
+        with self._lock:
+            spent = self._spent.get(write_id)
+        if spent is not None:
+            return (
+                f"that write was already rechecked ({spent}): each write is "
+                "rechecked once"
+            )
+        owed = None
+        try:
+            found = default_ledger().find_attempt(write_id)
+            if found is not None:
+                owed = found[1].recheck_owed
+        except Exception:  # noqa: BLE001 - only the wording depends on it
+            owed = None
+        if owed:
+            return (
+                "no provisional result for that write_id in this server, but "
+                f"the ledger shows its recheck owed (due {owed}): the server "
+                "restarted, or another server checked the write. A person "
+                "rechecks it from the saved recheck.json; openadapt verify "
+                "ledger list shows it until then"
+            )
+        return (
+            "no provisional result for that write_id: only a CONFIRMED write "
+            "whose contract sets frame.database.recheck_after_s has a recheck"
+        )
 
     def _later_writes(
         self, entry: PendingWrite, result: WriteResult
@@ -341,12 +399,7 @@ class VerifyBridge:
         with self._lock:
             held = self._rechecks.get(write_id)
         if held is None:
-            raise BridgeError(
-                "no provisional result for that write_id: only a CONFIRMED write "
-                "whose contract sets frame.database.recheck_after_s has a "
-                "recheck, each is rechecked once, and this server holds them in "
-                "memory only"
-            )
+            raise BridgeError(self._unheld(write_id))
         entry, result = held
         with self._lock:
             unchecked = [
@@ -379,11 +432,14 @@ class VerifyBridge:
                 "recheck_due_at.",
             }
         except VerifierError as exc:
-            with self._lock:
-                self._rechecks.pop(write_id, None)
-            raise BridgeError(f"the write can't be rechecked: {exc}") from exc
+            # Nothing was judged: the recheck is still owed and held here.
+            raise BridgeError(
+                f"the recheck couldn't run: {exc}; it is still owed, so call "
+                "verify_recheck again once that is fixed"
+            ) from exc
         with self._lock:
             self._rechecks.pop(write_id, None)
+            self._spent[write_id] = late.outcome
         if late.verified:
             nxt = "The verdict stands. A write after read_at is not seen."
         elif late.late:

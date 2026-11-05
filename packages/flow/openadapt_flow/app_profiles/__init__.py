@@ -10,7 +10,10 @@ app's own:
   rule's ``columns`` (none, by default) and may never go. With
   ``insert_entry_names_no_record``, the table is an id map or link row the
   app inserts with a save: the acting user's own insert entry for it that
-  names no record is the app's bookkeeping, not a write the run hid.
+  names no record is the app's bookkeeping, not a write the run hid. An entry
+  names no record when its record field is empty, or holds one of the
+  profile's ``no_record_values`` (an app may file such entries under record
+  ``0``).
 - ``columns``: an existing row may change in the named columns, and no row
   may be added or removed. Narrowed by ``fill_only`` (only from NULL or empty
   to a value: a backfill, never a swap, overwrite or clear), ``with_fill``
@@ -147,6 +150,9 @@ class AppProfile(BaseModel):
     system_columns: list[str] = Field(default_factory=list)
     #: Where the acting user's id is looked up from their sign-in name.
     users: Optional[UsersTable] = None
+    #: Record-field values with which the app's audit entries name no record
+    #: (besides an empty field), for ``insert_entry_names_no_record`` rules.
+    no_record_values: list[str] = Field(default_factory=list)
     rules: list[ProfileRule]
 
     @model_validator(mode="after")

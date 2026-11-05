@@ -119,6 +119,8 @@ _MAX_TEXT_CHARS = 65_536
 _MAX_UIA_NODES = 5_000
 _MAX_UIA_CANDIDATES = 16
 _MAX_UIA_DEPTH = 24
+#: Elements one ``/uia/tree`` observation returns at most.
+_MAX_TREE_NODES = 400
 # An Invoke that has not returned after this long (a click handler showing a
 # modal dialog, or an app that is not answering) is an uncertain delivery.
 _INVOKE_RETURN_S = 2.0
@@ -447,8 +449,29 @@ def _perform_input(payload: dict[str, Any]) -> dict[str, Any]:
 
         pyautogui.FAILSAFE = False
         if text:
+            foreground = _foreground_window_identity()
+            if foreground is None:
+                raise AgentRequestError(
+                    503,
+                    "input_focus_unavailable",
+                    "cannot bind keyboard input to a foreground window",
+                )
+
+            def require_foreground() -> None:
+                if _foreground_window_identity() != foreground:
+                    raise AgentRequestError(
+                        409,
+                        "input_focus_changed",
+                        "foreground window changed during typing; delivery may be partial",
+                    )
+
             if text.isascii():
-                pyautogui.write(text, interval=float(interval))
+                for index, char in enumerate(text):
+                    require_foreground()
+                    pyautogui.write(char, interval=0, _pause=False)
+                    require_foreground()
+                    if index + 1 < len(text):
+                        time.sleep(float(interval))
             else:
                 encoded = base64.b64encode(text.encode("utf-8")).decode("ascii")
                 ps = (
@@ -463,7 +486,9 @@ def _perform_input(payload: dict[str, Any]) -> dict[str, Any]:
                 if completed.returncode != 0:
                     raise RuntimeError("Set-Clipboard failed")
                 time.sleep(0.2)
+                require_foreground()
                 pyautogui.hotkey("ctrl", "v")
+                require_foreground()
         return _delivery_receipt("physical_type_text", native=False)
 
     if action == "press":
@@ -1159,6 +1184,62 @@ def _read_rows(container: object) -> tuple[list[dict[str, Any]], bool]:
     return rows, truncated
 
 
+def _window_tree(
+    auto: Any, window_name: str, max_nodes: int
+) -> tuple[list[dict[str, Any]], bool]:
+    """The elements of the top-level windows named ``window_name``.
+
+    Read-only, for an observation: role, name, automation id, bounds and
+    depth of each element with a known role or a name, depth first. Values are
+    not read: a text box's content shows on screen, and reading it here would
+    add a channel the pixels-only surface does not have.
+    """
+    try:
+        root = auto.GetRootControl()
+    except Exception as exc:  # noqa: BLE001
+        raise AgentRequestError(
+            503, "uia_unavailable", "UI Automation is unavailable"
+        ) from exc
+    nodes: list[dict[str, Any]] = []
+    visited = 0
+    truncated = False
+    for window in _children(root):
+        if (
+            " ".join(str(_control_value(window, "Name", "") or "").split())
+            != window_name
+        ):
+            continue
+        stack: list[tuple[Any, int]] = [(window, 0)]
+        while stack:
+            control, depth = stack.pop()
+            visited += 1
+            if visited > _MAX_UIA_NODES or len(nodes) >= max_nodes:
+                truncated = True
+                break
+            bounds = _bounds(control)
+            role = _role(control)
+            name = " ".join(str(_control_value(control, "Name", "") or "").split())
+            if bounds is not None and (role or name):
+                nodes.append(
+                    {
+                        "role": role
+                        or str(_control_value(control, "ControlTypeName", "")),
+                        "name": name[:_MAX_IDENTITY_TEXT] or None,
+                        "automation_id": str(
+                            _control_value(control, "AutomationId", "") or ""
+                        )
+                        or None,
+                        "bounds": bounds,
+                        "depth": depth,
+                    }
+                )
+            if depth < _MAX_UIA_DEPTH:
+                stack.extend((c, depth + 1) for c in reversed(_children(control)))
+        if truncated:
+            break
+    return nodes, truncated
+
+
 def _perform_uia_initialized(
     auto: Any, operation: str, payload: dict[str, Any]
 ) -> dict[str, Any]:
@@ -1251,6 +1332,30 @@ def _perform_uia_initialized(
             # a locator that matches others too could only ever be refused.
             locator = None
         return {"status": "ok", "locator": locator}
+
+    if operation == "tree":
+        data = _exact_object(
+            payload,
+            required=frozenset({"window_name"}),
+            optional=frozenset({"max_nodes"}),
+            label="uia tree",
+        )
+        window_name = data["window_name"]
+        if not isinstance(window_name, str) or not 1 <= len(window_name) <= 512:
+            raise AgentRequestError(
+                400, "invalid_schema", "window_name must be a bounded string"
+            )
+        max_nodes = data.get("max_nodes", _MAX_TREE_NODES)
+        if (
+            not isinstance(max_nodes, int)
+            or isinstance(max_nodes, bool)
+            or not 1 <= max_nodes <= _MAX_TREE_NODES
+        ):
+            raise AgentRequestError(
+                400, "invalid_schema", f"max_nodes must be 1..{_MAX_TREE_NODES}"
+            )
+        nodes, truncated = _window_tree(auto, window_name, max_nodes)
+        return {"status": "ok", "nodes": nodes, "truncated": truncated}
 
     if operation == "read":
         data = _exact_object(
@@ -1979,6 +2084,51 @@ def _active_console_session() -> int:
         return -1
 
 
+def _session_is_active(session_id: int) -> bool:
+    """True when this Windows session has a live display and input.
+
+    That is the console session, or a remote (RDP, Citrix) session that is
+    connected. A disconnected session draws nothing and takes no input.
+    """
+
+    if session_id == _active_console_session():
+        return True
+    try:
+        import ctypes  # noqa: PLC0415
+        from ctypes import wintypes  # noqa: PLC0415
+
+        win_dll = getattr(ctypes, "WinDLL", None)
+        if win_dll is None:
+            return False
+        wtsapi32 = win_dll("wtsapi32", use_last_error=True)
+        wtsapi32.WTSQuerySessionInformationW.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            ctypes.c_int,
+            ctypes.POINTER(ctypes.c_void_p),
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        wtsapi32.WTSQuerySessionInformationW.restype = wintypes.BOOL
+        wtsapi32.WTSFreeMemory.argtypes = [ctypes.c_void_p]
+        wtsapi32.WTSFreeMemory.restype = None
+        buffer = ctypes.c_void_p()
+        size = wintypes.DWORD()
+        # WTSConnectState (8) of this server's (0) session.
+        if not wtsapi32.WTSQuerySessionInformationW(
+            None, session_id, 8, ctypes.byref(buffer), ctypes.byref(size)
+        ):
+            return False
+        try:
+            if size.value < ctypes.sizeof(ctypes.c_int) or not buffer.value:
+                return False
+            state = ctypes.cast(buffer, ctypes.POINTER(ctypes.c_int)).contents.value
+        finally:
+            wtsapi32.WTSFreeMemory(buffer)
+        return int(state) == 0  # WTSActive
+    except Exception:  # noqa: BLE001 - unavailable means not active
+        return False
+
+
 def _bounded_application_identifier(name: str) -> Optional[str]:
     """Canonicalize one executable basename into the public context-id syntax."""
 
@@ -1999,8 +2149,8 @@ def _bounded_application_identifier(name: str) -> Optional[str]:
     return identifier
 
 
-def _process_image_identifier(pid: int) -> Optional[str]:
-    """Canonical executable basename of one live process, or None."""
+def _process_image_path(pid: int) -> Optional[str]:
+    """Full executable path of one live process, or None."""
 
     if os.name != "nt" or not isinstance(pid, int) or pid <= 0:
         return None
@@ -2037,15 +2187,124 @@ def _process_image_identifier(pid: int) -> Optional[str]:
                 process, 0, path, ctypes.byref(size)
             ):
                 return None
-            return _bounded_application_identifier(path.value)
+            return path.value or None
         finally:
             kernel32.CloseHandle(process)
     except Exception:  # noqa: BLE001 - unavailable means unverifiable
         return None
 
 
-def _foreground_application_identity() -> Optional[str]:
-    """Observe the foreground executable without reading its window title."""
+def _process_image_identifier(pid: int) -> Optional[str]:
+    """Canonical executable basename of one live process, or None."""
+
+    path = _process_image_path(pid)
+    return _bounded_application_identifier(path) if path else None
+
+
+#: File identity -> sha256 of the executable's bytes. The key holds the path,
+#: size, modification and change times and the NTFS file id, so a file
+#: replaced in place or by rename is hashed again. An executable rarely
+#: changes while the agent runs, and hashing a large one on every observation
+#: would sit between resolution and input.
+_IMAGE_DIGESTS: dict[tuple[str, int, int, int, int], str] = {}
+_IMAGE_DIGEST_CACHE_SIZE = 8
+_IMAGE_DIGEST_MAX_BYTES = 2 * 1024 * 1024 * 1024
+
+
+def _file_key(path: str) -> tuple[str, int, int, int, int]:
+    stat = os.stat(path)
+    return (
+        os.path.normcase(path),
+        int(stat.st_size),
+        int(stat.st_mtime_ns),
+        int(stat.st_ctime_ns),
+        int(stat.st_ino),
+    )
+
+
+def _image_file_digest(path: str) -> Optional[str]:
+    """``sha256:<hex>`` of one executable file's bytes, or None."""
+
+    try:
+        key = _file_key(path)
+        cached = _IMAGE_DIGESTS.pop(key, None)
+        if cached is None:
+            if key[1] > _IMAGE_DIGEST_MAX_BYTES:
+                return None
+            digest = hashlib.sha256()
+            with open(path, "rb") as image:
+                for chunk in iter(lambda: image.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            if _file_key(path) != key:
+                return None
+            cached = f"sha256:{digest.hexdigest()}"
+        _IMAGE_DIGESTS[key] = cached
+        while len(_IMAGE_DIGESTS) > _IMAGE_DIGEST_CACHE_SIZE:
+            del _IMAGE_DIGESTS[next(iter(_IMAGE_DIGESTS))]
+        return cached
+    except Exception:  # noqa: BLE001 - unavailable means unverifiable
+        return None
+
+
+def _process_start_ns(pid: int) -> Optional[int]:
+    """When one live process started, in Unix nanoseconds, or None."""
+
+    if os.name != "nt" or pid <= 0:
+        return None
+    try:
+        import ctypes  # noqa: PLC0415
+        from ctypes import wintypes  # noqa: PLC0415
+
+        win_dll = getattr(ctypes, "WinDLL", None)
+        if win_dll is None:
+            return None
+        kernel32 = win_dll("kernel32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.GetProcessTimes.argtypes = [wintypes.HANDLE] + [
+            ctypes.POINTER(wintypes.FILETIME)
+        ] * 4
+        kernel32.GetProcessTimes.restype = wintypes.BOOL
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel32.CloseHandle.restype = wintypes.BOOL
+        process = kernel32.OpenProcess(0x1000, False, pid)
+        if not process:
+            return None
+        try:
+            times = [wintypes.FILETIME() for _ in range(4)]
+            if not kernel32.GetProcessTimes(process, *(ctypes.byref(t) for t in times)):
+                return None
+        finally:
+            kernel32.CloseHandle(process)
+        created = (int(times[0].dwHighDateTime) << 32) | int(times[0].dwLowDateTime)
+        # FILETIME counts 100 ns ticks from 1601-01-01.
+        return (created - 116444736000000000) * 100
+    except Exception:  # noqa: BLE001 - unavailable means unverifiable
+        return None
+
+
+def _running_image_digest(pid: int, path: str) -> Optional[str]:
+    """The digest of ``path`` only if it is still the file the process loaded.
+
+    An updater that replaces an executable while it runs leaves the old code
+    in memory and a new file on disk. A file changed after the process
+    started is therefore not evidence for the running code, and yields None.
+    """
+
+    started = _process_start_ns(pid)
+    if started is None:
+        return None
+    try:
+        key = _file_key(path)
+    except OSError:
+        return None
+    if max(key[2], key[3]) > started:
+        return None
+    return _image_file_digest(path)
+
+
+def _foreground_window_identity() -> Optional[tuple[int, int]]:
+    """Foreground window and owning process, without reading a window title."""
 
     if os.name != "nt":
         return None
@@ -2075,7 +2334,41 @@ def _foreground_application_identity() -> Optional[str]:
             return None
     except Exception:  # noqa: BLE001 - unavailable means unverifiable
         return None
-    return _process_image_identifier(int(pid.value))
+    return int(hwnd), int(pid.value)
+
+
+def _foreground_process_id() -> Optional[int]:
+    """The process that owns the foreground window, without reading its title."""
+    identity = _foreground_window_identity()
+    return identity[1] if identity is not None else None
+
+
+def _foreground_application_identity() -> Optional[str]:
+    """Observe the foreground executable without reading its window title."""
+
+    pid = _foreground_process_id()
+    return _process_image_identifier(pid) if pid is not None else None
+
+
+def _foreground_application_image() -> tuple[Optional[str], Optional[str]]:
+    """The foreground executable's basename identity and its file digest.
+
+    Both come from the same process image path, so the version can never
+    describe a different program than the identity. The digest covers that
+    executable file only: for an app run by a shared host (a script
+    interpreter, a browser, a runtime that loads the app's own libraries) it
+    pins the host, not the app's code.
+    """
+
+    pid = _foreground_process_id()
+    path = _process_image_path(pid) if pid is not None else None
+    if path is None:
+        return None, None
+    identity = _bounded_application_identifier(path)
+    if identity is None:
+        return None, None
+    assert pid is not None
+    return identity, _running_image_digest(pid, path)
 
 
 def _native_session_digest() -> Optional[str]:
@@ -2139,7 +2432,7 @@ def _native_session_digest() -> Optional[str]:
         session_id = wintypes.DWORD()
         if not kernel32.ProcessIdToSessionId(os.getpid(), ctypes.byref(session_id)):
             return None
-        if int(session_id.value) != _active_console_session():
+        if not _session_is_active(int(session_id.value)):
             return None
 
         token = wintypes.HANDLE()
@@ -2180,13 +2473,57 @@ def _native_session_digest() -> Optional[str]:
         return None
 
 
-def _execution_context_identity() -> dict[str, Any]:
-    """Return PHI-free identities observed from live Windows OS state."""
+def _environment_digest() -> Optional[str]:
+    """Hash this Windows installation: machine id and exact OS build.
 
+    PHI-free and stable across sign-ins, so a qualification bound to one
+    machine and OS build is refused on another or after an OS update.
+    """
+
+    if os.name != "nt":
+        return None
+    try:
+        import importlib  # noqa: PLC0415
+
+        winreg = importlib.import_module("winreg")
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Cryptography",
+        ) as key:
+            machine_guid = str(winreg.QueryValueEx(key, "MachineGuid")[0])
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Windows NT\CurrentVersion",
+        ) as key:
+            build = str(winreg.QueryValueEx(key, "CurrentBuildNumber")[0])
+            try:
+                revision = str(int(winreg.QueryValueEx(key, "UBR")[0]))
+            except OSError:
+                revision = ""
+        if not machine_guid or not build:
+            return None
+        material = f"windows-environment-v1\0{machine_guid}\0{build}\0{revision}"
+        return hashlib.sha256(material.encode("utf-8")).hexdigest()
+    except Exception:  # noqa: BLE001 - unavailable means unverifiable
+        return None
+
+
+def _execution_context_identity() -> dict[str, Any]:
+    """Return PHI-free identities observed from live Windows OS state.
+
+    ``application`` and ``application_version`` describe the same foreground
+    executable (its basename and the SHA-256 of its file); ``environment``
+    hashes the machine id and OS build. All four come from this one call so
+    a qualification observer sees one consistent snapshot.
+    """
+
+    application, application_version = _foreground_application_image()
     return {
         "status": "ok",
-        "application": _foreground_application_identity(),
+        "application": application,
+        "application_version": application_version,
         "session": _native_session_digest(),
+        "environment": _environment_digest(),
         "workflow_state": None,
     }
 
@@ -2252,6 +2589,7 @@ def make_handler_class(
                         "capabilities": [
                             "screenshot",
                             "context_identity_v1",
+                            "context_environment_v1",
                             "typed_input_v1",
                             "guarded_input_v1",
                             "uia_v1",
@@ -2300,6 +2638,7 @@ def make_handler_class(
                 "/uia/find": ("uia", "find"),
                 "/uia/act": ("uia", "act"),
                 "/uia/read": ("uia", "read"),
+                "/uia/tree": ("uia", "tree"),
             }
             is_legacy = self.path == "/execute_windows" and config.allow_legacy_exec
             if self.path not in typed_routes and not is_legacy:
@@ -2393,6 +2732,9 @@ def make_handler_class(
                             required=frozenset(
                                 {"application", "session", "workflow_state"}
                             ),
+                            # context_environment_v1: the executable's digest
+                            # and the environment, compared like the others.
+                            optional=frozenset({"application_version", "environment"}),
                             label="expected_context",
                         )
                         for key, value in expected_context.items():

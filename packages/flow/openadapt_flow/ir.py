@@ -545,6 +545,27 @@ class Anchor(BaseModel):
             " tiers compare like-for-like. Set iff `identifier_crop` is set."
         ),
     )
+    dialog_region: Optional[Region] = Field(
+        default=None,
+        description=(
+            "Box of the active dialog (the topmost modal) that held the target"
+            " in the recorded frame, when it sat in one. The context band was"
+            " cut to it, so text of the page behind the dialog is not identity"
+            " evidence. Replay cuts the live band to the live dialog's box,"
+            " and fails the identity check closed when no dialog holds the"
+            " resolved point. None outside a dialog and on bundles compiled"
+            " before this capability."
+        ),
+    )
+    dialog_row: Optional[bool] = Field(
+        default=None,
+        description=(
+            "True reads the target's own row inside dialog_region. False permits"
+            " the whole dialog when teach time positively found a standalone"
+            " control with no usable row text; replay must confirm no record"
+            " row again. None conservatively uses the target's row."
+        ),
+    )
     form_identity: Optional[FormIdentity] = Field(
         default=None,
         description=(
@@ -563,6 +584,10 @@ class Anchor(BaseModel):
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         """Leave unset census metadata out, so older bundle bytes stay equal."""
         data: dict[str, Any] = handler(self)
+        if self.dialog_region is None:
+            data.pop("dialog_region", None)
+        if self.dialog_row is None:
+            data.pop("dialog_row", None)
         if self.record_key is None:
             data.pop("record_key", None)
         if self.structured_row is None:
@@ -827,6 +852,45 @@ class WebFormPrecheck(BaseModel):
     from_step: Optional[str] = None
 
 
+class WebFormWrite(BaseModel):
+    """A request, other than the save, that wrote while the replaced steps ran.
+
+    The API step's span is a declared, ordered sequence: these writes in the
+    order they were recorded, then the save. Each is one of two roles:
+
+    - ``ambient``: the page sent it on its own. It came from a script of
+      another document than the form, one that was loaded before the form
+      opened (for example an app's tab shell that posts
+      ``execute_background_services.php`` on a timer), and the form page's
+      source doesn't name it. No replaced step caused it, so the API step
+      neither sends nor waits for it; the live page goes on as it does under
+      the GUI steps. Listed for the person who admits the step.
+    - ``step``: a replaced step caused it. The API step sends it, rebuilt
+      from ``fields`` the same way as the save, in its recorded place before
+      the save. Its read-back is the record check declared on ``from_step``,
+      which the binding's record check includes; admission refuses a step
+      write whose step has none. A write that fails, or whose response is
+      outside ``expected_status``, stops the run with nothing after it sent,
+      nothing retried and nothing redone through the GUI, and the run
+      reconciles by reading the records back.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["ambient", "step"]
+    method: str = Field(min_length=1)
+    path: str = Field(min_length=1)
+    #: Path of the document whose script or form sent it.
+    sent_by: str = ""
+    #: The replaced step during which it was sent (``step`` writes).
+    from_step: Optional[str] = None
+    #: How to rebuild the body (``step`` writes): same sources as the save.
+    fields: list[WebFormField] = Field(default_factory=list)
+    expected_status: list[int] = Field(default_factory=list)
+    #: Why it has this role, in words, from the capture.
+    evidence: str = ""
+
+
 class WebFormSpec(BaseModel):
     """How to repeat a recorded browser form save as one HTTP request.
 
@@ -844,15 +908,41 @@ class WebFormSpec(BaseModel):
     fields: list[WebFormField] = Field(min_length=1)
     controls: list[str] = Field(default_factory=list)
     client_rules: Optional[dict[str, Any]] = None
+    #: Page script the browser runs on this save that the API step can't
+    #: evaluate by reading the form: the form's ``on*`` handlers, the ``on*``
+    #: handlers of the fields it sends, a page script listening for submit,
+    #: and validate.js rule kinds such as a ``pastDate`` rule. Before each
+    #: save the runtime runs that script itself, in a scratch page of the live
+    #: session with every write blocked, on the run's values, and sends only
+    #: when the page would submit exactly the body the API step built. When
+    #: it can't run the script, the GUI steps run. The live form must list the
+    #: same script, or the API step doesn't run.
+    client_scripts: list[str] = Field(default_factory=list)
+    #: The control in the form the person clicked to start the save (a CSS
+    #: selector from the recording), and the requests that click made
+    #: (``METHOD /path``). Running the page's script clicks it, as the person
+    #: did, and the page must then submit the form or make one of those
+    #: requests.
+    submitter: Optional[str] = None
+    submitter_requests: list[str] = Field(default_factory=list)
+    #: The control the person clicked to confirm the save when it isn't the
+    #: submitter (for example a ``#confirmCreate`` button in a duplicate
+    #: check dialog). Running the page's script clicks it too, in whichever
+    #: frame has it, and the page must then submit the form.
+    confirm: Optional[str] = None
     prechecks: list[WebFormPrecheck] = Field(default_factory=list)
     #: Regular expression the save response must match to count as accepted.
     success_pattern: Optional[str] = None
     #: GUI steps the API step stands in for, in order. The last one is the save.
     replaces_steps: list[str] = Field(min_length=1)
-    #: Other non-GET requests seen while the recorded steps ran. A proposal
-    #: with any is refused, and so are its admission and its run (a binding
-    #: proposed before that rule existed may still list some).
+    #: Other non-GET requests seen while the recorded steps ran that no
+    #: declared write accounts for. A binding with any is refused at
+    #: admission and at run time (bindings proposed before ``writes``
+    #: existed may list some).
     other_writes_seen: list[str] = Field(default_factory=list)
+    #: Every other write seen while the replaced steps ran, in recorded
+    #: order, each with its role (WebFormWrite). The save comes after them.
+    writes: list[WebFormWrite] = Field(default_factory=list)
     #: On-screen checks of folded steps that caused no request (screen-only,
     #: not repeated), listed for the person admitting the step.
     screen_only_checks: list[str] = Field(default_factory=list)
@@ -3624,6 +3714,13 @@ class Workflow(BaseModel):
             report = _bv.validate_workflow(wf)
             report.raise_if(categories=("structure",))
 
+        if not bundle_encrypted and wf.encrypted:
+            # The flag is authoritative only with an encrypted envelope on
+            # disk: a plaintext copy (for example a decrypted upload) that
+            # still says encrypted is plaintext, and loads as plaintext.
+            wf.encrypted = False
+            if wf.manifest is not None:
+                wf.manifest = wf.manifest.model_copy(update={"encrypted": False})
         return wf
 
     def stamp_certification(
@@ -4079,11 +4176,13 @@ class IdentityCheck(BaseModel):
             "look-alike identifier (runtime.identity_looks), in order."
         ),
     )
-    look_halt: Optional[Literal["identity_look_changed_screen"]] = Field(
+    look_halt: Optional[
+        Literal["identity_look_changed_screen", "identity_dialog_mask_failed"]
+    ] = Field(
         default=None,
         description=(
             "Set when an extra look changed the screen outside the "
-            "identifier it read. The step halts."
+            "identifier it read, or could not mask its dialog. The step halts."
         ),
     )
     candidate_count: Optional[int] = Field(

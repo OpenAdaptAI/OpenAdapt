@@ -208,3 +208,21 @@ it("says answers won't count while no approver root is pinned", async () => {
   render(<Stops />);
   expect(await screen.findByText("No approver root is pinned on this computer")).toBeTruthy();
 });
+
+it("answers the newly displayed stop when a navigation key is followed by a choice", async () => {
+  vi.mocked(engineInvoke).mockResolvedValue({ ok: true, changed: 1 });
+  render(<Stops />);
+  await screen.findByRole("heading", { name: "Same person?" });
+
+  fireEvent.keyDown(window, { key: "j", code: "KeyJ" });
+  await screen.findByText("2 of 2 · New patient referral · Caldley referral");
+  fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+
+  await waitFor(() =>
+    expect(engineInvoke).toHaveBeenCalledWith(
+      CMD.ANSWER_STOP_CARDS,
+      expect.objectContaining({ card_ids: ["sha256:b"], choice: "same" }),
+    ),
+  );
+  expect(engineInvoke).toHaveBeenCalledTimes(1);
+});

@@ -524,7 +524,7 @@ def _judge_versions(
     window that isn't the agent's own refutes it; one that can't be read or
     attributed leaves it not checked."""
 
-    from openadapt_flow.runtime.effects.versions import judge_versions
+    from openadapt_flow.runtime.effects.versions import VersionVerdict, judge_versions
 
     spec = cfg.frame.versions if cfg.frame is not None else None
     if spec is None:
@@ -557,13 +557,21 @@ def _judge_versions(
             return index(rows) if isinstance(rows, list) else None
         return index(before.records) if before.reachable else None
 
+    def writes_a_target(effect: Effect) -> bool:
+        """A write effect whose records can be targets. A guard ("nothing
+        here", ``record_written`` with ``expected_count`` 0) never is."""
+
+        if effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS):
+            return False
+        return not (
+            effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count == 0
+        )
+
     ignored = set(cfg.frame.ignore_fields)  # type: ignore[union-attr]
     targets: list[tuple[Optional[str], bool, bool]] = []
     for effect, verdict in zip(effects, verdicts):
-        if effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS):
+        if not writes_a_target(effect):
             continue
-        if effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count == 0:
-            continue  # a guard: "nothing here"
         if not verdict.confirmed:
             continue
         if (
@@ -588,14 +596,27 @@ def _judge_versions(
             )
             targets.append((text, existed, changed))
     stored = (before.detail or {}).get(FRAME_VERSIONS_DETAIL)
-    result = judge_versions(
-        spec,
-        stored if isinstance(stored, Mapping) else {},
-        _read_versions(cfg, params),
-        targets,
-        _mac_key(salt),
-        params,
-    )
+    if spec.target_surface is not None and not any(
+        writes_a_target(e) and surface_of(e) == spec.target_surface for e in effects
+    ):
+        # A surface no write target is read from (a typo in a hand-written
+        # contract, or a surface only a guard reads) would leave no target,
+        # and no target holds.
+        result = VersionVerdict(
+            "not_checked",
+            "unknown_surface",
+            reason="frame.versions.target_surface names a surface no write "
+            "target is read from, so no target's versions can be judged",
+        )
+    else:
+        result = judge_versions(
+            spec,
+            stored if isinstance(stored, Mapping) else {},
+            _read_versions(cfg, params),
+            targets,
+            _mac_key(salt),
+            params,
+        )
     frame.versions = result
     if result.status == "refuted":
         frame.status = "refuted"
@@ -721,6 +742,7 @@ def _read_database(
             key=mac_key(salt),
             modes=database.modes(),  # type: ignore[arg-type]
             max_rows=database.max_rows,
+            read_row_budget=database.read_row_budget,
             before=before,
             extra_queries=_audit_sql(cfg),
             ignore=database.all_ignore_columns(),
@@ -780,6 +802,8 @@ class _DatabaseFrame:
     blind: bool = False
     #: The two reads after the save differed: the database was still moving.
     still_moving: bool = False
+    #: A baseline or post-save read exceeded the row budget.
+    too_large: bool = False
     #: The app profile's judgment of one row change (``AppProfile.excuse``).
     excuse: Any = None
     #: Every user's id by sign-in name (in memory only), to resolve an
@@ -788,6 +812,8 @@ class _DatabaseFrame:
     #: Append-only tables in both reads whose profile rule excuses the acting
     #: user's insert entries that name no record.
     no_record_inserts: list[str] = field(default_factory=list)
+    #: The profile's record-field values that name no record.
+    no_record_values: list[str] = field(default_factory=list)
     #: The settled read after the save, and when it was taken: what a later
     #: recheck compares with (``recheck_after_s``).
     post: Any = None
@@ -853,6 +879,7 @@ def _database_frame(
         ROW,
         Snapshot,
         SnapshotError,
+        SnapshotTooLarge,
         cell_hash,
         key_text,
         mac_key,
@@ -877,11 +904,20 @@ def _database_frame(
     stored = (
         before.detail.get(FRAME_DB_DETAIL) if isinstance(before.detail, dict) else None
     )
+    limit_error = SnapshotTooLarge.__name__ + ":"
     if not isinstance(stored, dict):
+        error = (
+            before.detail.get(FRAME_DB_ERROR, "")
+            if isinstance(before.detail, dict)
+            else ""
+        )
+        unreachable.too_large = str(error).startswith(limit_error)
         return unreachable
     old = Snapshot.from_json(stored)
-    new = _read_database(cfg, salt, before=old)
+    errors: list[str] = []
+    new = _read_database(cfg, salt, before=old, errors=errors)
     if new is None:
+        unreachable.too_large = any(e.startswith(limit_error) for e in errors)
         return unreachable
     new_at = _now()
     # Read again a moment later: two reads in a row must match, or the app
@@ -895,8 +931,9 @@ def _database_frame(
     used = 0
     for used in range(1, attempts + 1):
         time.sleep(database.settle_s)
-        again = _read_database(cfg, salt, before=old)
+        again = _read_database(cfg, salt, before=old, errors=errors)
         if again is None:
+            unreachable.too_large = any(e.startswith(limit_error) for e in errors)
             return unreachable
         if settled_state(new, again):
             settled = True
@@ -939,6 +976,7 @@ def _database_frame(
 
     profile = database.loaded_profile()
     no_record = profile.no_record_insert_tables() if profile is not None else set()
+    out.no_record_values = list(profile.no_record_values) if profile is not None else []
     for name in sorted(set(old.tables) | set(new.tables)):
         a, b = old.tables.get(name), new.tables.get(name)
         try:
@@ -1011,6 +1049,12 @@ def _database_frame(
         }
 
         def excuse(name: str, before: Any, after: Any, fields: list[str]) -> Any:
+            from openadapt_flow.runtime.effects.db_snapshot import every_cell_hashed
+
+            tables = (old.tables.get(name), new.tables.get(name))
+            if any(t is not None and not every_cell_hashed(t) for t in tables):
+                # A column no cell MAC shows may have moved: no rule judges it.
+                return False
             return profile.excuse(
                 name, before, after, fields, hashers[name], names, ids
             )
@@ -1127,6 +1171,19 @@ def judge_run_frame(
     # (``database.judged_by``) is read by it no earlier than the settled
     # read a recheck compares with, so no change falls between the two.
     db = _database_frame(cfg, before, salt)
+    if db is not None and db.too_large:
+        from openadapt_flow.runtime.effects.db_snapshot import SnapshotTooLarge
+
+        assert spec.database is not None
+        return FrameVerdict(
+            status="not_checked",
+            reason=str(SnapshotTooLarge(spec.database.read_row_budget)),
+            database={
+                "read_status": "too_large",
+                "read_row_budget": spec.database.read_row_budget,
+            },
+            attribution=spec.attribution.kind if spec.attribution else "none",
+        )
     after: Any = None
     if not database_only:
         try:
@@ -1292,6 +1349,7 @@ def judge_run_frame(
         new_row_defaults=None if db is None else db.defaults,
         unread_changes=() if db is None else db.unread,
         no_record_inserts=() if db is None else db.no_record_inserts,
+        no_record_values=() if db is None else db.no_record_values,
         hashers=None if db is None else db.hashers,
         clock=("", "") if db is None else db.clock,
         database_evidence=None if db is None else db.evidence,
@@ -1559,7 +1617,11 @@ def capture_baseline(
             detail[FRAME_DB_ERROR] = why[0] if why else "not read"
     audit_verifier = _audit_verifier(cfg, params)
     if audit_verifier is not None:
-        if entries is None:
+        if entries is None and (
+            cfg.frame is None or cfg.frame.database is None or snapshot is not None
+        ):
+            # A failed database read must not retry its audit query outside
+            # the snapshot's budget and consistent transaction.
             entries = _read_audit(audit_verifier)
         # Which entries existed, as keyed hashes: never what they say.
         detail[FRAME_AUDIT_DETAIL] = {

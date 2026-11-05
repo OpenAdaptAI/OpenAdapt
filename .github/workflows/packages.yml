@@ -52,6 +52,12 @@
 # typecheck, the ESM build (which refuses any runtime import beyond React) and
 # a vendored copy's checksum verification.
 #
+# @openadapt/seal-view (packages/seal-view), one run's Seal drawn and checked
+# from its files, runs its unit tests, rebuilds the offline viewer and fails
+# when the launcher's copy (openadapt/seal_view/viewer.html) differs or is over
+# its size budget, then opens the quickstart fixture's Seal pages from file://
+# in Chromium (tests/test_seal_view.py): valid, tampered, and no requests.
+#
 # OpenAdapt Desktop (packages/desktop) runs two reusable workflows:
 # desktop-test.yml (the Python engine on Linux for a PR and in the queue, plus
 # macOS and Windows on main, and the bundled-Flow qualification contract) and
@@ -115,6 +121,7 @@ jobs:
       desktop: ${{ steps.classify.outputs.desktop }}
       tray: ${{ steps.classify.outputs.tray }}
       program_graph: ${{ steps.classify.outputs.program_graph }}
+      seal_view: ${{ steps.classify.outputs.seal_view }}
       weight: ${{ steps.classify.outputs.weight }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -170,6 +177,8 @@ jobs:
           tray="$(hit "^packages/tray/|$wf")"
           # The program map checks its schema against Flow's copy.
           program_graph="$(hit "^packages/program-graph/|^packages/flow/schemas/program-graph-v2\.json$|^\.github/workflows/release-program-graph\.yml$|$wf")"
+          # The Seal viewer inlines the program map's source.
+          seal_view="$(hit "^packages/(seal-view|program-graph)/|^openadapt/seal_view/|^tests/test_seal_view\.py$|^tests/fixtures/seal_view/|$wf")"
           # Any package's metadata, or the launcher's, can change what an
           # install pulls in.
           weight="$(hit "^packages/|^pyproject\.toml$|^openadapt/|^hatch_build\.py$|^scripts/install_weight/|$wf")"
@@ -182,6 +191,7 @@ jobs:
             echo "desktop=$desktop"
             echo "tray=$tray"
             echo "program_graph=$program_graph"
+            echo "seal_view=$seal_view"
             echo "weight=$weight"
           } | tee -a "$GITHUB_OUTPUT"
 
@@ -206,7 +216,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: |
@@ -231,7 +241,7 @@ jobs:
         run: ruff check openadapt_types tests scripts
       - name: Install uv (for the oldest-Python syntax check)
         if: matrix.python-version == '3.12'
-        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - name: Syntax at the oldest supported Python (3.10)
         if: matrix.python-version == '3.12'
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
@@ -275,7 +285,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       # uv installs the locked requirements into the setup-python interpreter,
       # in seconds instead of minutes, from a cache keyed on the locks.
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: |
@@ -299,7 +309,7 @@ jobs:
         run: ruff check src tests scripts
       - name: Install uv (for the oldest-Python syntax check)
         if: matrix.python-version == '3.12'
-        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - name: Syntax at the oldest supported Python (3.10)
         if: matrix.python-version == '3.12'
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
@@ -333,7 +343,7 @@ jobs:
           python-version: "3.12"
       # uv installs the locked requirements into the setup-python interpreter,
       # in seconds instead of minutes, from a cache keyed on the locks.
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: packages/flow/uv.lock
@@ -347,9 +357,13 @@ jobs:
         # every public data/config asset listed in public-artifacts.json.
         run: python scripts/check_release_consistency.py
       - name: Ruff lint
-        run: ruff check openadapt_flow
+        run: ruff check openadapt_flow benchmark/harness benchmark/phase_latency
+      - name: No app-specific code in the engine
+        # App knowledge lives in profiles, contracts and fixtures (CONTRIBUTING:
+        # "App knowledge lives in data"); the denylist is scripts/generality.toml.
+        run: python scripts/check_engine_generality.py
       - name: Install uv (for the oldest-Python syntax check)
-        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - name: Syntax at the oldest supported Python (3.10)
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
         # Python than requires-python allows (a 3.12 f-string, say) passed it
@@ -362,9 +376,11 @@ jobs:
           ruff check --isolated --select E9 --target-version py310 .
           uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Ruff format check
-        run: ruff format --check openadapt_flow tests
+        run: ruff format --check openadapt_flow tests benchmark/harness benchmark/phase_latency
       - name: Mypy
         run: mypy
+      - name: Phase timing contract types
+        run: mypy --follow-imports=silent --ignore-missing-imports benchmark/phase_latency/collector.py
       - name: Mypy (strict, safety path only)
         run: |
           mypy \
@@ -417,11 +433,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Each shard runs pytest-xdist on all four runner cores and pays about
-        # a minute and a half of setup. A pull request's fast lane takes four
-        # shards to fit `ci` in ten minutes at about the same runner time; the
-        # full suite on main and nightly takes two.
-        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"shard":1,"of":4},{"shard":2,"of":4},{"shard":3,"of":4},{"shard":4,"of":4}]' || '[{"shard":1,"of":2},{"shard":2,"of":2}]') }}
+        # Each shard runs one pytest-xdist worker per vCPU (four on
+        # ubuntu-latest) and pays about 35 s of setup. Files are packed by
+        # measured time (scripts/ci/flow_shards.py), so the shards finish
+        # together: a pull request's fast lane takes three shards, about five
+        # minutes each, to fit `ci` in ten minutes. The full suite on main and
+        # nightly takes two.
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"shard":1,"of":3},{"shard":2,"of":3},{"shard":3,"of":3}]' || '[{"shard":1,"of":2},{"shard":2,"of":2}]') }}
     defaults:
       run:
         working-directory: packages/flow
@@ -434,7 +452,7 @@ jobs:
           python-version: "3.12"
       # uv installs the locked requirements into the setup-python interpreter,
       # in seconds instead of minutes, from a cache keyed on the locks.
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: |
@@ -448,7 +466,7 @@ jobs:
           python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,capture,agent]' --lock packages/capture
           --editable packages/types --editable packages/capture --editable packages/flow
       - name: Install Harness² for the integration tests
-        # Not on PyPI. Pinned to the commit openadapt_flow.integrations.harness2
+        # Not on PyPI. Pinned to the commit benchmark.harness.harness2
         # is written against; it has no runtime dependencies.
         run: >-
           uv pip install --system --no-deps
@@ -485,30 +503,32 @@ jobs:
           # Everything outside tests/e2e, minus the installer self-test and the
           # long qualification campaign. The nightly run (a schedule, or a
           # dispatch) also takes all of tests/e2e; pull requests and main run
-          # the end-to-end tests flow-critical names. Files are dealt
-          # round-robin from a sorted list, so every file lands in exactly one
-          # shard.
+          # the end-to-end tests flow-critical names. flow_shards.py packs the
+          # files by their measured time (scripts/ci/flow_test_durations.json)
+          # and lists each shard longest first; every file lands in exactly
+          # one shard.
           e2e=(-not -path 'tests/e2e/*')
           case "$EVENT_NAME" in schedule|workflow_dispatch) e2e=() ;; esac
           find tests -name 'test_*.py' "${e2e[@]}" \
             -not -path 'tests/test_install_playwright_browser.py' \
             -not -path 'tests/test_qualification_gate_campaign.py' \
-            | LC_ALL=C sort | awk -v s="$SHARD" -v n="$SHARDS" 'NR % n == s % n' > "$RUNNER_TEMP/shard.txt"
+            | python ../../scripts/ci/flow_shards.py --shard "$SHARD" --of "$SHARDS" > "$RUNNER_TEMP/shard.txt"
           wc -l < "$RUNNER_TEMP/shard.txt"
       - name: Test
         # A pull request runs the fast lane: tests/nightly_only.txt lists the
         # slow tests (over about 5 s on CI) that main and nightly run instead.
         env:
           OPENADAPT_TEST_LANE: ${{ github.event_name == 'pull_request' && 'fast' || 'full' }}
-        # -n auto: one xdist worker per core. --dist loadfile keeps each file
-        # on one worker, so module fixtures and file-local state stay in one
-        # process. xdist gives each worker its own directory under --basetemp
+        # -n logical: one xdist worker per vCPU. (-n auto counts physical
+        # cores and started two workers on the four-vCPU runner.) --dist
+        # loadfile keeps each file on one worker, so module fixtures and
+        # file-local state stay in one process. xdist gives each worker its own directory under --basetemp
         # (runs/ci/popen-gwN), so tmp_path never collides.
         run: |
           set -euo pipefail
           mkdir -p runs
           mapfile -t files < "$RUNNER_TEMP/shard.txt"
-          pytest -n auto --dist loadfile -v --durations=20 --basetemp=runs/ci "${files[@]}"
+          pytest -n logical --dist loadfile -v --durations=20 --basetemp=runs/ci "${files[@]}"
 
   flow-critical:
     name: flow core critical (golden VERIFIED, zero model calls)
@@ -528,7 +548,7 @@ jobs:
           python-version: "3.12"
       # uv installs the locked requirements into the setup-python interpreter,
       # in seconds instead of minutes, from a cache keyed on the locks.
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: packages/flow/uv.lock
@@ -557,10 +577,10 @@ jobs:
         # agent guard's wire check end to end. Serially, these and the step
         # below took about 13 minutes. tests/e2e runs apart from tests/: in one
         # xdist run with both, test_structural_action lost its conftest's
-        # `bundle` fixture.
+        # `bundle` fixture. -n logical: one worker per vCPU, as in flow-unit.
         run: |
           mkdir -p runs
-          pytest -n auto --dist loadfile -v --durations=20 \
+          pytest -n logical --dist loadfile -v --durations=20 \
             tests/e2e/test_free_path_e2e.py \
             tests/e2e/test_record_compile_replay.py \
             tests/e2e/test_structural_action.py \
@@ -575,7 +595,7 @@ jobs:
             --basetemp=runs/ci-critical-e2e --junitxml=runs/critical-e2e-junit.xml
       - name: Read-back and zero-model-call tests, by name
         run: |
-          pytest -n auto --dist loadfile -v --durations=20 \
+          pytest -n logical --dist loadfile -v --durations=20 \
             tests/test_replayer_readback.py \
             tests/test_readback_authoring.py \
             tests/test_run_receipt.py \
@@ -620,7 +640,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/flow/uv.lock"
@@ -686,10 +706,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: packages/flow/uv.lock
@@ -736,6 +756,92 @@ jobs:
           sys.exit(1 if not cases or skipped else 0)
           PY
 
+  # Native Linux on a real AT-SPI registry: an isolated Xvfb display, session
+  # D-Bus and GTK3 apps. qualify_linux_atspi.py drives LinuxBackend on its
+  # fixture (three clean, three ambiguous and three stale-target trials, each
+  # checked from file bytes); qualify_linux.py records a write workflow on a
+  # GTK3 chart app with SQLite, compiles it, runs it governed with the record
+  # check (clean, another patient, a look-alike) and repairs an update notice
+  # on its AT-SPI element identity. Both results are uploaded.
+  flow-linux-atspi:
+    name: flow native Linux (AT-SPI, Xvfb)
+    needs: scope
+    # Post-merge tier (main and nightly): a pull request's `ci` lane is Linux
+    # unit tests; this job starts real apps.
+    if: needs.scope.outputs.flow == 'true' && github.event_name != 'pull_request' && github.event_name != 'merge_group'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: packages/flow
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install X11, D-Bus, GTK3 and AT-SPI
+        timeout-minutes: 15
+        run: |
+          set -uo pipefail
+          sudo sed -i \
+            's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          update_ok=""
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              update_ok=1
+              break
+            fi
+            echo "::warning::apt-get update failed (attempt ${attempt}/3); retrying"
+            sleep $((attempt * 10))
+          done
+          if [ -z "$update_ok" ]; then
+            echo "::error::apt-get update failed three times; the Ubuntu mirror is unreachable"
+            exit 1
+          fi
+          set -e
+          sudo apt-get install -y \
+            at-spi2-core dbus-x11 gir1.2-atspi-2.0 gir1.2-gtk-3.0 libatk-adaptor \
+            libcairo2-dev libgirepository-2.0-dev openbox pkg-config xauth xvfb
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: packages/flow/uv.lock
+          cache-suffix: flow-linux-atspi
+      - name: Install from the lock
+        run: >-
+          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,linux]'
+          --editable packages/types --editable packages/flow
+      - name: Qualify LinuxBackend on the GTK3 fixture
+        timeout-minutes: 10
+        run: |
+          mkdir -p runs/linux-atspi
+          xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- \
+            env XDG_SESSION_TYPE=x11 NO_AT_BRIDGE=0 GTK_MODULES=atk-bridge \
+            python scripts/qualify_linux_atspi.py \
+            --output runs/linux-atspi/results.json
+      - name: Record, compile, run and repair on a GTK3 app with SQLite
+        timeout-minutes: 15
+        run: |
+          # xvfb-run outside dbus-run-session: the D-Bus-activated AT-SPI
+          # registry needs DISPLAY to synthesize input. openbox makes the
+          # app's window active, which physical input requires.
+          xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- \
+            bash -c 'openbox >/dev/null 2>&1 & sleep 1; exec "$@"' bash \
+            env XDG_SESSION_TYPE=x11 NO_AT_BRIDGE=0 GTK_MODULES=atk-bridge \
+            python benchmark/repair_every_backend/qualify_linux.py \
+            --output runs/linux-atspi/record-compile-run.json
+      - name: Upload Linux AT-SPI qualification evidence
+        if: always()
+        timeout-minutes: 2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-atspi-qualification
+          path: packages/flow/runs/linux-atspi/
+          if-no-files-found: error
+
   capture-linux:
     name: capture (linux, py${{ matrix.python-version }})
     needs: scope
@@ -755,7 +861,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/capture/uv.lock"
@@ -822,7 +928,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/capture/uv.lock"
@@ -856,7 +962,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/capture/uv.lock"
@@ -890,7 +996,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/capture/uv.lock"
@@ -940,7 +1046,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/privacy/uv.lock"
@@ -964,7 +1070,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/privacy/uv.lock"
@@ -991,7 +1097,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/privacy/uv.lock"
@@ -1050,7 +1156,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/tray/uv.lock"
@@ -1078,7 +1184,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/tray/uv.lock"
@@ -1122,7 +1228,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/desktop/uv.lock"
@@ -1165,6 +1271,63 @@ jobs:
           node scripts/vendor.mjs --out "$RUNNER_TEMP/program-graph"
           node "$RUNNER_TEMP/program-graph/check.mjs"
 
+  seal-view:
+    name: seal-view (test, viewer build, browser)
+    needs: scope
+    if: needs.scope.outputs.seal_view == 'true'
+    # The launcher's lock pins Playwright 1.58, which has no Chromium build for
+    # ubuntu-latest (26.04); Flow's jobs use Flow's lock (1.61).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/seal-view/package-lock.json
+      - name: Install locked dependencies
+        working-directory: packages/seal-view
+        run: npm ci --ignore-scripts
+      - name: Unit tests
+        working-directory: packages/seal-view
+        run: npm test
+      - name: Rebuild the viewer; it must match the launcher's copy and its budget
+        working-directory: packages/seal-view
+        run: node scripts/build.mjs --check
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          cache-suffix: seal-view
+      - name: Install the launcher from its lock
+        run: >-
+          python scripts/ci/locked_install.py
+          --lock '.[dev]' --editable .
+      - name: Resolve Playwright version
+        id: pw
+        run: |
+          python -c "import importlib.metadata as m; print('version=' + m.version('playwright'))" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+      - name: Install and launch Playwright browser
+        timeout-minutes: 12
+        run: >-
+          python packages/flow/scripts/install_playwright_browser.py
+          --attempts 2 --attempt-timeout-seconds 270
+      - name: The Seal pages in a browser, from file://
+        env:
+          OPENADAPT_SEAL_VIEW_BROWSER: "1"
+        run: pytest -v tests/test_seal_view.py
+
   install-weight:
     # Each package is published on its own and must stay cheap to install:
     # build every in-tree wheel, install each one alone, and fail on a
@@ -1181,7 +1344,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "**/uv.lock"
@@ -1255,6 +1418,7 @@ jobs:
       - flow-critical
       - flow-agent-frameworks
       - flow-native-census
+      - flow-linux-atspi
       - capture-linux
       - capture-macos
       - capture-windows
@@ -1268,6 +1432,7 @@ jobs:
       - tray-contract
       - tray-desktop-ipc
       - program-graph
+      - seal-view
       - install-weight
       - capture-core-record
       - desktop-release-intent
@@ -1306,6 +1471,7 @@ jobs:
               "flow-critical": "flow",
               "flow-agent-frameworks": "flow",
               "flow-native-census": "flow",
+              "flow-linux-atspi": "flow",
               "capture-linux": "capture",
               "capture-macos": "capture",
               "capture-windows": "capture",
@@ -1325,7 +1491,12 @@ jobs:
           }
           # Post-merge tier only: skipped on a pull request and in the merge
           # queue; required on a push to main and on dispatch.
-          post_merge_only = {"capture-macos", "capture-windows", "flow-native-census"}
+          post_merge_only = {
+              "capture-macos",
+              "capture-windows",
+              "flow-native-census",
+              "flow-linux-atspi",
+          }
           # Skipped in the merge queue only: the pull request already passed
           # it on its merge with main (packages-gate is required there).
           not_in_queue = {"flow-unit"}

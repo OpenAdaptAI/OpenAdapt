@@ -1,0 +1,61 @@
+{
+ "tag": "after-branch",
+ "workers": 1,
+ "items": 26,
+ "window": 0,
+ "halt_at": null,
+ "profile": false,
+ "engine_sha": "4bb59503add4816e015a877dffe8f685527645d8",
+ "speed_profile": "standard",
+ "native_fill": false,
+ "page_quiet_ms": 100,
+ "ocr_threads": null,
+ "engine_dirty": false,
+ "bundle_digest": "93f8127d4af367500fc86ddd0bafa0d27b6e5764818f8999ab5c4abc56ec2973",
+ "baseline": "a1b14e0031d1",
+ "seed_status": 201,
+ "setup_s": 6.03,
+ "started": "2026-10-28 20:24:40",
+ "processes": false,
+ "wall_s": 492.285,
+ "pool_wall_s": 492.28,
+ "sign_in_s": {
+  "oa_clerk1": 2.24
+ },
+ "counts": {
+  "completed": 26
+ },
+ "stop": null,
+ "items_run": 26,
+ "saved_correct": 26,
+ "wrong_or_extra_charts": 0,
+ "not_saved": 0,
+ "new_charts_total": 26,
+ "entries_per_hour": 190.1,
+ "written_after_failed_readback": {},
+ "per_worker": [
+  {
+   "name": "oa_clerk1",
+   "items": 26,
+   "states": {
+    "completed": 26
+   },
+   "busy_s": 489.9
+  }
+ ],
+ "load1_mean": 23.04,
+ "load1_max": 90.04,
+ "ncpu": 12,
+ "gate": {
+  "threshold": 40.0,
+  "waited_s": 15.0,
+  "gave_up": false,
+  "load_at_start": [
+   8.98681640625,
+   15.39794921875,
+   37.7783203125
+  ]
+ },
+ "valid": true,
+ "ended": "2026-10-28 20:33:09"
+}

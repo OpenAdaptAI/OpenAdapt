@@ -137,7 +137,7 @@ def test_a_possible_duplicate_halts_before_the_save(
         open_session,
         seed_existing_chart,
     )
-    from openadapt_flow.benchmark.openemr_local import (
+    from benchmark.harness.openemr_local import (
         OpenEMRPatientOracle,
         SyntheticPatientSpec,
     )

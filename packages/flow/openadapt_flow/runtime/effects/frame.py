@@ -74,6 +74,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from openadapt_flow.app_profiles import Owner, table_name
+from openadapt_flow.runtime.effects.db_snapshot import DEFAULT_READ_ROW_BUDGET
 from openadapt_flow.runtime.effects.effect import (
     Effect,
     EffectKind,
@@ -329,6 +330,10 @@ class FrameDatabase(BaseModel):
     #: Over this many rows a table keeps, per row, its key and contents MACs
     #: and cell MACs only for the columns attribution and side records read.
     max_rows: int = Field(default=2000, ge=1)
+    #: Maximum data rows per whole-database snapshot, including auxiliary
+    #: audit reads. Exceeding it makes the frame not checked, never truncated.
+    #: This bounds rows, not elapsed time or bytes in an individual cell.
+    read_row_budget: int = Field(default=DEFAULT_READ_ROW_BUDGET, ge=1)
     #: Schemas the read account must see; the snapshot refuses when one isn't
     #: visible, so a schema the app writes can't be left out. Every other
     #: visible schema is read too. On PostgreSQL a schema the account can't
@@ -380,6 +385,8 @@ class FrameDatabase(BaseModel):
             data.pop("recheck_after_s", None)
         if data.get("settle_attempts") == 1:
             data.pop("settle_attempts", None)
+        if data.get("read_row_budget") == DEFAULT_READ_ROW_BUDGET:
+            data.pop("read_row_budget", None)
         if not data.get("judged_by"):
             data.pop("judged_by", None)
         return data
@@ -837,6 +844,7 @@ def judge_frame(
     new_row_defaults: Optional[Mapping[str, Mapping[str, Optional[str]]]] = None,
     unread_changes: Sequence[tuple[str, str]] = (),
     no_record_inserts: Collection[str] = (),
+    no_record_values: Collection[str] = (),
     hashers: Optional[Mapping[str, Callable[[str, Any], str]]] = None,
     clock: tuple[str, str] = ("", ""),
     database_evidence: Optional[dict[str, Any]] = None,
@@ -875,6 +883,9 @@ def judge_frame(
         no_record_inserts: Tables both database reads read as append-only
             whose profile rule marks the acting user's insert entry naming no
             record as the app's bookkeeping (an id map, a link row).
+        no_record_values: Record-field values that name no record in such an
+            entry, besides an empty field (the app profile's
+            ``no_record_values``).
         hashers: Slice -> (column, value) -> the keyed MAC its baseline records hold instead of
             values (database tables). A post-save record is plain; it is
             hashed to compare with the baseline.
@@ -1945,14 +1956,15 @@ def judge_frame(
                     else ""
                 )
                 if (
-                    ref in (None, "", "0", 0)
+                    (ref in (None, "") or str(ref) in no_record_values)
                     and attribution is not None
                     and event in attribution.insert_events
                     and entry_table not in (None, "")
                     and any(same_table(entry_table, t) for t in no_record_inserts)
                 ):
                     # The bot's insert into an id map or link row a save
-                    # makes (OpenEMR's uuid_registry), filed under no chart:
+                    # makes (an id map such as a uuid registry), filed under
+                    # no record:
                     # both reads read the table, which allows the row and
                     # judges every existing row. An update or delete, an
                     # entry naming a record, or any other table still counts.

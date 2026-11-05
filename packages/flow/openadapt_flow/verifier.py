@@ -67,8 +67,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator, Optional, Union
 
+from openadapt_flow.runtime.effects.db_snapshot import (
+    DEFAULT_READ_ROW_BUDGET,
+    TableDiff,
+    diff,
+    take_snapshot,
+)
 from openadapt_flow.runtime.effects.db_snapshot import Snapshot as DatabaseSnapshot
-from openadapt_flow.runtime.effects.db_snapshot import TableDiff, diff, take_snapshot
 from openadapt_flow.runtime.effects.late_write import (
     EVIDENCE_KEY,
     LATER_WRITE_DISPUTED,
@@ -291,9 +296,11 @@ class Contract:
     def digest(self) -> str:
         """SHA-256 of the contract as parsed: part of a write's identity."""
 
+        config = self.config.model_dump(mode="json")
+        config["verifier"] = self._verifier_dump()
         body = json.dumps(
             {
-                "config": self.config.model_dump(mode="json"),
+                "config": config,
                 "writes": list(self.writes),
             },
             sort_keys=True,
@@ -311,11 +318,19 @@ class Contract:
         return _digest(
             {
                 "environment": self.config.environment_id,
-                "verifier": _strip(
-                    self.config.verifier.model_dump(mode="json"), drop_secrets=True
-                ),
+                "verifier": _strip(self._verifier_dump(), drop_secrets=True),
             }
         )
+
+    def _verifier_dump(self) -> dict[str, Any]:
+        """The verifier as hashed: fields that lost their defaults still hash
+        as their old values, so contracts written before keep their digests."""
+
+        from openadapt_flow.deployment import legacy_hash_dump
+
+        dumped = self.config.verifier.model_dump(mode="json")
+        legacy_hash_dump(dumped, defaults_excluded=False)
+        return dumped
 
     @property
     def shape(self) -> str:
@@ -1043,6 +1058,12 @@ def _settle(
         assert attempt is not None and attempt.resolved is not None
         result = dict(attempt.resolved.get("result") or {})
         result["not_sent_again"] = True
+        if attempt.rechecked is not None:
+            # A recheck confirmed it since: no longer provisional, and no
+            # recheck is due.
+            result["provisional"] = False
+            result["recheck_due_at"] = None
+            result["rechecked_at"] = attempt.rechecked.get("at")
         if not attempt.delivered:
             led.delivered(key, attempt.attempt_id)
         raise AlreadyWritten(
@@ -1805,7 +1826,16 @@ def _reasons(evidence: Mapping[str, Any], receipt_outcome: str) -> list[str]:
             f"{frame.get('unattributed_count', 0)} of them no actor explains"
         )
     elif frame.get("status") == "not_checked" and not problem:
-        out.append("what else changed could not be read, so the frame is not checked")
+        database = frame.get("database") or {}
+        if database.get("read_status") == "too_large":
+            out.append(
+                "frame too large: row read budget of "
+                f"{database.get('read_row_budget')} exceeded; the frame is not checked"
+            )
+        else:
+            out.append(
+                "what else changed could not be read, so the frame is not checked"
+            )
     source = evidence.get("source") or {}
     if isinstance(source, Mapping) and source.get("status") == "refuted":
         fields = ", ".join(source.get("mismatched_fields") or [])
@@ -2224,7 +2254,51 @@ def recheck(
     )
     if late.outcome != "CONFIRMED":
         late = _hold_after_recheck(ledger, write, late, trusted=trusted)
+    else:
+        _mark_rechecked(ledger, write, late)
     return late
+
+
+def _mark_rechecked(
+    ledger: Any, write: WriteResult | RecheckState, late: RecheckResult
+) -> None:
+    """Record on the write's ledger attempt that a recheck confirmed it, so
+    ``openadapt verify ledger list`` no longer shows a recheck owed and a
+    retry is handed a result that is no longer provisional.
+
+    Best effort: the verdict stands either way. If nothing is recorded, the
+    list keeps showing the recheck as owed, which is the safe side.
+    """
+
+    try:
+        if isinstance(write, WriteResult):
+            write_id, key = write.write_id, write.write_key
+            if ledger is _NO_LEDGER and write.ledger is not None:
+                ledger = write.ledger
+        else:
+            receipt = write.payload.get("receipt") or {}
+            write_id, key = str(receipt.get("correlation_id") or ""), ""
+        led = _resolve_ledger(ledger)
+        if led is None or not write_id:
+            return
+        if key:
+            attempt = led.latest(key)
+        else:
+            found = led.find_attempt(write_id)
+            key, attempt = found if found is not None else ("", None)
+        if attempt is None or attempt.attempt_id != write_id:
+            return
+        if (attempt.resolved or {}).get("outcome") != "CONFIRMED":
+            return
+        led.rechecked(
+            key,
+            write_id,
+            outcome=late.outcome,
+            read_at=late.read_at,
+            receipt_sha256=late.receipt_sha256 or None,
+        )
+    except Exception:  # noqa: BLE001 - the list keeps showing it owed
+        return
 
 
 def _hold_after_recheck(
@@ -2294,6 +2368,16 @@ def _hold_after_recheck(
         if attempt.attempt_id != write_id:
             return unheld("a newer attempt of this write is in the ledger")
         prior = attempt.resolved or {}
+        if prior.get("outcome") == "REFUTED" and late.outcome != "REFUTED":
+            # An earlier recheck refuted it: a later UNCERTAIN doesn't soften
+            # that. The attempt stays held as it is.
+            return _replace(
+                late,
+                reasons=[
+                    *late.reasons,
+                    "the ledger already holds this write as REFUTED; left as is",
+                ],
+            )
         reason = "; ".join(late.reasons) or "the recheck did not confirm the write"
         led.resolved(
             key,
@@ -2325,6 +2409,32 @@ def _hold_after_recheck(
             ],
         )
     return late
+
+
+#: ``recheck_problem`` sentences that fault the recheck call (the params or
+#: actor it was given), not the write.
+_CALL_PROBLEMS = (
+    "the params don't bind the contract",
+    "the params are not the ones the write was verified with",
+    "the recheck state's write was made by a different actor",
+    "the contract can't be bound for the recheck",
+    "the recheck state was taken under a different contract",
+)
+
+
+def _recheck_refusal(problem: str) -> str:
+    """The UNCERTAIN reason for a recheck that couldn't run. When the call
+    was given other params, another actor or another contract than the
+    write was made with, it says the call was wrong: the write itself may
+    be fine, and stays unrechecked until a call with its own does."""
+
+    if problem.startswith(_CALL_PROBLEMS):
+        return (
+            f"{problem}: the recheck call doesn't match the write (its params, "
+            "actor or contract), so nothing was rechecked; this says nothing "
+            "about the write itself"
+        )
+    return f"{problem}, so the write can't be rechecked"
 
 
 def _judge_recheck(
@@ -2371,7 +2481,7 @@ def _judge_recheck(
     ) or recheck_problem(cfg, state.payload, params=params, run_record=run_record)
     if problem is not None:
         return (
-            _replace(base, reasons=[f"{problem}, so the write can't be rechecked"]),
+            _replace(base, reasons=[_recheck_refusal(problem)]),
             False,
         )
     wait_s = seconds_until(state.due_at)
@@ -2481,6 +2591,7 @@ def capture_database(
     *,
     allow_tables: Sequence[str] = (),
     max_rows: int = 2000,
+    read_row_budget: int = DEFAULT_READ_ROW_BUDGET,
     key: Optional[bytes] = None,
     profile: Optional[str] = None,
     before: Optional[DatabaseSnapshot] = None,
@@ -2494,7 +2605,9 @@ def capture_database(
     (to read through ``podman exec``, say). It talks to the database over
     that connection only; no application code is imported. The snapshot
     holds keyed MACs, never values: ``key`` keys them (default: one key per
-    process). ``allow_tables`` are kept append-only.
+    process). ``allow_tables`` are kept append-only. ``read_row_budget``
+    caps data rows across tables and auxiliary queries; exceeding it refuses
+    the read without returning a partial snapshot.
 
     ``profile`` (``openemr``) applies an app profile's bookkeeping rules, the
     same ones the frame uses (``openadapt_flow.app_profiles``); its own-row
@@ -2523,6 +2636,7 @@ def capture_database(
             key=key or _PROCESS_KEY,
             modes=dict.fromkeys(allow_tables, "append_only"),
             max_rows=max_rows,
+            read_row_budget=read_row_budget,
             before=before,
             extra_queries=extra,
             **_profile_args(profile),
@@ -2565,7 +2679,11 @@ def diff_database(
     counters, a uuid backfill) is left out, as the frame leaves it out.
     """
 
-    from openadapt_flow.runtime.effects.db_snapshot import cell_hash, unpack
+    from openadapt_flow.runtime.effects.db_snapshot import (
+        cell_hash,
+        every_cell_hashed,
+        unpack,
+    )
 
     k = key or _PROCESS_KEY
     moved = diff(before, after, key=k, allow_tables=allow_tables)
@@ -2579,7 +2697,14 @@ def diff_database(
     out: dict[str, TableDiff] = {}
     for name, d in moved.items():
         a, b = before.tables.get(name), after.tables.get(name)
-        if d.unread or a is None or b is None or a.cell_columns != b.cell_columns:
+        if (
+            d.unread
+            or a is None
+            or b is None
+            or a.cell_columns != b.cell_columns
+            or not every_cell_hashed(a)
+        ):
+            # A column no cell MAC shows may have moved: no rule judges it.
             out[name] = d
             continue
         hasher = (lambda t: lambda col, v: cell_hash(k, v, t, col))(name)

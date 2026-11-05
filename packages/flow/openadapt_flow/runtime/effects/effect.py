@@ -168,6 +168,18 @@ def number_matches(stored: Any, want: Any, *, text_numbers: bool) -> Optional[bo
     return have == expected
 
 
+def _capitalize_word(word: str) -> str:
+    """One word as a form's JavaScript capitalize step stores it:
+    ``charAt(0).toUpperCase() + substring(1)``. Split on the space character
+    only, the rest keeps its case ("McDonald" stays "McDonald"). ``charAt``
+    takes one UTF-16 code unit, so a first letter outside the BMP (Adlam,
+    Osage, Deseret) is half a surrogate pair and stays as typed."""
+
+    if ord(word[0]) > 0xFFFF:
+        return word
+    return word[0].upper() + word[1:]
+
+
 class ValueExpr(BaseModel):
     """A single effect-contract value: either a static ``literal`` or a
     reference to a run ``param`` (P0-3 fix).
@@ -206,9 +218,13 @@ class ValueExpr(BaseModel):
     #: what was entered (OpenEMR's New Patient form saves street and city in
     #: capitals). Applied after :attr:`map`, with full Unicode case mapping,
     #: as the browser's ``toUpperCase()`` does for OpenEMR's "U" fields
-    #: ("Peña" is stored "PEÑA", "Straße" "STRASSE"). The check stays exact:
-    #: it expects the stored form, not any casing.
-    stored: Optional[Literal["upper", "lower"]] = None
+    #: ("Peña" is stored "PEÑA", "Straße" "STRASSE"). ``capitalize_words``
+    #: puts the first letter of each space-separated word in capitals and
+    #: drops extra spaces, as an app's capitalize-on-save fields do (JavaScript:
+    #: " ada  lovelace" is stored "Ada Lovelace"). A closed set, declared per
+    #: field: the check stays exact, so it expects the stored form, not any
+    #: casing, and a different value is still refuted.
+    stored: Optional[Literal["upper", "lower", "capitalize_words"]] = None
     #: A declared value kind (:func:`kind_form`): the expected value and the
     #: stored one are compared in canonical form, so formatting alone never
     #: refutes, and a different value always does. Never inferred.
@@ -315,6 +331,10 @@ class ValueExpr(BaseModel):
             value = value.upper()
         elif value is not None and self.stored == "lower":
             value = value.lower()
+        elif value is not None and self.stored == "capitalize_words":
+            value = " ".join(
+                _capitalize_word(word) for word in value.split(" ") if word
+            )
         return value
 
     def resolved(self, params: Mapping[str, object]) -> "ValueExpr":
@@ -538,8 +558,9 @@ class ReadbackField(BaseModel):
     source: Literal["ocr", "structure"] = "ocr"
     #: How the read and the expected value are compared
     #: (:mod:`openadapt_flow.runtime.effects.readback_values`): ``text``,
-    #: ``code`` (case and separators ignored), ``date`` or ``currency``.
-    value_kind: Literal["text", "code", "date", "currency"] = "text"
+    #: ``code`` (case and separators ignored), ``date``, ``currency`` or
+    #: ``number``.
+    value_kind: Literal["text", "code", "date", "currency", "number"] = "text"
     #: ``date`` only: the order of a numeric date such as ``03/04/2026``.
     #: Unset, a numeric date that reads two ways is ambiguous.
     date_order: Optional[Literal["dmy", "mdy"]] = None
@@ -825,6 +846,12 @@ def _resolve_readback(
 # contract cannot claim stronger evidence than the compiler would emit.
 MIN_RENAV_ACTIONS = 2
 
+#: The record field read as an at-most-once key when nothing names another:
+#: :attr:`Effect.key_field`'s default, and the field the effect miner reads
+#: unless its caller names another (or ``None`` for no key). The miner sets a
+#: key only when the observed record carries a value there.
+DEFAULT_IDEMPOTENCY_KEY_FIELD = "key"
+
 
 class Effect(BaseModel):
     """A typed system-of-record effect (RFC ``Effect``, concrete runtime form).
@@ -896,9 +923,10 @@ class Effect(BaseModel):
     #: identity) so the key is PER-RUN, not the frozen demonstration literal
     #: that would collide across unrelated runs (P0-3).
     idempotency_key: Optional[ValueExpr] = None
-    #: Which record field carries the idempotency key (substrate-specific;
-    #: the MockMed system-of-record uses ``"key"``).
-    key_field: str = "key"
+    #: Which record field carries the idempotency key. The contract names it
+    #: beside ``idempotency_key``; the effect miner sets it from the field its
+    #: caller names (:data:`DEFAULT_IDEMPOTENCY_KEY_FIELD` unless told).
+    key_field: str = DEFAULT_IDEMPOTENCY_KEY_FIELD
     #: ``record_written`` only: a duplicate (idempotency) key made of several
     #: fields, such as OpenEMR's ``{lname, fname, DOB}``. Field -> value, each
     #: a :class:`ValueExpr` like :attr:`match`. The count reads only records

@@ -74,7 +74,7 @@ def load_demo() -> Any:
 
 
 def spec_for(ref: Referral) -> Any:
-    from openadapt_flow.benchmark.openemr_local import SyntheticPatientSpec
+    from benchmark.harness.openemr_local import SyntheticPatientSpec
 
     return SyntheticPatientSpec(**ref.kwargs)
 
