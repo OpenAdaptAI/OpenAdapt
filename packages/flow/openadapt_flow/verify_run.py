@@ -638,6 +638,21 @@ def _same_connection(
     return all(audit.get(k) == read.get(k) for k in keys)
 
 
+def _same_sql_source(source: Mapping[str, Any], read: Mapping[str, Any]) -> bool:
+    """Positive source binding for an attributed physical-row witness."""
+
+    if source.get("kind") != "sql":
+        return False
+    if source.get("sqlite_database") or read.get("sqlite_database"):
+        a, b = source.get("sqlite_database"), read.get("sqlite_database")
+        return bool(a and b and Path(str(a)).resolve() == Path(str(b)).resolve())
+    return bool(source.get("sql_driver")) and (
+        source.get("sql_driver") == read.get("sql_driver")
+        and (source.get("sql_connect_args") or {}) == (read.get("sql_connect_args") or {})
+        and source.get("sql_password_env") == read.get("sql_password_env")
+    )
+
+
 def _audit_sql(cfg: VerifyConfig) -> dict[str, str]:
     """Reads that run inside the database snapshot: the audit query (when it
     shares the connection), and the acting user's ids (for a profile's
@@ -1319,6 +1334,7 @@ def judge_run_frame(
         )
     if disputed:
         verdict.excused_by.add(late_write.LATER_WRITE_DISPUTED)
+    _witness_attributed_additions(cfg, verdict, db)
     database = spec.database
     if (
         db is not None
@@ -1345,6 +1361,84 @@ def judge_run_frame(
     return verdict
 
 
+def _witness_attributed_additions(
+    cfg: VerifyConfig, frame: FrameVerdict, db: Optional[_DatabaseFrame]
+) -> None:
+    """Bind another actor's addition to one physical row in this read source.
+
+    Audit identities need to be unique in the entire settled table, including
+    unchanged rows and rows a surface query hides. Counts of visible records
+    or audit entries cannot establish which physical row an actor inserted.
+    """
+
+    from openadapt_flow.runtime.effects.db_snapshot import unpack
+    from openadapt_flow.runtime.effects.frame import AddedRowWitness
+
+    spec = cfg.frame
+    database = spec.database if spec is not None else None
+    attribution = spec.attribution if spec is not None else None
+    if (
+        not frame.held
+        or spec is None
+        or database is None
+        or attribution is None
+        or attribution.kind != "audit_read"
+        or not attribution.insert_events
+        or not attribution.table_field
+        or not _same_sql_source(attribution.read or {}, database.read)
+        or db is None
+        or db.post is None
+        or db.old is None
+    ):
+        return
+    counts: dict[str, dict[str, int]] = {}
+    for change in frame.concurrent:
+        name = change.surface
+        surface = database.views.get(name)
+        record_key = attribution.record_keys.get(name, attribution.record_key)
+        if (
+            change.change != "added"
+            or change.attribution != "other"
+            or surface is None
+            or not record_key
+            or any(side.surface == name for side in spec.side_records)
+            or [t for t, v in database.views.items() if v == surface] != [name]
+        ):
+            continue
+        source = (
+            cfg.verifier.surfaces.get(surface)
+            if cfg.verifier.surfaces
+            else cfg.verifier if surface == "" else None
+        )
+        if source is None or not _same_sql_source(source.model_dump(), database.read):
+            continue
+        table = db.post.tables.get(name)
+        old = db.old.tables.get(name)
+        if (
+            table is None
+            or old is None
+            or not table.primary_key
+            or table.non_transactional
+            or record_key not in table.cell_columns
+            or change.key in old.rows
+        ):
+            continue
+        record = table.values.get(change.key)
+        if record is None or record.get(record_key) is None:
+            continue
+        if name not in counts:
+            counts[name] = {}
+            for _, cells in table.rows.values():
+                identity = unpack(table.cell_columns, cells)[record_key]
+                counts[name][identity] = counts[name].get(identity, 0) + 1
+        identity = db.hashers[name](record_key, record[record_key])
+        if counts[name].get(identity) != 1:
+            continue
+        frame.added_row_witnesses.setdefault(surface, []).append(
+            AddedRowWitness(tuple(table.primary_key), dict(record))
+        )
+
+
 def _excuse_attributed_additions(
     cfg: VerifyConfig,
     verifier: Any,
@@ -1369,35 +1463,11 @@ def _excuse_attributed_additions(
     """
 
     from openadapt_flow.runtime.effects._common import judge_records
-    from openadapt_flow.runtime.effects.effect import stable_id
+    from openadapt_flow.runtime.effects.db_snapshot import canonical
     from openadapt_flow.runtime.effects.surfaces import surface_of
 
-    spec = cfg.frame or FrameSpec()
-    attribution = spec.attribution
-    if (
-        attribution is None
-        or attribution.kind != "audit_read"
-        or not attribution.insert_events
-        or not attribution.table_field
-        or spec.database is None
-    ):
+    if not frame.added_row_witnesses:
         return
-    excused = {
-        (c.surface, str(c.key))
-        for c in frame.concurrent
-        if c.change == "added" and c.key is not None
-    }
-    # When a database table is judged in place of the surface it holds, the
-    # frame names those additions as the surface does.
-    excused |= set(getattr(frame, "added_by_others", ()))
-    if not excused:
-        return
-
-    def key_of(record: Mapping[str, Any]) -> str:
-        if spec.identity_field:
-            return str(record.get(spec.identity_field))
-        ignore = set(spec.ignore_fields)
-        return str(stable_id({k: v for k, v in record.items() if k not in ignore}))
 
     for i, (effect, verdict) in enumerate(zip(effects, verdicts)):
         if (
@@ -1426,16 +1496,26 @@ def _excuse_attributed_additions(
             base, name = before, ""
         if records is None:
             continue
-        # One colleague's addition is one record: a key that more than one
-        # record shares can't say which of them is the colleague's.
-        counts: dict[str, int] = {}
-        for r in records:
-            counts[key_of(r)] = counts.get(key_of(r), 0) + 1
-        kept = [
-            r
-            for r in records
-            if (name, key_of(r)) not in excused or counts[key_of(r)] > 1
-        ]
+        kept = list(records)
+        for witness in frame.added_row_witnesses.get(name, ()):
+            # The fresh surface read must still name this physical key and
+            # match every returned column. Missing keys or changed
+            # contents cannot borrow an earlier row's attribution.
+            matches = []
+            for j, record in enumerate(kept):
+                if any(record.get(k) is None for k in witness.primary_key):
+                    continue
+                try:
+                    if all(
+                        k in witness.record
+                        and canonical(value) == canonical(witness.record[k])
+                        for k, value in record.items()
+                    ):
+                        matches.append(j)
+                except (TypeError, ValueError):
+                    continue
+            if len(matches) == 1:
+                kept.pop(matches[0])
         if len(kept) == len(records):
             continue
         again = judge_records(effect, base, kept, substrate=verdict.substrate)

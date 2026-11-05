@@ -39,17 +39,27 @@ def _run(
     bot_name: str = "bot",
     views: dict[str, str] | None = None,
     extra: tuple[tuple[str, tuple], ...] = (),
+    surface_query: str = "SELECT * FROM patient",
+    separate_surface: bool = False,
+    separate_audit: bool = False,
+    routed: bool = False,
+    frame_identity: str = "pid",
+    max_rows: int = 2000,
 ) -> str:
     tmp_path.mkdir(exist_ok=True)
     db = tmp_path / "s.db"
     con = _db(db)
+    surface_db = tmp_path / "surface.db" if separate_surface else db
+    audit_db = tmp_path / "audit.db" if separate_audit else db
+    for other in {surface_db, audit_db} - {db}:
+        _db(other).close()
     cfg = parse_verify_config(
         {
             "schema_version": "openadapt.verify/v1",
             "verifier": {
                 "kind": "sql",
-                "sqlite_database": str(db),
-                "sql_query": "SELECT * FROM patient",
+                "sqlite_database": str(surface_db),
+                "sql_query": surface_query,
             },
             "record": {
                 "name": "patient",
@@ -58,7 +68,7 @@ def _run(
                 "fields": {"email": "email", "lname": "lname"},
             },
             "frame": {
-                "identity_field": "pid",
+                "identity_field": frame_identity,
                 "attribution": {
                     "kind": "audit_read",
                     "actor_field": "user",
@@ -71,7 +81,7 @@ def _run(
                     "record_key": "pid",
                     "read": {
                         "kind": "sql",
-                        "sqlite_database": str(db),
+                        "sqlite_database": str(audit_db),
                         "sql_query": "SELECT * FROM log",
                     },
                 },
@@ -82,10 +92,20 @@ def _run(
                     "allow_tables": ["log"],
                     "views": views if views is not None else {"patient": ""},
                     "new_row_fields": {"patient": ["pid"]},
+                    "max_rows": max_rows,
                 },
             },
         }
     )
+    if routed:
+        doc = cfg.model_dump(mode="json")
+        doc["verifier"] = {"kind": "surfaces", "surfaces": {"charts": doc["verifier"]}}
+        for effect in doc["effects"]:
+            effect["probe"] = "surface=charts"
+        doc["frame"]["database"]["views"] = {
+            table: "charts" for table in doc["frame"]["database"]["views"]
+        }
+        cfg = parse_verify_config(doc)
     params = {"email": "new@example.test", "lname": "New"}
     capture_baseline(cfg, params, tmp_path / "b.json")
     con.execute("INSERT INTO patient VALUES (2, 2, 'New', 'new@example.test')")
@@ -109,6 +129,11 @@ def _run(
     for sql, args in extra:
         con.execute(sql, args)
     con.commit()
+    for other in {surface_db, audit_db} - {db}:
+        with sqlite3.connect(other) as copy:
+            con.backup(copy)
+            if other == surface_db:
+                copy.execute("UPDATE log SET user = 'bot' WHERE user = 'clinic2'")
     con.close()
     receipt = verify_run(
         cfg,
@@ -213,6 +238,108 @@ def test_two_colleague_entries_never_explain_the_bots_record_too(
         _run(
             tmp_path,
             colleague_logged=True,
+            extra=(
+                ("INSERT INTO patient VALUES (4, 3, 'Extra', 'x@example.test')", ()),
+                (
+                    "INSERT INTO log (user, patient_id, event, tbl) "
+                    "VALUES ('clinic2', 3, 'insert', 'patient')",
+                    (),
+                ),
+            ),
+        )
+        == "reconciliation_required"
+    )
+
+
+def test_a_filtered_duplicate_identity_cannot_borrow_an_insert(tmp_path: Path) -> None:
+    assert (
+        _run(
+            tmp_path,
+            colleague_logged=True,
+            surface_query="SELECT * FROM patient WHERE lname != 'Colleague'",
+            extra=(
+                ("INSERT INTO patient VALUES (4, 3, 'Extra', 'x@example.test')", ()),
+                (
+                    "INSERT INTO log (user, patient_id, event, tbl) "
+                    "VALUES ('clinic2', 3, 'insert', 'patient')",
+                    (),
+                ),
+            ),
+        )
+        == "reconciliation_required"
+    )
+
+
+def test_an_existing_hidden_row_also_makes_the_audit_identity_ambiguous(
+    tmp_path: Path,
+) -> None:
+    assert (
+        _run(
+            tmp_path,
+            colleague_logged=True,
+            surface_query="SELECT * FROM patient WHERE lname != 'Old'",
+            extra=(
+                ("UPDATE patient SET pid = 1 WHERE id = 3", ()),
+                ("UPDATE log SET patient_id = 1 WHERE user = 'clinic2'", ()),
+            ),
+        )
+        == "reconciliation_required"
+    )
+
+
+def test_identical_rows_in_a_different_source_are_not_a_witness(tmp_path: Path) -> None:
+    for name in ("separate_surface", "separate_audit"):
+        assert (
+            _run(tmp_path / name, colleague_logged=True, **{name: True})
+            == "reconciliation_required"
+        )
+
+
+def test_a_surface_without_the_physical_key_cannot_set_a_row_aside(
+    tmp_path: Path,
+) -> None:
+    assert (
+        _run(
+            tmp_path,
+            colleague_logged=True,
+            surface_query="SELECT pid, lname, email FROM patient",
+        )
+        == "reconciliation_required"
+    )
+
+
+def test_a_filtered_unique_physical_row_still_has_a_witness(tmp_path: Path) -> None:
+    assert (
+        _run(
+            tmp_path,
+            colleague_logged=True,
+            surface_query="SELECT * FROM patient WHERE lname != 'Old'",
+        )
+        == "verified"
+    )
+
+
+def test_a_named_surface_uses_its_own_physical_row_witness(tmp_path: Path) -> None:
+    assert _run(tmp_path / "same", colleague_logged=True, routed=True) == "verified"
+    assert (
+        _run(
+            tmp_path / "different",
+            colleague_logged=True,
+            routed=True,
+            separate_surface=True,
+        )
+        == "reconciliation_required"
+    )
+
+
+def test_a_unique_frame_key_does_not_make_the_audit_key_unique(tmp_path: Path) -> None:
+    assert (
+        _run(
+            tmp_path,
+            colleague_logged=True,
+            frame_identity="id",
+            max_rows=1,
+            surface_query="SELECT * FROM patient WHERE lname != 'Colleague'",
             extra=(
                 ("INSERT INTO patient VALUES (4, 3, 'Extra', 'x@example.test')", ()),
                 (

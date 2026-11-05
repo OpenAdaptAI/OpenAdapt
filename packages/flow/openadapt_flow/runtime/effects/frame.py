@@ -652,6 +652,14 @@ class FrameChange:
 
 
 @dataclass
+class AddedRowWitness:
+    """One attributed physical database row, kept in memory only."""
+
+    primary_key: tuple[str, ...]
+    record: Mapping[str, Any]
+
+
+@dataclass
 class FrameVerdict:
     status: FrameStatus
     reason: str
@@ -665,6 +673,9 @@ class FrameVerdict:
     #: In memory only: (surface, identity) of records another actor added,
     #: as their surface names them, when a table is judged in its place.
     added_by_others: set[tuple[str, str]] = field(default_factory=set)
+    #: In memory only: rows whose source, physical key and unambiguous audit
+    #: identity the database snapshot witnessed for a surface.
+    added_row_witnesses: dict[str, list[AddedRowWitness]] = field(default_factory=dict)
     #: In memory only: app profile rules that excused a row change.
     excused_by: set[str] = field(default_factory=set)
     #: ``frame.versions`` only: how the target's versions came out.
