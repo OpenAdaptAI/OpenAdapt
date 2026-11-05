@@ -31,6 +31,7 @@ from urllib.parse import urlsplit
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.routing import APIRoute
 from starlette.routing import Match
 
 from openadapt_flow import __version__
@@ -363,6 +364,8 @@ def create_app(
                 # New or unknown endpoints/actions gain no implicit permission.
                 matched = None
                 for route in app.routes:
+                    if not isinstance(route, APIRoute):
+                        continue
                     match, scope = route.matches(request.scope)
                     if match is Match.FULL:
                         matched = (route, scope)
