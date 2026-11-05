@@ -448,3 +448,32 @@ def test_reference_identity_and_display_use_the_same_late_path(
     monkeypatch.setattr(ensure_record.FhirReader, "fetch", fetch)
     env["sh"].run_rechecks(now=True)
     assert ep.late_verdict == expected, ep.late_reasons
+
+
+def test_multivalued_reference_late_exception_stays_uncertain(env, monkeypatch):
+    from openadapt_flow.fhir_reference import ReferenceSchema
+    from tests.test_fhir_reference import schema
+
+    stored = _confirmed(env, monkeypatch)
+    ep = env["sh"].episodes[0]
+    ep.contract.reference_schema = ReferenceSchema.model_validate(
+        schema("AllergyIntolerance", "patient")
+    )
+    stored["now"] = _stored("Patient/p2")
+    stored["now"]["patient"] = [
+        {"reference": "Patient/p2"},
+        {"reference": "Patient/missing"},
+    ]
+
+    def fetch(self, url, params=None):
+        if "/Patient/" in url:
+            pid = url.rsplit("/", 1)[-1]
+            if pid == "missing":
+                raise ensure_record.Unreadable("synthetic missing target")
+            return {}, {"resourceType": "Patient", "id": pid}
+        return {}, stored["now"]
+
+    monkeypatch.setattr(ensure_record.FhirReader, "fetch", fetch)
+    env["sh"].run_rechecks(now=True)
+    assert ep.late_verdict == "UNCERTAIN"
+    assert any("ReferenceUnreadable" in reason for reason in ep.late_reasons)

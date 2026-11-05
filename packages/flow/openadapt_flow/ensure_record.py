@@ -544,6 +544,8 @@ def same(
     stored: Any,
     wanted: Any,
     references: Optional[ReferenceEvidence] = None,
+    *,
+    logical: bool = False,
 ) -> bool:
     rule = contract.fields[name]
     ref = reference_field(contract, rule.path)
@@ -554,8 +556,13 @@ def same(
             raise ReferenceUnreadable(
                 "reference comparison needs resolved target evidence"
             )
-        return references.identity(stored, ref[1]) == references.identity(
-            wanted, ref[1]
+        if references.identity(stored, ref[1]) != references.identity(wanted, ref[1]):
+            return False
+        wanted_version = references.version(wanted, ref[1])
+        return (
+            logical
+            or wanted_version is None
+            or references.version(stored, ref[1]) == wanted_version
         )
     a, b = normalize(stored, rule), normalize(wanted, rule, task=True)
     return a is not None and b is not None and a == b
@@ -668,7 +675,7 @@ def is_person(
     return any(
         all(
             any(
-                same(contract, p, value, params.get(p), references)
+                same(contract, p, value, params.get(p), references, logical=True)
                 for value in _field_values(contract, resource, contract.fields[p].path)
             )
             for p in rule
@@ -1262,7 +1269,7 @@ def _find_matches(
     def query_value(name: str) -> str:
         ref = reference_field(contract, contract.fields[name].path)
         return (
-            expected.identity(params[name], ref[1])
+            expected.search_value(params[name], ref[1], reader.base_url)
             if ref
             else str(params[name]).strip()
         )
@@ -1296,12 +1303,23 @@ def _find_matches(
     return matches, len(seen)
 
 
+def _require_matches(matches: Mapping[str, Any], expected_ids: Sequence[str]) -> None:
+    if set(expected_ids) - set(matches):
+        raise Unreadable("identifying search did not return a known matching record")
+
+
 def find_matches(
-    contract: EnsureContract, reader: FhirReader, params: Mapping[str, Any]
+    contract: EnsureContract,
+    reader: FhirReader,
+    params: Mapping[str, Any],
+    *,
+    expected_ids: Sequence[str] = (),
 ) -> tuple[dict[str, dict[str, Any]], int]:
-    """Resolve Reference evidence outside judging; unsupported targets are unreadable."""
+    """Search logical identities; an omitted known match is unreadable, never absent."""
     try:
-        return _find_matches(contract, reader, params)
+        matches, candidates = _find_matches(contract, reader, params)
+        _require_matches(matches, expected_ids)
+        return matches, candidates
     except ReferenceUnreadable as exc:
         raise Unreadable(str(exc)) from exc
 
@@ -2047,6 +2065,15 @@ def verify_ensure(
             if contract.reference_schema
             else None
         )
+        if contract.reference_schema:
+            known = [
+                str(r["id"])
+                for r in (created, existing_now)
+                if isinstance(r, Mapping)
+                and r.get("id") is not None
+                and is_person(contract, r, params, references)
+            ]
+            _require_matches(after_matches, known)
         result = judge(
             contract,
             params,

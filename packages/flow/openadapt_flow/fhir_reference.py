@@ -148,6 +148,7 @@ class ReferenceEvidence:
 
     identities: Mapping[str, str] = field(default_factory=dict)
     problems: Mapping[str, str] = field(default_factory=dict)
+    versions: Mapping[str, str] = field(default_factory=dict)
 
     def identity(self, value: Any, targets: Sequence[str]) -> str:
         key = _key(value, targets)
@@ -156,6 +157,25 @@ class ReferenceEvidence:
                 self.problems.get(key, "reference target was not resolved")
             )
         return self.identities[key]
+
+    def version(self, value: Any, targets: Sequence[str]) -> str | None:
+        self.identity(value, targets)
+        return self.versions.get(_key(value, targets))
+
+    def search_value(self, value: Any, targets: Sequence[str], base_url: str) -> str:
+        identity = self.identity(value, targets)
+        prefix = base_url.rstrip("/") + "/"
+        if not identity.startswith(prefix):
+            raise ReferenceUnreadable("reference search identity belongs to another base")
+        relative = identity[len(prefix) :]
+        parts = relative.split("/")
+        if (
+            len(parts) != 2
+            or not _RESOURCE.fullmatch(parts[0])
+            or not _ID.fullmatch(parts[1])
+        ):
+            raise ReferenceUnreadable("reference search needs one logical Type/id")
+        return relative
 
 
 class ReferenceReader:
@@ -172,9 +192,12 @@ class ReferenceReader:
         self.search = search
         self._identities: dict[str, str] = {}
         self._problems: dict[str, str] = {}
+        self._versions: dict[str, str] = {}
 
     def snapshot(self) -> ReferenceEvidence:
-        return ReferenceEvidence(dict(self._identities), dict(self._problems))
+        return ReferenceEvidence(
+            dict(self._identities), dict(self._problems), dict(self._versions)
+        )
 
     def collect(self, value: Any, targets: Sequence[str]) -> None:
         try:
@@ -207,9 +230,9 @@ class ReferenceReader:
             raise ReferenceUnreadable("unsupported literal reference identity")
         if len(tail) == 4 and (tail[2] != "_history" or not _ID.fullmatch(tail[3])):
             raise ReferenceUnreadable("unsupported versioned reference")
-        # Version-specific references remain version-specific. They are not
-        # collapsed into the current resource's identity.
-        return self.base + "/" + "/".join(tail), tail[0], "/".join(tail)
+        # Logical identity names the resource. The requested version stays
+        # in the read path and separate evidence; it never hides a duplicate.
+        return self.base + "/" + "/".join(tail[:2]), tail[0], "/".join(tail)
 
     def resolve(self, value: Any, targets: Sequence[str]) -> str:
         key = _key(value, targets)
@@ -218,7 +241,7 @@ class ReferenceReader:
         if key in self._problems:
             raise ReferenceUnreadable(self._problems[key])
         try:
-            identity = self._resolve(reference_value(value), targets)
+            identity, version = self._resolve(reference_value(value), targets)
         except Exception as exc:  # a transport failure cannot become a match
             problem = (
                 str(exc)
@@ -228,9 +251,13 @@ class ReferenceReader:
             self._problems[key] = problem
             raise ReferenceUnreadable(problem) from exc
         self._identities[key] = identity
+        if version is not None:
+            self._versions[key] = version
         return identity
 
-    def _resolve(self, ref: Mapping[str, Any], targets: Sequence[str]) -> str:
+    def _resolve(
+        self, ref: Mapping[str, Any], targets: Sequence[str]
+    ) -> tuple[str, str | None]:
         literal = ref.get("reference")
         identifier = ref.get("identifier")
         declared = ref.get("type")
@@ -240,6 +267,7 @@ class ReferenceReader:
             raise ReferenceUnreadable("unsupported Reference.type")
         target = None
         identity = None
+        version = None
         rtype = declared
         if literal is not None:
             identity, rtype, path = self._literal(literal)
@@ -259,6 +287,8 @@ class ReferenceReader:
                 and (target.get("meta") or {}).get("versionId") != path.split("/")[-1]
             ):
                 raise ReferenceUnreadable("the target read returned another version")
+            if "/_history/" in path:
+                version = path.split("/")[-1]
         permitted = tuple(t for t in targets if t != "Resource")
         if rtype is not None and permitted and rtype not in permitted:
             raise ReferenceUnreadable("the target type contradicts the schema")
@@ -330,4 +360,4 @@ class ReferenceReader:
             raise ReferenceUnreadable(
                 "a display alone does not identify a reference target"
             )
-        return identity
+        return identity, version

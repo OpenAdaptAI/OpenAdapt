@@ -551,3 +551,182 @@ def test_reference_identity_and_last_written_version_are_both_required(
         assert any(reason in item for item in result.reasons)
     else:
         assert result.evidence["versions"] == [{"version": "2", "author": BOT}]
+
+
+class SearchStore(Store):
+    def __init__(self, resources=(), *, strict=False):
+        super().__init__()
+        self.resources = list(resources)
+        self.strict = strict
+        self.queries = []
+        for version in ("1", "2"):
+            target = copy.deepcopy(self.records["Patient/a"])
+            target["meta"] = {"versionId": version}
+            self.records[f"Patient/a/_history/{version}"] = target
+
+    def get(self, url, params=None):
+        if url == BASE + "/Observation":
+            self.queries.append(dict(params or {}))
+            rows = self.resources
+            if self.strict and (params or {}).get("patient") != "Patient/a":
+                rows = []
+            return 200, {}, {
+                "resourceType": "Bundle",
+                "type": "searchset",
+                "total": len(rows),
+                "entry": [{"resource": r} for r in rows],
+            }
+        return super().get(url, params)
+
+
+@pytest.mark.parametrize(
+    "wanted,stored",
+    [("Patient/a", "Patient/a/_history/1"), ("Patient/a/_history/1", "Patient/a")],
+)
+def test_versioned_reference_cannot_hide_existing_record_or_allow_duplicate(
+    wanted, stored
+):
+    from openadapt_flow.ensure_record import find_matches
+
+    c = contract()
+    params = parameters(patient=wanted)
+    existing = record(subject={"reference": stored, "display": "Other presentation"})
+    store = SearchStore([existing])
+    reader = FhirReader(c, get=store.get)
+    matches, candidates = find_matches(c, reader, params)
+    assert candidates == 1 and set(matches) == {"o"}
+    baseline = Baseline(started=datetime.now(timezone.utc), matches=matches)
+    created = record(id="new", subject={"reference": wanted})
+    store.resources.append(created)
+    after, _ = find_matches(c, reader, params)
+    assert set(after) == {"o", "new"}
+    evidence = reader.reference_evidence(c, params, list(after.values()))
+    result = judge(
+        c,
+        params,
+        baseline,
+        {"Observation/new": Change(ref="Observation/new", actions={"C"}, authors={BOT})},
+        after,
+        created,
+        references=evidence,
+    )
+    assert result.outcome == "needs_review"
+    assert result.evidence["before_matches"] == 1
+    assert result.evidence["after_matches"] == 2
+    assert not result.evidence.get("unreadable")
+
+
+@pytest.mark.parametrize(
+    "wanted",
+    [
+        "Patient/a",
+        BASE + "/Patient/a",
+        "Patient/a/_history/1",
+        BASE + "/Patient/a/_history/1",
+    ],
+)
+def test_reference_search_uses_local_logical_type_id(wanted):
+    from openadapt_flow.ensure_record import find_matches
+
+    c = contract()
+    store = SearchStore([record()], strict=True)
+    matches, count = find_matches(
+        c, FhirReader(c, get=store.get), parameters(patient=wanted)
+    )
+    assert set(matches) == {"o"} and count == 1
+    assert store.queries == [{"patient": "Patient/a", "_count": "200"}]
+
+
+def test_missing_expected_reference_search_match_is_unreadable():
+    from openadapt_flow.ensure_record import Unreadable, find_matches
+
+    c = contract()
+    reader = FhirReader(c, get=SearchStore().get)
+    with pytest.raises(Unreadable, match="known matching record"):
+        find_matches(c, reader, parameters(), expected_ids=["o"])
+
+
+def test_initial_reference_search_may_be_empty_without_expected_record():
+    from openadapt_flow.ensure_record import find_matches
+
+    c = contract()
+    assert find_matches(c, FhirReader(c, get=SearchStore().get), parameters()) == ({}, 0)
+
+
+def test_logical_reference_identity_retains_verified_version_separately():
+    c = contract()
+    params = parameters(patient="Patient/a/_history/1")
+    evidence = FhirReader(c, get=SearchStore().get).reference_evidence(
+        c, params, [record()]
+    )
+    assert evidence.identity(params["patient"], ("Patient",)) == BASE + "/Patient/a"
+    assert evidence.identity("Patient/a", ("Patient",)) == BASE + "/Patient/a"
+    assert evidence.version(params["patient"], ("Patient",)) == "1"
+    assert evidence.version("Patient/a", ("Patient",)) is None
+
+
+def test_requested_reference_version_is_still_checked_outside_person_identity():
+    from openadapt_flow.ensure_record import is_person, wrong_fields
+
+    c = contract()
+    params = parameters(patient="Patient/a/_history/1")
+    resource = record(subject={"reference": "Patient/a/_history/2"})
+    evidence = FhirReader(c, get=SearchStore().get).reference_evidence(
+        c, params, [resource]
+    )
+    assert is_person(c, resource, params, evidence)
+    assert wrong_fields(c, resource, params, evidence) == ["patient"]
+
+
+def test_version_target_read_must_still_echo_requested_version():
+    store = SearchStore()
+    store.records["Patient/a/_history/1"]["meta"]["versionId"] = "2"
+    result = verdict(contract(), parameters(patient="Patient/a/_history/1"), record(), store)
+    assert result.outcome == "needs_review" and result.evidence["unreadable"]
+
+
+def test_closed_typed_reference_does_not_certify_its_display_text():
+    resource = record(
+        subject={"reference": "Patient/a", "display": "An unrelated person's label"}
+    )
+    assert (
+        verdict(contract(), parameters(), resource, Store()).outcome == "created_verified"
+    )
+
+
+def test_matching_display_does_not_make_a_different_target_an_existing_person():
+    from openadapt_flow.ensure_record import find_matches
+
+    c = contract()
+    resource = record(subject={"reference": "Patient/b", "display": "Task's presentation"})
+    store = SearchStore([resource])
+    assert find_matches(c, FhirReader(c, get=store.get), parameters()) == ({}, 1)
+
+
+@pytest.mark.parametrize("created", [False, True])
+def test_verification_refuses_search_omission_of_fresh_known_match(
+    monkeypatch, created
+):
+    from openadapt_flow import ensure_record
+
+    c = contract(change_feed={"audit": None, "sweep_types": ["Observation"]})
+    resource = record()
+    store = SearchStore()
+    store.records["Observation/o"] = resource
+    now = datetime.now(timezone.utc)
+    changes = (
+        {"Observation/o": Change(ref="Observation/o", actions={"C"}, authors={BOT})}
+        if created
+        else {}
+    )
+    monkeypatch.setattr(ensure_record, "read_changes", lambda *args: changes)
+    monkeypatch.setattr(FhirReader, "server_time", lambda self: now)
+    result = ensure_record.verify_ensure(
+        c,
+        parameters(),
+        Baseline(started=now, matches={} if created else {"o": resource}),
+        reader=FhirReader(c, get=store.get),
+        sleep=lambda seconds: None,
+    )
+    assert result.outcome == "needs_review" and result.evidence["unreadable"]
+    assert any("known matching record" in reason for reason in result.reasons)
