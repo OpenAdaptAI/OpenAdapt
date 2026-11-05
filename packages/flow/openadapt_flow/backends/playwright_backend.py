@@ -4127,6 +4127,7 @@ class PlaywrightBackend:
                 label=contract.label,
             )
             self._assert_qualification_environment_current()
+            receipt_fingerprint = structural_resolution_fingerprint(locator, handle)
             # The binding is independent of resolver tokens created during
             # post-action verification. Keep it even if delivery is uncertain.
             self._native_selected_proof = binding
@@ -4139,7 +4140,7 @@ class PlaywrightBackend:
                 raise ActionDeliveryUncertain(
                     operation="guarded_dom_select",
                     native=False,
-                    target_fingerprint=fingerprint,
+                    target_fingerprint=receipt_fingerprint,
                     cause_type=type(exc).__name__,
                 ) from exc
             status = result.get("status") if isinstance(result, dict) else None
@@ -4153,14 +4154,14 @@ class PlaywrightBackend:
                 raise ActionDeliveryUncertain(
                     operation="guarded_dom_select",
                     native=False,
-                    target_fingerprint=fingerprint,
+                    target_fingerprint=receipt_fingerprint,
                     cause_type="SelectionContinuityLost",
                 )
             return ActionDeliveryReceipt(
                 receipt_id=f"playwright-{uuid.uuid4().hex}",
                 operation="guarded_dom_select",
                 native=False,
-                target_fingerprint=fingerprint,
+                target_fingerprint=receipt_fingerprint,
                 selection_value_sha256=hashlib.sha256(
                     contract.value.encode("utf-8")
                 ).hexdigest(),

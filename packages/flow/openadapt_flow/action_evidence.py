@@ -198,6 +198,7 @@ def _delivery_receipt_error(
     source_fingerprint = _resolution_fingerprint(step, result.resolution)
     if (
         step.action is not ActionKind.DRAG
+        and step.native_selection is None
         and result.actuation in {"uia", "dom"}
         and result.resolution is not None
         and result.resolution.rung == "structural"
@@ -246,6 +247,14 @@ def _delivery_receipt_error(
                 return "native selection delivery receipt has a mixed input contract"
             if result.resolution is None or result.resolution.rung != "structural":
                 return "native selection delivery receipt lacks structural target proof"
+            handle = result.resolution.structural_handle
+            if (
+                handle is None
+                or handle.target_fingerprint is None
+                or source_fingerprint is None
+                or receipt.target_fingerprint != source_fingerprint
+            ):
+                return "native selection receipt does not bind its locator and target"
             selected = step.native_selection.value
         else:
             selected_value = (

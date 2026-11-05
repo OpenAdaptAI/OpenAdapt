@@ -397,45 +397,48 @@ class TestNewTab:
         assert report.results[0].postconditions_ok is True
 
 
-def test_native_selection_preserves_distinct_submitted_value(_browser, tmp_path):
+def test_native_selection_preserves_distinct_submitted_value(
+    _browser, mockmed_url, tmp_path
+):
     """Real record/compile/replay must commit the option's value, not its label."""
     from urllib.parse import parse_qs
 
     from openadapt_flow.ir import ActionKind, Workflow
     from openadapt_flow.runtime import Replayer
 
-    url = "https://native-selection.example/form"
-    html = """<!doctype html><html><body>
-      <form method="post" action="/save">
-        <label for="species">Species</label>
-        <select id="species" name="species">
-          <option value="">Choose</option>
-          <option value="record-code-17">Dog</option>
-          <option value="record-code-29">Dogwood</option>
-        </select>
-        <button id="submit" type="submit">Save</button>
-      </form><p id="status">Ready</p>
-      <script>
-        document.querySelector('#species').addEventListener('change', e => {
-          document.querySelector('#status').textContent =
-            'Chosen ' + e.target.selectedOptions[0].label;
-        });
-      </script></body></html>"""
+    url = f"{mockmed_url}widgets.html?panel=select"
+
+    def open_form(page):
+        # Use the same native-control geometry and styles as the existing
+        # cross-platform prefix regression. The minimal unstyled select can
+        # leave the native popup's type-ahead uncommitted on macOS Chromium.
+        page.goto(url)
+        page.locator("#panel-select").evaluate(
+            """panel => {
+                panel.innerHTML = `<form method="post" action="/save">
+                  <label for="species">Species</label>
+                  <select id="species" name="species">
+                    <option value="">Choose a species</option>
+                    <option value="record-code-17">Dog</option>
+                    <option value="record-code-29">Dogwood</option>
+                  </select>
+                  <button id="submit" type="submit">Save</button>
+                </form>`;
+                panel.querySelector('#species').addEventListener('change', e => {
+                    document.querySelector('#status').textContent =
+                        'Chosen ' + e.target.selectedOptions[0].label;
+                });
+            }"""
+        )
+
     rec_dir, bundle_dir = tmp_path / "rec", tmp_path / "bundle"
     page = _browser.new_page(viewport=VIEWPORT)
     try:
-        page.route(
-            "https://native-selection.example/**",
-            lambda route: route.fulfill(
-                status=200,
-                content_type="text/html",
-                body=html,
-            ),
-        )
-        page.goto(url)
+        open_form(page)
         recorder = Recorder(PlaywrightBackend(page), rec_dir, app_url=url)
         recorder.click(*center(page, "#species"))
-        recorder.type_text("d")
+        # Exact label corroborates Dog even with the shared Dogwood prefix.
+        recorder.type_text("Dog")
         recorder.press("Enter")
         recorder.finish()
         assert page.locator("#species").input_value() == "record-code-17"
@@ -452,15 +455,13 @@ def test_native_selection_preserves_distinct_submitted_value(_browser, tmp_path)
     page = _browser.new_page(viewport=VIEWPORT)
     try:
 
-        def serve(route):
-            if route.request.method == "POST":
-                payloads.append(parse_qs(route.request.post_data or ""))
-                route.fulfill(status=200, content_type="text/html", body="Saved")
-            else:
-                route.fulfill(status=200, content_type="text/html", body=html)
+        def save(route):
+            assert route.request.method == "POST"
+            payloads.append(parse_qs(route.request.post_data or ""))
+            route.fulfill(status=200, content_type="text/html", body="Saved")
 
-        page.route("https://native-selection.example/**", serve)
-        page.goto(url)
+        page.route("**/save", save)
+        open_form(page)
         report = Replayer(PlaywrightBackend(page), use_structural=False).run(
             Workflow.load(bundle_dir),
             bundle_dir=bundle_dir,

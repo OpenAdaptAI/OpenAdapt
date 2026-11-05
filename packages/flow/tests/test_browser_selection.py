@@ -493,12 +493,26 @@ def test_native_select_rechecks_context_at_mutation_boundary(
 def test_native_select_receipt_binds_value_not_display_label(native_page: Any) -> None:
     import hashlib
 
+    from openadapt_flow.runtime.resolver import structural_resolution_fingerprint
+
     backend, locator, handle = _native_binding(native_page)
     receipt = backend.select_native_option_guarded(
         _native_contract(), locator=locator, handle=handle
     )
     assert receipt.selection_value_sha256 == hashlib.sha256(b"code-b").hexdigest()
     assert receipt.selection_commit_key is None
+
+    assert receipt.target_fingerprint == structural_resolution_fingerprint(
+        locator, handle
+    )
+    assert receipt.target_fingerprint != handle.target_fingerprint
+    for changed in (
+        locator.model_copy(update={"selector": "#another-choice"}),
+        locator.model_copy(update={"frame_path": ["#another-frame"]}),
+    ):
+        assert receipt.target_fingerprint != structural_resolution_fingerprint(
+            changed, handle
+        )
 
 
 def _native_tracked_value(page: Any, backend: Any) -> Any:

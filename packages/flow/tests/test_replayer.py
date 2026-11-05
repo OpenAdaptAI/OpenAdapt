@@ -4686,6 +4686,8 @@ class NativeSelectionFakeBackend(FakeBackend):
         )
 
     def select_native_option_guarded(self, contract, *, locator, handle):
+        from openadapt_flow.runtime.resolver import structural_resolution_fingerprint
+
         self.actions.append(("native_select", contract.value))
         if self.uncertain:
             raise ActionDeliveryUncertain(operation="guarded_dom_select", native=False)
@@ -4698,7 +4700,7 @@ class NativeSelectionFakeBackend(FakeBackend):
             receipt_id="native-selection-test",
             operation="guarded_dom_select",
             native=False,
-            target_fingerprint=handle.target_fingerprint,
+            target_fingerprint=structural_resolution_fingerprint(locator, handle),
             selection_value_sha256=hashlib.sha256(contract.value.encode()).hexdigest(),
             delivered_at="2026-11-05T20:00:00+00:00",
         )

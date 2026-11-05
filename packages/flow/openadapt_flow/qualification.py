@@ -3226,6 +3226,7 @@ def _case_run_report_integrity_error(
         )
         if (
             step.action is not ActionKind.DRAG
+            and step.native_selection is None
             and item.actuation in {"uia", "dom"}
             and source_handle is not None
         ):
@@ -3361,19 +3362,22 @@ def _case_run_report_integrity_error(
             if selection_resolution.rung == "structural":
                 selection_handle = selection_resolution.structural_handle
                 selection_locator = step.anchor.structural
-                if selection_handle is None or selection_locator is None:
+                if (
+                    selection_handle is None
+                    or selection_locator is None
+                    or (
+                        step.native_selection is not None
+                        and selection_handle.target_fingerprint is None
+                    )
+                ):
                     return "selection delivery receipt lacks structural target proof"
                 from openadapt_flow.runtime.resolver import (
                     structural_resolution_fingerprint,
                 )
 
-                expected_target = (
-                    selection_handle.target_fingerprint
-                    if step.native_selection is not None
-                    else structural_resolution_fingerprint(
-                        selection_locator,
-                        selection_handle,
-                    )
+                expected_target = structural_resolution_fingerprint(
+                    selection_locator,
+                    selection_handle,
                 )
             else:
                 if step.native_selection is not None:
