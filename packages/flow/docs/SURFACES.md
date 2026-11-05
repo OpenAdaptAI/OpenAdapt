@@ -147,8 +147,10 @@ openadapt-flow compile rec --out bundle --name my-task
 openadapt-flow replay bundle --macos-app TextEdit \
   --macos-window-title notes.txt
 
-# Linux: Capture records the local desktop; AT-SPI selects the replay target.
-openadapt-flow record --backend linux --out rec
+# Linux: the title scopes the local Capture window on X11; AT-SPI selects
+# the replay target.
+openadapt-flow record --backend linux \
+  --linux-window-title "Untitled Document 1" --out rec
 openadapt-flow compile rec --out bundle --name my-task
 openadapt-flow replay bundle --linux-app gedit \
   --linux-window-title "Untitled Document 1"

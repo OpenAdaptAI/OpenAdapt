@@ -56,9 +56,50 @@ from typing import Any, Callable, ContextManager, Optional, Protocol
 # (openadapt_capture.window_capture.resolve_window / capture_window). Kept in
 # lock-step with that module: recording ONE window in its own pixel space needs
 # a per-window capture primitive (macOS CGWindowListCreateImage / Windows
-# Win32 + region grab). Elsewhere we refuse UP FRONT rather than start a
-# full-screen capture that silently ignores the requested --window scope.
-WINDOW_CAPTURE_PLATFORMS = ("darwin", "win32")
+# Win32 + region grab / Linux X11 EWMH + XComposite). Elsewhere we refuse UP
+# FRONT rather than start a full-screen capture that silently ignores the
+# requested --window scope.
+WINDOW_CAPTURE_PLATFORMS = ("darwin", "win32", "linux")
+
+
+def _linux_window_session_refusal(environ: Any = None) -> Optional[str]:
+    """Why a Linux session cannot record one window, or None for X11.
+
+    Mirrors ``openadapt_capture.window_capture_linux._require_x11_session`` so
+    the refusal comes before the operator is told to start demonstrating.
+    """
+    import os
+
+    values = os.environ if environ is None else environ
+    session_type = values.get("XDG_SESSION_TYPE", "").strip().casefold()
+    if session_type == "wayland" or values.get("WAYLAND_DISPLAY", "").strip():
+        return (
+            "this is a Wayland session; Capture can scope a recording to one "
+            "window only under X11"
+        )
+    if not values.get("DISPLAY", "").strip():
+        return "DISPLAY is not set; Capture needs an X11 desktop"
+    return None
+
+
+def _installed_capture_lacks_linux_windows() -> bool:
+    """Whether the installed openadapt-capture predates Linux window capture.
+
+    openadapt-capture added X11 window capture in 1.3.0
+    (``openadapt_capture.window_capture_linux``). An older release would
+    refuse only after the operator was told to start. Returns False when
+    openadapt-capture is not installed: the recorder reports that itself.
+    """
+    import importlib.util
+
+    try:
+        if importlib.util.find_spec("openadapt_capture") is None:
+            return False
+        return (
+            importlib.util.find_spec("openadapt_capture.window_capture_linux") is None
+        )
+    except (ImportError, ValueError):
+        return False
 
 
 class _CaptureRecorder(Protocol):
@@ -315,9 +356,22 @@ def record_desktop_capture(
             "window-scoped recording (--window) is not supported on this host "
             f"(platform {sys.platform!r}); openadapt-capture implements "
             "per-window capture only on "
-            f"{' and '.join(WINDOW_CAPTURE_PLATFORMS)}. Record on a supported "
+            f"{', '.join(WINDOW_CAPTURE_PLATFORMS)}. Record on a supported "
             "host, or omit --window to capture the full screen."
         )
+    if window is not None and sys.platform.startswith("linux"):
+        refusal = _linux_window_session_refusal()
+        if refusal is not None:
+            raise SystemExit(
+                f"window-scoped recording (--window) refused: {refusal}. "
+                "Nothing was recorded."
+            )
+        if recorder_factory is None and _installed_capture_lacks_linux_windows():
+            raise SystemExit(
+                "window-scoped recording (--window) refused: the installed "
+                "openadapt-capture has no Linux window capture; install "
+                "openadapt-capture 1.3.0 or later. Nothing was recorded."
+            )
     if backend_kind is not None and backend_kind not in ("rdp", "citrix"):
         raise ValueError(
             "backend_kind execution hints are supported only for rdp or citrix"
