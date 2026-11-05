@@ -37,7 +37,7 @@ class SearchObservation:
     contract_sha256: str
     schema_sha256: str
     matched_ids: frozenset[str] = field(repr=False)
-    candidate_count: int
+    candidate_count: Optional[int]
     complete: bool
     observed_at: str
 
@@ -206,6 +206,8 @@ def _search(spec: Any, reader: Any, params: Mapping[str, object], at: str) -> Se
 
 
 def _sealed_search(search: SearchObservation, salt: bytes) -> dict[str, Any]:
+    if not search.complete or search.candidate_count is None:
+        raise TargetedUnreadable("an incomplete identifying search cannot be sealed as the written search")
     return {
         "contract_sha256": search.contract_sha256,
         "schema_sha256": search.schema_sha256,
@@ -474,10 +476,7 @@ def observe_targeted(spec: Any, verifier: Any, post: Mapping[str, Any],
         raise TargetedUnreadable(problem)
     reader = _reader(spec, verifier)
     by_mac = {_digest("id", _identity(i, reader.resource_type), salt): i for i in locators}
-    late_search = _search(spec, reader, params, at)
     stored = post["search"]
-    if late_search.contract_sha256 != stored["contract_sha256"] or late_search.schema_sha256 != stored["schema_sha256"]:
-        raise TargetedUnreadable("identifying search changed contract or schema")
     if not set(stored["matched_id_macs"]) <= set(by_mac):
         raise TargetedUnreadable("the written search includes an unexplained duplicate")
     write_ids = frozenset(by_mac[m] for m in stored["matched_id_macs"])
@@ -496,9 +495,38 @@ def observe_targeted(spec: Any, verifier: Any, post: Mapping[str, Any],
         targets.append(TargetObservation(identity, bound["id_mac"], True, status, matches, current,
                         "complete" if complete else "incomplete" if spec.history_available else "unavailable",
                         complete, versions))
-    if any(t.current_status == "present" and t.matches_receipt is True and t.identity not in late_search.matched_ids for t in targets):
-        raise TargetedUnreadable("identifying search omitted a currently matching receipt target")
+    from dataclasses import replace
     from openadapt_flow.verify_run import _now
+
+    try:
+        late_search = _search(spec, reader, params, at)
+        if late_search.contract_sha256 != stored["contract_sha256"] or late_search.schema_sha256 != stored["schema_sha256"]:
+            raise TargetedUnreadable("identifying search changed contract or schema")
+        if any(t.current_status == "present" and t.matches_receipt is True and t.identity not in late_search.matched_ids for t in targets):
+            late_search = replace(late_search, candidate_count=None, complete=False)
+    except Exception:  # noqa: BLE001 - search failure must not erase observed harm
+        late_search = SearchObservation(stored["contract_sha256"], stored["schema_sha256"],
+                                        frozenset(), None, False, _now())
+    # Keep the original endpoint-stability requirement across the new order.
+    # A changed/unreadable final endpoint blocks positive history coverage,
+    # while already authenticated versions remain observed negative evidence.
+    if late_search.complete:
+        for i, target in enumerate(targets):
+            if target.current_status == "unreadable":
+                continue
+            try:
+                final = _current(spec, reader, target.identity)
+                if final == target.current:
+                    continue
+                targets[i] = replace(target, current_status="present" if final is not None else "absent",
+                                     current=final,
+                                     matches_receipt=final is not None and _digest("contents", _project(reader, final, post["ignore_fields"]), salt) == post["targets"][i]["contents_mac"],
+                                     history_status="incomplete" if spec.history_available else "unavailable",
+                                     history_anchor_bound=False)
+            except Exception:  # noqa: BLE001 - never discard earlier proven harm
+                targets[i] = replace(target, current_status="unreadable", current=None, matches_receipt=None,
+                                     history_status="incomplete" if spec.history_available else "unavailable",
+                                     history_anchor_bound=False)
 
     return TargetedObservation(receipt_digest, tuple(targets), write_search, late_search, _now(),
                                history_required=spec.history_required)
@@ -517,13 +545,15 @@ def judge_targeted(observation: TargetedObservation) -> tuple[TargetedStatus, di
         problems.append("identifying_search_unknown")
     other = 0
     for target in observation.targets:
-        if not target.receipt_bound or target.current_status == "unreadable":
+        if not target.receipt_bound:
             problems.append("target_read_unavailable")
             continue
+        if target.current_status == "unreadable":
+            problems.append("target_read_unavailable")
         complete = target.history_status == "complete" and target.history_anchor_bound
         if observation.history_required and not complete:
             problems.append("required_record_history_unknown")
-        if target.matches_receipt is not True:
+        if target.current_status != "unreadable" and target.matches_receipt is not True:
             later = target.versions[-1] if complete and target.versions else None
             if later is not None and later.author_trusted and later.by_run is False:
                 other += 1
@@ -551,6 +581,8 @@ def judge_targeted(observation: TargetedObservation) -> tuple[TargetedStatus, di
         "target_mismatches": refuted,
         "legitimate_later_user_edits": other,
         "history_required": observation.history_required,
+        "write_search_status": "complete" if observation.write_search.complete else "UNKNOWN",
+        "late_search_status": "complete" if observation.late_search.complete else "UNKNOWN",
         "history_status": "complete" if all(t.history_status == "complete" for t in observation.targets) and observation.targets else "UNKNOWN/BLOCKED",
         "problems": sorted(set(problems)),
         "outside_intermediate_history": OUTSIDE_INTERMEDIATE_HISTORY,

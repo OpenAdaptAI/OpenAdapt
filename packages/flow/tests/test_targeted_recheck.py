@@ -33,6 +33,8 @@ class Store:
         self.history_mode = "normal"
         self.history_reads = 0
         self.omit_identifying_search = False
+        self.fail_identifying_search = False
+        self.change_during_identifying_search = False
 
     def save(self, identity: str = RECORD_ID, *, name: str = PARAMS["name"],
              author: str | None = "actor/run", timestamp: str | None = None) -> None:
@@ -69,7 +71,13 @@ def server():
                     if store.omit_identifying_search:
                         records = []
                 body = {"resourceType": "Bundle", "type": "searchset", "total": len(records),
-                        "entry": [{"resource": r} for r in records]}
+                        "entry": [{"resource": copy.deepcopy(r)} for r in records]}
+                if "name" in params and store.fail_identifying_search:
+                    status = 503
+                    body = {"resourceType": "OperationOutcome", "issue": [{"severity": "error", "code": "transient"}]}
+                if "name" in params and store.change_during_identifying_search:
+                    store.change_during_identifying_search = False
+                    store.save(name="changed-during-identifying-search")
             elif len(parts) == 3 and parts[0] == "Basic" and parts[2] == "_history":
                 store.history_reads += 1
                 versions = copy.deepcopy(store.history.get(parts[1], []))
@@ -454,3 +462,47 @@ def test_initial_unknown_late_observation_does_not_promote_overall_verdict(tmp_p
     attempt = ledger.latest(write.write_key)
     assert attempt.resolved["outcome"] == "UNCERTAIN" and attempt.resolved["review"] is True
     assert attempt.recheck_owed == write.recheck_due_at
+
+
+@pytest.mark.parametrize("author,expected", [("actor/run", "REFUTED"), (None, "UNCERTAIN")])
+def test_failed_search_preserves_authenticated_wrong_version_only(issued: Any, author: str | None, expected: str) -> None:
+    store, cfg, write, ledger = issued
+    store.save(name="wrong-own-field", author=author)
+    store.fail_identifying_search = True
+    before = len(store.calls)
+    result = late(cfg, write, ledger)
+    assert result.outcome == expected
+    assert result.evidence["targeted"]["late_search_status"] == "UNKNOWN"
+    assert "identifying_search_unknown" in result.evidence["targeted"]["problems"]
+    assert "late_search_count" not in result.evidence["targeted"]
+    calls = store.calls[before:]
+    current_index = next(i for i, path in enumerate(calls) if urlsplit(path).path == f"/Basic/{RECORD_ID}")
+    history_index = next(i for i, path in enumerate(calls) if urlsplit(path).path == f"/Basic/{RECORD_ID}/_history")
+    search_index = next(i for i, path in enumerate(calls) if urlsplit(path).path == "/Basic" and "name" in parse_qs(urlsplit(path).query))
+    assert current_index < search_index and history_index < search_index
+    if expected == "UNCERTAIN":
+        assert not result.verified and not result.final
+
+
+def test_current_changed_during_search_cannot_confirm_stale_target(issued: Any) -> None:
+    store, cfg, write, ledger = issued
+    store.change_during_identifying_search = True
+    result = late(cfg, write, ledger)
+    assert result.outcome == "UNCERTAIN" and not result.verified and not result.final
+    assert result.evidence["targeted"]["history_status"] == "UNKNOWN/BLOCKED"
+
+
+@pytest.mark.parametrize("binding", ["locator", "params"])
+def test_bad_pure_binding_reads_nothing_and_creates_no_fence(issued: Any, tmp_path: Path, binding: str) -> None:
+    store, cfg, write, ledger = issued
+    assert write.recheck is not None
+    before = list(store.calls)
+    params = dict(PARAMS)
+    if binding == "locator":
+        write.recheck.target_ids = ("Basic/reply-is-not-authority",)
+    else:
+        params["actor"] = "actor/colleague"
+    result = api.recheck(cfg, write, params=params, actor=ACTOR, ledger=ledger)
+    assert result.outcome == "UNCERTAIN" and not result.verified and not result.final
+    assert store.calls == before
+    assert not list((tmp_path / "authority").rglob("*.inflight"))

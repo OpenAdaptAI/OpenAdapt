@@ -284,3 +284,23 @@ def test_legitimate_other_edit_need_not_remain_in_identifying_search():
     # The independent targeted judge must still prove this is a later user edit.
     result = judged(targets=(target(matches_receipt=False),), late_search=search())
     assert result.status == "held"
+
+
+@pytest.mark.parametrize("which", ["write_search", "late_search"])
+def test_unreadable_search_has_no_fabricated_zero_count(which):
+    proof = observation(**{which: search(candidate_count=None, complete=False)})
+    result = judged(proof)
+    assert result.status == "not_checked"
+    assert checks(result)["at_most_one"].status == "not_checked"
+    assert result.evidence()["guarantee"][which + "_count"] is None
+
+
+def test_known_refutation_survives_search_with_unknown_count():
+    from openadapt_flow.verify_run import _apply_hard_invariants
+
+    proof = observation(late_search=search(candidate_count=None, complete=False))
+    frame = FrameVerdict("refuted", "authenticated own wrong post-anchor version")
+    result = _apply_hard_invariants(frame, proof)
+    assert result.status == "refuted"
+    assert result.reason == "authenticated own wrong post-anchor version"
+    assert result.hard_invariants.evidence()["guarantee"]["late_search_count"] is None

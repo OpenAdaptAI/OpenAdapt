@@ -2320,7 +2320,8 @@ def verify_run(
             frame.targeted_observation = observation
             observed_status, detail = judge_targeted(observation)
             detail["write_search_count"] = len(observation.write_search.matched_ids)
-            detail["write_confirmation_search_count"] = len(observation.late_search.matched_ids)
+            if observation.late_search.complete:
+                detail["write_confirmation_search_count"] = len(observation.late_search.matched_ids)
             detail["write_confirmation_read_at"] = observation.read_at
             frame.targeted = detail
             frame.post_state["read_at"] = observation.read_at

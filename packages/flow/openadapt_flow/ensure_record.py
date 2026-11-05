@@ -1338,7 +1338,7 @@ def find_matches(
         raise Unreadable(str(exc)) from exc
 
 
-def capture_baseline(
+def _capture_ensure(
     contract: EnsureContract,
     params: Mapping[str, Any],
     reader: Optional[FhirReader] = None,
