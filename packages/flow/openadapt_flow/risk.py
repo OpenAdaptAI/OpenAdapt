@@ -610,6 +610,41 @@ def opener_explanation(confirm_id: str) -> str:
     return f"opens a confirmation dialog; the save is the next click ({confirm_id})"
 
 
+_OPENER_EXPLANATION_RE = re.compile(
+    r"^opens a confirmation dialog; the save is the next click "
+    r"\(([A-Za-z0-9][A-Za-z0-9_.-]{0,63})\)$"
+)
+
+
+def is_sealed_confirmation_opener(step: Step) -> bool:
+    """A confirmation-dialog opener the compiler sealed with dialog evidence.
+
+    Policy re-derives risk from labels, so a write-shaped opener label such as
+    "Create New Patient" would otherwise become irreversible again and demand
+    a system-of-record effect on a click that saves nothing. Both halves of the
+    seal are required: the explanation that names the confirm step, and a
+    postcondition that the dialog opened (``text_present`` or
+    ``no_duplicate_candidate``). Without the postcondition the run would treat
+    a missing dialog as a successful save.
+    """
+
+    if step.action not in _POINTER_ACTIONS:
+        return False
+    if step.effects or step.api_binding is not None:
+        return False
+    if _OPENER_EXPLANATION_RE.fullmatch(step.risk_explanation or "") is None:
+        return False
+    return any(
+        (
+            p.kind is PostconditionKind.TEXT_PRESENT
+            and isinstance(p.text, str)
+            and bool(p.text.strip())
+        )
+        or p.kind is PostconditionKind.NO_DUPLICATE_CANDIDATE
+        for p in step.expect
+    )
+
+
 def compiled_confirmation_pairs(
     steps: Iterable[Step],
 ) -> tuple[tuple[str, str], ...]:
@@ -841,6 +876,12 @@ def infer_step_risk(
             "reversible",
             (step.risk_explanation or LOCAL_EDIT_PREFIX)[:512],
             (action_evidence, "pattern:local_edit"),
+        )
+    if write_keyword is not None and is_sealed_confirmation_opener(step):
+        return RiskInference(
+            "reversible",
+            (step.risk_explanation or "")[:512],
+            (action_evidence, "pattern:confirmation_opener"),
         )
     if write_keyword is not None and step.action in {
         ActionKind.CLICK,
