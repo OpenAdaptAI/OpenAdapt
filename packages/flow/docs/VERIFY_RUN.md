@@ -264,6 +264,10 @@ row added, changed or removed anywhere is collateral unless a declared
 effect, a declared side record, an attributed concurrent write or an
 allow-listed bookkeeping table explains it.
 
+Use `charset: utf8mb4` in MySQL and MariaDB connection arguments. Before
+reading metadata or rows, the snapshot checks that `character_set_results`
+is `utf8mb4`; any other value refuses the read.
+
 Each snapshot has a `frame.database.read_row_budget` of 1,000,000 data rows
 by default. It counts all non-skipped tables, including append-only logs,
 and auxiliary audit-query results. If table counts exceed the budget, their

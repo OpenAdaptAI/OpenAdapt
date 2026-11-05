@@ -1805,6 +1805,13 @@ def _snapshot(
     scope: list[str] = []
     default_schema = ""
     if dialect == "mysql":
+        # A lossy result charset can turn different stored text into the
+        # same '?', hiding edits and corrupting new-row values. Check before
+        # reading metadata too: names and definitions must remain exact.
+        if s.rows("SELECT @@SESSION.character_set_results") != [("utf8mb4",)]:
+            raise SnapshotError(
+                "MySQL frame reads require character_set_results=utf8mb4"
+            )
         # Before the snapshot starts: a row committed after this read is in
         # the snapshot, so the counter never runs ahead of what it shows.
         counters = _mysql_counters(s)
