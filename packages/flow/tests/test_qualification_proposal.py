@@ -204,6 +204,32 @@ def test_accept_confirms_pins_and_keeps_break_it(tmp_path: Path) -> None:
     assert local.issuer_workflow == LOCAL_DEV_ISSUER_WORKFLOW
 
 
+@pytest.mark.parametrize("source", ["unchecked_tamper", "manifestless"])
+def test_local_dev_admission_requires_a_verified_persisted_seal(
+    tmp_path: Path, source: str
+) -> None:
+    workflow, recording, bundle = _write_workflow(tmp_path, _workflow())
+    if source == "unchecked_tamper":
+        raw = json.loads((bundle / "workflow.json").read_bytes())
+        raw["name"] = "tampered before unchecked load"
+        (bundle / "workflow.json").write_text(json.dumps(raw), encoding="utf-8")
+        workflow = Workflow.load(bundle, verify_integrity=False)
+    else:
+        raw = json.loads((bundle / "workflow.json").read_bytes())
+        raw.pop("manifest")
+        (bundle / "workflow.json").write_text(json.dumps(raw), encoding="utf-8")
+        (bundle / "manifest.json").unlink()
+        workflow = Workflow.load(bundle)
+
+    proposal = propose_qualification(workflow, recording_dir=recording)
+    accepted = accept_proposal(workflow, proposal)
+    with pytest.raises(
+        QualificationProposalError,
+        match="requires a verified persisted bundle seal",
+    ):
+        admit_local_dev(workflow, accepted, bundle_dir=bundle)
+
+
 def test_local_dev_key_cannot_enter_a_production_trust_map() -> None:
     registry = {
         LOCAL_DEV_KEY_ID: {

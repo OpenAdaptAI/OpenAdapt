@@ -517,6 +517,40 @@ def _verify_workflow_content(workflow: "Workflow", stored: BundleManifest) -> No
         )
 
 
+def verify_loaded_source_integrity(
+    workflow: "Workflow",
+    bundle_dir: Path | str,
+    stored: BundleManifest,
+    *,
+    decrypted_assets: Optional[dict[str, bytes]] = None,
+) -> None:
+    """Verify the immutable source seal before a loaded workflow is resealed.
+
+    Unlike :func:`verify_integrity`, this intentionally does not compare the
+    current runtime model fingerprint. A caller may have deliberately edited a
+    previously verified workflow in memory and then save that as new content.
+    The original payload, manifest identity, and original assets must still
+    verify first, so an unchecked or tampered load cannot be laundered by that
+    new seal.
+    """
+    loaded = workflow._loaded_seal
+    if loaded is None or not loaded.content_digest:
+        raise BundleIntegrityError(
+            "cannot reseal a loaded bundle without a persisted integrity seal"
+        )
+    if (
+        stored.content_digest != loaded.content_digest
+        or tuple(sorted(stored.file_hashes.items())) != loaded.file_hashes
+        or stored.schema_version != loaded.schema_version
+        or stored.encrypted != loaded.encrypted
+        or _sha256_bytes(loaded.original_payload) != stored.content_digest
+    ):
+        raise BundleIntegrityError(
+            "bundle original manifest integrity changed after loading"
+        )
+    _verify_asset_hashes(bundle_dir, stored, decrypted_assets=decrypted_assets)
+
+
 def _referenced_asset_paths(workflow: "Workflow") -> set[str]:
     """Every bundle-relative image path the IR references (templates, identifier
     crops, postcondition template crops), across the linear steps AND every
@@ -819,6 +853,38 @@ class BundleIntegrityError(Exception):
     written."""
 
 
+def _verify_asset_hashes(
+    bundle_dir: Path | str,
+    stored: BundleManifest,
+    *,
+    decrypted_assets: Optional[dict[str, bytes]] = None,
+) -> None:
+    bundle = Path(bundle_dir)
+    for rel, expected in stored.file_hashes.items():
+        if decrypted_assets is not None:
+            data = decrypted_assets.get(rel)
+            if data is None:
+                raise BundleIntegrityError(
+                    f"manifest lists sealed asset {rel!r} but its authenticated "
+                    "plaintext is unavailable"
+                )
+            if _sha256_bytes(data) != expected:
+                raise BundleIntegrityError(
+                    f"sealed asset {rel!r} plaintext hash mismatch "
+                    "(tampered or corrupted)"
+                )
+            continue
+        path = bundle / rel
+        if not path.is_file():
+            raise BundleIntegrityError(
+                f"manifest lists asset {rel!r} but it is missing from the bundle"
+            )
+        if _sha256_file(path) != expected:
+            raise BundleIntegrityError(
+                f"asset {rel!r} hash mismatch (tampered or corrupted)"
+            )
+
+
 def verify_integrity(
     workflow: "Workflow",
     bundle_dir: Path | str,
@@ -853,30 +919,7 @@ def verify_integrity(
     #    the sealed asset set) breaks this.
     _verify_workflow_content(workflow, stored)
     # 2. Each sealed asset must still hash to its recorded value.
-    bundle = Path(bundle_dir)
-    for rel, expected in stored.file_hashes.items():
-        if decrypted_assets is not None:
-            data = decrypted_assets.get(rel)
-            if data is None:
-                raise BundleIntegrityError(
-                    f"manifest lists sealed asset {rel!r} but its authenticated "
-                    "plaintext is unavailable"
-                )
-            if _sha256_bytes(data) != expected:
-                raise BundleIntegrityError(
-                    f"sealed asset {rel!r} plaintext hash mismatch "
-                    "(tampered or corrupted)"
-                )
-            continue
-        path = bundle / rel
-        if not path.is_file():
-            raise BundleIntegrityError(
-                f"manifest lists asset {rel!r} but it is missing from the bundle"
-            )
-        if _sha256_file(path) != expected:
-            raise BundleIntegrityError(
-                f"asset {rel!r} hash mismatch (tampered or corrupted)"
-            )
+    _verify_asset_hashes(bundle_dir, stored, decrypted_assets=decrypted_assets)
 
 
 # ---------------------------------------------------------------------------

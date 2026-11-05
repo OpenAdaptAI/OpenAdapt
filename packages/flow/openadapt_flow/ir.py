@@ -3529,6 +3529,18 @@ class Workflow(BaseModel):
         bundle = Path(bundle_dir)
         from openadapt_flow import sealed_set as _sealed
 
+        if self._loaded_seal is not None:
+            if self.manifest is None:
+                raise _bv.BundleIntegrityError(
+                    "loaded bundle lost its original integrity manifest"
+                )
+            _bv.verify_loaded_source_integrity(
+                self,
+                bundle,
+                self.manifest,
+                decrypted_assets=(self._decrypted_templates if self.encrypted else None),
+            )
+
         if _sealed.active_writer(bundle) is not None or _sealed.is_sealed(bundle):
             # A sealed bundle stays sealed whatever ``encrypt`` says: many
             # commands re-save a bundle with a bare ``save(bundle)``, and that

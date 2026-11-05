@@ -53,13 +53,22 @@ class SignRefused(RuntimeError):
 def bundle_digest(bundle_dir: Path) -> str:
     """Verify content identity against the original seal and current asset bytes."""
     from openadapt_flow.bundle_validation import (
+        BundleIntegrityError,
         compute_file_hashes,
         content_identity_digest,
     )
     from openadapt_flow.ir import Workflow
 
     workflow = Workflow.load(bundle_dir)
-    return content_identity_digest(workflow, compute_file_hashes(workflow, bundle_dir))
+    if workflow._loaded_seal is None or not workflow._loaded_seal.content_digest:
+        raise BundleIntegrityError(
+            "authorization summary requires a persisted bundle integrity seal"
+        )
+    assets = workflow.decrypted_templates() if workflow.encrypted else None
+    return content_identity_digest(
+        workflow,
+        compute_file_hashes(workflow, bundle_dir, assets=assets),
+    )
 
 
 def matching_bundle(digest: str, candidates: Sequence[Path]) -> Optional[Path]:

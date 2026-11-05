@@ -233,6 +233,52 @@ def test_unverified_load_cannot_launder_a_broken_original_seal(tmp_path):
         bundles.content_identity_digest(loaded, loaded.manifest.file_hashes)
 
 
+@pytest.mark.parametrize("attack", ["workflow", "asset"])
+@pytest.mark.parametrize("copy_loaded", [False, True])
+def test_unverified_load_cannot_reseal_tampered_source(
+    tmp_path, attack, copy_loaded
+):
+    bundle = saved_bundle(tmp_path)
+    if attack == "workflow":
+        raw = json.loads((bundle / "workflow.json").read_bytes())
+        raw["name"] = "tampered before unchecked load"
+        (bundle / "workflow.json").write_text(json.dumps(raw))
+    else:
+        (bundle / "templates/button.png").write_bytes(b"tampered asset")
+    before = {
+        path.relative_to(bundle): path.read_bytes()
+        for path in bundle.rglob("*")
+        if path.is_file()
+    }
+
+    loaded = Workflow.load(bundle, verify_integrity=False)
+    candidate = loaded.model_copy(deep=True) if copy_loaded else loaded
+    with pytest.raises(bundles.BundleIntegrityError):
+        candidate.save(bundle)
+
+    after = {
+        path.relative_to(bundle): path.read_bytes()
+        for path in bundle.rglob("*")
+        if path.is_file()
+    }
+    assert after == before
+
+
+def test_authorization_summary_refuses_manifestless_bundle(tmp_path):
+    bundle = saved_bundle(tmp_path)
+    raw = json.loads((bundle / "workflow.json").read_bytes())
+    raw.pop("manifest")
+    (bundle / "workflow.json").write_text(json.dumps(raw))
+    (bundle / "manifest.json").unlink()
+
+    from openadapt_flow.authorization_summary import bundle_digest
+
+    with pytest.raises(
+        bundles.BundleIntegrityError, match="persisted bundle integrity seal"
+    ):
+        bundle_digest(bundle)
+
+
 def test_loaded_identity_refuses_replaced_asset_hashes_or_missing_manifest(tmp_path):
     bundle = saved_bundle(tmp_path)
     loaded = Workflow.load(bundle)
