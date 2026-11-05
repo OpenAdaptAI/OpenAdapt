@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import io
+import secrets
 import subprocess
 from typing import Any
 
@@ -57,7 +58,7 @@ class NetBoxBase(AppBase):
                "-e", "REDIS_HOST=127.0.0.1", "-e", "REDIS_CACHE_HOST=127.0.0.1",
                "-e", "SECRET_KEY=synthetic-test-only-secret-key-0123456789abcdefghijklmnopqrstuvwxyz",
                "-e", "SKIP_SUPERUSER=false", "-e", "SUPERUSER_NAME=admin", "-e", "SUPERUSER_EMAIL=admin@example.invalid",
-               "-e", f"SUPERUSER_PASSWORD={ADMIN_PASS}", "-e", "SUPERUSER_API_TOKEN=0123456789abcdef0123456789abcdef01234567",
+               "-e", f"SUPERUSER_PASSWORD={ADMIN_PASS}", "-e", f"SUPERUSER_API_TOKEN={secrets.token_hex(20)}",
                NB_IMAGE)
         self.wait_http("/login/", timeout_s=900)
         print(podman("exec", "-i", NB_C, "/opt/netbox/venv/bin/python", "/opt/netbox/netbox/manage.py", "shell",
