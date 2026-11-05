@@ -3,7 +3,10 @@ whether or not that token was sent."""
 
 from __future__ import annotations
 
+import html
 import json
+
+import pytest
 
 from openadapt_flow.network_capture import SECRET, redact, session_placeholder
 
@@ -113,3 +116,152 @@ def test_unparseable_markup_does_not_stop_redaction():
     )
 
     assert PAGE_META not in out[0]["response_text"]
+
+
+def _page(markup, *more):
+    lines = [
+        {"seq": 0, "method": "GET", "url": "http://app.test/", "response_text": markup}
+    ]
+    for i, extra in enumerate(more, 1):
+        lines.append({"seq": i, **extra})
+    return redact(lines)
+
+
+NUMERIC = "Num5tokenFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+
+
+def _numeric(text):
+    return "".join(f"&#{ord(c)};" for c in text)
+
+
+@pytest.mark.parametrize(
+    "spelled",
+    [
+        "Amp6token&#38;GGGGGGGGGGGGGGGGGGGGGGGG",  # a numeric reference inside
+        "Amp6token&#x26;GGGGGGGGGGGGGGGGGGGGGGGG",  # a hex reference
+        _numeric(NUMERIC),  # every character a numeric reference
+    ],
+)
+def test_a_token_in_any_markup_spelling_is_withheld(spelled):
+    out = _page(f'<input type="hidden" name="csrf_token" value="{spelled}">')
+
+    text = out[0]["response_text"]
+    assert spelled not in text
+    assert html.unescape(spelled) not in html.unescape(text)
+    assert session_placeholder("csrf_token") in text
+
+
+@pytest.mark.parametrize(
+    "markup, value",
+    [
+        ('<input type="hidden" name="password" value="abc">', "abc"),
+        ('<input type="hidden" name="csrf_token" value="Seven77">', "Seven77"),
+        ("<meta name='csrf-token' content=Seven77>", "Seven77"),
+        ('<input type=hidden name=api_key value="k1">', "k1"),
+    ],
+)
+def test_a_short_token_or_secret_attribute_is_withheld(markup, value):
+    out = _page(markup)
+
+    assert f"={value}" not in out[0]["response_text"].replace('"', "").replace("'", "")
+
+
+def test_a_token_equal_to_a_field_name_on_the_page_is_withheld():
+    token = "SameAsAFieldName0123"
+    markup = (
+        f'<input name="{token}" value="x">'
+        f'<input type="hidden" name="authenticity_token" value="{token}">'
+    )
+    out = _page(markup)
+
+    assert f'value="{token}"' not in out[0]["response_text"]
+
+
+def test_a_token_equal_to_a_field_name_in_another_request_is_withheld():
+    token = "SameAsAFieldName0123"
+    out = _page(
+        f'<input type="hidden" name="authenticity_token" value="{token}">',
+        {
+            "method": "POST",
+            "url": "http://app.test/other",
+            "form": [[token, "1"]],
+        },
+    )
+
+    assert token not in out[0]["response_text"]
+
+
+def test_every_copy_of_a_repeated_value_attribute_is_withheld():
+    out = _page('<input type="hidden" name="csrf" value="First111" value="Second22">')
+
+    text = out[0]["response_text"]
+    assert "First111" not in text and "Second22" not in text
+
+
+def test_a_meta_that_names_a_field_or_header_keeps_its_name():
+    markup = (
+        '<meta name="_csrf_parameter" content="_csrf">'
+        '<meta name="_csrf_header" content="X-CSRF-TOKEN">'
+        '<meta name="csrf-param" content="authenticity_token">'
+    )
+    out = _page(markup)
+
+    assert out[0]["response_text"] == markup
+
+
+def test_a_value_inside_another_attribute_is_not_mistaken_for_the_token():
+    markup = (
+        '<input data-note=\'value="keep"\' type="hidden" name="csrf_token"'
+        ' value="Hidden999token">'
+    )
+    out = _page(markup)
+
+    text = out[0]["response_text"]
+    assert "data-note='value=\"keep\"'" in text
+    assert "Hidden999token" not in text
+
+
+def test_chromium_recovers_no_token_from_the_saved_markup():
+    sync_api = pytest.importorskip("playwright.sync_api")
+    tokens = {
+        "csrf_token": "Amp6token&#38;GGGGGGGGGGGGGGGGGGGGGGGG",
+        "authenticity_token": _numeric(NUMERIC),
+        "password": "abc",
+        "xsrf": "Seven77",
+    }
+    markup = (
+        "<form>"
+        + "".join(
+            f'<input type="hidden" name="{n}" value="{v}">' for n, v in tokens.items()
+        )
+        + "</form>"
+    )
+    saved = _page(markup)[0]["response_text"]
+    with sync_api.sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(headless=True)
+        except Exception as exc:  # noqa: BLE001 - no browser installed
+            pytest.skip(f"chromium unavailable: {exc}")
+        try:
+            page = browser.new_page()
+            page.set_content(saved)
+            values = page.eval_on_selector_all(
+                "input", "els => els.map((e) => [e.name, e.value])"
+            )
+        finally:
+            browser.close()
+    recovered = dict(values)
+    for name, spelled in tokens.items():
+        assert recovered[name] != html.unescape(spelled)
+        assert recovered[name] in (SECRET, session_placeholder(name))
+
+
+def test_a_token_the_walk_cannot_place_withholds_the_whole_page(monkeypatch):
+    import re
+
+    from openadapt_flow import network_capture
+
+    monkeypatch.setattr(network_capture, "_ATTRIBUTE", re.compile(r"(?!)"))
+    out = _page('<input type="hidden" name="csrf_token" value="Unplaced0token">')
+
+    assert "Unplaced0token" not in out[0]["response_text"]
