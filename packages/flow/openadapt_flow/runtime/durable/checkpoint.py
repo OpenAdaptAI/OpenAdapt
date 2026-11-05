@@ -120,6 +120,28 @@ def _now_after(*stamps: str) -> str:
     return now.isoformat()
 
 
+def _now_not_before(*stamps: str) -> str:
+    """The current time, or the latest given durable timestamp if the wall
+    clock reads earlier than it.
+
+    A pause must not be older than the checkpoints written before it, but it
+    need not be strictly newer: resume treats an equal checkpoint as written
+    before the pause. Not moving the pause past the clock keeps an approval
+    issued on a held clock from looking older than the pause it resolves.
+    """
+
+    now = datetime.now(timezone.utc)
+    latest = now
+    for stamp in stamps:
+        try:
+            prior = datetime.fromisoformat(stamp)
+        except (TypeError, ValueError):
+            continue
+        if prior.tzinfo is not None and prior > latest:
+            latest = prior
+    return latest.isoformat()
+
+
 class RunManifest(BaseModel):
     """Enough to reconstruct a run from its ``run_dir`` alone.
 

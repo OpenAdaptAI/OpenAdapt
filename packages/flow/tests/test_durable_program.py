@@ -893,7 +893,7 @@ def test_program_wall_clock_stepping_back_keeps_durable_history_ordered(
     retained = store.program_checkpoints()
     assert retained and all(
         datetime.fromisoformat(c.created_at)
-        < datetime.fromisoformat(pending.created_at)
+        <= datetime.fromisoformat(pending.created_at)
         for c in retained
     )
 
@@ -911,6 +911,42 @@ def test_program_wall_clock_stepping_back_keeps_durable_history_ordered(
     )
     assert resumed.success is True
     assert resume_backend.actions == [("type", "Bob"), ("type", "Cara")]
+
+
+def test_an_exact_program_checkpoint_retry_during_a_pause_is_accepted(tmp_path):
+    from openadapt_flow.runtime.durable.controller import DurableRun
+
+    report, run_dir, bundle, _verifier = _run_branch_loop_to_pause(tmp_path)
+    assert report.success is False
+    store = CheckpointStore(run_dir)
+    manifest = store.read_manifest()
+    assert manifest is not None and store.read_pending() is not None
+    durable = DurableRun(
+        run_dir,
+        run_id=manifest.run_id,
+        workflow_name=manifest.workflow_name,
+        bundle_dir=bundle,
+        params=manifest.params,
+        worklists=manifest.worklists,
+        idempotency_key=manifest.idempotency_key,
+        resume_existing=True,
+    )
+    last = store.last_program_checkpoint()
+    assert last is not None
+    following = last.model_copy(update={"seq": last.seq + 1})
+
+    durable.record_program_checkpoint(following)
+    durable.record_program_checkpoint(following)
+    written = [c for c in store.program_checkpoints() if c.seq == following.seq]
+    assert len(written) == 1
+    assert datetime.fromisoformat(written[0].created_at) > datetime.fromisoformat(
+        store.read_pending().created_at
+    )
+
+    with pytest.raises(StateDiverged, match="different program checkpoint"):
+        durable.record_program_checkpoint(
+            following.model_copy(update={"intent": "a different state"})
+        )
 
 
 def test_program_resume_report_lists_every_loop_row_binding(tmp_path):

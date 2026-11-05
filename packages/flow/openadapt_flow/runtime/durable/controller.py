@@ -56,6 +56,7 @@ from openadapt_flow.runtime.durable.checkpoint import (
     RunCheckpoint,
     RunManifest,
     _now_after,
+    _now_not_before,
 )
 from openadapt_flow.runtime.durable.program_checkpoint import (
     GraphFrame,
@@ -669,6 +670,31 @@ class DurableRun:
         active = self.store.read_pending()
         if active is None:
             return checkpoint
+        # An exact retry keeps the stamp its first write chose, so the store's
+        # idempotent rewrite still matches; a changed payload is still refused.
+        retained: Optional[RunCheckpoint | ProgramCheckpoint]
+        if isinstance(checkpoint, ProgramCheckpoint):
+            retained = next(
+                (
+                    c
+                    for c in self.store.program_checkpoints()
+                    if c.seq == checkpoint.seq
+                ),
+                None,
+            )
+        else:
+            retained = next(
+                (
+                    c
+                    for c in self.store.checkpoints()
+                    if c.step_index == checkpoint.step_index
+                ),
+                None,
+            )
+        if retained is not None and retained == checkpoint.model_copy(
+            update={"created_at": retained.created_at}
+        ):
+            return checkpoint.model_copy(update={"created_at": retained.created_at})
         return checkpoint.model_copy(
             update={"created_at": _now_after(checkpoint.created_at, active.created_at)}
         )
@@ -747,7 +773,7 @@ class DurableRun:
             delivery_uncertainty=result.delivery_uncertainty,
             # A person's "Don't save" ends the item for good.
             status="rejected" if category == "item_declined" else "pending",
-            created_at=_now_after(*(c.created_at for c in checkpoints)),
+            created_at=_now_not_before(*(c.created_at for c in checkpoints)),
         )
         self.store.cas_pending(self._active_pause_digest, pending)
         self._active_pause_digest = self.store.model_digest(pending)
@@ -840,7 +866,7 @@ class DurableRun:
                 active_surface=active_surface,
                 surface_observations=dict(surface_observations or {}),
             ),
-            created_at=_now_after(*(c.created_at for c in checkpoints)),
+            created_at=_now_not_before(*(c.created_at for c in checkpoints)),
         )
         self.store.cas_pending(self._active_pause_digest, pending)
         self._active_pause_digest = self.store.model_digest(pending)
@@ -996,7 +1022,7 @@ class DurableRun:
             program_history=list(program_history or []),
             delivery_uncertainty=result.delivery_uncertainty,
             status="rejected" if category == "item_declined" else "pending",
-            created_at=_now_after(*(c.created_at for c in program_checkpoints)),
+            created_at=_now_not_before(*(c.created_at for c in program_checkpoints)),
         )
         self.store.cas_pending(self._active_pause_digest, pending)
         self._active_pause_digest = self.store.model_digest(pending)
