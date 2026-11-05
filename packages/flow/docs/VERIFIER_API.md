@@ -492,7 +492,8 @@ SQL event query returns `event_id`, `record_id`, `operation`, `author`, and
 `occurred_at`. Both time columns and event times include a timezone.
 
 A confirmed initial check has `provisional: true` and `final: false` while its
-recheck is owed. A consumer that requires a final verdict calls
+recheck is owed. An `UNCERTAIN` initial result has `final: false`, including
+when history is incomplete. A consumer that requires a final verdict calls
 `recheck(contract, result, params=params, actor=actor, wait=True)`. The ledger
 keeps the recheck owed across restarts. The final verdict covers the earliest
 coverage frontier returned by all feeds. A write after that frontier remains
@@ -504,3 +505,34 @@ edit to another user. Missing coverage, a vanished or changed history entry,
 an unreadable page, or an unresolved actor prevents confirmation. The history
 checkpoint stores keyed event digests; record values and actor identities do
 not enter the receipt.
+
+### Receipt-bound late reads
+
+`frame.targeted` schedules an exact-record recheck using a setup-derived
+`quiet_s` and its `setup_evidence_sha256`. Its `search` is the pinned
+schema-key identifying contract. The verifier uses the same search at write
+time and at the late read. The private `RecheckState.target_ids` stays in
+memory. After a restart, `RecheckState.load(..., target_ids=...)` requires
+locators from the caller's private run state that resolve the exact issued
+identity commitments.
+
+The receipt names wider intermediate history outside those records and
+search observations as `UNKNOWN`. Available per-record history must retain
+and authenticate the written anchor. Missing required history, unstable
+versions, or unknown authorship cannot confirm a changed target. A trusted
+later user edit is reported separately from the agent's write.
+
+An independently landed write can owe `read_only_reconciliation` while its
+initial outcome is `UNCERTAIN`. That obligation does not make it provisional
+or final and does not authorize a retry or release a held attempt. Write-time
+confirmation reads are labeled `phase: write`; the future late read stays
+owed. `phase: late` identifies the actual late observation.
+
+Unknown target identities stay `UNCERTAIN` with the named reason
+`independent_target_identity_unknown`. Their issued observation has no target
+IDs or successful search claim. Supplying a reply ID or a new private locator
+does not create authority to read or confirm that target.
+
+A later successful scoped observation does not promote an initially
+`UNCERTAIN` write. Its overall outcome and review obligation stay unchanged;
+the late targeted evidence records what was observed.

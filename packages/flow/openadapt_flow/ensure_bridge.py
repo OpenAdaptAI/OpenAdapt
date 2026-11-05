@@ -184,7 +184,8 @@ class EnsureEffectVerifier(FhirEffectVerifier):
                          field_paths=native.field_paths, search_params=native.search_params,
                          access_token=native.access_token, token_source=native.token_source,
                          session=native._session, timeout_s=native.timeout_s,
-                         verify_tls=native.verify_tls, poll_interval_s=native.poll_interval_s)
+                         verify_tls=native.verify_tls, poll_interval_s=native.poll_interval_s,
+                         read_headers=native._read_headers)
         self._verify_per_request = native._verify_per_request
         self.binding, self.params = binding, dict(params)
         self.context = context or EnsureContext()

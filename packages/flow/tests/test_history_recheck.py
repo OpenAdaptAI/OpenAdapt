@@ -331,6 +331,40 @@ def test_sql_public_api_provisional_late_hold(database: Path, tmp_path: Path) ->
     assert ledger.state(ledger.latest(result.write_key)) == "held"
 
 
+def test_sql_clean_recheck_confirms_without_changing_the_store(
+    database: Path, tmp_path: Path
+) -> None:
+    contract = Contract.from_dict(_sql_contract(database))
+    ledger = verifier.Ledger(MemoryLedger())
+    actor = Actor("agent", "bot")
+    pending = begin_write(
+        contract,
+        {"value": "expected"},
+        actor=actor,
+        ledger=ledger,
+        workdir=tmp_path / "writes",
+    )
+    with sqlite3.connect(database) as con:
+        con.execute("INSERT INTO records VALUES(1,'expected')")
+        con.execute(
+            "INSERT INTO changes VALUES(1,'1','INSERT','bot',?)",
+            ("2026-11-05T00:00:01Z",),
+        )
+        con.execute("UPDATE coverage SET event_count=1")
+    initial = verify_write(pending)
+    assert initial.verified and initial.provisional and not initial.final
+    assert initial.to_dict()["final"] is False
+    assert len(ledger.rechecks_owed()) == 1
+    with sqlite3.connect(database) as con:
+        before = list(con.iterdump())
+    late = recheck(contract, initial, params={"value": "expected"}, actor=actor)
+    assert late.verified and late.final
+    assert late.frame == "held" and late.read_at
+    assert not ledger.rechecks_owed()
+    with sqlite3.connect(database) as con:
+        assert list(con.iterdump()) == before
+
+
 def test_sql_incomplete_coverage_prevents_provisional_success(
     database: Path, tmp_path: Path
 ) -> None:
@@ -347,6 +381,8 @@ def test_sql_incomplete_coverage_prevents_provisional_success(
         con.execute("UPDATE coverage SET event_count=1")
     result = verify_write(pending)
     assert not result.verified and result.outcome.value == "UNCERTAIN"
+    assert not result.provisional and not result.final
+    assert result.to_dict()["final"] is False
 
 
 def test_history_contract_requires_every_read_surface(database: Path) -> None:

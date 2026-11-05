@@ -664,9 +664,9 @@ class WriteResult:
     #: write's is what its recheck compares with; any write's can excuse its
     #: own window in an earlier write's recheck.
     recheck: Optional["RecheckState"] = field(default=None, repr=False, compare=False)
-    #: When a confirmed write's recheck is due (whole-second UTC), as the
-    #: receipt's ``recheck_due_at`` says; None when no recheck is due. Until
-    #: the recheck runs, the result is provisional.
+    #: A real issued read-only obligation deadline, or the confirmed
+    #: provisional deadline (whole-second UTC). An obligation does not
+    #: confirm a write or add a due field to its signed public receipt.
     recheck_due_at: Optional[str] = None
     #: ``off``, ``issued`` or ``not issued: <why>``: the signed write receipt
     #: (``docs/WRITE_RECEIPTS.md``). Issuing never changes the outcome.
@@ -687,9 +687,19 @@ class WriteResult:
 
     @property
     def final(self) -> bool:
-        """Whether this result is free of an owed final recheck."""
+        """A conclusive outcome with no owed final recheck."""
 
-        return not self.provisional
+        return self.outcome in (Outcome.CONFIRMED, Outcome.REFUTED) and not bool(
+            self.recheck_due_at
+        )
+
+    @property
+    def recheck_purpose(self) -> Optional[str]:
+        """Why a read-only recheck is owed, independently of provisional status."""
+        if self.recheck is None:
+            return None
+        schedule = (self.recheck.payload.get("evidence") or {}).get("frame", {}).get(EVIDENCE_KEY, {})
+        return schedule.get("purpose")
 
     @property
     def verdict(self) -> str:
@@ -736,6 +746,7 @@ class WriteResult:
             "seal_path": self.seal_path,
             "landed": self.landed,
             "review": self.review,
+            **({"recheck_purpose": self.recheck_purpose} if self.recheck_purpose is not None else {}),
             "recheck_due_at": self.recheck_due_at,
             "provisional": self.provisional,
             "final": self.final,
@@ -763,6 +774,8 @@ class RecheckState:
     payload: dict[str, Any] = field(repr=False)
     params: Optional[Mapping[str, object]] = field(default=None, repr=False)
     path: Optional[Path] = field(default=None, repr=False)
+    #: Exact private locators; save() never serializes these.
+    target_ids: tuple[str, ...] = field(default=(), repr=False)
 
     @property
     def due_at(self) -> str:
@@ -778,7 +791,8 @@ class RecheckState:
 
     @classmethod
     def load(
-        cls, path: str | Path, *, params: Optional[Mapping[str, object]] = None
+        cls, path: str | Path, *, params: Optional[Mapping[str, object]] = None,
+        target_ids: Sequence[str] = (),
     ) -> "RecheckState":
         """Read a state :meth:`save` wrote. Raises :class:`VerifierError`
         when it can't be read as one; :func:`recheck` checks the rest."""
@@ -791,7 +805,7 @@ class RecheckState:
         problem = state_problem(payload)
         if problem is not None:
             raise VerifierError(problem)
-        return cls(payload, params=params, path=source)
+        return cls(payload, params=params, path=source, target_ids=tuple(target_ids))
 
 
 class RecheckNotDue(VerifierError):
@@ -837,7 +851,7 @@ class RecheckResult:
     def final(self) -> bool:
         """A completed proof through read_at, with no unread history gap."""
 
-        return bool(self.read_at) and self.frame in ("held", "refuted")
+        return self.outcome in ("CONFIRMED", "REFUTED") and bool(self.read_at) and self.frame in ("held", "refuted")
 
     @property
     def late(self) -> bool:
@@ -1673,6 +1687,7 @@ def _judge(
         "authorization": "operator" if pending.authorized else "unbound",
     }
     post_state: dict[str, Any] = {}
+    targeted: dict[str, Any] = {}
     try:
         baseline = json.loads(pending.baseline_path.read_text(encoding="utf-8"))
         doc = verify_run(
@@ -1688,6 +1703,7 @@ def _judge(
             provenance=None if source is None else source.provenance,
             documents=None if source is None else source.documents,
             post_state_out=post_state,
+            targeted_out=targeted,
             **({"ensure_context": ensure_context} if ensure_context is not None else {}),
         )
         path: Optional[str] = str(write_result(doc, pending.workdir))
@@ -1712,7 +1728,7 @@ def _judge(
     seal_path, seal_state = None, "off"
     if outcome is Outcome.CONFIRMED and seal and path:
         seal_path, seal_state = _seal(path, pending.write_id)
-    state = _issue_state(baseline, doc, post_state, pending.params)
+    state = _issue_state(baseline, doc, post_state, pending.params, target_ids=targeted.get("locators", ()))
     if state is not None:
         state.path = state.save(pending.workdir / "recheck.json")
     return WriteResult(
@@ -1730,7 +1746,9 @@ def _judge(
         seal=seal_state,
         seal_path=seal_path,
         recheck=state,
-        recheck_due_at=receipt.get("recheck_due_at"),
+        landed=state is not None and (evidence.get("reconciliation") or {}).get("executable") is True,
+        review=state is not None and (state.payload.get("evidence") or {}).get("frame", {}).get(EVIDENCE_KEY, {}).get("purpose") == "read_only_reconciliation",
+        recheck_due_at=receipt.get("recheck_due_at") or (state.due_at if state is not None else None),
         **base,
     )
 
@@ -1740,6 +1758,7 @@ def _issue_state(
     doc: Mapping[str, Any],
     post_state: Mapping[str, Any],
     params: Mapping[str, Any],
+    *, target_ids: Sequence[str] = (),
 ) -> Optional["RecheckState"]:
     """The run's recheck state, recorded as issued here, or None when its
     evidence binds no post-save state."""
@@ -1748,7 +1767,7 @@ def _issue_state(
     if payload is None:
         return None
     _issue_recheck(payload)
-    return RecheckState(payload, params=dict(params))
+    return RecheckState(payload, params=dict(params), target_ids=tuple(target_ids))
 
 
 def classify(
@@ -1833,13 +1852,22 @@ def _scope(
     schedule = (evidence.get("frame") or {}).get(EVIDENCE_KEY) or {}
     due = schedule.get("due_at") if isinstance(schedule, Mapping) else None
     not_covered = [
-        f"writes that land after read_at until the recheck due at {due} "
+        f"read-only reconciliation is due at {due}; the initial outcome remains UNCERTAIN"
+        if due and schedule.get("purpose") == "read_only_reconciliation"
+        else f"writes that land after read_at until the recheck due at {due} "
         "(the result is provisional until it runs), and after that recheck"
         if due
         else "writes that land after read_at (delayed or queued writes)",
         "stores the contract doesn't read: email, other services, files",
         "whether the write was authorized; the verifier doesn't judge it",
     ]
+    if spec is not None and spec.targeted is not None:
+        from openadapt_flow.runtime.effects.targeted import OUTSIDE_INTERMEDIATE_HISTORY
+
+        not_covered.append(OUTSIDE_INTERMEDIATE_HISTORY)
+        if not spec.targeted.history_available:
+            not_covered.append("per-record intermediate history: UNKNOWN/BLOCKED; final-state read only")
+        not_covered.append("delete tasks: UNKNOWN (targeted recheck supports create/update records)")
     if spec is None or getattr(spec, "database", None) is None:
         not_covered.append("records outside the read set (no frame.database)")
     targeted = getattr(spec, "targeted", None)
@@ -2182,6 +2210,7 @@ def _verify_snapshot(
     _consume(before.payload)
     # Judge the payload whose salt was just used, never the file as it is now.
     post_state: dict[str, Any] = {}
+    targeted: dict[str, Any] = {}
     with tempfile.TemporaryDirectory(prefix="openadapt-verify-") as tmp:
         try:
             doc = verify_run(
@@ -2194,6 +2223,7 @@ def _verify_snapshot(
                 provenance=None if source is None else source.provenance,
                 documents=None if source is None else source.documents,
                 post_state_out=post_state,
+                targeted_out=targeted,
             )
         except (VerifyRunError, OSError) as exc:
             raise VerifierError(str(exc)) from exc
@@ -2213,7 +2243,7 @@ def _verify_snapshot(
         receipt=receipt,
         receipt_sha256=receipt_sha256(receipt),
         evidence=evidence,
-        recheck=_issue_state(before.payload, doc, post_state, params),
+        recheck=_issue_state(before.payload, doc, post_state, params, target_ids=targeted.get("locators", ())),
         recheck_due_at=receipt.get("recheck_due_at"),
     )
 
@@ -2474,7 +2504,7 @@ def _hold_after_recheck(
             write_id,
             outcome=late.outcome,
             retry_safe=False,
-            landed=False,
+            landed=bool(prior.get("landed")) and late.outcome == "UNCERTAIN" and (prior.get("result") or {}).get("recheck_purpose") == "read_only_reconciliation",
             review=True,
             delivered=True,
             via="recheck",
@@ -2487,6 +2517,7 @@ def _hold_after_recheck(
                 "late": late.late,
                 "reason": reason,
                 "receipt_sha256": digest,
+                **({"recheck_purpose": "read_only_reconciliation", "recheck_due_at": (prior.get("result") or {}).get("recheck_due_at"), "provisional": False, "final": False} if late.outcome == "UNCERTAIN" and (prior.get("result") or {}).get("recheck_purpose") == "read_only_reconciliation" else {}),
             },
         )
     except Exception as exc:  # noqa: BLE001 - the verdict stands; say so
@@ -2543,7 +2574,7 @@ def _judge_recheck(
     if (
         state is None
         or not isinstance(receipt, dict)
-        or receipt.get("outcome") != "verified"
+        or (receipt.get("outcome") != "verified" and (state.payload.get("evidence") or {}).get("frame", {}).get(EVIDENCE_KEY, {}).get("purpose") != "read_only_reconciliation")
     ):
         raise VerifierError(
             "this write scheduled no recheck: it was not verified, or the "
@@ -2600,7 +2631,8 @@ def _judge_recheck(
         excused.append((later.payload, later.params))
     try:
         verdict, read_at = recheck_run(
-            cfg, state.payload, params=params, run_record=run_record, excused=excused
+            cfg, state.payload, params=params, run_record=run_record, excused=excused,
+            target_ids=state.target_ids,
         )
     except VerifyRunError as exc:
         raise VerifierError(str(exc)) from exc
@@ -2633,7 +2665,9 @@ def _judge_recheck(
             "a change since the verdict may be a later write's whose own "
             "frame was not judged; reconcile both"
         )
-    if status == "refuted":
+    if status == "refuted" and spec is not None and spec.targeted is not None:
+        reasons.append(verdict.reason or "the targeted late check refuted the write")
+    elif status == "refuted":
         kinds = ", ".join(sorted({c.change for c in verdict.collateral}))
         reasons.append(
             f"{len(verdict.collateral)} record(s) moved after the verdict that "

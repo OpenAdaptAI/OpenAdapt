@@ -1,0 +1,456 @@
+"""Credential-free HTTP controls for receipt-bound late rechecks.
+
+This is a synthetic protocol server, not a real-app qualification. It retains
+all intermediate versions so an immediately restored wrong write remains
+observable. No evaluation delay chooses the configured quiet window.
+"""
+from __future__ import annotations
+
+import copy
+import json
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any
+from urllib.parse import parse_qs, urlsplit
+
+import pytest
+
+from openadapt_flow import verifier as api
+from openadapt_flow.fhir_reference import definition_digest
+from openadapt_flow.runtime.effects.targeted import OUTSIDE_INTERMEDIATE_HISTORY
+
+PARAMS = {"name": "private-business-value", "actor": "actor/run"}
+ACTOR = api.Actor("agent", "actor/run")
+RECORD_ID = "private-record-id"
+
+
+class Store:
+    def __init__(self) -> None:
+        self.current: dict[str, dict[str, Any]] = {}
+        self.history: dict[str, list[dict[str, Any]]] = {}
+        self.calls: list[str] = []
+        self.history_mode = "normal"
+        self.history_reads = 0
+        self.omit_identifying_search = False
+
+    def save(self, identity: str = RECORD_ID, *, name: str = PARAMS["name"],
+             author: str | None = "actor/run", timestamp: str | None = None) -> None:
+        versions = self.history.setdefault(identity, [])
+        resource = {
+            "resourceType": "Basic", "id": identity, "name": name,
+            "meta": {"versionId": f"v{len(versions) + 1}",
+                     "lastUpdated": timestamp or f"2026-01-01T00:00:{len(versions):02d}Z"},
+        }
+        if author is not None:
+            resource["meta"]["author"] = {"reference": author}
+        self.current[identity] = copy.deepcopy(resource)
+        versions.append(copy.deepcopy(resource))
+
+
+@pytest.fixture
+def server():
+    store = Store()
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args: Any) -> None:
+            pass
+
+        def do_GET(self) -> None:
+            store.calls.append(self.path)
+            route = urlsplit(self.path)
+            parts = route.path.strip("/").split("/")
+            status = 200
+            if parts == ["Basic"]:
+                params = parse_qs(route.query)
+                records = list(store.current.values())
+                if "name" in params:
+                    records = [r for r in records if r["name"] == params["name"][0]]
+                    if store.omit_identifying_search:
+                        records = []
+                body = {"resourceType": "Bundle", "type": "searchset", "total": len(records),
+                        "entry": [{"resource": r} for r in records]}
+            elif len(parts) == 3 and parts[0] == "Basic" and parts[2] == "_history":
+                store.history_reads += 1
+                versions = copy.deepcopy(store.history.get(parts[1], []))
+                if store.history_mode == "gap":
+                    versions = versions[1:]
+                if store.history_mode == "empty":
+                    versions = []
+                if store.history_mode == "unstable" and store.history_reads % 2:
+                    versions = versions[:-1]
+                body = {"resourceType": "Bundle", "type": "history", "total": len(versions),
+                        "entry": [{"resource": r, "request": {"method": "PUT", "url": f"Basic/{parts[1]}"}} for r in reversed(versions)]}
+                if store.history_mode == "paged":
+                    body["link"] = [{"relation": "next", "url": self.path + "&page=2"}]
+            elif len(parts) == 2 and parts[0] == "Basic" and parts[1] in store.current:
+                body = store.current[parts[1]]
+            else:
+                status = 404
+                body = {"resourceType": "OperationOutcome", "issue": [{"severity": "error", "code": "not-found"}]}
+            encoded = json.dumps(body).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/fhir+json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
+    http = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=http.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield store, f"http://127.0.0.1:{http.server_port}"
+    finally:
+        http.shutdown()
+        http.server_close()
+        thread.join(timeout=5)
+
+
+def contract(base: str, **options: Any) -> api.Contract:
+    definition = {
+        "resourceType": "StructureDefinition", "kind": "resource", "type": "Basic",
+        "url": "http://hl7.org/fhir/StructureDefinition/Basic",
+        "snapshot": {"element": [{"path": "Basic"}, {"path": "Basic.name", "type": [{"code": "string"}]}]},
+    }
+    return api.Contract.from_dict({
+        "verifier": {"kind": "fhir", "base_url": base, "resource_type": "Basic",
+                     "field_paths": {"id": "id", "name": "name"}},
+        "effects": [{"kind": "record_written", "match": {"name": {"param": "name"}}, "expected_count": 1}],
+        "frame": {"identity_field": "id", "targeted": {
+            "quiet_s": 0.01, "setup_evidence_sha256": "sha256:" + "a" * 64,
+            "search": {"resource_type": "Basic", "base_url": base, "self": ["actor/run"],
+                       "fields": {"name": {"path": "name"}}, "identity": [["name"]], "search": {"name": "name"},
+                       "reference_schema": {"definition": definition, "sha256": definition_digest(definition)}},
+            "history_retention_qualified": True, "author_path": "meta.author.reference",
+            "author_server_set": True, "self": [{"param": "actor"}], "not_found_qualified": True,
+            **options,
+        }},
+    })
+
+
+@pytest.fixture
+def issued(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any):
+    monkeypatch.setenv("OPENADAPT_VERIFIER_STATE_DIR", str(tmp_path / "authority"))
+    # Deterministic due-time control, separate from automatic scheduler proof.
+    monkeypatch.setattr(api, "seconds_until", lambda due: 0)
+    store, base = server
+    cfg = contract(base)
+    ledger = api.Ledger(api.MemoryLedger())
+    pending = api.begin_write(cfg, PARAMS, actor=ACTOR, ledger=ledger, workdir=tmp_path / "runs")
+    store.save()
+    write = api.verify_write(pending, write_attempted=True)
+    return store, cfg, write, ledger
+
+
+def late(cfg: api.Contract, write: Any, ledger: Any) -> api.RecheckResult:
+    return api.recheck(cfg, write, params=PARAMS, actor=ACTOR, ledger=ledger)
+
+
+def test_clean_targeted_recheck_is_final_and_store_unchanged(issued: Any) -> None:
+    store, cfg, write, ledger = issued
+    assert write.outcome is api.Outcome.CONFIRMED, write.reasons
+    assert write.provisional and not write.final
+    assert write.evidence["frame"]["targeted"]["phase"] == "write"
+    assert write.evidence["frame"]["targeted"]["future_late_search"] == "owed"
+    assert "late_search_count" not in write.evidence["frame"]["targeted"]
+    before = copy.deepcopy((store.current, store.history))
+    prior_history_reads = store.history_reads
+    result = late(cfg, write, ledger)
+    assert result.outcome == "CONFIRMED", result.reasons
+    assert result.final
+    assert result.evidence["targeted"]["phase"] == "late"
+    assert before == (store.current, store.history)
+    assert result.evidence["targeted"]["outside_intermediate_history"] == OUTSIDE_INTERMEDIATE_HISTORY
+    assert store.history_reads == prior_history_reads + 2
+    assert not any("/_history" in p and p.startswith("/Basic/_history") for p in store.calls)
+
+
+@pytest.mark.parametrize("author,expected", [("actor/run", "REFUTED"), ("actor/colleague", "CONFIRMED"), (None, "UNCERTAIN")])
+def test_same_record_later_version_requires_trusted_actor(issued: Any, author: str | None, expected: str) -> None:
+    store, cfg, write, ledger = issued
+    store.save(name="later-private-value", author=author)
+    result = late(cfg, write, ledger)
+    assert result.outcome == expected, result.reasons
+    if author == "actor/colleague":
+        assert result.evidence["targeted"]["legitimate_later_user_edits"] == 1
+
+
+def test_changed_then_restored_run_version_still_refutes(issued: Any) -> None:
+    store, cfg, write, ledger = issued
+    store.save(name="wrong-intermediate-value")
+    store.save()
+    result = late(cfg, write, ledger)
+    assert result.outcome == "REFUTED", result.reasons
+
+
+@pytest.mark.parametrize("mode", ["gap", "empty", "unstable", "paged"])
+def test_incomplete_history_never_confirms(issued: Any, mode: str) -> None:
+    store, cfg, write, ledger = issued
+    store.history_mode = mode
+    if mode == "unstable":
+        store.save()
+    result = late(cfg, write, ledger)
+    assert result.outcome == "UNCERTAIN", result.reasons
+    assert not result.final
+
+
+def test_equal_version_times_are_unknown(issued: Any) -> None:
+    store, cfg, write, ledger = issued
+    store.save(timestamp="2026-01-01T00:00:00Z")
+    assert late(cfg, write, ledger).outcome == "UNCERTAIN"
+
+
+def test_identifying_search_detects_late_duplicate(issued: Any) -> None:
+    store, cfg, write, ledger = issued
+    store.save("second-private-record")
+    assert late(cfg, write, ledger).outcome == "REFUTED"
+
+
+def test_missing_record_without_deleted_actor_proof_never_confirms(issued: Any) -> None:
+    store, cfg, write, ledger = issued
+    del store.current[RECORD_ID]
+    result = late(cfg, write, ledger)
+    assert result.outcome == "UNCERTAIN"
+    assert not result.final
+
+
+def test_persisted_state_and_receipt_never_contain_locators_or_values(issued: Any, tmp_path: Path) -> None:
+    _, cfg, write, ledger = issued
+    assert write.recheck is not None
+    state = write.recheck
+    path = state.save(tmp_path / "state.json")
+    public = json.dumps(write.to_dict()) + json.dumps(state.payload) + repr(state)
+    assert RECORD_ID not in public
+    assert PARAMS["name"] not in public
+    assert path.stat().st_mode & 0o777 == 0o600
+    missing = api.RecheckState.load(path, params=PARAMS)
+    assert late(cfg, missing, ledger).outcome == "UNCERTAIN"
+    correct = api.RecheckState.load(path, params=PARAMS, target_ids=[f"Basic/{RECORD_ID}"])
+    assert late(cfg, correct, ledger).outcome == "CONFIRMED"
+
+
+def test_foreign_locator_cannot_replace_issued_identity(issued: Any) -> None:
+    store, cfg, write, ledger = issued
+    store.save("foreign-private-record", name="unrelated")
+    assert write.recheck is not None
+    write.recheck.target_ids = ("Basic/foreign-private-record",)
+    assert late(cfg, write, ledger).outcome == "UNCERTAIN"
+
+
+def test_params_used_for_actor_binding_cannot_change(issued: Any) -> None:
+    _, cfg, write, ledger = issued
+    result = api.recheck(cfg, write, params={**PARAMS, "actor": "actor/colleague"}, actor=ACTOR, ledger=ledger)
+    assert result.outcome == "UNCERTAIN"
+
+
+def test_initial_unknown_history_has_distinct_read_only_obligation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any) -> None:
+    monkeypatch.setenv("OPENADAPT_VERIFIER_STATE_DIR", str(tmp_path / "authority"))
+    monkeypatch.setattr(api, "seconds_until", lambda due: 0)
+    store, base = server
+    cfg = contract(base, history_available=False, history_retention_qualified=False)
+    ledger = api.Ledger(api.MemoryLedger())
+    pending = api.begin_write(cfg, PARAMS, actor=ACTOR, ledger=ledger, workdir=tmp_path / "runs")
+    store.save()
+    write = api.verify_write(pending, write_attempted=True)
+    assert write.outcome is api.Outcome.UNCERTAIN
+    assert not write.provisional and not write.final
+    assert write.recheck_purpose == "read_only_reconciliation"
+    assert write.recheck_due_at
+    assert "recheck_due_at" not in write.receipt
+    assert ledger.latest(write.write_key).recheck_owed == write.recheck_due_at
+    result = late(cfg, write, ledger)
+    assert result.outcome == "UNCERTAIN"
+    assert ledger.latest(write.write_key).recheck_owed == write.recheck_due_at
+
+
+def test_final_state_only_contract_names_unavailable_intermediate_history(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any) -> None:
+    monkeypatch.setenv("OPENADAPT_VERIFIER_STATE_DIR", str(tmp_path / "authority"))
+    monkeypatch.setattr(api, "seconds_until", lambda due: 0)
+    store, base = server
+    cfg = contract(base, history_available=False, history_retention_qualified=False, history_required=False)
+    pending = api.begin_write(cfg, PARAMS, actor=ACTOR, ledger=None, workdir=tmp_path / "runs")
+    store.save()
+    write = api.verify_write(pending, write_attempted=True)
+    assert write.outcome is api.Outcome.CONFIRMED
+    assert OUTSIDE_INTERMEDIATE_HISTORY in write.scope.not_covered
+    assert any("per-record intermediate history: UNKNOWN/BLOCKED" in line for line in write.scope.not_covered)
+    result = late(cfg, write, None)
+    assert result.outcome == "CONFIRMED", result.reasons
+    assert result.evidence["targeted"]["history_status"] == "UNKNOWN/BLOCKED"
+
+
+@pytest.mark.parametrize("ledger_mode", ["original", "none"])
+def test_refuted_targeted_recheck_cannot_be_cleared_by_cleaning_duplicate(issued: Any, ledger_mode: str) -> None:
+    store, cfg, write, ledger = issued
+    store.save("duplicate-before-cleanup")
+    selected = ledger if ledger_mode == "original" else None
+    first = late(cfg, write, selected)
+    assert first.outcome == "REFUTED"
+    del store.current["duplicate-before-cleanup"]
+    again = late(cfg, write, selected)
+    assert again.outcome == "REFUTED", again.reasons
+    if selected is not None:
+        assert ledger.latest(write.write_key).resolved["outcome"] == "REFUTED"
+
+
+def test_due_time_blocks_all_late_reads_before_the_frozen_window(issued: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, cfg, write, ledger = issued
+    before = list(store.calls)
+    monkeypatch.setattr(api, "seconds_until", lambda due: 10)
+    with pytest.raises(api.RecheckNotDue):
+        late(cfg, write, ledger)
+    assert store.calls == before
+
+
+def test_unqualified_sql_identifying_search_cannot_claim_targeted_proof(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any) -> None:
+    import sqlite3
+
+    monkeypatch.setenv("OPENADAPT_VERIFIER_STATE_DIR", str(tmp_path / "authority"))
+    _, base = server
+    db = tmp_path / "source.sqlite"
+    with sqlite3.connect(db) as con:
+        con.execute("CREATE TABLE records (id TEXT PRIMARY KEY, name TEXT)")
+    doc = contract(base).config.model_dump(mode="json", by_alias=True)
+    doc["verifier"] = {"kind": "sql", "sqlite_database": str(db), "sql_query": "SELECT * FROM records"}
+    cfg = api.Contract.from_dict(doc)
+    pending = api.begin_write(cfg, PARAMS, actor=ACTOR, ledger=None, workdir=tmp_path / "runs")
+    with sqlite3.connect(db) as con:
+        con.execute("INSERT INTO records VALUES (?, ?)", (RECORD_ID, PARAMS["name"]))
+    result = api.verify_write(pending, write_attempted=True)
+    assert result.outcome is api.Outcome.UNCERTAIN
+    assert not result.final
+    assert result.evidence["frame"]["targeted"]["problem"] == "TargetedUnreadable"
+    assert result.evidence["frame"]["targeted"]["reason"] == "independent_target_identity_unknown"
+    assert result.recheck is not None
+    assert result.recheck_due_at and result.recheck_purpose == "read_only_reconciliation"
+    unresolved = result.recheck.payload["post_state"]["targeted"]
+    assert unresolved["status"] == "unresolved" and unresolved["targets"] == []
+    again = late(cfg, result, None)
+    assert again.outcome == "UNCERTAIN" and not again.final
+    assert any("independent_target_identity_unknown" in reason for reason in again.reasons)
+
+
+def test_complete_http_body_does_not_replace_retention_qualification(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any) -> None:
+    monkeypatch.setenv("OPENADAPT_VERIFIER_STATE_DIR", str(tmp_path / "authority"))
+    monkeypatch.setattr(api, "seconds_until", lambda due: 0)
+    store, base = server
+    cfg = contract(base, history_retention_qualified=False)
+    pending = api.begin_write(cfg, PARAMS, actor=ACTOR, ledger=None, workdir=tmp_path / "runs")
+    store.save()
+    result = api.verify_write(pending, write_attempted=True)
+    assert result.outcome is api.Outcome.UNCERTAIN
+    assert late(cfg, result, None).outcome == "UNCERTAIN"
+    assert not result.final
+
+
+def test_late_empty_search_cannot_contradict_current_matching_target(issued: Any) -> None:
+    store, cfg, write, ledger = issued
+    store.omit_identifying_search = True
+    result = late(cfg, write, ledger)
+    assert result.outcome == "UNCERTAIN"
+    assert not result.final
+
+
+def test_bookkeeping_ignore_cannot_erase_a_declared_effect_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any) -> None:
+    monkeypatch.setenv("OPENADAPT_VERIFIER_STATE_DIR", str(tmp_path / "authority"))
+    monkeypatch.setattr(api, "seconds_until", lambda due: 0)
+    store, base = server
+    doc = contract(base).config.model_dump(mode="json", by_alias=True)
+    doc["verifier"]["field_paths"]["phone"] = "phone"
+    doc["effects"][0]["match"]["phone"] = {"literal": "declared-phone"}
+    doc["frame"]["ignore_fields"] = ["phone"]
+    cfg = api.Contract.from_dict(doc)
+    pending = api.begin_write(cfg, PARAMS, actor=ACTOR, ledger=None, workdir=tmp_path / "runs")
+    store.save()
+    store.current[RECORD_ID]["phone"] = "declared-phone"
+    store.history[RECORD_ID][-1]["phone"] = "declared-phone"
+    write = api.verify_write(pending, write_attempted=True)
+    assert write.outcome is api.Outcome.CONFIRMED, write.reasons
+    store.save()
+    store.current[RECORD_ID]["phone"] = "wrong-phone"
+    store.history[RECORD_ID][-1]["phone"] = "wrong-phone"
+    assert late(cfg, write, None).outcome == "REFUTED"
+
+
+@pytest.mark.parametrize("change", ["none", "params", "foreign", "missing", "duplicate", "versioned", "post"])
+def test_locator_preparation_is_pure_and_exact(issued: Any, monkeypatch: pytest.MonkeyPatch, change: str) -> None:
+    from openadapt_flow.runtime.effects import targeted
+
+    _, cfg, write, _ = issued
+    assert write.recheck is not None
+    state = write.recheck
+    spec = cfg.config.frame.targeted
+    post = copy.deepcopy(state.payload["post_state"]["targeted"])
+    locators = state.target_ids
+    params = dict(PARAMS)
+    if change == "params":
+        params["actor"] = "actor/colleague"
+    elif change == "foreign":
+        locators = ("Basic/foreign-private-record",)
+    elif change == "missing":
+        locators = ()
+    elif change == "duplicate":
+        locators = (*locators, *locators)
+    elif change == "versioned":
+        locators = (locators[0] + "/_history/1",)
+    elif change == "post":
+        post["unexpected"] = True
+
+    def forbidden(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("pure preparation performed reader work")
+
+    monkeypatch.setattr(targeted, "_reader", forbidden)
+    monkeypatch.setattr(targeted, "_transport", forbidden)
+    problem = targeted.targeted_locators_problem(spec, post, locators, params, bytes.fromhex(state.payload["salt"]))
+    assert (problem is None) == (change == "none")
+
+
+@pytest.mark.parametrize("locators", [(), ("Basic/reply-is-not-authority",)])
+def test_unresolved_identity_never_becomes_observable_from_caller_ids(issued: Any, monkeypatch: pytest.MonkeyPatch, locators: tuple[str, ...]) -> None:
+    from openadapt_flow.runtime.effects import targeted
+
+    _, cfg, write, _ = issued
+    assert write.recheck is not None
+    salt = bytes.fromhex(write.recheck.payload["salt"])
+    post = targeted.unresolved_targeted(PARAMS, salt, "held")
+    assert targeted.targeted_state_problem(post) is None
+    assert post["targets"] == [] and "search" not in post
+
+    def forbidden(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("unresolved target performed reader work")
+
+    monkeypatch.setattr(targeted, "_reader", forbidden)
+    monkeypatch.setattr(targeted, "_transport", forbidden)
+    assert targeted.targeted_locators_problem(cfg.config.frame.targeted, post, locators, PARAMS, salt) == targeted.UNRESOLVED_TARGET_IDENTITY
+    with pytest.raises(targeted.TargetedUnreadable, match=targeted.UNRESOLVED_TARGET_IDENTITY):
+        targeted.observe_targeted(cfg.config.frame.targeted, None, post, locators, PARAMS, salt, "", "", "")
+    post["search"] = write.recheck.payload["post_state"]["targeted"]["search"]
+    assert targeted.targeted_state_problem(post) is not None
+
+
+@pytest.mark.parametrize("ledger_mode", ["original", "none", "alternate"])
+def test_initial_unknown_late_observation_does_not_promote_overall_verdict(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any, ledger_mode: str) -> None:
+    monkeypatch.setenv("OPENADAPT_VERIFIER_STATE_DIR", str(tmp_path / "authority"))
+    monkeypatch.setattr(api, "seconds_until", lambda due: 0)
+    store, base = server
+    cfg = contract(base)
+    ledger = api.Ledger(api.MemoryLedger())
+    pending = api.begin_write(cfg, PARAMS, actor=ACTOR, ledger=ledger, workdir=tmp_path / "runs")
+    store.save()
+    store.history_mode = "empty"
+    write = api.verify_write(pending, write_attempted=True)
+    assert write.outcome is api.Outcome.UNCERTAIN and not write.final
+    assert write.recheck is not None and write.recheck_due_at
+    assert write.recheck_purpose == "read_only_reconciliation"
+    assert ledger.latest(write.write_key).resolved["outcome"] == "UNCERTAIN"
+    store.history_mode = "normal"
+    selected = ledger if ledger_mode == "original" else api.Ledger(api.MemoryLedger()) if ledger_mode == "alternate" else None
+    result = late(cfg, write, selected)
+    assert result.evidence["targeted"]["phase"] == "late"
+    assert result.evidence["targeted"]["status"] == "held"
+    assert result.outcome == "UNCERTAIN" and not result.verified and not result.final
+    assert result.reasons
+    assert write.outcome is api.Outcome.UNCERTAIN and not write.final
+    attempt = ledger.latest(write.write_key)
+    assert attempt.resolved["outcome"] == "UNCERTAIN" and attempt.resolved["review"] is True
+    assert attempt.recheck_owed == write.recheck_due_at

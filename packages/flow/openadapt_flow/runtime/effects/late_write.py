@@ -112,19 +112,25 @@ def schedule(
     post_state_sha256: str,
     *,
     due: bool,
+    purpose: Optional[str] = None,
 ) -> dict[str, Any]:
     """The ``evidence.frame.recheck`` block: closed fields only. ``due``: the
     write was verified, so a recheck is due (``due_at``); otherwise
     ``due_at`` is None and the block only binds the post-save state."""
 
     read_at = str(post_state["read_at"])
-    return {
-        "compares": "history_since_checkpoint" if "history" in post_state else COMPARES,
+    block = {
+        "compares": "receipt_records_and_identifying_search" if "targeted" in post_state else "history_since_checkpoint" if "history" in post_state else COMPARES,
         "after_s": after_s,
         "post_save_read_at": read_at,
         "due_at": due_at(read_at, after_s) if due else None,
         "post_state_sha256": post_state_sha256,
     }
+    if "targeted" in post_state:
+        if purpose not in ("late_recheck", "read_only_reconciliation", "observation_only"):
+            raise ValueError("targeted rechecks need an explicit owed purpose")
+        block["purpose"] = purpose
+    return block
 
 
 def state_problem(payload: Any) -> Optional[str]:
@@ -146,6 +152,16 @@ def state_problem(payload: Any) -> Optional[str]:
         if not isinstance(payload[name], Mapping):
             return f"the recheck state's {name} is not an object"
     post = payload["post_state"]
+    if "targeted" in post:
+        from openadapt_flow.runtime.effects.targeted import targeted_state_problem
+
+        if set(post) != {"read_at", "targeted"}:
+            return "the targeted post-state has unknown fields"
+        try:
+            parse_time(str(post.get("read_at")))
+        except ValueError:
+            return "the targeted post-state time is malformed"
+        return targeted_state_problem(post["targeted"])
     if "history" in post:
         from openadapt_flow.runtime.effects.history import checkpoint_problem
 

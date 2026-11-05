@@ -45,6 +45,8 @@ mirrors the real FHIR wire shape, never MockMed's screen.
 from __future__ import annotations
 
 import time
+import re
+from collections.abc import Mapping
 from typing import Any, Optional, Protocol
 
 from openadapt_flow.runtime.effects._common import drop_record_fields, judge_records
@@ -95,6 +97,35 @@ def _origin(url: str) -> str:
 
 def _same_origin(url: str, base_url: str) -> bool:
     return _origin(url) == _origin(base_url)
+
+
+def validate_fhir_read_headers(value: Optional[Mapping[str, str]]) -> dict[str, str]:
+    """Metadata preferences cannot replace transport, authentication or tracing."""
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError("FHIR read headers must be a mapping")
+    reserved = {
+        "accept", "authorization", "www-authenticate", "cookie", "set-cookie",
+        "host", "origin", "referer", "forwarded", "proxy", "content-type", "content-length",
+        "transfer-encoding", "connection", "trailer", "upgrade", "te", "keep-alive",
+        "expect", "range", "if-match", "if-none-match", "if-modified-since",
+        "if-unmodified-since", "cache-control", "pragma", "date",
+    }
+    out: dict[str, str] = {}
+    seen: set[str] = set()
+    for name, text in value.items():
+        if not isinstance(name, str) or not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", name):
+            raise ValueError("FHIR read header name is invalid")
+        lower = name.lower()
+        if (lower in seen or lower in reserved or lower.startswith(("proxy-", "x-forwarded-", "x-openadapt-", "x-auth", "access-control-", "x-original-", "x-rewrite-"))
+                or any(part in lower for part in ("authorization", "authenticate", "auth-token", "api-key", "apikey", "csrf", "xsrf", "session", "method"))):
+            raise ValueError("FHIR read header is reserved or repeated")
+        if not isinstance(text, str) or not text or any(ord(c) < 32 or ord(c) > 126 for c in text):
+            raise ValueError("FHIR read header value is invalid")
+        seen.add(lower)
+        out[name] = text
+    return out
 
 
 class AccessTokenSource(Protocol):
@@ -229,7 +260,9 @@ class FhirEffectVerifier(VerifierAdapterBase):
         verify_tls: bool = True,
         poll_interval_s: float = 0.3,
         drop_fields: tuple[str, ...] = (),
+        read_headers: Optional[Mapping[str, str]] = None,
     ) -> None:
+        self._read_headers = validate_fhir_read_headers(read_headers)
         self.base_url = base_url.rstrip("/")
         self.drop_fields = tuple(drop_fields)
         self.resource_type = resource_type
@@ -285,7 +318,7 @@ class FhirEffectVerifier(VerifierAdapterBase):
 
     def _headers(self) -> Optional[dict[str, str]]:
         """Request headers, or None when the token source has no token."""
-        headers = {"Accept": "application/fhir+json"}
+        headers = {"Accept": "application/fhir+json", **self._read_headers}
         token = self.access_token
         if self.token_source is not None:
             token = self.token_source.access_token()

@@ -22,7 +22,9 @@ from openadapt_flow.verifier import (
     Outcome,
     RecheckResult,
     RecheckState,
+    Scope,
     VerifierError,
+    Window,
     WriteResult,
     begin_write,
     capture_database,
@@ -106,6 +108,28 @@ def test_a_correct_write_is_confirmed(tmp_path: Path) -> None:
     assert len(result.receipt_sha256) == 64
     assert result.checked["delta"] == "held" and result.checked["frame"] == "held"
     assert result.reasons == [] and result.observed == "present"
+
+
+@pytest.mark.parametrize(
+    ("outcome", "due", "provisional", "final"),
+    [
+        (Outcome.CONFIRMED, None, False, True),
+        (Outcome.CONFIRMED, "2026-11-05T00:02:00Z", True, False),
+        (Outcome.REFUTED, None, False, True),
+        (Outcome.REFUTED, "2026-11-05T00:02:00Z", False, False),
+        (Outcome.UNCERTAIN, None, False, False),
+        (Outcome.UNCERTAIN, "2026-11-05T00:02:00Z", False, False),
+    ],
+)
+def test_initial_finality_requires_a_conclusive_outcome_and_no_owed_recheck(
+    outcome: Outcome, due: str | None, provisional: bool, final: bool
+) -> None:
+    scope = Scope((), (), (), Window(None, None, None), "unchecked", ())
+    result = WriteResult(outcome, scope, recheck_due_at=due)
+    assert result.provisional is provisional
+    assert result.final is final
+    assert result.to_dict()["provisional"] is provisional
+    assert result.to_dict()["final"] is final
 
 
 def test_a_result_says_what_it_establishes(tmp_path: Path) -> None:
@@ -467,11 +491,11 @@ def test_contract_hashes_do_not_change() -> None:
             },
         },
     }
-    for kind, verifier in verifiers.items():
+    for kind, verifier_config in verifiers.items():
         contract = Contract.from_dict(
             {
                 "schema_version": "openadapt.verify/v1",
-                "verifier": verifier,
+                "verifier": verifier_config,
                 "record": record,
                 "frame": {"identity_field": "id"},
             }

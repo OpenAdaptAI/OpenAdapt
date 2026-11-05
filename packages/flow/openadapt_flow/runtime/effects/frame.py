@@ -96,6 +96,7 @@ from openadapt_flow.runtime.effects.learned import (
     set_columns,
 )
 from openadapt_flow.runtime.effects.versions import FrameVersions, VersionVerdict
+from openadapt_flow.runtime.effects.targeted import FrameTargeted
 
 FrameStatus = Literal["held", "refuted", "not_checked"]
 Attribution = Literal["other", "self", "unattributed"]
@@ -512,6 +513,8 @@ class FrameSpec(BaseModel):
     versions: Optional[FrameVersions] = None
     #: Complete type/table change feeds for a provisional then final verdict.
     history: Optional[FrameHistory] = None
+    #: Exact receipt records, plan identifying search and final-state recheck.
+    targeted: Optional[FrameTargeted] = None
     #: Moves a person approved from ``openadapt-flow learn``
     #: (``learned.LearnedFrame``): the app's own writes on the acting user's
     #: row or the write's own rows, by table, column and change.
@@ -522,6 +525,8 @@ class FrameSpec(BaseModel):
         # Unset, ``versions`` is left out, so a contract that doesn't use it
         # keeps its digests (``frame_sha256``, the check digest).
         data: dict[str, Any] = handler(self)
+        if data.get("targeted") is None:
+            data.pop("targeted", None)
         if data.get("history") is None:
             data.pop("history", None)
         if data.get("versions") is None:
@@ -535,6 +540,8 @@ class FrameSpec(BaseModel):
     @model_validator(mode="after")
     def _database_attribution(self) -> "FrameSpec":
         a = self.attribution
+        if self.targeted is not None and (self.history is not None or (self.database is not None and self.database.recheck_after_s is not None)):
+            raise ValueError("choose targeted, history or database recheck scheduling")
         if (
             self.history is not None
             and self.database is not None
@@ -704,6 +711,10 @@ class FrameVerdict:
     post_state: Optional[dict[str, Any]] = None
     #: Count-only named checks; raw reader observations are never serialized.
     hard_invariants: Optional[HardInvariantVerdict] = None
+    #: Closed targeted guarantee evidence, without locators or bodies.
+    targeted: Optional[dict[str, Any]] = None
+    #: Memory-only facts for the independent fixed predicate layer.
+    targeted_observation: Optional[Any] = field(default=None, repr=False)
 
     @property
     def held(self) -> bool:
@@ -732,6 +743,7 @@ class FrameVerdict:
             "target_changed_by_other": sum(
                 1 for c in self.collateral if c.other_on_target
             ),
+            **({"targeted": self.targeted} if self.targeted is not None else {}),
             **({"database": self.database} if self.database is not None else {}),
             **(
                 {"versions": self.versions.evidence()}

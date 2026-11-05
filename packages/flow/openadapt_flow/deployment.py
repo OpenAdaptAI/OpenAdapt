@@ -456,6 +456,8 @@ class EffectsConfig(BaseModel):
     #: OAuth2 bearer token literal. DEPRECATED for committed configs — prefer
     #: ``access_token_env`` so the YAML never carries the secret.
     access_token: Optional[str] = None
+    #: Nonsecret metadata preferences; auth/routing/framing overrides refuse.
+    fhir_read_headers: Optional[dict[str, str]] = Field(default=None, repr=False)
     #: Name of the env var holding the OAuth2 bearer token (secret-isolated;
     #: wins over ``access_token``; missing var fails loud).
     access_token_env: Optional[str] = None
@@ -633,10 +635,21 @@ class EffectsConfig(BaseModel):
             "records_total_path",
             "records_path",
             "resource_type",
+            "fhir_read_headers",
         ):
             if data.get(added, "") is None:
                 data.pop(added, None)
         return data
+
+    @model_validator(mode="after")
+    def _validate_fhir_read_headers(self) -> "EffectsConfig":
+        if self.fhir_read_headers is not None:
+            if self.kind != "fhir":
+                raise ValueError("fhir_read_headers applies only to FHIR")
+            from openadapt_flow.runtime.effects.fhir import validate_fhir_read_headers
+
+            self.fhir_read_headers = validate_fhir_read_headers(self.fhir_read_headers) or None
+        return self
 
     @model_validator(mode="after")
     def _validate_records_drop_fields(self) -> "EffectsConfig":
@@ -2342,6 +2355,7 @@ def _build_effect_verifier_unredacted(
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,
             drop_fields=tuple(cfg.records_drop_fields),
+            read_headers=cfg.fhir_read_headers,
         )
 
     if kind == "sql":

@@ -343,8 +343,9 @@ class Attempt:
 
     @property
     def recheck_owed(self) -> Optional[str]:
-        """The ``recheck_due_at`` of a provisional ``CONFIRMED`` that no
-        recheck has settled yet, else None.
+        """The deadline of an unsettled provisional check or independently
+        landed read-only reconciliation, else None. The latter remains
+        UNCERTAIN; an owed read never grants replay or releases review.
 
         A recheck that confirms the write records ``rechecked``; one that
         doesn't resolves the attempt again (no longer provisional). A
@@ -354,7 +355,10 @@ class Attempt:
         if self.released or self.rechecked is not None or self.resolved is None:
             return None
         result = self.resolved.get("result")
-        if not isinstance(result, Mapping) or not result.get("provisional"):
+        if not isinstance(result, Mapping):
+            return None
+        owed = result.get("provisional") or (result.get("recheck_purpose") == "read_only_reconciliation" and self.resolved.get("landed"))
+        if not owed:
             return None
         return str(result.get("recheck_due_at") or "") or None
 

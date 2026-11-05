@@ -2022,6 +2022,7 @@ def verify_run(
     second_extractor: Optional[Any] = None,
     post_state_out: Optional[dict[str, Any]] = None,
     ensure_context: Optional[EnsureContext] = None,
+    targeted_out: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Read the system of record and return ``{"receipt", "evidence"}``.
 
@@ -2267,6 +2268,81 @@ def verify_run(
                 frame.status = history_frame.status
                 frame.reason = history_frame.reason
             frame.post_state = {"read_at": _now(), "history": history_checkpoint}
+    if frame_spec.targeted is not None:
+        from openadapt_flow.runtime.effects.targeted import (
+            COMPARES, OUTSIDE_INTERMEDIATE_HISTORY, capture_targeted,
+            observe_targeted, judge_targeted, unresolved_targeted,
+            UNRESOLVED_TARGET_IDENTITY,
+        )
+        target_spec = frame_spec.targeted
+        initial_frame_status = frame.status
+        frame.targeted = {
+            "domain": COMPARES,
+            "outside_intermediate_history": OUTSIDE_INTERMEDIATE_HISTORY,
+            "history_required": target_spec.history_required,
+            "history_status": "pending" if target_spec.history_available else "UNKNOWN/BLOCKED",
+        }
+        try:
+            from openadapt_flow.runtime.effects.surfaces import surface_of
+
+            targets = []
+            for effect, verdict in zip(bound_effects, verdicts):
+                if effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS):
+                    raise ValueError("targeted rechecks support create/update record effects only")
+                if effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count == 0:
+                    continue
+                if surface_of(effect) != target_spec.surface or not verdict.confirmed:
+                    raise ValueError("a written target is not independently bound")
+                targets.extend(verdict.matched_records)
+            required_fields = {k for effect in bound_effects for k in effect.match}
+            required_fields.update(effect.field for effect in bound_effects if effect.field is not None)
+            ignored = [k for k in frame_spec.ignore_fields if k not in required_fields]
+            checkpoint, locators, target_status = capture_targeted(
+                target_spec, verifier, targets, params, salt, ignored, _now()
+            )
+            checkpoint["initial_frame_status"] = frame.status
+            frame.post_state = {"read_at": _now(), "targeted": checkpoint}
+            if targeted_out is not None:
+                targeted_out["locators"] = locators
+            frame.targeted["write_search_count"] = len(checkpoint["search"]["matched_id_macs"])
+            frame.targeted["status"] = target_status
+            if target_status == "refuted":
+                frame.status = "refuted"
+            # These are actual write-time confirmation reads. They never stand
+            # for the future late read, whose separate obligation remains owed.
+            from dataclasses import replace
+
+            observation = observe_targeted(
+                target_spec, verifier, checkpoint, locators, params, salt, "", _now(),
+                str(run_record.get("executor_id") or ""),
+            )
+            observation = replace(observation, phase="write")
+            frame.targeted_observation = observation
+            observed_status, detail = judge_targeted(observation)
+            detail["write_search_count"] = len(observation.write_search.matched_ids)
+            detail["write_confirmation_search_count"] = len(observation.late_search.matched_ids)
+            detail["write_confirmation_read_at"] = observation.read_at
+            frame.targeted = detail
+            frame.post_state["read_at"] = observation.read_at
+            if observed_status == "refuted" or (observed_status == "not_checked" and target_status != "refuted"):
+                target_status = observed_status
+            if target_status == "refuted" or (target_status == "not_checked" and frame.status != "refuted"):
+                frame.status = target_status
+                frame.reason = "the targeted record or identifying-search proof is incomplete or refuted"
+        except Exception as exc:  # noqa: BLE001 - unsupported or unreadable cannot pass
+            if not isinstance(frame.post_state, dict) or "targeted" not in frame.post_state:
+                frame.post_state = {"read_at": _now(), "targeted": unresolved_targeted(params, salt, initial_frame_status)}
+                if targeted_out is not None:
+                    targeted_out["locators"] = ()
+                frame.targeted["identity_status"] = "unresolved"
+                frame.targeted["reason"] = UNRESOLVED_TARGET_IDENTITY
+                frame.targeted["phase"] = "write"
+                frame.targeted["future_late_search"] = "owed"
+            frame.targeted["status"] = "refuted" if frame.status == "refuted" else "not_checked"
+            frame.targeted["problem"] = type(exc).__name__
+            if frame.status != "refuted":
+                frame.status = "not_checked"
+                frame.reason = "receipt-bound records or the identifying search could not be established"
     frame = _apply_hard_invariants(frame)
     # A known field/frame violation still refutes. Missing required in-scope
     # evidence cannot turn a field read into an overall CONFIRMED claim.
@@ -2592,7 +2668,10 @@ def recheck_problem(
     receipt, evidence = dict(state["receipt"]), dict(state["evidence"])
     if receipt_problem(receipt) or evidence_problem(evidence, receipt):
         return "the recheck state's receipt and evidence don't match"
-    if verified and receipt.get("outcome") != "verified":
+    targeted = cfg.frame.targeted if cfg.frame is not None else None
+    purpose = (evidence.get("frame") or {}).get(late_write.EVIDENCE_KEY, {}).get("purpose")
+    targeted_reconciliation = targeted is not None and purpose == "read_only_reconciliation"
+    if verified and receipt.get("outcome") != "verified" and not targeted_reconciliation:
         return "the write was not verified, so there is nothing to recheck"
     if receipt.get("execution_id") != state["execution_id"]:
         return "the recheck state belongs to another run"
@@ -2616,7 +2695,9 @@ def recheck_problem(
     database = cfg.frame.database if cfg.frame is not None else None
     history = cfg.frame.history if cfg.frame is not None else None
     after_s = (
-        history.quiet_s
+        targeted.quiet_s
+        if targeted is not None
+        else history.quiet_s
         if history is not None
         else database.recheck_after_s
         if database is not None
@@ -2629,7 +2710,16 @@ def recheck_problem(
     if schedule.get("post_state_sha256") != digest:
         return "the recheck state is not the post-save state its receipt names"
     is_verified = receipt.get("outcome") == "verified"
-    if dict(schedule) != late_write.schedule(post, after_s, digest, due=is_verified):
+    if targeted_reconciliation and not (
+        receipt.get("outcome") == "reconciliation_required"
+        and (receipt.get("checked") or {}).get("delta") == "held"
+        and (receipt.get("checked") or {}).get("source") in ("held", "instruction")
+        and (receipt.get("checked") or {}).get("frame") != "refuted"
+        and (evidence.get("authorization") or {}).get("self_approved") is not True
+        and ((receipt.get("checked") or {}).get("coverage") or {}).get("policy", "met") == "met"
+    ):
+        return "the targeted reconciliation lacks independently bound landed evidence"
+    if dict(schedule) != late_write.schedule(post, after_s, digest, due=is_verified or targeted_reconciliation, purpose=purpose if targeted is not None else None):
         return (
             "the contract's recheck_after_s is not the one the receipt was issued under"
         )
@@ -2756,6 +2846,7 @@ def recheck_run(
     params: Mapping[str, object],
     run_record: Mapping[str, Any],
     excused: Sequence[tuple[Mapping[str, Any], Mapping[str, object]]] = (),
+    target_ids: Sequence[str] = (),
 ) -> tuple[FrameVerdict, str]:
     """Judge every change since a verified write's post-save read.
 
@@ -2780,6 +2871,28 @@ def recheck_run(
     """
 
     post = dict(state["post_state"])
+    if cfg.frame is not None and cfg.frame.targeted is not None:
+        from openadapt_flow.runtime.effects.targeted import observe_targeted, judge_targeted
+
+        if excused:
+            raise VerifyRunError("targeted rechecks require authenticated per-record provenance")
+        verifier = _build_verifier(cfg, params)
+        _tag_reads(verifier, str(state["execution_id"]))
+        observation = observe_targeted(
+            cfg.frame.targeted, verifier, post["targeted"], tuple(target_ids), params,
+            bytes.fromhex(str(state["salt"])), receipt_sha256(state["receipt"]), _now(),
+            str(run_record.get("executor_id") or ""),
+        )
+        status, detail = judge_targeted(observation)
+        original = post["targeted"]["initial_frame_status"]
+        if original == "refuted" or (original != "held" and status != "refuted"):
+            status = original
+            detail["status"] = status
+            detail["problems"].append("initial_frame_not_established")
+        verdict = FrameVerdict(status=status, reason="targeted record, history or identifying-search check did not hold", targeted=detail)
+        verdict.targeted_observation = observation
+        verdict = _apply_hard_invariants(verdict, observation)
+        return verdict, _now()
     if cfg.frame is not None and cfg.frame.history is not None:
         from openadapt_flow.runtime.effects.history import instant, judge_history
 
