@@ -244,6 +244,28 @@ assert "concurrent update lock is refused" test "$?" -ne 0
 rm -f "$ROOT/releases/.update.lock/pid"
 rmdir "$ROOT/releases/.update.lock"
 
+# Ubuntu 26.04 ships uutils mkdir, which reports success to both callers when
+# two processes race to create one directory. Model that with a mkdir shim that
+# never reports EEXIST: the locks must still exclude, so they cannot rest on
+# the exit status of mkdir(1).
+EEXIST_SHIM="$WORK/eexist-shim"
+mkdir -p "$EEXIST_SHIM"
+REAL_MKDIR="$(command -v mkdir)"
+cat > "$EEXIST_SHIM/mkdir" <<SHIM_EOF
+#!/usr/bin/env bash
+"$REAL_MKDIR" "\$@" 2>/dev/null || true
+exit 0
+SHIM_EOF
+chmod +x "$EEXIST_SHIM/mkdir"
+mkdir "$ROOT/releases/.update.lock"
+printf '%s\n' "$$" > "$ROOT/releases/.update.lock/pid"
+PATH="$EEXIST_SHIM:$PATH" apply_release "$ROOT" "$ARC6" >/dev/null 2>&1
+assert "update lock holds when mkdir(1) never reports EEXIST" test "$?" -ne 0
+assert_eq "a refused update leaves the live owner's lock" "$$" \
+  "$(cat "$ROOT/releases/.update.lock/pid" 2>/dev/null || echo none)"
+rm -f "$ROOT/releases/.update.lock/pid"
+rmdir "$ROOT/releases/.update.lock"
+
 chmod -x "$ROOT/releases/2.0.0/venv/bin/openadapt-flow"
 rel_do_rollback "$ROOT" "" >/dev/null 2>&1
 assert "incomplete rollback target is refused" test "$?" -ne 0
@@ -290,6 +312,21 @@ if grep -q 'audit chain intact' <<< "$audit_output"; then
   pass "concurrent audit writers preserve one hash chain"
 else
   fail "concurrent audit writers preserve one hash chain"
+  printf '%s\n' "$audit_output" | sed 's/^/    /'
+fi
+
+SHIM_LOG="$WORK/eexist-audit/audit.log"
+for index in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  OPENADAPT_ONPREM_AUDIT_LOG="$SHIM_LOG" PATH="$EEXIST_SHIM:$PATH" \
+    bash "$OPENADAPT_ONPREM_AUDIT_BIN" started "shim-$index" --note test >/dev/null &
+done
+wait
+audit_output="$(OPENADAPT_ONPREM_AUDIT_LOG="$SHIM_LOG" \
+  bash "$HERE/verify-airgap.sh" --config "$WORK/missing.yaml" --audit 2>&1 || true)"
+if grep -q 'audit chain intact across 12 record' <<< "$audit_output"; then
+  pass "audit writers stay serialized when mkdir(1) never reports EEXIST"
+else
+  fail "audit writers stay serialized when mkdir(1) never reports EEXIST"
   printf '%s\n' "$audit_output" | sed 's/^/    /'
 fi
 
