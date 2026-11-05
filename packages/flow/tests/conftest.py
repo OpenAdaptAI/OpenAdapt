@@ -63,6 +63,9 @@ def _isolate_durable_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
         "OPENADAPT_DURABLE_AUTHORITY_DB",
         str(tmp_path / ".durable-authority.sqlite3"),
     )
+    # Sealed-set cooperative locks stay outside authenticated inventories and
+    # outside the real per-user lock directory, including in subprocesses.
+    monkeypatch.setenv("OPENADAPT_SEALED_LOCK_DIR", str(tmp_path / ".sealed-locks"))
     # Offline Seals are on by default; keep each test's Seal key and batch
     # queue out of the real home directory.
     monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / ".seal-home"))
