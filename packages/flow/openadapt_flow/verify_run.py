@@ -2536,7 +2536,7 @@ def verify_run(
         try:
             from openadapt_flow.runtime.effects.surfaces import surface_of
 
-            targets = []
+            matched_targets: list[Mapping[str, Any]] = []
             for effect, verdict in zip(bound_effects, verdicts):
                 if effect.kind not in (
                     EffectKind.RECORD_WRITTEN,
@@ -2552,14 +2552,14 @@ def verify_run(
                     continue
                 if surface_of(effect) != target_spec.surface or not verdict.confirmed:
                     raise ValueError("a written target is not independently bound")
-                targets.extend(verdict.matched_records)
+                matched_targets.extend(verdict.matched_records)
             required_fields = {k for effect in bound_effects for k in effect.match}
             required_fields.update(
                 effect.field for effect in bound_effects if effect.field is not None
             )
             ignored = [k for k in frame_spec.ignore_fields if k not in required_fields]
             checkpoint, locators, target_status = capture_targeted(
-                target_spec, verifier, targets, params, salt, ignored, _now()
+                target_spec, verifier, matched_targets, params, salt, ignored, _now()
             )
             checkpoint["initial_frame_status"] = frame.status
             frame.post_state = {"read_at": _now(), "targeted": checkpoint}
@@ -3344,10 +3344,10 @@ def recheck_run(
         cfg, state, run_record=run_record, excused=excused
     )
     salt = bytes.fromhex(str(state["salt"]))
-    detail: dict[str, Any] = {FRAME_DB_DETAIL: dict(post["snapshot"])}
+    native_detail: dict[str, Any] = {FRAME_DB_DETAIL: dict(post["snapshot"])}
     if post.get("audit") is not None:
-        detail[FRAME_AUDIT_DETAIL] = dict(post["audit"])
-    before = EffectState(substrate="database", reachable=True, detail=detail)
+        native_detail[FRAME_AUDIT_DETAIL] = dict(post["audit"])
+    before = EffectState(substrate="database", reachable=True, detail=native_detail)
     verifier = _build_verifier(cfg, params)
     verdict = judge_run_frame(
         cfg,

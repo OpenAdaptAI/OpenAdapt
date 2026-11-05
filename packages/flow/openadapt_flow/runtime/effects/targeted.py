@@ -11,7 +11,7 @@ import os
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Literal, Mapping, Optional, Sequence
+from typing import Any, Literal, Mapping, Optional, Sequence, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -489,6 +489,13 @@ def _current(spec: Any, reader: Any, identity: str) -> Optional[Mapping[str, Any
     return body
 
 
+class _TargetedRecord(TypedDict):
+    id_mac: str
+    contents_mac: str
+    version_mac: Optional[str]
+    anchor_mac: Optional[str]
+
+
 def capture_targeted(
     spec: Any,
     verifier: Any,
@@ -507,7 +514,7 @@ def capture_targeted(
     if not targets:
         raise TargetedUnreadable("no independent landed target evidence")
     search = _search(spec, reader, params, at)
-    entries = []
+    entries: list[_TargetedRecord] = []
     identities = []
     for target in targets:
         raw_id = target.get("id")

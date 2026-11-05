@@ -10,7 +10,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
-from openadapt_flow.hard_invariants import HardInvariantVerdict, judge_hard_invariants
+from openadapt_flow.hard_invariants import (
+    HardInvariantVerdict,
+    InvariantResult,
+    judge_hard_invariants,
+)
 
 if TYPE_CHECKING:
     from openadapt_flow.ensure_record import (
@@ -182,7 +186,7 @@ def enforce_ensure_invariants(
     )
     # Preserve existing adjudicated scope/delete failures. A duplicate only
     # seen in wider history remains part of the optional global predicate.
-    known_failures = {
+    known_failures: dict[str, InvariantResult] = {
         check.name: check
         for check in observed.checks
         if check.status == "refuted" and check.name != "at_most_one"

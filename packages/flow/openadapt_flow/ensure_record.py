@@ -45,7 +45,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 from urllib.parse import urlsplit
 
 from pydantic import (
@@ -70,6 +70,9 @@ from openadapt_flow.fhir_reference import (
     ReferenceSchema,
     ReferenceUnreadable,
 )
+
+if TYPE_CHECKING:
+    from openadapt_flow.ensure_bridge import _EnsureAuthority
 
 Outcome = Literal["found_existing", "created_verified", "needs_review"]
 Compare = Literal["exact", "casefold", "digits", "date", "instant"]
@@ -1251,6 +1254,7 @@ class _BaselineRuntime:
     """Authority is process-local and is never part of a data snapshot."""
 
     __slots__ = ("_pending_authority",)
+    _pending_authority: Optional[_EnsureAuthority]
 
     def __getstate__(self) -> dict[str, Any]:
         # dataclasses.asdict sees only data fields; pickle/copy use this state.

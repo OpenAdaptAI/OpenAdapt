@@ -13,7 +13,7 @@ from collections.abc import Callable, Collection, Mapping
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, SupportsIndex
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -73,7 +73,7 @@ class EnsureContext:
         self.baseline: Optional[Baseline] = None
         self.observation: Optional[EnsureObservation] = None
 
-    def __reduce_ex__(self, protocol: int) -> Any:
+    def __reduce_ex__(self, protocol: SupportsIndex) -> Any:
         raise TypeError("ensure runtime context cannot be serialized")
 
 
@@ -105,7 +105,7 @@ class _EnsureAuthority:
         self.params = _hash(dict(pending.params))
         self.result: Any = None
 
-    def __reduce_ex__(self, protocol: int) -> Any:
+    def __reduce_ex__(self, protocol: SupportsIndex) -> Any:
         raise TypeError("ensure pending authority cannot be serialized")
 
 

@@ -23,7 +23,8 @@ from openadapt_flow.deployment import (
 from openadapt_flow.ensure_record import EnsureContract, FhirReader
 from openadapt_flow.runtime.effects import targeted
 from openadapt_flow.runtime.effects.fhir import FhirEffectVerifier
-from tests.test_targeted_recheck import ACTOR, PARAMS, contract, server
+from tests.test_targeted_recheck import ACTOR, PARAMS, contract
+from tests.test_targeted_recheck import server as server
 
 
 def configured(base: str, bound: Any = 0.0, **target_options: Any) -> api.Contract:
