@@ -647,18 +647,8 @@ def test_cli_record_default_desktop_rejects_secret(tmp_path: Path) -> None:
         ),
         (
             "linux",
-            ["--linux-app", "gedit"],
-            "no Linux window-scoping primitive",
-        ),
-        (
-            "linux",
-            ["--linux-window-title", "Untitled Document 1"],
-            "no Linux window-scoping primitive",
-        ),
-        (
-            "linux",
             ["--linux-allow-physical-input"],
-            "no Linux window-scoping primitive",
+            "recording sends none",
         ),
         (
             "rdp",
@@ -738,6 +728,30 @@ def test_cli_record_macos_target_scopes_capture(tmp_path: Path, monkeypatch) -> 
 
 
 @pytest.mark.parametrize(
+    "flags",
+    [
+        ["--linux-app", "chart", "--linux-window-title", "Chart"],
+        ["--window", "chart", "--window-title", "Chart"],
+        ["--window", "chart", "--linux-app", "CHART", "--window-title", "Chart"],
+    ],
+)
+def test_cli_record_linux_target_scopes_capture(
+    tmp_path: Path, monkeypatch, flags: list[str]
+) -> None:
+    """Linux target flags and --window/--window-title scope one X11 window."""
+    captured: dict = {}
+    monkeypatch.setattr(
+        "openadapt_flow.desktop_record.record_desktop_capture",
+        _fake_desktop_record(captured),
+    )
+    rc = _run_cli(
+        ["record", "--backend", "linux", *flags, "--out", str(tmp_path / "rec")]
+    )
+    assert rc == 0
+    assert captured["window"] == {"owner": "chart", "title": "Chart"}
+
+
+@pytest.mark.parametrize(
     ("backend", "generic_flags", "target_flags"),
     [
         ("macos", ["--window", "Notes"], ["--macos-app", "TextEdit"]),
@@ -745,6 +759,12 @@ def test_cli_record_macos_target_scopes_capture(tmp_path: Path, monkeypatch) -> 
             "macos",
             ["--window-title", "notes.txt"],
             ["--macos-window-title", "draft.txt"],
+        ),
+        ("linux", ["--window", "gedit"], ["--linux-app", "chart"]),
+        (
+            "linux",
+            ["--window-title", "Chart"],
+            ["--linux-window-title", "Terminal"],
         ),
     ],
 )
@@ -1002,7 +1022,7 @@ def test_record_desktop_window_unsupported_platform(
     """
     from openadapt_flow import desktop_record
 
-    monkeypatch.setattr(desktop_record.sys, "platform", "linux")
+    monkeypatch.setattr(desktop_record.sys, "platform", "freebsd14")
     with pytest.raises(SystemExit, match="not supported on this host"):
         record_desktop_capture(
             tmp_path / "rec",
@@ -1010,6 +1030,100 @@ def test_record_desktop_window_unsupported_platform(
             stop=lambda: True,
             announce=False,
         )
+
+
+@pytest.mark.parametrize(
+    ("environ", "message"),
+    [
+        ({"XDG_SESSION_TYPE": "wayland", "DISPLAY": ":0"}, "Wayland session"),
+        ({"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"}, "Wayland session"),
+        ({"XDG_SESSION_TYPE": "x11"}, "DISPLAY is not set"),
+    ],
+)
+def test_record_desktop_window_linux_needs_x11(
+    tmp_path: Path, monkeypatch, environ: dict, message: str
+) -> None:
+    """On Linux, --window is refused before Capture starts unless X11 is up."""
+    from openadapt_flow import desktop_record
+
+    monkeypatch.setattr(desktop_record.sys, "platform", "linux")
+    for name in ("XDG_SESSION_TYPE", "WAYLAND_DISPLAY", "DISPLAY"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in environ.items():
+        monkeypatch.setenv(name, value)
+    log: list = []
+    with pytest.raises(SystemExit, match=message):
+        record_desktop_capture(
+            tmp_path / "rec",
+            window={"owner": "chart", "title": None},
+            recorder_factory=_make(log),
+            stop=lambda: True,
+            announce=False,
+        )
+    assert log == []
+    assert not (tmp_path / "rec").exists()
+
+
+def test_record_desktop_window_linux_x11_forwarded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Under X11 the Linux window spec reaches the Capture recorder."""
+    from openadapt_flow import desktop_record
+
+    monkeypatch.setattr(desktop_record.sys, "platform", "linux")
+    monkeypatch.setattr(desktop_record, "_require_capture_extra", lambda: None)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
+    monkeypatch.setenv("DISPLAY", ":99")
+    seen: dict = {}
+    log: list = []
+
+    def spy_default(task, cap_dir, window=None):
+        seen["window"] = window
+        return _FakeRecorder(task, cap_dir, log)
+
+    monkeypatch.setattr(desktop_record, "_default_recorder_factory", spy_default)
+    monkeypatch.setattr(
+        desktop_record, "_installed_capture_lacks_linux_windows", lambda: False
+    )
+    record_desktop_capture(
+        tmp_path / "rec",
+        window={"owner": "chart", "title": "Chart"},
+        convert=lambda cap_dir, out_dir, *, params=None: Path(out_dir),
+        stop=lambda: True,
+        announce=False,
+    )
+    assert seen["window"] == {"owner": "chart", "title": "Chart"}
+
+
+def test_record_desktop_window_linux_refuses_old_capture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An openadapt-capture without Linux window capture is refused up front."""
+    from openadapt_flow import desktop_record
+
+    monkeypatch.setattr(desktop_record.sys, "platform", "linux")
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
+    monkeypatch.setenv("DISPLAY", ":99")
+    monkeypatch.setattr(
+        desktop_record, "_installed_capture_lacks_linux_windows", lambda: True
+    )
+    started: list = []
+    monkeypatch.setattr(
+        desktop_record,
+        "_default_recorder_factory",
+        lambda *a, **k: started.append(a) or pytest.fail("Capture started"),
+    )
+    with pytest.raises(SystemExit, match="openadapt-capture 1.3.0 or later"):
+        record_desktop_capture(
+            tmp_path / "rec",
+            window={"owner": "chart", "title": "Chart"},
+            stop=lambda: True,
+            announce=False,
+        )
+    assert started == []
+    assert not (tmp_path / "rec").exists()
 
 
 def test_record_desktop_no_window_ok_on_any_platform(

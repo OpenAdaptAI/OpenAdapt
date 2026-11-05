@@ -165,10 +165,18 @@ with `--rdp-readiness-text`, set `backend.rdp_readiness_text` in deployment
 config, or pass the flag directly. If it is absent, `run` refuses before any
 action; ordinary record/replay remains available.
 
-Window-scoped capture is implemented on **macOS and Windows** hosts
-(`CGWindowListCreateImage` / Win32 region grab); on any other host `--window`
-is refused up front rather than silently falling back to full-screen (which
-would record coordinates in the wrong pixel space). `--window` applies only to
+Window-scoped capture is implemented on **macOS, Windows and X11 Linux**
+hosts (`CGWindowListCreateImage` / Win32 region grab / X11 EWMH window list
+and XComposite). On Linux, `--linux-app` and `--linux-window-title` are the
+same selectors as `--window` and `--window-title`: the owner is matched
+against the window's process name and the title against its `_NET_WM_NAME`,
+both as substrings, and more than one match is refused. The process name of a
+Python or Java app is the interpreter (`python3`, `java`), not the AT-SPI
+application name that `replay --linux-app` matches, so scope such an app by
+title. A native Wayland session, an unset `DISPLAY`, or an openadapt-capture
+older than 1.3.0 is refused before recording starts. On any other host
+`--window` is refused up front rather than silently falling back to
+full-screen (which would record coordinates in the wrong pixel space). `--window` applies only to
 the desktop backends — `--backend web` records the Playwright page and refuses
 it.
 
