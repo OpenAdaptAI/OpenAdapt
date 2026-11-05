@@ -371,9 +371,7 @@ def squash(text: str) -> str:
     them in the comparison form turned a glyph-collapse ABSTAIN into a false
     affirmative MISMATCH on native Windows while Mac stayed consistent.
     """
-    return "".join(
-        ch for ch in text.lower() if not ch.isspace() and ch not in ",."
-    )
+    return "".join(ch for ch in text.lower() if not ch.isspace() and ch not in ",.")
 
 
 def band_region(point: Point, band_height: int, viewport: tuple[int, int]) -> Region:
