@@ -18,6 +18,10 @@ The independent reviewer comment must use the existing heading
 heading and requires the reviewed SHA to match the current pull request head.
 The author and reviewer declarations must name different vendors. A stale,
 missing, duplicate, malformed, or BLOCK declaration fails closed.
+Evidence comments are accepted only from GitHub accounts whose API
+`author_association` is `OWNER`, `MEMBER`, or `COLLABORATOR`. The author
+declaration must also be posted by the API-reported pull request author. The
+`From` vendor line remains self-reported evidence, not an identity proof.
 
 For a change to the manifest or gate implementation itself, add one separate
 current-head coordinator comment with exactly these headers:
@@ -67,7 +71,13 @@ commit. The workflow reads PR metadata, files, commits, and issue comments via
 the GitHub API, then publishes the stable `protected-safety-review` check for
 the exact PR head with `checks: write`. The report parser is pure and does not
 make network requests. This reduces accidental misuse under a shared account;
-the self-reported declarations are not proof against a malicious actor.
+the self-reported declarations are not proof against a malicious actor. The
+verifier compares file and commit API result counts to PR metadata, rejects
+duplicate IDs and over-limit commit histories, and includes both sides of file
+renames when matching the protected-path manifest. It fetches comments again
+before publishing and fails if their IDs, bodies, authors, associations, or
+update times changed. Per-PR workflow concurrency cancels an earlier run when
+a newer review event arrives.
 
 ## Enforcement bootstrap
 

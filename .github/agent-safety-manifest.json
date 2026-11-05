@@ -6,9 +6,16 @@
       "id": "verification-authority",
       "rationale": "These components choose the independent read-back result and expose verification to the agent boundary.",
       "paths": [
+        "packages/flow/openadapt_flow/verifier.py",
         "packages/flow/openadapt_flow/verify_run.py",
         "packages/flow/openadapt_flow/verify.py",
+        "packages/flow/openadapt_flow/runner/verify.py",
         "packages/flow/openadapt_flow/agent/verify_tools.py",
+        "packages/flow/openadapt_flow/runtime/identity*.py",
+        "packages/flow/openadapt_flow/identity_signals.py",
+        "packages/flow/openadapt_flow/ir.py",
+        "packages/flow/openadapt_flow/runtime/replayer.py",
+        "packages/flow/openadapt_flow/runtime/effects/**",
         "packages/flow/tests/test_verify_run.py",
         "packages/flow/tests/test_verify_tools.py"
       ]
@@ -18,9 +25,7 @@
       "rationale": "These files decide whether policy, approval, and signed authorization are sufficient or must refuse.",
       "paths": [
         "packages/flow/openadapt_flow/policy.py",
-        "packages/flow/openadapt_flow/approval_mode/signed_policy.py",
-        "packages/flow/openadapt_flow/approval_mode/item_approval.py",
-        "packages/flow/openadapt_flow/approval_mode/approver_roster.py",
+        "packages/flow/openadapt_flow/approval_mode/**",
         "packages/flow/openadapt_flow/agent/contract.py",
         "packages/flow/tests/test_policy.py",
         "packages/flow/tests/test_approval_mode_switch_policy.py",

@@ -83,17 +83,28 @@ def validate_manifest(manifest: Any) -> dict[str, Any]:
     if seen != required_areas:
         raise EvidenceError("manifest must enumerate all six required safety areas")
     required_sources = {
-        "verification-authority": "packages/flow/openadapt_flow/verify_run.py",
-        "fail-closed-policy-and-approval": "packages/flow/openadapt_flow/policy.py",
-        "receipts-and-signing": "packages/flow/openadapt_flow/write_receipt.py",
-        "refusal-and-ledger": "packages/flow/openadapt_flow/write_ledger.py",
-        "frozen-study-guard": "packages/flow/tests/test_hardening_flywheel.py",
+        "verification-authority": {
+            "packages/flow/openadapt_flow/verifier.py",
+            "packages/flow/openadapt_flow/verify_run.py",
+            "packages/flow/openadapt_flow/runtime/identity*.py",
+            "packages/flow/openadapt_flow/identity_signals.py",
+            "packages/flow/openadapt_flow/ir.py",
+            "packages/flow/openadapt_flow/runtime/replayer.py",
+            "packages/flow/openadapt_flow/runtime/effects/**",
+        },
+        "fail-closed-policy-and-approval": {
+            "packages/flow/openadapt_flow/policy.py",
+            "packages/flow/openadapt_flow/approval_mode/**",
+        },
+        "receipts-and-signing": {"packages/flow/openadapt_flow/write_receipt.py"},
+        "refusal-and-ledger": {"packages/flow/openadapt_flow/write_ledger.py"},
+        "frozen-study-guard": {"packages/flow/tests/test_hardening_flywheel.py"},
     }
     for area in manifest["areas"]:
-        required_source = required_sources.get(area["id"])
-        if required_source and required_source not in area["paths"]:
+        required_area_sources = required_sources.get(area["id"], set())
+        if not required_area_sources <= set(area["paths"]):
             raise EvidenceError(
-                f"manifest area {area['id']!r} omits canonical source {required_source}"
+                f"manifest area {area['id']!r} omits canonical source paths"
             )
     gate_paths = {
         path
@@ -133,20 +144,36 @@ def _current_comment(body: Any, head: str) -> bool:
     return isinstance(body, str) and _headers(body, "Reviewed-Head") == [head]
 
 
+TRUSTED_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
+
+
+def _trusted_comment(comment: dict[str, Any]) -> bool:
+    user = comment.get("user")
+    return (
+        isinstance(user, dict)
+        and isinstance(user.get("login"), str)
+        and comment.get("author_association") in TRUSTED_ASSOCIATIONS
+    )
+
+
 def _review_and_attestation_errors(
     *,
     comments: list[dict[str, Any]],
     head: str,
     commits: list[dict[str, Any]],
     coordinator_needed: bool,
+    pull_request_author: str,
 ) -> list[str]:
     errors: list[str] = []
-    all_bodies = [c.get("body") for c in comments]
+    trusted_comments = [c for c in comments if _trusted_comment(c)]
+    all_bodies = [c.get("body") for c in trusted_comments]
     current = [body for body in all_bodies if _current_comment(body, head)]
     authors: list[tuple[str, str]] = []
     reviewers: list[tuple[str, str]] = []
     coordinator_notes: list[str] = []
-    for body in current:
+    for comment, body in zip(trusted_comments, all_bodies, strict=True):
+        if body not in current:
+            continue
         assert isinstance(body, str)
         if "Coordinator-Approval:" in body:
             try:
@@ -173,6 +200,12 @@ def _review_and_attestation_errors(
         elif _headers(body, "From") and _headers(body, "Reviewed-Head"):
             try:
                 vendor = parse_author_declaration(body, head)
+                if comment.get("user", {}).get("login", "").casefold() != (
+                    pull_request_author.casefold()
+                ):
+                    raise EvidenceError(
+                        "author declaration must be posted by the pull request author"
+                    )
                 authors.append((vendor, body))
             except EvidenceError as exc:
                 errors.append(f"invalid author declaration: {exc}")
@@ -209,13 +242,15 @@ def _review_and_attestation_errors(
             errors.append("GitHub returned malformed commit metadata")
             continue
         try:
-            commit_time = datetime.fromisoformat(date_value.replace("Z", "+00:00"))
-        except (AttributeError, ValueError):
+            commit_time = datetime.fromisoformat(date_value)
+        except (TypeError, ValueError):
             errors.append(f"commit {sha} has no valid committer timestamp")
             continue
         matches: list[str] = []
-        for body in all_bodies:
+        for comment, body in zip(trusted_comments, all_bodies, strict=True):
             if not isinstance(body, str):
+                continue
+            if not _trusted_comment(comment):
                 continue
             candidates = re.findall(r'"commit"\s*:\s*"([0-9a-f]{40})"', body)
             if sha in candidates:
@@ -276,12 +311,50 @@ def evaluate_pull_request(
         or not head.get("repo", {}).get("full_name", "").strip()
     ):
         errors.append("pull request head repository metadata is missing")
+    author = pull_request.get("user")
+    if not isinstance(author, dict) or not isinstance(author.get("login"), str):
+        errors.append("pull request author metadata is missing")
+    if errors:
+        return errors
+
+    expected_file_count = pull_request.get("changed_files")
+    expected_commit_count = pull_request.get("commits")
+    if type(expected_file_count) is not int or expected_file_count < 0:
+        errors.append("pull request changed-file count is missing or malformed")
+    elif len(files) != expected_file_count:
+        errors.append("changed-file API results are incomplete")
+    if type(expected_commit_count) is not int or expected_commit_count < 0:
+        errors.append("pull request commit count is missing or malformed")
+    elif expected_commit_count > 250 or len(commits) != expected_commit_count:
+        errors.append("commit API results are incomplete or exceed the API limit")
+    commit_shas = [commit.get("sha") for commit in commits]
+    if not all(isinstance(sha, str) and sha for sha in commit_shas):
+        errors.append("commit API results contain malformed commit ids")
+    elif len(set(commit_shas)) != len(commit_shas):
+        errors.append("commit API results contain duplicate commit ids")
+    filenames = [item.get("filename") for item in files]
+    if not all(isinstance(filename, str) and filename for filename in filenames):
+        errors.append("changed-file API results contain malformed paths")
+    elif len(set(filenames)) != len(filenames):
+        errors.append("changed-file API results contain duplicate paths")
     if errors:
         return errors
 
     paths = _manifest_paths(validated)
-    changed_paths = [item.get("filename") for item in files]
-    if not changed_paths or not all(isinstance(p, str) and p for p in changed_paths):
+    changed_paths: list[str] = []
+    for item in files:
+        filename = item.get("filename")
+        previous = item.get("previous_filename")
+        if not isinstance(filename, str) or not filename:
+            return _fail("changed-file metadata is empty or malformed")
+        changed_paths.append(filename)
+        if previous is not None:
+            if not isinstance(previous, str) or not previous:
+                return _fail("renamed-file metadata is malformed")
+            changed_paths.append(previous)
+    if expected_file_count == 0 and files:
+        return _fail("changed-file API results are inconsistent with the PR")
+    if expected_file_count and not changed_paths:
         return _fail("changed-file metadata is empty or malformed")
     protected = any(
         _matches(path, pattern) for path in changed_paths for pattern in paths
@@ -304,6 +377,7 @@ def evaluate_pull_request(
             head=head_sha,
             commits=commits,
             coordinator_needed=coordinator_needed,
+            pull_request_author=pull_request.get("user", {}).get("login", ""),
         )
     )
     return errors
@@ -341,7 +415,7 @@ class GitHubApi:
                 f"{path}{'&' if '?' in path else '?'}per_page=100&page={page}"
             )
             if not isinstance(batch, list):
-                raise RuntimeError(f"GitHub API returned a non-list for {path}")
+                raise TypeError(f"GitHub API returned a non-list for {path}")
             results.extend(batch)
             if len(batch) < 100:
                 return results
@@ -363,6 +437,17 @@ def _pull_request_number(event: dict[str, Any]) -> int:
     return number
 
 
+def _comment_snapshot(comments: list[dict[str, Any]]) -> list[str]:
+    fields = ("id", "body", "author_association", "updated_at")
+    snapshot = []
+    for comment in comments:
+        user = comment.get("user") if isinstance(comment.get("user"), dict) else {}
+        value = {field: comment.get(field) for field in fields}
+        value["login"] = user.get("login")
+        snapshot.append(json.dumps(value, sort_keys=True, separators=(",", ":")))
+    return sorted(snapshot)
+
+
 def run(
     event: dict[str, Any], trusted_base_sha: str, api: Any
 ) -> tuple[str, list[str]]:
@@ -371,6 +456,7 @@ def run(
     pull_request = api.request(f"/pulls/{number}")
     head_sha = pull_request.get("head", {}).get("sha")
     errors: list[str]
+    initial_comment_snapshot: list[str] | None = None
     try:
         if pull_request.get("base", {}).get("ref") != "main":
             errors = ["pull request base must be main"]
@@ -380,6 +466,7 @@ def run(
             files = api.pages(f"/pulls/{number}/files")
             commits = api.pages(f"/pulls/{number}/commits")
             comments = api.pages(f"/issues/{number}/comments")
+            initial_comment_snapshot = _comment_snapshot(comments)
             manifest_path = Path(os.environ.get("SAFETY_MANIFEST", str(MANIFEST_PATH)))
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             errors = evaluate_pull_request(
@@ -417,7 +504,13 @@ def run(
             "sha"
         ) != latest_main.get("object", {}).get("sha"):
             errors.append("pull request is no longer based on current main")
-    except Exception as exc:  # fail closed on unavailable or malformed metadata
+        if initial_comment_snapshot is not None:
+            latest_comments = api.pages(f"/issues/{number}/comments")
+            if _comment_snapshot(latest_comments) != initial_comment_snapshot:
+                errors.append(
+                    "PR comments changed during review; rerun on current evidence"
+                )
+    except Exception as exc:  # noqa: BLE001 - fail closed on any unavailable metadata
         errors = [f"safety review could not verify GitHub metadata: {exc}"]
     if not isinstance(head_sha, str) or not SHA.fullmatch(head_sha):
         raise EvidenceError("cannot publish status: pull request head SHA is malformed")
@@ -454,7 +547,7 @@ def main() -> int:
     try:
         event = json.loads(Path(event_path).read_text(encoding="utf-8"))
         conclusion, errors = run(event, trusted_base_sha, GitHubApi(token))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - malformed inputs must exit nonzero
         print(f"unable to publish protected safety review: {exc}", file=sys.stderr)
         return 2
     print("protected-safety-review: " + conclusion)
