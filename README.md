@@ -175,8 +175,8 @@ covers other clients.
 
 ```bash
 python -m pip install --upgrade openadapt
-openadapt flow record --url https://staging.your-app.example --out rec
-openadapt flow compile rec --out bundle --name my-first-workflow
+openadapt record --url https://staging.your-app.example --out rec
+openadapt compile rec --out bundle --name my-first-workflow
 openadapt flow replay bundle --url https://staging.your-app.example --run-dir run
 ```
 
@@ -185,7 +185,7 @@ including saves you can't undo. It doesn't ask first and doesn't check the
 saved record. Point it at a test or staging copy, never at production data.
 
 A program that writes to a real system also needs record checks, a deployment
-file, certification, qualification, and an admission; then `openadapt flow run`
+file, certification, qualification, and an admission; then `openadapt run`
 runs it. By default each save waits for a person to approve it in OpenAdapt
 Desktop or on a paired phone. [Your first workflow](https://docs.openadapt.ai/tutorials/first-workflow/)
 walks through it. Several recordings of the same task can become one program

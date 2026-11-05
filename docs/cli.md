@@ -4,8 +4,9 @@
 > [docs.openadapt.ai/reference/cli](https://docs.openadapt.ai/reference/cli/).
 > Run `openadapt flow <command> --help` for the exact installed engine version.
 
-The launcher command is `openadapt`. It delegates the product lifecycle to the
-installed `openadapt-flow` engine.
+Install with `pip install openadapt`. Use `openadapt record`,
+`openadapt compile` and `openadapt run` for the workflow lifecycle.
+Their `openadapt flow` forms remain available with identical options and checks.
 
 ## First run
 
@@ -21,9 +22,8 @@ runs the bundled synthetic MockMed workflow from recording through an
 independently verified Standard-profile result. `openadapt quickstart --break-it`
 is the halt demo. It reruns the same certified bundle against a backend that
 rejects the write after the app shows success. The independent read finds no
-saved record, and the run halts with transaction outcome
-`RECONCILIATION_REQUIRED`, so nothing is retried until a person checks the
-record.
+saved record, and the result says “Check the record.” Nothing is retried
+until a person checks the record. Exact outcomes remain in the run report.
 
 The engine runs on Python 3.10 through 3.12. On Python 3.13 or newer, pip
 installs only the launcher and every engine command prints the fix:
