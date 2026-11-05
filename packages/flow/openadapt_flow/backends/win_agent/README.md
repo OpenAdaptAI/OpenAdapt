@@ -25,6 +25,13 @@ Only the Python **standard library** is imported at load; `mss`/Pillow (for the
 screenshot) and `pyautogui`/`uiautomation` (used by the input handlers) import
 lazily. No Flask required in the guest.
 
+Typing binds to the foreground window handle and process. The agent checks
+that identity before and after each ASCII character or Unicode clipboard
+paste. If it changes, delivery stops with `input_focus_changed`; the client
+reports uncertain delivery because input may already be partial. When the
+foreground cannot be read, the agent refuses before typing. Update the guest
+agent to get these checks.
+
 ## Security (TLS in transit + loopback default + bearer token)
 
 `/screenshot` returns a PNG of the live patient chart and the input routes drive

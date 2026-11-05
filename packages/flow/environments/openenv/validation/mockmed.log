@@ -1,0 +1,88 @@
+  mockmed-01: scripted=1.0 screen_trusting=1.0 lazy_failure=0.0 random=0.0 random=0.0 random=0.0
+  mockmed-02: scripted=1.0 screen_trusting=1.0 lazy_failure=0.0 random=0.0 random=0.0 random=0.0
+  mockmed-03: scripted=1.0 screen_trusting=1.0 lazy_failure=0.0 random=0.0 random=0.0 random=0.0
+  mockmed-04: scripted=1.0 screen_trusting=1.0 lazy_failure=0.0 random=0.0 random=0.0 random=0.0
+  mockmed-05: scripted=1.0 screen_trusting=1.0 lazy_failure=0.0 random=0.0 random=0.0 random=0.0
+  mockmed-06: scripted=1.0 screen_trusting=1.0 lazy_failure=0.0 random=0.0 random=0.0 random=0.0
+  mockmed-07: scripted=1.0 screen_trusting=0.0 lazy_failure=0.0 random=0.0 random=0.0 random=0.0
+  mockmed-08: scripted=1.0 screen_trusting=0.0 lazy_failure=0.0 random=0.0 random=0.0 random=0.0
+  mockmed-09: scripted=1.0 screen_trusting=0.0 lazy_failure=0.0 random=0.0 random=0.0 random=0.0
+  mockmed-10: scripted=1.0 screen_trusting=0.0 lazy_failure=0.0 random=0.0 random=0.0 random=0.0
+  mockmed-11: scripted=1.0 screen_trusting=0.0 lazy_failure=0.0 random=0.0 random=0.0 random=0.0
+{
+  "agents": {
+    "lazy_failure": {
+      "episodes": 11,
+      "judge_errors": 0,
+      "mean_reward": 0.0,
+      "silent_wrong_effects": 0,
+      "verdicts": {
+        "CONFIRMED": 0,
+        "INDETERMINATE": 0,
+        "REFUTED": 11
+      }
+    },
+    "random": {
+      "episodes": 33,
+      "judge_errors": 0,
+      "mean_reward": 0.0,
+      "silent_wrong_effects": 21,
+      "verdicts": {
+        "CONFIRMED": 0,
+        "INDETERMINATE": 0,
+        "REFUTED": 33
+      }
+    },
+    "screen_trusting": {
+      "episodes": 11,
+      "judge_errors": 0,
+      "mean_reward": 0.5455,
+      "silent_wrong_effects": 5,
+      "verdicts": {
+        "CONFIRMED": 6,
+        "INDETERMINATE": 0,
+        "REFUTED": 5
+      }
+    },
+    "scripted": {
+      "episodes": 11,
+      "judge_errors": 0,
+      "mean_reward": 1.0,
+      "silent_wrong_effects": 0,
+      "verdicts": {
+        "CONFIRMED": 6,
+        "INDETERMINATE": 0,
+        "REFUTED": 5
+      }
+    }
+  },
+  "checks": {
+    "lazy_failure_earns_nothing": true,
+    "no_judge_errors": true,
+    "random_floor_margin": true,
+    "screen_trusting_paid_only_on_feasible": true,
+    "scripted_reaches_max": true
+  },
+  "env": "openadapt-mockmed",
+  "feasible_tasks": 6,
+  "licence": {
+    "app": "MIT",
+    "app_source": "bundled",
+    "environment": "MIT",
+    "notes": "MockMed is OpenAdapt's own synthetic fixture (openadapt_flow.mockmed). All data is fake.",
+    "upstream_images": []
+  },
+  "pack_sha256": {
+    "public.jsonl": "sha256:525f5958ee2aca1f6308bb63a9e5e215f6addab37c42a6ba24e7379de025561a"
+  },
+  "passed": true,
+  "run": {
+    "base_url_kind": "started locally",
+    "model_calls": 0,
+    "platform": "Darwin arm64 py3.12.13",
+    "started": "2026-11-03T22:42:07Z",
+    "transport": "openenv GenericEnvClient over WebSocket",
+    "wall_s": 585.4
+  },
+  "tasks": 11
+}

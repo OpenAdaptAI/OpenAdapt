@@ -19,6 +19,7 @@ from collections.abc import Iterator
 import pytest
 import requests
 
+from openadapt_flow.backend import StructuralResolutionRefused
 from openadapt_flow.backends.win_agent import AgentConfig, create_server
 from openadapt_flow.backends.win_agent.server import (
     AgentRequestError,
@@ -194,7 +195,9 @@ def test_typed_input_and_uia_receipts_never_claim_outcome(
     assert set(context.json()) == {
         "status",
         "application",
+        "application_version",
         "session",
+        "environment",
         "workflow_state",
     }
     assert "title" not in context.text.casefold()
@@ -513,6 +516,201 @@ def test_windows_context_identity_is_live_bounded_and_authenticated() -> None:
         assert unauthenticated.session_identity() is None
     finally:
         agent.close()
+
+
+def test_windows_qualification_environment_is_one_agent_snapshot() -> None:
+    """A qualification case on Windows observes all four signals in one call."""
+
+    from openadapt_flow.backends import WindowsBackend
+    from openadapt_flow.qualification_environment import (
+        BackendQualificationEnvironmentObserver,
+    )
+
+    state = {
+        "application": "patient-notes",
+        "application_version": "sha256:" + "c" * 64,
+        "session": "a" * 64,
+        "environment": "e" * 64,
+    }
+    calls = []
+
+    def context_fn():
+        calls.append(1)
+        return {"status": "ok", **state, "workflow_state": None}
+
+    agent = RunningAgent(
+        AgentConfig(host="127.0.0.1", port=0, token="secret"),
+        context_fn=context_fn,
+    )
+    try:
+        backend = WindowsBackend(agent.url, auth_token="secret")
+        assert backend.qualification_environment_identity() == (
+            "patient-notes",
+            "sha256:" + "c" * 64,
+            "a" * 64,
+            "e" * 64,
+        )
+        assert len(calls) == 1
+        observed = BackendQualificationEnvironmentObserver(backend).observe(
+            backend, "windows"
+        )
+        assert observed.application_version == "sha256:" + "c" * 64
+        assert observed.environment_digest == "e" * 64
+
+        # Every signal must be present and well formed, or the case refuses.
+        for key, bad in (
+            ("environment", None),
+            ("application_version", "1.2.3"),
+            ("application_version", None),
+            ("session", "NOT-A-DIGEST"),
+            ("application", "Patient Alice Example"),
+        ):
+            saved = state[key]
+            state[key] = bad
+            assert backend.qualification_environment_identity() is None, key
+            state[key] = saved
+
+        # An older agent without the environment fields cannot qualify.
+        del state["environment"], state["application_version"]
+        assert backend.qualification_environment_identity() is None
+        assert WindowsBackend(agent.url).qualification_environment_identity() is None
+    finally:
+        agent.close()
+
+
+def test_agent_hashes_the_executable_file_and_notices_a_change(tmp_path) -> None:
+    from openadapt_flow.backends.win_agent import server
+
+    image = tmp_path / "app.exe"
+    image.write_bytes(b"first build")
+    first = server._image_file_digest(str(image))
+    assert first == "sha256:" + hashlib.sha256(b"first build").hexdigest()
+    image.write_bytes(b"second build, longer")
+    second = server._image_file_digest(str(image))
+    assert second == "sha256:" + hashlib.sha256(b"second build, longer").hexdigest()
+    assert server._image_file_digest(str(tmp_path / "missing.exe")) is None
+
+
+def test_agent_rehashes_a_same_size_file_replaced_with_the_old_times(tmp_path) -> None:
+    import os
+
+    from openadapt_flow.backends.win_agent import server
+
+    image = tmp_path / "app.exe"
+    image.write_bytes(b"build-A")
+    first = server._image_file_digest(str(image))
+    stat = image.stat()
+    staged = tmp_path / "staged.exe"
+    staged.write_bytes(b"build-B")
+    os.replace(staged, image)
+    os.utime(image, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    second = server._image_file_digest(str(image))
+    assert second == "sha256:" + hashlib.sha256(b"build-B").hexdigest()
+    assert second != first
+
+
+def test_agent_refuses_a_file_changed_after_the_process_started(
+    tmp_path, monkeypatch
+) -> None:
+    from openadapt_flow.backends.win_agent import server
+
+    image = tmp_path / "app.exe"
+    image.write_bytes(b"running build")
+    changed = max(image.stat().st_mtime_ns, image.stat().st_ctime_ns)
+    monkeypatch.setattr(server, "_process_start_ns", lambda pid: changed + 1)
+    assert server._running_image_digest(42, str(image)) is not None
+    monkeypatch.setattr(server, "_process_start_ns", lambda pid: changed - 1)
+    assert server._running_image_digest(42, str(image)) is None
+    monkeypatch.setattr(server, "_process_start_ns", lambda pid: None)
+    assert server._running_image_digest(42, str(image)) is None
+
+
+def test_guarded_input_binds_the_executable_digest_and_environment() -> None:
+    from openadapt_flow.backends import WindowsBackend
+
+    state = {
+        "application": "patient-notes",
+        "application_version": "sha256:" + "c" * 64,
+        "session": "a" * 64,
+        "environment": "e" * 64,
+    }
+    agent = RunningAgent(
+        AgentConfig(host="127.0.0.1", port=0),
+        context_fn=lambda: {"status": "ok", **state, "workflow_state": None},
+    )
+    try:
+        backend = WindowsBackend(agent.url)
+        context = backend._guard_context()
+        assert context["application_version"] == "sha256:" + "c" * 64
+        assert context["environment"] == "e" * 64
+        state["application_version"] = "not-a-digest"
+        with pytest.raises(StructuralResolutionRefused):
+            backend._guard_context()
+        del state["application_version"], state["environment"]
+        assert "application_version" not in backend._guard_context()
+    finally:
+        agent.close()
+
+
+def test_guarded_input_refuses_when_the_executable_digest_changes() -> None:
+    """A guarded POST carries the digest; a different executable is refused."""
+
+    from openadapt_flow.backends import WindowsBackend
+
+    frame = _fake_png()
+    state = {
+        "application": "patient-notes",
+        "application_version": "sha256:" + "c" * 64,
+        "session": "a" * 64,
+        "environment": "e" * 64,
+    }
+    delivered = []
+
+    def input_fn(payload):
+        delivered.append(payload)
+        return {
+            "status": "delivered",
+            "receipt_id": "guarded-env",
+            "operation": "physical_click",
+            "native": False,
+            "target_fingerprint": None,
+            "delivered_at": "2026-11-03T00:00:00+00:00",
+            "outcome_verified": False,
+        }
+
+    agent = RunningAgent(
+        AgentConfig(host="127.0.0.1", port=0),
+        grab_fn=lambda: frame,
+        input_fn=input_fn,
+        context_fn=lambda: {"status": "ok", **state, "workflow_state": None},
+    )
+    try:
+        backend = WindowsBackend(agent.url)
+        expected = backend._guard_context()
+        body = {
+            "expected_frame_sha256": hashlib.sha256(frame).hexdigest(),
+            "expected_context": expected,
+            "input": {"action": "click", "x": 1, "y": 1},
+        }
+        ok = requests.post(f"{agent.url}/input/guarded", json=body, timeout=5)
+        assert ok.status_code == 200, ok.text
+        assert len(delivered) == 1
+        state["application_version"] = "sha256:" + "d" * 64
+        moved = requests.post(f"{agent.url}/input/guarded", json=body, timeout=5)
+        assert moved.status_code == 409
+        assert moved.json()["code"] == "stale_context"
+        assert len(delivered) == 1
+    finally:
+        agent.close()
+
+
+def test_agent_advertises_the_environment_context() -> None:
+    agent = RunningAgent(AgentConfig(host="127.0.0.1", port=0))
+    try:
+        health = requests.get(f"{agent.url}/health", timeout=5).json()
+    finally:
+        agent.close()
+    assert "context_environment_v1" in health["capabilities"]
 
 
 # -- screenshot ---------------------------------------------------------------
@@ -1249,6 +1447,7 @@ class _FakeDesktop:
         self.dpi_ok = True
         self.foreground_window = self.PINNED
         self.roots: dict[int, int] = {}  # child hwnd -> top-level
+        self.paint_border: dict[int, int] = {}  # self-drawn frame, in px
 
     def add(
         self,
@@ -1278,6 +1477,11 @@ class _FakeDesktop:
 
     def rect(self, hwnd):
         return self.windows[hwnd][2]
+
+    def outer_rect(self, hwnd):
+        x0, y0, x1, y1 = self.windows[hwnd][2]
+        grow = self.paint_border.get(hwnd, 0)
+        return (x0 - grow, y0 - grow, x1 + grow, y1 + grow)
 
     def is_visible(self, hwnd):
         return self.windows[hwnd][3]
@@ -1324,7 +1528,39 @@ def test_an_owned_dialog_over_the_region_is_reported(monkeypatch) -> None:
         "hwnd": 0x200,
         "owner_hwnd": _FakeDesktop.PINNED,
         "pid": 10,
+        "region": [200, 200, 300, 200],
     }
+
+
+def test_the_reported_region_is_the_owned_windows_visible_frame(monkeypatch) -> None:
+    # The whole frame, not its overlap with the query, so the caller can
+    # check that it spans the band from the cut point to the right edge.
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(295, 265, 400, 300))
+    assert _owned_over(monkeypatch, desktop)["region"] == [295, 265, 105, 35]
+
+
+def test_a_one_pixel_region_reports_the_topmost_owned_window_there(
+    monkeypatch,
+) -> None:
+    # agnostic-repair asks at the dismiss-click point and requires the same
+    # hwnd as the cover.
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(200, 200, 500, 400))
+    desktop.add(0x300, owner=_FakeDesktop.PINNED, rect=(450, 350, 600, 450))
+    assert _owned_over(monkeypatch, desktop, region=(300, 300, 1, 1))["hwnd"] == 0x200
+    assert _owned_over(monkeypatch, desktop, region=(460, 360, 1, 1))["hwnd"] == 0x300
+    # Its right and bottom edges are exclusive: (500, 300) is off 0x200.
+    assert _owned_over(monkeypatch, desktop, region=(500, 300, 1, 1)) is None
+
+
+def test_a_one_pixel_region_under_a_foreign_window_is_none(monkeypatch) -> None:
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(200, 200, 500, 400))
+    desktop.add(0x900, pid=99, rect=(280, 280, 320, 320))
+    assert _owned_over(monkeypatch, desktop, region=(300, 300, 1, 1)) is None
+    # A foreign window elsewhere does not decide a point it does not reach.
+    assert _owned_over(monkeypatch, desktop, region=(400, 350, 1, 1))["hwnd"] == 0x200
 
 
 def test_a_topmost_owned_popup_does_not_hide_a_foreign_window_over_the_target(
@@ -1338,10 +1574,37 @@ def test_a_topmost_owned_popup_does_not_hide_a_foreign_window_over_the_target(
     assert _owned_over(monkeypatch, desktop) is None
 
 
-def test_an_owned_window_that_only_clips_the_region_is_none(monkeypatch) -> None:
-    # A shadow or glow window of the app's own grazing one corner.
+def test_an_owned_dialog_over_part_of_the_region_is_reported(monkeypatch) -> None:
+    # Live lab finding: the "Session notice" dialog covers the right part of
+    # the identity band, not its center; the caller still sees the rest.
     desktop = _FakeDesktop()
     desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(295, 265, 400, 300))
+    assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x200
+
+
+def test_a_foreign_self_drawn_frame_reaching_the_band_is_none(monkeypatch) -> None:
+    # Review should-fix: an Electron-style window paints into the ~7 px border
+    # DWM leaves out of its visible frame.
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(280, 240, 400, 300))
+    desktop.add(0x900, pid=99, rect=(200, 240, 245, 300))  # frame ends 5 px short
+    desktop.paint_border[0x900] = 7
+    assert _owned_over(monkeypatch, desktop) is None
+
+
+def test_a_foreign_window_beside_an_owned_dialog_over_the_band_is_none(
+    monkeypatch,
+) -> None:
+    # Review attack (a): the app's dialog covers one end of the band and
+    # another process's window the other end.
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(280, 240, 400, 300))
+    desktop.add(0x900, pid=99, rect=(200, 240, 262, 300))
+    assert _owned_over(monkeypatch, desktop) is None
+    # Same with the foreign window below the dialog in z-order.
+    desktop = _FakeDesktop()
+    desktop.add(0x900, pid=99, rect=(200, 240, 262, 300))
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(280, 240, 400, 300))
     assert _owned_over(monkeypatch, desktop) is None
 
 
@@ -1389,13 +1652,11 @@ def test_a_dialog_owned_through_a_chain_counts(monkeypatch) -> None:
     assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x300
 
 
-def test_an_owned_window_over_the_center_wins_over_one_only_clipping(
-    monkeypatch,
-) -> None:
+def test_the_topmost_owned_window_over_the_region_is_reported(monkeypatch) -> None:
     desktop = _FakeDesktop()
     desktop.add(0x200, owner=_FakeDesktop.PINNED, title="Session notice")
     desktop.add(0x300, owner=_FakeDesktop.PINNED, rect=(295, 265, 400, 300))
-    assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x200
+    assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x300
 
 
 @pytest.mark.parametrize(
@@ -1474,3 +1735,245 @@ def test_window_root_at_names_the_top_level_window(monkeypatch) -> None:
         "status": "ok",
         "window": {"hwnd": _FakeDesktop.PINNED, "pid": 10},
     }
+
+
+def test_locator_at_refuses_a_painted_toolbar_pane(monkeypatch) -> None:
+    # Open Dental paints its toolbar buttons: the only UIA element under
+    # "Select Patient" is the whole toolbar, whose centre is another button.
+    toolbar = _FakeControl(
+        "PaneControl", automation_id="ToolBarMain", bounds=(51, 50, 1024, 75)
+    )
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(toolbar))
+
+    assert _perform_uia("locator-at", {"x": 110, "y": 61}) == {
+        "status": "ok",
+        "locator": None,
+    }
+
+
+def test_locator_at_keeps_a_custom_control_clicked_at_its_centre(monkeypatch) -> None:
+    # A WPF button can surface as a CustomControl with an AutomationId.
+    ok = _FakeControl(
+        "CustomControl", automation_id="butOK", bounds=(899, 688, 975, 714)
+    )
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(ok))
+
+    locator = _perform_uia("locator-at", {"x": 937, "y": 701})["locator"]
+
+    assert locator["automation_id"] == "butOK"
+
+
+def test_locator_at_keeps_an_actionable_control_clicked_off_centre(monkeypatch) -> None:
+    button = _FakeControl(
+        "ButtonControl",
+        automation_id="saveButton",
+        name="Save",
+        bounds=(500, 450, 600, 484),
+    )
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(button))
+
+    locator = _perform_uia("locator-at", {"x": 503, "y": 452})["locator"]
+
+    assert locator["automation_id"] == "saveButton"
+
+
+def test_locator_at_refuses_an_automation_id_others_share(monkeypatch) -> None:
+    # WPF names the inner edit of every text box "textBox".
+    last = _FakeControl(
+        "EditControl",
+        automation_id="textBox",
+        runtime_id=(42, 7),
+        bounds=(879, 81, 969, 101),
+    )
+    first = _FakeControl(
+        "EditControl",
+        automation_id="textBox",
+        runtime_id=(42, 8),
+        bounds=(879, 101, 969, 121),
+    )
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(last, first))
+
+    assert _perform_uia("locator-at", {"x": 920, "y": 91})["locator"] is None
+
+
+def test_locator_at_keeps_a_unique_automation_id(monkeypatch) -> None:
+    note = _FakeControl(
+        "EditControl",
+        automation_id="noteBox",
+        runtime_id=(42, 7),
+        bounds=(254, 304, 879, 514),
+    )
+    other = _FakeControl(
+        "EditControl",
+        automation_id="searchBox",
+        runtime_id=(42, 8),
+        bounds=(10, 10, 200, 30),
+    )
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(note, other))
+
+    assert (
+        _perform_uia("locator-at", {"x": 560, "y": 400})["locator"]["automation_id"]
+        == "noteBox"
+    )
+
+
+def test_uia_tree_lists_one_windows_elements_without_values(monkeypatch) -> None:
+    box = _FakeControl(
+        "EditControl",
+        automation_id="noteBox",
+        name="Chart note",
+        bounds=(20, 350, 740, 460),
+    )
+    box.Value = "a typed note the tree must not carry"
+    button = _FakeControl(
+        "ButtonControl",
+        automation_id="saveButton",
+        name="Save Note",
+        bounds=(630, 494, 740, 528),
+    )
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(box, button))
+    tree = _perform_uia("tree", {"window_name": "Patient Notes"})
+    ids = [n["automation_id"] for n in tree["nodes"]]
+    assert ids[1:] == ["noteBox", "saveButton"]
+    assert tree["nodes"][2]["bounds"] == [630, 494, 740, 528]
+    assert tree["truncated"] is False
+    assert "typed note" not in str(tree)
+    assert _perform_uia("tree", {"window_name": "Another app"})["nodes"] == []
+    cut = _perform_uia("tree", {"window_name": "Patient Notes", "max_nodes": 1})
+    assert len(cut["nodes"]) == 1 and cut["truncated"] is True
+    for bad in (
+        {},
+        {"window_name": ""},
+        {"window_name": "x", "max_nodes": 0},
+        {"window_name": "x", "max_nodes": True},
+    ):
+        with pytest.raises(AgentRequestError):
+            _perform_uia("tree", bad)
+
+
+@pytest.fixture
+def physical_keyboard(monkeypatch):
+    """A physical-input seam with no desktop, clipboard or real key events."""
+    from openadapt_flow.backends.win_agent import server
+
+    state = types.SimpleNamespace(
+        foreground=(101, 202), typed="", pastes=0, after_write=None, after_paste=None
+    )
+    fake = types.ModuleType("pyautogui")
+
+    def write(text, **_kwargs):
+        state.typed += text
+        if state.after_write is not None:
+            state.after_write()
+
+    def hotkey(*keys):
+        assert keys == ("ctrl", "v")
+        state.pastes += 1
+        if state.after_paste is not None:
+            state.after_paste()
+
+    fake.write = write
+    fake.hotkey = hotkey
+    monkeypatch.setitem(sys.modules, "pyautogui", fake)
+    monkeypatch.setattr(server, "_foreground_window_identity", lambda: state.foreground)
+    monkeypatch.setattr(server.time, "sleep", lambda _delay: None)
+    return state
+
+
+def test_physical_typing_preserves_the_complete_value_with_stable_focus(
+    physical_keyboard,
+):
+    receipt = _perform_input(
+        {"action": "type_text", "text": "safe-text", "interval_s": 0}
+    )
+    assert physical_keyboard.typed == "safe-text"
+    assert receipt["status"] == "delivered"
+    assert receipt["operation"] == "physical_type_text"
+
+
+def test_physical_typing_refuses_an_unobservable_foreground(physical_keyboard):
+    physical_keyboard.foreground = None
+    with pytest.raises(AgentRequestError, match="foreground window"):
+        _perform_input({"action": "type_text", "text": "abc"})
+    assert physical_keyboard.typed == ""
+    assert physical_keyboard.pastes == 0
+
+
+@pytest.mark.parametrize("changed", [(303, 202), (101, 404), None])
+def test_physical_typing_stops_after_focus_changes(physical_keyboard, changed):
+    physical_keyboard.after_write = lambda: setattr(
+        physical_keyboard, "foreground", changed
+    )
+    with pytest.raises(AgentRequestError, match="delivery may be partial") as error:
+        _perform_input({"action": "type_text", "text": "abc"})
+    assert error.value.code == "input_focus_changed"
+    assert physical_keyboard.typed == "a"
+
+
+def test_physical_typing_refuses_focus_change_before_the_first_key(
+    physical_keyboard, monkeypatch
+):
+    from openadapt_flow.backends.win_agent import server
+
+    readings = iter([(101, 202), (303, 202)])
+    monkeypatch.setattr(server, "_foreground_window_identity", lambda: next(readings))
+    with pytest.raises(AgentRequestError, match="delivery may be partial"):
+        _perform_input({"action": "type_text", "text": "abc"})
+    assert physical_keyboard.typed == ""
+
+
+def test_unicode_paste_is_refused_if_focus_changes_during_clipboard_setup(
+    physical_keyboard, monkeypatch
+):
+    from openadapt_flow.backends.win_agent import server
+
+    def clipboard(*_args, **_kwargs):
+        physical_keyboard.foreground = (303, 202)
+        return types.SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(server.subprocess, "run", clipboard)
+    with pytest.raises(AgentRequestError, match="delivery may be partial"):
+        _perform_input({"action": "type_text", "text": "caf\u00e9"})
+    assert physical_keyboard.typed == ""
+    assert physical_keyboard.pastes == 0
+
+
+def test_unicode_paste_reports_uncertainty_if_focus_changes_after_delivery(
+    physical_keyboard, monkeypatch
+):
+    from openadapt_flow.backends.win_agent import server
+
+    monkeypatch.setattr(
+        server.subprocess, "run", lambda *_a, **_k: types.SimpleNamespace(returncode=0)
+    )
+    physical_keyboard.after_paste = lambda: setattr(
+        physical_keyboard, "foreground", (303, 202)
+    )
+    with pytest.raises(AgentRequestError, match="delivery may be partial"):
+        _perform_input({"action": "type_text", "text": "caf\u00e9"})
+    assert physical_keyboard.pastes == 1
+
+
+def test_focus_change_over_http_is_uncertain_and_never_uses_legacy_delivery(
+    physical_keyboard,
+):
+    from openadapt_flow.backend import ActionDeliveryUncertain
+    from openadapt_flow.backends.windows_backend import WindowsBackend
+
+    physical_keyboard.after_write = lambda: setattr(
+        physical_keyboard, "foreground", (303, 202)
+    )
+    legacy_calls = []
+    agent = RunningAgent(
+        AgentConfig(host="127.0.0.1", port=0, allow_legacy_exec=True),
+        legacy_fn=_recording_legacy_fn(legacy_calls),
+    )
+    try:
+        backend = WindowsBackend(agent.url, allow_legacy_exec=True)
+        with pytest.raises(ActionDeliveryUncertain) as error:
+            backend.type_text("abc")
+        assert error.value.operation == "physical_type_text"
+        assert physical_keyboard.typed == "a"
+        assert legacy_calls == []
+    finally:
+        agent.close()

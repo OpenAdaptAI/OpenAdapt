@@ -113,8 +113,12 @@ NON_PUBLIC_RUN_AUTHORITY = frozenset(
         "approval.json",
         "approval.json.enc",
         "attended_capability.json",
+        "attended_capability.json.enc",
         "attended_capability_history.json",
+        "attended_capability_history.json.enc",
         "attended_decisions.json",
+        "attended_decisions.json.enc",
+        ".attended_state.encrypted",
     }
 )
 REPO_ROOT = Path(__file__).resolve().parents[1]
