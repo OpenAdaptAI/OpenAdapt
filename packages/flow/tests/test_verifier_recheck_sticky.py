@@ -212,7 +212,7 @@ def test_recorded_person_review_allows_only_a_new_attempt(
 ) -> None:
     db = tmp_path / "person"
     db.mkdir()
-    from test_verifier_recheck import _keyed
+    from tests.test_verifier_recheck import _keyed
 
     contract, path, result = _keyed(db, "reviewed-order")
     assert result.ledger is not None
@@ -246,7 +246,7 @@ def test_recorded_person_review_allows_only_a_new_attempt(
 def test_confirming_no_ledger_capture_remains_supported(
     tmp_path: Path, due_now: None
 ) -> None:
-    from test_verifier_recheck import _db
+    from tests.test_verifier_recheck import _db
 
     path = _db(tmp_path)
     contract = Contract.from_dict(_doc(path))
