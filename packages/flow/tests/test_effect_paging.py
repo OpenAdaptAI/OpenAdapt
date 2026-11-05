@@ -321,7 +321,16 @@ def _empty_with_outcome(severity: str) -> dict:
             {
                 "resource": {
                     "resourceType": "OperationOutcome",
-                    "issue": [{"severity": severity, "code": "processing"}],
+                    "issue": [
+                        {
+                            "severity": severity,
+                            "code": (
+                                "informational"
+                                if severity in ("warning", "information")
+                                else "processing"
+                            ),
+                        }
+                    ],
                 },
                 "search": {"mode": "outcome"},
             }

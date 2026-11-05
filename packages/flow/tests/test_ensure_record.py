@@ -183,12 +183,12 @@ def bundle(*resources, total=None, next_url=None, kind="searchset"):
     return body
 
 
-def with_outcome(body, severity):
+def with_outcome(body, severity, *, code="processing"):
     body["entry"] = list(body.get("entry") or []) + [
         {
             "resource": {
                 "resourceType": "OperationOutcome",
-                "issue": [{"severity": severity, "code": "processing"}],
+                "issue": [{"severity": severity, "code": code}],
             },
             "search": {"mode": "outcome"},
         }
@@ -299,12 +299,25 @@ def test_a_warning_outcome_is_a_message_not_an_unreadable_search():
     """Epic answers an empty search with a warning outcome entry."""
 
     r = reader_for(
-        {"Observation": bundle(), "AuditEvent": with_outcome(bundle(), "warning")}
+        {
+            "Observation": bundle(),
+            "AuditEvent": with_outcome(bundle(), "warning", code="informational"),
+        }
     )
     changes = read_changes(
         contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}), r, T0
     )
     assert changes == {}
+
+
+def test_a_processing_warning_is_an_unreadable_search():
+    r = reader_for(
+        {"Observation": bundle(), "AuditEvent": with_outcome(bundle(), "warning")}
+    )
+    with pytest.raises(Unreadable):
+        read_changes(
+            contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}), r, T0
+        )
 
 
 def test_a_server_without_history_authors_relies_on_the_audit_trail():
