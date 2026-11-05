@@ -635,3 +635,61 @@ def test_a_mapped_decision_word_is_compared_as_a_code(world) -> None:
     assert not [b for b in result.breaks if b.outcome is Outcome.REFUTED]
     leg = next(leg for leg in result.legs if leg.name == "clearinghouse")
     assert leg.checked["field:decision"] == "not_checked"
+
+
+@pytest.mark.parametrize(
+    "pended_at, granted_at",
+    [
+        # Round 3, finding 1: later as an instant, earlier as text.
+        ("2026-11-01T10:00:00Z", "2026-11-01T06:00:05-05:00"),
+        ("2026-11-01T10:00:00Z", "2026-11-01T10:00:00.500Z"),
+    ],
+)
+def test_latest_decision_is_the_latest_instant(world, pended_at, granted_at) -> None:
+    pend = ("PA-1", "M1", "97110", "2026-11-20", "queued", "P1", pended_at)
+    grant = ("PA-1", "M1", "97110", "2026-11-20", "complete", "AUTH9", granted_at)
+    spec = world(payer=[pend, grant])
+    payer = spec.legs["payer"]
+    payer.group_by, payer.latest_by = ["identifier"], "decided_at"
+    payer.duplicate_key = {}
+    result = reconcile(spec, {"submission_id": "PA-1"}, now=NOW)
+    assert result.outcome is Outcome.CONFIRMED, result.reasons
+    # The grant is decided but the 278 still carries the pend: never agreement.
+    spec = world(
+        payer=[pend, grant],
+        reviews=[
+            fx.Review(
+                "PA-1", "M1", "97110", "2026-11-20", decision="A4", auth_number="P1"
+            )
+        ],
+        writeback=[],
+    )
+    payer = spec.legs["payer"]
+    payer.group_by, payer.latest_by = ["identifier"], "decided_at"
+    payer.duplicate_key = {}
+    result = reconcile(spec, {"submission_id": "PA-1"}, now=NOW)
+    assert result.outcome is Outcome.REFUTED
+
+
+def test_order_of_marks() -> None:
+    from openadapt_flow.reconcile import _order
+
+    assert _order(["202611011000", "20261101095959"]) == [
+        "20261101100000",
+        "20261101095959",
+    ]
+    assert _order(["2026-11-01T10:00:00Z", "2026-11-01T10:00:00"]) is None
+    assert _order(["2026-11-01T10:00:00Z", "202611011000"]) is None
+    assert _order(["2026-11-01T10:00:00Z", None]) is None
+
+
+def test_an_id_that_repeats_a_value_is_not_in_the_reference() -> None:
+    # Round 3, finding 2: the PAS reference implementation's ClaimResponse
+    # id is its auth number.
+    from types import SimpleNamespace
+
+    from openadapt_flow.reconcile import _refs
+
+    v = SimpleNamespace(resource_type="ClaimResponse", substrate="fhir")
+    refs = _refs(v, [{"id": "abc-1", "auth_number": "abc-1"}, {"id": "r2", "x": "y"}])
+    assert refs == ("ClaimResponse/…", "ClaimResponse/r2")

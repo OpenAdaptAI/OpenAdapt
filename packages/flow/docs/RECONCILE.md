@@ -130,8 +130,12 @@ copy in the EHR while the payer pends is a `not_written_back` break.
 
 `group_by` and `latest_by` read a store that keeps every status of a unit (a
 277 acknowledgement, then the 277 that it was paid) as one unit's history:
-only the records with the latest `latest_by` in each group are judged. A
-redelivered file ties at the latest and still counts twice. A group whose
+only the records with the latest `latest_by` in each group are judged.
+Marks compare as instants (zoned ISO 8601 times) or as one sender's X12
+`CCYYMMDDHHMM[SS]` clock; a group whose marks are missing, carry no time
+zone, or mix the two is kept whole. A redelivered file ties at the latest
+and still counts twice, and so do two decisions stamped in the same
+second: a false `duplicate`, never a hidden one. A group whose
 records carry two different values of a `distinct_by` field (two payer
 claim numbers under one trace) is two submissions and is kept whole, so a
 resubmission is still a `duplicate`.
@@ -170,6 +174,9 @@ The JSON result holds closed fields only, as `WriteResult.to_dict()` does:
 leg names, break kinds, field names, record references (`Claim/123`, or an
 X12 unit's place `x12:f<file index>:ISA13.GS06.ST02.n`), counts, read times and
 reasons. It holds no member ids, names, codes or dates, and no file names.
+A record whose id repeats one of its own values (the PAS reference
+implementation's ClaimResponse id is its auth number) is referenced by type
+only, `ClaimResponse/…`.
 Reasons that come from a store have quoted values and URL queries replaced
 with `…`. A person follows the record references
 to the systems themselves.
@@ -181,6 +188,11 @@ to the systems themselves.
   unless filtered (`item[sequence=2]...`), so a multi-line request needs a
   field per line.
 - Stores it doesn't read: a payer portal, faxes, a second clearinghouse.
+- Which payer Claim a decision answers. The PAS reference implementation's
+  decision is found by the submission identifier it echoes, not by its
+  `request` reference (which it writes malformed on an update). A payer
+  that hides a superseded Claim from search but keeps its ClaimResponse
+  could have the old claim's decision judged for the unit.
 - Attachments and DTR questionnaire answers. CRD and DTR shape the request
   before it is sent. The reconciler checks what was sent and decided, not
   whether the documentation was complete.

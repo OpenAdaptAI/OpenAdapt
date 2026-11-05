@@ -142,7 +142,11 @@ def up() -> None:
 
 def down() -> None:
     _sh("docker", "rm", "-f", PAS_NAME, check=False)
-    _ehr().down(volumes=True)
+    ehr = _ehr()
+    ehr.down(volumes=True)
+    # Its clients and users lived in the volumes just removed.
+    for name in ("clients.json", "secrets.json"):
+        (ehr.state_dir / name).unlink(missing_ok=True)
 
 
 def pas_url() -> str:
@@ -307,7 +311,12 @@ def pas_decision(member_id: str, sid: str, first: dict) -> dict:
         ]
         done = [r for r in mine if r.get("outcome") != "queued"]
         if done:
-            return max(done, key=lambda r: r.get("created", ""))
+            return max(
+                done,
+                key=lambda r: datetime.fromisoformat(
+                    r["created"].replace("Z", "+00:00")
+                ),
+            )
         time.sleep(1)
     raise SystemExit(f"PAS never decided {sid}")
 

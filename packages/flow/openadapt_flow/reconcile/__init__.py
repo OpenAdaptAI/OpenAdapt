@@ -416,7 +416,14 @@ def _refs(verifier: Any, records: list[dict[str, Any]]) -> tuple[str, ...]:
     out = []
     for r in records:
         rid = r.get("id")
-        if rid is not None:
+        # A store may reuse a value as the id (the PAS reference
+        # implementation's ClaimResponse id is its auth number): that
+        # reference names the record type only.
+        if rid is not None and any(
+            k != "id" and v is not None and str(v) == str(rid) for k, v in r.items()
+        ):
+            out.append(f"{kind}/…" if kind else "…")
+        elif rid is not None:
             out.append(
                 f"{kind}/{rid}" if kind and verifier.substrate == "fhir" else str(rid)
             )
@@ -503,8 +510,8 @@ def _effect_params(effect: Any) -> set[str]:
 
 
 def _latest(records: list[dict[str, Any]], leg: Leg) -> list[dict[str, Any]]:
-    """Each ``group_by`` group's records at its greatest ``latest_by``. A
-    group whose ``latest_by`` is missing on any record is kept whole."""
+    """Each ``group_by`` group's records at its latest ``latest_by``. A
+    group whose marks can't be put in time order is kept whole."""
 
     if not leg.group_by or leg.latest_by is None:
         return records
@@ -522,12 +529,27 @@ def _latest(records: list[dict[str, Any]], leg: Leg) -> list[dict[str, Any]]:
             len({str(m[f]) for m in members if m.get(f) is not None}) > 1
             for f in leg.distinct_by
         )
-        if split or any(m is None for m in marks):
+        order = None if split else _order(marks)
+        if order is None:
             out.extend(members)
             continue
-        top = max(str(m) for m in marks)
-        out.extend(m for m, mark in zip(members, marks) if str(mark) == top)
+        top = max(order)
+        out.extend(m for m, mark in zip(members, order) if mark == top)
     return out
+
+
+def _order(marks: list[Any]) -> Optional[list[Any]]:
+    """``marks`` as values that sort in time order, or None when they can't
+    be put in order: every mark a zoned ISO 8601 time (compared as instants,
+    so ``06:00:05-05:00`` is after ``10:00:00Z``), or every mark an X12
+    ``CCYYMMDDHHMM[SS[d…]]`` (one sender's clock; zero-padded to one
+    length). A missing mark, a time without a zone, or a mix is no order."""
+
+    if all(isinstance(m, str) and m.isdigit() and len(m) >= 12 for m in marks):
+        width = max(len(m) for m in marks)
+        return [m.ljust(width, "0") for m in marks]
+    times = [_when(m) for m in marks]
+    return None if any(t is None for t in times) else times
 
 
 def _check_leg(
