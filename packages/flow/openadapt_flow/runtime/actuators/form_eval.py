@@ -257,7 +257,9 @@ def evaluate_form(
     stray: list[str] = []
     phase = {"loaded": False}
     origin = _destination(base_url)
-    expected_url = up.urljoin(base_url + form_path, action_path)
+    # Match the transport's actual URL construction; resolving a relative
+    # path here could claim an origin the outgoing request does not use.
+    expected_url = base_url + action_path
     expected = _destination(expected_url)
     reads = {r.split(" ", 1)[1] for r in submitter_requests if r.startswith("GET ")}
     #: Exact script and stylesheet URLs the form page loaded.

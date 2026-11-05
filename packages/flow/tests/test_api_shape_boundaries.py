@@ -206,6 +206,21 @@ def native_submit(site: Site, page: Any, title: str = "Note Beta") -> None:
     page.wait_for_timeout(180)
 
 
+@pytest.mark.parametrize("target", ["relative", "absolute", "protocol_relative"])
+def test_an_unbound_transport_destination_is_not_resolved(target, site_page):
+    site, page = site_page
+    endpoint = {
+        "relative": "publish",
+        "absolute": site.base + "/publish",
+        "protocol_relative": "//publish",
+    }[target]
+    result = PlaywrightSessionTransport(page).evaluate_form(
+        "/compose", endpoint, [("title", "Note Beta")], submitter="#send"
+    )
+    assert result.status == "unevaluable", result.reason
+    assert not site.writes()
+
+
 @pytest.mark.parametrize("value", ["7", "68", "907", "", "long-synthetic-value"])
 def test_declared_multipart_secret_is_scrubbed_before_persistence(
     value, tmp_path, site_page
