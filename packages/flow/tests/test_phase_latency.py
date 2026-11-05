@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 
@@ -57,7 +58,7 @@ def observation(
 
 def test_reuse_actual_exclusive_step_timer(monkeypatch):
     clock = Clock()
-    monkeypatch.setattr(step_timing.time, "perf_counter", clock)
+    monkeypatch.setattr(step_timing, "time", SimpleNamespace(perf_counter=clock))
     timer, previous = step_timing.start_step()
     try:
         timer.enter("actuate")
@@ -352,3 +353,22 @@ def test_clock_or_setup_failure_stays_started_with_unknown_wall_time():
         off, attempt=4, source_head=HEAD, status="setup_error", human_active_s=60
     )
     assert analyze([off], [known])["human_active"]["total_minutes"] == 1
+
+
+def test_unobserved_step_phase_is_missing_but_explicit_zero_is_retained():
+    row = observation()
+    phases = {
+        item["phase"]: item
+        for item in analyze([row.trial], [row])["groups"][0]["phase_costs"]
+    }
+    assert phases["settle"]["observed_median_ms"] is None
+    assert phases["settle"]["covered_attempts"] == 0
+    assert phases["settle"]["missing_verified_attempts"] == 1
+    row = observation(data=report({"identity": 0.0, "other": 100.0}))
+    phases = {
+        item["phase"]: item
+        for item in analyze([row.trial], [row])["groups"][0]["phase_costs"]
+    }
+    assert phases["identity"]["observed_median_ms"] == 0.0
+    assert phases["identity"]["covered_attempts"] == 1
+    assert phases["identity"]["missing_verified_attempts"] == 0

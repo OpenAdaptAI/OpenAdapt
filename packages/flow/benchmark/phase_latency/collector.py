@@ -368,15 +368,25 @@ def analyze(plan: Sequence[Trial], rows: Sequence[Observation]) -> dict[str, Any
         valid = [r for r in good if not r.step_issues]
         costs: list[dict[str, Any]] = []
         for phase in sorted(set(STEP_GROUPS.values()) - {"unattributed_step"}):
-            values = [r.step_exclusive_ms.get(phase, 0.0) for r in valid]
+            values = [
+                r.step_exclusive_ms[phase]
+                for r in valid
+                if phase in r.step_exclusive_ms
+            ]
             costs.append(
                 {
                     "phase": phase,
                     "observed_median_ms": statistics.median(values) if values else None,
                     "covered_attempts": len(values),
+                    "missing_verified_attempts": len(good) - len(values),
                 }
             )
-        costs.sort(key=lambda row: -(row["observed_median_ms"] or 0))
+        costs.sort(
+            key=lambda row: (
+                row["observed_median_ms"] is None,
+                -(row["observed_median_ms"] or 0),
+            )
+        )
         outer_costs = []
         for phase in sorted(OUTER_PHASES):
             outer_values = [
