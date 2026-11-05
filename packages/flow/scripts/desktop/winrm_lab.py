@@ -36,6 +36,7 @@ dependency only and is imported lazily, so nothing ships with it.
 from __future__ import annotations
 
 import base64
+import math
 import os
 import re
 import subprocess
@@ -59,7 +60,8 @@ _PYTHON_DIRS = (
 )
 
 
-# Run over SSH: read the whole script from stdin and run it as one block. Like
+# Run over SSH: read a length-framed script from stdin as one block. Windows
+# OpenSSH does not always deliver EOF, so ReadToEnd can wait indefinitely. Like
 # ``powershell -Command``, exit 1 when the script's last statement failed.
 _SSH_BOOTSTRAP = base64.b64encode(
     (
@@ -67,7 +69,12 @@ _SSH_BOOTSTRAP = base64.b64encode(
         "[Console]::InputEncoding=[Text.Encoding]::UTF8; "
         "[Console]::OutputEncoding=[Text.Encoding]::UTF8; "
         "$global:OAFlowLastOk=$true; "
-        '$s=[Console]::In.ReadToEnd() + "`n`$global:OAFlowLastOk=`$?"; '
+        "$n=0; $header=[Console]::In.ReadLine(); "
+        "if (-not [int]::TryParse($header,[ref]$n) -or $n -le 0) { exit 2 }; "
+        "$b=New-Object char[] $n; $r=0; "
+        "while ($r -lt $n) { "
+        "$k=[Console]::In.Read($b,$r,$n-$r); if ($k -le 0) { exit 2 }; $r+=$k }; "
+        '$s=(-join $b) + "`n`$global:OAFlowLastOk=`$?"; '
         "& ([scriptblock]::Create($s)); "
         "if (-not $global:OAFlowLastOk) { exit 1 }"
     ).encode("utf-16-le")
@@ -209,24 +216,42 @@ class WinRMLab:
             f"{self.user}@{self.host}",
         ]
 
-    def _ssh(self, remote_command: str, stdin: bytes = b"") -> Result:
+    def _ssh(
+        self,
+        remote_command: str,
+        stdin: bytes = b"",
+        *,
+        timeout_s: float = 60.0,
+        operation: str = "PowerShell command",
+    ) -> Result:
+        if not math.isfinite(timeout_s) or timeout_s <= 0:
+            raise ValueError("SSH timeout must be finite and positive")
         try:
             proc = subprocess.run(
                 self._ssh_base() + [remote_command],
                 input=stdin,
                 capture_output=True,
-                timeout=600,
+                timeout=timeout_s,
             )
         except subprocess.TimeoutExpired:
             # The exception's own text repeats the command line.
-            raise WinRMLabError(f"ssh to {self.host} timed out") from None
+            raise WinRMLabError(
+                f"{operation} over SSH to {self.host} timed out after {timeout_s:g}s"
+            ) from None
         return Result(
             proc.returncode,
             proc.stdout.decode("utf-8", "replace"),
             _clixml_text(proc.stderr.decode("utf-8", "replace")),
         )
 
-    def run_ps(self, script: str, *, check: bool = True) -> Result:
+    def run_ps(
+        self,
+        script: str,
+        *,
+        check: bool = True,
+        timeout_s: float = 60.0,
+        operation: str = "PowerShell command",
+    ) -> Result:
         if self._session is not None:
             raw = self._session.run_ps(script)
             result = Result(
@@ -238,9 +263,12 @@ class WinRMLab:
             # The script goes on stdin, so neither its length nor what it
             # holds (an agent token) is on a command line. Progress records
             # would arrive as CLIXML on stderr.
+            units = len(script.encode("utf-16-le")) // 2
             result = self._ssh(
                 f"powershell -NoProfile -NonInteractive -EncodedCommand {_SSH_BOOTSTRAP}",
-                stdin=script.encode("utf-8"),
+                stdin=f"{units}\n{script}".encode("utf-8"),
+                timeout_s=timeout_s,
+                operation=operation,
             )
         if check and result.status != 0:
             raise WinRMLabError(
@@ -384,7 +412,7 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 Register-ScheduledTask -TaskName '{task}' -Action $action -Principal $principal -Settings $settings -Force | Out-Null
 Start-ScheduledTask -TaskName '{task}'
 """
-        self.run_ps(script)
+        self.run_ps(script, timeout_s=30.0, operation="launch interactive task")
 
     def stop_interactive(self, name: str = "OAFlowLab") -> None:
         task = name.replace("'", "")
@@ -393,6 +421,8 @@ Start-ScheduledTask -TaskName '{task}'
             f"Unregister-ScheduledTask -TaskName '{task}' -Confirm:$false "
             "-ErrorAction SilentlyContinue",
             check=False,
+            timeout_s=30.0,
+            operation="stop interactive task",
         )
 
     def wait_port(self, port: int, *, timeout_s: float = 60.0) -> bool:
@@ -427,7 +457,9 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
   Unregister-ScheduledTask -TaskName OAFlowConsole -Confirm:$false
 }}
 """
-        self.run_ps(script, check=False)
+        self.run_ps(
+            script, check=False, timeout_s=30.0, operation="attach desktop console"
+        )
 
     def launch_agent(
         self,

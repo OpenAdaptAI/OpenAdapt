@@ -72,10 +72,12 @@ def test_ssh_profile_needs_no_password_and_encodes_the_script(monkeypatch):
     argv, kw = calls[0]
     assert argv[:3] == ["ssh", "-i", "/k"] and "user@10.0.0.2" in argv
     # The script travels on stdin, never on the command line.
-    assert kw["input"] == b"Write-Output 'secret-token'"
+    assert kw["input"] == b"27\nWrite-Output 'secret-token'"
     assert not any("secret-token" in a for a in argv)
     bootstrap = base64.b64decode(argv[-1].rsplit(" ", 1)[1]).decode("utf-16-le")
-    assert "ReadToEnd" in bootstrap
+    assert "ReadToEnd" not in bootstrap
+    assert "ReadLine" in bootstrap and ".Read($b,$r,$n-$r)" in bootstrap
+    assert "if ($k -le 0) { exit 2 }" in bootstrap
 
 
 def test_ssh_timeout_names_only_the_host(monkeypatch):
@@ -84,6 +86,7 @@ def test_ssh_timeout_names_only_the_host(monkeypatch):
     monkeypatch.setenv("OAFLOW_WINLAP_SSH_KEY", "/k")
 
     def fake_run(argv, **kw):
+        assert kw["timeout"] == 60
         raise subprocess.TimeoutExpired(argv, 600)
 
     monkeypatch.setattr(lab_mod.subprocess, "run", fake_run)
@@ -101,12 +104,89 @@ def test_ssh_run_cmd_quotes_for_powershell(monkeypatch):
     scripts = []
 
     def fake_run(argv, **kw):
-        scripts.append(kw["input"].decode())
+        units, script = kw["input"].decode().split("\n", 1)
+        assert int(units) == len(script.encode("utf-16-le")) // 2
+        scripts.append(script)
         return subprocess.CompletedProcess(argv, 0, b"", b"")
 
     monkeypatch.setattr(lab_mod.subprocess, "run", fake_run)
     lab_mod.WinRMLab(profile="winlap").run_cmd("tool.exe", "a&b", "it's")
     assert scripts == ["& 'tool.exe' 'a&b' 'it''s'; exit $LASTEXITCODE"]
+
+
+def test_ssh_frame_counts_utf16_units_and_keeps_payload_off_argv(monkeypatch):
+    monkeypatch.setenv("OAFLOW_WINLAP_HOST", "192.0.2.1")
+    monkeypatch.setenv("OAFLOW_WINLAP_USER", "operator")
+    monkeypatch.setenv("OAFLOW_WINLAP_SSH_KEY", "/synthetic/key")
+    calls = []
+
+    def fake_run(argv, **kw):
+        calls.append((argv, kw))
+        return subprocess.CompletedProcess(argv, 0, b"ok", b"")
+
+    monkeypatch.setattr(lab_mod.subprocess, "run", fake_run)
+    script = "Write-Output 'synthetic-\U0001f680-\u00e9'"
+    lab_mod.WinRMLab(profile="winlap").run_ps(script)
+    argv, kw = calls[0]
+    units, payload = kw["input"].decode("utf-8").split("\n", 1)
+    assert payload == script
+    assert int(units) == len(script) + 1
+    assert not any(script in arg for arg in argv)
+    assert "OAFlowLastOk" in base64.b64decode(argv[-1].rsplit(" ", 1)[1]).decode(
+        "utf-16-le"
+    )
+
+
+def test_stop_task_has_a_short_redacted_timeout_without_retry(monkeypatch):
+    monkeypatch.setenv("OAFLOW_WINLAP_HOST", "192.0.2.1")
+    monkeypatch.setenv("OAFLOW_WINLAP_USER", "operator")
+    monkeypatch.setenv("OAFLOW_WINLAP_SSH_KEY", "/synthetic/key")
+    calls = []
+
+    def fake_run(argv, **kw):
+        calls.append((argv, kw))
+        raise subprocess.TimeoutExpired(argv, kw["timeout"], output=b"sensitive")
+
+    monkeypatch.setattr(lab_mod.subprocess, "run", fake_run)
+    with pytest.raises(lab_mod.WinRMLabError) as err:
+        lab_mod.WinRMLab(profile="winlap").stop_interactive("SyntheticAgent")
+    assert len(calls) == 1
+    assert calls[0][1]["timeout"] == 30
+    assert "stop interactive task" in str(err.value)
+    assert "30s" in str(err.value)
+    assert "sensitive" not in str(err.value)
+    assert "SyntheticAgent" not in str(err.value)
+    assert err.value.__cause__ is None and err.value.__suppress_context__
+
+
+def test_ssh_exit_status_and_check_false_are_preserved(monkeypatch):
+    monkeypatch.setenv("OAFLOW_WINLAP_HOST", "192.0.2.1")
+    monkeypatch.setenv("OAFLOW_WINLAP_USER", "operator")
+    monkeypatch.setenv("OAFLOW_WINLAP_SSH_KEY", "/synthetic/key")
+    monkeypatch.setattr(
+        lab_mod.subprocess,
+        "run",
+        lambda argv, **kw: subprocess.CompletedProcess(argv, 7, b"partial", b"failed"),
+    )
+    lab = lab_mod.WinRMLab(profile="winlap")
+    result = lab.run_ps("Write-Output 'value'", check=False)
+    assert (result.status, result.stdout, result.stderr) == (7, "partial", "failed")
+    with pytest.raises(lab_mod.WinRMLabError, match="guest PowerShell exited 7"):
+        lab.run_ps("Write-Output 'value'")
+
+
+@pytest.mark.parametrize("timeout", [0, -1, float("inf"), float("nan")])
+def test_invalid_timeout_refuses_before_ssh(monkeypatch, timeout):
+    monkeypatch.setenv("OAFLOW_WINLAP_HOST", "192.0.2.1")
+    monkeypatch.setenv("OAFLOW_WINLAP_USER", "operator")
+    monkeypatch.setenv("OAFLOW_WINLAP_SSH_KEY", "/synthetic/key")
+    monkeypatch.setattr(
+        lab_mod.subprocess, "run", lambda *args, **kw: pytest.fail("SSH was called")
+    )
+    with pytest.raises(ValueError, match="finite and positive"):
+        lab_mod.WinRMLab(profile="winlap").run_ps(
+            "Write-Output 'value'", timeout_s=timeout
+        )
 
 
 def test_explicit_host_uses_the_winlab_password(monkeypatch):
