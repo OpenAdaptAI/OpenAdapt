@@ -344,7 +344,7 @@ class TeachScope:
         )
 
     def request_refusal(
-        self, method: str, url: str, body: Optional[bytes]
+        self, method: str, url: str, body: Optional[bytes], *, write: bool = False
     ) -> Optional[str]:
         """Why a browser request is outside the scope, or ``None`` if it may go.
 
@@ -360,7 +360,7 @@ class TeachScope:
             return "egress_origin_not_declared"
         if method == "DELETE" and "delete_request" in self.forbidden_actions:
             return "forbidden_action"
-        if method not in WRITE_METHODS or self.write_adapter is None:
+        if (method not in WRITE_METHODS and not write) or self.write_adapter is None:
             return None
         try:
             claim = self.write_adapter.claim(method, url, body)
@@ -648,6 +648,20 @@ def _object_name(session: Any, result: Mapping[str, Any]) -> Optional[str]:
     return _ax_name_of(session, node["backendNodeId"])
 
 
+def _node_labels(session: Any, backend: Any, frame_id: Any) -> Optional[list[str]]:
+    """The same isolated names for a pointer target or a focused element."""
+
+    name = _ax_name_of(session, backend)
+    if name is None:
+        return None
+    texts = _isolated(session, frame_id, backend, _TEXTS_JS, by_value=True)
+    control = _isolated(session, frame_id, backend, _LABEL_CONTROL_JS, by_value=False)
+    labelled = _object_name(session, control)
+    if labelled is None:
+        return None
+    return [name, labelled, *[str(t) for t in texts.get("value") or []]]
+
+
 def control_labels_at(page: Any, x: int, y: int) -> Optional[list[str]]:
     """Every name the control under ``(x, y)`` goes by, or ``None``.
 
@@ -674,18 +688,7 @@ def control_labels_at(page: Any, x: int, y: int) -> Optional[list[str]]:
                 "ignorePointerEventsNone": True,
             },
         )
-        backend, frame_id = found["backendNodeId"], found.get("frameId")
-        name = _ax_name_of(session, backend)
-        if name is None:
-            return None
-        texts = _isolated(session, frame_id, backend, _TEXTS_JS, by_value=True)
-        control = _isolated(
-            session, frame_id, backend, _LABEL_CONTROL_JS, by_value=False
-        )
-        labelled = _object_name(session, control)
-        if labelled is None:
-            return None
-        return [name, labelled, *[str(t) for t in texts.get("value") or []]]
+        return _node_labels(session, found["backendNodeId"], found.get("frameId"))
     except Exception:  # noqa: BLE001 - the probe failed: the label is unknown
         return None
     finally:
@@ -757,20 +760,26 @@ def key_target_labels(page: Any, *, enter: bool) -> Optional[list[str]]:
         nodes, node, frame_id = found
         if _ax_value(node, "role") in _OPAQUE_ROLES:
             return None  # focus is in a frame this session can't read
-        labels = [_control_name(nodes, node)]
+        backend = node.get("backendDOMNodeId")
+        if backend is None:
+            return None
+        labels = _node_labels(session, backend, frame_id)
+        if labels is None:
+            return None
         if enter:
-            backend = node.get("backendDOMNodeId")
-            if backend is None:
-                return None
-            default = _object_name(
-                session,
-                _isolated(
-                    session, frame_id, backend, _DEFAULT_BUTTON_JS, by_value=False
-                ),
+            default = _isolated(
+                session, frame_id, backend, _DEFAULT_BUTTON_JS, by_value=False
             )
-            if default is None:
-                return None
-            labels.append(default)
+            if default.get("subtype") != "null" and default.get("objectId"):
+                default_node = session.send(
+                    "DOM.describeNode", {"objectId": default["objectId"]}
+                )["node"]
+                default_labels = _node_labels(
+                    session, default_node["backendNodeId"], frame_id
+                )
+                if default_labels is None:
+                    return None
+                labels.extend(default_labels)
         return labels
     except Exception:  # noqa: BLE001 - the probe failed: unknown, refused
         return None

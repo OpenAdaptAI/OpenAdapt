@@ -56,6 +56,13 @@ refuses a write when the record or its outcome cannot be established.
 
 - Browser teach writes again, bound to a person's signed teach authorization (`serve --teach-browser --teach-authorization`), for task `browser-tool.<name>`. Run 1 opens no WebSocket and reaches only the statement's origins. Run 1 of a write starts only when the statement covers it: the app's origin, the contract as its record kind, a write adapter, run 1's inputs, and exactly the record fields the contract checks, with run 1's values. During run 1 the write adapter reads every write before it is sent. A taught tool keeps the statement and is signed with the local admission key; every call checks the statement again (signature, roster, purpose, task, expiry). The example app ships its write adapter (`openadapt_flow.agent.example_app:OrderWrites`). Docs: `docs/TEACH_AUTHORIZATION.md`, `docs/VERIFY_WRITES.md`.
 
+  Teaching and every later call stop on missing worker containment or an
+  observed worker violation and connect no WebSocket. Redirect hops receive
+  the wire check, and declared GET writes pin query field names, including
+  empty fields. Requests from independently targeted frames are refused.
+  Guarded clicks use the exact fragment point checked; keyboard checks also
+  read visible text.
+
 - A code-as-action agent is now the default for the first run. Every save is
   read back before that run becomes a replayable program. Form scripts can run
   before an admitted API save.

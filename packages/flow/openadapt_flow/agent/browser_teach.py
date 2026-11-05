@@ -251,15 +251,46 @@ def _lane_limits(statement: Any, contract: Any) -> Optional[str]:
     return None
 
 
+def _first_click_point(page: Any, el: Any) -> Optional[tuple[float, float]]:
+    """The first visible fragment's point, which the guarded click uses."""
+
+    if el is None:
+        return None
+    el.scroll_into_view_if_needed()
+    box = el.bounding_box()
+    if not box:
+        return None
+    geometry = el.evaluate(
+        """element => {
+          const box = element.getBoundingClientRect();
+          return {x: box.x, y: box.y, rects: Array.from(element.getClientRects(),
+            r => ({x: r.x, y: r.y, width: r.width, height: r.height}))};
+        }"""
+    )
+    viewport = page.viewport_size
+    if not viewport or not isinstance(geometry, Mapping):
+        return None
+    # Playwright's box uses the main viewport, including frame offsets.
+    dx, dy = box["x"] - geometry["x"], box["y"] - geometry["y"]
+    for rect in geometry["rects"]:
+        left, top = max(0, rect["x"] + dx), max(0, rect["y"] + dy)
+        right = min(viewport["width"], rect["x"] + dx + rect["width"])
+        bottom = min(viewport["height"], rect["y"] + dy + rect["height"])
+        if right - left >= 1 and bottom - top >= 1:
+            return (float(int((left + right) / 2)), float(int((top + bottom) / 2)))
+    return None
+
+
 def _check_forbidden(
     page: Any, scope: Any, action: str, el: Any, key: Optional[str]
-) -> None:
+) -> Optional[tuple[float, float]]:
     """Refuse an action on (or a key reaching) a control the statement forbids.
 
     The names come from Chromium's accessibility tree over DevTools, not
     from the listing a page script built. A click or select is checked
-    against the control at the element's centre; a press focuses its
-    element first, then checks the control with focus and, for Enter, the
+    at the first visible fragment, never the union's centre. A click uses
+    that exact checked point. A press focuses its element first, then checks
+    the control with focus and, for Enter, the
     form's default button. Anything unreadable is refused. Raises
     :class:`StepStopped`.
     """
@@ -271,19 +302,11 @@ def _check_forbidden(
     )
 
     labels: Optional[list[str]]
+    point: Optional[tuple[float, float]] = None
     if action in ("click", "select"):
-        if el is not None:
-            # Measured where it will be clicked: in view.
-            el.scroll_into_view_if_needed()
-        box = el.bounding_box() if el is not None else None
+        point = _first_click_point(page, el)
         labels = (
-            control_labels_at(
-                page,
-                int(box["x"] + box["width"] / 2),
-                int(box["y"] + box["height"] / 2),
-            )
-            if box
-            else None
+            control_labels_at(page, int(point[0]), int(point[1])) if point else None
         )
     elif action == "press":
         if el is not None:
@@ -305,6 +328,8 @@ def _check_forbidden(
         raise StepStopped(
             "the signed teach authorization forbids this control; nothing was done"
         )
+
+    return point
 
 
 def _contract_coverage(
@@ -787,6 +812,8 @@ class _Browser:
         self.allow_writes = allow_writes
         self.secrets = [v for v in secrets if v]
         self.blocked: list[str] = []
+        self._pending_sockets: list[Any] = []
+        self._closed = False
         self.downloads: list[Any] = []
         #: What may leave the browser (the shared wire check): no writes on the
         #: read lane; on the write lane only the contract's writes, and on a
@@ -826,22 +853,46 @@ class _Browser:
         self.page.on("download", lambda d: self.downloads.append(d))
         #: Writes run 1's write adapter attributed (record writes).
         self.claimed = 0
-        if scope is not None:
-            # Playwright's request routing doesn't see WebSockets: a page could
-            # write over one where the adapter never reads it. Run 1 of a
-            # taught write opens none.
+        try:
+            # Request routes never see WebSockets, including on later calls.
+            # No browser-teach context connects one to a server.
             if not hasattr(self.context, "route_web_socket"):
                 raise BridgeError(
                     "this Playwright can't stop WebSockets (1.48 or newer is "
-                    "needed), so a taught write can't be held to its statement"
+                    "needed), so a browser teach run can't be held"
                 )
 
             def _refuse_socket(ws: Any) -> None:
-                # Never connected to the server (no connect_to_server): the
-                # page's frames go nowhere. Run 1 then ends at its next step.
                 self.blocked.append(f"a WebSocket to {_origin(ws.url)}")
+                # Playwright's sync callback is on its async dispatcher.
+                # Closing here reenters that dispatcher and can deadlock. A
+                # routed socket has no server connection unless explicitly
+                # connected; keep it mocked and close from the outer check.
+                self._pending_sockets.append(ws)
 
             self.context.route_web_socket("**/*", _refuse_socket)
+            from openadapt_flow.backends.worker_containment import contain_workers
+
+            # Newest route first: containment hands only this page's requests
+            # to the wire guard installed above. Install before any navigation.
+            self.containment = contain_workers(self.page, self.blocked.append)
+            if not self.containment.ok:
+                raise BridgeError(
+                    self.containment.problem or self.containment.violations[0]
+                )
+            from openadapt_flow.backends.redirect_guard import guard_redirects
+
+            self.redirects = guard_redirects(
+                self.page, self._guard, self.blocked.append
+            )
+            if not self.redirects.ok:
+                raise BridgeError(
+                    self.redirects.problem or self.redirects.violations[0]
+                )
+        except Exception:
+            self.close()
+            raise
+        if scope is not None:
             forbidden = scope.forbidden_actions
             if "new_window" in forbidden:
                 self.context.on(
@@ -865,8 +916,44 @@ class _Browser:
         except Exception:  # noqa: BLE001 - already handled
             pass
 
+    def _frame_routes_covered(self, request: Any) -> bool:
+        if getattr(request, "redirect_guarded", False):
+            return True  # this request came from the installed redirect session
+        from playwright.sync_api import Error
+
+        shared = (
+            "This frame does not have a separate CDP session, it is a part "
+            "of the parent frame's session"
+        )
+        try:
+            frame = request.frame
+            for _ in range(64):
+                if frame is self.page.main_frame:
+                    return True
+                if frame is None:
+                    return False
+                try:
+                    session = self.context.new_cdp_session(frame)
+                except Error as exc:
+                    # This explicit result comes from Playwright's frame-session
+                    # map. Unknown errors never establish parent coverage.
+                    first = str(exc).splitlines()[0]
+                    if first != shared and not first.endswith(": " + shared):
+                        return False
+                    frame = frame.parent_frame
+                else:
+                    session.detach()
+                    return False  # a separate target has no installed hop guard
+        except Exception:  # noqa: BLE001 - unknown frame coverage refuses
+            return False
+        return False
+
     def _guard(self, route: Any) -> None:
         request = route.request
+        if not self._frame_routes_covered(request):
+            self.blocked.append("a frame whose redirected requests cannot be checked")
+            route.abort()
+            return
         if (
             request.method.upper() in READ_METHODS
             and request.is_navigation_request()
@@ -892,15 +979,16 @@ class _Browser:
             return
         if (
             self.scope is not None
-            and request.method.upper() not in READ_METHODS
-            and request.redirected_from is None
+            and self.wire.is_write(request)
             and self._wire_allows(request)
         ):
             # A write the wire check would send: the authorization's write
             # adapter reads it first (record, fields, values).
             try:
                 body = request.post_data_buffer
-                refusal = self.scope.request_refusal(request.method, request.url, body)
+                refusal = self.scope.request_refusal(
+                    request.method, request.url, body, write=True
+                )
                 attributed = (
                     refusal is None
                     and self.scope.write_adapter.claim(
@@ -929,11 +1017,28 @@ class _Browser:
         except Exception:  # noqa: BLE001 - the wire check refuses it itself
             return False
 
+    def check_guards(self) -> None:
+        if not self._closed:
+            pending, self._pending_sockets = self._pending_sockets, []
+            for ws in pending:
+                try:
+                    ws.close(code=1008, reason="browser teach refuses WebSockets")
+                except Exception:  # noqa: BLE001 - a refusal still halts the run
+                    self.blocked.append("a refused WebSocket could not be closed")
+        for state in (self.containment, self.redirects):
+            for reason in ([state.problem] if state.problem else []) + state.violations:
+                if reason not in self.blocked:
+                    self.blocked.append(reason)
+
     def settle(self) -> None:
         try:
             self.page.wait_for_load_state("domcontentloaded", timeout=_STEP_TIMEOUT_MS)
+            # Dispatch browser policy events and the captured binding before
+            # judging completion, even on a document that was already loaded.
+            self.page.wait_for_timeout(0)
         except Exception:  # noqa: BLE001 - an aborted or download navigation
             pass
+        self.check_guards()
 
     def close(self) -> None:
         for closer in (self.context.close, self._browser.close, self._pw.stop):
@@ -941,6 +1046,8 @@ class _Browser:
                 closer()
             except Exception:  # noqa: BLE001 - closing is best effort
                 pass
+        self._closed = True
+        self._pending_sockets.clear()
 
 
 # -- the downloaded file and its checks --------------------------------------------------
@@ -1141,7 +1248,9 @@ def _run_steps(
         # Guard the page's WebSockets from its first document (wire check).
         prepare_ws_guard(page)
         page.goto(program["url"], wait_until="domcontentloaded")
+        browser.settle()
         for i, step in enumerate(program["steps"], 1):
+            browser.check_guards()
             if browser.blocked:
                 raise StepStopped(
                     f"the page tried {browser.blocked[0]}; it was blocked"
@@ -1150,25 +1259,32 @@ def _run_steps(
             value = step.get("value") or {}
             text = inputs[value["input"]] if "input" in value else value.get("text", "")
             try:
+                if target is not None:
+                    el = _resolve(page, target, _APPEAR_MS)
+                else:
+                    el = None
+                browser.check_guards()
+                if browser.blocked:
+                    raise StepStopped(
+                        f"the page tried {browser.blocked[0]}; it was blocked"
+                    )
                 if step["op"] == "goto":
                     page.goto(
                         program["origin"] + step["url"], wait_until="domcontentloaded"
                     )
                 elif step["op"] == "fill":
-                    _resolve(page, target, _APPEAR_MS).fill(text)
+                    el.fill(text)
                 elif step["op"] == "select":
-                    el = _resolve(page, target, _APPEAR_MS)
                     try:
                         el.select_option(label=text, timeout=2000)
                     except Exception:  # noqa: BLE001 - the input names a value
                         el.select_option(value=text)
                 elif step["op"] == "press":
                     if target:
-                        _resolve(page, target, _APPEAR_MS).press(step["key"])
+                        el.press(step["key"])
                     else:
                         page.keyboard.press(step["key"])
                 elif step["op"] == "click":
-                    el = _resolve(page, target, _APPEAR_MS)
                     if step.get("download"):
                         with page.expect_download(timeout=_STEP_TIMEOUT_MS) as info:
                             el.click()
@@ -1190,10 +1306,11 @@ def _run_steps(
     except StepStopped as exc:
         out.stopped = str(exc)
     finally:
+        browser.close()
+        browser.check_guards()
         out.writes_sent = list(browser.writes_sent)
         out.blocked = list(browser.blocked)
         out.dialogs = list(browser.dialogs)
-        browser.close()
         out.seconds = round(time.monotonic() - started, 2)
     return out
 
@@ -1651,11 +1768,6 @@ class BrowserTeachBridge:
         contract_name = args.get("contract")
         contract = None
         if contract_name is not None:
-            # A taught write is an agent teaching a write with no person's
-            # signed teach authorization bound to it (this lane has no teach
-            # scope guard), so it is refused. docs/TEACH_AUTHORIZATION.md.
-            raise BridgeError(TAUGHT_WRITE_REFUSED)
-        if contract_name is not None:
             contract = self.contracts.get(str(contract_name))
             if contract is None:
                 raise BridgeError(f"no write contract named {contract_name!r}")
@@ -1737,12 +1849,14 @@ class BrowserTeachBridge:
                 # Guard the page's WebSockets from its first document (wire check).
                 prepare_ws_guard(run.browser.page)
                 run.browser.page.goto(url, wait_until="domcontentloaded")
+                run.browser.settle()
                 return self._listing(run)
 
             try:
                 listing = thread.call(open_page)
             except Exception as exc:
-                thread.call(lambda: run.browser and run.browser.close())
+                if not run.ended:
+                    thread.call(lambda: run.browser and run.browser.close())
                 thread.stop()
                 if isinstance(exc, BridgeError):
                     raise
@@ -1783,8 +1897,22 @@ class BrowserTeachBridge:
             values[key] = value
         return values
 
+    def _check_browser(self, run: _Teaching) -> None:
+        assert run.browser is not None
+        run.browser.check_guards()
+        if run.browser.blocked:
+            what = run.browser.blocked[0]
+            run.ended = "blocked"
+            run.browser.close()
+            run.thread.stop()
+            raise BridgeError(
+                f"run 1 ended: the page tried {what}; it was not sent. Nothing "
+                "was compiled. Start again and avoid that control."
+            )
+
     def _listing(self, run: _Teaching) -> str:
         assert run.browser is not None
+        self._check_browser(run)
         raw = _observe_page(run.browser.page, run.browser.origin)
         if run.secret_typed:
             # Once a sign-in value is typed, no address is shown with its query.
@@ -1862,6 +1990,7 @@ class BrowserTeachBridge:
         browser = run.browser
         assert browser is not None
         page = browser.page
+        self._check_browser(run)
         if run.file is not None:
             raise BridgeError("the file has downloaded; call teach_finish")
         step: dict[str, Any] = {"op": "fill" if action == "type" else action}
@@ -1975,10 +2104,19 @@ class BrowserTeachBridge:
             # The same resolution a compiled run uses, so what works here
             # works there.
             el = _resolve(page, target, 2000) if target is not None else None
+            click_point = None
             if run.scope is not None and run.scope.forbidden_controls:
-                _check_forbidden(page, run.scope, action, el, step.get("key"))
+                click_point = _check_forbidden(
+                    page, run.scope, action, el, step.get("key")
+                )
+            self._check_browser(run)
             if action == "click":
-                el.click()
+                if click_point is not None:
+                    # Never let a second default-point choice reach a control
+                    # different from the one the guard just checked.
+                    page.mouse.click(*click_point)
+                else:
+                    el.click()
             elif action == "type":
                 el.fill(text)
             elif action == "select":
@@ -2007,17 +2145,7 @@ class BrowserTeachBridge:
                 if len(browser.downloads) > before:
                     break
                 page.wait_for_timeout(100)
-        if browser.blocked:
-            what = browser.blocked[0]
-            # On the browser thread already: close here, not through _end,
-            # which would wait on this same thread.
-            run.ended = "blocked"
-            browser.close()
-            run.thread.stop()
-            raise BridgeError(
-                f"run 1 ended: the page tried {what}; it was not sent. Nothing "
-                "was compiled. Start again and avoid that control."
-            )
+        self._check_browser(run)
         run.steps.append(step)
         result: dict[str, Any] = {}
         if len(browser.downloads) > before:
@@ -2264,15 +2392,11 @@ class BrowserTeachBridge:
             return "this write tool's program changed after it was taught"
         kept = self.tools_dir / name / ta.KEPT_DIR / ta.STATEMENT_FILE
         try:
-            ta.check_admission(
-                program.get("teach_authorization"),
-                kept,
-                key_dir=key_dir,
-                root=root,
-                purpose="teach",
-                task_id=self.write_task_id(name),
-                at_least=heads,
-            )
+            recorded = program.get("teach_authorization")
+            if not isinstance(recorded, Mapping) or not recorded:
+                raise ta.TeachAuthorizationError(
+                    "teach_auth_not_recorded", "the tool names no teach authorization"
+                )
             verified = ta.require(
                 kept,
                 purpose="teach",
@@ -2281,6 +2405,11 @@ class BrowserTeachBridge:
                 task_id=self.write_task_id(name),
                 at_least=heads,
             )
+            if verified.sha256 != recorded.get("sha256"):
+                raise ta.TeachAuthorizationError(
+                    "teach_auth_digest_mismatch",
+                    "the kept statement is not the one the tool recorded",
+                )
         except ta.TeachAuthorizationError as exc:
             return (
                 f"this write tool's teach authorization doesn't hold now ({exc.code})"
@@ -2315,6 +2444,8 @@ class BrowserTeachBridge:
         with self._lock:
             run = self._active()
             assert run.browser is not None
+            run.thread.call(lambda: run.browser.settle())
+            run.thread.call(lambda: self._check_browser(run))
             writes = list(run.browser.writes_sent)
             shapes = list(run.browser.write_shapes)
             if not writes:
@@ -2336,6 +2467,13 @@ class BrowserTeachBridge:
             steps = list(run.steps)
             self._end("finished")
         result = verify_write(run.pending)
+        run.browser.check_guards()
+        if run.browser.blocked:
+            return {
+                "status": "not_added",
+                "what_happened": "A browser guard refused the run; no tool was added.",
+                "verification": result.to_dict(),
+            }
         if not result.verified:
             return {
                 "status": "not_added",
@@ -2589,7 +2727,7 @@ class BrowserTeachBridge:
             # The steps may have sent the write before they failed: read back.
             check = verify_write(pending)
             return {
-                "outcome": "done" if check.verified else "needs_review",
+                "outcome": "needs_review",
                 "what_happened": str(exc),
                 "verification": check.to_dict(),
                 "model_calls": 0,
@@ -2654,10 +2792,5 @@ class BrowserTeachBridge:
                 "model_calls": 0,
             }
         if (program.get("result") or {}).get("kind") == "write":
-            # A write tool taught here carries no person's teach authorization.
-            return {
-                "outcome": "did_not_run",
-                "what_happened": f"{TAUGHT_WRITE_REFUSED}; nothing was written",
-                "model_calls": 0,
-            }
+            return self._run_write(tool, program, inputs)
         return self._replay(program, inputs)

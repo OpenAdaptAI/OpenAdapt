@@ -93,6 +93,14 @@ needs a person at an interactive terminal who types `yes`.
 | Self-repair of an agent-taught program (`admit_repair`) | The prior admission's authorization must cover `repair` and verify now; its statement is copied into the repaired bundle | The repair's admission (probe or full) refuses |
 | Airbag handoff (`agent_guard.handoff`) | Not bound: the guarded run 1 runs under the guard's task file, and the handoff can't attach a person's signature to it yet | Admission refuses its draft (`teach_auth_not_recorded`). Teach the task through `compile-agent` or `serve --teach` with an authorization instead |
 
+Browser teaching and every later call use worker containment and refuse
+WebSocket connections. Missing containment support, a worker policy violation
+or an unexpected worker stops the run. Redirect hops receive the wire check
+before they are sent. A contract-declared GET write is counted and pinned by
+its query field names, including fields with empty values. Requests from an
+independently targeted frame are refused because the redirect guard cannot
+prove coverage there.
+
 Every JIT draft is compiled from an agent's run, so admission requires the
 authorization for every JIT draft, in each admission mode (a person, an
 admitter key, an agent under a signed policy). Admission reads the signed
@@ -147,12 +155,14 @@ Programs and tools made before teach authorizations carry none, so:
   world, so a page script that tampers with how controls are read doesn't
   change them; a page that renames a control through ARIA or its text
   does, and against a hostile page the write adapter and the read-back are
-  what bind the save. A click is checked against the control under it.
+  what bind the save. A guarded click checks the first visible fragment
+  and uses that exact viewport point.
   Every key (Enter, Space, any other key, typing) is checked when it
   arrives against the control with focus, in any frame, and Enter in a
   form field also against the button the browser would submit the form
-  with (`:default`, read in an isolated world). Key combinations with a
-  modifier are refused. A click with no position, a name that can't be
+  with (`:default`, read in an isolated world). Focus and the default button
+  use the same names as the click check, including visible text. Key combinations
+  with a modifier are refused. A click with no position, a name that can't be
   read, focus in a frame the tree can't see, or a surface without a web
   page is refused when the statement forbids any control. In browser
   teach, a page could still move focus between the check and the key.
