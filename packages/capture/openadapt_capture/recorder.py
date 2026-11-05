@@ -1792,6 +1792,14 @@ def write_video_event(
         raise ValueError(
             f"video frame {screenshot_image.size} differs from fixed stream {stream_size}"
         )
+    if "last_frame" not in kwargs:
+        # The encoded stream starts at its first frame, and frame lookups map
+        # a wall-clock time to video time by subtracting video_start_time. A
+        # source that only delivers frames when the screen changes (macOS
+        # ScreenCaptureKit) can send its first frame long after the writer
+        # opened, so anchor the video start to that first frame instead.
+        video_start_timestamp = screenshot_timestamp
+        crud.update_video_start_time(db, recording_timestamp, video_start_timestamp)
     force_key_frame = last_pts == 0
     # ensure that the first frame is available (otherwise occasionally it is not)
     # TODO: why isn't force_key_frame sufficient?
