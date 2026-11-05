@@ -43,7 +43,10 @@
       "tracks_main": false,
       "tag_without_release_grace_hours": 6,
       "pypi_lag_grace_minutes": 30,
-      "remediation": "# A half-published version resumes by re-running the failed jobs of its run:\ngh run rerun --failed --repo OpenAdaptAI/OpenAdapt <desktop-release run id>\n# A merged version that never started releases with:\ngh workflow run desktop-release.yml --repo OpenAdaptAI/OpenAdapt --ref main"
+      "remediation": "# A half-published version resumes by re-running the failed jobs of its run:\ngh run rerun --failed --repo OpenAdaptAI/OpenAdapt <desktop-release run id>\n# A merged version that never started releases with:\ngh workflow run desktop-release.yml --repo OpenAdaptAI/OpenAdapt --ref main",
+      "acknowledged_tags": {
+        "openadapt-desktop-v0.21.1": "Superseded by openadapt-desktop-v0.25.1. Version 0.21.1 was never published; 0.25.1 is the published replacement."
+      }
     }
   ]
 }

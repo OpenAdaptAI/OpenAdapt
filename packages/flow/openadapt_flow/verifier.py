@@ -67,8 +67,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator, Optional, Union
 
+from openadapt_flow.runtime.effects.db_snapshot import (
+    DEFAULT_READ_ROW_BUDGET,
+    TableDiff,
+    diff,
+    take_snapshot,
+)
 from openadapt_flow.runtime.effects.db_snapshot import Snapshot as DatabaseSnapshot
-from openadapt_flow.runtime.effects.db_snapshot import TableDiff, diff, take_snapshot
 from openadapt_flow.runtime.effects.late_write import (
     EVIDENCE_KEY,
     LATER_WRITE_DISPUTED,
@@ -1821,7 +1826,16 @@ def _reasons(evidence: Mapping[str, Any], receipt_outcome: str) -> list[str]:
             f"{frame.get('unattributed_count', 0)} of them no actor explains"
         )
     elif frame.get("status") == "not_checked" and not problem:
-        out.append("what else changed could not be read, so the frame is not checked")
+        database = frame.get("database") or {}
+        if database.get("read_status") == "too_large":
+            out.append(
+                "frame too large: row read budget of "
+                f"{database.get('read_row_budget')} exceeded; the frame is not checked"
+            )
+        else:
+            out.append(
+                "what else changed could not be read, so the frame is not checked"
+            )
     source = evidence.get("source") or {}
     if isinstance(source, Mapping) and source.get("status") == "refuted":
         fields = ", ".join(source.get("mismatched_fields") or [])
@@ -2577,6 +2591,7 @@ def capture_database(
     *,
     allow_tables: Sequence[str] = (),
     max_rows: int = 2000,
+    read_row_budget: int = DEFAULT_READ_ROW_BUDGET,
     key: Optional[bytes] = None,
     profile: Optional[str] = None,
     before: Optional[DatabaseSnapshot] = None,
@@ -2590,7 +2605,9 @@ def capture_database(
     (to read through ``podman exec``, say). It talks to the database over
     that connection only; no application code is imported. The snapshot
     holds keyed MACs, never values: ``key`` keys them (default: one key per
-    process). ``allow_tables`` are kept append-only.
+    process). ``allow_tables`` are kept append-only. ``read_row_budget``
+    caps data rows across tables and auxiliary queries; exceeding it refuses
+    the read without returning a partial snapshot.
 
     ``profile`` (``openemr``) applies an app profile's bookkeeping rules, the
     same ones the frame uses (``openadapt_flow.app_profiles``); its own-row
@@ -2619,6 +2636,7 @@ def capture_database(
             key=key or _PROCESS_KEY,
             modes=dict.fromkeys(allow_tables, "append_only"),
             max_rows=max_rows,
+            read_row_budget=read_row_budget,
             before=before,
             extra_queries=extra,
             **_profile_args(profile),

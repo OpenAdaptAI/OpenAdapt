@@ -495,6 +495,13 @@ def redact(
     structured = []
     for line in lines:
         line = dict(line)
+        if line.get("form"):
+            # A declared field is secret regardless of its value's length or
+            # whether another value needs global replacement elsewhere.
+            line["form"] = [
+                [name, (kind(name) or value) if value else value]
+                for name, value in line["form"]
+            ]
         for key in ("body", "response_text"):
             document = _json(line.get(key))
             if document is not None:
@@ -531,9 +538,7 @@ def redact(
             line["form"] = [
                 [
                     name,
-                    SECRET
-                    if (SECRET_NAME.search(name) or name.lower() in declared) and value
-                    else replace.get(value, scrub(value)),
+                    replace.get(value, scrub(value)),
                 ]
                 for name, value in line["form"]
             ]

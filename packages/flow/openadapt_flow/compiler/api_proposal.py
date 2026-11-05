@@ -1265,7 +1265,9 @@ def _propose_json(
         and not _graphql_read(ln)
         # Sent while the page loaded, before any recorded step.
         and float(ln["t"]) >= 0
-        and page_t < float(ln["t"]) < float(post["t"])
+        # The save is the final step. Its consequences include writes
+        # captured after its own response, not just earlier requests.
+        and page_t < float(ln["t"])
     ]
     if others:
         what = f"{others[0]['method']} {_path(others[0]['url'])}"
