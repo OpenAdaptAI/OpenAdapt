@@ -31,12 +31,21 @@ from urllib.parse import urlsplit
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
+from starlette.routing import Match
 
 from openadapt_flow import __version__
 from openadapt_flow.console import actions as actions_mod
 from openadapt_flow.console import attention as attention_mod
 from openadapt_flow.console import data, human_decisions, json_artifacts
 from openadapt_flow.console import save_approvals as save_approvals_mod
+from openadapt_flow.console.identity import (
+    ConsoleIdentityPolicy,
+    ConsoleIdentityRefused,
+    ConsoleIdentityResolver,
+    ConsoleRequestBinding,
+    authorize_identity,
+    required_role,
+)
 from openadapt_flow.runtime.durable.approval import ResumeRefused
 from openadapt_flow.runtime.durable.attended import (
     AttendedActionRefused,
@@ -287,18 +296,30 @@ def create_app(
     csrf_token: Optional[str] = None,
     attended_service: Optional[AttendedActionService] = None,
     repair_store: Path | str | None = None,
+    identity_policy: ConsoleIdentityPolicy | None = None,
+    identity_resolver: ConsoleIdentityResolver | None = None,
 ) -> FastAPI:
     bundles = _validated_root(bundles_root, label="bundles")
     runs = _validated_root(runs_root, label="runs")
     skills = _validated_root(skills_root, label="skills") if skills_root else None
     token = access_token or secrets.token_urlsafe(32)
     csrf = csrf_token or secrets.token_urlsafe(32)
-    operator = _local_operator_identity().strip()
+    if (identity_policy is None) != (identity_resolver is None):
+        raise ValueError(
+            "console identity policy and trusted resolver are both required"
+        )
+    if identity_policy is not None:
+        identity_policy = ConsoleIdentityPolicy.model_validate(
+            identity_policy.model_dump(mode="python")
+        )
+        if not callable(identity_resolver):
+            raise ValueError("console identity resolver must be callable")
+    operator = _local_operator_identity().strip() if identity_policy is None else ""
     if len(token) < 32 or len(csrf) < 32:
         raise ValueError(
             "console access and CSRF tokens must each be at least 32 chars"
         )
-    if allow_actions and not operator:
+    if allow_actions and identity_policy is None and not operator:
         raise ValueError("actions require a server-derived local operator identity")
 
     app = FastAPI(
@@ -326,6 +347,57 @@ def create_app(
             {"detail": "request did not match the console action schema"},
             status_code=422,
         )
+
+    def _operator_for(request: Request) -> str:
+        if identity_policy is None:
+            return operator
+        identity = getattr(request.state, "console_identity", None)
+        if identity is None:
+            raise HTTPException(status_code=403, detail="console identity required")
+        return identity.operator_ref
+
+    async def _authorized_dispatch(request: Request, call_next, authority: str):
+        if identity_policy is not None and request.url.path.startswith("/api/"):
+            try:
+                # Resolve the actual registered route, including path converters.
+                # New or unknown endpoints/actions gain no implicit permission.
+                matched = None
+                for route in app.routes:
+                    match, scope = route.matches(request.scope)
+                    if match is Match.FULL:
+                        matched = (route, scope)
+                        break
+                if matched is None:
+                    raise ConsoleIdentityRefused("unknown console endpoint")
+                route, scope = matched
+                role = required_role(
+                    route.name,
+                    request.method,
+                    scope.get("path_params", {}).get("action_id"),
+                )
+                body = await request.body()
+                if len(body) > _MAX_BODY_BYTES:
+                    return JSONResponse(
+                        {"detail": "request body is too large"}, status_code=413
+                    )
+                binding = ConsoleRequestBinding.for_request(
+                    request, body, request.headers["host"]
+                )
+                # The callback is injected by trusted deployment code. Nothing
+                # deserializes a browser identity or promotes a console bearer.
+                assert identity_resolver is not None
+                identity = await identity_resolver(request, binding)
+                request.state.console_identity = authorize_identity(
+                    identity, identity_policy, binding, role
+                )
+            except Exception:
+                # IdP outages, revocation and malformed resolver output all
+                # refuse. Never expose a token, subject or provider exception.
+                return JSONResponse(
+                    {"detail": "console identity authorization refused"},
+                    status_code=403,
+                )
+        return await call_next(request)
 
     @app.middleware("http")
     async def console_security_boundary(request: Request, call_next):
@@ -378,9 +450,9 @@ def create_app(
                         {"detail": "valid CSRF token required"}, status_code=403
                     )
                 else:
-                    response = await call_next(request)
+                    response = await _authorized_dispatch(request, call_next, authority)
             else:
-                response = await call_next(request)
+                response = await _authorized_dispatch(request, call_next, authority)
         for name, value in _SECURITY_HEADERS.items():
             response.headers[name] = value
         return response
@@ -484,7 +556,7 @@ def create_app(
         return Response(content, media_type="image/png")
 
     @app.get("/api/runs/{run_id:path}/actions")
-    def run_actions(run_id: str) -> list[dict[str, Any]]:
+    def run_actions(request: Request, run_id: str) -> list[dict[str, Any]]:
         run_dir = _resolve_run(runs, run_id)
         summary = data.run_summary(runs, run_dir)
         bundle = _guess_bundle_for_run(bundles, runs, run_dir)
@@ -495,7 +567,7 @@ def create_app(
                 halted=summary.halted,
                 paused=summary.paused,
                 bundle_dir=bundle,
-                operator_identity=operator,
+                operator_identity=_operator_for(request),
             )
         ]
 
@@ -687,6 +759,7 @@ def create_app(
         run_id: str,
         action_id: str,
         payload: human_decisions.ConsoleAttendedActionRequest,
+        request: Request,
     ) -> JSONResponse:
         if not attend:
             raise HTTPException(status_code=404, detail="no such action")
@@ -707,21 +780,21 @@ def create_app(
                 raise AttendedActionRefused(
                     "the attention item is no longer current; reload the queue"
                 )
-            request = human_decisions.admit_console_action(run_dir, item, payload)
+            admitted = human_decisions.admit_console_action(run_dir, item, payload)
             # The authenticated interactive route attributes a human decider.
             # This is route provenance, not proof of physical human presence.
             decision = (
                 attended_service.execute(
                     run_dir,
-                    request,
-                    operator=operator,
+                    admitted,
+                    operator=_operator_for(request),
                     decided_by="human",
                 )
                 if attended_service is not None
                 else execute_attended_action(
                     run_dir,
-                    request,
-                    operator=operator,
+                    admitted,
+                    operator=_operator_for(request),
                     decided_by="human",
                 )
             )
@@ -775,7 +848,10 @@ def create_app(
 
     @app.post("/api/runs/{run_id:path}/actions/{action_id}")
     def execute_run_action(
-        run_id: str, action_id: str, payload: dict[str, Any] | None = None
+        request: Request,
+        run_id: str,
+        action_id: str,
+        payload: dict[str, Any] | None = None,
     ) -> JSONResponse:
         run_dir = _resolve_run(runs, run_id)
         summary = data.run_summary(runs, run_dir)
@@ -787,7 +863,7 @@ def create_app(
                 halted=summary.halted,
                 paused=summary.paused,
                 bundle_dir=bundle,
-                operator_identity=operator,
+                operator_identity=_operator_for(request),
             )
         }
         spec = specs.get(action_id)
@@ -811,7 +887,7 @@ def create_app(
             result = actions_mod.execute_run_action(
                 action_id,
                 run_dir,
-                operator_identity=operator,
+                operator_identity=_operator_for(request),
                 resolution=kwargs.get("resolution"),
             )
         except ValueError as e:
