@@ -43,7 +43,7 @@ import os
 import re
 import secrets
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator, Literal, Optional
 
@@ -95,6 +95,29 @@ _CLOUD_RUN_UUID_RE = re.compile(
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _now_after(*stamps: str) -> str:
+    """The current time, strictly later than every given durable timestamp.
+
+    Resume orders the durable history by ``created_at``: every checkpoint
+    written before a pause must not be newer than it, and every checkpoint
+    written after it must be newer. The wall clock can step backward (an NTP
+    or WSL clock resync), which would make a correctly ordered history look
+    changed after the pause. Stamping a new record just after the records it
+    follows keeps the written order and the timestamp order the same.
+    Unreadable stamps are ignored here; resume still refuses them.
+    """
+
+    now = datetime.now(timezone.utc)
+    for stamp in stamps:
+        try:
+            prior = datetime.fromisoformat(stamp)
+        except (TypeError, ValueError):
+            continue
+        if prior.tzinfo is not None and prior >= now:
+            now = prior + timedelta(microseconds=1)
+    return now.isoformat()
 
 
 class RunManifest(BaseModel):
