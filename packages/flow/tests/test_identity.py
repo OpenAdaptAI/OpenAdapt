@@ -480,6 +480,11 @@ class TestHelpers:
         assert squash("Smith,") == squash("Smith.")
         assert squash("Smith, John") == "smithjohn"
         assert squash("Jr.") == "jr"
+        # Date / digit separators must survive: collapsing "01.01.1900" into
+        # "01011900" makes the glyph-vulnerable-identifier gate spuriously
+        # abstain on a clean MRN + period-separated DOB pair (CI fuzz).
+        assert squash("01.01.1900") == "01.01.1900"
+        assert squash("01/01/1900") == "01/01/1900"
 
     def test_band_region_clamps_to_viewport(self):
         assert band_region((500, 10), 64, (1280, 800)) == (0, 0, 1280, 64)
