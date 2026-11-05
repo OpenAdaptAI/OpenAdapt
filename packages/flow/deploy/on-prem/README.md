@@ -58,8 +58,8 @@ sudo -E env "PATH=$PATH" "HOME=$HOME" deploy/on-prem/bin/run-egress-blocked.sh \
   python -m pytest -v tests/e2e/test_egress_blocked_e2e.py
 ```
 
-The wrapper refuses to start if any interface or route inspection fails,
-or if it finds anything besides loopback and no routes. The tests check
+The wrapper starts only after all interface and route inspections succeed
+and confirm exactly loopback with no routes. The tests check
 direct IP refusal independently, then require the tutorial to reach VERIFIED
 with zero model calls and a receipt. CI runs this on every flow change.
 

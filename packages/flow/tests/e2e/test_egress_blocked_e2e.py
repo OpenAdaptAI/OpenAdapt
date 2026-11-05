@@ -112,7 +112,9 @@ def test_the_free_path_verifies_without_reaching_another_machine(
     assert not log.exists() or log.read_text() == ""
 
 
-def test_native_child_attempt_is_blocked_without_a_python_refusal(tmp_path: Path) -> None:
+def test_native_child_attempt_is_blocked_without_a_python_refusal(
+    tmp_path: Path,
+) -> None:
     log = tmp_path / "native-outbound-blocked.jsonl"
     probe = textwrap.dedent(
         """\
@@ -129,8 +131,11 @@ def test_native_child_attempt_is_blocked_without_a_python_refusal(tmp_path: Path
     env = _strict_env(log)
     env["LC_ALL"] = "C"
     proc = subprocess.run(
-        [sys.executable, "-c", probe], env=env,
-        capture_output=True, text=True, timeout=30,
+        [sys.executable, "-c", probe],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     assert proc.returncode == 0, proc.stderr
     child = json.loads(proc.stdout)

@@ -533,7 +533,6 @@ def test_clean_machine_lifecycle_declares_utf8_on_every_os() -> None:
     assert 'PYTHONIOENCODING: "utf-8"' in lifecycle_header
 
 
-
 def test_egress_boundary_controls_are_required_without_skips() -> None:
     workflow = ROOT_PACKAGES.read_text(encoding="utf-8")
     start = workflow.index("\n  flow-critical:")

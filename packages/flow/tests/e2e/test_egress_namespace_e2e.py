@@ -33,7 +33,15 @@ def _invoke(
 
 
 def _namespace(*argv: str) -> list[str]:
-    return ["sudo", "-n", "-E", "env", f"PATH={os.environ['PATH']}", str(WRAPPER), *argv]
+    return [
+        "sudo",
+        "-n",
+        "-E",
+        "env",
+        f"PATH={os.environ['PATH']}",
+        str(WRAPPER),
+        *argv,
+    ]
 
 
 @pytest.mark.parametrize("root", [False, True])
@@ -85,15 +93,22 @@ def test_unreadable_or_unexpected_inspection_prevents_command(
     fake_ip = tools / "ip"
     fake_ip.write_text(
         "#!/bin/bash\n"
-        f"if [[ \"$*\" == {inspection!r} ]]; then\n"
+        f'if [[ "$*" == {inspection!r} ]]; then\n'
         f"  printf '%s' {output!r}\n  exit {status}\nfi\n"
-        f"exec {real_ip!r} \"$@\"\n"
+        f'exec {real_ip!r} "$@"\n'
     )
     fake_ip.chmod(0o755)
     marker = tmp_path / "command-ran"
     proc = _invoke(
-        ["sudo", "-n", "env", f"PATH={tools}", str(WRAPPER),
-         "/usr/bin/touch", str(marker)]
+        [
+            "sudo",
+            "-n",
+            "env",
+            f"PATH={tools}",
+            str(WRAPPER),
+            "/usr/bin/touch",
+            str(marker),
+        ]
     )
     assert proc.returncode == 2, (proc.stdout, proc.stderr)
     assert not marker.exists()
@@ -158,7 +173,10 @@ def test_owned_pathname_unix_relay_remains_outside_the_ip_restriction(
                 try:
                     for _ in range(2):
                         conn, _ = unix.accept()
-                        with conn, socket.create_connection(address, timeout=5) as upstream:
+                        with (
+                            conn,
+                            socket.create_connection(address, timeout=5) as upstream,
+                        ):
                             conn.settimeout(5)
                             upstream.sendall(conn.recv(128))
                             conn.sendall(upstream.recv(128))
@@ -182,7 +200,11 @@ def test_owned_pathname_unix_relay_remains_outside_the_ip_restriction(
                     "print(json.dumps(dict(ack=ack,netns=os.readlink('/proc/self/ns/net'))))"
                 )
                 log = tmp_path / "relay-refusals.jsonl"
-                env = {k: v for k, v in os.environ.items() if not k.startswith("OPENADAPT_NO_")}
+                env = {
+                    k: v
+                    for k, v in os.environ.items()
+                    if not k.startswith("OPENADAPT_NO_")
+                }
                 env.update(
                     OPENADAPT_NO_OUTBOUND="1",
                     OPENADAPT_NO_OUTBOUND_CHILDREN="sandbox",
@@ -210,7 +232,9 @@ def test_owned_pathname_unix_relay_remains_outside_the_ip_restriction(
                 for worker in workers:
                     worker.join(20)
                 (tmp_path / "independent-relay-receipt.json").write_text(
-                    json.dumps({"received": [x.decode() for x in receipts], "errors": errors})
+                    json.dumps(
+                        {"received": [x.decode() for x in receipts], "errors": errors}
+                    )
                 )
             assert not any(worker.is_alive() for worker in workers)
             assert not errors, errors
