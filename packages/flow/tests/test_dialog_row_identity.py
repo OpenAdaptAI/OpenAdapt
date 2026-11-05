@@ -262,6 +262,7 @@ def test_chromium_compile_and_ocr_refuse_wrong_dialog_row(
     page.set_content(
         """<style>
       body {font:22px Arial} dialog {width:760px} td {padding:20px} button {font:22px Arial}
+      table {width:100%} td:last-child {width:140px;text-align:right}
       </style><p>Jane Lindqvist Room 7 East</p><dialog id=d><h2>Select record</h2><table>
       <tr><td>Jane Lindqvist Room 7 East</td><td><button id=first>Select</button></td></tr>
       <tr><td>"""
@@ -270,6 +271,7 @@ def test_chromium_compile_and_ocr_refuse_wrong_dialog_row(
       </table><button>Cancel</button></dialog><script>d.showModal()</script>"""
     )
     workflow, anchor_step, point = _compile_page(page, backend, "#first", tmp_path)
+    assert anchor_step.identity_armed is True, anchor_step.identity_unarmed_reason
     assert anchor_step.anchor.dialog_row is True
     box = page.locator("#second").bounding_box()
     wrong_point = (int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2))
