@@ -432,7 +432,8 @@ class Shadow:
         return ep
 
     def _fhir_episode(self, method: str, path: str, doc: Any) -> Episode:
-        from openadapt_flow.ensure_record import extract, normalize
+        from openadapt_flow.ensure_record import extract, normalize, reference_field
+        from openadapt_flow.fhir_reference import reference_value
 
         segs = [s for s in urlsplit(path).path.split("/") if s]
         if any(s == "_search" or s.startswith("$") for s in segs):
@@ -453,7 +454,13 @@ class Shadow:
         if isinstance(doc, dict) and doc.get("resourceType") == rtype:
             for name, rule in contract.fields.items():
                 value = extract(doc, rule.path)
-                if value is not None and not isinstance(value, (dict, list)):
+                if value is not None and (
+                    not isinstance(value, (dict, list))
+                    or (
+                        reference_field(contract, rule.path) is not None
+                        and isinstance(value, dict)
+                    )
+                ):
                     params[name] = value
         done = self._by_ref.get(ref) if ref else None
         if done is not None and done.checked:
@@ -469,7 +476,15 @@ class Shadow:
                     key = (
                         rtype,
                         tuple(
-                            (p, normalize(params[p], contract.fields[p], task=True))
+                            (
+                                p,
+                                json.dumps(reference_value(params[p]), sort_keys=True)
+                                if reference_field(contract, contract.fields[p].path)
+                                is not None
+                                else normalize(
+                                    params[p], contract.fields[p], task=True
+                                ),
+                            )
                             for p in rule
                         ),
                     )
@@ -795,6 +810,7 @@ class Shadow:
         """Compatibility entry point; the canonical fence owns every read."""
         self._recheck(ep)
 
+
     def _check(self, ep: Episode) -> None:
         statuses = [w.status for w in ep.writes]
         ep.evidence["replies"] = statuses
@@ -817,8 +833,10 @@ class Shadow:
             self._check_sql(ep, base)
 
     def _check_fhir(self, ep: Episode, base: Any, statuses: list[int]) -> None:
-        from openadapt_flow.ensure_record import extra_elements, extract, same, verify_ensure
+        from openadapt_flow.ensure_record import extra_elements, extract, wrong_fields, verify_ensure
         from openadapt_flow.ensure_bridge import canonical_observation, canonical_result
+        from openadapt_flow.fhir_reference import ReferenceUnreadable
+
 
         contract = ep.contract
         # Response/request IDs remain grouping/report hints only. They cannot
@@ -848,6 +866,11 @@ class Shadow:
         for ref, res in stored.items():
             if not isinstance(res, dict) or "unreadable" in res:
                 continue
+            references = observation.references if observation is not None else None
+            try:
+                mismatches = wrong_fields(contract, res, ep.params, references)
+            except ReferenceUnreadable:
+                mismatches = list(contract.fields)
             for name, rule in contract.fields.items():
                 got = extract(res, rule.path)
                 sent = ep.params.get(name)
@@ -859,8 +882,7 @@ class Shadow:
                         "field": name,
                         "sent": sent,
                         "stored": got,
-                        "same": name in ep.params
-                        and same(contract, name, got, ep.params[name]),
+                        "same": name in ep.params and name not in mismatches,
                     }
                 )
             if contract.closed:

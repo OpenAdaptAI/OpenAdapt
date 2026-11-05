@@ -73,7 +73,7 @@ openadapt flow demo-record --out rec
 openadapt flow compile rec --out bundle --name my-task
 openadapt flow lint bundle --strict
 openadapt flow certify bundle --policy permissive
-openadapt flow replay bundle --run-dir run
+openadapt flow replay bundle --demo-app --run-dir run
 ```
 
 The strict lint step refuses the unarmed demo write. The permissive policy is a

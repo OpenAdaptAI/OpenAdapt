@@ -429,3 +429,49 @@ def test_pg_read_only_check_counts_inherited_and_non_dml_privileges(pg: Any) -> 
     assert any("TRIGGER on table public.t" in p for p in ro2), ro2
     assert any("CREATE on schema public" in p for p in ro2), ro2
     assert check("ro3") == []
+
+
+# -- #1675 item 1: a row every demonstration happened to share -----------------
+
+
+def test_a_shared_parent_row_is_named_by_the_task_not_by_its_key(
+    gv: dict[str, Any],
+) -> None:
+    """Both set_status demonstrations were in Help Desk, so they touched the
+    same project row. The excuse names the row the task's project names,
+    not that row's literal key."""
+    rows = gv["report"]["kinds"]["set_status"]["touched_rows"]
+    projects = [r for r in rows if r["table"] == "projects"]
+    assert projects and all(not r["by_key"] for r in projects), rows
+    assert all("literal" not in s for r in projects for s in r["selector"].values()), (
+        rows
+    )
+
+
+def test_correct_status_update_in_another_project_confirmed(
+    gv: dict[str, Any],
+) -> None:
+    app = gv["app"]
+    iid = app.create_issue(
+        {"project": "Billing Portal", "subject": "S1 other", "status": "New"}
+    )
+    v = {"project": "Billing Portal", "subject": "S1 other", "status": "Resolved"}
+    out = _run(gv, "set_status", v, lambda: app.save(iid, {"status": "Resolved"}))
+    assert out.startswith("CONFIRMED"), out
+
+
+def test_status_update_that_touches_another_project_stops(
+    gv: dict[str, Any],
+) -> None:
+    """The excuse is for the task's project only: the same bookkeeping on
+    a project the task doesn't name is collateral."""
+    app = gv["app"]
+    iid = _fresh(app, "S2 other")
+    v = {"project": "Help Desk", "subject": "S2 other", "status": "Resolved"}
+
+    def write() -> None:
+        app.save(iid, {"status": "Resolved"})
+        app.q("UPDATE projects SET updated_on=now() WHERE name='Billing Portal'")
+
+    out = _run(gv, "set_status", v, write)
+    assert not out.startswith("CONFIRMED"), out
