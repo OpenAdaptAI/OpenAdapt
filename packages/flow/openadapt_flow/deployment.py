@@ -1457,7 +1457,11 @@ def load_deployment(
     if pinned is None and not path.is_file():
         raise FileNotFoundError(f"deployment config {source!r} is not an existing file")
     try:
-        text = pinned.decode("utf-8") if pinned is not None else path.read_text()
+        text = (
+            pinned.decode("utf-8")
+            if pinned is not None
+            else path.read_text(encoding="utf-8")
+        )
         data = yaml.safe_load(text) or {}
     except yaml.YAMLError as e:  # pragma: no cover - passthrough
         raise ValueError(f"could not parse deployment YAML {path}: {e}") from e
@@ -1954,7 +1958,10 @@ def plugin_secrets(
 
 
 def build_effect_verifier(
-    cfg: EffectsConfig, params: Optional[Mapping[str, object]] = None
+    cfg: EffectsConfig,
+    params: Optional[Mapping[str, object]] = None,
+    *,
+    session: Any = None,
 ) -> Optional[Any]:
     """Construct the configured ``EffectVerifier`` (or None for ``kind: none``).
 
@@ -1966,6 +1973,11 @@ def build_effect_verifier(
             ``graphql_variables``) are resolved against these AT CONSTRUCTION,
             so the verifier probes the record THIS run writes. A config with
             no references ignores ``params`` entirely (fully back-compatible).
+        session: An authenticated ``requests``-style client the read-back
+            uses instead of building its own, for ``kind: rest``, ``fhir``
+            or ``graphql`` (for example one from a qualify
+            ``verifier.session`` hook that renews an expiring token). Any
+            other kind refuses it rather than read without it.
 
     Resolution order for ``kind``: built-in adapters, then plugin factories registered under the
     ``openadapt_flow.effect_verifiers`` entry-point group or via
@@ -1980,6 +1992,14 @@ def build_effect_verifier(
             unresolved ``{param: ...}`` reference, or a missing secret env var
             (fail loud rather than wire a broken verifier).
     """
+    if session is not None and (
+        cfg.candidates or (cfg.kind or "").strip().lower() not in _SESSION_KINDS
+    ):
+        raise ValueError(
+            "an injected read-back session is supported for kind: "
+            + ", ".join(_SESSION_KINDS)
+            + f", not {cfg.kind!r}"
+        )
     if cfg.candidates:
         built = [
             build_effect_verifier(candidate, params) for candidate in cfg.candidates
@@ -2026,7 +2046,7 @@ def build_effect_verifier(
             return RedactingVerifier(candidate_selector, policy)
         return candidate_selector
 
-    verifier = _build_effect_verifier_unredacted(cfg, params)
+    verifier = _build_effect_verifier_unredacted(cfg, params, session=session)
     if verifier is None:
         return None
     from openadapt_flow.runtime.effects.adapter import set_verifier_identity
@@ -2047,6 +2067,9 @@ def build_effect_verifier(
 
 
 _PLUGIN_ONLY_FIELDS = ("options", "option_params", "secret_env")
+
+#: The built-in read-backs that can read through an injected client.
+_SESSION_KINDS: Final[tuple[str, ...]] = ("rest", "fhir", "graphql")
 
 
 #: What these fields held when they still had defaults. Verifier identities
@@ -2172,7 +2195,10 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
 
 
 def _build_effect_verifier_unredacted(
-    cfg: EffectsConfig, params: Optional[Mapping[str, object]] = None
+    cfg: EffectsConfig,
+    params: Optional[Mapping[str, object]] = None,
+    *,
+    session: Any = None,
 ) -> Optional[Any]:
     """The per-kind construction behind :func:`build_effect_verifier`."""
     kind = (cfg.kind or "none").strip().lower()
@@ -2291,6 +2317,7 @@ def _build_effect_verifier_unredacted(
             cfg.base_url,
             records_path=records_path,
             records_key=cfg.records_key,
+            session=session,
             headers=headers,
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,
@@ -2338,6 +2365,7 @@ def _build_effect_verifier_unredacted(
             field_paths=cfg.field_paths,
             access_token=access_token,
             token_source=token_source,
+            session=session,
             verify_tls=cfg.verify_tls,
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,
@@ -2434,6 +2462,7 @@ def _build_effect_verifier_unredacted(
             query=cfg.graphql_query,
             variables=variables,
             records_path=cfg.graphql_records_path,
+            session=session,
             headers=headers,
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,

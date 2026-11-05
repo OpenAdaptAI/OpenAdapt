@@ -357,7 +357,7 @@ jobs:
         # every public data/config asset listed in public-artifacts.json.
         run: python scripts/check_release_consistency.py
       - name: Ruff lint
-        run: ruff check openadapt_flow benchmark/harness
+        run: ruff check openadapt_flow benchmark/harness benchmark/phase_latency
       - name: No app-specific code in the engine
         # App knowledge lives in profiles, contracts and fixtures (CONTRIBUTING:
         # "App knowledge lives in data"); the denylist is scripts/generality.toml.
@@ -376,9 +376,11 @@ jobs:
           ruff check --isolated --select E9 --target-version py310 .
           uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Ruff format check
-        run: ruff format --check openadapt_flow tests benchmark/harness
+        run: ruff format --check openadapt_flow tests benchmark/harness benchmark/phase_latency
       - name: Mypy
         run: mypy
+      - name: Phase timing contract types
+        run: mypy --follow-imports=silent --ignore-missing-imports benchmark/phase_latency/collector.py
       - name: Mypy (strict, safety path only)
         run: |
           mypy \

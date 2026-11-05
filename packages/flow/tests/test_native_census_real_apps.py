@@ -20,6 +20,7 @@ import os
 import subprocess
 import sys
 import time
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any, Optional
 
@@ -27,6 +28,7 @@ import pytest
 
 from openadapt_flow.runtime import identity_template as itmpl
 from openadapt_flow.runtime.identity_census import CensusDecision, decide
+from tests._native_app_startup import stop_owned_process, wait_for_rendered_items
 
 pytestmark = pytest.mark.timeout(180)
 
@@ -60,34 +62,53 @@ def _wait(predicate, timeout_s: float = 30.0) -> Any:
 # -- Windows (WPF + UI Automation) ---------------------------------------------
 
 _WPF_APP = r"""
-param([string]$RowsJson)
-Add-Type -AssemblyName PresentationFramework
-$rows = $RowsJson | ConvertFrom-Json
-$window = New-Object System.Windows.Window
-$window.Title = '__TITLE__'
-$window.Width = 520
-$window.Height = 360
-$window.Left = 40
-$window.Top = 40
-$list = New-Object System.Windows.Controls.ListBox
-foreach ($row in $rows) {
-    $item = New-Object System.Windows.Controls.ListBoxItem
-    $panel = New-Object System.Windows.Controls.StackPanel
-    $panel.Orientation = 'Horizontal'
-    foreach ($cell in $row.cells) {
-        $text = New-Object System.Windows.Controls.TextBlock
-        $text.Text = $cell
-        $text.Margin = '0,0,24,0'
-        [void]$panel.Children.Add($text)
+param([string]$RowsJson, [string]$ReadyPath)
+$ErrorActionPreference = 'Stop'
+try {
+    Add-Type -AssemblyName PresentationFramework
+    $rows = $RowsJson | ConvertFrom-Json
+    $window = New-Object System.Windows.Window
+    $window.Title = '__TITLE__'
+    $window.Width = 520
+    $window.Height = 360
+    $window.Left = 40
+    $window.Top = 40
+    $list = New-Object System.Windows.Controls.ListBox
+    foreach ($row in $rows) {
+        $item = New-Object System.Windows.Controls.ListBoxItem
+        $panel = New-Object System.Windows.Controls.StackPanel
+        $panel.Orientation = 'Horizontal'
+        foreach ($cell in $row.cells) {
+            $text = New-Object System.Windows.Controls.TextBlock
+            $text.Text = $cell
+            $text.Margin = '0,0,24,0'
+            [void]$panel.Children.Add($text)
+        }
+        $item.Content = $panel
+        if ($row.id) {
+            [System.Windows.Automation.AutomationProperties]::SetAutomationId($item, $row.id)
+        }
+        [void]$list.Items.Add($item)
     }
-    $item.Content = $panel
-    if ($row.id) {
-        [System.Windows.Automation.AutomationProperties]::SetAutomationId($item, $row.id)
-    }
-    [void]$list.Items.Add($item)
+    $window.Content = $list
+    $window.add_ContentRendered({
+        if ([System.IO.File]::Exists($ReadyPath)) { return }
+        $helper = [System.Windows.Interop.WindowInteropHelper]::new($window)
+        $signal = @{
+            event = 'content_rendered'
+            pid = $PID
+            hwnd = $helper.Handle.ToInt64()
+            rows = $list.Items.Count
+        }
+        $temporary = $ReadyPath + '.tmp'
+        [System.IO.File]::WriteAllText($temporary, ($signal | ConvertTo-Json -Compress))
+        [System.IO.File]::Move($temporary, $ReadyPath)
+    })
+    [void]$window.ShowDialog()
+} catch {
+    [Console]::Error.WriteLine($_.Exception.ToString())
+    exit 1
 }
-$window.Content = $list
-[void]$window.ShowDialog()
 """.replace("__TITLE__", TITLE)
 
 
@@ -100,43 +121,69 @@ def wpf_worklist(tmp_path: Path):
     script.write_text(_WPF_APP, encoding="utf-8")
     procs: list[subprocess.Popen] = []
 
-    def start(rows: list[dict[str, Any]]) -> list[Any]:
-        proc = subprocess.Popen(
-            [
-                "powershell",
-                "-NoProfile",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-File",
-                str(script),
-                "-RowsJson",
-                json.dumps(rows),
-            ]
-        )
-        procs.append(proc)
-        window = _wait(
-            lambda: (
-                auto.WindowControl(searchDepth=1, Name=TITLE)
-                if auto.WindowControl(searchDepth=1, Name=TITLE).Exists(0, 0)
-                else None
-            )
-        )
-        listing = window.ListControl(searchDepth=3)
-        return _wait(
-            lambda: (
-                [
-                    c
-                    for c in listing.GetChildren()
-                    if c.ControlTypeName == "ListItemControl"
-                ]
-                if listing.Exists(0, 0)
-                else None
-            )
-        )
+    with ExitStack() as owned:
 
-    yield auto, start
-    for proc in procs:
-        proc.kill()
+        def start(rows: list[dict[str, Any]]) -> list[Any]:
+            prefix = tmp_path / f"worklist-{len(procs)}"
+            ready = prefix.with_suffix(".ready.json")
+            stdout_path, stderr_path = (
+                prefix.with_suffix(".stdout"),
+                prefix.with_suffix(".stderr"),
+            )
+            stdout = owned.enter_context(stdout_path.open("wb"))
+            stderr = owned.enter_context(stderr_path.open("wb"))
+            proc = subprocess.Popen(
+                [
+                    "powershell",
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-STA",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(script),
+                    "-RowsJson",
+                    json.dumps(rows),
+                    "-ReadyPath",
+                    str(ready),
+                ],
+                stdout=stdout,
+                stderr=stderr,
+            )
+            procs.append(proc)
+            owned.callback(stop_owned_process, proc)
+
+            def items_from_owned_window(hwnd: int) -> Optional[list[Any]]:
+                window = auto.ControlFromHandle(hwnd)
+                if window is None:
+                    return None
+                if window.ProcessId != proc.pid or window.Name != TITLE:
+                    raise ValueError(
+                        "rendered HWND does not identify the owned worklist"
+                    )
+                listing = window.ListControl(searchDepth=3)
+                if not listing.Exists(0, 0):
+                    return None
+                return [
+                    child
+                    for child in listing.GetChildren()
+                    if child.ControlTypeName == "ListItemControl"
+                ]
+
+            # One startup budget inside the existing 180s test limit leaves
+            # 60s for the unchanged census assertions and owned cleanup.
+            return wait_for_rendered_items(
+                proc,
+                ready,
+                len(rows),
+                items_from_owned_window,
+                stdout_path,
+                stderr_path,
+                timeout_s=120.0,
+            )
+
+        yield auto, start
 
 
 def _first_cell_center(item: Any) -> tuple[int, int]:
