@@ -57,6 +57,25 @@ def test_upgrade_is_explicit_deterministic_and_does_not_mutate_source(monkeypatc
         bundles.migrate_bundle_dict(original)
 
 
+@pytest.mark.parametrize(
+    "asset", ["../outside.png", "/outside.png", "templates\\x.png"]
+)
+def test_manifest_asset_paths_cannot_escape_bundle(tmp_path, asset):
+    with pytest.raises(bundles.BundleIntegrityError, match="unsafe bundle asset path"):
+        bundles.bundle_asset_path(tmp_path / "bundle", asset)
+
+
+def test_manifest_asset_paths_reject_symlink_escape(tmp_path):
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (bundle / "templates").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(bundles.BundleIntegrityError, match="escapes its directory"):
+        bundles.bundle_asset_path(bundle, "templates/crop.png")
+
+
 def test_original_seal_is_checked_before_current_model_construction(
     tmp_path, monkeypatch
 ):
@@ -235,9 +254,7 @@ def test_unverified_load_cannot_launder_a_broken_original_seal(tmp_path):
 
 @pytest.mark.parametrize("attack", ["workflow", "asset"])
 @pytest.mark.parametrize("copy_loaded", [False, True])
-def test_unverified_load_cannot_reseal_tampered_source(
-    tmp_path, attack, copy_loaded
-):
+def test_unverified_load_cannot_reseal_tampered_source(tmp_path, attack, copy_loaded):
     bundle = saved_bundle(tmp_path)
     if attack == "workflow":
         raw = json.loads((bundle / "workflow.json").read_bytes())
@@ -277,6 +294,65 @@ def test_authorization_summary_refuses_manifestless_bundle(tmp_path):
         bundles.BundleIntegrityError, match="persisted bundle integrity seal"
     ):
         bundle_digest(bundle)
+
+
+def test_missing_seal_requires_explicit_legacy_migration_opt_in(tmp_path):
+    bundle = saved_bundle(tmp_path)
+    raw = json.loads((bundle / "workflow.json").read_bytes())
+    raw.pop("manifest")
+    (bundle / "workflow.json").write_text(json.dumps(raw))
+    (bundle / "manifest.json").unlink()
+
+    with pytest.raises(
+        bundles.BundleIntegrityError, match="no persisted integrity seal"
+    ):
+        Workflow.load(bundle)
+
+    loaded = Workflow.load(bundle, allow_unsealed_legacy=True)
+    assert loaded.manifest is not None
+    assert loaded.manifest.content_digest
+    target = tmp_path / "migrated"
+    loaded.save(target)
+    reloaded = Workflow.load(target)
+    bundles.verify_integrity(reloaded, target, reloaded.manifest)
+
+
+def test_model_validate_dump_does_not_recover_verified_load_capability(tmp_path):
+    bundle = saved_bundle(tmp_path)
+    loaded = Workflow.load(bundle)
+    clone = Workflow.model_validate(loaded.model_dump())
+
+    with pytest.raises(bundles.BundleIntegrityError, match="non-serializable"):
+        clone.save(bundle)
+
+
+def test_authorization_display_paths_verify_bundle_before_reading(tmp_path):
+    bundle = saved_bundle(tmp_path)
+    raw = json.loads((bundle / "workflow.json").read_bytes())
+    raw["name"] = "tampered display input"
+    (bundle / "workflow.json").write_text(json.dumps(raw))
+
+    from openadapt_flow.authorization_summary import _covered_by_digest, outline
+
+    with pytest.raises(bundles.BundleIntegrityError):
+        outline(bundle)
+    report = bundle / "QUALIFICATION.md"
+    report.write_text("synthetic report")
+    assert not _covered_by_digest(bundle, report)
+
+
+def test_verified_load_can_save_as_and_carries_its_assets(tmp_path):
+    source = saved_bundle(tmp_path)
+    loaded = Workflow.load(source)
+    target = tmp_path / "save-as"
+
+    loaded.save(target)
+
+    assert (target / "templates/button.png").read_bytes() == (
+        source / "templates/button.png"
+    ).read_bytes()
+    reloaded = Workflow.load(target)
+    bundles.verify_integrity(reloaded, target, reloaded.manifest)
 
 
 def test_loaded_identity_refuses_replaced_asset_hashes_or_missing_manifest(tmp_path):

@@ -18,9 +18,8 @@ bundle's semantics):
   a certified bundle -- the policy it was certified against, its certification
   status, and an optional expiry.
 * **Migration** (:func:`migrate_bundle_dict`): a v1 bundle (or one with no
-  ``schema_version``) migrates cleanly to v2 in memory on read. v2 is a strict
-  superset of v1, so migration only stamps the new version and back-fills the
-  manifest if it is absent -- an existing bundle keeps replaying byte-for-byte.
+  ``schema_version``) migrates cleanly to v2 in memory when a caller explicitly
+  opts into unsealed legacy migration. Ordinary loads require a persisted seal.
 * **Load-time structural validation** (:func:`validate_workflow`): reject a
   malformed or uncertifiable graph with clear, per-issue errors BEFORE the
   replayer touches it. Rules span graph well-formedness (entry exists, every
@@ -42,8 +41,9 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import weakref
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Iterable, Iterator, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -86,6 +86,25 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: fh.read(65536), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def bundle_asset_path(bundle_dir: Path | str, rel: str) -> Path:
+    """Resolve a manifest asset only when it stays inside the bundle."""
+    posix = PurePosixPath(rel)
+    if (
+        not rel
+        or "\\" in rel
+        or posix.is_absolute()
+        or posix.as_posix() != rel
+        or any(part in {"", ".", ".."} for part in posix.parts)
+    ):
+        raise BundleIntegrityError(f"unsafe bundle asset path {rel!r}")
+    root = Path(bundle_dir).resolve()
+    candidate = root.joinpath(*posix.parts)
+    resolved = candidate.resolve()
+    if not resolved.is_relative_to(root) or candidate.is_symlink():
+        raise BundleIntegrityError(f"bundle asset path escapes its directory: {rel!r}")
+    return candidate
 
 
 @dataclass(frozen=True)
@@ -469,6 +488,75 @@ class _LoadedSeal:
     file_hashes: tuple[tuple[str, str], ...]
     schema_version: int
     encrypted: bool
+    source_bundle_dir: Path
+
+
+# Load authority is process-local and bound to the exact object. Pydantic
+# private attributes are omitted from dumps but copied by model_copy, so the
+# registry prevents a clone or model_validate(model_dump()) from inheriting it.
+_verified_loads: dict[int, tuple[weakref.ReferenceType, object]] = {}
+
+
+def has_verified_load_capability(workflow: "Workflow") -> bool:
+    entry = _verified_loads.get(id(workflow))
+    return (
+        entry is not None
+        and entry[0]() is workflow
+        and getattr(workflow, "_verification_capability", None) is entry[1]
+    )
+
+
+def _grant_verified_load_capability(workflow: "Workflow") -> None:
+    identity = id(workflow)
+
+    def discard(reference: weakref.ReferenceType, *, identity: int = identity) -> None:
+        current = _verified_loads.get(identity)
+        if current is not None and current[0] is reference:
+            _verified_loads.pop(identity, None)
+
+    reference = weakref.ref(workflow, discard)
+    token = object()
+    workflow._verification_capability = token
+    _verified_loads[identity] = (reference, token)
+
+
+def transfer_verified_load_capability(source: "Workflow", target: "Workflow") -> None:
+    """Keep verified authority across an explicit in-memory model_copy only."""
+    if has_verified_load_capability(source):
+        _grant_verified_load_capability(target)
+
+
+def authorize_sanitized_derivative(
+    workflow: "Workflow", verified_source: "Workflow", source_bundle_dir: Path | str
+) -> str:
+    """Authorize the sanitizer's verified-source → scrub → reseal transition."""
+    source_manifest = verified_source.manifest
+    if (
+        source_manifest is None
+        or not source_manifest.content_digest
+        or verified_source._loaded_seal is None
+        or not has_verified_load_capability(verified_source)
+    ):
+        raise BundleIntegrityError(
+            "sanitized bundle reseal requires a verified sealed source bundle"
+        )
+    verify_loaded_source_integrity(
+        verified_source,
+        source_bundle_dir,
+        source_manifest,
+        decrypted_assets=(
+            verified_source.decrypted_templates() if verified_source.encrypted else None
+        ),
+    )
+    if workflow.manifest is None:
+        raise BundleIntegrityError(
+            "sanitized bundle reseal requires the source manifest"
+        )
+    workflow.manifest.provenance.sanitized_from_digest = source_manifest.content_digest
+    workflow._loaded_seal = None
+    workflow._unverified_load = False
+    _grant_verified_load_capability(workflow)
+    return source_manifest.content_digest
 
 
 def verify_original_content(raw: dict, stored: BundleManifest) -> bytes:
@@ -481,7 +569,11 @@ def verify_original_content(raw: dict, stored: BundleManifest) -> bytes:
 
 
 def remember_original_content(
-    workflow: "Workflow", payload: bytes, stored: BundleManifest
+    workflow: "Workflow",
+    payload: bytes,
+    stored: BundleManifest,
+    *,
+    source_bundle_dir: Path | str,
 ) -> None:
     # The original payload is immutable; this second fingerprint detects later
     # mutation of the upgraded runtime object without reserializing the source.
@@ -492,7 +584,9 @@ def remember_original_content(
         tuple(sorted(stored.file_hashes.items())),
         stored.schema_version,
         stored.encrypted,
+        Path(source_bundle_dir).resolve(),
     )
+    _grant_verified_load_capability(workflow)
 
 
 def _verify_workflow_content(workflow: "Workflow", stored: BundleManifest) -> None:
@@ -548,7 +642,13 @@ def verify_loaded_source_integrity(
         raise BundleIntegrityError(
             "bundle original manifest integrity changed after loading"
         )
-    _verify_asset_hashes(bundle_dir, stored, decrypted_assets=decrypted_assets)
+    if not has_verified_load_capability(workflow):
+        raise BundleIntegrityError(
+            "loaded bundle verification capability is missing or was not preserved"
+        )
+    _verify_asset_hashes(
+        loaded.source_bundle_dir, stored, decrypted_assets=decrypted_assets
+    )
 
 
 def _referenced_asset_paths(workflow: "Workflow") -> set[str]:
@@ -644,11 +744,11 @@ def compute_file_hashes(
                 paths.add(f.relative_to(bundle).as_posix())
 
     for rel in _referenced_asset_paths(workflow):
-        candidate = bundle / rel
+        candidate = bundle_asset_path(bundle, rel)
         if candidate.is_file():
-            paths.add(Path(rel).as_posix())
+            paths.add(rel)
 
-    return {rel: _sha256_file(bundle / rel) for rel in sorted(paths)}
+    return {rel: _sha256_file(bundle_asset_path(bundle, rel)) for rel in sorted(paths)}
 
 
 def _workflow_content(workflow: "Workflow") -> dict:
@@ -689,6 +789,10 @@ def content_identity_digest(workflow: "Workflow", file_hashes: dict[str, str]) -
     or separately call verify_integrity. New serialization/build_manifest always
     uses compute_content_digest instead, so a new seal covers its new format.
     """
+    if workflow._unverified_load:
+        raise BundleIntegrityError(
+            "an unchecked bundle load has no verified content identity"
+        )
     loaded = workflow._loaded_seal
     if loaded is None:
         return compute_content_digest(workflow, file_hashes)
@@ -784,6 +888,9 @@ def build_manifest(
         governed_authorization_template=(
             prior_prov.governed_authorization_template if prior_prov else None
         ),
+        sanitized_from_digest=(
+            prior_prov.sanitized_from_digest if prior_prov else None
+        ),
     )
     return BundleManifest(
         content_digest=digest,
@@ -861,6 +968,7 @@ def _verify_asset_hashes(
 ) -> None:
     bundle = Path(bundle_dir)
     for rel, expected in stored.file_hashes.items():
+        path = bundle_asset_path(bundle, rel)
         if decrypted_assets is not None:
             data = decrypted_assets.get(rel)
             if data is None:
@@ -874,7 +982,6 @@ def _verify_asset_hashes(
                     "(tampered or corrupted)"
                 )
             continue
-        path = bundle / rel
         if not path.is_file():
             raise BundleIntegrityError(
                 f"manifest lists asset {rel!r} but it is missing from the bundle"
@@ -909,8 +1016,8 @@ def verify_integrity(
        (re-saving reseals them).
 
     Only meaningful for a bundle that carries a persisted manifest with a
-    non-empty digest; legacy (pre-v2) bundles have no sealed digest to compare
-    against, and the caller skips this check for them."""
+    non-empty digest. An explicit legacy migration opt-in creates a new seal
+    before the caller can save it."""
     if not stored.content_digest and workflow._loaded_seal is None:
         return
     # 1. Recompute the digest over the loaded workflow content using the SEALED

@@ -16,6 +16,7 @@ import pytest
 from PIL import Image
 
 from openadapt_flow.__main__ import main
+from openadapt_flow.bundle_validation import BundleIntegrityError
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
@@ -219,7 +220,9 @@ def test_local_dev_admission_requires_a_verified_persisted_seal(
         raw.pop("manifest")
         (bundle / "workflow.json").write_text(json.dumps(raw), encoding="utf-8")
         (bundle / "manifest.json").unlink()
-        workflow = Workflow.load(bundle)
+        with pytest.raises(BundleIntegrityError, match="no persisted integrity seal"):
+            Workflow.load(bundle)
+        workflow = Workflow.load(bundle, allow_unsealed_legacy=True)
 
     proposal = propose_qualification(workflow, recording_dir=recording)
     accepted = accept_proposal(workflow, proposal)

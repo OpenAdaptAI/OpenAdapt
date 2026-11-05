@@ -433,6 +433,10 @@ def admit_local_dev(
         raise QualificationProposalError(
             "initialize qualification before local-dev admission"
         )
+    if workflow._unverified_load or workflow._legacy_migration:
+        raise QualificationProposalError(
+            "local-dev admission requires a verified persisted bundle seal"
+        )
     stored_manifest = workflow.manifest
     if stored_manifest is None:
         raise QualificationProposalError(
