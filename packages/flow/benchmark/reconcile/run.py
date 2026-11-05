@@ -43,7 +43,16 @@ FLOW = HERE.parents[1]
 STATE = Path.home() / "oa/scratch/pa-reconciler"
 PAS_REPO = "https://github.com/HL7-DaVinci/prior-auth.git"
 PAS_COMMIT = "848f28c11d8efb4e253b70cfbbc485acf9acd1a0"
-PAS_IMAGE = f"localhost/openadapt-pa-recon-pas:{PAS_COMMIT[:12]}"
+PAS_IMAGE = f"localhost/openadapt-pa-recon-pas:{PAS_COMMIT[:12]}-p1"
+#: One upstream race fixed before the build: ProcessClaimItemTask.start()
+#: starts the item's thread, then marks it running, which overwrites the
+#: success of an item that finished first, so a submit fails at random
+#: (HTTP 400 after the Claim is stored). The patch marks it running first.
+PAS_PATCH = (
+    "src/main/java/org/hl7/davinci/priorauth/ProcessClaimItemTask.java",
+    "            this.thread.start();\n            this.threadStatus = 3; // Running\n",
+    "            this.threadStatus = 3; // Running\n            this.thread.start();\n",
+)
 PAS_NAME = "openadapt-pa-recon-pas"
 PAS_PORT = 9840
 EHR_PORT, EHR_APP_PORT = 9841, 9842
@@ -101,7 +110,13 @@ def build_pas() -> None:
     if not src.is_dir():
         _sh("git", "clone", "-q", PAS_REPO, str(src))
     _sh("git", "-C", str(src), "fetch", "-q", "--depth", "1", "origin", PAS_COMMIT)
-    _sh("git", "-C", str(src), "checkout", "-q", PAS_COMMIT)
+    _sh("git", "-C", str(src), "checkout", "-q", "-f", PAS_COMMIT)
+    path, racy, fixed = PAS_PATCH
+    java = src / path
+    text = java.read_text()
+    if text.count(racy) != 1:
+        raise SystemExit(f"the PAS patch no longer applies to {path}")
+    java.write_text(text.replace(racy, fixed))
     _sh("docker", "build", "-t", PAS_IMAGE, str(src))
 
 
@@ -267,15 +282,16 @@ def pas_submit(u: dict, *, sid: str, code: str, day: str, created: str) -> dict:
         ],
     }
     reply = _http("POST", f"{pas_url()}/Claim/$submit", bundle)
+    followup = False
     if reply.get("resourceType") == "Bundle":
-        reply = next(
-            e["resource"]
-            for e in reply["entry"]
-            if e["resource"]["resourceType"] == "ClaimResponse"
-        )
+        kinds = [e["resource"]["resourceType"] for e in reply["entry"]]
+        # A CommunicationRequest asks for more documentation: the reference
+        # implementation keeps that request pended, with no timed grant.
+        followup = "CommunicationRequest" in kinds
+        reply = reply["entry"][kinds.index("ClaimResponse")]["resource"]
     if reply.get("resourceType") != "ClaimResponse":
         raise SystemExit(f"PAS refused {sid}: {json.dumps(reply)[:400]}")
-    return reply
+    return {**reply, "_followup": followup}
 
 
 #: X12 HCR01 for a PAS disposition: the reference implementation's own
@@ -292,9 +308,9 @@ HCR = {
 def pas_decision(member_id: str, sid: str, first: dict) -> dict:
     """The latest ClaimResponse for ``sid``: the reference implementation
     pends a request whose code its rules don't know, then grants it on a
-    timer as a new ClaimResponse."""
+    timer as a new ClaimResponse, unless it asked for more documentation."""
 
-    if first.get("outcome") != "queued":
+    if first.get("outcome") != "queued" or first.get("_followup"):
         return first
     deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
@@ -408,6 +424,7 @@ def seed(fixtures: dict, start: datetime, inbox: Path, log: list) -> dict[int, d
                     "sid": w_sid,
                     "payer_outcome": outcome,
                     "payer_claim_response": reply.get("id"),
+                    "payer_followup": reply.get("_followup"),
                 }
             )
             if fault == "duplicate_payer" and w_sid == sid:
