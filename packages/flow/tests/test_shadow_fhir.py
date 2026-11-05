@@ -451,6 +451,49 @@ def test_reference_identity_and_display_use_the_same_late_path(
 
 
 def test_multivalued_reference_late_exception_stays_uncertain(env, monkeypatch):
+    from tests.test_fhir_reference import schema
+
+    stored = _confirmed(env, monkeypatch)
+    ep = env["sh"].episodes[0]
+    # A repeated ancestor preserves scalar Reference leaves. A list directly
+    # in AllergyIntolerance.patient is malformed and refuses before this path.
+    data = ep.contract.model_dump(by_alias=True)
+    data.update(
+        resource_type="CareTeam",
+        reference_schema=schema("CareTeam", "participant.member"),
+        fields={
+            "patient": {"path": "participant.member.reference"},
+            "code": {"path": "category.coding.code"},
+        },
+        allow=[],
+    )
+    ep.contract = ensure_record.EnsureContract.model_validate(data)
+    ep.params = {"patient": ep.params["patient"], "code": ep.params["code"]}
+    stored["now"] = {
+        "resourceType": "CareTeam",
+        "id": "a1",
+        "participant": [
+            {"member": {"reference": "Patient/p2"}},
+            {"member": {"reference": "Patient/missing"}},
+        ],
+        "category": [{"coding": [{"code": ep.params["code"]}]}],
+    }
+
+    def fetch(self, url, params=None):
+        if "/Patient/" in url:
+            pid = url.rsplit("/", 1)[-1]
+            if pid == "missing":
+                raise ensure_record.Unreadable("synthetic missing target")
+            return {}, {"resourceType": "Patient", "id": pid}
+        return {}, stored["now"]
+
+    monkeypatch.setattr(ensure_record.FhirReader, "fetch", fetch)
+    env["sh"].run_rechecks(now=True)
+    assert ep.late_verdict == "UNCERTAIN"
+    assert any("ReferenceUnreadable" in reason for reason in ep.late_reasons)
+
+
+def test_invalid_singular_reference_array_is_refused(env, monkeypatch):
     from openadapt_flow.fhir_reference import ReferenceSchema
     from tests.test_fhir_reference import schema
 
@@ -475,5 +518,5 @@ def test_multivalued_reference_late_exception_stays_uncertain(env, monkeypatch):
 
     monkeypatch.setattr(ensure_record.FhirReader, "fetch", fetch)
     env["sh"].run_rechecks(now=True)
-    assert ep.late_verdict == "UNCERTAIN"
-    assert any("ReferenceUnreadable" in reason for reason in ep.late_reasons)
+    assert ep.late_verdict == "REFUTED"
+    assert any("no longer the person" in reason for reason in ep.late_reasons)
