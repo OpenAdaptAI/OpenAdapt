@@ -999,6 +999,10 @@ export interface RunReport {
     external_network_calls: "none" | "observed" | "unknown";
     compensation_actions: number;
   } | null;
+  dry_run?: {
+    reached_boundary: boolean;
+    checks: { code: string; detail: string; passed: boolean; step_id?: string | null }[];
+  };
   persistence?: {
     state: "persisted" | "degraded" | "failed";
     retryable: boolean;

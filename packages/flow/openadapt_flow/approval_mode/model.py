@@ -90,7 +90,7 @@ PreCheckCode = Literal[
 #: Post-run checks (design 7.4).
 PostCheckCode = Literal["verified", "whole_run_clean"]
 #: Codes for the gate's own failure handling and for the each-item gate.
-GateCode = Literal["each_item", "gate_error", "switch_log"]
+GateCode = Literal["each_item", "gate_error", "switch_log", "dry_run"]
 
 CheckCode = Literal[
     "channel",
@@ -111,6 +111,7 @@ CheckCode = Literal[
     "each_item",
     "gate_error",
     "switch_log",
+    "dry_run",
 ]
 
 

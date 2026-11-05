@@ -497,3 +497,19 @@ grant's digest. See [`APPROVAL_AND_VERIFICATION.md`](APPROVAL_AND_VERIFICATION.m
 - A Desktop list queue for batch review.
   [`DECISION_TRIAGE.md`](DECISION_TRIAGE.md) describes the engine part that
   orders a list's verified saves for review.
+
+
+## Check without application input
+
+`openadapt-flow replay BUNDLE --stop-before-effect` runs an observational prefix
+on a prefilled screen, checks the save target's identity and declared
+preconditions, and stops before input at the declared final save. An unproved
+input prefix or interstitial dismissal refuses before delivery. Web checks
+attach to an already-open page through `backend.browser_cdp_endpoint`; they do
+not launch or navigate a browser. Network desktop-session creation refuses
+before backend construction.
+
+The ordinary run report retains the bound effect-contract hashes and the checks
+that actually passed. It uses the existing redacted/sealed evidence path and
+ends `HALTED`, never a qualification success. The separate qualification
+practice case still needs a person's approval and saves for real.

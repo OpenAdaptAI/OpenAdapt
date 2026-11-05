@@ -316,6 +316,7 @@ class EngineDispatcher:
             "get_check_setup": self.get_check_setup,
             "answer_check_setup": self.answer_check_setup,
             "run_check_cases": self.run_check_cases,
+            "dry_run_workflow": self.dry_run_workflow,
             "run_item": self.run_item,
             "list_attention_items": self.list_attention_items,
             "resolve_attention_item": self.resolve_attention_item,
@@ -1354,13 +1355,52 @@ class EngineDispatcher:
         """Run a bundle under the deployment config; return a ``RunReport`` dict."""
         return self._replay_or_run(params, run=True)
 
+    def dry_run_workflow(self, **params: Any) -> dict:
+        """Observe a prefilled item, with Flow refusing every application input.
+
+        This is separate from the real-save qualification practice case. No
+        qualification case, approval, or production authorization is created.
+        """
+        from openadapt_desktop.work_items import WorkItemError, validate_inputs
+
+        workflow_id = str(params.get("workflow_id") or "")
+        if self._bundle_dir(workflow_id) is None:
+            return self._pre_action_refusal("Unknown workflow")
+        try:
+            raw = params.get("inputs", {})
+            if isinstance(raw, dict):
+                raw = {**self._fixed_values(workflow_id), **raw}
+            values = validate_inputs(raw, self._task_inputs(workflow_id))
+        except WorkItemError as exc:
+            return self._pre_action_refusal(str(exc))
+        except Exception:
+            return self._pre_action_refusal("Desktop could not read the task inputs")
+        return self._replay_or_run(
+            {
+                "workflow_id": workflow_id,
+                "target": params.get("target"),
+                "deployment_config": params.get("deployment_config"),
+                "_item_inputs": values,
+            },
+            run=False,
+            stop_before_effect=True,
+        )
+
     def _replay_or_run(
         self,
         params: dict,
         *,
         run: bool,
         first_supervised: bool = False,
+        stop_before_effect: bool = False,
     ) -> dict:
+        if stop_before_effect:
+            supports = getattr(self.services.flow_bridge, "supports_dry_run", None)
+            if run or first_supervised or supports is None or not supports():
+                return self._pre_action_refusal(
+                    "This engine cannot prove a stop before all input. "
+                    "Update OpenAdapt before checking without saving."
+                )
         workflow_id = params.get("workflow_id")
         bundle = self._bundle_dir(workflow_id)
         if bundle is None:
@@ -1515,7 +1555,7 @@ class EngineDispatcher:
             )
 
             try:
-                approver_root = pinned_root()
+                approver_root = None if stop_before_effect else pinned_root()
                 approver_head = pinned_head() if approver_root else None
             except ApproverKeychainError as exc:
                 return self._pre_action_refusal(str(exc))
@@ -1569,6 +1609,7 @@ class EngineDispatcher:
                 ensure_browser = getattr(self.services.flow_bridge, "ensure_browser_runtime", None)
                 should_ensure_browser = (
                     not run
+                    and not stop_before_effect
                     and ensure_browser is not None
                     and (
                         (target is not None and target.backend == "web")
@@ -1675,6 +1716,8 @@ class EngineDispatcher:
                             "out_dir": run_dir,
                             "config": staged_config,
                         }
+                        if stop_before_effect:
+                            replay_kwargs["stop_before_effect"] = True
                         if params_file is not None:
                             replay_kwargs["params_file"] = params_file
                         if bundle_env:
@@ -1744,6 +1787,10 @@ class EngineDispatcher:
             error=error,
         )
         report["persistence"] = persistence
+        if stop_before_effect:
+            from openadapt_desktop.dry_run import dry_run_evidence
+
+            report["dry_run"] = dry_run_evidence(report_data)
         progress_state = {
             "VERIFIED": "done",
             "COMPLETED_UNVERIFIED": "completed_unverified",

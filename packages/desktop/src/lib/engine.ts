@@ -67,6 +67,7 @@ export const CMD = {
   EDIT_PROGRAM_SECTIONS: "edit_program_sections",
   // Check it pre-filled from the recording; answered by a person or their agent.
   GET_CHECK_SETUP: "get_check_setup",
+  DRY_RUN_WORKFLOW: "dry_run_workflow",
   ANSWER_CHECK_SETUP: "answer_check_setup",
   INITIALIZE_QUALIFICATION: "initialize_qualification",
   PROPOSE_QUALIFICATION_FROM_DEMO: "propose_qualification_from_demo",
