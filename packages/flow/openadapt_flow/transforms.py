@@ -55,6 +55,7 @@ import calendar
 import datetime as _dt
 import difflib
 import hashlib
+import json
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -64,6 +65,10 @@ from typing import Any, Callable, Literal, Mapping, Optional, Sequence, Union
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 TRANSFORM_RECORD_SCHEMA = "openadapt.param-transform-record/v1"
+#: The language this module implements. Anything that stores an expression
+#: (a transform, a generated effect model) binds this and
+#: :func:`operator_set_sha256`, so a library change is a new, reviewed version.
+LANGUAGE_VERSION = "openadapt.expr/v1"
 
 #: Hard bounds. They are part of the language: an expression that needs more
 #: is refused, never truncated.
@@ -1206,6 +1211,124 @@ def evaluate(source: str, params: Mapping[str, str]) -> Evaluation:
 
 
 # --------------------------------------------------------------------------
+# Operator set identity and three-valued predicates
+# --------------------------------------------------------------------------
+
+_SPECIAL_SIGNATURES: dict[str, dict[str, Any]] = {
+    "fuzzy_match": {"args": ["string", "list", "number"], "result": "string",
+                    "literal_args": [2]},
+    "if_else": {"args": ["bool", "T", "T"], "result": "T", "literal_args": []},
+    "text": {"args": ["string|int|bool|date"], "result": "string",
+             "literal_args": []},
+}  # fmt: skip
+
+_OPERATOR_SIGNATURES: list[dict[str, Any]] = [
+    {"op": "+", "args": ["string", "string"], "result": "string"},
+    {"op": "+", "args": ["int", "int"], "result": "int"},
+    {"op": "-", "args": ["int", "int"], "result": "int"},
+    {"op": "*", "args": ["int", "int"], "result": "int"},
+    {"op": "neg", "args": ["int"], "result": "int"},
+    {"op": "==", "args": ["T", "T"], "result": "bool"},
+    {"op": "!=", "args": ["T", "T"], "result": "bool"},
+    {"op": "<", "args": ["int|date", "int|date"], "result": "bool"},
+    {"op": "<=", "args": ["int|date", "int|date"], "result": "bool"},
+    {"op": ">", "args": ["int|date", "int|date"], "result": "bool"},
+    {"op": ">=", "args": ["int|date", "int|date"], "result": "bool"},
+    {"op": "and", "args": ["bool", "bool"], "result": "bool"},
+    {"op": "or", "args": ["bool", "bool"], "result": "bool"},
+    {"op": "not", "args": ["bool"], "result": "bool"},
+]
+
+
+def operator_set() -> dict[str, Any]:
+    """The closed operator set and bounds, as canonical data.
+
+    This is what a generated effect model or a transform is checked against.
+    Its digest changes whenever a function, signature, operator or bound
+    changes.
+    """
+
+    functions: dict[str, Any] = {
+        name: {
+            "args": [t.value for t in fn.args],
+            "result": fn.result.value,
+            "literal_args": sorted(fn.literal),
+        }
+        for name, fn in _STDLIB.items()
+    }
+    functions.update(_SPECIAL_SIGNATURES)
+    return {
+        "language": LANGUAGE_VERSION,
+        "types": [t.value for t in ExprType],
+        "operators": _OPERATOR_SIGNATURES,
+        "functions": {k: functions[k] for k in sorted(functions)},
+        "bounds": {
+            "max_source_chars": MAX_SOURCE_CHARS,
+            "max_nodes": MAX_NODES,
+            "max_depth": MAX_DEPTH,
+            "max_string_chars": MAX_STRING_CHARS,
+            "max_list_items": MAX_LIST_ITEMS,
+            "max_int_abs": MAX_INT_ABS,
+            "max_transforms": MAX_TRANSFORMS,
+            "max_pattern_chars": MAX_PATTERN_CHARS,
+            "max_regex_input_chars": MAX_REGEX_INPUT_CHARS,
+            "max_unbounded_quantifiers": MAX_UNBOUNDED_QUANTIFIERS,
+            "max_variable_quantifiers": MAX_VARIABLE_QUANTIFIERS,
+            "max_fuzzy_chars": MAX_FUZZY_CHARS,
+            "max_fuzzy_options": MAX_FUZZY_OPTIONS,
+        },
+        "refusal_codes": [c.value for c in RefusalCode],
+    }
+
+
+def operator_set_sha256() -> str:
+    """SHA-256 of the canonical JSON of :func:`operator_set`."""
+
+    blob = json.dumps(operator_set(), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class PredicateResult:
+    """A three-valued predicate outcome.
+
+    ``"unknown"`` is never a pass. It carries the refusal code, so a caller
+    such as an effect-model evaluator can map it to UNCERTAIN and keep the
+    reason, while ``"false"`` is an observed contradiction.
+    """
+
+    outcome: Literal["true", "false", "unknown"]
+    refusal: Optional[RefusalCode] = None
+    reason: str = ""
+    inputs: tuple[str, ...] = ()
+    matches: tuple[dict[str, Any], ...] = ()
+
+
+def evaluate_predicate(source: str, params: Mapping[str, str]) -> PredicateResult:
+    """Evaluate a bool expression without raising.
+
+    Any refusal (syntax, unknown name or function, type, bounds, a fuzzy
+    match below threshold, a missing regex match) is ``"unknown"``, never
+    ``"true"``. An expression whose type is not bool is ``"unknown"`` too.
+    """
+
+    try:
+        node = parse(source)
+        typ = check(node, set(params))
+        if typ != B:
+            raise _refuse(RefusalCode.TYPE, "a predicate must be a bool expression")
+        ctx = _Ctx(params=params)
+        value = _as_bool(_eval(node, ctx))
+    except ExpressionRefused as exc:
+        return PredicateResult("unknown", exc.code, exc.reason)
+    return PredicateResult(
+        "true" if value else "false",
+        inputs=tuple(refs(node)),
+        matches=tuple(ctx.matches),
+    )
+
+
+# --------------------------------------------------------------------------
 # IR declaration and receipt record
 # --------------------------------------------------------------------------
 
@@ -1257,6 +1380,8 @@ class TransformRecord(BaseModel):
     schema_version: Literal["openadapt.param-transform-record/v1"] = (
         "openadapt.param-transform-record/v1"
     )
+    language: Literal["openadapt.expr/v1"] = "openadapt.expr/v1"
+    operator_set_sha256: str
     output_param: str
     expression: str
     expression_sha256: str
@@ -1292,6 +1417,7 @@ def apply_transforms(
         if not isinstance(value, str):
             raise _refuse(RefusalCode.TYPE, f"parameter {name!r} is not text")
     records: list[TransformRecord] = []
+    ops_digest = operator_set_sha256()
     for t in transforms:
         if t.output_param in working:
             raise _refuse(
@@ -1304,6 +1430,7 @@ def apply_transforms(
         text = canonical_text(result.value)
         records.append(
             TransformRecord(
+                operator_set_sha256=ops_digest,
                 output_param=t.output_param,
                 expression=t.expression,
                 expression_sha256=_sha256(t.expression),
@@ -1319,7 +1446,9 @@ def apply_transforms(
 
 
 __all__ = [
+    "LANGUAGE_VERSION",
     "Evaluation",
+    "PredicateResult",
     "ExprType",
     "ExpressionRefused",
     "ParamTransform",
@@ -1331,6 +1460,9 @@ __all__ = [
     "check",
     "compile_expression",
     "evaluate",
+    "evaluate_predicate",
+    "operator_set",
+    "operator_set_sha256",
     "parse",
     "refs",
     "stdlib_names",

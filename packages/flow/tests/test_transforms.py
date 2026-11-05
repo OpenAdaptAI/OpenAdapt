@@ -447,3 +447,55 @@ def test_random_input_only_ever_returns_or_refuses() -> None:
         except ExpressionRefused:
             pass
     assert time.monotonic() - start < 20
+
+
+# ------------------------------------------- shared contract (effect models)
+
+#: Pinned on purpose. A change to any function, signature, operator, bound or
+#: refusal code changes this digest, and so needs a reviewed new language
+#: version: a stored transform or generated effect model binds it.
+OPERATOR_SET_SHA256 = "06b615d7529dcf073e94a4b87f28c9d890a40e52f3068475cf9a000fc44cde0e"
+
+
+def test_operator_set_is_pinned_and_matches_the_library() -> None:
+    from openadapt_flow.transforms import (
+        LANGUAGE_VERSION,
+        operator_set,
+        operator_set_sha256,
+    )
+
+    ops = operator_set()
+    assert ops["language"] == LANGUAGE_VERSION == "openadapt.expr/v1"
+    assert sorted(ops["functions"]) == stdlib_names()
+    assert operator_set_sha256() == OPERATOR_SET_SHA256
+
+
+def test_transform_record_binds_language_and_operator_set() -> None:
+    _, (rec,) = apply_transforms(
+        {"x": "a"}, [ParamTransform(output_param="y", expression="upper(x)")]
+    )
+    assert rec.language == "openadapt.expr/v1"
+    assert rec.operator_set_sha256 == OPERATOR_SET_SHA256
+
+
+def test_predicate_is_three_valued_and_never_passes_on_refusal() -> None:
+    from openadapt_flow.transforms import evaluate_predicate
+
+    params = {"before": "2026-01-01", "after": "2026-01-31", "status": "active"}
+    ok = evaluate_predicate("days_between(date(before), date(after)) == 30", params)
+    assert ok.outcome == "true" and ok.refusal is None
+    assert ok.inputs == ("after", "before")
+    bad = evaluate_predicate("status == 'inactive'", params)
+    assert bad.outcome == "false"
+    for src, code in [
+        ("__import__('os')", RefusalCode.SYNTAX),
+        ("missing == 'x'", RefusalCode.UNKNOWN_NAME),
+        ("now() > date(after)", RefusalCode.UNKNOWN_FUNCTION),
+        ("upper(status)", RefusalCode.TYPE),  # not a bool: not a predicate
+        ("date(status) < date(after)", RefusalCode.INVALID_VALUE),
+        ("fuzzy_match(status, ['zzz'], 0.9) == 'zzz'", RefusalCode.BELOW_THRESHOLD),
+        ("matches(status, '(a+)+')", RefusalCode.UNSAFE_PATTERN),
+    ]:
+        result = evaluate_predicate(src, params)
+        assert result.outcome == "unknown", src
+        assert result.refusal == code, src
