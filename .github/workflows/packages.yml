@@ -114,6 +114,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       flow: ${{ steps.classify.outputs.flow }}
+      flow_unit_shards: ${{ steps.classify.outputs.flow_unit_shards }}
       types: ${{ steps.classify.outputs.types }}
       agent: ${{ steps.classify.outputs.agent }}
       capture: ${{ steps.classify.outputs.capture }}
@@ -136,6 +137,9 @@ jobs:
           GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
         run: |
           set -euo pipefail
+          # Both the matrix and the claims consumer use this exact count.
+          if [ "$EVENT_NAME" = pull_request ]; then unit_shards=3; else unit_shards=2; fi
+          echo "flow_unit_shards=$unit_shards" >> "$GITHUB_OUTPUT"
           all() {
             for pkg in flow types agent capture privacy desktop tray program_graph weight; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
             exit 0
@@ -439,7 +443,7 @@ jobs:
         # together: a pull request's fast lane takes three shards, about five
         # minutes each, to fit `ci` in ten minutes. The full suite on main and
         # nightly takes two.
-        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"shard":1,"of":3},{"shard":2,"of":3},{"shard":3,"of":3}]' || '[{"shard":1,"of":2},{"shard":2,"of":2}]') }}
+        include: ${{ fromJSON(needs.scope.outputs.flow_unit_shards == '3' && '[{"shard":1,"of":3},{"shard":2,"of":3},{"shard":3,"of":3}]' || '[{"shard":1,"of":2},{"shard":2,"of":2}]') }}
     defaults:
       run:
         working-directory: packages/flow
@@ -528,7 +532,16 @@ jobs:
           set -euo pipefail
           mkdir -p runs
           mapfile -t files < "$RUNNER_TEMP/shard.txt"
-          pytest -n logical --dist loadfile -v --durations=20 --basetemp=runs/ci "${files[@]}"
+          pytest -n logical --dist loadfile -v --durations=20 --basetemp=runs/ci \
+            --junitxml=runs/flow-unit-shard-${{ matrix.shard }}-of-${{ matrix.of }}.xml "${files[@]}"
+      - name: Retain this shard's claims evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flow-unit-junit-${{ matrix.shard }}-of-${{ matrix.of }}
+          path: packages/flow/runs/flow-unit-shard-${{ matrix.shard }}-of-${{ matrix.of }}.xml
+          if-no-files-found: error
+          retention-days: 7
 
   flow-critical:
     name: flow core critical (golden VERIFIED, zero model calls)
@@ -620,6 +633,11 @@ jobs:
                   bad = True
           sys.exit(1 if bad else 0)
           PY
+
+      - name: Validate passing browser claim evidence
+        run: >-
+          python scripts/validate_claims.py --check --ci-job e2e-browser
+          --junit runs/critical-e2e-junit.xml
 
   # The agent-framework adapters (openadapt_flow.integrations.agents): each
   # framework's own agent loop with a scripted model, writing through a real
@@ -1528,3 +1546,37 @@ jobs:
               print(f"failed: {bad}")
           sys.exit(1 if bad else 0)
           PY
+      # Unit evidence is complete only after every current-run shard passed.
+      # The merge queue deliberately rechecks critical tests, not unit shards.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        with:
+          enable-cache: true
+          cache-dependency-glob: .github/ci-tools/uv.lock
+          cache-suffix: flow-claims
+      - name: Install the locked claims validator dependency
+        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        run: python scripts/ci/locked_install.py --lock .github/ci-tools:claims
+      - name: Download this run's unit claim evidence
+        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: flow-unit-junit-*
+          path: runs/flow-unit-junit
+          merge-multiple: false
+      - name: Require every unit shard and validate all supported unit evidence
+        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        run: |
+          set -euo pipefail
+          python scripts/ci/merge_flow_junit.py --artifacts-dir runs/flow-unit-junit \
+            --shards '${{ needs.scope.outputs.flow_unit_shards }}' --out runs/flow-unit-junit.xml
+          cd packages/flow
+          python scripts/validate_claims.py --check --ci-job test --junit ../../runs/flow-unit-junit.xml
