@@ -570,12 +570,16 @@ class SearchStore(Store):
             rows = self.resources
             if self.strict and (params or {}).get("patient") != "Patient/a":
                 rows = []
-            return 200, {}, {
-                "resourceType": "Bundle",
-                "type": "searchset",
-                "total": len(rows),
-                "entry": [{"resource": r} for r in rows],
-            }
+            return (
+                200,
+                {},
+                {
+                    "resourceType": "Bundle",
+                    "type": "searchset",
+                    "total": len(rows),
+                    "entry": [{"resource": r} for r in rows],
+                },
+            )
         return super().get(url, params)
 
 
@@ -605,7 +609,11 @@ def test_versioned_reference_cannot_hide_existing_record_or_allow_duplicate(
         c,
         params,
         baseline,
-        {"Observation/new": Change(ref="Observation/new", actions={"C"}, authors={BOT})},
+        {
+            "Observation/new": Change(
+                ref="Observation/new", actions={"C"}, authors={BOT}
+            )
+        },
         after,
         created,
         references=evidence,
@@ -650,7 +658,10 @@ def test_initial_reference_search_may_be_empty_without_expected_record():
     from openadapt_flow.ensure_record import find_matches
 
     c = contract()
-    assert find_matches(c, FhirReader(c, get=SearchStore().get), parameters()) == ({}, 0)
+    assert find_matches(c, FhirReader(c, get=SearchStore().get), parameters()) == (
+        {},
+        0,
+    )
 
 
 def test_logical_reference_identity_retains_verified_version_separately():
@@ -681,7 +692,9 @@ def test_requested_reference_version_is_still_checked_outside_person_identity():
 def test_version_target_read_must_still_echo_requested_version():
     store = SearchStore()
     store.records["Patient/a/_history/1"]["meta"]["versionId"] = "2"
-    result = verdict(contract(), parameters(patient="Patient/a/_history/1"), record(), store)
+    result = verdict(
+        contract(), parameters(patient="Patient/a/_history/1"), record(), store
+    )
     assert result.outcome == "needs_review" and result.evidence["unreadable"]
 
 
@@ -690,7 +703,8 @@ def test_closed_typed_reference_does_not_certify_its_display_text():
         subject={"reference": "Patient/a", "display": "An unrelated person's label"}
     )
     assert (
-        verdict(contract(), parameters(), resource, Store()).outcome == "created_verified"
+        verdict(contract(), parameters(), resource, Store()).outcome
+        == "created_verified"
     )
 
 
@@ -698,7 +712,9 @@ def test_matching_display_does_not_make_a_different_target_an_existing_person():
     from openadapt_flow.ensure_record import find_matches
 
     c = contract()
-    resource = record(subject={"reference": "Patient/b", "display": "Task's presentation"})
+    resource = record(
+        subject={"reference": "Patient/b", "display": "Task's presentation"}
+    )
     store = SearchStore([resource])
     assert find_matches(c, FhirReader(c, get=store.get), parameters()) == ({}, 1)
 

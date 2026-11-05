@@ -166,7 +166,9 @@ class ReferenceEvidence:
         identity = self.identity(value, targets)
         prefix = base_url.rstrip("/") + "/"
         if not identity.startswith(prefix):
-            raise ReferenceUnreadable("reference search identity belongs to another base")
+            raise ReferenceUnreadable(
+                "reference search identity belongs to another base"
+            )
         relative = identity[len(prefix) :]
         parts = relative.split("/")
         if (
