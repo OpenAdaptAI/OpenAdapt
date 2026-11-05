@@ -604,13 +604,28 @@ jobs:
             tests/test_admitted_composition_runtime.py \
             tests/test_agent_guard.py \
             --basetemp=runs/ci-critical --junitxml=runs/critical-junit.xml
+      - name: Golden free path with egress blocked (loopback-only network namespace)
+        # Direct IP sockets stay in a loopback-only namespace. The tutorial
+        # must still reach VERIFIED with no Python-hook refusal recorded.
+        # A native-child control measures the hook observation boundary.
+        run: |
+          sudo -n env "PATH=$PATH" "HOME=$HOME" \
+            deploy/on-prem/bin/run-egress-blocked.sh \
+            python -m pytest -v tests/e2e/test_egress_blocked_e2e.py \
+            --basetemp=runs/ci-onprem-egress --junitxml=runs/onprem-egress-junit.xml
+      - name: Network namespace setup and owned Unix broker boundary
+        env:
+          OPENADAPT_TEST_NETNS: "1"
+        run: |
+          python -m pytest -v tests/e2e/test_egress_namespace_e2e.py \
+            --basetemp=runs/ci-onprem-boundary --junitxml=runs/onprem-boundary-junit.xml
       - name: Fail if any critical test was skipped or none ran
         run: |
           python - <<'PY'
           import sys
           import xml.etree.ElementTree as ET
           bad = False
-          for name in ("critical-e2e", "critical"):
+          for name in ("critical-e2e", "critical", "onprem-egress", "onprem-boundary"):
               root = ET.parse(f"runs/{name}-junit.xml").getroot()
               suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
               tests = sum(int(s.get("tests", 0)) for s in suites)
@@ -620,6 +635,46 @@ jobs:
                   bad = True
           sys.exit(1 if bad else 0)
           PY
+
+  # The on-prem install path for real: build two signed offline releases of
+  # openadapt-flow[privacy] from uv.lock on this connected runner, then, as
+  # root in a network namespace with no route out, install the first from its
+  # wheelhouse, refuse a tampered second, update to the signed second, roll
+  # back, and run the air-gap attestation (egress probe, audit chain). pip has
+  # no index and the machine has no network, so a wheel missing from the
+  # archive fails the install. deploy/on-prem/bin/test-offline-install.sh.
+  # First, bin/test-update.sh: the update state machine's refusal, migration
+  # and recovery paths with a fake venv build, which nothing else runs.
+  flow-onprem-offline:
+    name: flow on-prem offline install, update and rollback (egress blocked)
+    needs: scope
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.flow == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: packages/flow
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+      - name: Signed update and rollback state machine (hermetic, fake build)
+        run: bash deploy/on-prem/bin/test-update.sh
+      - name: Build two signed offline releases from the lock (connected)
+        run: bash deploy/on-prem/bin/test-offline-install.sh stage "$RUNNER_TEMP/offline"
+      - name: Install, update and roll back with egress blocked
+        # env -u SUDO_UID keeps the command root inside the namespace:
+        # install.sh owns the release tree as root.
+        run: >-
+          sudo env -u SUDO_UID -u SUDO_GID "PATH=$PATH"
+          deploy/on-prem/bin/run-egress-blocked.sh
+          bash deploy/on-prem/bin/test-offline-install.sh verify "$RUNNER_TEMP/offline"
 
   # The agent-framework adapters (openadapt_flow.integrations.agents): each
   # framework's own agent loop with a scripted model, writing through a real
@@ -762,7 +817,9 @@ jobs:
   # checked from file bytes); qualify_linux.py records a write workflow on a
   # GTK3 chart app with SQLite, compiles it, runs it governed with the record
   # check (clean, another patient, a look-alike) and repairs an update notice
-  # on its AT-SPI element identity. Both results are uploaded.
+  # on its AT-SPI element identity; qualify_linux_window_record.py records
+  # that app through Capture scoped to its window, with a second window open.
+  # All results are uploaded.
   flow-linux-atspi:
     name: flow native Linux (AT-SPI, Xvfb)
     needs: scope
@@ -801,19 +858,24 @@ jobs:
           set -e
           sudo apt-get install -y \
             at-spi2-core dbus-x11 gir1.2-atspi-2.0 gir1.2-gtk-3.0 libatk-adaptor \
-            libcairo2-dev libgirepository-2.0-dev openbox pkg-config xauth xvfb
+            libcairo2-dev libgirepository-2.0-dev openbox pkg-config xauth xdotool xvfb
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
-          cache-dependency-glob: packages/flow/uv.lock
+          cache-dependency-glob: |
+            packages/flow/uv.lock
+            packages/capture/uv.lock
           cache-suffix: flow-linux-atspi
-      - name: Install from the lock
+      - name: Install from the locks
+        # Flow's lock, then Capture's: the in-tree Capture (X11 window capture)
+        # can need newer dependencies than the published one Flow's lock names.
         run: >-
-          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,linux]'
-          --editable packages/types --editable packages/flow
+          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,linux,capture]'
+          --lock packages/capture
+          --editable packages/types --editable packages/capture --editable packages/flow
       - name: Qualify LinuxBackend on the GTK3 fixture
         timeout-minutes: 10
         run: |
@@ -833,6 +895,17 @@ jobs:
             env XDG_SESSION_TYPE=x11 NO_AT_BRIDGE=0 GTK_MODULES=atk-bridge \
             python benchmark/repair_every_backend/qualify_linux.py \
             --output runs/linux-atspi/record-compile-run.json
+      - name: Record one X11 window through Capture with a second window open
+        timeout-minutes: 10
+        run: |
+          # --skip-other-clicks: Capture's verifier rejects a recording whose
+          # dropped input left a hole in the source ordinals, so clicks in the
+          # second window fail the recording. The second window stays open.
+          xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- \
+            bash -c 'openbox >/dev/null 2>&1 & sleep 1; exec "$@"' bash \
+            env XDG_SESSION_TYPE=x11 GDK_BACKEND=x11 \
+            python scripts/qualify_linux_window_record.py --skip-other-clicks \
+            --output runs/linux-atspi/window-record.json
       - name: Upload Linux AT-SPI qualification evidence
         if: always()
         timeout-minutes: 2
@@ -1416,6 +1489,7 @@ jobs:
       - flow-lint
       - flow-unit
       - flow-critical
+      - flow-onprem-offline
       - flow-agent-frameworks
       - flow-native-census
       - flow-linux-atspi
@@ -1469,6 +1543,7 @@ jobs:
               "flow-lint": "flow",
               "flow-unit": "flow",
               "flow-critical": "flow",
+              "flow-onprem-offline": "flow",
               "flow-agent-frameworks": "flow",
               "flow-native-census": "flow",
               "flow-linux-atspi": "flow",

@@ -107,7 +107,6 @@ async def judge_one(
                 view["task"],
                 view.get("init_url", ""),
                 view["steps"],
-                view["predicted_output"],
                 shots,
                 client,
                 rubric=rubric,

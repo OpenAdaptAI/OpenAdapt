@@ -19,6 +19,13 @@
 
 ### Changed
 
+- `record --backend linux` can scope the recording to one X11 window.
+  `--window`/`--window-title` and `--linux-app`/`--linux-window-title` select
+  it; before, they were refused. Wayland sessions, an unset `DISPLAY` and
+  openadapt-capture releases before 1.3.0 are refused before recording starts.
+  `scripts/qualify_linux_window_record.py` checks it under Xvfb with a second
+  window open: the recording holds only the target's clicks, in its pixel
+  space, and only its frames.
 - No command falls back to the demo app on its own. `replay` needs a target: `--url`, `backend.url` in `--config`, or `--demo-app` to serve the bundled MockMed (the tutorial and quickstart commands pass it; `--drift` needs it). The variant router's first-screen probe captures nothing without a URL. `qualify accept`'s break-it check no longer runs every workflow's oracle against MockMed: it builds the lie from the workflow itself (a store that did not change, and a screen showing the workflow's own success text and every value the run typed). The reference Execute worker refuses, before running anything, an admission whose `target_url` it cannot drive, instead of resetting and reading that app as if it were the demo.
 
 ### Fixes
