@@ -45,10 +45,20 @@ def _run(
     routed: bool = False,
     frame_identity: str = "pid",
     max_rows: int = 2000,
+    clone_surface: bool = False,
+    view_surface: bool = False,
 ) -> str:
     tmp_path.mkdir(exist_ok=True)
     db = tmp_path / "s.db"
     con = _db(db)
+    if clone_surface:
+        con.execute("CREATE TABLE mirror AS SELECT * FROM patient")
+        con.commit()
+        surface_query = "SELECT * FROM mirror"
+    if view_surface:
+        con.execute("CREATE VIEW patient_view AS SELECT * FROM patient")
+        con.commit()
+        surface_query = "SELECT * FROM patient_view"
     surface_db = tmp_path / "surface.db" if separate_surface else db
     audit_db = tmp_path / "audit.db" if separate_audit else db
     for other in {surface_db, audit_db} - {db}:
@@ -89,7 +99,7 @@ def _run(
                 "database": {
                     "dialect": "sqlite",
                     "read": {"sqlite_database": str(db)},
-                    "allow_tables": ["log"],
+                    "allow_tables": ["log", "mirror"] if clone_surface else ["log"],
                     "views": views if views is not None else {"patient": ""},
                     "new_row_fields": {"patient": ["pid"]},
                     "max_rows": max_rows,
@@ -128,6 +138,8 @@ def _run(
         )
     for sql, args in extra:
         con.execute(sql, args)
+    if clone_surface:
+        con.execute("INSERT INTO mirror SELECT * FROM patient WHERE id != 1")
     con.commit()
     for other in {surface_db, audit_db} - {db}:
         with sqlite3.connect(other) as copy:
@@ -349,5 +361,48 @@ def test_a_unique_frame_key_does_not_make_the_audit_key_unique(tmp_path: Path) -
                 ),
             ),
         )
+        == "reconciliation_required"
+    )
+
+
+def test_a_surface_row_must_match_the_witnessed_contents(tmp_path: Path) -> None:
+    assert (
+        _run(
+            tmp_path,
+            colleague_logged=True,
+            surface_query=(
+                "SELECT id, pid, CASE WHEN id = 3 THEN 'Extra' ELSE lname END AS lname, "
+                "email FROM patient"
+            ),
+        )
+        == "reconciliation_required"
+    )
+
+
+def test_an_identical_clone_table_is_not_the_witnessed_physical_source(
+    tmp_path: Path,
+) -> None:
+    """The audit names patient; the surface reads an append-only clone."""
+
+    assert (
+        _run(tmp_path, colleague_logged=True, clone_surface=True)
+        == "reconciliation_required"
+    )
+
+
+def test_unknown_query_provenance_never_sets_a_record_aside(tmp_path: Path) -> None:
+    queries = (
+        "SELECT * FROM patient AS p",
+        "SELECT patient.* FROM patient JOIN (SELECT 1) AS marker ON 1 = 1",
+        "WITH p AS (SELECT * FROM patient) SELECT * FROM p",
+        "SELECT id, pid, lname, email FROM patient",
+    )
+    for i, query in enumerate(queries):
+        assert (
+            _run(tmp_path / f"query{i}", colleague_logged=True, surface_query=query)
+            == "reconciliation_required"
+        )
+    assert (
+        _run(tmp_path / "view", colleague_logged=True, view_surface=True)
         == "reconciliation_required"
     )

@@ -657,6 +657,7 @@ class AddedRowWitness:
 
     primary_key: tuple[str, ...]
     record: Mapping[str, Any]
+    source_relation: tuple[str, str, int]
 
 
 @dataclass
@@ -673,9 +674,6 @@ class FrameVerdict:
     #: In memory only: (surface, identity) of records another actor added,
     #: as their surface names them, when a table is judged in its place.
     added_by_others: set[tuple[str, str]] = field(default_factory=set)
-    #: In memory only: rows whose source, physical key and unambiguous audit
-    #: identity the database snapshot witnessed for a surface.
-    added_row_witnesses: dict[str, list[AddedRowWitness]] = field(default_factory=dict)
     #: In memory only: app profile rules that excused a row change.
     excused_by: set[str] = field(default_factory=set)
     #: ``frame.versions`` only: how the target's versions came out.
@@ -692,6 +690,9 @@ class FrameVerdict:
     #: and when it was read). Never put in a receipt; only its salted digest
     #: is.
     post_state: Optional[dict[str, Any]] = None
+    #: In memory only: rows whose source, physical key and unambiguous audit
+    #: identity the database snapshot witnessed for a surface.
+    added_row_witnesses: dict[str, list[AddedRowWitness]] = field(default_factory=dict)
 
     @property
     def held(self) -> bool:

@@ -1334,7 +1334,7 @@ def judge_run_frame(
         )
     if disputed:
         verdict.excused_by.add(late_write.LATER_WRITE_DISPUTED)
-    _witness_attributed_additions(cfg, verdict, db)
+    _witness_attributed_additions(cfg, verifier, verdict, db)
     database = spec.database
     if (
         db is not None
@@ -1361,8 +1361,18 @@ def judge_run_frame(
     return verdict
 
 
+def _sql_reader(verifier: Any, surface: str) -> Any:
+    from openadapt_flow.runtime.effects.sql import SqlRecordVerifier
+
+    routed = getattr(verifier, "verifiers", None)
+    reader = routed.get(surface) if isinstance(routed, dict) else (
+        verifier if not surface else None
+    )
+    return reader if isinstance(reader, SqlRecordVerifier) else None
+
+
 def _witness_attributed_additions(
-    cfg: VerifyConfig, frame: FrameVerdict, db: Optional[_DatabaseFrame]
+    cfg: VerifyConfig, verifier: Any, frame: FrameVerdict, db: Optional[_DatabaseFrame]
 ) -> None:
     """Bind another actor's addition to one physical row in this read source.
 
@@ -1379,6 +1389,7 @@ def _witness_attributed_additions(
     attribution = spec.attribution if spec is not None else None
     if (
         not frame.held
+        or not any(effect.kind is EffectKind.EXACT_NEW_SET for effect in cfg.effects)
         or spec is None
         or database is None
         or attribution is None
@@ -1414,6 +1425,7 @@ def _witness_attributed_additions(
             continue
         table = db.post.tables.get(name)
         old = db.old.tables.get(name)
+        reader = _sql_reader(verifier, surface)
         if (
             table is None
             or old is None
@@ -1421,7 +1433,15 @@ def _witness_attributed_additions(
             or table.non_transactional
             or record_key not in table.cell_columns
             or change.key in old.rows
+            or reader is None
+            or reader.source_relation is None
         ):
+            continue
+        relation = (
+            ("main", name, 0) if database.dialect == "sqlite"
+            else table.source_relation if database.dialect == "postgresql" else None
+        )
+        if relation is None or reader.source_relation != relation:
             continue
         record = table.values.get(change.key)
         if record is None or record.get(record_key) is None:
@@ -1435,7 +1455,7 @@ def _witness_attributed_additions(
         if counts[name].get(identity) != 1:
             continue
         frame.added_row_witnesses.setdefault(surface, []).append(
-            AddedRowWitness(tuple(table.primary_key), dict(record))
+            AddedRowWitness(tuple(table.primary_key), dict(record), relation)
         )
 
 
@@ -1460,6 +1480,9 @@ def _excuse_attributed_additions(
     with ``insert_events`` and a ``table_field``. A colleague's later entry or last-modifier
     stamp on a record says who touched it, not who added it, so under any
     other attribution nothing is set aside.
+
+    The settled snapshot must also witness the surface's physical row in
+    the same SQL source, with an audit identity unique in the full table.
     """
 
     from openadapt_flow.runtime.effects._common import judge_records
@@ -1498,6 +1521,9 @@ def _excuse_attributed_additions(
             continue
         kept = list(records)
         for witness in frame.added_row_witnesses.get(name, ()):
+            reader = _sql_reader(verifier, name)
+            if reader is None or reader.source_relation != witness.source_relation:
+                continue
             # The fresh surface read must still name this physical key and
             # match every returned column. Missing keys or changed
             # contents cannot borrow an earlier row's attribution.

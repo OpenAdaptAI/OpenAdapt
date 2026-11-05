@@ -334,6 +334,9 @@ class Table:
     #: two runs' snapshots can tell they hold the same row (a removal one of
     #: them saw) without values. Empty otherwise.
     links: dict[str, str] = field(default_factory=dict)
+    #: In memory only: PostgreSQL's actual (schema, relation, OID), binding a
+    #: captured SQL read to this physical table without guessing search_path.
+    source_relation: Optional[tuple[str, str, int]] = field(default=None, repr=False)
 
 
 @dataclass
@@ -615,6 +618,7 @@ class _Def:
     #: The SELECT that reads the rows, when it isn't the table's own
     #: (PostgreSQL large objects), one text column per ``columns``.
     select: str = ""
+    source_relation: Optional[tuple[str, str, int]] = None
 
 
 def _digest(parts: Sequence[Any]) -> str:
@@ -1237,7 +1241,8 @@ def _pg_definitions(
             )
         tables[int(oid)] = (name, str(schema), [kind, persistence, rls, force])
         d = out[name] = _Def(
-            [], [], None, {}, {}, "", relation=_pg_relation(str(schema), str(table))
+            [], [], None, {}, {}, "", relation=_pg_relation(str(schema), str(table)),
+            source_relation=(str(schema), str(table), int(oid)),
         )
         if kind == "f":
             d.unreadable = "a foreign table: its rows live outside this database"
@@ -1714,6 +1719,7 @@ def _snapshot(
             d.auto_column,
             maxes.get(t),
             non_transactional=d.non_transactional,
+            source_relation=d.source_relation,
         )
         if d.generated_key:
             # Only the table's own generated key may hold any value.
