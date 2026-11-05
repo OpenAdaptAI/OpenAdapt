@@ -16,6 +16,9 @@ test = ["pytest>=9.1.1", "packaging>=25.0"]
 build = ["build>=1.6.1", "pip>=25.3"]
 pip = ["pip>=25.3"]
 lint = ["ruff==0.17.0"]
+# Combines the flow-unit shards' coverage data (flow-coverage in packages.yml);
+# keep it at the version packages/flow/uv.lock pins, so the data format matches.
+coverage = ["coverage[toml]==7.15.1"]
 release = ["build>=1.6.1", "twine>=7.0.0"]
 # The in-guest Windows agent's screen and input modules, for the hosted
 # Windows replay (desktop-replay.yml), which runs Python 3.12. CI only: Flow
