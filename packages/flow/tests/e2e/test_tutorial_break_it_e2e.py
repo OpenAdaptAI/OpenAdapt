@@ -32,9 +32,9 @@ from openadapt_flow.ir import RunReport
 from openadapt_flow.tutorial import TutorialResult, run_tutorial
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def break_it_path(tmp_path_factory: pytest.TempPathFactory) -> TutorialResult:
-    """Run the tutorial once with ``break_it=True`` for the whole module."""
+    """Run after the function-scoped synthetic at-rest isolation is active."""
 
     return run_tutorial(tmp_path_factory.mktemp("break-it"), break_it=True)
 
