@@ -60,14 +60,14 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Literal, Mapping, Optional, Sequence, Union
+from typing import Any, Callable, Literal, Mapping, Optional, Sequence, Union, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 TRANSFORM_RECORD_SCHEMA = "openadapt.param-transform-record/v1"
-#: The language this module implements. Anything that stores an expression
-#: (a transform, a generated effect model) binds this and
-#: :func:`operator_set_sha256`, so a library change is a new, reviewed version.
+#: The text-transform contract. Stored transforms bind this version and
+#: :func:`operator_set_sha256`. Typed effect models also bind their profile
+#: and the exact language implementation digest.
 LANGUAGE_VERSION = "openadapt.expr/v1"
 
 #: Hard bounds. They are part of the language: an expression that needs more
@@ -129,9 +129,49 @@ class ExprType(str, Enum):
     BOOL = "bool"
     DATE = "date"
     LIST = "list"
+    NULL = "null"
+    RECORD = "record"
+    RECORDS = "records"
+    KEYED = "keyed"
 
 
-Value = Union[str, int, float, bool, _dt.date, tuple]
+Value = Union[
+    str,
+    int,
+    float,
+    bool,
+    _dt.date,
+    tuple,
+    None,
+    "RecordValue",
+    "RecordRows",
+    "KeyedRows",
+]
+
+
+@dataclass(frozen=True)
+class RecordValue:
+    fields: tuple[tuple[str, Value], ...]
+
+
+@dataclass(frozen=True)
+class RecordRows:
+    rows: tuple[RecordValue, ...]
+
+    def __len__(self) -> int:
+        return len(self.rows)
+
+
+Key = tuple[tuple[ExprType, Value], ...]
+
+
+@dataclass(frozen=True)
+class KeyedRows:
+    columns: tuple[str, ...]
+    rows: tuple[tuple[Key, RecordValue], ...]
+
+    def __len__(self) -> int:
+        return len(self.rows)
 
 
 # --------------------------------------------------------------------------
@@ -882,11 +922,15 @@ def _accepts(expected: ExprType, got: ExprType) -> bool:
     return expected == got or (expected == N and got == I)
 
 
-def check(node: Node, names: Optional[set[str]] = None) -> ExprType:
-    """Type-check ``node``. Every parameter reference is a string.
+def check(
+    node: Node,
+    names: Optional[Union[set[str], Mapping[str, ExprType]]] = None,
+) -> ExprType:
+    """Type-check ``node`` using text parameters or an explicit typed name map.
 
     ``names`` is the set of parameters that exist. ``None`` skips the existence
     check (used when a transform is declared, before the run's params exist).
+    The effect profile supplies a mapping of validated binding names to types.
     """
 
     if isinstance(node, Lit):
@@ -894,8 +938,12 @@ def check(node: Node, names: Optional[set[str]] = None) -> ExprType:
     if isinstance(node, Ref):
         if names is not None and node.name not in names:
             raise _refuse(RefusalCode.UNKNOWN_NAME, f"no parameter named {node.name!r}")
-        return S
+        return names[node.name] if isinstance(names, Mapping) else S
     if isinstance(node, ListLit):
+        if isinstance(names, Mapping) and node.items:
+            kinds = {check(item, names) for item in node.items}
+            if kinds == {ExprType.RECORD}:
+                return ExprType.RECORDS
         for item in node.items:
             if check(item, names) != S:
                 raise _refuse(RefusalCode.TYPE, "list items must be strings")
@@ -919,7 +967,7 @@ def check(node: Node, names: Optional[set[str]] = None) -> ExprType:
                 raise _refuse(RefusalCode.TYPE, f"'{op}' needs bools")
             return B
         if op in ("==", "!="):
-            if lt != rt or lt in (N, L):
+            if lt != rt or lt == N or (lt == L and not isinstance(names, Mapping)):
                 raise _refuse(
                     RefusalCode.TYPE,
                     f"'{op}' needs two values of the same scalar type, got "
@@ -955,8 +1003,12 @@ def _arity(node: Call, n: int) -> None:
         )
 
 
-def _check_call(node: Call, names: Optional[set[str]]) -> ExprType:
+def _check_call(
+    node: Call, names: Optional[Union[set[str], Mapping[str, ExprType]]]
+) -> ExprType:
     fn = node.fn
+    if isinstance(names, Mapping) and fn in _EFFECT_FUNCTIONS:
+        return _check_effect_call(node, names)
     if fn == "text":
         _arity(node, 1)
         t = check(node.args[0], names)
@@ -1039,8 +1091,9 @@ def refs(node: Node) -> list[str]:
 
 @dataclass
 class _Ctx:
-    params: Mapping[str, str]
+    params: Mapping[str, Value]
     matches: list[dict[str, Any]] = field(default_factory=list)
+    budget: Optional[EvaluationBudget] = None
 
 
 def _as_bool(v: Value) -> bool:
@@ -1071,15 +1124,22 @@ def _compare(op: str, left: Value, right: Value) -> bool:
 
 
 def _eval(node: Node, ctx: _Ctx) -> Value:
+    if ctx.budget is not None:
+        ctx.budget.charge()
     if isinstance(node, Lit):
         return node.value
     if isinstance(node, Ref):
         v = ctx.params[node.name]
+        if ctx.budget is not None:
+            return v
         if not isinstance(v, str):
             raise _refuse(RefusalCode.TYPE, f"parameter {node.name!r} is not text")
         return _check_str(v)
     if isinstance(node, ListLit):
-        return _check_list(tuple(_eval(x, ctx) for x in node.items))
+        items = _check_list(tuple(_eval(x, ctx) for x in node.items))
+        if ctx.budget is not None and items and isinstance(items[0], RecordValue):
+            return RecordRows(items)
+        return items
     if isinstance(node, Unary):
         operand = _eval(node.operand, ctx)
         if node.op == "not":
@@ -1094,17 +1154,26 @@ def _eval(node: Node, ctx: _Ctx) -> Value:
         if op == "or":
             return _as_bool(left) or _as_bool(right)
         if op == "==":
-            return left == right
+            return (
+                _typed_equal(left, right, ctx.budget) if ctx.budget else left == right
+            )
         if op == "!=":
-            return left != right
+            return (
+                not _typed_equal(left, right, ctx.budget)
+                if ctx.budget
+                else left != right
+            )
         if op in ("<", "<=", ">", ">="):
             return _compare(op, left, right)
         if op == "+" and isinstance(left, str) and isinstance(right, str):
+            if ctx.budget is not None:
+                ctx.budget.charge(len(left) + len(right))
             if len(left) + len(right) > MAX_STRING_CHARS:
                 raise _refuse(
                     RefusalCode.BOUNDS, f"string longer than {MAX_STRING_CHARS}"
                 )
-            return left + right
+            joined = left + right
+            return _effect_text(joined, ctx.budget) if ctx.budget else joined
         li, ri = _as_int(left), _as_int(right)
         if op == "+":
             return _check_int(li + ri)
@@ -1114,13 +1183,23 @@ def _eval(node: Node, ctx: _Ctx) -> Value:
             return _check_int(li * ri)
     if isinstance(node, Call):
         args = [_eval(a, ctx) for a in node.args]
+        if ctx.budget is not None and node.fn in _EFFECT_FUNCTIONS:
+            return _effect_call(node.fn, args, ctx.budget)
+        if ctx.budget is not None and node.fn != "if_else":
+            for arg in args:
+                if isinstance(arg, str):
+                    ctx.budget.charge(len(arg))
+                elif isinstance(arg, tuple):
+                    ctx.budget.charge(sum(len(item) for item in arg))
         if node.fn == "text":
-            return _text(args[0])
+            result = _text(args[0])
+            return _effect_text(result, ctx.budget) if ctx.budget else result
         if node.fn == "if_else":
             return args[1] if args[0] else args[2]
         if node.fn == "fuzzy_match":
             return _fuzzy(args[0], args[1], float(args[2]), ctx)  # type: ignore[arg-type]
-        return _STDLIB[node.fn].impl(*args)
+        computed = _STDLIB[node.fn].impl(*args)
+        return _freeze_value(computed, ctx.budget) if ctx.budget else computed
     raise _refuse(RefusalCode.SYNTAX, "unknown node")  # pragma: no cover
 
 
@@ -1259,7 +1338,7 @@ def operator_set() -> dict[str, Any]:
     functions.update(_SPECIAL_SIGNATURES)
     return {
         "language": LANGUAGE_VERSION,
-        "types": [t.value for t in ExprType],
+        "types": [t.value for t in (S, I, N, B, D, L)],
         "operators": _OPERATOR_SIGNATURES,
         "functions": {k: functions[k] for k in sorted(functions)},
         "bounds": {
@@ -1326,6 +1405,377 @@ def evaluate_predicate(source: str, params: Mapping[str, str]) -> PredicateResul
         inputs=tuple(refs(node)),
         matches=tuple(ctx.matches),
     )
+
+
+# --------------------------------------------------------------------------
+# Typed effect profile: the same parser, checker and evaluator
+# --------------------------------------------------------------------------
+
+EFFECT_PROFILE = "openadapt.effect-predicate/v1"
+MAX_EFFECT_WORK = 100_000
+MAX_EFFECT_BYTES = 1_000_000
+_EFFECT_FUNCTIONS = {
+    "keyed",
+    "lookup",
+    "put",
+    "same_keys",
+    "has_record",
+    "allowed_delta",
+    "count",
+    "unchanged",
+    "is_null",
+}
+
+
+_EFFECT_ALLOWED = (
+    _EFFECT_FUNCTIONS | (set(_STDLIB) - {"matches", "extract"}) | {"text", "if_else"}
+)
+
+
+def effect_operator_set() -> dict[str, Any]:
+    """Typed profile metadata; the text-transform v1 manifest stays unchanged."""
+    return {
+        "profile": EFFECT_PROFILE,
+        "language": LANGUAGE_VERSION,
+        "base_operator_set_sha256": operator_set_sha256(),
+        "types": [t.value for t in ExprType if t != N],
+        "functions": sorted(_EFFECT_ALLOWED),
+        "max_work": MAX_EFFECT_WORK,
+        "max_bytes": MAX_EFFECT_BYTES,
+    }
+
+
+@dataclass
+class EvaluationBudget:
+    """One budget for input validation and every predicate in a model."""
+
+    work: int = MAX_EFFECT_WORK
+    bytes: int = MAX_EFFECT_BYTES
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.work) is not int
+            or not 0 <= self.work <= MAX_EFFECT_WORK
+            or type(self.bytes) is not int
+            or not 0 <= self.bytes <= MAX_EFFECT_BYTES
+        ):
+            raise _refuse(RefusalCode.BOUNDS, "invalid effect budget")
+
+    def charge(self, work: int = 1, bytes_: int = 0) -> None:
+        self.work -= work
+        self.bytes -= bytes_
+        if self.work < 0 or self.bytes < 0:
+            raise _refuse(RefusalCode.BOUNDS, "effect budget exhausted")
+
+
+def _value_type(value: Value) -> ExprType:
+    kinds = {
+        str: S,
+        int: I,
+        bool: B,
+        _dt.date: D,
+        tuple: L,
+        type(None): ExprType.NULL,
+        RecordValue: ExprType.RECORD,
+        RecordRows: ExprType.RECORDS,
+        KeyedRows: ExprType.KEYED,
+    }
+    kind = kinds.get(type(value))
+    if kind is None:
+        raise _refuse(RefusalCode.TYPE, "unsupported typed value")
+    return kind
+
+
+def _effect_text(value: str, budget: EvaluationBudget) -> str:
+    if type(value) is not str:
+        raise _refuse(RefusalCode.TYPE, "expected text")
+    _check_str(value)
+    try:
+        size = len(value.encode("utf-8"))
+    except UnicodeError:
+        raise _refuse(RefusalCode.INVALID_VALUE, "invalid Unicode value") from None
+    budget.charge(bytes_=size)
+    return value
+
+
+def _freeze_value(value: object, budget: EvaluationBudget, depth: int = 0) -> Value:
+    budget.charge()
+    if depth > MAX_DEPTH:
+        raise _refuse(RefusalCode.BOUNDS, "nested value too deep")
+    if value is None or type(value) in (bool, _dt.date):
+        return value  # type: ignore[return-value]
+    if type(value) is str:
+        return _effect_text(value, budget)
+    if type(value) is int:
+        return _check_int(value)
+    if type(value) is dict:
+        if len(value) > MAX_LIST_ITEMS:
+            raise _refuse(RefusalCode.BOUNDS, "record too large")
+        fields = []
+        for key, item in value.items():
+            if type(key) is not str:
+                raise _refuse(RefusalCode.TYPE, "record fields must be text")
+            fields.append(
+                (_effect_text(key, budget), _freeze_value(item, budget, depth + 1))
+            )
+        return RecordValue(tuple(sorted(fields)))
+    if type(value) in (list, tuple):
+        sequence = cast(Union[list[object], tuple[object, ...]], value)
+        if len(sequence) > MAX_LIST_ITEMS:
+            raise _refuse(RefusalCode.BOUNDS, "collection too large")
+        items = tuple(_freeze_value(item, budget, depth + 1) for item in sequence)
+        if all(type(item) is RecordValue for item in items):
+            return RecordRows(cast(tuple[RecordValue, ...], items))
+        if all(type(item) is str for item in items):
+            return items
+        raise _refuse(RefusalCode.TYPE, "collection must contain records or strings")
+    raise _refuse(RefusalCode.TYPE, "unsupported typed value")
+
+
+def _typed_equal(left: Value, right: Value, budget: EvaluationBudget) -> bool:
+    budget.charge()
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, RecordValue) and isinstance(right, RecordValue):
+        budget.charge(len(left.fields) + len(right.fields))
+        return tuple(k for k, _ in left.fields) == tuple(
+            k for k, _ in right.fields
+        ) and all(
+            _typed_equal(a, b, budget)
+            for (_, a), (_, b) in zip(left.fields, right.fields)
+        )
+    if isinstance(left, RecordRows) and isinstance(right, RecordRows):
+        return _typed_equal(left.rows, right.rows, budget)
+    if isinstance(left, KeyedRows) and isinstance(right, KeyedRows):
+        a, b = _row_maps(left, right, budget)
+        return a.keys() == b.keys() and all(
+            _typed_equal(a[k], b[k], budget) for k in _ordered_keys(set(a), budget)
+        )
+    if isinstance(left, tuple) and isinstance(right, tuple):
+        return len(left) == len(right) and all(
+            _typed_equal(a, b, budget) for a, b in zip(left, right)
+        )
+    if isinstance(left, str):
+        budget.charge(len(left))
+    return left == right
+
+
+def _record_key(
+    record: RecordValue, columns: tuple[str, ...], budget: EvaluationBudget
+) -> Key:
+    budget.charge(len(record.fields))
+    fields = dict(record.fields)
+    key = []
+    for column in columns:
+        if column not in fields or fields[column] is None:
+            raise _refuse(RefusalCode.INVALID_VALUE, "record key is absent or null")
+        value = fields[column]
+        kind = _value_type(value)
+        if kind not in (S, I, B, D):
+            raise _refuse(RefusalCode.TYPE, "record key must be scalar")
+        budget.charge(len(value) if isinstance(value, str) else 1)
+        key.append((kind, value))
+    return tuple(key)
+
+
+def _row_maps(
+    left: KeyedRows, right: KeyedRows, budget: EvaluationBudget
+) -> tuple[dict[Key, RecordValue], dict[Key, RecordValue]]:
+    if left.columns != right.columns:
+        raise _refuse(RefusalCode.TYPE, "collection key definitions differ")
+    budget.charge(len(left) + len(right))
+    return dict(left.rows), dict(right.rows)
+
+
+def _ordered_keys(keys: set[Key], budget: EvaluationBudget) -> list[Key]:
+    """Traversal order must not depend on a process's hash randomization."""
+    budget.charge(len(keys) * max(1, len(keys).bit_length()))
+    sortable = []
+    for key in keys:
+        order = tuple((kind.value, canonical_text(value)) for kind, value in key)
+        budget.charge(sum(len(text) for _, text in order))
+        sortable.append((order, key))
+    return [key for _, key in sorted(sortable)]
+
+
+def _check_effect_call(node: Call, names: Mapping[str, ExprType]) -> ExprType:
+    fn = node.fn
+    R, RS, K = ExprType.RECORD, ExprType.RECORDS, ExprType.KEYED
+    if fn == "put":
+        _arity(node, 3)
+        if (
+            check(node.args[0], names) != R
+            or not isinstance(node.args[1], Lit)
+            or node.args[1].type != S
+        ):
+            raise _refuse(RefusalCode.TYPE, "put needs a record and literal field")
+        check(node.args[2], names)
+        return R
+    if fn in ("unchanged", "is_null", "count"):
+        _arity(node, 2 if fn == "unchanged" else 1)
+        first = check(node.args[0], names)
+        if fn == "unchanged" and check(node.args[1], names) != first:
+            raise _refuse(RefusalCode.TYPE, "unchanged needs matching types")
+        if fn == "count" and first not in (L, RS, K):
+            raise _refuse(RefusalCode.TYPE, "count needs a collection")
+        return I if fn == "count" else B
+    signatures = {
+        "keyed": ((RS, L), K),
+        "lookup": ((K, R), R),
+        "has_record": ((K, R), B),
+        "same_keys": ((K, K), B),
+        "allowed_delta": ((K, K, K, K), B),
+    }
+    args, result = signatures[fn]
+    _arity(node, len(args))
+    for index, (arg, want) in enumerate(zip(node.args, args)):
+        if fn == "keyed" and index == 0 and isinstance(arg, ListLit) and not arg.items:
+            continue
+        if check(arg, names) != want:
+            raise _refuse(RefusalCode.TYPE, "typed collection argument mismatch")
+    if fn == "keyed" and (
+        not isinstance(node.args[1], ListLit)
+        or any(not isinstance(arg, Lit) for arg in node.args[1].items)
+    ):
+        raise _refuse(RefusalCode.TYPE, "key columns must be literal strings")
+    return result
+
+
+def _effect_call(fn: str, args: list[Value], budget: EvaluationBudget) -> Value:
+    # _check_effect_call proves argument types; values are immutable here.
+    if fn == "is_null":
+        return args[0] is None
+    if fn == "unchanged":
+        return _typed_equal(args[0], args[1], budget)
+    if fn == "count":
+        return len(args[0])  # type: ignore[arg-type]
+    if fn == "put":
+        record, name, value = args
+        assert isinstance(record, RecordValue) and isinstance(name, str)
+        budget.charge(len(record.fields))
+        fields = dict(record.fields)
+        fields[name] = value
+        if len(fields) > MAX_LIST_ITEMS:
+            raise _refuse(RefusalCode.BOUNDS, "record too large")
+        return RecordValue(tuple(sorted(fields.items())))
+    if fn == "keyed":
+        source, columns = args
+        assert isinstance(columns, tuple)
+        if not columns or len(set(columns)) != len(columns):
+            raise _refuse(RefusalCode.INVALID_VALUE, "key columns empty or repeated")
+        rows = source.rows if isinstance(source, RecordRows) else ()
+        indexed: dict[Key, RecordValue] = {}
+        for record in rows:
+            key = _record_key(record, columns, budget)
+            if key in indexed:
+                raise _refuse(RefusalCode.CONFLICT, "duplicate record key")
+            indexed[key] = record
+        return KeyedRows(columns, tuple(indexed.items()))
+    if fn in ("lookup", "has_record"):
+        collection, record = args
+        assert isinstance(collection, KeyedRows) and isinstance(record, RecordValue)
+        budget.charge(len(collection))
+        key = _record_key(record, collection.columns, budget)
+        found = dict(collection.rows).get(key)
+        if fn == "has_record":
+            return found is not None and _typed_equal(found, record, budget)
+        if found is None:
+            raise _refuse(RefusalCode.INVALID_VALUE, "record key not found")
+        return found
+    before, after = args[:2]
+    assert isinstance(before, KeyedRows) and isinstance(after, KeyedRows)
+    old, new = _row_maps(before, after, budget)
+    if fn == "same_keys":
+        return old.keys() == new.keys()
+    allowed_after, allowed_deleted = args[2:]
+    assert isinstance(allowed_after, KeyedRows) and isinstance(
+        allowed_deleted, KeyedRows
+    )
+    _, permitted = _row_maps(before, allowed_after, budget)
+    _, deleted = _row_maps(before, allowed_deleted, budget)
+    if permitted.keys() & deleted.keys():
+        raise _refuse(RefusalCode.CONFLICT, "conflicting delta permissions")
+    for key in _ordered_keys(old.keys() | new.keys(), budget):
+        budget.charge()
+        if key in old and key in new and _typed_equal(old[key], new[key], budget):
+            continue
+        if key not in new:
+            if key not in deleted or not _typed_equal(old[key], deleted[key], budget):
+                return False
+        elif key not in permitted or not _typed_equal(new[key], permitted[key], budget):
+            return False
+    return True
+
+
+def _effect_profile(node: Node, budget: EvaluationBudget) -> None:
+    budget.charge()
+    if isinstance(node, Lit):
+        if node.type == N:
+            raise _refuse(RefusalCode.TYPE, "effect numbers must be exact integers")
+        if isinstance(node.value, str):
+            _effect_text(node.value, budget)
+    elif isinstance(node, Call):
+        if node.fn not in _EFFECT_ALLOWED:
+            raise _refuse(
+                RefusalCode.UNKNOWN_FUNCTION, "function outside effect profile"
+            )
+        for arg in node.args:
+            _effect_profile(arg, budget)
+    elif isinstance(node, ListLit):
+        for item in node.items:
+            _effect_profile(item, budget)
+    elif isinstance(node, Binary):
+        _effect_profile(node.left, budget)
+        _effect_profile(node.right, budget)
+    elif isinstance(node, Unary):
+        _effect_profile(node.operand, budget)
+
+
+def evaluate_effect_predicates(
+    sources: Sequence[str],
+    bindings: Mapping[str, object],
+    *,
+    budget: Optional[EvaluationBudget] = None,
+) -> tuple[PredicateResult, ...]:
+    """Evaluate typed effect predicates with one shared budget and no I/O.
+
+    All input bindings are frozen/validated first. Missing is a refusal;
+    explicit null is a value. Regex/fuzzy functions are outside this profile.
+    """
+    budget = budget if budget is not None else EvaluationBudget()
+    if type(bindings) is not dict or type(sources) not in (tuple, list):
+        raise _refuse(RefusalCode.TYPE, "effect inputs must be plain data")
+    if not 0 < len(sources) <= MAX_TRANSFORMS or len(bindings) > MAX_NODES:
+        raise _refuse(RefusalCode.BOUNDS, "effect model too large or empty")
+    values: dict[str, Value] = {}
+    try:
+        for name, value in bindings.items():
+            if (
+                type(name) is not str
+                or not re.fullmatch(_PARAM_NAME, name)
+                or name.startswith("__")
+            ):
+                raise _refuse(RefusalCode.INVALID_VALUE, "invalid binding name")
+            _effect_text(name, budget)
+            values[name] = _freeze_value(value, budget)
+    except ExpressionRefused as exc:
+        return tuple(PredicateResult("unknown", exc.code, exc.reason) for _ in sources)
+    types = {name: _value_type(value) for name, value in values.items()}
+    results = []
+    for source in sources:
+        try:
+            _effect_text(source, budget)
+            node = parse(source)
+            _effect_profile(node, budget)  # before type checking any function
+            if check(node, types) != B:
+                raise _refuse(RefusalCode.TYPE, "effect predicate must be Boolean")
+            value = _as_bool(_eval(node, _Ctx(params=values, budget=budget)))
+            results.append(
+                PredicateResult("true" if value else "false", inputs=tuple(refs(node)))
+            )
+        except ExpressionRefused as exc:
+            results.append(PredicateResult("unknown", exc.code, exc.reason))
+    return tuple(results)
 
 
 # --------------------------------------------------------------------------
@@ -1446,6 +1896,10 @@ def apply_transforms(
 
 
 __all__ = [
+    "EFFECT_PROFILE",
+    "EvaluationBudget",
+    "evaluate_effect_predicates",
+    "effect_operator_set",
     "LANGUAGE_VERSION",
     "Evaluation",
     "PredicateResult",

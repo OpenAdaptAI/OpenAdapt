@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -82,6 +83,7 @@ class EvaluationIdentity(StrictModel):
     operator_profile: Identifier
     schema_sha256: Digest
     reader_sha256: Digest
+    source_sha256: Digest
 
 
 class BindingUnavailable(ValueError):
@@ -129,7 +131,11 @@ class CandidateResult(StrictModel):
     verdict: Verdict = Verdict.INDETERMINATE
     judged: bool = False
     reason: Literal[
-        "satisfied", "contradiction", "evidence_unavailable", "language_refused"
+        "satisfied",
+        "contradiction",
+        "evidence_unavailable",
+        "language_refused",
+        "prior_refutation",
     ] = "evidence_unavailable"
 
     @model_validator(mode="after")
@@ -138,6 +144,8 @@ class CandidateResult(StrictModel):
             if not self.judged or self.reason != "satisfied":
                 raise ValueError("confirmation requires judged satisfied obligations")
         elif self.verdict == Verdict.REFUTED:
+            if self.reason == "prior_refutation" and not self.judged:
+                return self
             if not self.judged or self.reason != "contradiction":
                 raise ValueError("refutation requires a judged contradiction")
         elif self.judged or self.reason not in (
@@ -146,3 +154,129 @@ class CandidateResult(StrictModel):
         ):
             raise ValueError("an incomplete candidate cannot claim a judged outcome")
         return self
+
+
+class ObservationPath(StrictModel):
+    source: Literal["task", "before", "after"]
+    path: Annotated[tuple[Identifier, ...], Field(max_length=24)] = ()
+
+
+class ObservationRequirements(StrictModel):
+    """Reader scope chosen independently of the generated model."""
+
+    paths: Annotated[tuple[ObservationPath, ...], Field(min_length=1, max_length=256)]
+
+    @model_validator(mode="after")
+    def _before_and_after(self) -> ObservationRequirements:
+        if not {"before", "after"} <= {path.source for path in self.paths}:
+            raise ValueError("reader scope requires before and after observations")
+        if len(self.paths) != len(set(self.paths)):
+            raise ValueError("duplicate observation requirement")
+        return self
+
+
+class CapturedObservations(StrictModel):
+    """Stable snapshots and facts supplied by the trusted independent reader.
+
+    ``fresh`` requires the reader's native version/consistency evidence; elapsed
+    time alone is insufficient. These facts are not model outputs or executor
+    claims. The caller owns snapshot stability and authentication of the reader.
+    """
+
+    task: dict[str, object]
+    before: dict[str, object]
+    after: dict[str, object]
+    source_sha256: Digest
+    schema_sha256: Digest
+    reader_sha256: Digest
+    covered: Annotated[tuple[ObservationPath, ...], Field(max_length=256)] = ()
+    complete: bool = False
+    fresh: bool = False
+    freshness_ref: Identifier | None = None
+    prior_refuted: bool = False
+
+
+def evaluate_effect_model(
+    model: EffectModel,
+    observations: CapturedObservations,
+    requirements: ObservationRequirements,
+    identity: EvaluationIdentity,
+) -> CandidateResult:
+    """Evaluate a shadow candidate using the shared language only.
+
+    Neither model declarations nor expressions can replace reader obligations.
+    The result holds no episode, ledger or signed-receipt mutation capability.
+    """
+
+    if observations.prior_refuted:
+        return CandidateResult(
+            identity=identity, verdict=Verdict.REFUTED, reason="prior_refutation"
+        )
+    unavailable = CandidateResult(identity=identity)
+    if (
+        not observations.complete
+        or not observations.fresh
+        or observations.freshness_ref is None
+        or observations.source_sha256 != identity.source_sha256
+        or observations.schema_sha256 != identity.schema_sha256
+        or observations.reader_sha256 != identity.reader_sha256
+    ):
+        return unavailable
+    required = set(requirements.paths)
+    declared = {
+        ObservationPath(source=binding.source, path=binding.path)
+        for binding in model.bindings
+    }
+    if not required <= set(observations.covered) or not required <= declared:
+        return unavailable
+    try:
+        from openadapt_flow import transforms
+
+        language_digest = hashlib.sha256(
+            Path(transforms.__file__).read_bytes()
+        ).hexdigest()
+        if (
+            model.content_sha256() != identity.model_sha256
+            or model.language_version != identity.language_version
+            or model.language_version != transforms.LANGUAGE_VERSION
+            or model.operator_profile != identity.operator_profile
+            or model.operator_profile != transforms.EFFECT_PROFILE
+            or language_digest != identity.language_sha256
+        ):
+            return CandidateResult(identity=identity, reason="language_refused")
+        bindings = bind_observations(
+            model,
+            task=observations.task,
+            before=observations.before,
+            after=observations.after,
+        )
+        results = transforms.evaluate_effect_predicates(model.obligations, bindings)
+        if len(results) != len(model.obligations) or any(
+            result.outcome == "unknown" for result in results
+        ):
+            return CandidateResult(identity=identity, reason="language_refused")
+        used = {name for result in results for name in result.inputs}
+        used_paths = {
+            ObservationPath(source=binding.source, path=binding.path)
+            for binding in model.bindings
+            if binding.name in used
+        }
+        if not required <= used_paths:
+            return unavailable
+        if any(result.outcome == "false" for result in results):
+            return CandidateResult(
+                identity=identity,
+                verdict=Verdict.REFUTED,
+                judged=True,
+                reason="contradiction",
+            )
+        if not all(result.outcome == "true" for result in results):
+            return CandidateResult(identity=identity, reason="language_refused")
+        return CandidateResult(
+            identity=identity,
+            verdict=Verdict.CONFIRMED,
+            judged=True,
+            reason="satisfied",
+        )
+    except Exception:  # noqa: BLE001 - a shadow failure never changes canonical state
+        return CandidateResult(identity=identity, reason="language_refused")

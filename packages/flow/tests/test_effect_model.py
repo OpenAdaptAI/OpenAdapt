@@ -22,6 +22,7 @@ def identity(**changes):
         "operator_profile": "synthetic_effect",
         "schema_sha256": "c" * 64,
         "reader_sha256": "d" * 64,
+        "source_sha256": "e" * 64,
     }
     return EvaluationIdentity(**(values | changes))
 

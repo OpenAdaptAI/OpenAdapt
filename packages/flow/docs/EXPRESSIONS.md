@@ -86,6 +86,41 @@ contradiction.
 ## One language, versioned
 
 `LANGUAGE_VERSION` (`openadapt.expr/v1`) and `operator_set_sha256()` name the
-exact language. Anything that stores an expression should bind both. The
+text-transform contract. Anything that stores a transform should bind both. The
 tests pin the digest, so adding or changing a function, operator or bound is a
 reviewed change to a new version, never a silent one.
+
+## Typed effect predicates
+
+`evaluate_effect_predicates(sources, bindings)` uses the same parser, type
+checker and evaluator with `EFFECT_PROFILE`. Bindings contain exact scalar
+values, explicit nulls, records and record collections. A single
+`EvaluationBudget` covers validation and every predicate in the call. The
+function freezes input values before evaluating them.
+
+The profile provides `keyed`, `lookup`, `put`, `has_record`, `same_keys`,
+`allowed_delta`, `unchanged`, `is_null` and `count`, together with the typed
+Boolean, comparison and arithmetic operators and bounded string/date transforms.
+Every computed scalar is checked against the same output limits and budget.
+`effect_operator_set()` exposes
+its profile, types, functions and limits. The text-transform manifest and its
+receipt digest retain their existing meanings.
+
+`keyed(rows, ['id'])` checks unique, non-null typed keys. Keyed equality ignores
+record order; ordinary collection equality preserves order. `put(record,
+'field', value)` returns an updated immutable record. `has_record` checks the
+complete expected record, including whether it exists.
+
+`allowed_delta(before, after, permitted_after, permitted_deleted)` takes four
+keyed collections with the same key definition. Each changed or added record
+must equal its complete permitted after-value; each removed record must equal
+its permitted prior value. Combine this allowance with `has_record` to require
+the intended change. An unchanged store can satisfy an allowance by itself.
+
+`shadow.evaluate_effect_candidate` evaluates a generated `EffectModel` over
+caller-captured observations. The caller supplies independent reader scope,
+complete snapshots and native freshness evidence. The model binds the profile,
+language implementation digest, schema, reader and source identities. The
+candidate result is returned separately from canonical verdicts, ledgers and
+signed receipts. Replay admission checks the complete independently labelled
+history for that exact set of identities.
