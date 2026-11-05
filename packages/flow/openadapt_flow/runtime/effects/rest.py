@@ -412,6 +412,8 @@ class RestRecordVerifier(VerifierAdapterBase):
                 )
                 return None
         records = drop_record_fields(collected, self.drop_fields)
+        if records is None:
+            return None
         if source_observed:
             self._read_completion = {
                 "schema_version": PROJECTION_SCHEMA,

@@ -306,6 +306,7 @@ class Contract:
         their names enter this public configuration; the baseline binds the
         exact inputs with a run-salted MAC before any write.
         """
+        from openadapt_flow.deployment import EffectsConfig
         from openadapt_flow.ensure_bridge import EnsureBinding
         from openadapt_flow.runtime.effects.effect import Effect, EffectKind
         from openadapt_flow.runtime.effects.frame import FrameSpec
@@ -321,15 +322,17 @@ class Contract:
             frame_data["targeted"] = targeted
         binding = EnsureBinding(contract=ensure, parameters=sorted(params))
         cfg = VerifyConfig(
-            verifier={
-                "kind": "fhir",
-                "base_url": ensure.base_url,
-                "resource_type": ensure.resource_type,
-                "access_token_env": ensure.access_token_env,
-                "fhir_cache_bound_s": ensure.cache_bound_s,
-                "field_paths": {"id": "id"},
-                "timeout_s": ensure.timeout_s,
-            },
+            verifier=EffectsConfig.model_validate(
+                {
+                    "kind": "fhir",
+                    "base_url": ensure.base_url,
+                    "resource_type": ensure.resource_type,
+                    "access_token_env": ensure.access_token_env,
+                    "fhir_cache_bound_s": ensure.cache_bound_s,
+                    "field_paths": {"id": "id"},
+                    "timeout_s": ensure.timeout_s,
+                }
+            ),
             effects=[Effect(kind=EffectKind.RECORD_WRITTEN)],
             frame=FrameSpec.model_validate(frame_data),
             ensure_record=binding,
@@ -3219,6 +3222,7 @@ def _prepare_recheck(
     if cfg.frame is not None and cfg.frame.targeted is not None:
         from openadapt_flow.runtime.effects.targeted import targeted_read_clock_problem
 
+        assert original is not None
         original_clock = original._targeted_read_clock
         checkpoint = state.payload["post_state"]["targeted"]
         # Validate copied issued bindings first; never reconstruct a witness

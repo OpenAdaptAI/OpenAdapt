@@ -124,7 +124,7 @@ class SurfaceRoutedVerifier:
                 if isinstance(state.detail, dict)
                 else None
             )
-            if projection_problem(facts) is None:
+            if isinstance(facts, Mapping) and projection_problem(facts) is None:
                 # Forward only closed factual completion observations, never
                 # arbitrary native detail or an authority supplied by a caller.
                 detail[name][PROJECTION_DETAIL] = dict(facts)

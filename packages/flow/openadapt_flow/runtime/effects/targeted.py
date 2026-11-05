@@ -276,6 +276,8 @@ def late_search_problem(
     problem = targeted_read_clock_problem(post, salt, clock)
     if problem is not None:
         return problem
+    if clock is None:
+        return "late_search_live_read_clock_binding_unknown"
     if (
         type(started_ns) is not int
         or started_ns < clock.completed_ns
@@ -296,7 +298,8 @@ def targeted_read_wait_s(
     """
     policy = post.get("cache_policy")
     if (
-        _cache_policy_problem(policy) is not None
+        not isinstance(policy, Mapping)
+        or _cache_policy_problem(policy) is not None
         or policy["bound_s"] is None
         or policy["W_s"] != spec.quiet_s
         or targeted_read_clock_problem(post, salt, clock) is not None

@@ -671,17 +671,18 @@ class Shadow:
         state = getattr(result, "recheck", None)
         due = getattr(state, "due_at", "") or getattr(result, "recheck_due_at", None)
         existing = (getattr(result, "evidence", None) or {}).get("reconciliation")
-        unresolved = (
-            isinstance(existing, Mapping) and existing.get("executable") is False
-        )
+        if isinstance(existing, Mapping) and existing.get("executable") is False:
+            unresolved = True
+            reason = existing["reason"]
+        else:
+            unresolved = False
+            reason = "recheck_proof_owed"
         obligation = {
             "status": "owed",
             "purpose": "read_only_reconciliation",
             "reason": "independent_target_identity_unknown"
             if result is None
-            else existing["reason"]
-            if unresolved
-            else "recheck_proof_owed",
+            else reason,
             "executable": bool(state and due) and not unresolved,
         }
         ep.evidence["reconciliation"] = obligation
