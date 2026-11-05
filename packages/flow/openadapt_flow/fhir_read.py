@@ -1,0 +1,81 @@
+"""Shared FHIR read directives and fail-closed page metadata checks."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any, Optional
+
+
+def fhir_read_headers(
+    private_read_headers: Optional[Mapping[str, str]] = None,
+) -> dict[str, str]:
+    """One coherent no-cache directive; private preferences cannot replace it.
+
+    This requests origin validation. It does not certify search visibility,
+    completeness, or a learned server cache-window bound.
+    """
+    headers = {"Accept": "application/fhir+json"}
+    seen: set[str] = set()
+    if private_read_headers is not None:
+        if not isinstance(private_read_headers, Mapping):
+            raise ValueError("FHIR read headers must be a mapping")
+        for name, value in private_read_headers.items():
+            if not isinstance(name, str) or not isinstance(value, str):
+                raise ValueError("FHIR read header names and values must be text")
+            folded = name.casefold()
+            if folded in seen:
+                raise ValueError("FHIR read header is repeated case-insensitively")
+            seen.add(folded)
+            if folded == "cache-control":
+                if value.strip().casefold() != "no-cache":
+                    raise ValueError("FHIR read cache directive must be no-cache only")
+                continue
+            if folded == "accept":
+                if value.strip().casefold() != "application/fhir+json":
+                    raise ValueError("FHIR read Accept must be application/fhir+json")
+                continue
+            headers[name] = value
+    headers["Cache-Control"] = "no-cache"
+    return headers
+
+
+def next_page_url(bundle: Mapping[str, Any]) -> Optional[str]:
+    """Reject malformed/ambiguous next links instead of treating them as EOF."""
+    if "link" not in bundle:
+        return None
+    links = bundle["link"]
+    if not isinstance(links, list):
+        raise ValueError("a Bundle's link is not a list")
+    next_urls: list[str] = []
+    for link in links:
+        if not isinstance(link, dict):
+            raise ValueError("a Bundle link is not an object")
+        if link.get("relation") != "next":
+            continue
+        url = link.get("url")
+        if not isinstance(url, str) or not url.strip():
+            raise ValueError("a Bundle's next link is not a nonempty URL")
+        next_urls.append(url)
+    if len(next_urls) > 1:
+        raise ValueError("a Bundle has ambiguous next links")
+    return next_urls[0] if next_urls else None
+
+
+def search_total(bundle: Mapping[str, Any], previous: Optional[int]) -> Optional[int]:
+    """Remember an observed total and reject invalid or changing counts."""
+    if "total" not in bundle:
+        return previous
+    total = bundle["total"]
+    if isinstance(total, bool) or not isinstance(total, int) or total < 0:
+        raise ValueError("a search Bundle's total is not a nonnegative integer")
+    if previous is not None and total != previous:
+        raise ValueError("a search Bundle's total changed across pages")
+    return total
+
+
+def check_search_coverage(total: Optional[int], matches: int) -> None:
+    """An observable cap or contradictory count is incomplete, never absent."""
+    if total is not None and total != matches:
+        raise ValueError(
+            f"the Bundle's total is {total}, the read returned {matches} matches"
+        )

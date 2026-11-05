@@ -50,6 +50,12 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
+from openadapt_flow.fhir_read import (
+    check_search_coverage,
+    fhir_read_headers,
+    next_page_url,
+    search_total,
+)
 from openadapt_flow.fhir_reference import (
     ReferenceEvidence,
     ReferenceReader,
@@ -1060,7 +1066,7 @@ class FhirReader:
 
         if self._client is None:
             self._client = httpx.Client(timeout=self.timeout_s, follow_redirects=False)
-        headers = {"Accept": "application/fhir+json"}
+        headers = fhir_read_headers()
         if self._token_env:
             token = os.environ.get(self._token_env)
             if not token:
@@ -1094,6 +1100,7 @@ class FhirReader:
         url: Optional[str] = f"{self.base_url}/{path}"
         query: Optional[Mapping[str, Any]] = params
         entries: list[dict[str, Any]] = []
+        total: Optional[int] = None
         for _ in range(MAX_PAGES):
             assert url is not None
             _, body = self.fetch(url, query)
@@ -1118,17 +1125,11 @@ class FhirReader:
                     for i in issues
                 ):
                     raise Unreadable(f"{path}: the search returned an error outcome")
-            nxt = next(
-                (
-                    link.get("url")
-                    for link in body.get("link") or []
-                    if isinstance(link, dict) and link.get("relation") == "next"
-                ),
-                None,
-            )
-            if not nxt:
-                total = body.get("total")
-                if isinstance(total, int) and body.get("type") == "searchset":
+            try:
+                nxt = next_page_url(body)
+                if body.get("type") == "searchset":
+                    total = search_total(body, total)
+                if not nxt and total is not None:
                     found = len(
                         {
                             json.dumps(
@@ -1141,8 +1142,10 @@ class FhirReader:
                             if (e.get("search") or {}).get("mode", "match") == "match"
                         }
                     )
-                    if total > found:
-                        raise Unreadable(f"{path}: total {total} but read {found}")
+                    check_search_coverage(total, found)
+            except ValueError as exc:
+                raise Unreadable(f"{path}: {exc}") from exc
+            if not nxt:
                 return entries
             if _origin(nxt) != _origin(self.base_url):
                 raise Unreadable(f"{path}: next page on another origin")
