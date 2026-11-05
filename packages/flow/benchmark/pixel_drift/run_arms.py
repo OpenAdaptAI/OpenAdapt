@@ -485,6 +485,177 @@ def rdp_live_cases(runs: list[Path], every: int = 5) -> list[dict]:
     return cases
 
 
+# -- held-out pages (PREREGISTRATION_2.md) -----------------------------------
+
+#: Neutral words for row labels; two are drawn per row.
+WORDS = (
+    "amber birch cedar delta ember fable garnet harbor indigo juniper kestrel "
+    "lagoon meadow nectar orchard pebble quartz raven saffron timber umber "
+    "velvet willow yarrow zephyr anchor beacon canyon dune estuary fjord glacier "
+    "heron island jasper kelp lantern marble nimbus opal prairie quill ridge "
+    "sierra thistle tundra valley walnut"
+).split()
+HELDOUT_CONDITIONS = ("unchanged", "moved", "dark", "transfer_missing", "transfer_none")
+
+
+def heldout_seed() -> int:
+    import hashlib
+
+    digest = hashlib.sha256((HERE / "PREREGISTRATION_2.md").read_bytes()).hexdigest()
+    return int(digest[:16], 16)
+
+
+def heldout_layouts(seed: int, pages: int = 6) -> list[dict]:
+    """Row layouts drawn from ``seed``: kind, label, pitch, origin, move."""
+    import random
+
+    rng = random.Random(seed)
+    layouts = []
+    for page in range(pages):
+        n = rng.randint(5, 7)
+        kinds = [rng.choice(["checkbox", "radio", "icon"]) for _ in range(n)]
+        glyphs = [rng.choice(sorted(GLYPHS)) for _ in range(n)]
+        labels = []
+        while len(labels) < n:
+            label = f"{rng.choice(WORDS).title()} {rng.choice(WORDS)}"
+            if label not in labels:
+                labels.append(label)
+        layouts.append(
+            {
+                "page": page,
+                "pitch": rng.choice([30, 34, 40]),
+                "x": rng.randint(30, 300),
+                "y": rng.randint(60, 200),
+                "kinds": kinds,
+                "glyphs": glyphs,
+                "labels": labels,
+                "move": (rng.randint(34, 120), rng.randint(34, 120)),
+                "transfer": rng.choice([1, 2]),
+            }
+        )
+    return layouts
+
+
+def heldout_html(layout: dict, condition: str) -> str:
+    dark = condition == "dark"
+    fg = "#dde3ea" if dark else "#23303d"
+    bg = "#1c2228" if dark else "#f4f6f8"
+    x0, y0 = layout["x"], layout["y"]
+    if condition == "moved":
+        x0, y0 = x0 + layout["move"][0], y0 + layout["move"][1]
+    n = len(layout["kinds"])
+    checked = {i for i in range(n) if i % 2 == 0}
+    if condition.startswith("transfer"):
+        # The checked state moves down ``transfer`` rows; the controls stay.
+        checked = {(i + layout["transfer"]) % n for i in checked}
+    rows = []
+    for i, (kind, glyph, label) in enumerate(
+        zip(layout["kinds"], layout["glyphs"], layout["labels"])
+    ):
+        top = y0 + i * layout["pitch"]
+        if kind == "icon":
+            control = (
+                f'<button class="ic" id="ctl-{i}">{_svg(GLYPHS[glyph], fg)}</button>'
+            )
+        else:
+            on = " checked" if i in checked else ""
+            name = f' name="g{i}"' if kind == "radio" else ""
+            control = f'<input type="{kind}" id="ctl-{i}"{name}{on}>'
+        rows.append(
+            f'<div class="row" style="left:{x0}px;top:{top}px">{control}'
+            f'<span class="lbl" id="lbl-{i}">{label}</span></div>'
+        )
+    return (
+        "<!doctype html><html><head><meta charset='utf-8'><style>"
+        f"html,body{{margin:0;background:{bg};color:{fg};"
+        "font-family:Arial,Helvetica,sans-serif;font-size:15px;"
+        f"color-scheme:{'dark' if dark else 'light'}}}"
+        ".row{position:absolute;display:flex;align-items:center;height:26px}"
+        ".row input{margin:0 10px 0 0;width:15px;height:15px}"
+        ".ic{width:26px;height:26px;padding:2px;margin-right:10px;"
+        f"border:1px solid {'#56616d' if dark else '#9aa5b1'};border-radius:4px;"
+        f"background:{'#2a323a' if dark else '#ffffff'}}}"
+        "</style></head><body>" + "".join(rows) + "</body></html>"
+    )
+
+
+def heldout_cases(seed: Optional[int] = None) -> list[dict]:
+    """Record each page unchanged; replay it under every held-out condition."""
+    from playwright.sync_api import sync_playwright
+
+    from openadapt_flow import vision
+    from openadapt_flow.ir import Anchor, Landmark
+
+    seed = heldout_seed() if seed is None else seed
+    cases = []
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        try:
+            page = browser.new_page(viewport={"width": 1280, "height": 800})
+
+            def render(layout, condition):
+                page.set_content(heldout_html(layout, condition))
+                page.wait_for_timeout(80)
+                boxes = {}
+                for i in range(len(layout["kinds"])):
+                    b = page.locator(f"#ctl-{i}").bounding_box()
+                    boxes[i] = (b["x"], b["y"], b["width"], b["height"])
+                return boxes
+
+            for layout in heldout_layouts(seed):
+                base_boxes = render(layout, "unchanged")
+                base_png = page.screenshot()
+                for i, (x, y, w, h) in base_boxes.items():
+                    region = (int(x) - 4, int(y) - 4, int(w) + 8, int(h) + 8)
+                    cx, cy = int(x + w / 2), int(y + h / 2)
+                    found = vision.find_text(base_png, layout["labels"][i])
+                    landmarks = []
+                    if found is not None:
+                        lcx, lcy = found.point
+                        landmarks.append(
+                            Landmark(
+                                relation="right_of" if lcx > cx else "left_of",
+                                ocr_text=layout["labels"][i],
+                                distance_px=int(abs(lcx - cx)),
+                                dx_px=int(round(cx - lcx)),
+                                dy_px=int(round(cy - lcy)),
+                            )
+                        )
+                    template = _crop(base_png, region)
+                    for condition in HELDOUT_CONDITIONS:
+                        boxes = render(layout, condition)
+                        if condition == "transfer_missing":
+                            # Only the target row's label is gone.
+                            page.evaluate(
+                                f"() => document.getElementById('lbl-{i}')"
+                                ".style.visibility = 'hidden'"
+                            )
+                            page.wait_for_timeout(40)
+                        png = page.screenshot()
+                        anchor = Anchor(
+                            template=f"templates/p{layout['page']}-{i}.png",
+                            region=region,
+                            click_point=(cx, cy),
+                            ocr_text=None,
+                            landmarks=[] if condition == "transfer_none" else landmarks,
+                        )
+                        bx, by, bw, bh = boxes[i]
+                        cases.append(
+                            {
+                                "suite": "heldout",
+                                "condition": condition,
+                                "target": f"p{layout['page']}/{i}/{layout['kinds'][i]}",
+                                "anchor": anchor,
+                                "template": template,
+                                "frame": png,
+                                "truth_box": (bx - 3, by - 3, bw + 6, bh + 6),
+                            }
+                        )
+        finally:
+            browser.close()
+    return cases
+
+
 # -- scoring -----------------------------------------------------------------
 
 
@@ -635,6 +806,8 @@ def main() -> int:
             rows += score(controls_cases(), grounder)
         if "avc444" in suites and args.avc444:
             rows += score(avc444_cases(args.avc444, Path(tmpdir)), grounder)
+        if "heldout" in suites:
+            rows += score(heldout_cases(), grounder)
         if "rdp_live" in suites and args.rdp_live:
             rows += score(rdp_live_cases(args.rdp_live), grounder)
 
