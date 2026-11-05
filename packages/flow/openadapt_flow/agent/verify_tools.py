@@ -115,7 +115,7 @@ class VerifyBridge:
         if not self.contracts:
             raise ValueError(f"no write contracts (*.yaml) in {self.contracts_dir}")
         self._pending: dict[str, PendingWrite] = {}
-        #: Provisional results whose recheck is still to run, by write_id.
+        #: Issued read-only obligations still owed, by write_id.
         #: This server can run them only while it holds them; the ledger
         #: records each one owed (``openadapt verify ledger list``), and
         #: after a restart it is rechecked from Python with the saved
@@ -207,15 +207,17 @@ class VerifyBridge:
             ToolSpec(
                 name="verify_recheck",
                 description=(
-                    "Call at or after a provisional result's recheck_due_at. "
-                    "Reads the whole database again: CONFIRMED (the verdict "
+                    "Call at or after an issued recheck_due_at. "
+                    "Reads the contract's declared record scope again: CONFIRMED (the verdict "
                     "stands), REFUTED (something moved after it that nothing "
                     "explains: the write is no longer verified) or UNCERTAIN. "
                     "Your later writes under the same contract and agent_id, "
                     "checked with verify_check, account for their own rows; a "
                     "write under another contract or another agent_id does "
                     "not, and refutes it. Before the due time it returns due: "
-                    "false and the time to call again."
+                    "false and the time to call again. An initial UNCERTAIN "
+                    "remains UNCERTAIN. Unknown identity or proof stays owed "
+                    "for a person to reconcile; never resend the write."
                 ),
                 input_schema=_obj(
                     {"write_id": {"type": "string", "maxLength": 64}}, ["write_id"]
@@ -304,14 +306,29 @@ class VerifyBridge:
             # earlier write's recheck (``excused_by``).
             with self._lock:
                 self._checked.append((entry, result))
-        if result.recheck is not None and out.get("provisional"):
+        if result.recheck is not None and (
+            out.get("provisional")
+            or (result.recheck_purpose == "read_only_reconciliation" and result.recheck_due_at)
+        ):
             with self._lock:
                 self._rechecks[write_id] = (entry, result)
-            out["next"] = (
-                "Provisional: call verify_recheck with this write_id at or after "
-                "recheck_due_at. A write that lands before then can still refute "
-                "it; a write after the recheck is not seen."
-            )
+            if out.get("provisional"):
+                out["next"] = (
+                    "Provisional: call verify_recheck with this write_id at or after "
+                    "recheck_due_at. A write that lands before then can still refute "
+                    "it; a write after the recheck is not seen."
+                )
+            else:
+                obligation = result.evidence.get("reconciliation") or {}
+                out["next"] = (
+                    "Read-only reconciliation remains owed; the initial outcome is UNCERTAIN. "
+                    "The missing identity or proof is not executable: a person reconciles it. "
+                    "Do not resend the write."
+                    if obligation.get("executable") is False
+                    else "Read-only reconciliation is due at recheck_due_at; call verify_recheck "
+                    "with this write_id for that observation. The initial outcome remains "
+                    "UNCERTAIN and review stays owed. Do not resend the write."
+                )
         return out
 
     def _owed_next(self, write_id: str) -> str:
@@ -438,8 +455,9 @@ class VerifyBridge:
                 "verify_recheck again once that is fixed"
             ) from exc
         with self._lock:
-            self._rechecks.pop(write_id, None)
-            self._spent[write_id] = late.outcome
+            if late.outcome != "UNCERTAIN":
+                self._rechecks.pop(write_id, None)
+                self._spent[write_id] = late.outcome
         if late.verified:
             nxt = "The verdict stands. A write after read_at is not seen."
         elif late.late:
@@ -448,8 +466,12 @@ class VerifyBridge:
                 "checks the record."
             )
         else:
-            nxt = "Not a pass. Don't retry: a person checks the record."
+            nxt = "Not a pass. The read-only obligation remains owed; a person reconciles the missing proof. Don't retry the write."
         return {
+            **({"recheck_purpose": result.recheck_purpose,
+                "reconciliation": dict(result.evidence["reconciliation"])}
+               if result.recheck_purpose == "read_only_reconciliation"
+               and isinstance(result.evidence.get("reconciliation"), Mapping) else {}),
             "due": True,
             "write_id": write_id,
             "verified": late.verified,
