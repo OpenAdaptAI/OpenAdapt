@@ -153,6 +153,19 @@ def verifier_factory(config: VerifyConfig) -> Callable[[Mapping[str, object]], A
 
     sor = config.system_of_record
     cfg = sor.verifier
+    if sor.session and cfg.kind != "rest":
+        session_hook = load_hook(sor.session)
+        from openadapt_flow.deployment import build_effect_verifier
+
+        def build_with_session(params: Mapping[str, object]) -> Any:
+            # A fresh client per read-back, so a token that expired during a
+            # long campaign is renewed rather than replayed.
+            verifier = build_effect_verifier(cfg, params, session=session_hook(config))
+            if verifier is None:
+                raise QualifyConfigError("verifier built no verifier")
+            return verifier
+
+        return build_with_session
     if sor.session:
         hook = load_hook(sor.session)
         from openadapt_flow.runtime.effects import RestRecordVerifier
