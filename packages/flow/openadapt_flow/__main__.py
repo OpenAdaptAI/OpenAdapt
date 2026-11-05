@@ -2985,12 +2985,29 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 
     headed = args.headed or cfg.backend.headed
     url = args.url or cfg.backend.url
-    refuse_unqualified_skill(bundle, target_url=url)
-    if url and args.drift:
+    demo_app = bool(getattr(args, "demo_app", False))
+    if demo_app and (
+        url or backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url
+    ):
         raise SystemExit(
-            "--drift only applies to the bundled MockMed demo app; "
-            "omit --url to use it (drift your own app for real)."
+            "--demo-app serves its own app; drop --url, backend.url or the "
+            "attached browser."
         )
+    if args.drift and not demo_app:
+        raise SystemExit(
+            "--drift only applies to the bundled MockMed demo app (--demo-app); "
+            "drift your own app for real."
+        )
+    if (
+        url is None
+        and not demo_app
+        and not (backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url)
+    ):
+        raise SystemExit(
+            "replay needs a target: pass --url, set backend.url in --config, or "
+            "pass --demo-app to replay against the bundled MockMed demo app."
+        )
+    refuse_unqualified_skill(bundle, target_url=url)
 
     held_backend: list = []
     hold_s = min(max(float(getattr(args, "hold_on_halt", 0.0) or 0.0), 0.0), 1800.0)
@@ -3076,13 +3093,13 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         )
 
     stop = None
-    if url is None:
+    if url is None and demo_app:
         from openadapt_flow.mockmed.server import serve
 
         url, stop = serve(port=0)
         url = _with_drift(url, args.drift)
         drift_note = f" (drift: {args.drift})" if args.drift else ""
-        print(f"No --url given; replaying against bundled MockMed{drift_note}")
+        print(f"--demo-app: replaying against bundled MockMed{drift_note}")
 
     video_dir = getattr(args, "record_video", None)
     from playwright.sync_api import sync_playwright
@@ -9795,22 +9812,30 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "replay",
         help=(
-            "Replay a bundle (serves the bundled MockMed demo app when "
-            "no --url is given)"
+            "Replay a bundle against --url, the config's backend.url, or "
+            "with --demo-app the bundled demo app"
         ),
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument(
         "--url",
         default=None,
-        help=("URL of the target app (default: serve the bundled MockMed demo app)"),
+        help="URL of the target app",
+    )
+    p.add_argument(
+        "--demo-app",
+        action="store_true",
+        help=(
+            "Serve the bundled MockMed demo app and replay against it (for a "
+            "bundle recorded on it, such as the tutorial's)"
+        ),
     )
     p.add_argument(
         "--drift",
         default=None,
         help=(
             "Comma-separated MockMed drift modes (theme,move,rename,modal) "
-            "to demonstrate bounded drift resolution; only valid without --url"
+            "to demonstrate bounded drift resolution; only with --demo-app"
         ),
     )
     p.add_argument(

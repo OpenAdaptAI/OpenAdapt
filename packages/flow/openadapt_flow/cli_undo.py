@@ -178,7 +178,7 @@ def register(
     p.add_argument(
         "--url",
         default=None,
-        help="URL of the target app (default: the bundled MockMed demo app)",
+        help="URL of the target app (required unless the config names one)",
     )
     p.add_argument("--headed", action="store_true", help="Run the browser headed")
     for add in add_run_flags:
@@ -535,9 +535,8 @@ def _cmd_undo_accept(args: argparse.Namespace) -> int:
 def _cmd_undo_run(args: argparse.Namespace) -> int:
     run_dir = Path(args.run_dir)
     workflow = Workflow.load(args.bundle)
-    # Without a target, replay would start the bundled MockMed demo app: the
-    # undo would act on the demo, leave the real record alone and use up the
-    # approval. Refuse before claiming it.
+    # Without a target, replay has nowhere to act: the undo would use up the
+    # approval and change nothing. Refuse before claiming it.
     problem = args._undo_target_problem(args, workflow)
     if problem:
         print(

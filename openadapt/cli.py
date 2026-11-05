@@ -3,7 +3,7 @@
 Usage:
     openadapt flow record --url <app> --out rec   # record a workflow
     openadapt flow compile rec --out bundle        # compile it
-    openadapt flow replay bundle                    # run it, local, $0
+    openadapt flow replay bundle --url <app>        # run it, local, $0
     openadapt flow lint bundle
     openadapt flow certify bundle --policy clinical-write
 
@@ -117,7 +117,7 @@ def main():
         openadapt flow compile rec --out bundle --name demo
         openadapt flow lint bundle
         openadapt flow certify bundle --policy permissive
-        openadapt flow replay bundle
+        openadapt flow replay bundle --demo-app
 
     Lint lists the demo's coverage gaps. The demo has warnings, so
     `lint --strict` exits 1 on it.
