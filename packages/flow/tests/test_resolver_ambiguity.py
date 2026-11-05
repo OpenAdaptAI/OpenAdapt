@@ -374,7 +374,7 @@ def test_geometry_estimate_snaps_onto_the_one_nearby_outline_in_a_dark_theme() -
 def test_geometry_estimate_between_two_outlines_refuses() -> None:
     scr = _blank(shade=240)
     _checkbox(scr, 100, 100, (40, 40, 40))
-    _checkbox(scr, 120, 100, (40, 40, 40))
+    _checkbox(scr, 126, 100, (40, 40, 40))
     template = _blank(shade=240)
     _checkbox(template, 100, 100, (40, 40, 40))
     template = template[96:119, 96:119].copy()
@@ -382,7 +382,7 @@ def test_geometry_estimate_between_two_outlines_refuses() -> None:
 
     with pytest.raises(resolver.UncorroboratedGeometryRefused):
         resolver._outline_corroborated(
-            _checkbox_anchor(), (117, 107), _png(scr), _png(template)
+            _checkbox_anchor(), (120, 107), _png(scr), _png(template)
         )
 
 

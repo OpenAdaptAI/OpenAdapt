@@ -761,8 +761,9 @@ def _outline_corroborated(
     glyph beside it moves the label's centre sideways, and rows above and
     below stay outside the window.
     One place: the click moves there (by the recorded offset inside the
-    crop). Several: :class:`UncorroboratedGeometryRefused`. None (a frame
-    with no such outline nearby): the estimate stands, as before.
+    crop). Several separate copies: :class:`UncorroboratedGeometryRefused`.
+    None, or copies overlapping one another (a self-similar crop): the
+    estimate stands, as before.
     """
     from openadapt_flow.vision.match import outline_matches_near
 
@@ -773,6 +774,15 @@ def _outline_corroborated(
     )
     places = outline_matches_near(screen_png, template_png, origin, (w, h // 2))
     if not places:
+        return estimate
+    if len(places) > 1 and any(
+        abs(ax - bx) < w and abs(ay - by) < h
+        for index, (_sa, ax, ay) in enumerate(places)
+        for _sb, bx, by in places[index + 1 :]
+    ):
+        # Copies that overlap one another: the crop is self-similar (a strip
+        # of field or row) and its outline cannot place it. The estimate
+        # stands, as before.
         return estimate
     if len(places) > 1:
         raise UncorroboratedGeometryRefused(
