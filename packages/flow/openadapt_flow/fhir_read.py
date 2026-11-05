@@ -91,6 +91,8 @@ def check_search_outcome(outcome: Mapping[str, Any], *, has_matches: bool) -> No
     Severity alone and absence of a partial-results code are not completeness
     evidence. A no-match message cannot coexist with actual matching records.
     """
+    if outcome.get("resourceType") != "OperationOutcome":
+        raise ValueError("the search returned an unreadable outcome")
     issues = outcome.get("issue")
     if not isinstance(issues, list) or not issues:
         raise ValueError("the search returned an unreadable outcome")

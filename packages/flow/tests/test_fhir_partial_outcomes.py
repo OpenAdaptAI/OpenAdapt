@@ -138,3 +138,11 @@ def test_unknown_issue_code_does_not_prove_completeness(kind):
         kind, [page({"severity": "information", "code": "unrecognized-search-note"})]
     )
     assert records is None
+
+
+@pytest.mark.parametrize("kind", ["ensure", "effect"])
+def test_outcome_mode_cannot_hide_another_resource_type(kind):
+    body = page({"severity": "information", "code": "informational"})
+    body["entry"][0]["resource"]["resourceType"] = "Patient"
+    records, _ = read(kind, [body])
+    assert records is None
