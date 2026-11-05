@@ -4575,6 +4575,12 @@ class EffectVerificationEvidence(BaseModel):
     deferred_check: Optional[str] = Field(
         default=None, pattern=r"^deferred:[0-9a-f]{32}$"
     )
+    #: Why a read through the application's own screens counts as
+    #: independent: separate session, re-query, distinct view, and the
+    #: history and provisional checks it ran
+    #: (:mod:`openadapt_flow.runtime.effects.ui_read_checks`). No record
+    #: values. Left out of the serialized record when unset.
+    read_evidence: Optional[dict[str, Any]] = None
 
     @property
     def assurance(self) -> str:
@@ -4603,6 +4609,8 @@ class EffectVerificationEvidence(BaseModel):
             data.pop("endpoint_scope", None)
         if self.deferred_check is None:
             data.pop("deferred_check", None)
+        if self.read_evidence is None:
+            data.pop("read_evidence", None)
         return data
 
 

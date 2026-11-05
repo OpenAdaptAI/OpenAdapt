@@ -2154,8 +2154,15 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
     # The same rule one level down: ``ui_readback.reference`` came later.
     for holder in [config, *(config.get("candidates") or [])]:
         section = holder.get("ui_readback") if isinstance(holder, dict) else None
-        if isinstance(section, dict) and section.get("reference") is None:
-            section.pop("reference", None)
+        if isinstance(section, dict):
+            for added in ("reference", "history", "final"):
+                if section.get(added) is None:
+                    section.pop(added, None)
+            if not section.get("index_lag_s"):
+                section.pop("index_lag_s", None)
+            sign_in = section.get("sign_in")
+            if isinstance(sign_in, dict) and sign_in.get("post_url") is None:
+                sign_in.pop("post_url", None)
     payload = {
         "schema": "openadapt.effect-verifier-identity/v1",
         "implementation": (

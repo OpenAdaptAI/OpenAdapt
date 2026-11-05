@@ -17,6 +17,10 @@
 
 ## Unreleased
 
+### Features
+
+- A separate-session UI read-back (`effects.kind: ui_readback`) is now an independent record check for apps with no API, SQL or FHIR read. It confirms a save only from a fresh session (no client-side store), a re-query, and a view the save didn't leave on screen, and records each rule in the effect evidence (`read_evidence`). New optional `history` (an audit or activity view read before and after the save: collateral changes are refuted), `final` (a provisional read now, settled later by `deferred settle`, one session for a batch; a re-run of a waiting item is refused) and `index_lag_s` (a lagging search view is polled with backoff). A new `regulated-ui-read` policy pack admits this check under `regulated`. Measured on OpenEMR and Dolibarr, direct and behind a chaos proxy (`benchmark/ui_second_read/RESULTS.md`).
+
 ### Fixes
 
 - The OpenEMR contracts (`benchmark/lifecycle_proof/verify.yaml`, `benchmark/openemr_local/verify.yaml`) now declare how the New Patient form stores what was typed: street and city in capitals, names with each word capitalized. Without it the exact record check refuted 19 of 20 correct saves on the stand-in suites (#1811). A contract value's `stored` form gains `capitalize_words` (OpenEMR's "C" fields); the set stays closed and the check stays exact.

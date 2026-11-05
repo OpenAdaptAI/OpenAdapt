@@ -49,6 +49,8 @@ REFUTED. Nothing here guesses CONFIRMED.
 
 from __future__ import annotations
 
+import hashlib
+import inspect
 import json
 import os
 import re
@@ -58,7 +60,7 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Literal, Mapping, Optional, Protocol
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, urljoin, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -73,6 +75,15 @@ from openadapt_flow.runtime.effects.effect import (
     ValueExpr,
     Verdict,
 )
+from openadapt_flow.runtime.effects.ui_read_checks import (
+    FinalCheck,
+    HistoryView,
+    ReadIndependence,
+    assess_independence,
+    judge_history,
+    record_digest_payload,
+    view_key,
+)
 from openadapt_flow.verification import VerificationTier
 
 SUBSTRATE = "ui-readback"
@@ -80,6 +91,20 @@ SUBSTRATE = "ui-readback"
 #: Methods the read-only session may send after sign-in. OPTIONS is a CORS
 #: preflight and carries no body.
 READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+#: Longest gap between reads while waiting for a lagging view.
+_MAX_POLL_S = 2.0
+
+#: HTTP statuses that mean the fetch failed in transit (a proxy or gateway),
+#: retried a few times with backoff before the page counts as unreadable.
+_TRANSIENT = frozenset({502, 503, 504})
+_LOAD_ATTEMPTS = 3
+_SIGN_IN_ATTEMPTS = 3
+
+
+def _backoff(attempt: int) -> float:
+    return min(0.5 * (2 ** (attempt - 1)), 4.0)
+
 
 #: Displayed values that end with one of these are treated as shortened.
 DEFAULT_TRUNCATION_MARKERS: tuple[str, ...] = ("…", "...")
@@ -112,12 +137,47 @@ class FieldReader(BaseModel):
     casefold: bool = False
 
 
+def _auth_url_key(url: str) -> tuple[str, str, int, str, str]:
+    """Canonical authority/path with the query kept verbatim, never inferred."""
+
+    try:
+        parts = urlsplit(url)
+        if (
+            parts.scheme not in {"http", "https"}
+            or not parts.hostname
+            or parts.username is not None
+            or parts.password is not None
+            or "#" in url
+            or "\\" in url
+            or any(c.isspace() for c in url)
+        ):
+            raise ValueError("invalid auth endpoint")
+        port = (
+            parts.port
+            if parts.port is not None
+            else (443 if parts.scheme == "https" else 80)
+        )
+        return (
+            parts.scheme,
+            parts.hostname.lower(),
+            port,
+            parts.path or "/",
+            parts.query,
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "sign_in requires an absolute HTTP(S) URL without userinfo or fragments"
+        ) from exc
+
+
 class SignInSpec(BaseModel):
     """The read-back session's own sign-in. Credentials are env-var names."""
 
     model_config = ConfigDict(extra="forbid")
 
     url: str
+    #: Trusted deployment authority for one native form POST; never inferred.
+    post_url: Optional[str] = None
     username_selector: str
     password_selector: str
     submit_selector: str
@@ -125,6 +185,25 @@ class SignInSpec(BaseModel):
     signed_in_selector: str
     username_env: str
     password_env: str
+
+    @model_validator(mode="after")
+    def _auth_endpoint(self) -> "SignInSpec":
+        try:
+            page = _auth_url_key(self.url)
+        except ValueError as exc:
+            raise ValueError(
+                "ui_readback.sign_in.url must be an absolute http(s) URL"
+            ) from exc
+        if self.post_url is not None:
+            try:
+                post = _auth_url_key(self.post_url)
+            except ValueError as exc:
+                raise ValueError(
+                    "sign_in.post_url must be an absolute HTTP(S) endpoint without userinfo or fragments"
+                ) from exc
+            if post[:3] != page[:3]:
+                raise ValueError("sign_in.post_url must have the sign-in page's origin")
+        return self
 
 
 class RecordIdentity(BaseModel):
@@ -224,8 +303,20 @@ class UiReadbackSpec(BaseModel):
         default_factory=lambda: list(DEFAULT_TRUNCATION_MARKERS)
     )
     navigation_timeout_s: float = 15.0
+    #: Seconds a search or list view may lag the save (a replica or a
+    #: full-text index), measured per application in its sandbox, never
+    #: from evaluation data. The read polls with backoff for at least this
+    #: long before a missing record counts.
+    index_lag_s: float = Field(default=0.0, ge=0.0, le=300.0)
     browser: Literal["chromium", "firefox", "webkit"] = "chromium"
     headless: bool = True
+    #: Optional: the application's history, audit or activity view, read
+    #: before and after the save to catch collateral changes
+    #: (:class:`~openadapt_flow.runtime.effects.ui_read_checks.HistoryView`).
+    history: Optional[HistoryView] = None
+    #: Optional: make this read provisional and settle it with a later read
+    #: (:class:`~openadapt_flow.runtime.effects.ui_read_checks.FinalCheck`).
+    final: Optional[FinalCheck] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -289,6 +380,22 @@ class UiReadbackSpec(BaseModel):
                 raise ValueError("ui_readback.read_post_paths entries start with '/'")
         if self.navigation_timeout_s <= 0:
             raise ValueError("ui_readback.navigation_timeout_s must be positive")
+        if self.history is not None:
+            if _origin(self.history.url.split("{", 1)[0]) != record_origin:
+                raise ValueError(
+                    "ui_readback.history.url must be on the record page's origin"
+                )
+            for name in re.findall(r"{([^{}]*)}", self.history.url):
+                if name not in self.url_params:
+                    raise ValueError(
+                        f"ui_readback.history.url placeholder {{{name}}} must come "
+                        "from url_params (the view is read before the save)"
+                    )
+        if self.final is not None and self.final.status_field is not None:
+            if self.final.status_field not in self.fields:
+                raise ValueError(
+                    "ui_readback.final.status_field must be one of ui_readback.fields"
+                )
         return self
 
 
@@ -382,6 +489,11 @@ class RawPage:
     identity: Optional[str] = None
     rows: list[dict[str, Optional[str]]] = field(default_factory=list)
     blocked_requests: int = 0
+    #: Whether the page's document came over the network from the server
+    #: (not a cache or a service worker). None when the driver doesn't say.
+    fetched: Optional[bool] = None
+    #: The URL the session showed when it read the page.
+    view_url: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -442,6 +554,26 @@ _READ_SCRIPT = """
   const blockedWrites = window.__openadaptBlockedWrites || 0;
   return {ready: !!ready, notFound: !!notFound, empty: empty, identity: identity,
           rows: rows, blockedWrites: blockedWrites};
+}
+"""
+
+#: True only when the page sees no client-side store a client cache could
+#: serve the record from: Web Storage, IndexedDB databases, CacheStorage
+#: caches, or a controlling service worker. A store the page can't inspect
+#: counts as empty only when the API doesn't exist in this browser.
+_EMPTY_CLIENT_STORE_SCRIPT = """
+async () => {
+  try {
+    if (window.localStorage.length || window.sessionStorage.length) return false;
+  } catch (e) {}
+  if (window.indexedDB && indexedDB.databases) {
+    if ((await indexedDB.databases()).length) return false;
+  }
+  if (window.caches) {
+    if ((await caches.keys()).length) return false;
+  }
+  if (navigator.serviceWorker && navigator.serviceWorker.controller) return false;
+  return true;
 }
 """
 
@@ -533,6 +665,31 @@ def _reader_payload(reader: FieldReader) -> dict[str, Optional[str]]:
     return {"selector": reader.selector, "attribute": reader.attribute}
 
 
+_NATIVE_SIGN_IN_FORM = """
+e => {
+  const descriptor = (prototype, name, node) =>
+    Object.getOwnPropertyDescriptor(prototype, name).get.call(node);
+  let prototype;
+  if (e instanceof HTMLButtonElement) prototype = HTMLButtonElement.prototype;
+  else if (e instanceof HTMLInputElement) prototype = HTMLInputElement.prototype;
+  else return null;
+  const type = descriptor(prototype, 'type', e);
+  if (type !== 'submit' && type !== 'image') return null;
+  const form = descriptor(prototype, 'form', e);
+  if (!(form instanceof HTMLFormElement) || !form.isConnected) return null;
+  const attribute = name => Element.prototype.getAttribute.call(e, name);
+  const effective = (override, property) => attribute(override) !== null
+    ? descriptor(prototype, property, e)
+    : descriptor(HTMLFormElement.prototype, property.slice(4).toLowerCase(), form);
+  return {
+    method: effective('formmethod', 'formMethod'),
+    action: effective('formaction', 'formAction'),
+    target: effective('formtarget', 'formTarget')
+  };
+}
+"""
+
+
 class PlaywrightReadbackDriver:
     """Drive a separate browser with Playwright's sync API.
 
@@ -569,14 +726,33 @@ class _PlaywrightSession:
         self._context: Any = None
         self._page: Any = None
         self._phase = "sign_in"
+        self._auth_refused = False
+        self._auth_attempt = 0
+        self._auth_frame: Any = None
+        self._auth_read_redirect: Optional[tuple[Any, int, str]] = None
+        self._auth_get_allowance: Optional[
+            tuple[tuple[str, str, int, str, str], Any, int]
+        ] = None
+        self._auth_response_status: Optional[int] = None
+        self._auth_allowance: Optional[
+            tuple[tuple[str, str, int, str, str], Any, int]
+        ] = None
         self._blocked = 0
-        self._loaded = False
+        self._blocked_elsewhere = 0
+        #: The URL of the page being read (None outside a read).
+        self._reading: Optional[str] = None
+        self._loaded: Optional[str] = None
         self.facts = SessionFacts(
             own_browser=True, fresh_context=False, signed_in=False
         )
 
     # -- context manager ------------------------------------------------------
     def __enter__(self) -> "_PlaywrightSession":
+        if self._target.spec.sign_in.post_url is None:
+            self._username = self._password = ""
+            raise ReadbackSessionError(
+                "sign_in.post_url must declare the permitted native form POST"
+            )
         try:
             from playwright.sync_api import sync_playwright
         except ModuleNotFoundError as exc:  # pragma: no cover - env specific
@@ -600,21 +776,74 @@ class _PlaywrightSession:
             self._context.route("**/*", self._guard)
             self._page = self._context.new_page()
             self._page.goto(spec.sign_in.url, wait_until="domcontentloaded")
-            fresh = fresh and self._page.evaluate(
-                "() => { try { return window.localStorage.length === 0 && "
-                "window.sessionStorage.length === 0; } catch (e) { return true; } }"
-            )
+            fresh = fresh and self._page.evaluate(_EMPTY_CLIENT_STORE_SCRIPT)
             if not fresh:
                 raise ReadbackSessionError("the read-back context was not empty")
-            self._page.fill(spec.sign_in.username_selector, self._username)
-            self._page.fill(spec.sign_in.password_selector, self._password)
-            self._page.click(spec.sign_in.submit_selector)
-            self._page.wait_for_selector(
-                spec.sign_in.signed_in_selector, state="attached"
-            )
+            # Only a captured transient auth response permits another explicit
+            # credential submission. Unknown delivery/navigation never does.
+            for attempt in range(_SIGN_IN_ATTEMPTS):
+                self._auth_attempt += 1
+                self._auth_read_redirect = None
+                self._auth_get_allowance = None
+                self._auth_response_status = None
+                self._auth_allowance = None
+                self._phase = "sign_in"
+                try:
+                    if attempt:
+                        time.sleep(_backoff(attempt))
+                        self._page.goto(spec.sign_in.url, wait_until="domcontentloaded")
+                    self._page.fill(spec.sign_in.username_selector, self._username)
+                    self._page.fill(spec.sign_in.password_selector, self._password)
+                    self._arm_sign_in()
+                    try:
+                        self._page.click(spec.sign_in.submit_selector)
+                    except Exception:  # noqa: BLE001 - only our captured abort is expected
+                        if not self._current_auth_redirect():
+                            raise
+                    redirect = self._consume_auth_redirect()
+                    if redirect is not None:
+                        frame, url = redirect
+                        self._auth_get_allowance = (
+                            _auth_url_key(url),
+                            frame,
+                            self._auth_attempt,
+                        )
+                        try:
+                            frame.goto(url, wait_until="domcontentloaded")
+                        except Exception:
+                            raise ReadbackSessionError(
+                                "the explicit authentication read failed"
+                            ) from None
+                        if self._auth_get_allowance is not None or self._auth_refused:
+                            raise ReadbackSessionError(
+                                "the authentication read did not pass its guard"
+                            )
+                    self._page.wait_for_selector(
+                        spec.sign_in.signed_in_selector, state="attached"
+                    )
+                    if self._auth_refused:
+                        raise ReadbackSessionError(
+                            "the authentication response could not be safely delivered"
+                        )
+                    break
+                except ReadbackSessionError:
+                    raise
+                except Exception:  # noqa: BLE001 - retried, then fails below
+                    self._auth_allowance = None
+                    if self._auth_refused:
+                        raise ReadbackSessionError(
+                            "the authentication response could not be safely delivered"
+                        ) from None
+                    if self._auth_response_status not in _TRANSIENT:
+                        raise ReadbackSessionError(
+                            "sign-in did not complete after the declared POST"
+                        ) from None
+                    if attempt == _SIGN_IN_ATTEMPTS - 1:
+                        raise
             # From here on the session is read-only. The network guard
             # (``_guard``) refuses every non-read request; the init script
             # refuses them inside each page before they are sent.
+            self._auth_allowance = None
             self._phase = "read"
             self._context.add_init_script(_no_writes_script(self._target))
         except ReadbackSessionError:
@@ -639,6 +868,9 @@ class _PlaywrightSession:
         # Anything still in flight while the session closes is refused, and
         # the context goes offline first so a request released during
         # teardown cannot reach the application.
+        self._auth_allowance = None
+        self._auth_get_allowance = None
+        self._auth_read_redirect = None
         self._phase = "closed"
         if self._context is not None:
             try:
@@ -659,62 +891,282 @@ class _PlaywrightSession:
         self._context = self._browser = self._pw = None
 
     # -- read-only guard --------------------------------------------------------
+    def _arm_sign_in(self) -> None:
+        """Bind the selected native submitter to the declared deployment POST."""
+
+        self._auth_allowance = None
+        sign_in = self._target.spec.sign_in
+        if sign_in.post_url is None:
+            raise ReadbackSessionError("sign_in.post_url is not declared")
+        submitter = self._page.locator(sign_in.submit_selector).element_handle()
+        if submitter is None:
+            raise ReadbackSessionError("the selected sign-in submitter is unavailable")
+        form = submitter.evaluate(_NATIVE_SIGN_IN_FORM)
+        frame = submitter.owner_frame()
+        if (
+            not isinstance(form, dict)
+            or form.get("method") != "post"
+            or form.get("target") not in {"", "_self"}
+            or not isinstance(form.get("action"), str)
+            or _auth_url_key(form["action"]) != _auth_url_key(sign_in.post_url)
+            or frame is None
+        ):
+            raise ReadbackSessionError(
+                "the selected native sign-in form does not match its declared POST"
+            )
+        self._auth_frame = frame
+        self._auth_allowance = (
+            _auth_url_key(sign_in.post_url),
+            frame,
+            self._auth_attempt,
+        )
+
+    def _current_auth_redirect(self) -> bool:
+        token = self._auth_read_redirect
+        return (
+            token is not None
+            and not self._auth_refused
+            and token[0] is self._auth_frame
+            and token[1] == self._auth_attempt
+            and self._phase == "read"
+        )
+
+    def _consume_auth_redirect(self) -> Optional[tuple[Any, str]]:
+        token = self._auth_read_redirect
+        current = self._current_auth_redirect()
+        self._auth_read_redirect = None
+        if token is None:
+            return None
+        if not current:
+            raise ReadbackSessionError(
+                "the captured authentication read is not current"
+            )
+        return token[0], token[2]
+
+    def _send_auth_request(self, route: Any, request: Any, *, read: bool) -> None:
+        """Send one bound auth request; redirects never reach the browser."""
+
+        response = None
+        handled = False
+        try:
+            response = route.fetch(
+                max_redirects=0,
+                max_retries=0,
+                timeout=int(self._target.spec.navigation_timeout_s * 1000),
+            )
+            status = int(response.status)
+            if not read:
+                self._auth_response_status = status
+            if 300 <= status < 400:
+                if read or status not in {301, 302, 303}:
+                    self._auth_refused = True
+                else:
+                    location = response.headers.get("location")
+                    if not isinstance(location, str) or not location:
+                        raise ValueError("missing auth read Location")
+                    url = urljoin(str(request.url), location)
+                    if _auth_url_key(url)[:3] != _auth_url_key(str(request.url))[:3]:
+                        raise ValueError("auth read Location changes origin")
+                    self._auth_read_redirect = (request.frame, self._auth_attempt, url)
+                # Cancel only the captured native navigation without creating
+                # a browser error document that can race the explicit read.
+                route.abort(
+                    "aborted" if self._current_auth_redirect() else "blockedbyclient"
+                )
+                handled = True
+            else:
+                route.fulfill(response=response)
+                handled = True
+        except Exception:  # noqa: BLE001 - unknown delivery never permits a resend
+            self._auth_refused = True
+            if not handled:
+                try:
+                    route.abort("blockedbyclient")
+                except Exception:  # noqa: BLE001 - refusal remains mandatory
+                    pass
+        finally:
+            if response is not None:
+                try:
+                    response.dispose()
+                except Exception:  # noqa: BLE001 - cleanup cannot establish success
+                    self._auth_refused = True
+
     def _guard(self, route: Any, request: Any) -> None:
         method = str(request.method).upper()
         if method in READ_METHODS:
+            if self._auth_get_allowance is not None:
+                endpoint, frame, attempt = self._auth_get_allowance
+                if request.frame is frame and request.is_navigation_request():
+                    self._auth_get_allowance = None
+                    if (
+                        method == "GET"
+                        and attempt == self._auth_attempt
+                        and _auth_url_key(str(request.url)) == endpoint
+                        and self._phase == "read"
+                    ):
+                        self._send_auth_request(route, request, read=True)
+                    else:
+                        self._auth_refused = True
+                        route.abort("blockedbyclient")
+                    return
             route.continue_()
             return
         spec = self._target.spec
         url = str(request.url)
+        if method == "POST" and self._auth_allowance is not None:
+            endpoint, frame, attempt = self._auth_allowance
+            try:
+                native_auth = (
+                    request.frame is frame
+                    and attempt == self._auth_attempt
+                    and request.is_navigation_request()
+                    and request.resource_type == "document"
+                    and request.redirected_from is None
+                    and _auth_url_key(url) == endpoint
+                )
+            except Exception:  # noqa: BLE001 - unknown request authority refuses
+                native_auth = False
+            if native_auth:
+                # Consume before the request can cause redirects or background writes.
+                self._auth_allowance = None
+                self._phase = "read"
+                self._send_auth_request(route, request, read=False)
+                return
         if (
-            self._phase == "sign_in"
+            self._phase == "read"
             and method == "POST"
-            and _origin(url) == _origin(spec.sign_in.url)
-        ):
-            route.continue_()
-            return
-        if (
-            method == "POST"
             and _origin(url) == _origin(self._target.record_url)
             and any(urlsplit(url).path.startswith(p) for p in spec.read_post_paths)
         ):
             route.continue_()
             return
-        self._blocked += 1
+        # Always refused. It counts against the page being read only when
+        # that page sent it: a timer on a page the session already left
+        # (a landing page polling a counter) says nothing about the record.
+        if self._from_reading_page(request):
+            self._blocked += 1
+        else:
+            self._blocked_elsewhere += 1
         route.abort("blockedbyclient")
 
+    def _from_reading_page(self, request: Any) -> bool:
+        if self._reading is None:
+            return True
+        try:
+            frame_url = str(request.frame.url)
+        except Exception:  # noqa: BLE001 - unknown origin counts against the page
+            return True
+        here = urlsplit(self._reading)
+        there = urlsplit(frame_url)
+        if not there.scheme.startswith("http"):
+            return True
+        return (there.netloc, there.path) == (here.netloc, here.path)
+
     # -- reading ------------------------------------------------------------------
-    def read(self) -> RawPage:
-        spec = self._target.spec
+    def _load(self, url: str) -> Optional[bool]:
+        """Open ``url`` (reload it when it is already open); say whether the
+        document came over the network."""
+
+        self._reading = url
+        for attempt in range(_LOAD_ATTEMPTS):
+            if attempt:
+                time.sleep(_backoff(attempt))
+            if self._loaded == url:
+                response = self._page.reload(wait_until="domcontentloaded")
+            else:
+                response = self._page.goto(url, wait_until="domcontentloaded")
+                self._loaded = url
+            # A gateway error is a failed fetch, not a page: load it again.
+            if response is None or int(response.status) not in _TRANSIENT:
+                break
+        if response is None:
+            return None
+        if int(response.status) in _TRANSIENT:
+            raise ReadbackSessionError("the page kept answering with a gateway error")
+        try:
+            from_worker = bool(response.from_service_worker)
+        except Exception:  # noqa: BLE001 - older drivers lack the property
+            from_worker = False
+        return not from_worker and int(response.status) != 304
+
+    def read(self, target: Optional[ResolvedReadback] = None) -> RawPage:
+        """Read the record page; ``target`` reads another record in the same
+        session (a batch of final reads signs in once)."""
+
+        target = target or self._target
+        spec = target.spec
+        payload = {
+            "ready": spec.ready_selector,
+            "notFound": spec.not_found_selector,
+            "empty": spec.empty_selector,
+            "row": spec.row_selector,
+            "identity": _reader_payload(spec.identity.reader),
+            "fields": {
+                name: _reader_payload(reader) for name, reader in spec.fields.items()
+            },
+        }
+        waiting = spec.ready_selector
+        if spec.not_found_selector:
+            waiting = f"{spec.ready_selector}, {spec.not_found_selector}"
+        return self._read(target.record_url, waiting, payload, "record page")
+
+    def read_view(self, url: str, payload: dict[str, Any]) -> RawPage:
+        """Read another view of the application (a history or audit list),
+        submitting its GET filter form first when ``payload["submit"]`` names
+        the control."""
+
+        submit = payload.get("submit")
+        if not submit:
+            return self._read(url, payload["ready"], payload, "history view")
         blocked_before = self._blocked
         try:
-            if self._loaded:
-                self._page.reload(wait_until="domcontentloaded")
-            else:
-                self._page.goto(self._target.record_url, wait_until="domcontentloaded")
-                self._loaded = True
-            waiting = spec.ready_selector
-            if spec.not_found_selector:
-                waiting = f"{spec.ready_selector}, {spec.not_found_selector}"
-            self._page.wait_for_selector(waiting, state="attached")
-            raw = self._page.evaluate(
-                _READ_SCRIPT,
-                {
-                    "ready": spec.ready_selector,
-                    "notFound": spec.not_found_selector,
-                    "empty": spec.empty_selector,
-                    "row": spec.row_selector,
-                    "identity": _reader_payload(spec.identity.reader),
-                    "fields": {
-                        name: _reader_payload(reader)
-                        for name, reader in spec.fields.items()
-                    },
-                },
+            self._load(url)
+            with self._page.expect_navigation(wait_until="domcontentloaded"):
+                self._page.click(submit)
+            self._loaded = None  # the form chose the URL; never reload it blind
+        except Exception as exc:  # noqa: BLE001 - unreadable view
+            return RawPage(
+                ok=False,
+                reason=f"the history view's form did not submit ({type(exc).__name__})",
+                blocked_requests=self._blocked - blocked_before,
             )
+        return self._read_current(
+            payload["ready"], payload, "history view", None, blocked_before
+        )
+
+    def _read(
+        self, url: str, waiting: str, payload: dict[str, Any], what: str
+    ) -> RawPage:
+        blocked_before = self._blocked
+        try:
+            fetched = self._load(url)
         except Exception as exc:  # noqa: BLE001 - unreadable page
             return RawPage(
                 ok=False,
-                reason=f"the record page did not load or could not be read "
+                reason=f"the {what} did not load or could not be read "
+                f"({type(exc).__name__})",
+                blocked_requests=self._blocked - blocked_before,
+            )
+        return self._read_current(waiting, payload, what, fetched, blocked_before)
+
+    def _read_current(
+        self,
+        waiting: str,
+        payload: dict[str, Any],
+        what: str,
+        fetched: Optional[bool],
+        blocked_before: Optional[int] = None,
+    ) -> RawPage:
+        if blocked_before is None:
+            blocked_before = self._blocked
+        try:
+            self._page.wait_for_selector(waiting, state="attached")
+            raw = self._page.evaluate(_READ_SCRIPT, payload)
+            view_url = str(self._page.url)
+        except Exception as exc:  # noqa: BLE001 - unreadable page
+            return RawPage(
+                ok=False,
+                reason=f"the {what} did not load or could not be read "
                 f"({type(exc).__name__})",
                 blocked_requests=self._blocked - blocked_before,
             )
@@ -728,6 +1180,8 @@ class _PlaywrightSession:
             blocked_requests=self._blocked
             - blocked_before
             + int(raw.get("blockedWrites") or 0),
+            fetched=fetched,
+            view_url=view_url,
         )
 
 
@@ -913,7 +1367,16 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         self.poll_interval_s = poll_interval_s
         self._session_timeout_s = session_timeout_s
         self._environ = environ if environ is not None else os.environ
+        #: The history view as read before the save (None: not read).
+        self._history_before: Optional[list[dict[str, Optional[str]]]] = None
         sign_in = target.spec.sign_in
+        if (
+            isinstance(self._driver, PlaywrightReadbackDriver)
+            and sign_in.post_url is None
+        ):
+            raise ValueError(
+                "sign_in.post_url must declare the permitted native form POST"
+            )
         for name in (sign_in.username_env, sign_in.password_env):
             if not self._environ.get(name):
                 raise ValueError(
@@ -938,6 +1401,8 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         any effect that judges against a baseline must refuse before input
         rather than halt after it.
         """
+        if self._waiting_entry() is not None:
+            return True  # refuse before input: this item is still provisional
         base = bool(effect.requires_baseline or effect.forbid_collateral_loss)
         if self._reference is None:
             return base
@@ -999,6 +1464,252 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
             )
         except ValueError as exc:
             return None, f"the captured record reference cannot be used ({exc})"
+
+    # -- independence, history, provisional ------------------------------------------
+    def _acting_view(self) -> tuple[bool, bool, Optional[str]]:
+        """``(bound, has_url, url)`` of the acting session right after the save."""
+
+        if self._backend is None:
+            return False, False, None
+        missing = object()
+        try:
+            url = getattr(self._backend, "url", missing)
+            if url is missing:
+                if inspect.getattr_static(self._backend, "url", missing) is not missing:
+                    return True, True, None
+                return True, False, None
+            value = url() if callable(url) else url
+        except Exception:  # noqa: BLE001 - unknown, never a pass by itself
+            return True, True, None
+        return True, True, value if isinstance(value, str) else None
+
+    def _history_url(self) -> Optional[str]:
+        view = self._target.spec.history
+        if view is None:
+            return None
+        values: dict[str, str] = {}
+        for name, expr in self._target.spec.url_params.items():
+            value = expr.resolve(self._params)
+            if value is not None:
+                values[name] = quote(value, safe="")
+        try:
+            return view.url.format(**values) if values else view.url
+        except (KeyError, IndexError, ValueError):
+            return None
+
+    def _read_history(
+        self, session: ReadbackSession
+    ) -> Optional[list[dict[str, Optional[str]]]]:
+        view = self._target.spec.history
+        url = self._history_url()
+        reader = getattr(session, "read_view", None)
+        if view is None or url is None or not callable(reader):
+            return None
+        raw = reader(url, view.script_spec())
+        if not isinstance(raw, RawPage) or not raw.ok or raw.blocked_requests:
+            return None
+        return list(raw.rows)
+
+    def _history_verdict(
+        self,
+        verdict: EffectVerdict,
+        after: Optional[list[dict[str, Optional[str]]]],
+        target: ResolvedReadback,
+    ) -> tuple[EffectVerdict, Optional[dict[str, Any]]]:
+        view = self._target.spec.history
+        if view is None or not verdict.confirmed:
+            return verdict, None
+        acting = (
+            self._environ.get(view.acting_user_env) if view.acting_user_env else None
+        )
+        record_id = (
+            view.record.resolve(self._params) if view.record is not None else None
+        )
+        judged = judge_history(
+            view,
+            self._history_before,
+            after,
+            record_id=record_id or target.identity_value,
+            acting_user=acting,
+        )
+        detail = {"read": True, "ok": judged.ok, **judged.detail}
+        if judged.ok:
+            return verdict, detail
+        return (
+            verdict.model_copy(
+                update={
+                    "verdict": Verdict.REFUTED
+                    if judged.refuted
+                    else Verdict.INDETERMINATE,
+                    "reason": f"{judged.reason}; HALT",
+                    # A collateral change says nothing about whether the
+                    # declared record is absent.
+                    "observed_count": None
+                    if not judged.refuted
+                    else verdict.observed_count,
+                }
+            ),
+            detail,
+        )
+
+    def _params_digest(self, ledger: Any) -> str:
+        return ledger.key_digest(
+            json.dumps(
+                {k: str(v) for k, v in sorted(self._params.items())},
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        )
+
+    def _waiting_entry(self) -> Optional[str]:
+        """The id of a provisional entry for these same inputs, still waiting.
+
+        The ledger is on disk, so this holds across restarts: re-running the
+        worklist never sends an item again while its final read is owed.
+        """
+
+        final = self._target.spec.final
+        if final is None:
+            return None
+        from openadapt_flow.runtime.effects.deferred_report import (
+            UI_READBACK_FORMAT,
+            PendingLedger,
+        )
+
+        try:
+            ledger = PendingLedger(final.ledger)
+            digest = self._params_digest(ledger)
+            for entry in ledger.entries():
+                if (
+                    entry.state != "waiting"
+                    or entry.report_format != UI_READBACK_FORMAT
+                ):
+                    continue
+                if entry.params_digest == digest:
+                    return entry.id
+                if entry.params_digest is None:
+                    # Older fixed-target entries omitted the empty-input digest.
+                    # A changed config alone cannot release the same record.
+                    # Unknown or incomplete legacy identity requires a stop.
+                    locator = entry.locator or {}
+                    reader = self._target.spec.identity.reader
+                    old_identity, old_readable = normalize_value(
+                        locator.get("identity"), reader
+                    )
+                    identity, readable = normalize_value(
+                        self._target.identity_value, reader
+                    )
+                    other_target = (
+                        view_key(self._target.record_url) is not None
+                        and view_key(locator.get("record_url")) is not None
+                        and old_readable
+                        and readable
+                        and bool(old_identity)
+                        and bool(identity)
+                        and old_identity != identity
+                    )
+                    if (
+                        not other_target
+                        or entry.report_format_digest == self._final_digest()
+                    ):
+                        return entry.id
+        except (OSError, ValueError):
+            return "unreadable-ledger"  # can't rule it out: refuse
+        return None
+
+    def _final_digest(self) -> str:
+        spec = self._target.spec
+        payload = spec.model_dump(mode="json", exclude={"sign_in"})
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+
+    def _provisional(
+        self,
+        expected: Effect,
+        verdict: EffectVerdict,
+        page: Optional["_NormalizedPage"],
+        target: ResolvedReadback,
+    ) -> tuple[EffectVerdict, Optional[dict[str, Any]]]:
+        """Under ``final``, turn a confirmation into a waiting entry."""
+
+        final = self._target.spec.final
+        if final is None or not verdict.confirmed or page is None:
+            return verdict, None
+        status = None
+        if final.status_field is not None:
+            values = {r.get(final.status_field) for r in page.records}
+            kinds = {final.status_of(v) for v in values}
+            if "rejected" in kinds:
+                return (
+                    verdict.model_copy(
+                        update={
+                            "verdict": Verdict.REFUTED,
+                            "observed_count": None,
+                            "reason": "the record page shows the record turned "
+                            "down (a rejected status); HALT",
+                        }
+                    ),
+                    {"status": "rejected"},
+                )
+            if "unknown" in kinds or len(kinds) != 1:
+                return (
+                    verdict.model_copy(
+                        update={
+                            "verdict": Verdict.INDETERMINATE,
+                            "reason": "the record page shows a status the "
+                            "deployment doesn't declare; HALT",
+                        }
+                    ),
+                    {"status": "unknown"},
+                )
+            status = kinds.pop()
+        from openadapt_flow.runtime.effects.deferred_report import PendingLedger
+
+        exclude = (final.status_field,) if final.status_field else ()
+        try:
+            ledger = PendingLedger(final.ledger)
+            entry = ledger.add_ui(
+                effect_contract_hash=expected.contract_hash(),
+                spec_digest=self._final_digest(),
+                describe=final.describe,
+                deadline_hours=final.deadline_hours,
+                due_after_s=final.after_s,
+                locator={
+                    "record_url": target.record_url,
+                    "identity": target.identity_value,
+                },
+                record_payload=record_digest_payload(page.records, exclude=exclude),
+                params_digest=self._params_digest(ledger),
+            )
+        except (OSError, ValueError) as exc:
+            return (
+                verdict.model_copy(
+                    update={
+                        "verdict": Verdict.INDETERMINATE,
+                        "reason": "could not record the provisional check "
+                        f"({type(exc).__name__}); HALT",
+                        "unavailable": True,
+                    }
+                ),
+                None,
+            )
+        return (
+            EffectVerdict(
+                verdict=Verdict.INDETERMINATE,
+                kind=expected.kind,
+                substrate=self.substrate,
+                reason=(
+                    "provisionally confirmed through the record page"
+                    + (f" (status {status})" if status else "")
+                    + f"; the final read is due after {entry.due_at} and by "
+                    f"{entry.deadline}; not counted until it settles"
+                ),
+                deferred_check=entry.id,
+                assurance=UNCHECKED,
+            ),
+            {"provisional": True, "status": status, "due_at": entry.due_at},
+        )
 
     # -- session plumbing ----------------------------------------------------------
     def _credentials(self) -> tuple[str, str]:
@@ -1238,6 +1949,23 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         return self._normalize(raw), "", facts
 
     def capture_pre_state(self, context: Any = None) -> EffectState:
+        waiting = self._waiting_entry()
+        if waiting is not None:
+            return EffectState(
+                substrate=self.substrate,
+                reachable=False,
+                records=[],
+                detail={
+                    **self._detail(None, None),
+                    "reason": "this item was saved earlier and is still provisional "
+                    f"({waiting}); it is not sent again before its final read",
+                },
+            )
+        if self._target.spec.history is not None:
+            rows, _failure, _facts = self._in_session(
+                self._read_history, budget_s=self._session_budget()
+            )
+            self._history_before = rows if isinstance(rows, list) else None
         if self._reference is not None:
             return EffectState(
                 substrate=self.substrate,
@@ -1309,6 +2037,7 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         CONFIRMED or ``expected.timeout_s`` passes, reloading between reads."""
 
         timeout_s = max(0.0, expected.timeout_s)
+        spec = self._target.spec
         target, failure = self._bound_target()
         if target is None:
             return EffectVerdict(
@@ -1320,20 +2049,50 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
                 assurance=UNCHECKED,
             )
 
-        def work(session: ReadbackSession) -> EffectVerdict:
-            deadline = time.monotonic() + timeout_s
-            while True:
-                verdict = self._judge(
-                    expected, before, self._normalize(session.read(), target), target
-                )
-                if verdict.confirmed or time.monotonic() >= deadline:
-                    return verdict
-                time.sleep(self.poll_interval_s)
+        bound, has_url, acting_url = self._acting_view()
 
-        verdict, failure, _facts = self._in_session(
-            work, budget_s=self._session_budget(timeout_s), target=target
+        def work(session: ReadbackSession) -> tuple[Any, ...]:
+            # Search and list views often read a replica or an index that
+            # lags the save. Poll with backoff for the lag the deployment
+            # measured in its sandbox before taking "not there" as the read.
+            deadline = time.monotonic() + max(timeout_s, spec.index_lag_s)
+            wait = self.poll_interval_s
+            found = False
+            while True:
+                raw = session.read()
+                page = self._normalize(raw, target)
+                shows = page.readable and not page.not_found and bool(page.records)
+                if found and page.readable and not shows:
+                    # Once seen, a record never quietly becomes "not saved".
+                    verdict = EffectVerdict(
+                        verdict=Verdict.INDETERMINATE,
+                        kind=expected.kind,
+                        substrate=self.substrate,
+                        reason="the view showed the record, then stopped showing "
+                        "it (a lagging or inconsistent index); can't certify the "
+                        "save; HALT",
+                    )
+                    break
+                found = found or shows
+                verdict = self._judge(expected, before, page, target)
+                if verdict.confirmed or time.monotonic() >= deadline:
+                    break
+                time.sleep(wait)
+                wait = min(max(wait * 2, 0.05), _MAX_POLL_S)
+            history = (
+                self._read_history(session)
+                if verdict.confirmed and self._target.spec.history is not None
+                else None
+            )
+            return verdict, raw, page, history
+
+        started = time.monotonic()
+        result, failure, facts = self._in_session(
+            work,
+            budget_s=self._session_budget(max(timeout_s, spec.index_lag_s)),
+            target=target,
         )
-        if verdict is None:
+        if result is None:
             return EffectVerdict(
                 verdict=Verdict.INDETERMINATE,
                 kind=expected.kind,
@@ -1342,13 +2101,56 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
                 unavailable=True,
                 assurance=UNCHECKED,
             )
+        verdict, raw, page, history = result
         assert isinstance(verdict, EffectVerdict)
+        independence = assess_independence(
+            own_browser=bool(facts and facts.own_browser),
+            fresh_context=bool(facts and facts.fresh_context),
+            signed_in=bool(facts and facts.signed_in),
+            fetched=getattr(raw, "fetched", None),
+            read_url=getattr(raw, "view_url", None) or target.record_url,
+            acting_url=acting_url,
+            acting_bound=bound,
+            acting_has_url=has_url,
+            read_seconds=time.monotonic() - started,
+        )
+        evidence: dict[str, Any] = {"independence": independence.to_dict()}
+        verdict = _require_independent(verdict, independence)
+        verdict, history_detail = self._history_verdict(verdict, history, target)
+        if history_detail is not None:
+            evidence["history"] = history_detail
+        verdict, final_detail = self._provisional(expected, verdict, page, target)
+        if final_detail is not None:
+            evidence["final"] = final_detail
         # A separate session reads the same application's screens, so under
         # the policy rule in openadapt_flow.assurance this is a screen
         # read-back, not a system-of-record read (tier 2).
         return verdict.model_copy(
-            update={"assurance": SCREEN_READBACK if verdict.confirmed else UNCHECKED}
+            update={
+                "assurance": SCREEN_READBACK if verdict.confirmed else UNCHECKED,
+                "read_evidence": evidence,
+            }
         )
+
+
+def _require_independent(
+    verdict: EffectVerdict, independence: ReadIndependence
+) -> EffectVerdict:
+    """A read that isn't independent can refute a save, never confirm one."""
+
+    if not verdict.confirmed or independence.qualifies:
+        return verdict
+    return verdict.model_copy(
+        update={
+            "verdict": Verdict.INDETERMINATE,
+            "reason": (
+                "the record page agreed, but the read is not independent of the "
+                f"save ({', '.join(independence.failed)}: "
+                + "; ".join(independence.basis[k] for k in independence.failed)
+                + "); reading the page the save showed never counts; HALT"
+            ),
+        }
+    )
 
 
 def without_absence_claim(verdict: EffectVerdict) -> EffectVerdict:
@@ -1434,6 +2236,155 @@ def build_ui_readback_verifier(
     )
 
 
+def settle_ui_readback(
+    spec: UiReadbackSpec,
+    *,
+    driver: Optional[ReadbackDriver] = None,
+    environ: Optional[Mapping[str, str]] = None,
+    now: Optional[datetime] = None,
+) -> list[Any]:
+    """Run the final read for every due entry this configuration left waiting.
+
+    One fresh, signed-in session reads every due record in turn, so a batch
+    of N saves costs one sign-in and N page loads. Each entry settles:
+
+    - VERIFIED: the record shows a final status (when ``status_field`` is
+      declared) and exactly the values the provisional read saw;
+    - RECONCILIATION_REQUIRED: a rejected or undeclared status, a value that
+      changed after the provisional read, a record the page no longer shows,
+      or (first, before any read) a deadline that passed;
+    - still waiting: a status still pending, or a page that couldn't be read.
+
+    Returns the :class:`~.deferred_report.Settlement` list.
+    """
+
+    from openadapt_flow.runtime.effects.deferred_report import (
+        UI_READBACK_FORMAT,
+        PendingLedger,
+        _now,
+    )
+
+    final = spec.final
+    if final is None:
+        raise ValueError("ui_readback.final is not configured")
+    ledger = PendingLedger(final.ledger)
+    moment = now or _now()
+    settled: list[Any] = list(ledger.settle(None, None, now=moment))
+    due = []
+    for entry in ledger.entries():
+        if (
+            entry.state != "waiting"
+            or entry.report_format != UI_READBACK_FORMAT
+            or entry.locator is None
+            or entry.record_mac is None
+        ):
+            continue
+        if entry.due_at and datetime.fromisoformat(entry.due_at) > moment:
+            continue
+        target = ResolvedReadback(
+            spec=spec,
+            record_url=str(entry.locator.get("record_url", "")),
+            identity_value=str(entry.locator.get("identity", "")),
+        )
+        due.append((entry, target))
+    if not due:
+        return settled
+    verifier = SeparateSessionReadbackVerifier(
+        due[0][1], driver=driver, environ=environ
+    )
+    digest = verifier._final_digest()
+    due = [(e, t) for e, t in due if e.report_format_digest == digest]
+    if not due:
+        return settled
+    exclude = (final.status_field,) if final.status_field else ()
+
+    def work(session: ReadbackSession) -> list[tuple[Any, Any, str, str]]:
+        decisions = []
+        for entry, target in due:
+            raw = session.read(target)  # type: ignore[call-arg]
+            independence = assess_independence(
+                own_browser=session.facts.own_browser,
+                fresh_context=session.facts.fresh_context,
+                signed_in=session.facts.signed_in,
+                fetched=raw.fetched,
+                read_url=raw.view_url or target.record_url,
+                acting_url=None,
+                acting_bound=False,
+                acting_has_url=False,
+            )
+            if not independence.qualifies:
+                continue  # refused document: keep waiting until the deadline
+            page = verifier._normalize(raw, target)
+            if not page.readable:
+                continue  # can't tell now; the deadline still applies
+            if page.not_found or not page.records:
+                decisions.append(
+                    (
+                        entry,
+                        "reconciliation_required",
+                        "gone",
+                        "the record page no longer shows the record",
+                    )
+                )
+                continue
+            if final.status_field is not None:
+                kinds = {
+                    final.status_of(r.get(final.status_field)) for r in page.records
+                }
+                if kinds == {"pending"}:
+                    continue
+                if kinds != {"final"}:
+                    decisions.append(
+                        (
+                            entry,
+                            "reconciliation_required",
+                            "status",
+                            "the record shows a rejected or undeclared status",
+                        )
+                    )
+                    continue
+            if page.uncertain:
+                continue
+            mac = ledger.key_digest(
+                record_digest_payload(page.records, exclude=exclude)
+            )
+            if mac != entry.record_mac:
+                decisions.append(
+                    (
+                        entry,
+                        "reconciliation_required",
+                        "changed",
+                        "the record changed after the provisional check",
+                    )
+                )
+                continue
+            decisions.append(
+                (
+                    entry,
+                    "verified",
+                    "final",
+                    "the final read shows the record unchanged"
+                    + (" with a final status" if final.status_field else ""),
+                )
+            )
+        return decisions
+
+    decisions, failure, facts = verifier._in_session(
+        work,
+        budget_s=verifier._session_budget() + len(due) * spec.navigation_timeout_s,
+        target=due[0][1],
+    )
+    if decisions is None:
+        return settled  # no session: nothing settles but the deadlines
+    for entry, state, code, reason in decisions:
+        item = ledger.settle_entry(
+            entry.id, state, code=code, reason=reason, now=moment
+        )
+        if item is not None:
+            settled.append(item)
+    return settled
+
+
 __all__ = [
     "DEFAULT_TRUNCATION_MARKERS",
     "FieldReader",
@@ -1458,4 +2409,5 @@ __all__ = [
     "without_absence_claim",
     "normalize_value",
     "resolve_spec",
+    "settle_ui_readback",
 ]

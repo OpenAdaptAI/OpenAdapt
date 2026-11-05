@@ -6769,6 +6769,7 @@ class Replayer:
                         final_verdict=verdict.verdict.value,
                         observed_effect=verdict.observed_effect,
                         endpoint_scope=effect_endpoint_scope(current_verifier),
+                        read_evidence=verdict.read_evidence,
                     )
                 )
             else:
@@ -10701,6 +10702,7 @@ class Replayer:
                         final_verdict=verdict.verdict.value,
                         observed_effect=verdict.observed_effect,
                         endpoint_scope=scope,
+                        read_evidence=verdict.read_evidence,
                     )
                 )
                 result.effect_results.append(
@@ -10735,6 +10737,7 @@ class Replayer:
                             final_verdict=final_verdict.verdict.value,
                             observed_effect=final_verdict.observed_effect,
                             endpoint_scope=scope,
+                            read_evidence=final_verdict.read_evidence,
                             reconciliation_completed=True,
                             reconciliation_actions=comp.actions_taken,
                         )
@@ -10757,6 +10760,7 @@ class Replayer:
                         final_verdict=final_verdict.verdict.value,
                         observed_effect=final_verdict.observed_effect,
                         endpoint_scope=scope,
+                        read_evidence=final_verdict.read_evidence,
                         reconciliation_actions=comp.actions_taken,
                         deferred_check=verdict.deferred_check,
                     )
@@ -10787,6 +10791,7 @@ class Replayer:
                     final_verdict=verdict.verdict.value,
                     observed_effect=verdict.observed_effect,
                     endpoint_scope=scope,
+                    read_evidence=verdict.read_evidence,
                     deferred_check=verdict.deferred_check,
                 )
             )

@@ -1510,6 +1510,10 @@ class EffectVerdict(BaseModel):
     #: The pending entry a later report settles, when this effect's check is
     #: a declared deferred report (the verdict is then INDETERMINATE).
     deferred_check: Optional[str] = None
+    #: Why a UI read counts as independent, and what else it checked
+    #: (:mod:`openadapt_flow.runtime.effects.ui_read_checks`). No record
+    #: values. None for verifiers that don't read through the UI.
+    read_evidence: Optional[dict[str, Any]] = None
     #: How the check was done, when the verifier states it:
     #: ``independent_readback``, ``screen_readback`` or ``unchecked``
     #: (:mod:`openadapt_flow.assurance`). None for verifiers that don't.

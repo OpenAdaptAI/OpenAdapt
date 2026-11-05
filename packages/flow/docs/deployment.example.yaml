@@ -109,6 +109,7 @@ effects:
   #   url_params: { patient: { param: patient_id } }
   #   sign_in:                             # the read-back account, not the
   #     url: https://app.example.org/login #   account the workflow types as
+  #     post_url: "https://app.example.org/login" # trusted native form POST endpoint
   #     username_selector: "#username"
   #     password_selector: "#password"
   #     submit_selector: "button[type=submit]"
