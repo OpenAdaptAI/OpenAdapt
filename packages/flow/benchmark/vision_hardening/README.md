@@ -36,7 +36,7 @@ and CLASSIFIES what the **real** resolver does on each generated case:
    go DOWN. A hardening fix regenerates the corpus and lowers the ratchet.
 
 The headline metric is **SWER** (Silent Wrong-Effect/Resolution Rate), the same
-taxonomy as EffectBench (`openadapt_flow/benchmark/effectbench/`) — this sweep
+taxonomy as EffectBench (`benchmark/harness/effectbench/`) — this sweep
 is the *resolution-tier* feeder for that benchmark.
 
 ## The two tiers

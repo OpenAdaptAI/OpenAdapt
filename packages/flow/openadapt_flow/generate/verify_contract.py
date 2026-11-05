@@ -89,6 +89,56 @@ def _computed(role: ColumnRole) -> bool:
     return why.startswith("the ") and "of a date the task gives" in why
 
 
+def _strict(roles: Mapping[str, ColumnRole], on: bool) -> dict[str, ColumnRole]:
+    """``roles`` with each column two readings fit made a ``strict`` role
+    (checked both ways) when ``strict_pins`` is on; else unchanged."""
+
+    if not on:
+        return dict(roles)
+    return {
+        c: ColumnRole("strict", detail=dict(r.detail["strict"]))
+        if r.role == "varies" and r.detail.get("strict")
+        else r
+        for c, r in roles.items()
+    }
+
+
+def _found_role(role: ColumnRole) -> Optional[ColumnRole]:
+    """The part of a role a ``found`` contract checks. Who made the record and
+    what it copied may differ for a record already there (a person entered
+    it), so ``actor`` and ``copied`` are left out, and a ``strict`` role keeps
+    only its constant half. None: nothing to check."""
+
+    if role.role in ("actor", "copied"):
+        return None
+    if role.role == "strict":
+        if "constant" not in role.detail:
+            return None
+        return ColumnRole("strict", detail={"constant": role.detail["constant"]})
+    return role
+
+
+def _strict_pins(
+    b: "SqlBuilder", surf: "Surface", table: str, col: str, detail: Mapping[str, Any],
+    match: dict[str, Any],
+) -> None:  # fmt: skip
+    """Both checks of a ``strict`` role: the constant (or the acting user),
+    and the copy of the column its key points to."""
+
+    if "constant" in detail:
+        alias = _add_column(
+            surf, f"pin__{_alias(col)}", b.pin("t", table, col, detail["constant"])
+        )
+        match[alias] = {"literal": "1"}
+    if "actor" in detail:
+        match.setdefault(col, {"param": detail["actor"]})
+    if detail.get("copied"):
+        alias = _add_column(
+            surf, f"copy__{_alias(col)}", b.copied("t", detail["copied"], table, col)
+        )
+        match[alias] = {"literal": "1"}
+
+
 class GenerateError(RuntimeError):
     """The generator can't go on; the message says why."""
 
@@ -1167,42 +1217,41 @@ def _touched_rows(
         demos_with = {id(d) for d, _, _ in items}
         selector: Optional[dict[str, Any]] = None
         how = ""
-        if (
+        # Reached from the main record by a key column whose target row holds
+        # located values in single columns (the task's project). Tried first:
+        # when every demonstration happened to touch the same such row, its
+        # literal key would excuse that one row for every write, and a
+        # correct write naming another row would stop.
+        for p, loc in plan.locations.items():
+            if not loc.hops or loc.hops[0].kind != "fk" or loc.hops[0].table != table:
+                continue
+            hop = loc.hops[0]
+            if all(
+                (a.after or {}).get(hop.column) == (ch.after or {}).get(pk)
+                for _, a, ch in items
+            ):
+                sel = {
+                    x.columns[0]: {"param": q}
+                    for q, x in plan.locations.items()
+                    if len(x.hops) == 1
+                    and x.hops[0] == hop
+                    and len(x.columns) == 1
+                    and x.rule == "exact"
+                }
+                if sel:
+                    selector = sel
+                    how = f"the {table} row the task's {', '.join(sorted(v['param'] for v in sel.values()))} name"
+                    break
+        if selector is None and (
             len(keys) == 1
             and len(demos_with) == len(plan.demos)
             and len(items) == len(plan.demos)
         ):
+            # The same row (by key) in every demonstration: a counter row.
             key = (items[0][2].after or {}).get(pk)
             if key is not None:
                 selector = {pk: {"literal": key}}
                 how = f"{table} row {pk}={key}"
-        if selector is None:
-            # Reached from the main record by a key column whose target row
-            # holds located values in single columns.
-            for p, loc in plan.locations.items():
-                if (
-                    not loc.hops
-                    or loc.hops[0].kind != "fk"
-                    or loc.hops[0].table != table
-                ):
-                    continue
-                hop = loc.hops[0]
-                if all(
-                    (a.after or {}).get(hop.column) == (ch.after or {}).get(pk)
-                    for _, a, ch in items
-                ):
-                    sel = {
-                        x.columns[0]: {"param": q}
-                        for q, x in plan.locations.items()
-                        if len(x.hops) == 1
-                        and x.hops[0] == hop
-                        and len(x.columns) == 1
-                        and x.rule == "exact"
-                    }
-                    if sel:
-                        selector = sel
-                        how = f"the {table} row the task's {', '.join(sorted(v['param'] for v in sel.values()))} name"
-                        break
         if selector is None or len(items) != len({id(d) for d, _, _ in items}):
             plan.unexcused.setdefault(table, set()).update(cols)
             continue
@@ -1723,6 +1772,29 @@ class SqlBuilder:
             return f"CASE WHEN {ref} = CAST({self.literal(value)} AS DATE) THEN '1' ELSE '0' END"
         return f"CASE WHEN {self.text(alias, table, column)} = {self.literal(value)} THEN '1' ELSE '0' END"
 
+    def now(self, alias: str, column: str, window_s: int) -> str:
+        """A flag: this date-time column holds a time within ``window_s``
+        seconds before the read (or 5 minutes after it, for clock skew), by
+        the database's local clock or by UTC (an app may store either).
+        NULL is not a time, so it fails."""
+
+        ref = f"{alias}.{self.q(column)}"
+        w, ahead = int(window_s), 300
+        if self.d == "mysql":
+            clocks = ("NOW()", "UTC_TIMESTAMP()")
+            spans = [
+                f"{ref} BETWEEN {c} - INTERVAL {w} SECOND AND {c} + INTERVAL {ahead} SECOND"
+                for c in clocks
+            ]
+        else:
+            clocks = ("LOCALTIMESTAMP", "(NOW() AT TIME ZONE 'UTC')")
+            spans = [
+                f"CAST({ref} AS timestamp) BETWEEN {c} - INTERVAL '{w} seconds' "
+                f"AND {c} + INTERVAL '{ahead} seconds'"
+                for c in clocks
+            ]
+        return f"CASE WHEN {' OR '.join(spans)} THEN '1' ELSE '0' END"
+
     def empty(self, alias: str, table: str, column: str) -> str:
         col = self.schema.tables[table].column(column)
         ref = f"{alias}.{self.q(column)}"
@@ -1835,6 +1907,23 @@ class Settings:
     #: Table -> columns of a new row the person named as not checked (they
     #: vary, are free text left empty, or are the write's time stamp).
     unchecked: dict[str, set[str]] = field(default_factory=dict)
+    #: ``now_checks`` answered true: a date-time column of the main record
+    #: that is the write's time stamp (named unchecked on a create, or the
+    #: target's excused bookkeeping on an update) must hold a time near the
+    #: read, instead of any value.
+    now_checks: bool = False
+    #: ``strict_pins`` answered true: a new-row column two readings fit in
+    #: every demonstration (a constant and a copy of a column a key points
+    #: to, or the acting user and such a copy) is checked both ways, instead
+    #: of refusing the kind.
+    strict_pins: bool = False
+
+    @property
+    def now_window_s(self) -> int:
+        """How old the write's time stamp may be when it is read: the
+        execution window plus the recheck, plus a minute."""
+
+        return int(self.max_window_s + (self.recheck_after_s or 0) + 60)
 
 
 #: Roles of a new row's column that no rule checks: named by the person
@@ -1915,13 +2004,29 @@ def build_contract(
         target_fields.update(
             c for c in plan.anchor_extra if c in excused.get(anchor, set())
         )
+        if settings.now_checks:
+            for c in sorted(plan.anchor_extra):
+                column = schema.tables[anchor].column(c)
+                if (
+                    c in excused.get(anchor, set())
+                    and column is not None
+                    and column.kind == "datetime"
+                ):
+                    alias = _add_column(
+                        main, f"now__{_alias(c)}", b.now("t", c, settings.now_window_s)
+                    )
+                    match[alias] = {"literal": "1"}
     if plan.mode == "create":
         # ``found`` pins the same constants as ``create`` (a soft-delete
         # flag, a status, a type): a trashed record with the task's values
         # is not "already there". Who created it may differ.
-        roles = _anchor_roles(schema, plan, variant, settings.actor_params)
-        for col, role in sorted(roles.items()):
-            if flavor == "found" and role.role in ("actor", "copied"):
+        roles = _strict(
+            _anchor_roles(schema, plan, variant, settings.actor_params),
+            settings.strict_pins,
+        )
+        for col, full in sorted(roles.items()):
+            role = _found_role(full) if flavor == "found" else full
+            if role is None:
                 continue
             _pin(
                 b,
@@ -1933,6 +2038,19 @@ def build_contract(
                 settings.actor_params,
                 settings.unchecked,
             )
+            column = schema.tables[anchor].column(col)
+            if (
+                settings.now_checks
+                and flavor == "create"
+                and role.role == "timestamp"
+                and col in settings.unchecked.get(anchor, set())
+                and column is not None
+                and column.kind == "datetime"
+            ):
+                alias = _add_column(
+                    main, f"now__{_alias(col)}", b.now("t", col, settings.now_window_s)
+                )
+                match[alias] = {"literal": "1"}
     if plan.mode == "create" and flavor == "create":
         support = _support(plan, variant)
         for p in plan.optional:
@@ -2038,8 +2156,11 @@ def build_contract(
                     m[key] = {"literal": "1"}
                 else:
                     m[key] = _value_expr(pname, loc.rule)
-            for col, role in sorted(g.roles.items()):
-                if role.role == "link" or (found and role.role in ("actor", "copied")):
+            for col, full in sorted(_strict(g.roles, settings.strict_pins).items()):
+                if full.role == "link":
+                    continue
+                role = _found_role(full) if found else full
+                if role is None:
                     continue
                 _pin(
                     b,
@@ -2141,7 +2262,8 @@ def build_contract(
         if found or (side.unless is not None and side.unless in fields):
             continue
         m = {}
-        for col, role in sorted(side.roles.items()):
+        side_roles = _strict(side.roles, settings.strict_pins)
+        for col, role in sorted(side_roles.items()):
             if role.role == "constant" and role.value is not None:
                 m[col] = {"literal": role.value}
             elif role.role == "actor":
@@ -2155,7 +2277,7 @@ def build_contract(
                 side.table,
                 m,
                 side.count,
-                side.roles,
+                side_roles,
                 f"{side.count} row(s) the app adds to {side.table}",
             )
         )
@@ -2271,6 +2393,9 @@ def _pin(
     actor_params: Mapping[str, str],
     unchecked: Mapping[str, set[str]] = {},
 ) -> None:
+    if role.role == "strict":
+        _strict_pins(b, surf, table, col, role.detail, match)
+        return
     if (
         role.role == "varies"
         and col not in unchecked.get(table, set())
@@ -2374,6 +2499,10 @@ def _raw_effect(
             continue
         role = roles.get(c.name)
         if role is not None and role.role == "constant" and role.value is None:
+            continue
+        if role is not None and role.role == "strict":
+            _strict_pins(b, surf, table, c.name, role.detail, m)
+            nrf.add(c.name)
             continue
         if (
             role is None
@@ -2589,7 +2718,9 @@ def sample_values(
     out: dict[str, Any] = {}
     for d in [*plan.demos, *others]:
         for k, v in d.values.items():
-            if v is not None and k not in out:
+            # An empty list gives no item to read with: a later
+            # demonstration's items fill ``lines.0.qty`` and the rest.
+            if v is not None and v != [] and k not in out:
                 out[k] = v
     if variant.dispatch_value is not None and plan.dispatch:
         out[plan.dispatch] = variant.dispatch_value
@@ -2655,6 +2786,7 @@ def dry_read(path: Path, params: Mapping[str, Any], mysql: bool) -> Optional[str
                     key=mac_key(b"0" * 32),
                     modes=database.modes(),
                     max_rows=database.max_rows,
+                    read_row_budget=database.read_row_budget,
                     extra_queries=_audit_sql(contract.config),
                     ignore=database.all_ignore_columns(),
                     ref_columns=_ref_columns(contract.config),
@@ -3193,6 +3325,8 @@ def propose(
             (g.table, g.roles) for g in [*p.children.values(), *p.lists.values()]
         ]
         groups += [(sd.table, sd.roles) for sd in p.sides]
+        strict_on = _answer(answers, "strict_pins") is True
+        groups = [(t, _strict(r, strict_on)) for t, r in groups]
         for table, group_roles in groups:
             for col, role in group_roles.items():
                 if role.role in OPEN_ROLES:
@@ -3367,6 +3501,8 @@ def propose(
         recheck or DEFAULT_RECHECK_S,
         env,
         unchecked=unchecked_named,
+        now_checks=_answer(answers, "now_checks") is True,
+        strict_pins=_answer(answers, "strict_pins") is True,
     )
 
     # Tables whose name the SQL guard refuses: a view, or a refusal.
@@ -3765,6 +3901,19 @@ def _questions_md(
                 + ", ".join(f"`{x}`" for x in rep["not_placed"])
                 + ". A task that gives one is stopped: record a demonstration "
                 "that gives it now, before tasks need it."
+            )
+        if (
+            rep["mode"] == "update"
+            and "versions" in rep
+            and rep["versions"] is None
+            and not rep["refused"]
+        ):
+            lines.append(
+                "  - No version check: the main table has no version column and "
+                "no audit trail names the record and the acting user in every "
+                "demonstration, so another user's save to the same record in the "
+                "window (a lost update) is not seen. Write `frame.versions` by "
+                "hand if the app keeps versions somewhere else."
             )
         for r in rep["refused"]:
             lines.append(f"  - Refused: {r}")

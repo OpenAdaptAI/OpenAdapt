@@ -1,0 +1,18 @@
+{
+  "env": "openadapt-mockmed",
+  "episode_s": {
+    "median": 9.5,
+    "p95": 14.64
+  },
+  "episodes": 16,
+  "episodes_per_minute": 46.6,
+  "errors": [],
+  "not_max_reward": [],
+  "passed": true,
+  "reset_s": {
+    "median": 3.48,
+    "p95": 3.91
+  },
+  "sessions": 8,
+  "wall_s": 20.6
+}

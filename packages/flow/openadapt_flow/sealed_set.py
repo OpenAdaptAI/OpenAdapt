@@ -23,8 +23,9 @@ sealed set:
 The ``set_digest`` is the SHA-256 of the canonical index. It names the exact
 file set, and ``seal`` prints it.
 
-Every file kind is classified in :data:`BUNDLE_FILES` and
-:data:`RECORDING_FILES`. Writing into a sealed set refuses a file the
+Every file kind is classified in :data:`BUNDLE_FILES`,
+:data:`RECORDING_FILES`, :data:`RUN_FILES`, :data:`LIBRARY_FILES` and
+:data:`SANITIZED_FILES`. Writing into a sealed set refuses a file the
 inventory does not know, rather than passing it through. ``structural`` files
 hold only hashes, counts and format markers and stay readable without the key;
 every other file is encrypted.
@@ -63,7 +64,7 @@ FORMAT: Final[str] = "openadapt-flow-sealed-set"
 FORMAT_VERSION: Final[int] = 1
 SEALED_SUFFIX: Final[str] = ".enc"
 
-Kind = Literal["bundle", "recording", "run"]
+Kind = Literal["bundle", "recording", "run", "library", "sanitized"]
 Codec = Literal["set", "plain", "external"]
 Classification = Literal["phi", "structural"]
 
@@ -269,12 +270,44 @@ RUN_FILES: Final[tuple[FileKind, ...]] = (
 )
 
 
+#: A skill library written by ``teach`` (:mod:`openadapt_flow.learning.library`).
+LIBRARY_FILES: Final[tuple[FileKind, ...]] = (
+    FileKind(
+        "skills.json",
+        "phi",
+        "every learned program version (target labels, typed literals, screen "
+        "text, crop paths) and the execution traces it was learned from",
+    ),
+)
+
+#: The sanitized review copy ``push`` makes of a sealed source
+#: (:mod:`openadapt_flow.sanitized_artifact`). Scrubbing is best effort until a
+#: person approves it, so every file stays encrypted.
+SANITIZED_FILES: Final[tuple[FileKind, ...]] = (
+    FileKind(
+        ".openadapt-sanitization.json",
+        "phi",
+        "the redaction manifest: file names, hashes and redaction records",
+    ),
+    FileKind(".openadapt-approval.json", "phi", "the reviewer's approval"),
+    FileKind(
+        "*",
+        "phi",
+        "the scrubbed copy of each recording or bundle file, before review",
+    ),
+)
+
+_INVENTORIES: Final[dict[str, tuple[FileKind, ...]]] = {
+    "bundle": BUNDLE_FILES,
+    "recording": RECORDING_FILES,
+    "run": RUN_FILES,
+    "library": LIBRARY_FILES,
+    "sanitized": SANITIZED_FILES,
+}
+
+
 def inventory(kind: Kind) -> tuple[FileKind, ...]:
-    if kind == "bundle":
-        return BUNDLE_FILES
-    if kind == "recording":
-        return RECORDING_FILES
-    return RUN_FILES
+    return _INVENTORIES[kind]
 
 
 def classify(kind: Kind, rel: str) -> Optional[FileKind]:
@@ -290,7 +323,8 @@ def classify(kind: Kind, rel: str) -> Optional[FileKind]:
 
 def recording_key(explicit: Optional[str] = None) -> Optional[str]:
     """The passphrase for recordings: explicit, then the recording variable,
-    then the bundle variable. ``None`` means no key is configured."""
+    then the bundle variable, then the local key. ``None`` only under the
+    plaintext opt-out."""
     if explicit:
         return explicit
     return os.environ.get(RECORDING_ENV_KEY) or crypto.resolve_key(None)
@@ -299,7 +333,20 @@ def recording_key(explicit: Optional[str] = None) -> Optional[str]:
 def passphrase_for(kind: str, explicit: Optional[str] = None) -> Optional[str]:
     if kind == "recording":
         return recording_key(explicit)
-    return crypto.resolve_key(explicit)
+    if explicit:
+        return explicit
+    return output_bundle_key()
+
+
+def output_bundle_key() -> Optional[str]:
+    """The key for a bundle Flow writes: ``OPENADAPT_BUNDLE_KEY``, else
+    ``OPENADAPT_RECORDING_KEY`` (a deployment that sets only the recording
+    key keeps its bundles under it), else the local key."""
+    return (
+        os.environ.get(crypto.ENV_KEY)
+        or os.environ.get(RECORDING_ENV_KEY)
+        or crypto.resolve_key(None)
+    )
 
 
 def missing_key_message(root: Path | str, kind: str) -> str:
@@ -406,7 +453,7 @@ def read_header(root: Path | str) -> dict[str, object]:
         raise SealedSetError(
             f"sealed-set format version {header.get('version')!r} is not supported"
         )
-    if header.get("kind") not in ("bundle", "recording", "run"):
+    if header.get("kind") not in _INVENTORIES:
         raise SealedSetError("sealed-set header has no valid kind")
     return header
 
@@ -895,10 +942,24 @@ def open_set(root: Path | str, key: Optional[str] = None) -> SealedSet:
         cached[0].encode("utf-8"), passphrase.encode("utf-8")
     ):
         return cached[1]
-    opened = SealedSet.open(base, passphrase)
+    try:
+        opened = SealedSet.open(base, passphrase)
+    except crypto.CryptoError as exc:
+        if key is None and not _configured(str(header["kind"])):
+            # Opened with the local key because nothing was configured: the
+            # set was most likely sealed with a deployment key that isn't set.
+            raise SealedSetKeyError(
+                missing_key_message(Path(base), str(header["kind"]))
+                + " (The local key did not open it.)"
+            ) from exc
+        raise
     with _STATE_LOCK:
         _OPENED[cache_key] = (passphrase, opened)
     return opened
+
+
+def _configured(kind: str) -> bool:
+    return bool(os.environ.get(crypto.ENV_KEY) or os.environ.get(RECORDING_ENV_KEY))
 
 
 def _reader(root: str) -> SealedSet | SealedSetWriter:
@@ -1075,8 +1136,10 @@ def require_readable(path: Path | str, what: str) -> None:
 __all__ = [
     "BUNDLE_FILES",
     "HEADER",
+    "LIBRARY_FILES",
     "RECORDING_ENV_KEY",
     "RECORDING_FILES",
+    "SANITIZED_FILES",
     "SealedSet",
     "SealedSetError",
     "SealedSetKeyError",

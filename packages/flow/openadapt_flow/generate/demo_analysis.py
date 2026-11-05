@@ -551,22 +551,28 @@ def pick_anchor(
             v = demo.values.get(p)
             if v is None or isinstance(v, (list, dict)):
                 continue
-            if mode == "update":
-                hit = locate(schema, demo, ch, v, before=True, max_hops=1) or locate(
-                    schema, demo, ch, v, changed_only=True, max_hops=1
-                )
-            else:
-                hit = locate(schema, demo, ch, v, max_hops=1)
+
             # Only the row's own columns, and keys named after the table they
             # point to: a row the write added beside the main record (an
             # issue's journal) reaches the record's values only through a
             # link back, and a key equal to some row's id by chance proves
-            # nothing.
-            hit = [
-                loc
-                for loc in hit
-                if all(h.kind == "fk" and _hop_cost(h) <= 1 for h in loc.hops)
-            ]
+            # nothing. Filtered before an update falls back to its changed
+            # columns: a key equal to some row's id by chance (a project id
+            # that is also an issue id) must not hide the value the write
+            # put in the row itself.
+            def kept(locs: list[Location]) -> list[Location]:
+                return [
+                    loc
+                    for loc in locs
+                    if all(h.kind == "fk" and _hop_cost(h) <= 1 for h in loc.hops)
+                ]
+
+            if mode == "update":
+                hit = kept(
+                    locate(schema, demo, ch, v, before=True, max_hops=1)
+                ) or kept(locate(schema, demo, ch, v, changed_only=True, max_hops=1))
+            else:
+                hit = kept(locate(schema, demo, ch, v, max_hops=1))
             score += 1 if hit else 0
             direct += 1 if any(not loc.hops for loc in hit) else 0
         if (score, direct) > (best_score, best_direct):
@@ -672,25 +678,19 @@ def column_roles(
                     if copy is not None
                     else "a link to a row the write added"
                 )
-                out[name] = ColumnRole(
-                    "varies",
-                    detail={
-                        "why": f"the acting user's id or {other}: the "
-                        "demonstrations can't tell"
-                    },
-                )
+                detail: dict[str, Any] = {
+                    "why": f"the acting user's id or {other}: the "
+                    "demonstrations can't tell"
+                }
+                if copy is not None:
+                    # Both fit every row: ``strict_pins`` checks both.
+                    detail["strict"] = {"actor": actor[0], "copied": copy}
+                out[name] = ColumnRole("varies", detail=detail)
                 continue
             out[name] = ColumnRole("actor", detail={"param": actor[0]})
             continue
         if is_link:
             out[name] = ColumnRole("link")
-            continue
-        template = None if one else _key_template(t, values, rows)
-        if template is not None:
-            out[name] = ColumnRole(
-                "varies",
-                detail={"why": "holds the row's own key", "template": template},
-            )
             continue
         part = None if one else _date_part(values, [d for d, _ in rows])
         if part is not None:
@@ -706,12 +706,19 @@ def column_roles(
                 "varies",
                 detail={
                     "why": f"a constant or a copy of {copied['table']}."
-                    f"{copied['column']}: the demonstrations can't tell"
+                    f"{copied['column']}: the demonstrations can't tell",
+                    # Both fit every row: ``strict_pins`` checks both.
+                    "strict": {"constant": values[0], "copied": copied},
                 },
             )
             continue
         if copied is not None:
             out[name] = ColumnRole("copied", detail=copied)
+            continue
+        # Only once no copy fits: a copied price of 15 and 25 on rows 1 and
+        # 2 reads as ``{key}5``, and a copy is checked where this isn't.
+        if not one and _holds_own_key(t, values, rows):
+            out[name] = ColumnRole("varies", detail={"why": "holds the row's own key"})
             continue
         distinct = {v for v in values}
         if col.kind == "text" and distinct <= {None, ""}:
@@ -729,9 +736,12 @@ def column_roles(
             out[name] = ColumnRole("free", detail={"empty": empty})
             continue
         if one:
-            out[name] = ColumnRole(
-                "varies", detail={"why": "seen in one demonstration only"}
-            )
+            detail = {"why": "seen in one demonstration only"}
+            if len(distinct) == 1:
+                # ``strict_pins`` pins the one value seen: too strict at
+                # worst, which a held-out write shows.
+                detail["strict"] = {"constant": values[0]}
+            out[name] = ColumnRole("varies", detail=detail)
             continue
         if len(distinct) == 1:
             v = values[0]
@@ -751,27 +761,25 @@ def column_roles(
     return out
 
 
-def _key_template(
+def _holds_own_key(
     t: Table,
     values: Sequence[Optional[str]],
     rows: Sequence[tuple["Demo", Mapping[str, Optional[str]]]],
-) -> Optional[str]:
-    """``prefix{key}suffix`` when every row holds its own single-column key
-    between the same prefix and suffix (``INV-{key}``), else None."""
+) -> bool:
+    """Does every row hold its own single-column key between the same prefix
+    and suffix (``INV-{key}``)? Only the question's wording uses this: such
+    a column is never checked unless the answer leaves it out."""
 
     if len(t.primary_key) != 1 or not values:
-        return None
+        return False
     shapes = set()
     for v, (_, r) in zip(values, rows):
         key = r.get(t.primary_key[0])
         if v is None or key is None or v == key or str(key) not in v:
-            return None
+            return False
         i = v.index(str(key))
         shapes.add((v[:i], v[i + len(str(key)) :]))
-    if len(shapes) != 1:
-        return None
-    prefix, suffix = next(iter(shapes))
-    return prefix + "{key}" + suffix
+    return len(shapes) == 1
 
 
 def _date_part(

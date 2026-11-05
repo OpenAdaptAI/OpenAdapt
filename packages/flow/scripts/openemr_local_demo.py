@@ -40,8 +40,8 @@ from openadapt_flow.backend import StructuralResolutionRefused  # noqa: E402
 from openadapt_flow.backends.playwright_backend import (  # noqa: E402
     PlaywrightBackend as _BasePlaywrightBackend,
 )
-from openadapt_flow.benchmark import agent_baseline  # noqa: E402
-from openadapt_flow.benchmark.openemr_local import (  # noqa: E402
+from benchmark.harness import agent_baseline  # noqa: E402
+from benchmark.harness.openemr_local import (  # noqa: E402
     CONDITIONS,
     INITIAL_TRIALS_PER_CELL,
     PUBLICATION_TRIALS_PER_CELL,

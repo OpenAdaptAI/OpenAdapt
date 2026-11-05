@@ -682,6 +682,19 @@ def test_instant_compare_is_one_moment_to_the_second():
     assert normalize("not a time", rule) is None
 
 
+def test_date_compare_parses_the_date_never_a_prefix():
+    from openadapt_flow.ensure_record import FieldRule, normalize
+
+    rule = FieldRule(path="birthDate", compare="date")
+    assert normalize("1984-03-07", rule) == "1984-03-07"
+    # A date-time: the date it was written on, in its own offset.
+    assert normalize("2025-10-01T09:30:00-04:00", rule) == "2025-10-01"
+    # A FHIR partial date compares as written.
+    assert normalize("1984", rule) == "1984" and normalize("1984-03", rule) == "1984-03"
+    for junk in ("1984-03-07xyz", "1984-03-07 and more", "1984-13-07", "84"):
+        assert normalize(junk, rule) is None, junk
+
+
 def test_a_prefix_filter_is_one_leaf_in_a_closed_record():
     from openadapt_flow.ensure_record import (
         EnsureContract,

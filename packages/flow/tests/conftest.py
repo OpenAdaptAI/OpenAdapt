@@ -72,3 +72,31 @@ def _isolate_durable_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     # The uncertain-write ledger: per test, never ~/.openadapt/ledger.
     monkeypatch.setenv("OPENADAPT_LEDGER_DIR", str(tmp_path / ".write-ledger"))
     monkeypatch.delenv("OPENADAPT_FRAME_SECRET_FILE", raising=False)
+    # Encryption at rest is the default (openadapt_flow.at_rest). The suite
+    # keeps the plaintext behaviour its fixtures assert, under the recorded
+    # opt-out, and keeps the local key and the ledger out of the real home.
+    # tests/test_at_rest_default.py covers the default and strict modes.
+    monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "test suite: synthetic data")
+    monkeypatch.setenv("OPENADAPT_FLOW_AT_REST_HOME", str(tmp_path / ".at-rest-home"))
+    monkeypatch.delenv("OPENADAPT_FLOW_AT_REST", raising=False)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Keep a timed-out Playwright test from failing every later browser test.
+
+    Only after a pytest-timeout failure: a healthy scoped browser fixture
+    keeps the loop running between tests. See
+    :mod:`tests._playwright_loop_guard`.
+    """
+
+    yield
+    if call.when != "call" or call.excinfo is None:
+        return
+    from tests._playwright_loop_guard import (
+        clear_leaked_running_loop,
+        is_pytest_timeout,
+    )
+
+    if is_pytest_timeout(call.excinfo.value):
+        clear_leaked_running_loop()

@@ -1091,12 +1091,44 @@ def _match_tokens(
         elif _suspicious_pair(expected_raw, observed_raw):
             suspect_evidence[i] = True
 
-    # single-token equivalence (mark every equivalent observed copy)
-    for i, ec in enumerate(exp_c):
-        for j, oc in enumerate(obs_c):
-            if ec == oc:
-                mark(i, exp[i], obs[j])
+    # single-token equivalence (mark every equivalent observed copy). A
+    # digit-bearing recorded token takes ONE observed copy of its own: a
+    # second copy of the recorded value elsewhere in the band ("15 patients
+    # found") must not stand in for a sibling's differing id.
+    digit_used: set[int] = set()
+    # Recorded tokens matched only by gluing two digit-bearing fragments
+    # ("100" "512" vs "100512", or "15" "47" vs "1547"): one id split by OCR
+    # and two values read as one look the same, so the band abstains.
+    digit_glued: set[int] = set()
+    # Digit tokens take a raw-equal copy first: a word that only folds to
+    # the value ("Bo" ~ "80", "Li" ~ "11") must not take the slot the exact
+    # copy fills.
+    for i, token in enumerate(exp):
+        if not _has_digit(token):
+            continue
+        for j, o in enumerate(obs):
+            if o == token and j not in digit_used:
+                mark(i, token, o)
                 explained[j] = True
+                digit_used.add(j)
+                break
+    for i, ec in enumerate(exp_c):
+        digit = _has_digit(exp[i])
+        if digit and matched[i]:
+            continue
+        for j, oc in enumerate(obs_c):
+            if ec != oc or (digit and j in digit_used):
+                continue
+            if not digit and _has_digit(obs[j]) and not _alpha_dominated(obs[j]):
+                # Only a recorded value explains a live value: a word that
+                # folds to one ("Bo" ~ "80") must not hide a differing id.
+                # Digit noise inside a word ("5ample") is still the word.
+                continue
+            mark(i, exp[i], obs[j])
+            explained[j] = True
+            if digit:
+                digit_used.add(j)
+                break
 
     # split: consecutive recorded tokens -> one observed token
     for i in range(len(exp)):
@@ -1105,6 +1137,7 @@ def _match_tokens(
                 break
             if all(matched[i : i + size]):
                 continue
+            glued = _glues_digits(exp[i : i + size])
             concat_raw = "".join(exp[i : i + size])
             concat_c = ocr_canonical(concat_raw)
             if len(concat_c) < MIN_BLOCK:
@@ -1129,6 +1162,8 @@ def _match_tokens(
                             raw_matched[m] = True
                         elif _suspicious_pair(concat_raw, obs[j]):
                             suspect_evidence[m] = True
+                        if glued:
+                            digit_glued.add(m)
                     explained[j] = True
 
     # join: one recorded token -> consecutive observed tokens
@@ -1142,6 +1177,8 @@ def _match_tokens(
                 concat_raw = "".join(obs[j : j + size])
                 if ocr_canonical(concat_raw) == exp_c[i]:
                     mark(i, token, concat_raw)
+                    if _glues_digits(obs[j : j + size]):
+                        digit_glued.add(i)
                     for m in range(j, j + size):
                         explained[m] = True
                     break
@@ -1162,6 +1199,8 @@ def _match_tokens(
     # (→ mismatch), not the abstain gate.
     for i in range(len(exp)):
         if raw_matched[i] and _is_glyph_vulnerable_identifier(exp[i]):
+            glyph_ambiguous_id[i] = True
+        if i in digit_glued:
             glyph_ambiguous_id[i] = True
     return (
         matched,
@@ -1198,22 +1237,40 @@ def _contradicted(
       confusion-equivalent — a changed middle initial ('J' -> 'K'), the
       SEX column ('M' -> 'F'), a 2-char name ('Al' -> 'Bo'). These sat
       below MIN_BLOCK and were invisible to every rule;
-    - generational suffix on either side, unmatched.
+    - generational suffix on either side, unmatched;
+    - an unmatched recorded token carrying a digit (an id, date, age or
+      count), whatever its length, while an unexplained observed token
+      carries one too: a differing value is what tells same-name records
+      apart, never a tolerated uncovered run.
     """
     exp_c = [ocr_canonical(t) for t in exp]
     obs_c = [ocr_canonical(t) for t in obs]
     contradicted = [False] * len(exp)
+    # A 2-letter observed name ("Eva" -> "Bo") replaces a recorded name as
+    # surely as a longer one; shorter recorded tokens are counted in
+    # band_match.
     unexplained_alpha = any(
-        not explained[j] and len(o) >= MIN_BLOCK and _alpha_dominated(o)
+        not explained[j] and len(o) >= 2 and _alpha_dominated(o)
         for j, o in enumerate(obs)
     )
     obs_suffix_unexplained = any(
         not explained[j] and _is_generational_suffix(o) for j, o in enumerate(obs)
     )
+    unexplained_digit = any(
+        not explained[j] and _has_digit(o) for j, o in enumerate(obs)
+    )
     for i, token in enumerate(exp):
         if matched[i]:
             continue
         if _is_generational_suffix(token):
+            contradicted[i] = True
+            continue
+        if _has_digit(token) and unexplained_digit:
+            # A recorded id, date, age or count missing while the live band
+            # shows another digit-bearing token is a different record, never
+            # a small gap: same-name siblings differ ONLY in such tokens
+            # (PatNum 15 vs 16, age 47 vs 50), often under MIN_BLOCK. Pure
+            # absence is charged in band_match (absent identifying field).
             contradicted[i] = True
             continue
         if len(token) < MIN_BLOCK:
@@ -1253,6 +1310,46 @@ def _contradicted(
             if not matched[i]:
                 contradicted[i] = True
     return contradicted
+
+
+def _glues_digits(fragments: list[str]) -> bool:
+    """Whether joining ``fragments`` glues two digit-bearing tokens: OCR's
+    split of one id ("100" "512") and two values ("15" "47" beside a record
+    whose id is 1547) read alike, so such a match can only abstain."""
+    return any(
+        _has_digit(a) and _has_digit(b) for a, b in zip(fragments, fragments[1:])
+    )
+
+
+def _digit_token_absent(exp: list[str], matched: list[bool]) -> bool:
+    """Whether a digit-bearing recorded token (id, date, age, count) is
+    unmatched. Such a token is never a tolerated uncovered run: absent, the
+    band lacks identifying evidence (the OCR tier abstains); replaced by
+    another digit token, it is a contradiction (:func:`_contradicted`)."""
+    return any(not m and _has_digit(t) for t, m in zip(exp, matched))
+
+
+def _extra_digit_token(exp: list[str], obs: list[str], explained: list[bool]) -> bool:
+    """Whether the live band shows a digit-bearing token nothing recorded
+    explains while the recorded band shows one. A recorded id can match a
+    copy of its value elsewhere in the live band ("15 patients found")
+    while the record's own differing id sits unexplained, so the band
+    abstains."""
+    return any(_has_digit(t) for t in exp) and any(
+        not explained[j] and _has_digit(o) for j, o in enumerate(obs)
+    )
+
+
+def _name_token_replaced(
+    exp: list[str], obs: list[str], matched: list[bool], explained: list[bool]
+) -> bool:
+    """Whether a recorded alphabetic token is unmatched while the live band
+    shows an alphabetic token nothing recorded explains. A replaced name of
+    any length ("Ann" -> "J", "al" -> "joan") may be OCR noise or another
+    record, so the band abstains."""
+    return any(not m and _alpha_dominated(t) for t, m in zip(exp, matched)) and any(
+        not explained[j] and _alpha_dominated(o) for j, o in enumerate(obs)
+    )
 
 
 def band_match(
@@ -1405,11 +1502,16 @@ def band_match(
     # verify_target_identity reads a positive charge here as ABSTAIN (OCR
     # cannot certify), not verify and not mismatch.
     glyph_ambiguous_id_chars = glyph_id_chars
-    evidence_short = identity_evidence_shortfall(
-        [identity_kind(t) for t in exp],
-        matched,
-        raw_matched,
-        [_has_lookalike(t) for t in exp],
+    evidence_short = (
+        identity_evidence_shortfall(
+            [identity_kind(t) for t in exp],
+            matched,
+            raw_matched,
+            [_has_lookalike(t) for t in exp],
+        )
+        or _digit_token_absent(exp, matched)
+        or _extra_digit_token(exp, obs, explained)
+        or _name_token_replaced(exp, obs, matched, explained)
     )
     return BandMatch(
         matched_chars / total_chars,
@@ -1427,7 +1529,15 @@ def _token_belongs_to(token: str, value_squashed: str) -> bool:
     """Whether a band token is (part of) a parameter's demonstrated value."""
     if not token or not value_squashed:
         return False
-    if token in value_squashed or value_squashed in token:
+    if value_squashed in token:
+        return True
+    if _has_digit(token):
+        # A digit token is never dropped for being inside the value or merely
+        # similar to it: "15" (a PatNum) sits inside "20150101" (a date) and
+        # "547" is near "15470"; each is its own field. Only the value itself,
+        # read with OCR's confusions ("l5470"), belongs to it.
+        return ocr_canonical(token) == ocr_canonical(value_squashed)
+    if token in value_squashed:
         return True
     ratio = difflib.SequenceMatcher(None, token, value_squashed, autojunk=False).ratio()
     # Same-token-with-OCR-jitter question ("Phi1" ~ "Phil"): the token
