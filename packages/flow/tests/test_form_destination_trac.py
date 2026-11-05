@@ -20,8 +20,8 @@ from urllib.request import urlopen
 import pytest
 
 from openadapt_flow.backends.playwright_backend import (
-    PlaywrightBackend,
     _FORM_EXPECTED_JS,
+    PlaywrightBackend,
     prepare_ws_guard,
 )
 from openadapt_flow.wire_check import body_fields, expected_submission

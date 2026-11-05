@@ -373,9 +373,9 @@ def test_a_destination_changed_after_the_check_is_refused(
     )
     assert not report.success
     assert received == []
-    assert any(
-        "different address" in (r.error or "") for r in report.results
-    ), [(r.step_id, r.error) for r in report.results]
+    assert any("different address" in (r.error or "") for r in report.results), [
+        (r.step_id, r.error) for r in report.results
+    ]
 
 
 @pytest.mark.parametrize(
