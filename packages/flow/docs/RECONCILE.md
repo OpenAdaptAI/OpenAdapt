@@ -1,7 +1,7 @@
 # Cross-system reconciliation for prior authorization and claims
 
-Design note, 2026-11-02. Status: design. The usage and the measured results
-are added below once they exist.
+Design note, 2026-11-02. The measured results are in
+[`benchmark/reconcile/RESULTS.md`](../benchmark/reconcile/RESULTS.md).
 
 ## The question
 
