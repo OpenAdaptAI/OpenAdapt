@@ -7,7 +7,8 @@
 # the release's own wheels (the ones pinned by uv.lock):
 #
 #   release/   the extracted release: VERSION, wheels/, requirements.lock.txt
-#   on-prem/   this directory (scripts, units, this Dockerfile)
+#   on-prem/   the runtime scripts, compose file, docs and this Dockerfile
+#              (build-image.sh names each file; nothing else is copied)
 #
 # The base image must already be in the local image store (`docker load` it
 # on an air-gapped host). Its default is pinned by digest; the release must be

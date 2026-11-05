@@ -9,9 +9,13 @@
 # release and the vendor public key). Needs Linux, Docker with compose, and a
 # connected host only to pull the pinned base image. Checks:
 #   - build-image.sh refuses a tampered archive and builds no image;
+#   - build-image.sh refuses a base image that is not loaded locally, before
+#     building;
 #   - the image build has no network: the same release with one dependency
 #     wheel removed fails to build;
-#   - the signed release builds, and inside the image (no network) the engine
+#   - the signed release builds from a deploy directory with site files left
+#     beside the scripts, and the image holds only the named deploy files;
+#     inside the image (no network) the engine
 #     and privacy extra import from the image's venv at the release version;
 #   - the default command resolves, and run-queue.sh files a job and writes
 #     the audit log on a bind-mounted storage root; it refuses to start with
@@ -60,7 +64,7 @@ cleanup() {
   # The container writes the storage root as root; empty it from inside.
   docker run --rm --network none -v "$store:/s" "$tag" \
     sh -c 'rm -rf /s/* /s/.[!.]*' >/dev/null 2>&1 || true
-  docker image rm -f "$tag" "$tag-tampered" "$tag-missing" >/dev/null 2>&1 || true
+  docker image rm -f "$tag" "$tag-tampered" "$tag-missing" "$tag-nobase" >/dev/null 2>&1 || true
   rm -rf "$work"
 }
 trap cleanup EXIT
@@ -81,6 +85,24 @@ if docker image inspect "$tag-tampered" >/dev/null 2>&1; then
   bad "no image built from the tampered archive"
 else
   ok "no image built from the tampered archive"
+fi
+
+echo "== build-image.sh refuses a base image that is not loaded locally =="
+absent="openadapt-flow-onprem-test-absent-base:$$"
+if bash "$HERE/build-image.sh" --archive "$archive" --signature "$sig" --pubkey "$pub" \
+    --sig-tool openssl --base "$absent" --tag "$tag-nobase" >"$work/nobase.log" 2>&1; then
+  bad "absent base image refused"
+elif grep -q "is not in the local image store" "$work/nobase.log" \
+    && ! grep -q "== building" "$work/nobase.log"; then
+  ok "absent base image refused before building"
+else
+  bad "absent base image refused before building (failed another way)"
+  tail -n 20 "$work/nobase.log"
+fi
+if docker image inspect "$tag-nobase" >/dev/null 2>&1; then
+  bad "no image built on an absent base"
+else
+  ok "no image built on an absent base"
 fi
 
 echo "== the image build has no network: a release missing one wheel fails =="
@@ -107,8 +129,16 @@ else
   fi
 fi
 
-echo "== build the signed release =="
-if bash "$HERE/build-image.sh" --archive "$archive" --signature "$sig" --pubkey "$pub" \
+echo "== build the signed release from a deploy directory with site files beside it =="
+site="$work/site/on-prem"
+mkdir -p "$site"
+tar -C "$ONPREM" -cf - . | tar -C "$site" -xf -
+printf 'site secret\n' > "$site/bin/site-notes.txt"
+printf 'not a real key\n' > "$site/vendor.key"
+printf 'site: local\n' > "$site/onprem.yaml"
+mkdir -p "$site/storage"
+printf 'job\n' > "$site/storage/left.job"
+if bash "$site/bin/build-image.sh" --archive "$archive" --signature "$sig" --pubkey "$pub" \
     --sig-tool openssl --tag "$tag" >"$work/build.log" 2>&1; then
   ok "signed release $v1 builds with no network"
 else
@@ -133,6 +163,10 @@ if openadapt_flow.__version__ != importlib.metadata.version("openadapt-flow"):
     sys.exit("module and distribution versions differ")
 print(openadapt_flow.__version__)
 ' 2>&1)"
+check_eq "image: holds only the named deploy files" \
+  "COMPLIANCE.md Dockerfile README.md UPDATE.md bin/audit-log.sh bin/run-egress-blocked.sh bin/run-queue.sh bin/verify-airgap.sh docker-compose.yml onprem.example.yaml" \
+  "$(run -w /opt/openadapt-flow/deploy/on-prem "$tag" find . ! -type d 2>&1 \
+      | sed 's|^\./||' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')"
 check_eq "image: VERSION file" "$v1" "$(run "$tag" cat /opt/openadapt-flow/VERSION 2>&1)"
 check_eq "image: default command is the absolute run-queue path" \
   '["/opt/openadapt-flow/deploy/on-prem/bin/run-queue.sh","watch"]' \
