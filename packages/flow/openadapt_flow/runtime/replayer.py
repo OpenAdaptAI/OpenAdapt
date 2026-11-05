@@ -1393,7 +1393,7 @@ class Replayer:
             "linear_checkpoints": store.checkpoints(),
             "program_checkpoints": store.program_checkpoints(),
             "auxiliary_digest": self._durable_auxiliary_digest(
-                run_dir, store.program_checkpoints()
+                run_dir, store.program_checkpoints(), key=self.checkpoint_key
             ),
         }
         return {
@@ -1425,8 +1425,13 @@ class Replayer:
     def _durable_auxiliary_digest(
         run_dir: Path,
         program_checkpoints: list[ProgramCheckpoint],
+        key: Optional[str] = None,
     ) -> str:
-        """Bind namespace, active capability, and every attended receipt."""
+        """Bind namespace, active capability, and every attended receipt.
+
+        ``key`` reads attended state encrypted at rest (default: the key
+        ``crypto.resolve_key`` gives).
+        """
 
         receipts_dir = Path(run_dir) / ".attended_program_receipts"
         expected = {
@@ -1434,11 +1439,10 @@ class Replayer:
             for checkpoint in program_checkpoints
             if checkpoint.attended_transition is not None
         }
-        actual = (
-            {path.name for path in receipts_dir.glob("*.json")}
-            if receipts_dir.is_dir()
-            else set()
-        )
+        from openadapt_flow.runtime.durable import attended_state as _state
+
+        # Either form counts: ``<pause>.json`` or its encrypted ``.json.enc``.
+        actual = _state.logical_names(receipts_dir)
         if actual != expected:
             from openadapt_flow.runtime.durable.approval import StateDiverged
 
@@ -1455,10 +1459,14 @@ class Replayer:
         for path in paths:
             digest.update(path.name.encode("utf-8"))
             digest.update(b"\0")
-            if path.is_file():
-                digest.update(path.read_bytes())
-            else:
-                digest.update(b"<missing>")
+            if _state.enc_path(path).is_file() and not key:
+                from openadapt_flow import crypto as _crypto
+
+                key = _crypto.resolve_key(None)
+            # The plaintext, so the digest doesn't change when a file is
+            # encrypted at rest.
+            data = _state.digest_bytes(Path(run_dir), path, key)
+            digest.update(b"<missing>" if data is None else data)
             digest.update(b"\0")
         return "sha256:" + digest.hexdigest()
 
@@ -3265,6 +3273,7 @@ class Replayer:
             runtime_worklists=self._outcome_worklists,
             transition_evidence_root=run_dir,
             transition_predicate_vision=self.vision,
+            transition_evidence_key=self.checkpoint_key,
         )
 
     def _begin_control_overlay(self, profile: Optional[str]) -> None:

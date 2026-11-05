@@ -81,6 +81,27 @@ def _isolate_durable_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.delenv("OPENADAPT_FLOW_AT_REST", raising=False)
 
 
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Keep a timed-out Playwright test from failing every later browser test.
+
+    Only after a pytest-timeout failure: a healthy scoped browser fixture
+    keeps the loop running between tests. See
+    :mod:`tests._playwright_loop_guard`.
+    """
+
+    yield
+    if call.when != "call" or call.excinfo is None:
+        return
+    from tests._playwright_loop_guard import (
+        clear_leaked_running_loop,
+        is_pytest_timeout,
+    )
+
+    if is_pytest_timeout(call.excinfo.value):
+        clear_leaked_running_loop()
+
+
 def pytest_configure(config: pytest.Config) -> None:
     # A package-local pyproject.toml cuts off ancestor conftest discovery.
     if not config.pluginmanager.hasplugin("openadapt-headless"):

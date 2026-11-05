@@ -1217,42 +1217,41 @@ def _touched_rows(
         demos_with = {id(d) for d, _, _ in items}
         selector: Optional[dict[str, Any]] = None
         how = ""
-        if (
+        # Reached from the main record by a key column whose target row holds
+        # located values in single columns (the task's project). Tried first:
+        # when every demonstration happened to touch the same such row, its
+        # literal key would excuse that one row for every write, and a
+        # correct write naming another row would stop.
+        for p, loc in plan.locations.items():
+            if not loc.hops or loc.hops[0].kind != "fk" or loc.hops[0].table != table:
+                continue
+            hop = loc.hops[0]
+            if all(
+                (a.after or {}).get(hop.column) == (ch.after or {}).get(pk)
+                for _, a, ch in items
+            ):
+                sel = {
+                    x.columns[0]: {"param": q}
+                    for q, x in plan.locations.items()
+                    if len(x.hops) == 1
+                    and x.hops[0] == hop
+                    and len(x.columns) == 1
+                    and x.rule == "exact"
+                }
+                if sel:
+                    selector = sel
+                    how = f"the {table} row the task's {', '.join(sorted(v['param'] for v in sel.values()))} name"
+                    break
+        if selector is None and (
             len(keys) == 1
             and len(demos_with) == len(plan.demos)
             and len(items) == len(plan.demos)
         ):
+            # The same row (by key) in every demonstration: a counter row.
             key = (items[0][2].after or {}).get(pk)
             if key is not None:
                 selector = {pk: {"literal": key}}
                 how = f"{table} row {pk}={key}"
-        if selector is None:
-            # Reached from the main record by a key column whose target row
-            # holds located values in single columns.
-            for p, loc in plan.locations.items():
-                if (
-                    not loc.hops
-                    or loc.hops[0].kind != "fk"
-                    or loc.hops[0].table != table
-                ):
-                    continue
-                hop = loc.hops[0]
-                if all(
-                    (a.after or {}).get(hop.column) == (ch.after or {}).get(pk)
-                    for _, a, ch in items
-                ):
-                    sel = {
-                        x.columns[0]: {"param": q}
-                        for q, x in plan.locations.items()
-                        if len(x.hops) == 1
-                        and x.hops[0] == hop
-                        and len(x.columns) == 1
-                        and x.rule == "exact"
-                    }
-                    if sel:
-                        selector = sel
-                        how = f"the {table} row the task's {', '.join(sorted(v['param'] for v in sel.values()))} name"
-                        break
         if selector is None or len(items) != len({id(d) for d, _, _ in items}):
             plan.unexcused.setdefault(table, set()).update(cols)
             continue
@@ -2719,7 +2718,9 @@ def sample_values(
     out: dict[str, Any] = {}
     for d in [*plan.demos, *others]:
         for k, v in d.values.items():
-            if v is not None and k not in out:
+            # An empty list gives no item to read with: a later
+            # demonstration's items fill ``lines.0.qty`` and the rest.
+            if v is not None and v != [] and k not in out:
                 out[k] = v
     if variant.dispatch_value is not None and plan.dispatch:
         out[plan.dispatch] = variant.dispatch_value
@@ -2785,6 +2786,7 @@ def dry_read(path: Path, params: Mapping[str, Any], mysql: bool) -> Optional[str
                     key=mac_key(b"0" * 32),
                     modes=database.modes(),
                     max_rows=database.max_rows,
+                    read_row_budget=database.read_row_budget,
                     extra_queries=_audit_sql(contract.config),
                     ignore=database.all_ignore_columns(),
                     ref_columns=_ref_columns(contract.config),
@@ -3899,6 +3901,19 @@ def _questions_md(
                 + ", ".join(f"`{x}`" for x in rep["not_placed"])
                 + ". A task that gives one is stopped: record a demonstration "
                 "that gives it now, before tasks need it."
+            )
+        if (
+            rep["mode"] == "update"
+            and "versions" in rep
+            and rep["versions"] is None
+            and not rep["refused"]
+        ):
+            lines.append(
+                "  - No version check: the main table has no version column and "
+                "no audit trail names the record and the acting user in every "
+                "demonstration, so another user's save to the same record in the "
+                "window (a lost update) is not seen. Write `frame.versions` by "
+                "hand if the app keeps versions somewhere else."
             )
         for r in rep["refused"]:
             lines.append(f"  - Refused: {r}")

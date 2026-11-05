@@ -353,6 +353,27 @@ class Sandbox:
                 plain.setdefault(str(name), []).append(str(col))
         return {k: v for k, v in plain.items() if k not in odd}
 
+    def holds(
+        self,
+        table: str,
+        values: Mapping[str, Optional[str]],
+        exclude: Optional[Mapping[str, Optional[str]]] = None,
+    ) -> bool:
+        """Whether a row of the table already holds every one of ``values``
+        (compared by the store, so its collation decides, as its unique
+        index would). ``exclude`` is the primary key of a row left out: the
+        row the plant itself writes, whose own value never collides."""
+
+        t = self._table(table)
+        where = " AND ".join(f"{self.q(c)} = %s" for c in values)
+        args = [_db_value(t, c, v) for c, v in values.items()]
+        if exclude:
+            own = " AND ".join(f"{self.q(c)} = %s" for c in exclude)
+            where += f" AND NOT ({own})"
+            args += [_db_value(t, c, v) for c, v in exclude.items()]
+        got = self._exec(f"SELECT 1 FROM {self.t(table)} WHERE {where} LIMIT 1", args)
+        return bool(got)
+
     def distinct(self, table: str, column: str, limit: int = 5) -> list[str]:
         """Up to ``limit`` values the column holds, as text."""
 
@@ -664,15 +685,96 @@ def fresh_value(
     return None
 
 
-def edit_value(
-    sb: "Sandbox", t: Table, col: str, current: Optional[str], written: Optional[str]
+def unique_free(
+    sb: "Sandbox",
+    t: Table,
+    col: str,
+    row: Mapping[str, Optional[str]],
+    value: Optional[str],
+) -> bool:
+    """Whether ``row`` with ``col`` set to ``value`` leaves every unique
+    index of the table (other than its primary key) free: no other row
+    already holds the index's values. ``row`` itself, found by its primary
+    key, is left out: the plant writes that row, so a value only it holds
+    (an update's old value) is free. Without a whole primary key no row is
+    left out. A NULL in an index never collides."""
+
+    get = getattr(sb, "unique_indexes", None)
+    if get is None or value is None:
+        return True
+    holds = getattr(sb, "holds", None)
+    key = {c: row.get(c) for c in t.primary_key}
+    own = key if key and all(v is not None for v in key.values()) else None
+
+    def is_own(r: Mapping[str, Optional[str]]) -> bool:
+        return own is not None and all(r.get(c) == v for c, v in own.items())
+
+    for cols in get(t.name).values():
+        if col not in cols:
+            continue
+        want = {c: (value if c == col else row.get(c)) for c in cols}
+        if any(v is None for v in want.values()):
+            continue
+        if holds is not None:
+            if holds(t.name, want, exclude=own):
+                return False
+        elif any(
+            not is_own(r) and all(r.get(c) == v for c, v in want.items())
+            for r in sb.rows(t.name, 1000)
+        ):
+            return False
+    return True
+
+
+def plant_free(
+    sb: "Sandbox", t: Table, col: str, row: Mapping[str, Optional[str]]
 ) -> Optional[str]:
-    """The value an unrelated edit sets on another row: what the write set
-    (the same change elsewhere), except in a column of a unique index, where
-    that value would make the store refuse the edit; there, a planted value."""
+    """:func:`plant_value` for ``row``'s ``col``, kept out of the table's
+    unique indexes: where the planted value would give a row another row
+    already holds (another row's code, or an index over several columns), a
+    value that doesn't: another the key or column holds, else one made by
+    :func:`fresh_value`. None when there is none (the fault is then
+    unplantable, which fails admission)."""
+
+    current = row.get(col)
+    v = plant_value(sb, t, col, current)
+    if col not in unique_columns(sb, t.name) or unique_free(sb, t, col, row, v):
+        return v
+    tried = {v, current}
+    pool: list[Optional[str]] = []
+    fk = next((f for f in t.foreign_keys if f.column == col), None)
+    if fk is not None:
+        pool += [r.get(fk.ref_column) for r in sb.rows(fk.table, 50)]
+    else:
+        pool += sb.distinct(t.name, col, 50)
+    pool.append(fresh_value(sb, t, col, current))
+    for cand in pool:
+        if cand is None or cand in tried:
+            continue
+        tried.add(cand)
+        if unique_free(sb, t, col, row, cand):
+            return cand
+    return None
+
+
+def edit_value(
+    sb: "Sandbox",
+    t: Table,
+    col: str,
+    current: Optional[str],
+    written: Optional[str],
+    row: Optional[Mapping[str, Optional[str]]] = None,
+) -> Optional[str]:
+    """The value an unrelated edit sets on another row (``row``): what the
+    write set (the same change elsewhere), except in a column of a unique
+    index, where that value would make the store refuse the edit; there, a
+    value no row holds in any of the table's unique indexes."""
 
     if col in unique_columns(sb, t.name):
-        return fresh_value(sb, t, col, current)
+        v = fresh_value(sb, t, col, current)
+        if row is None or (v is not None and unique_free(sb, t, col, row, v)):
+            return v
+        return plant_free(sb, t, col, row)
     return written
 
 
@@ -789,7 +891,7 @@ def faults(
     def column_fault(cls: str, i: int, op: Op, col: str) -> None:
         t = schema.tables[op.table]
         assert op.row is not None
-        new = plant_value(sb, t, col, op.row.get(col))
+        new = plant_free(sb, t, col, op.row)
         name = f"{cls}:{op.table}.{col}"
         if new is None:
             c = t.column(col)
@@ -850,7 +952,7 @@ def faults(
                           if store.row_key(t, r) != store.row_key(t, op.key)), None)  # fmt: skip
             if other is not None:
                 for col in changed:
-                    v = edit_value(sb, t, col, other.get(col), op.row.get(col))
+                    v = edit_value(sb, t, col, other.get(col), op.row.get(col), other)
                     if v is None or other.get(col) == v:
                         continue
                     edit = dict(other)
@@ -877,7 +979,7 @@ def faults(
                 # The same change on another row: an excuse must hold only
                 # on the rows the write declares.
                 for col in changed:
-                    v = edit_value(sb, t, col, other.get(col), op.row.get(col))
+                    v = edit_value(sb, t, col, other.get(col), op.row.get(col), other)
                     if v is None or other.get(col) == v:
                         continue
                     edit = dict(other)
@@ -887,7 +989,7 @@ def faults(
             # A late change to the target itself: its first changed column.
             if changed:
                 late = dict(op.row)
-                v = plant_value(sb, t, changed[0], op.row.get(changed[0]))
+                v = plant_free(sb, t, changed[0], op.row)
                 if v is not None:
                     late[changed[0]] = v
                     out.append(Case(f"delayed:{op.table}.{changed[0]}", "delayed",
@@ -933,7 +1035,7 @@ def faults(
         for c in t.columns:
             if c.name in t.primary_key:
                 continue
-            v = plant_value(sb, t, c.name, other.get(c.name))
+            v = plant_free(sb, t, c.name, other)
             if v is None:
                 continue
             row = dict(other)
