@@ -60,24 +60,31 @@ def redact_evidence(
     """Return a copy with secret values withheld.
 
     Defense in depth for lines that already left the content script.
+    A live secret value is never copied into the result: only the constant
+    ``SECRET`` placeholder is written for secret fields, so clear-text
+    storage scanners see no sensitive payload on the write path.
     """
 
-    out = dict(line)
     names = {n.lower() for n in secret_names}
-    name = out.get("name") or out.get("id")
-    declared = bool(out.get("secret_field"))
+    name = line.get("name") or line.get("id")
+    declared = bool(line.get("secret_field"))
     if name and str(name).lower() in names:
         declared = True
-    if is_secret_field(
-        tag=out.get("tag"),
-        name=out.get("name"),
-        field_id=out.get("id"),
+    secret = is_secret_field(
+        tag=line.get("tag"),
+        name=line.get("name"),
+        field_id=line.get("id"),
         secret_field=declared,
-        input_type=out.get("input_type"),
-    ):
+        input_type=line.get("input_type"),
+    )
+    # Rebuild without carrying a live secret value forward.
+    out: dict[str, Any] = {k: v for k, v in line.items() if k != "value"}
+    if secret:
         out["secret_field"] = True
-        if "value" in out and out["value"] not in (None, SECRET):
+        if "value" in line:
             out["value"] = SECRET
+    elif "value" in line:
+        out["value"] = line["value"]
     return out
 
 
