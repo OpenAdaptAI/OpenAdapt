@@ -81,7 +81,9 @@ def _change(row_id, before, after):
 def test_unchanged_identity_of_a_changed_row_is_required():
     gui = [_change(17, n, n) for n in (100, 101, 102)]
     api = [_change(29, n, n) for n in (100, 101, 102)]
-    verdict = footprint_verdict(gui, api, ["g"] * 3, ["a"] * 3)
+    verdict = footprint_verdict(
+        gui, api, ["gui-unique-tag"] * 3, ["api-unique-tag"] * 3
+    )
     assert not verdict["equivalent"]
     assert any("before.id" in d and "after.id" in d for d in verdict["differences"])
 
@@ -89,7 +91,9 @@ def test_unchanged_identity_of_a_changed_row_is_required():
 def test_varying_business_increment_cannot_be_ignored():
     gui = [_change(17, n, n + 1) for n in (100, 101, 102)]
     api = [_change(17, n, n) for n in (100, 101, 102)]
-    verdict = footprint_verdict(gui, api, ["g"] * 3, ["a"] * 3)
+    verdict = footprint_verdict(
+        gui, api, ["gui-unique-tag"] * 3, ["api-unique-tag"] * 3
+    )
     assert not verdict["equivalent"]
     assert verdict["server_owned"] == []
     assert any("after.counter" in d for d in verdict["differences"])
@@ -97,7 +101,9 @@ def test_varying_business_increment_cannot_be_ignored():
 
 def test_matching_varying_business_increment_is_allowed():
     gui = [_change(17, n, n + 1) for n in (100, 101, 102)]
-    verdict = footprint_verdict(gui, gui, ["g"] * 3, ["a"] * 3)
+    verdict = footprint_verdict(
+        gui, gui, ["gui-unique-tag"] * 3, ["api-unique-tag"] * 3
+    )
     assert verdict["equivalent"], verdict["differences"]
     assert verdict["server_owned"] == []
 
@@ -108,8 +114,8 @@ def test_existing_row_identity_and_business_changes_are_both_compared():
     verdict = footprint_verdict(
         gui,
         api,
-        ["g"] * 3,
-        ["a"] * 3,
+        ["gui-unique-tag"] * 3,
+        ["api-unique-tag"] * 3,
     )
     assert not verdict["equivalent"]
     assert any(
@@ -120,6 +126,8 @@ def test_existing_row_identity_and_business_changes_are_both_compared():
 def test_changed_rows_with_equal_new_values_still_compare_prior_states():
     gui = [_change(17, n, 200) for n in (100, 101)]
     api = [_change(17, n + 10, 200) for n in (100, 101)]
-    verdict = footprint_verdict(gui, api, ["g"] * 2, ["a"] * 2)
+    verdict = footprint_verdict(
+        gui, api, ["gui-unique-tag"] * 2, ["api-unique-tag"] * 2
+    )
     assert not verdict["equivalent"]
     assert any("before.counter" in d for d in verdict["differences"])

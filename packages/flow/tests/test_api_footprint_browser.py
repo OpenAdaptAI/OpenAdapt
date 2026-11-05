@@ -198,6 +198,15 @@ def capture_save(app, context, page, tmp_path):
         page.click("#save")
         page.wait_for_function("done.textContent === 'saved'")
         page.wait_for_load_state("networkidle")
+        # A requestfinished callback reads headers/body before appending.
+        # Drain those callbacks before detaching the capture listeners.
+        expected = (
+            4 if app.mode.startswith("trailing_") or app.mode == "load_write" else 3
+        )
+        deadline = time.monotonic() + 5
+        while capture.count < expected and time.monotonic() < deadline:
+            page.wait_for_timeout(20)
+        assert capture.count >= expected, "Every fixture request must finish capture"
     finally:
         capture.stop()
     capture.write(rec, t0_monotonic=start)
