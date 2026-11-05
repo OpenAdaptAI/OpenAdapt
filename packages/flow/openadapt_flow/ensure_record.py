@@ -48,7 +48,14 @@ from pathlib import Path
 from typing import Any, Literal, Optional
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
+
+from openadapt_flow.fhir_reference import (
+    ReferenceEvidence,
+    ReferenceReader,
+    ReferenceSchema,
+    ReferenceUnreadable,
+)
 
 Outcome = Literal["found_existing", "created_verified", "needs_review"]
 Compare = Literal["exact", "casefold", "digits", "date", "instant"]
@@ -215,6 +222,8 @@ class EnsureContract(BaseModel):
     resource_type: str = Field(min_length=1)
     base_url: str = Field(min_length=1)
     access_token_env: Optional[str] = None
+    #: Exact schema metadata proving which elements are FHIR References.
+    reference_schema: Optional[ReferenceSchema] = None
     #: The agent's own actor references (``Practitioner/<id>``).
     self_actors: list[str] = Field(alias="self", min_length=1)
     #: Task parameter -> where and how the record stores it.
@@ -259,9 +268,37 @@ class EnsureContract(BaseModel):
 
     @model_validator(mode="after")
     def _bound(self) -> "EnsureContract":
+        if self.reference_schema is not None:
+            if self.reference_schema.definition["type"] != self.resource_type:
+                raise ValueError("the Reference schema describes another resource type")
+            paths = self.reference_schema.paths()
+            for name, field in self.fields.items():
+                plain = _bare(field.path)
+                if plain in paths or plain.removesuffix(".reference") in paths:
+                    if field.compare != "exact" or field.map:
+                        raise ValueError(
+                            "Reference identity cannot use scalar normalization"
+                        )
+                if (
+                    plain.endswith(".display")
+                    and plain.removesuffix(".display") in paths
+                ):
+                    parent = field.path.removesuffix(".display")
+                    if not any(
+                        f.path in (parent, parent + ".reference")
+                        for f in self.fields.values()
+                    ):
+                        raise ValueError(
+                            f"{name}: a Reference display needs a bound target identity"
+                        )
         for rule in self.identity:
             if not rule:
                 raise ValueError("an identity rule names no parameter")
+            if any(
+                p in self.fields and reference_display(self, self.fields[p].path)
+                for p in rule
+            ):
+                raise ValueError("Reference display cannot identify a record")
             missing = [p for p in rule if p not in self.fields]
             if missing:
                 raise ValueError(f"identity names unknown fields: {missing}")
@@ -287,6 +324,13 @@ class EnsureContract(BaseModel):
                         "meta.versionId, meta.lastUpdated and extension[url=...]"
                     )
         return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_reference_schema(self, handler: Any) -> Any:
+        data = handler(self)
+        if self.reference_schema is None:
+            data.pop("reference_schema", None)
+        return data
 
     @property
     def corrections(self) -> bool:
@@ -457,8 +501,62 @@ def normalize(value: Any, rule: FieldRule, *, task: bool = False) -> Optional[st
     return text
 
 
-def same(contract: EnsureContract, name: str, stored: Any, wanted: Any) -> bool:
+def reference_field(
+    contract: EnsureContract, path: str
+) -> Optional[tuple[str, tuple[str, ...]]]:
+    """A field's typed Reference parent and target types, never a name guess."""
+    if contract.reference_schema is None:
+        return None
+    paths = contract.reference_schema.paths()
+    for parent in (path, path.removesuffix(".reference")):
+        if _bare(parent) in paths:
+            return parent, paths[_bare(parent)]
+    return None
+
+
+def reference_display(contract: EnsureContract, path: str) -> bool:
+    return (
+        path.endswith(".display")
+        and reference_field(contract, path.removesuffix(".display")) is not None
+    )
+
+
+def _display_has_identity(
+    contract: EnsureContract, path: str, params: Mapping[str, Any]
+) -> bool:
+    parent = path.removesuffix(".display")
+    return any(
+        f.path in (parent, parent + ".reference") and params.get(n) not in (None, "")
+        for n, f in contract.fields.items()
+    )
+
+
+def _field_values(
+    contract: EnsureContract, resource: Mapping[str, Any], path: str
+) -> list[Any]:
+    ref = reference_field(contract, path)
+    return extract_all(resource, ref[0] if ref else path)
+
+
+def same(
+    contract: EnsureContract,
+    name: str,
+    stored: Any,
+    wanted: Any,
+    references: Optional[ReferenceEvidence] = None,
+) -> bool:
     rule = contract.fields[name]
+    ref = reference_field(contract, rule.path)
+    if ref is not None:
+        if stored is None or wanted is None:
+            return False
+        if references is None:
+            raise ReferenceUnreadable(
+                "reference comparison needs resolved target evidence"
+            )
+        return references.identity(stored, ref[1]) == references.identity(
+            wanted, ref[1]
+        )
     a, b = normalize(stored, rule), normalize(wanted, rule, task=True)
     return a is not None and b is not None and a == b
 
@@ -553,7 +651,10 @@ def is_void(contract: EnsureContract, resource: Mapping[str, Any]) -> bool:
 
 
 def is_person(
-    contract: EnsureContract, resource: Mapping[str, Any], params: Mapping[str, Any]
+    contract: EnsureContract,
+    resource: Mapping[str, Any],
+    params: Mapping[str, Any],
+    references: Optional[ReferenceEvidence] = None,
 ) -> bool:
     """True when the resource meets any identity rule for these values.
 
@@ -567,8 +668,8 @@ def is_person(
     return any(
         all(
             any(
-                same(contract, p, value, params.get(p))
-                for value in extract_all(resource, contract.fields[p].path)
+                same(contract, p, value, params.get(p), references)
+                for value in _field_values(contract, resource, contract.fields[p].path)
             )
             for p in rule
         )
@@ -578,13 +679,32 @@ def is_person(
 
 
 def wrong_fields(
-    contract: EnsureContract, resource: Mapping[str, Any], params: Mapping[str, Any]
+    contract: EnsureContract,
+    resource: Mapping[str, Any],
+    params: Mapping[str, Any],
+    references: Optional[ReferenceEvidence] = None,
 ) -> list[str]:
+    for name, rule in contract.fields.items():
+        if (
+            name in params
+            and reference_display(contract, rule.path)
+            and not _display_has_identity(contract, rule.path, params)
+        ):
+            raise ReferenceUnreadable(
+                "Reference display has no supplied target identity"
+            )
     return sorted(
         name
         for name, rule in contract.fields.items()
         if name in params
-        and not same(contract, name, extract(resource, rule.path), params[name])
+        and not reference_display(contract, rule.path)
+        and not same(
+            contract,
+            name,
+            next(iter(_field_values(contract, resource, rule.path)), None),
+            params[name],
+            references,
+        )
     )
 
 
@@ -613,7 +733,13 @@ def _expected_leaves(
 ) -> Counter[str]:
     want: Counter[str] = Counter()
     for name, rule in contract.fields.items():
-        if params is not None and params.get(name) in (None, ""):
+        if params is not None and (
+            params.get(name) in (None, "")
+            or (
+                reference_display(contract, rule.path)
+                and not _display_has_identity(contract, rule.path, params)
+            )
+        ):
             continue  # the task didn't give it, so the record mustn't hold it
         from openadapt_flow.runtime.effects.fhir import parse_filter, split_path
 
@@ -634,6 +760,23 @@ def _expected_leaves(
         for path in filters:
             if path != leaf:
                 want[path] += 1
+    # These allowances apply only to a schema-proven Reference with an
+    # independently checked identity supplied by this task.
+    for name, rule in contract.fields.items():
+        ref = reference_field(contract, rule.path)
+        if ref is None or (params is not None and params.get(name) in (None, "")):
+            continue
+        parent = _bare(ref[0])
+        if rule.path == ref[0]:
+            want.pop(parent, None)
+        for member in (
+            "reference",
+            "type",
+            "identifier.system",
+            "identifier.value",
+            "display",
+        ):
+            want[parent + "." + member] = max(1, want[parent + "." + member])
     return want
 
 
@@ -663,7 +806,10 @@ def extra_elements(
 
 
 def holds_only_task_values(
-    contract: EnsureContract, resource: Mapping[str, Any], params: Mapping[str, Any]
+    contract: EnsureContract,
+    resource: Mapping[str, Any],
+    params: Mapping[str, Any],
+    references: Optional[ReferenceEvidence] = None,
 ) -> bool:
     """True when every value the version holds is the task's (``consistent``).
 
@@ -676,12 +822,22 @@ def holds_only_task_values(
     if is_void(contract, resource):
         return False
     for name, rule in contract.fields.items():
-        held = [v for v in extract_all(resource, rule.path) if v not in (None, "")]
+        if reference_display(contract, rule.path):
+            if extract_all(resource, rule.path) and not _display_has_identity(
+                contract, rule.path, params
+            ):
+                return False
+            continue
+        held = [
+            v
+            for v in _field_values(contract, resource, rule.path)
+            if v not in (None, "")
+        ]
         if not held:
             continue
         if params.get(name) in (None, ""):
             return False
-        if not all(same(contract, name, v, params[name]) for v in held):
+        if not all(same(contract, name, v, params[name], references) for v in held):
             return False
     # On any contract, open or closed: a version in between may hold nothing
     # the task didn't give (another person's identifier, an address).
@@ -689,16 +845,19 @@ def holds_only_task_values(
 
 
 def _between_ok(
-    contract: EnsureContract, version: Mapping[str, Any], params: Mapping[str, Any]
+    contract: EnsureContract,
+    version: Mapping[str, Any],
+    params: Mapping[str, Any],
+    references: Optional[ReferenceEvidence] = None,
 ) -> bool:
     mode = contract.operations.correction.between
     if mode == "consistent":
-        return holds_only_task_values(contract, version, params)
+        return holds_only_task_values(contract, version, params, references)
     if mode == "either":
-        return is_person(contract, version, params) or holds_only_task_values(
-            contract, version, params
-        )
-    return is_person(contract, version, params)
+        return is_person(
+            contract, version, params, references
+        ) or holds_only_task_values(contract, version, params, references)
+    return is_person(contract, version, params, references)
 
 
 def _strip(node: Any, path: str) -> Any:
@@ -976,6 +1135,28 @@ class FhirReader:
             out.append(res)
         return out
 
+    def reference_evidence(
+        self,
+        contract: EnsureContract,
+        params: Mapping[str, Any],
+        resources: Collection[Mapping[str, Any]],
+    ) -> ReferenceEvidence:
+        def fetch(path: str) -> Mapping[str, Any]:
+            _, body = self.fetch(f"{self.base_url}/{path}")
+            return body
+
+        reader = ReferenceReader(self.base_url, fetch, self.resources)
+        for name, rule in contract.fields.items():
+            ref = reference_field(contract, rule.path)
+            if ref is None:
+                continue
+            if params.get(name) not in (None, ""):
+                reader.collect(params[name], ref[1])
+            for resource in resources:
+                for value in extract_all(resource, ref[0]):
+                    reader.collect(value, ref[1])
+        return reader.snapshot()
+
     def server_time(self) -> datetime:
         """The server's clock, from the ``Date`` header of a metadata read."""
 
@@ -1045,13 +1226,27 @@ class Change:
     reads: list[tuple[Optional[datetime], frozenset[str]]] = field(default_factory=list)
 
 
-def find_matches(
+def _find_matches(
     contract: EnsureContract, reader: FhirReader, params: Mapping[str, Any]
 ) -> tuple[dict[str, dict[str, Any]], int]:
     """Every live record that is the person, by each identity rule's search."""
 
     seen: dict[str, dict[str, Any]] = {}
     queries: list[dict[str, str]] = []
+    expected = (
+        reader.reference_evidence(contract, params, [])
+        if contract.reference_schema
+        else ReferenceEvidence()
+    )
+
+    def query_value(name: str) -> str:
+        ref = reference_field(contract, contract.fields[name].path)
+        return (
+            expected.identity(params[name], ref[1])
+            if ref
+            else str(params[name]).strip()
+        )
+
     for rule in contract.identity:
         given = [p for p in rule if params.get(p) not in (None, "")]
         if len(given) < len(rule):
@@ -1062,18 +1257,33 @@ def find_matches(
         # (an allergy's substance code) only narrows nothing: the search uses
         # the rule's other values, and the contract compares it after.
         searchable = [p for p in rule if p in contract.search]
-        queries.append({contract.search[p]: str(params[p]).strip() for p in searchable})
+        queries.append({contract.search[p]: query_value(p) for p in searchable})
         if len(searchable) > 1:
-            queries += [
-                {contract.search[p]: str(params[p]).strip()} for p in searchable
-            ]
+            queries += [{contract.search[p]: query_value(p)} for p in searchable]
     if not queries:
         raise Unreadable("the task gives the values of no identity rule")
     for query in queries:
         for res in reader.resources(contract.resource_type, {**query, "_count": "200"}):
             seen[str(res["id"])] = res
-    matches = {i: r for i, r in seen.items() if is_person(contract, r, params)}
+    references = (
+        reader.reference_evidence(contract, params, list(seen.values()))
+        if contract.reference_schema
+        else None
+    )
+    matches = {
+        i: r for i, r in seen.items() if is_person(contract, r, params, references)
+    }
     return matches, len(seen)
+
+
+def find_matches(
+    contract: EnsureContract, reader: FhirReader, params: Mapping[str, Any]
+) -> tuple[dict[str, dict[str, Any]], int]:
+    """Resolve Reference evidence outside judging; unsupported targets are unreadable."""
+    try:
+        return _find_matches(contract, reader, params)
+    except ReferenceUnreadable as exc:
+        raise Unreadable(str(exc)) from exc
 
 
 def capture_baseline(
@@ -1221,7 +1431,7 @@ def _review(reasons: list[str], evidence: dict[str, Any]) -> EnsureResult:
     return EnsureResult("needs_review", None, reasons, evidence)
 
 
-def judge(
+def _judge(
     contract: EnsureContract,
     params: Mapping[str, Any],
     baseline: Baseline,
@@ -1229,6 +1439,7 @@ def judge(
     after_matches: Mapping[str, Mapping[str, Any]],
     created: Optional[Mapping[str, Any]],
     existing_now: Optional[Mapping[str, Any]] = None,
+    references: Optional[ReferenceEvidence] = None,
 ) -> EnsureResult:
     """Decide the outcome from the snapshots. Reads nothing itself.
 
@@ -1316,7 +1527,7 @@ def judge(
             r
             for r in creates
             if r.split("/", 1)[1] not in after_matches
-            and transient_ok(contract, mine[r], selfs, params, changes)
+            and transient_ok(contract, mine[r], selfs, params, changes, references)
         ]
         creates = [r for r in creates if r not in transient]
         if transient:
@@ -1337,7 +1548,9 @@ def judge(
         tid = target.split("/", 1)[1]
         corrected = bool(set(mine[target].actions) - {"C"})
         if corrected:
-            refused = correction_refused(contract, mine[target], selfs, params)
+            refused = correction_refused(
+                contract, mine[target], selfs, params, references
+            )
             if refused:
                 reasons.append(refused)
         if target in others or (changes[target].authors - selfs):
@@ -1345,12 +1558,12 @@ def judge(
         if created is None or str(created.get("id")) != tid:
             reasons.append("the created record can't be read back")
         else:
-            wrong = wrong_fields(contract, created, params)
+            wrong = wrong_fields(contract, created, params, references)
             if wrong:
                 reasons.append("wrong or missing: " + ", ".join(wrong))
             if is_void(contract, created):
                 reasons.append("the created record asserts nothing (void)")
-            elif not is_person(contract, created, params):
+            elif not is_person(contract, created, params, references):
                 reasons.append("the created record is not the person")
             if contract.closed:
                 extra_paths = extra_elements(contract, created, params)
@@ -1391,11 +1604,38 @@ def judge(
     return _review(reasons, evidence)
 
 
+def judge(
+    contract: EnsureContract,
+    params: Mapping[str, Any],
+    baseline: Baseline,
+    changes: Mapping[str, Change],
+    after_matches: Mapping[str, Mapping[str, Any]],
+    created: Optional[Mapping[str, Any]],
+    existing_now: Optional[Mapping[str, Any]] = None,
+    references: Optional[ReferenceEvidence] = None,
+) -> EnsureResult:
+    """Judge snapshots without I/O; missing target evidence stays uncertain."""
+    try:
+        return _judge(
+            contract,
+            params,
+            baseline,
+            changes,
+            after_matches,
+            created,
+            existing_now,
+            references,
+        )
+    except ReferenceUnreadable as exc:
+        return _review([f"unreadable: {exc}"], {"unreadable": True})
+
+
 def correction_refused(
     contract: EnsureContract,
     change: Change,
     selfs: set[str],
     params: Mapping[str, Any],
+    references: Optional[ReferenceEvidence] = None,
 ) -> Optional[str]:
     """Why a create followed by more writes can't count as one write, or None.
 
@@ -1425,7 +1665,9 @@ def correction_refused(
         return f"{changed}, and with settle_s under 1 s its reads can't be told apart"
     if change.versions is None:
         return f"{changed}, and without _history its versions can't be counted"
-    if any(not _between_ok(contract, body, params) for body in change.bodies):
+    if any(
+        not _between_ok(contract, body, params, references) for body in change.bodies
+    ):
         # A version that was someone else (or no one) may have been found by
         # a search no audit event names, and acted on.
         if contract.operations.correction.between != "person":
@@ -1478,6 +1720,7 @@ def transient_ok(
     selfs: set[str],
     params: Mapping[str, Any],
     changes: Mapping[str, Change] = {},
+    references: Optional[ReferenceEvidence] = None,
 ) -> bool:
     """True when ``change`` is a record the agent created and deleted again
     that ``cardinality.own_transient`` lets count as not created.
@@ -1518,7 +1761,9 @@ def transient_ok(
         return False
     if change.versions != sum(1 for _, a in timed if a in ("C", "U")):
         return False
-    if not all(holds_only_task_values(contract, b, params) for b in change.bodies):
+    if not all(
+        holds_only_task_values(contract, b, params, references) for b in change.bodies
+    ):
         return False
     return not any(when is None or not who or who - selfs for when, who in change.reads)
 
@@ -1675,13 +1920,28 @@ def verify_ensure(
         late = _agents_part(changes_since(None), selfs)
         if late != _agents_part(changes, selfs):
             raise Unreadable("the agent wrote after the window closed")
+        resources = [r for r in (created, existing_now) if isinstance(r, Mapping)]
+        resources += [body for change in changes.values() for body in change.bodies]
+        resources += list(after_matches.values())
+        references = (
+            reader.reference_evidence(contract, params, resources)
+            if contract.reference_schema
+            else None
+        )
         result = judge(
-            contract, params, baseline, changes, after_matches, created, existing_now
+            contract,
+            params,
+            baseline,
+            changes,
+            after_matches,
+            created,
+            existing_now,
+            references,
         )
         # Where the read window closed, for a write receipt's scope.
         result.evidence["window_until"] = until.isoformat()
         return result
-    except Unreadable as exc:
+    except (Unreadable, ReferenceUnreadable) as exc:
         return _review([f"unreadable: {exc}"], {"unreadable": True})
 
 

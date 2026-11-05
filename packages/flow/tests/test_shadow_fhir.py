@@ -410,3 +410,41 @@ def test_a_lost_retry_in_a_known_episode_makes_a_late_refutation_uncertain(
     env["calls"]["ev"] = {"agent_writes": 1}
     sh.run_rechecks(now=True, only=[sh.episodes[0]])
     assert sh.episodes[0].late_verdict == "UNCERTAIN"
+
+
+@pytest.mark.parametrize(
+    "target,expected",
+    [
+        ("Patient/p1", "CONFIRMED"),
+        ("Patient/p2", "REFUTED"),
+        ("Patient/missing", "UNCERTAIN"),
+    ],
+)
+def test_reference_identity_and_display_use_the_same_late_path(
+    env, monkeypatch, target, expected
+):
+    from openadapt_flow.fhir_reference import ReferenceSchema
+    from tests.test_fhir_reference import schema
+
+    stored = _confirmed(env, monkeypatch)
+    ep = env["sh"].episodes[0]
+    c = ep.contract
+    c.reference_schema = ReferenceSchema.model_validate(
+        schema("AllergyIntolerance", "patient")
+    )
+    # The existing synthetic contract binds the patient reference and scalar
+    # clinical values. A stored display is presentation even when unbound.
+    stored["now"] = _stored(target)
+    stored["now"]["patient"]["display"] = "A different presentation"
+
+    def fetch(self, url, params=None):
+        if "/Patient/" in url:
+            pid = url.rsplit("/", 1)[-1]
+            if pid == "missing":
+                raise ensure_record.Unreadable("synthetic missing target")
+            return {}, {"resourceType": "Patient", "id": pid}
+        return {}, stored["now"]
+
+    monkeypatch.setattr(ensure_record.FhirReader, "fetch", fetch)
+    env["sh"].run_rechecks(now=True)
+    assert ep.late_verdict == expected, ep.late_reasons
