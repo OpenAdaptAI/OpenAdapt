@@ -420,7 +420,13 @@ def test_persisted_state_and_receipt_never_contain_locators_or_values(
     correct = api.RecheckState.load(
         path, params=PARAMS, target_ids=[f"Basic/{RECORD_ID}"]
     )
-    assert late(cfg, correct, ledger).outcome == "CONFIRMED"
+    loaded_result = late(cfg, correct, ledger)
+    assert loaded_result.outcome == "UNCERTAIN"
+    assert not loaded_result.verified and not loaded_result.final
+    assert (
+        "late_search_live_read_clock_binding_unknown"
+        in loaded_result.evidence["targeted"]["problems"]
+    )
 
 
 def test_foreign_locator_cannot_replace_issued_identity(issued: Any) -> None:
