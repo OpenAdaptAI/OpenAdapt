@@ -49,7 +49,7 @@ def bundle_digest(bundle: Path) -> str:
     manifest_path = bundle / "manifest.json"
     if manifest_path.is_file():
         try:
-            manifest = json.loads(manifest_path.read_text())
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise SystemExit(f"{manifest_path} is not valid JSON: {exc}") from exc
         digest = manifest.get("content_digest")

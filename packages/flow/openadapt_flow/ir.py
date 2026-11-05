@@ -3663,7 +3663,9 @@ class Workflow(BaseModel):
         if wf.manifest is None:
             sidecar = bundle / "manifest.json"
             if sidecar.is_file():
-                wf.manifest = BundleManifest.model_validate_json(sidecar.read_text())
+                wf.manifest = BundleManifest.model_validate_json(
+                    sidecar.read_text(encoding="utf-8")
+                )
                 persisted = wf.manifest
 
         if sealed_assets is not None:
