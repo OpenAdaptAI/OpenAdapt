@@ -265,6 +265,7 @@ def contract(base: str, **options: Any) -> api.Contract:
                 "kind": "fhir",
                 "base_url": base,
                 "resource_type": "Basic",
+                "fhir_cache_bound_s": 0,
                 "field_paths": {"id": "id", "name": "name"},
             },
             "effects": [
@@ -319,8 +320,10 @@ def issued(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, server: Any):
     return store, cfg, write, ledger
 
 
-def late(cfg: api.Contract, write: Any, ledger: Any) -> api.RecheckResult:
-    return api.recheck(cfg, write, params=PARAMS, actor=ACTOR, ledger=ledger)
+def late(
+    cfg: api.Contract, write: Any, ledger: Any, *, wait: bool = True
+) -> api.RecheckResult:
+    return api.recheck(cfg, write, params=PARAMS, actor=ACTOR, ledger=ledger, wait=wait)
 
 
 def test_clean_targeted_recheck_is_final_and_store_unchanged(issued: Any) -> None:
@@ -515,7 +518,7 @@ def test_due_time_blocks_all_late_reads_before_the_frozen_window(
     before = list(store.calls)
     monkeypatch.setattr(api, "seconds_until", lambda due: 10)
     with pytest.raises(api.RecheckNotDue):
-        late(cfg, write, ledger)
+        late(cfg, write, ledger, wait=False)
     assert store.calls == before
 
 

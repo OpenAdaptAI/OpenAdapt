@@ -72,10 +72,12 @@ def test_mcp_initial_unknown_retains_owed_state_and_never_promotes_scoped_hold(
             api.Ledger(api.MemoryLedger()) if ledger_mode == "alternate" else None
         )
 
-        def selected_recheck(*args: Any, **kwargs: Any) -> Any:
-            return api.recheck(*args, **kwargs, ledger=selected)
+    def selected_recheck(*args: Any, **kwargs: Any) -> Any:
+        if ledger_mode != "original":
+            kwargs["ledger"] = selected
+        return api.recheck(*args, **kwargs, wait=True)
 
-        monkeypatch.setattr(verify_tools, "recheck", selected_recheck)
+    monkeypatch.setattr(verify_tools, "recheck", selected_recheck)
     late = bridge.dispatch("verify_recheck", {"write_id": write_id})
     assert late["outcome"] == "UNCERTAIN" and not late["verified"] and not late["final"]
     assert late["read_at"] and late["reconciliation"]["status"] == "owed"

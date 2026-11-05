@@ -62,6 +62,7 @@ def plan(base: str) -> tuple[EnsureContract, FrameTargeted, api.Contract]:
         {
             "resource_type": "Basic",
             "base_url": base,
+            "cache_bound_s": 0,
             "self": [ACTOR.id],
             "closed": True,
             "settle_s": 0,
@@ -158,6 +159,7 @@ def finish(begun: Any, **values: Any):
 
 
 def recheck(cfg: api.Contract, write: Any, ledger: Any, **options: Any):
+    options.setdefault("wait", True)
     return api.recheck(cfg, write, params=PARAMS, actor=ACTOR, ledger=ledger, **options)
 
 
