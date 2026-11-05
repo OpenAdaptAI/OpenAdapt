@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import cv2
 import numpy as np
+import pytest
 
 from openadapt_flow.ir import Anchor
 from openadapt_flow.runtime import resolver
@@ -271,11 +272,13 @@ def test_near_neighbor_refused_when_widget_repeats_and_target_moved() -> None:
     assert m is None
     anchor = _anchor((130, 114, 40, 40), (150, 134), ocr_text=None, pad=80)
     result = resolver.resolve(anchor, _png(scr), VISION, template_png=_png(template))
-    assert result is None or abs(result[0].point[1] - 134) <= 20
+    assert result is None or (
+        result[0].point[0] == 600 and abs(result[0].point[1] - 134) <= 20
+    )
 
 
 def test_near_moved_unique_target_is_still_found() -> None:
-    """The guard does not touch a lone widget that moved a few rows' worth."""
+    """The matcher may propose a unique move; it is not input authority."""
     scr = _blank(shade=235)
     _gear(scr, 150, 134 + 30)
     template = _blank(shade=235)
@@ -289,16 +292,20 @@ def test_near_moved_unique_target_is_still_found() -> None:
         prefer_near=(130, 114),
     )
     assert m is not None and abs(m.point[1] - 164) <= 2
+    anchor = _anchor((130, 114, 40, 40), (150, 134), pad=80)
+    with pytest.raises(resolver.UncorroboratedMovedTargetRefused):
+        resolver.resolve(anchor, _png(scr), VISION, template_png=_png(template))
 
 
-def test_moved_match_refused_when_recorded_landmark_is_gone() -> None:
+@pytest.mark.parametrize("move", [30, 80])
+def test_moved_match_refused_when_recorded_landmark_is_gone(move) -> None:
     """A crop that carries state (a checked box) matches the box now in that
     state, a row lower after a toggle. The anchor kept a label landmark that
     is not found, so the move cannot be checked: the template rungs refuse."""
     from openadapt_flow.ir import Landmark
 
     scr = _blank(shade=235)
-    _gear(scr, 150, 164)  # the stateful look moved down one row
+    _gear(scr, 150, 134 + move)  # the matching state is near or far away
     template = _blank(shade=235)
     _gear(template, 150, 134)
     template = template[114:154, 130:170].copy()
@@ -318,8 +325,8 @@ def test_moved_match_refused_when_recorded_landmark_is_gone() -> None:
         ],
         search_pad=80,
     )
-    result = resolver.resolve(anchor, _png(scr), VISION, template_png=_png(template))
-    assert result is None or result[0].rung not in ("template", "template_global")
+    with pytest.raises(resolver.UncorroboratedMovedTargetRefused):
+        resolver.resolve(anchor, _png(scr), VISION, template_png=_png(template))
 
 
 def test_peaks_above_suppresses_neighbors() -> None:

@@ -55,6 +55,21 @@ button 5. A screen-only method that "found" them would be guessing, so 6
 right and 15 refused is the best safe score. The structural rung still finds
 all 21 where page structure exists, and it still runs first.
 
+The tables above describe the initial guard head `52c52b8e1` and its declared
+benchmark conditions. They do not establish that a unique state-bearing crop
+identifies the same control: after a toggle, another checkbox or radio button
+can be the only exact match, near or far from the recorded spot.
+
+The follow-up guard requires located retained context for an off-spot template
+or a single local-model candidate. Missing context is checked before a far
+unique match can be admitted. Independently qualified target OCR may still
+resolve; otherwise an unsupported moved template causes a typed refusal before
+weaker pixel fallbacks, including geometry, can revive it. Geometry's point and
+confidence alone are not a control identity or state witness. This deliberately
+refuses some legitimate appearance-only moves. The matcher may still propose a
+unique appearance; the resolver decides whether it can authorize input. The
+local model remains opt-in.
+
 ## Pre-registered checks
 
 | Check | Threshold | Outcome |

@@ -19,7 +19,7 @@
 
 ### Fixes
 
-- On a screen-only surface (Citrix, RDP, VNC), the template, OCR and local model rungs no longer click a look-alike near where the target was recorded when the target itself has moved or changed state. Before, a dense list's next-row button or a toggled neighbour checkbox within 48 px was taken as the target: 202 wrong clicks across the drift, controls and live RDP suites in `benchmark/pixel_drift`, 0 after. Those targets are now refused or missed.
+- On a screen-only surface (Citrix, RDP, VNC), an off-spot template or single local-model candidate needs located retained context. A globally unique checked crop can be a different control after a state change, even beyond the locality radius. Missing or absent context now causes a typed refusal before weaker pixel fallbacks can revive that move; independently qualified target OCR and structural resolution keep their existing gates. Some legitimate appearance-only moves are refused too. The initial declared benchmark arms at `52c52b8e1` reported 202 wrong clicks on main and 0 with the original guards; that result is limited to those conditions.
 
 - The OpenEMR contracts (`benchmark/lifecycle_proof/verify.yaml`, `benchmark/openemr_local/verify.yaml`) now declare how the New Patient form stores what was typed: street and city in capitals, names with each word capitalized. Without it the exact record check refuted 19 of 20 correct saves on the stand-in suites (#1811). A contract value's `stored` form gains `capitalize_words` (OpenEMR's "C" fields); the set stays closed and the check stays exact.
 

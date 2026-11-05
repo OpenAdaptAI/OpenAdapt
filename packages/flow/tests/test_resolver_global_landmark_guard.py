@@ -14,10 +14,11 @@ from __future__ import annotations
 
 import io
 
+import pytest
 from PIL import Image
 
 from openadapt_flow.ir import Anchor, Landmark
-from openadapt_flow.runtime.resolver import resolve
+from openadapt_flow.runtime.resolver import UncorroboratedMovedTargetRefused, resolve
 
 VIEWPORT = (640, 480)
 
@@ -132,9 +133,9 @@ def test_labeled_global_match_corroborated_by_landmark_is_accepted() -> None:
     assert resolution.rung == "template_global"
 
 
-def test_labeled_anchor_without_landmarks_unchanged() -> None:
-    # No landmarks -> contradiction check abstains -> global match accepted
-    # (backward-compatible with the pre-fix behavior for this common case).
+def test_moved_labeled_anchor_without_landmarks_refuses() -> None:
+    # A baked-in label is not independent context when target OCR misses.
+    # This formerly admitted the far template; the new contract refuses it.
     anchor = Anchor(
         template="t.png",
         region=(80, 90, 90, 32),
@@ -147,7 +148,36 @@ def test_labeled_anchor_without_landmarks_unchanged() -> None:
         template_results=[None, _Match(point=(545, 416), region=(500, 400, 90, 32))],
         text_results={},
     )
-    result = resolve(anchor, _png(), vision, template_png=b"tmpl")
-    assert result is not None
-    resolution, _region = result
-    assert resolution.rung == "template_global"
+    with pytest.raises(UncorroboratedMovedTargetRefused):
+        resolve(anchor, _png(), vision, template_png=b"tmpl")
+
+
+def test_rejected_moved_template_does_not_reach_weaker_grounder() -> None:
+    class ForbiddenGrounder:
+        def locate_anchor(self, *_args):
+            pytest.fail("a rejected move must not reach a weaker local proposal")
+
+        def locate(self, *_args):
+            pytest.fail("a rejected move must not reach a weaker fallback")
+
+    anchor = _labeled_anchor_with_landmark()
+    anchor.landmarks = []
+    vision = _FakeVision(
+        template_results=[None, _Match(point=(545, 416), region=(500, 400, 90, 32))],
+        text_results={},
+    )
+    with pytest.raises(UncorroboratedMovedTargetRefused):
+        resolve(anchor, _png(), vision, ForbiddenGrounder(), template_png=b"tmpl")
+
+
+def test_independent_target_ocr_can_resolve_after_rejected_moved_template() -> None:
+    anchor = _labeled_anchor_with_landmark()
+    anchor.landmarks = []
+    target = _Match(point=(300, 106), region=(255, 90, 90, 32))
+    vision = _FakeVision(
+        template_results=[None, _Match(point=(545, 416), region=(500, 400, 90, 32))],
+        text_results={"Delete": target},
+    )
+    resolution, _region = resolve(anchor, _png(), vision, template_png=b"tmpl")
+    assert resolution.rung == "ocr"
+    assert resolution.point == target.point

@@ -167,6 +167,8 @@ def visual_resolution_evaluator_contract_sha256() -> str:
             "same_spot": ["per-axis", SAME_SPOT_MIN_PX, SAME_SPOT_SHARE],
             "landmark_share": _MOVED_MATCH_LANDMARK_SHARE,
             "ocr_local_copy": "whole-frame-unless-in-recorded-region",
+            "off_spot_context": "located-retained-context-or-terminal-refusal",
+            "missing_context": "checked-before-far-unique-exemption",
         },
         "template_scales": list(DEFAULT_TEMPLATE_SCALES),
         "ambiguity": "unique-or-independent-retained-evidence",
@@ -416,20 +418,17 @@ def _moved_match_unsupported(
     located landmark puts the target somewhere else.
 
     A crop that carries state (a checked box, a selected radio button)
-    matches the control now in that state, which after a toggle is the
-    neighbour. A moved match is also unsupported when the anchor kept
-    landmarks and none of them is found. ``_landmarks_contradict``'s 40 px tolerance is wider than a
-    form's row pitch, so it cannot tell the two apart; this test uses the
-    control's own size instead. Only a move inside the matcher's locality
-    radius, where the next row's copy can sit, is tested.
+    matches the control now in that state, which after a toggle can be
+    another row. Whole-frame uniqueness does not identify the same control.
+    Every off-spot match needs located retained context. Near matches also
+    use the control's own size: the global contradiction tolerance is wider
+    than a form's row pitch. Located far context keeps the existing global
+    contradiction check rather than this narrower near-control tolerance.
     """
     x, y, w, h = anchor.region
     if not moved_off_spot(matched[0] - x, matched[1] - y, w, h):
         return False
-    if math.hypot(matched[0] - x, matched[1] - y) > max(LOCALITY_MIN_PX, min(w, h)):
-        # A far move is the matcher's lone unique peak, which its own
-        # whole-frame test already admitted; no neighbour is in question.
-        return False
+    far = math.hypot(matched[0] - x, matched[1] - y) > max(LOCALITY_MIN_PX, min(w, h))
     tolerance = max(8.0, _MOVED_MATCH_LANDMARK_SHARE * min(matched[2], matched[3]))
     retained = located = 0
     for landmark in anchor.landmarks:
@@ -446,11 +445,12 @@ def _moved_match_unsupported(
         scale = matched[2] / w if w else 1.0
         ex = int(match.point[0]) + landmark.dx_px * scale
         ey = int(match.point[1]) + landmark.dy_px * scale
-        if math.hypot(ex - point[0], ey - point[1]) > tolerance:
+        if not far and math.hypot(ex - point[0], ey - point[1]) > tolerance:
             return True
-    # The control was recorded with context that is no longer found: the move
-    # cannot be checked, and a pixel-identical neighbour is as likely.
-    return retained > 0 and located == 0
+    # Missing context and absent context both leave the move uncorroborated.
+    # Check this before any far-unique exemption: a state-bearing crop can
+    # have exactly one matching neighbour at any distance.
+    return retained == 0 or located == 0
 
 
 def _point_in_region(point: Point, region: Region) -> bool:
@@ -734,6 +734,10 @@ class LookAlikeTargetsRefused(OcrResolutionRefused):
     retained landmarks did not single one out. A halt, never a pick."""
 
 
+class UncorroboratedMovedTargetRefused(LookAlikeTargetsRefused):
+    """A moved pixel candidate lacks independent retained control context."""
+
+
 _LATIN_ALNUM = re.compile(r"[A-Za-z0-9]")
 
 
@@ -784,8 +788,8 @@ def _model_grounded(
     candidate's short side.
 
     - One look-alike: kept unless a located landmark disagrees with it
-      (:class:`ContradictoryOcrEvidenceError`), or it is off the recorded
-      spot and the anchor kept landmarks of which none is found (abstain).
+      (:class:`ContradictoryOcrEvidenceError`). An off-spot candidate with
+      no located retained landmark is a typed terminal refusal.
     - Several: kept only when exactly one is supported by every located
       landmark (at least one located); else :class:`LookAlikeTargetsRefused`.
 
@@ -830,22 +834,18 @@ def _model_grounded(
 
     if len(candidates) == 1:
         only = candidates[0]
-        retained = any(
-            landmark.dx_px is not None and landmark.dy_px is not None
-            for landmark in anchor.landmarks
-        )
         moved = moved_off_spot(
             click(only)[0] - anchor.click_point[0],
             click(only)[1] - anchor.click_point[1],
             anchor.region[2],
             anchor.region[3],
         )
-        if retained and not located and moved:
-            # The one look-alike is off the recorded spot and none of the
-            # recorded context is found to check the move: a control whose
-            # crop carries state (a checked box) looks like its toggled
-            # neighbour. Abstain.
-            return None
+        if moved and not located:
+            # A lone matching appearance may be a different control now in
+            # the recorded state. A weaker fallback must not revive it.
+            raise UncorroboratedMovedTargetRefused(
+                "moved local-model target has no located retained control context"
+            )
         if not all(supported_by(only, point, landmark) for point, landmark in located):
             raise ContradictoryOcrEvidenceError(
                 "a located landmark places the model-grounded target elsewhere"
@@ -931,6 +931,7 @@ def resolve(
     def elapsed_ms() -> float:
         return (time.monotonic() - t0) * 1000.0
 
+    unsupported_moved_template = False
     landmark_evidence_loaded = False
     landmark_evidence: Optional[tuple[Point, float]] = None
     ambiguous_landmark = False
@@ -1037,9 +1038,12 @@ def resolve(
                 _scaled_click_point(anchor, tuple(match.region)),
                 tuple(match.region),
             )
-            if bound_point is None or _moved_match_unsupported(
+            if bound_point is None:
+                match = None
+            elif _moved_match_unsupported(
                 anchor, tuple(match.region), bound_point, screen_png, vision
             ):
+                unsupported_moved_template = True
                 match = None
         if match is not None:
             assert bound_point is not None
@@ -1079,9 +1083,12 @@ def resolve(
                 _scaled_click_point(anchor, tuple(match.region)),
                 tuple(match.region),
             )
-            if bound_point is None or _moved_match_unsupported(
+            if bound_point is None:
+                match = None
+            elif _moved_match_unsupported(
                 anchor, tuple(match.region), bound_point, screen_png, vision
             ):
+                unsupported_moved_template = True
                 match = None
         if match is not None:
             assert bound_point is not None
@@ -1217,6 +1224,14 @@ def resolve(
                 resolution_evidence_regions=(full_frame_region,),
             )
             return resolution, tolerant.region
+
+    if unsupported_moved_template:
+        # Target OCR above may independently establish the control. A box
+        # from a weaker pixel rung supplies no control identity/state witness
+        # that could reauthorize this rejected move. Geometry is not one.
+        raise UncorroboratedMovedTargetRefused(
+            "moved template target has no corroborated retained control context"
+        )
 
     # Rung 3b: the local grounding model, on pixel surfaces only. It runs
     # before the landmark geometry estimate, which assumes the recorded

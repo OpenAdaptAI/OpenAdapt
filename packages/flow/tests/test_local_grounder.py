@@ -29,6 +29,7 @@ from openadapt_flow.runtime.local_grounder import (
 )
 from openadapt_flow.runtime.resolver import (
     LookAlikeTargetsRefused,
+    UncorroboratedMovedTargetRefused,
     is_below_ocr,
     resolve,
 )
@@ -113,9 +114,25 @@ def _resolve(anchor, model, vision=None, structural=None):
     )
 
 
-def test_one_look_alike_resolves_on_the_grounder_rung_below_ocr():
+def test_one_moved_look_alike_without_retained_context_refuses():
+    # This formerly resolved solely because the appearance was unique. Keep
+    # that case explicit: a moved checked crop may be a different control.
     model = _Model([_Candidate((200, 150, 60, 60), 1.5, 0.93)])
-    resolution, region = _resolve(_icon_anchor(), model)
+    with pytest.raises(UncorroboratedMovedTargetRefused):
+        _resolve(_icon_anchor(), model)
+
+
+def test_one_corroborated_look_alike_resolves_on_grounder_below_ocr():
+    model = _Model([_Candidate((200, 150, 60, 60), 1.5, 0.93)])
+    anchor = _icon_anchor(
+        landmarks=[
+            Landmark(
+                relation="left_of", ocr_text="Notes", distance_px=40, dx_px=40, dy_px=0
+            )
+        ]
+    )
+    vision = _Vision({"Notes": _Match((170, 180), (145, 170, 50, 20))})
+    resolution, region = _resolve(anchor, model, vision)
     assert resolution.rung == "grounder"
     assert is_below_ocr(resolution.rung)  # irreversible steps still halt
     # The recorded click offset (20, 20) scales with the matched box (1.5x).
@@ -210,7 +227,7 @@ def test_one_look_alike_that_every_landmark_contradicts_refuses():
         _resolve(anchor, model, vision)
 
 
-def test_one_moved_look_alike_whose_landmarks_are_all_missing_abstains():
+def test_one_moved_look_alike_whose_landmarks_are_all_missing_refuses():
     """A checked radio button's crop matches the checked neighbour after a
     toggle. Its label landmark is not found, so the move cannot be checked."""
     anchor = _icon_anchor(
@@ -225,7 +242,8 @@ def test_one_moved_look_alike_whose_landmarks_are_all_missing_abstains():
         ]
     )
     moved = _Model([_Candidate((100, 130, 40, 40), 1.0, 0.95)])
-    assert _resolve(anchor, moved) is None
+    with pytest.raises(UncorroboratedMovedTargetRefused):
+        _resolve(anchor, moved)
     # At its recorded spot, the same look-alike still resolves.
     in_place = _Model([_Candidate((100, 100, 40, 40), 1.0, 0.95)])
     resolution, _region = _resolve(anchor, in_place)
