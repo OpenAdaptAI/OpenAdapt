@@ -2903,3 +2903,42 @@ class TestScrubCaptureRefusal:
         row = db.get_capture("capE")
         assert row["review_status"] == "captured"
         assert not row["scrubbed_path"]
+
+
+class TestDryRunCommands:
+    def test_dry_run_is_explicit_and_does_not_call_qualification(self, deps, monkeypatch, tmp_path):
+        disp, _db, _events = deps
+        monkeypatch.setattr(disp, "_bundle_dir", lambda _: tmp_path)
+        monkeypatch.setattr(disp, "_task_inputs", lambda _: [])
+        monkeypatch.setattr(disp, "_fixed_values", lambda _: {})
+        calls = []
+        monkeypatch.setattr(
+            disp,
+            "_replay_or_run",
+            lambda params, **kwargs: calls.append((params, kwargs)) or {"ok": False},
+        )
+        disp.dispatch(
+            "dry_run_workflow",
+            {
+                "workflow_id": "synthetic",
+                "inputs": {},
+                "_qualification_case_execution": {"kind": "representative"},
+            },
+        )
+        assert len(calls) == 1
+        params, flags = calls[0]
+        assert flags == {"run": False, "stop_before_effect": True}
+        assert "_qualification_case_execution" not in params
+
+    def test_missing_dry_run_capability_refuses_before_flow(self, deps):
+        disp, _db, _events = deps
+
+        class OldBridge:
+            def replay(self, *args, **kwargs):
+                pytest.fail("old engines must never fall back to real replay")
+
+        disp.services._flow_bridge = OldBridge()
+        response = disp._replay_or_run(
+            {"workflow_id": "anything"}, run=False, stop_before_effect=True
+        )
+        assert response["pre_action_refusal"] is True

@@ -1335,6 +1335,13 @@ class Replayer:
             if not isinstance(approval_gate, ApprovalGate):
                 raise ValueError("approval_gate must be an approval_mode ApprovalGate")
         self.approval_gate = approval_gate
+        if getattr(approval_gate, "stops_before_any_input", False) is True:
+            # Request preparation can execute page scripts. Never enter an API
+            # span or construct its actuator in a zero-input Check-it run.
+            self.api_steps = False
+            self.api_steps_off_reason = (
+                "Check-it dry-run does not prepare or send API steps"
+            )
         self._approval_report: Optional[RunReport] = None
         self._approval_run_dir: Optional[Path] = None
         self._approval_refusal: Optional[str] = None
@@ -1645,6 +1652,25 @@ class Replayer:
         """
         from openadapt_flow import at_rest
 
+        if getattr(self.approval_gate, "stops_before_any_input", False) is True:
+            from openadapt_flow.ir import ActionKind
+
+            if (
+                self.durable
+                or resume_from is not None
+                or resume_program is not None
+                or workflow.program is not None
+                or workflow.subflows
+                or worklists
+                or workflow.surfaces
+                or self.surface_backends
+                or any(
+                    step.action is ActionKind.SWITCH_SURFACE for step in workflow.steps
+                )
+            ):
+                raise ValueError(
+                    "Check-it dry-run requires a single-surface linear replay without durable continuation"
+                )
         bundle_path = Path(bundle_dir)
         bundle_sealed = (
             _sealed.is_sealed(bundle_path)
@@ -1743,7 +1769,23 @@ class Replayer:
     def _sealed_run_unsupported(self, workflow: Workflow) -> Optional[str]:
         """Name a run feature whose run-directory state is not sealed yet."""
         if self.approval_gate is not None:
-            return "an approval gate (attended approvals)"
+            from openadapt_flow.approval_mode.dry_run import DryRunGate
+            from openadapt_flow.approval_mode.model import ApprovalMode
+
+            gate = self.approval_gate
+            # This exact non-authorizing gate writes no approval/request/state
+            # files: its closed evidence belongs only to the sealed run report.
+            # No subclass or caller-declared capability can make an attended
+            # gate's plaintext stores eligible for a sealed run.
+            if (
+                type(gate) is not DryRunGate
+                or gate.mode is not ApprovalMode.NOT_GATED
+                or gate.approval_store is not None
+                or gate.log is not None
+                or gate.approver is not None
+                or gate.record is not None
+            ):
+                return "an approval gate (attended approvals)"
         if self._attended_draft_by is not None:
             return "an attended draft"
         program = workflow.program
@@ -8539,6 +8581,26 @@ class Replayer:
                             code="target_ambiguous",
                             detector_input_sha256=sha256_bytes(before_png),
                         )
+            if (
+                error is None
+                and getattr(self.approval_gate, "stops_before_any_input", False) is True
+                and (
+                    step.action not in (ActionKind.READ, ActionKind.WAIT)
+                    or step.effects
+                )
+            ):
+                # A verifier may navigate a second UI session to snapshot a
+                # record. Stop before that preparation as well as before input.
+                # Only pure contract binding runs here; no request is prepared.
+                if step.effects:
+                    resolved_effects = self._resolve_effects(step.effects, params)
+                    result.effect_contract_hashes.extend(
+                        effect.contract_hash() for effect in resolved_effects
+                    )
+                error = self._delivery_authorization_refusal(
+                    workflow, params, step, result
+                )
+
             # System-of-record effect verification -- SNAPSHOT the record just
             # before the (consequential) action, so the post-action verifier
             # can count only what THIS step wrote (delta / at-most-once /
@@ -9578,6 +9640,8 @@ class Replayer:
     def _actuator_for(self, binding: Any) -> Optional[Any]:
         """The actuator that runs ``binding``, or None when none can."""
 
+        if getattr(self.approval_gate, "stops_before_any_input", False) is True:
+            return None
         if binding is None:
             return None
         if binding.kind != "web_form":
@@ -12885,9 +12949,11 @@ class Replayer:
             )
         if (
             refusal is None
-            and not interstitial
             and self.approval_gate is not None
-            and self._step_is_consequential(step, workflow)
+            and (
+                getattr(self.approval_gate, "stops_before_any_input", False) is True
+                or (not interstitial and self._step_is_consequential(step, workflow))
+            )
         ):
             refusal = self._approval_gate_refusal(workflow, step, result)
         initial_guard = getattr(self, "_durable_initial_delivery_guard", None)
@@ -15382,6 +15448,7 @@ class Replayer:
                     params,
                     workflow=workflow,
                 ):
+                    self._record_dry_run_preconditions(step, result)
                     return True, None, before_png
                 if time.monotonic() >= deadline:
                     return (
@@ -15398,7 +15465,16 @@ class Replayer:
                 time.sleep(self.poll_interval_s)
                 before_png = self.vision.wait_settled(self.backend)
 
+        self._record_dry_run_preconditions(step, result)
         return True, None, before_png
+
+    def _record_dry_run_preconditions(self, step: Step, result: StepResult) -> None:
+        if self.approval_gate is None:
+            return
+        from openadapt_flow.approval_mode.dry_run import DryRunGate
+
+        if isinstance(self.approval_gate, DryRunGate):
+            self.approval_gate.record_preconditions(step, result)
 
     def _predicate_holds(
         self,

@@ -624,6 +624,7 @@ class FlowBridge:
         self._push_json_support: bool | None = None
         self._approval_gate_support: bool | None = None
         self._local_drill_support: bool | None = None
+        self._dry_run_support: bool | None = None
 
     @property
     def approver_keychain(self):
@@ -959,11 +960,18 @@ class FlowBridge:
         timeout: float | None = None,
         *,
         config: Path | None = None,
+        stop_before_effect: bool = False,
         params_file: Path | None = None,
         env_overrides: dict[str, str] | None = None,
     ) -> FlowResult:
         """Replay a bundle; returns the run directory in ``out_dir`` if given."""
         args = ["replay", str(bundle_dir)]
+        if stop_before_effect:
+            if not self.supports_dry_run():
+                raise FlowNotAvailableError(
+                    "This Flow cannot stop before all input; dry-run refused"
+                )
+            args.append("--stop-before-effect")
         if out_dir:
             args += ["--run-dir", str(out_dir)]
         if config:
@@ -1419,6 +1427,18 @@ class FlowBridge:
             except Exception:
                 self._approval_gate_support = False
         return self._approval_gate_support
+
+    def supports_dry_run(self) -> bool:
+        """Whether Flow explicitly refuses every input in Check-it dry mode."""
+        if self._dry_run_support is None:
+            try:
+                result = self._run(["replay", "--help"], timeout=30)
+                self._dry_run_support = result.ok and "--stop-before-effect" in (
+                    result.stdout or ""
+                )
+            except Exception:
+                self._dry_run_support = False
+        return self._dry_run_support
 
     def supports_local_drills(self) -> bool:
         """Probe (once) whether Flow can set up this computer's drill campaign."""

@@ -272,7 +272,14 @@ openadapt-flow, this file and openadapt-flow are current.
   openadapt-flow on the Windows computer, and Citrix needs the Citrix Workspace
   app. `openadapt-desktop capabilities` says what's missing on your computer.
 - **Run it** reads CSV and TSV files, not `.xlsx`.
-- The practice run in **Check it** saves for real, so use a test record.
+- **Check without saving** observes the prefilled screen and stops before
+  the declared save. It refuses application input, including a prefix that
+  needs typing, clicking or navigation. It reports the identity and declared
+  preconditions that passed, alongside the declared changes. Web checks attach
+  to the already-open signed-in browser. The run evidence uses the usual
+  redacted report and stays sealed when the bundle is sealed.
+- The separate qualification practice run in **Check it** saves for real,
+  so use a test record. Checking without saving does not qualify the task.
 - Phone pairing identifies the device, not a named person.
 
 Release status, signing, CI evidence, and data handling for security and IT
