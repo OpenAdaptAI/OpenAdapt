@@ -5,7 +5,8 @@ PortableReceiptVerification describe different signature formats; neither
 substitutes for the store result or a caller's pinned issuer trust.
 """
 
-from openadapt_flow.integrations.agents import WriteGuard
+from typing import TYPE_CHECKING, Any
+
 from openadapt_flow.offline_seal import LocalSealVerification, verify_local_seal
 from openadapt_flow.verifier import (
     Actor,
@@ -45,3 +46,16 @@ __all__ = [
     "verify_receipt",
     "verify_write",
 ]
+
+
+if TYPE_CHECKING:
+    from openadapt_flow.integrations.agents import WriteGuard
+
+
+def __getattr__(name: str) -> Any:
+    if name == "WriteGuard":
+        from openadapt_flow.integrations.agents import WriteGuard
+
+        globals()[name] = WriteGuard
+        return WriteGuard
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

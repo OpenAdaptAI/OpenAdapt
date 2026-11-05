@@ -10,6 +10,19 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 
+def _outcome_exit(outcome: str, provisional: bool = False) -> int:
+    if outcome == "CONFIRMED":
+        return 5 if provisional else 0
+    return {"UNCERTAIN": 3, "REFUTED": 4}.get(outcome, 2)
+
+
+def _params(path: str) -> dict:
+    values = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(values, dict):
+        raise ValueError("params must be a JSON object")
+    return values
+
+
 def _run(args: argparse.Namespace) -> int:
     from openadapt_verify import (
         Actor,
@@ -25,9 +38,7 @@ def _run(args: argparse.Namespace) -> int:
         command.pop(0)
     if not command:
         raise ValueError("run needs a write command after --")
-    values = json.loads(Path(args.params).read_text(encoding="utf-8"))
-    if not isinstance(values, dict):
-        raise ValueError("params must be a JSON object")
+    values = _params(args.params)
     try:
         pending = begin_write(
             Contract.load(args.contract),
@@ -46,8 +57,7 @@ def _run(args: argparse.Namespace) -> int:
     error = None
     delivered = True
     try:
-        # Keep stdout a single verifier document. The operator's command can
-        # report diagnostics on stderr; none become signed evidence of success.
+        # Command diagnostics never become signed evidence of success.
         returncode = subprocess.run(
             command, check=False, stdout=sys.stderr, stderr=sys.stderr
         ).returncode
@@ -64,13 +74,88 @@ def _run(args: argparse.Namespace) -> int:
             write_receipt=True,
         )
         reply = result.to_dict()
-        reply.update(command_returncode=returncode, command_error=error)
+        reply.update(
+            command_returncode=returncode,
+            command_error=error,
+            recheck_state_path=str(result.recheck.path) if result.recheck else None,
+        )
         print(json.dumps(reply, sort_keys=True))
-    return (
-        0
-        if result.verified and result.write_receipt == "issued" and returncode == 0
-        else 1
+    outcome = _outcome_exit(result.outcome.value, result.provisional)
+    if outcome:
+        return outcome
+    return 0 if result.write_receipt == "issued" and returncode == 0 else 1
+
+
+def _verify(args: argparse.Namespace) -> int:
+    from openadapt_flow.write_receipt import load_public_key
+
+    from openadapt_verify import ReceiptError, verify_receipt
+
+    try:
+        result = verify_receipt(
+            Path(args.file).read_bytes(),
+            issuer_public=load_public_key(Path(args.issuer_key)),
+            log_public=load_public_key(Path(args.log_key)),
+            evidence=Path(args.evidence).read_bytes() if args.evidence else None,
+        )
+    except ReceiptError as exc:
+        print(json.dumps({"valid": False, "code": exc.code, "detail": str(exc)}))
+        return 1
+    print(
+        json.dumps(
+            {
+                "valid": True,
+                "receipt_id": result.sha256,
+                "log_index": result.log_index,
+                "evidence_opened": result.evidence_opened,
+                "anchor": result.anchor,
+                "notes": result.notes,
+                "payload": result.payload.wire(),
+            },
+            sort_keys=True,
+        )
     )
+    return _outcome_exit(result.payload.verdict, result.payload.provisional)
+
+
+def _recheck(args: argparse.Namespace) -> int:
+    from openadapt_flow.verifier import RecheckNotDue, RecheckState
+
+    from openadapt_verify import Actor, Contract, recheck
+
+    values = _params(args.params)
+    state = RecheckState.load(args.recheck_state, params=values)
+    try:
+        result = recheck(
+            Contract.load(args.contract),
+            state,
+            params=values,
+            actor=Actor("agent", args.agent_id),
+        )
+    except RecheckNotDue as exc:
+        print(
+            json.dumps(
+                {"due": False, "recheck_due_at": exc.due_at, "wait_s": exc.wait_s}
+            )
+        )
+        return 5
+    print(
+        json.dumps(
+            {
+                "due": True,
+                "verified": result.verified,
+                "outcome": result.outcome,
+                "frame": result.frame,
+                "reasons": result.reasons,
+                "receipt_sha256": result.receipt_sha256,
+                "post_save_read_at": result.post_save_read_at,
+                "recheck_due_at": result.due_at,
+                "read_at": result.read_at,
+            },
+            sort_keys=True,
+        )
+    )
+    return _outcome_exit(result.outcome)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -87,12 +172,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     run.add_argument("--agent-id", default="external-agent")
     run.add_argument("command", nargs=argparse.REMAINDER)
     verify = sub.add_parser(
-        "verify", help="Verify a portable COSE receipt with pinned public keys"
+        "verify", help="Check pinned signatures and require a final CONFIRMED verdict"
     )
     verify.add_argument("file")
     verify.add_argument("--issuer-key", required=True)
     verify.add_argument("--log-key", required=True)
     verify.add_argument("--evidence")
+    check = sub.add_parser("recheck", help="Re-read a provisional write's store")
+    check.add_argument("--contract", required=True)
+    check.add_argument("--params", required=True)
+    check.add_argument(
+        "--recheck-state", required=True, help="private recheck.json from run"
+    )
+    check.add_argument("--agent-id", default="external-agent")
     serve = sub.add_parser("serve", help="Serve the canonical MCP verification tools")
     serve.add_argument("--contracts", required=True)
     serve.add_argument("--state", required=True)
@@ -101,15 +193,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if args.command_name == "run":
             return _run(args)
         if args.command_name == "verify":
-            from openadapt_flow.cli_receipt import cmd_verify
+            return _verify(args)
+        if args.command_name == "recheck":
+            return _recheck(args)
+        try:
+            from openadapt_verify.mcp import serve as serve_mcp
 
-            args.no_log = False
-            args.require_anchor = False
-            args.json = True
-            return cmd_verify(args)
-        from openadapt_verify.mcp import serve as serve_mcp
-
-        serve_mcp(Path(args.contracts), Path(args.state))
+            serve_mcp(Path(args.contracts), Path(args.state))
+        except ModuleNotFoundError as exc:
+            if exc.name != "mcp" and not (exc.name or "").startswith("mcp."):
+                raise
+            print(
+                "openadapt-verify: MCP is missing; pip install 'openadapt-verify[mcp]'",
+                file=sys.stderr,
+            )
+            return 2
         return 0
     except (OSError, ValueError) as exc:
         print(f"openadapt-verify: {exc}", file=sys.stderr)

@@ -68,6 +68,10 @@ the receipt carries it. No receipt format or cryptography is defined here.
 
 ## Existing agents
 
+The existing `WriteGuard` compatibility adapter emits Flow's
+`DeprecationWarning` when first requested. Plain `import openadapt_verify`
+does not load that adapter.
+
 OpenAI and Claude use the existing tool adapters:
 
 ```sh
@@ -112,14 +116,32 @@ model/provider behavior.
 ```sh
 openadapt-verify run --contract verify.yaml --params values.json --state ./state -- python write.py
 openadapt-verify verify write.receipt.cbor --issuer-key issuer.pub.pem --log-key log.pub.pem
+openadapt-verify recheck --contract verify.yaml --params values.json --recheck-state ./state/WRITE_ID/recheck.json
 pip install 'openadapt-verify[mcp]'
 openadapt-verify serve --contracts ./contracts --state ./state
 ```
 
 `run` executes an explicit argv without a shell. It reads back and requests a
-portable receipt even when the command fails. Exit zero requires a confirmed
-result, issued portable receipt and command exit zero; inspect those fields
-separately before deciding what happened. Command diagnostics go to stderr.
+portable receipt even when the command fails. Exit zero requires a final
+confirmed result, issued portable receipt and command exit zero. A provisional
+result exits 5 and reports `recheck_state_path`. Command diagnostics go to stderr.
+
+`verify` checks the portable signature and log inclusion against the pinned
+keys. Its JSON `valid` field reports those integrity checks; the exit code
+also requires a final `CONFIRMED` payload. Both commands use 0 for final
+`CONFIRMED`, 3 for `UNCERTAIN`, 4 for `REFUTED` and 5 for provisional confirmation.
+Code 1 reports a signature, signing or command failure; 2 reports a usage,
+configuration or read error. Inspect the JSON outcome and signing fields
+separately before deciding what happened.
+
+At or after `recheck_due_at`, `recheck` reads the store using the canonical
+verifier and the private state saved by `run`. Supply the original contract,
+params and `--agent-id`, and retain the same verifier authority and ledger
+directories. Before the due time it exits 5 without ending the window.
+A confirmed recheck exits 0, an uncertain one 3 and a refuted one 4. It reports
+the current result and read window as unsigned JSON; the earlier signed
+receipt remains provisional. A write after the recheck read is outside its
+window. A refusal requires a person to check the record before any retry.
 
 `serve` exposes the existing `verify_contracts`, `verify_begin`, `verify_check`
 and `verify_recheck` MCP tools. Their contracts remain operator-owned, and a

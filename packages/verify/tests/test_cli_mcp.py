@@ -171,7 +171,12 @@ def test_mcp_actual_transport_with_independent_store(store, tmp_path):
                     duplicate = await session.call_tool(
                         "verify_check", {"write_id": entry["write_id"]}
                     )
-                    assert duplicate.isError is True
+                    assert (
+                        getattr(
+                            duplicate, "is_error", getattr(duplicate, "isError", None)
+                        )
+                        is True
+                    )
                 tasks.cancel_scope.cancel()
 
     anyio.run(run)
