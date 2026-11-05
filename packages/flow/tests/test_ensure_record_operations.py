@@ -778,3 +778,56 @@ def test_the_frozen_inputs_are_the_leaderboards_rows():
             r["_source"].startswith("04e76283a03c37a18e47887c1954728812d21533:")
             for r in rows
         )
+
+
+def test_bookkeeping_versions_are_ordered_by_instant_not_text():
+    # The stamp first changes in a version written at 12:00:02, ten minutes
+    # before the time it names, so it is not that version's own time. Its
+    # lastUpdated is written as +01:00, which as text sorts after the next
+    # version's 12:10:00Z; checked in that order, the stamp would look like
+    # the later version's own time.
+    book = {
+        "bookkeeping": [
+            {"resource_type": "Practitioner", "paths": BOOK_PATHS, "now_checks": True}
+        ]
+    }
+    seen = [{"url": "urn:app:last-seen", "valueInstant": "2026-10-28T12:10:00Z"}]
+    v2 = {
+        **DOC,
+        "meta": {"versionId": "2", "lastUpdated": "2026-10-28T13:00:02+01:00"},
+        "extension": seen,
+    }
+    v3 = {
+        **DOC,
+        "meta": {"versionId": "3", "lastUpdated": "2026-10-28T12:10:00Z"},
+        "extension": seen,
+    }
+    c = Change(
+        ref="Practitioner/d",
+        actions={"U"},
+        authors={BOT},
+        events=[(_t(2), "U", frozenset({BOT})), (_t(600), "U", frozenset({BOT}))],
+        versions=2,
+        bodies=[v2, v3],
+        prior=DOC,
+    )
+    x = patient("x")
+    r = judge(contract(**book), PARAMS, base(), created_with(c), {"x": x}, x)
+    assert r.outcome == "needs_review"
+    # The same versions with one offset are refused as well.
+    v2z = {**v2, "meta": {"versionId": "2", "lastUpdated": "2026-10-28T12:00:02Z"}}
+    c.bodies = [v2z, v3]
+    r = judge(contract(**book), PARAMS, base(), created_with(c), {"x": x}, x)
+    assert r.outcome == "needs_review"
+
+
+def test_bookkeeping_with_a_version_time_without_a_zone_is_refused():
+    # Its place in the order can't be known, so it excuses nothing.
+    x = patient("x")
+    after = {**DOC, "meta": {"versionId": "2", "lastUpdated": "2026-10-28T12:00:02Z"}}
+    c = touched(after)
+    c.bodies = [
+        {**after, "meta": {"versionId": "2", "lastUpdated": "2026-10-28T12:00:02"}}
+    ]
+    r = judge(contract(**BOOK), PARAMS, base(), created_with(c), {"x": x}, x)
+    assert r.outcome == "needs_review"

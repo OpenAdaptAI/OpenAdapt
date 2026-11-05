@@ -772,10 +772,10 @@ def bookkeeping_only(
         return False
     if any(not (b.get("meta") or {}).get("lastUpdated") for b in change.bodies):
         return False  # a version with no time can't be put in order
-    chain = [
-        change.prior,
-        *sorted(change.bodies, key=lambda v: str(v["meta"]["lastUpdated"])),
-    ]
+    ordered = _by_instant(change.bodies)
+    if ordered is None:
+        return False  # a version with no readable time can't be put in order
+    chain = [change.prior, *ordered]
     if not all(_same_outside(a, b, paths) for a, b in zip(chain, chain[1:])):
         return False
     timed = [
@@ -788,6 +788,22 @@ def bookkeeping_only(
             if not _times_near_now(a, b, rule):
                 return False
     return True
+
+
+def _by_instant(bodies: list[dict[str, Any]]) -> Optional[list[dict[str, Any]]]:
+    """``bodies`` oldest first by the instant of ``meta.lastUpdated``, or None
+    when one has no readable time (none, unparseable, or no time zone).
+    Compared as instants, not text: with mixed offsets the text order is not
+    the time order."""
+
+    try:
+        times = [_when((b.get("meta") or {}).get("lastUpdated")) for b in bodies]
+    except Unreadable:
+        return None
+    if any(when is None for when in times):
+        return None
+    order = sorted(range(len(bodies)), key=lambda i: (times[i], i))
+    return [bodies[i] for i in order]
 
 
 def _times_near_now(
@@ -1435,6 +1451,9 @@ def read_back_unbound(change: Change, created: Mapping[str, Any]) -> Optional[st
     return None
 
 
+_NO_TIME = datetime.min.replace(tzinfo=timezone.utc)
+
+
 def version_trail(change: Change) -> list[dict[str, Optional[str]]]:
     """Each version in the window, oldest first: its id and who wrote it.
 
@@ -1445,7 +1464,7 @@ def version_trail(change: Change) -> list[dict[str, Optional[str]]]:
     n-th version. Otherwise ``author`` is None: unknown, never guessed.
     """
 
-    rows: list[tuple[str, str, Optional[str]]] = []
+    rows: list[tuple[Optional[datetime], str, Optional[str]]] = []
     for body in change.bodies:
         when, vid = _version_meta(body)
         meta = body.get("meta") or {}
@@ -1454,14 +1473,11 @@ def version_trail(change: Change) -> list[dict[str, Optional[str]]]:
             if isinstance(meta, Mapping)
             else None
         )
-        rows.append(
-            (
-                when.isoformat() if when is not None else "",
-                vid,
-                _ref(who) if isinstance(who, str) and who else None,
-            )
-        )
-    rows.sort(key=lambda r: r[0])
+        rows.append((when, vid, _ref(who) if isinstance(who, str) and who else None))
+    # By instant, not by text: with mixed offsets the text order is not the
+    # time order, and the n-th logged write would name the wrong version.
+    # A version with no time sorts first, as before.
+    rows.sort(key=lambda r: (r[0] is not None, r[0] or _NO_TIME))
     writes = [
         (when, who)
         for when, action, who in change.events

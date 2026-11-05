@@ -1471,3 +1471,33 @@ def test_the_reader_binds_the_read_back_to_history(server, outcome):
         ]
     authors = [v["author"] for v in r.evidence.get("versions", [])]
     assert authors == [BOT, BOT]
+
+
+def test_version_trail_orders_mixed_offsets_by_instant():
+    # v1 at 12:00:01Z written as +01:00, v2 at 12:00:02Z: as text, v2 sorts
+    # first and the audit trail's n-th write would name the wrong version.
+    from openadapt_flow.ensure_record import version_trail
+
+    v1 = {
+        **patient("x"),
+        "meta": {"versionId": "1", "lastUpdated": "2026-10-28T13:00:01+01:00"},
+    }
+    v2 = {
+        **patient("x"),
+        "meta": {"versionId": "2", "lastUpdated": "2026-10-28T12:00:02Z"},
+    }
+    change = Change(
+        ref="Patient/x",
+        actions={"C", "U"},
+        authors={BOT, OTHER},
+        events=[
+            (T0 + timedelta(seconds=1), "C", frozenset({BOT})),
+            (T0 + timedelta(seconds=2), "U", frozenset({OTHER})),
+        ],
+        versions=2,
+        bodies=[v2, v1],
+    )
+    assert version_trail(change) == [
+        {"version": "1", "author": BOT},
+        {"version": "2", "author": OTHER},
+    ]
