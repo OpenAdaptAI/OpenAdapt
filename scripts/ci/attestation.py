@@ -116,7 +116,7 @@ def parse_precommit_report(
     """Validate one v1 report against exact metadata from trusted Git plumbing.
 
     The returned value is parsed evidence only; it is not proof that reported
-    commands ran before the commit or that hook bypass was impossible.
+    commands ran before the commit or that hooks were used.
     """
     for name, sha in [
         ("commit", expected_commit),
@@ -135,7 +135,6 @@ def parse_precommit_report(
         "tree",
         "commands",
         "completed_before_commit",
-        "hook_bypass",
     }
     optional = {"completed_utc"}
     if set(report) - (required | optional) or required - set(report):
@@ -165,13 +164,8 @@ def parse_precommit_report(
             )
         if type(command["exit_code"]) is not int or command["exit_code"] != 0:
             raise EvidenceError("every reported command must have exit_code 0")
-    if (
-        report["completed_before_commit"] is not True
-        or report["hook_bypass"] is not False
-    ):
-        raise EvidenceError(
-            "report must state completed_before_commit=true and hook_bypass=false"
-        )
+    if report["completed_before_commit"] is not True:
+        raise EvidenceError("report must state completed_before_commit=true")
     if "completed_utc" in report:
         completed = _parse_time(report["completed_utc"], "completed_utc")
         if completed > commit_time.astimezone(timezone.utc):

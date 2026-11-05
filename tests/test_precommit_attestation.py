@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 
 import pytest
+
 from scripts.ci.attestation import (
     EvidenceError,
     parse_author_declaration,
@@ -26,7 +27,6 @@ def _precommit_body(**updates: object) -> str:
         "tree": TREE,
         "commands": [{"argv": ["uv", "run", "pytest", "-q"], "exit_code": 0}],
         "completed_before_commit": True,
-        "hook_bypass": False,
     }
     report.update(updates)
     return f"```json\n{json.dumps(report)}\n```"
@@ -93,8 +93,8 @@ def test_validates_all_precommit_bindings() -> None:
         {"commands": []},
         {"commands": [{"argv": ["pytest"], "exit_code": 1}]},
         {"commands": [{"argv": ["pytest"], "exit_code": True}]},
-        {"hook_bypass": True},
         {"completed_before_commit": False},
+        {"hook_bypass": False},
         {"unrecognized": "field"},
         {"completed_utc": "2026-11-05T18:01:00Z"},
     ],

@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -12,6 +13,7 @@ from scripts.ci.attestation import EvidenceError
 from scripts.ci.protected_safety_review import (
     CHECK_NAME,
     MANIFEST_PATH,
+    MERGE_QUEUE_QUERY,
     evaluate_pull_request,
     run,
     validate_manifest,
@@ -65,7 +67,6 @@ def _precommit_comment() -> str:
         "tree": TREE,
         "commands": [{"argv": ["pytest", "-q"], "exit_code": 0}],
         "completed_before_commit": True,
-        "hook_bypass": False,
         "completed_utc": "2026-11-05T17:59:00Z",
     }
     return "```json\n" + json.dumps(report) + "\n```"
@@ -77,6 +78,7 @@ def _comment(body: str, login: str, comment_id: int) -> dict[str, Any]:
         "body": body,
         "user": {"login": login},
         "author_association": "MEMBER",
+        "created_at": "2026-11-05T18:00:00Z",
         "updated_at": "2026-11-05T18:00:00Z",
     }
 
@@ -167,10 +169,10 @@ def test_gate_change_requires_exact_head_coordinator_note() -> None:
     assert _evaluate(files=files, comments=comments) == []
 
 
-def test_stale_base_fails_closed() -> None:
+def test_pr_does_not_need_rebase_to_current_main_tip() -> None:
     pull = _pull_request()
     pull["base"]["sha"] = "e" * 40
-    assert any("stale" in error for error in _evaluate(pull_request=pull))
+    assert _evaluate(pull_request=pull) == []
 
 
 def test_unprotected_path_does_not_require_evidence() -> None:
@@ -180,9 +182,10 @@ def test_unprotected_path_does_not_require_evidence() -> None:
 class FakeApi:
     """Fixed GitHub API responses; this test never calls the network."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, queue_entries: list[dict[str, Any]] | None = None) -> None:
         self.check_run: dict[str, Any] | None = None
         self.comment_batches = 0
+        self.queue_entries = queue_entries or []
 
     def request(self, path: str, *, method: str = "GET", data: Any = None) -> Any:
         if method == "POST" and path == "/check-runs":
@@ -190,6 +193,13 @@ class FakeApi:
             return {"id": 7}
         fixed = {
             "": {"full_name": "OpenAdaptAI/OpenAdapt", "default_branch": "main"},
+            "/actions/runs/77": {
+                "path": ".github/workflows/protected-safety-review.yml",
+                "event": "issue_comment",
+                "head_sha": BASE,
+                "repository": {"full_name": "OpenAdaptAI/OpenAdapt"},
+                "html_url": "https://github.com/OpenAdaptAI/OpenAdapt/actions/runs/77",
+            },
             "/pulls/42": _pull_request(),
             "/git/ref/heads/main": {"object": {"sha": BASE}},
             "/pulls/42/files?per_page=100&page=1": [
@@ -213,17 +223,46 @@ class FakeApi:
             return fixed[path]
         return fixed[path]
 
+    def graphql(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
+        assert query == MERGE_QUEUE_QUERY
+        assert variables == {
+            "owner": "OpenAdaptAI",
+            "name": "OpenAdapt",
+            "branch": "main",
+        }
+        return {
+            "repository": {
+                "mergeQueue": {
+                    "configuration": {"mergeMethod": "MERGE"},
+                    "entries": {
+                        "totalCount": len(self.queue_entries),
+                        "pageInfo": {"hasNextPage": False},
+                        "nodes": self.queue_entries,
+                    }
+                }
+            }
+        }
+
 
 def test_orchestrator_uses_fixed_api_responses_and_publishes_exact_head() -> None:
     api = FakeApi()
-    event = {"pull_request": {"number": 42}}
-    conclusion, errors = run(event, BASE, api)
+    event = {"issue": {"number": 42, "pull_request": {}}}
+    conclusion, errors = run(
+        event,
+        BASE,
+        api,
+        event_name="issue_comment",
+        workflow_run_id="77",
+        workflow_sha=BASE,
+    )
     assert conclusion == "success", errors
     assert errors == []
     assert api.check_run is not None
     assert api.check_run["name"] == CHECK_NAME
     assert api.check_run["head_sha"] == HEAD
     assert api.check_run["conclusion"] == "success"
+    assert api.check_run["external_id"] == "77"
+    assert api.check_run["details_url"].endswith("/77")
 
 
 def test_rename_from_protected_path_remains_protected() -> None:
@@ -297,11 +336,254 @@ def test_comment_change_during_review_fails_closed() -> None:
     assert any("comments changed during review" in error for error in errors)
 
 
+def test_edited_review_comment_is_not_current_evidence() -> None:
+    comments = _comments()
+    comments[1]["updated_at"] = "2026-11-05T18:01:00Z"
+    assert any(
+        "exact-head independent review" in e for e in _evaluate(comments=comments)
+    )
+
+
+def test_coordinator_header_must_be_a_whole_line() -> None:
+    comments = _comments()
+    comments.append(
+        _comment(
+            f"From: Coordinator\nReviewed-Head: {HEAD}\n\nQuoted: Coordinator-Approval: APPROVE",
+            "coordinator-login",
+            4,
+        )
+    )
+    errors = _evaluate(
+        files=[{"filename": ".github/agent-safety-manifest.json"}],
+        comments=comments,
+    )
+    assert any("coordinator approval" in error for error in errors)
+    assert not any("invalid coordinator note" in error for error in errors)
+
+
+def _queue_entry(
+    *, position: int, base: str, head: str, number: int, pr_head: str
+) -> dict[str, Any]:
+    return {
+        "position": position,
+        "state": "BUILDING",
+        "baseCommit": {"oid": base},
+        "headCommit": {"oid": head},
+        "pullRequest": {
+            "number": number,
+            "state": "OPEN",
+            "baseRefName": "main",
+            "headRefOid": pr_head,
+        },
+    }
+
+
+def test_merge_group_maps_multi_pr_chain_and_publishes_group_sha() -> None:
+    group_head = "f" * 40
+    first_head = "d" * 40
+    queue = [
+        _queue_entry(
+            position=1, base=BASE, head=first_head, number=41, pr_head="4" * 40
+        ),
+        _queue_entry(
+            position=2, base=first_head, head=group_head, number=42, pr_head=HEAD
+        ),
+    ]
+
+    class GroupApi(FakeApi):
+        def request(self, path: str, *, method: str = "GET", data: Any = None) -> Any:
+            if method == "POST" and path == "/check-runs":
+                self.check_run = data
+                return {"id": 8}
+            if path == "":
+                return {"full_name": "OpenAdaptAI/OpenAdapt", "default_branch": "main"}
+            if path == "/git/ref/heads/main":
+                return {"object": {"sha": BASE}}
+            if path in {"/pulls/41", "/pulls/42"}:
+                number = int(path.rsplit("/", 1)[1])
+                pr = _pull_request()
+                pr["user"] = {"login": f"author-{number}"}
+                pr["head"]["sha"] = "4" * 40 if number == 41 else HEAD
+                pr["changed_files"] = 1
+                pr["commits"] = 1
+                return pr
+            raise AssertionError(path)
+
+        def pages(self, path: str) -> list[dict[str, Any]]:
+            if path.endswith("/files"):
+                return [{"filename": "README.md"}]
+            if path.endswith("/commits"):
+                return [_commit()]
+            if path.endswith("/comments"):
+                return []
+            raise AssertionError(path)
+
+    api = GroupApi(queue_entries=queue)
+    event = {
+        "repository": {"full_name": "OpenAdaptAI/OpenAdapt"},
+        "merge_group": {
+            "base_ref": "refs/heads/main",
+            "base_sha": BASE,
+            "head_sha": group_head,
+        },
+    }
+    conclusion, errors = run(
+        event,
+        BASE,
+        api,
+        event_name="merge_group",
+        workflow_sha=group_head,
+    )
+    assert conclusion == "success", errors
+    assert api.check_run is not None
+    assert api.check_run["head_sha"] == group_head
+
+
+def test_merge_group_missing_or_ambiguous_mapping_fails_closed() -> None:
+    group_head = "f" * 40
+    api = FakeApi(queue_entries=[])
+    event = {
+        "merge_group": {
+            "base_ref": "main",
+            "base_sha": BASE,
+            "head_sha": group_head,
+        }
+    }
+    conclusion, errors = run(event, BASE, api, event_name="merge_group")
+    assert conclusion == "failure"
+    assert any("queue-entry mapping" in error for error in errors)
+    assert api.check_run is not None
+    assert api.check_run["head_sha"] == group_head
+
+
+def test_merge_group_rejects_rewrite_queue_methods() -> None:
+    group_head = "f" * 40
+    api = FakeApi()
+    api.graphql = lambda query, variables: {
+        "repository": {
+            "mergeQueue": {
+                "configuration": {"mergeMethod": "SQUASH"},
+                "entries": {
+                    "totalCount": 1,
+                    "pageInfo": {"hasNextPage": False},
+                    "nodes": [
+                        _queue_entry(
+                            position=1,
+                            base=BASE,
+                            head=group_head,
+                            number=42,
+                            pr_head=HEAD,
+                        )
+                    ],
+                },
+            }
+        }
+    }
+    event = {
+        "merge_group": {
+            "base_ref": "main",
+            "base_sha": BASE,
+            "head_sha": group_head,
+        }
+    }
+    conclusion, errors = run(event, BASE, api, event_name="merge_group")
+    assert conclusion == "failure"
+    assert any("only for MERGE queues" in error for error in errors)
+    assert api.check_run is not None
+    assert api.check_run["head_sha"] == group_head
+
+
+def test_workflow_uses_trusted_merge_group_base_not_group_head() -> None:
+    workflow = (
+        Path(__file__).parents[1] / ".github/workflows/protected-safety-review.yml"
+    )
+    text = workflow.read_text(encoding="utf-8")
+    assert "merge_group:" in text
+    assert "github.event_name == 'merge_group'" in text
+    assert "github.event.merge_group.base_sha" in text
+    assert (
+        "ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}"
+        in text
+    )
+    assert "ref: ${{ github.event.merge_group.head_sha }}" not in text
+
+
+def test_first_api_failure_publishes_failure_for_known_pr_head() -> None:
+    class FailedFirstRequestApi(FakeApi):
+        def request(self, path: str, *, method: str = "GET", data: Any = None) -> Any:
+            if path == "/actions/runs/77":
+                raise RuntimeError("fixed synthetic API failure")
+            return super().request(path, method=method, data=data)
+
+    api = FailedFirstRequestApi()
+    event = {"pull_request": {"number": 42, "head": {"sha": HEAD}}}
+    conclusion, errors = run(
+        event,
+        BASE,
+        api,
+        event_name="pull_request_target",
+        workflow_run_id="77",
+        workflow_sha=BASE,
+    )
+    assert conclusion == "failure"
+    assert any("fixed synthetic API failure" in error for error in errors)
+    assert api.check_run is not None
+    assert api.check_run["head_sha"] == HEAD
+
+
+def test_pr_head_change_during_review_publishes_failure_for_original_head() -> None:
+    class HeadChangesApi(FakeApi):
+        def __init__(self) -> None:
+            super().__init__()
+            self.pull_calls = 0
+
+        def request(self, path: str, *, method: str = "GET", data: Any = None) -> Any:
+            if path == "/pulls/42":
+                self.pull_calls += 1
+                pull = _pull_request()
+                if self.pull_calls > 1:
+                    pull["head"]["sha"] = "e" * 40
+                return pull
+            return super().request(path, method=method, data=data)
+
+    api = HeadChangesApi()
+    event = {"issue": {"number": 42, "pull_request": {}}}
+    conclusion, errors = run(event, BASE, api, event_name="issue_comment")
+    assert conclusion == "failure"
+    assert any("head changed during review" in error for error in errors)
+    assert api.check_run is not None
+    assert api.check_run["head_sha"] == HEAD
+
+
+def test_untrusted_workflow_provenance_cannot_publish_success() -> None:
+    class WrongWorkflowApi(FakeApi):
+        def request(self, path: str, *, method: str = "GET", data: Any = None) -> Any:
+            value = super().request(path, method=method, data=data)
+            if path == "/actions/runs/77":
+                value["path"] = ".github/workflows/other.yml"
+            return value
+
+    api = WrongWorkflowApi()
+    event = {"issue": {"number": 42, "pull_request": {}}}
+    conclusion, errors = run(
+        event,
+        BASE,
+        api,
+        event_name="issue_comment",
+        workflow_run_id="77",
+        workflow_sha=BASE,
+    )
+    assert conclusion == "failure"
+    assert any("trusted safety workflow" in error for error in errors)
+
+
 def test_module_entrypoint_missing_environment_exits_without_network() -> None:
     env = os.environ.copy()
     env.pop("GITHUB_TOKEN", None)
     env.pop("GITHUB_EVENT_PATH", None)
     env.pop("TRUSTED_BASE_SHA", None)
+    env.pop("GITHUB_EVENT_NAME", None)
+    env.pop("GITHUB_RUN_ID", None)
     result = subprocess.run(
         [sys.executable, "-m", "scripts.ci.protected_safety_review"],
         cwd=MANIFEST_PATH.parents[1],
@@ -311,4 +593,7 @@ def test_module_entrypoint_missing_environment_exits_without_network() -> None:
         check=False,
     )
     assert result.returncode == 2
-    assert "missing GitHub event path or token" in result.stderr
+    assert (
+        "missing GitHub event path, token, event name, run id/attempt, or SHA"
+        in result.stderr
+    )

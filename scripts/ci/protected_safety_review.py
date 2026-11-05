@@ -34,6 +34,7 @@ MANIFEST_PATH = (
 )
 CHECK_NAME = "protected-safety-review"
 SHA = re.compile(r"^[0-9a-f]{40}$")
+WORKFLOW_PATH = ".github/workflows/protected-safety-review.yml"
 
 
 def _fail(message: str) -> list[str]:
@@ -156,6 +157,11 @@ def _trusted_comment(comment: dict[str, Any]) -> bool:
     )
 
 
+def _unedited_comment(comment: dict[str, Any]) -> bool:
+    created = comment.get("created_at")
+    return isinstance(created, str) and created == comment.get("updated_at")
+
+
 def _review_and_attestation_errors(
     *,
     comments: list[dict[str, Any]],
@@ -165,7 +171,9 @@ def _review_and_attestation_errors(
     pull_request_author: str,
 ) -> list[str]:
     errors: list[str] = []
-    trusted_comments = [c for c in comments if _trusted_comment(c)]
+    trusted_comments = [
+        c for c in comments if _trusted_comment(c) and _unedited_comment(c)
+    ]
     all_bodies = [c.get("body") for c in trusted_comments]
     current = [body for body in all_bodies if _current_comment(body, head)]
     authors: list[tuple[str, str]] = []
@@ -175,7 +183,7 @@ def _review_and_attestation_errors(
         if body not in current:
             continue
         assert isinstance(body, str)
-        if "Coordinator-Approval:" in body:
+        if _headers(body, "Coordinator-Approval"):
             try:
                 vendor = parse_author_declaration(body, head)
                 approval = _headers(body, "Coordinator-Approval")
@@ -301,8 +309,6 @@ def evaluate_pull_request(
         errors.append("pull request base must be main")
     if not isinstance(main_sha, str) or not SHA.fullmatch(main_sha):
         errors.append("current main reference is missing or malformed")
-    if base.get("sha") != main_sha:
-        errors.append("pull request base is stale; update it to current main")
     head_sha = head.get("sha")
     if not isinstance(head_sha, str) or not SHA.fullmatch(head_sha):
         errors.append("pull request head SHA is missing or malformed")
@@ -408,6 +414,28 @@ class GitHubApi:
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
             raise RuntimeError(f"GitHub API request failed for {path}: {exc}") from exc
 
+    def graphql(self, query: str, variables: dict[str, Any]) -> Any:
+        payload = json.dumps({"query": query, "variables": variables}).encode()
+        request = urllib.request.Request(
+            "https://api.github.com/graphql",
+            data=payload,
+            method="POST",
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {self.token}",
+                "X-GitHub-Api-Version": "2022-11-28",
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                result = json.loads(response.read())
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"GitHub GraphQL request failed: {exc}") from exc
+        if not isinstance(result, dict) or result.get("errors"):
+            raise RuntimeError("GitHub GraphQL returned errors")
+        return result.get("data")
+
     def pages(self, path: str) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
         for page in range(1, 21):
@@ -438,7 +466,7 @@ def _pull_request_number(event: dict[str, Any]) -> int:
 
 
 def _comment_snapshot(comments: list[dict[str, Any]]) -> list[str]:
-    fields = ("id", "body", "author_association", "updated_at")
+    fields = ("id", "body", "author_association", "created_at", "updated_at")
     snapshot = []
     for comment in comments:
         user = comment.get("user") if isinstance(comment.get("user"), dict) else {}
@@ -448,105 +476,409 @@ def _comment_snapshot(comments: list[dict[str, Any]]) -> list[str]:
     return sorted(snapshot)
 
 
-def run(
-    event: dict[str, Any], trusted_base_sha: str, api: Any
+MERGE_QUEUE_QUERY = """
+query($owner: String!, $name: String!, $branch: String!) {
+  repository(owner: $owner, name: $name) {
+    mergeQueue(branch: $branch) {
+      configuration { mergeMethod }
+      entries(first: 100) {
+        totalCount
+        pageInfo { hasNextPage }
+        nodes {
+          position
+          state
+          baseCommit { oid }
+          headCommit { oid }
+          pullRequest { number state baseRefName headRefOid }
+        }
+      }
+    }
+  }
+}
+"""
+
+
+def _merge_group_entries(api: Any, group: dict[str, Any]) -> list[dict[str, Any]]:
+    """Map a merge-group SHA through GitHub's queue-entry commit chain."""
+    base_sha = group.get("base_sha")
+    head_sha = group.get("head_sha")
+    base_ref = group.get("base_ref")
+    if base_ref not in {"main", "refs/heads/main"}:
+        raise EvidenceError("merge group base ref must be main")
+    if not isinstance(base_sha, str) or not SHA.fullmatch(base_sha):
+        raise EvidenceError("merge group base SHA is missing or malformed")
+    if not isinstance(head_sha, str) or not SHA.fullmatch(head_sha):
+        raise EvidenceError("merge group head SHA is missing or malformed")
+
+    data = api.graphql(
+        MERGE_QUEUE_QUERY,
+        {"owner": "OpenAdaptAI", "name": "OpenAdapt", "branch": "main"},
+    )
+    repository = data.get("repository") if isinstance(data, dict) else None
+    queue = repository.get("mergeQueue") if isinstance(repository, dict) else None
+    entries = queue.get("entries") if isinstance(queue, dict) else None
+    if not isinstance(entries, dict):
+        raise EvidenceError("GitHub returned no merge queue entry mapping")
+    configuration = queue.get("configuration")
+    if (
+        not isinstance(configuration, dict)
+        or configuration.get("mergeMethod") != "MERGE"
+    ):
+        raise EvidenceError(
+            "merge queue commit-chain mapping is supported only for MERGE queues"
+        )
+    nodes = entries.get("nodes")
+    total = entries.get("totalCount")
+    page_info = entries.get("pageInfo")
+    if (
+        not isinstance(nodes, list)
+        or type(total) is not int
+        or total != len(nodes)
+        or not isinstance(page_info, dict)
+        or page_info.get("hasNextPage") is not False
+    ):
+        raise EvidenceError("merge queue API results are incomplete")
+
+    by_head: dict[str, list[dict[str, Any]]] = {}
+    for entry in nodes:
+        if not isinstance(entry, dict):
+            raise EvidenceError("merge queue contains a malformed entry")
+        base = entry.get("baseCommit", {}).get("oid")
+        head = entry.get("headCommit", {}).get("oid")
+        if not isinstance(base, str) or not SHA.fullmatch(base):
+            raise EvidenceError("merge queue entry has a malformed base commit")
+        if not isinstance(head, str) or not SHA.fullmatch(head):
+            raise EvidenceError("merge queue entry has a malformed head commit")
+        if entry.get("state") not in {"AWAITING_CHECKS", "MERGEABLE", "QUEUED"}:
+            raise EvidenceError("merge queue contains an inactive or blocked entry")
+        by_head.setdefault(head, []).append(entry)
+
+    chain: list[dict[str, Any]] = []
+    cursor = head_sha
+    seen: set[str] = set()
+    while cursor != base_sha:
+        if cursor in seen:
+            raise EvidenceError("merge queue entry chain contains a cycle")
+        seen.add(cursor)
+        matches = by_head.get(cursor, [])
+        if len(matches) != 1:
+            raise EvidenceError("merge group SHA has no unique queue-entry mapping")
+        entry = matches[0]
+        chain.append(entry)
+        cursor = entry["baseCommit"]["oid"]
+        if len(chain) > len(nodes):
+            raise EvidenceError("merge queue entry chain is incomplete")
+    if not chain:
+        raise EvidenceError("merge group contains no queued pull requests")
+
+    selected: list[dict[str, Any]] = []
+    for entry in reversed(chain):
+        pull_request = entry.get("pullRequest")
+        number = pull_request.get("number") if isinstance(pull_request, dict) else None
+        if type(number) is not int or number <= 0:
+            raise EvidenceError("merge queue entry has no pull request")
+        if (
+            pull_request.get("state") != "OPEN"
+            or pull_request.get("baseRefName") != "main"
+        ):
+            raise EvidenceError(
+                "merge queue contains a closed or non-main pull request"
+            )
+        if any(item["pullRequest"]["number"] == number for item in selected):
+            raise EvidenceError("merge queue maps a pull request more than once")
+        selected.append(entry)
+    return selected
+
+
+def _workflow_provenance_errors(
+    workflow_run: Any,
+    *,
+    event_name: str | None,
+    workflow_attempt: str | None,
+    workflow_sha: str | None,
+) -> list[str]:
+    if workflow_run is None:
+        return []
+    errors: list[str] = []
+    if not isinstance(workflow_run, dict):
+        return ["current workflow run metadata is malformed"]
+    if not isinstance(workflow_sha, str) or not SHA.fullmatch(workflow_sha):
+        errors.append("workflow event SHA is missing or malformed")
+    if workflow_run.get("path") != WORKFLOW_PATH:
+        errors.append("check was not produced by the trusted safety workflow")
+    if workflow_run.get("repository", {}).get("full_name") != REPOSITORY:
+        errors.append("workflow run belongs to a different repository")
+    if event_name and workflow_run.get("event") != event_name:
+        errors.append("workflow run event does not match the triggering event")
+    if workflow_attempt:
+        try:
+            expected_attempt = int(workflow_attempt)
+        except ValueError:
+            expected_attempt = -1
+        if workflow_run.get("run_attempt") != expected_attempt:
+            errors.append("workflow run attempt does not match this execution")
+    if workflow_sha and workflow_run.get("head_sha") != workflow_sha:
+        errors.append("workflow run SHA does not match the triggering event SHA")
+    return errors
+
+
+def _publish_check(
+    api: Any,
+    *,
+    head_sha: str,
+    errors: list[str],
+    workflow_run_id: str | None,
+    workflow_url: str | None,
 ) -> tuple[str, list[str]]:
-    """Fetch GitHub metadata, evaluate it, and publish the exact-head check."""
-    number = _pull_request_number(event)
+    if not isinstance(head_sha, str) or not SHA.fullmatch(head_sha):
+        raise EvidenceError("cannot publish status: target head SHA is malformed")
+    conclusion = "failure" if errors else "success"
+    summary = (
+        "\n".join(f"- {error}" for error in errors)
+        if errors
+        else "Current protected-path evidence is present. This is an evidence-presence check, not proof of execution."
+    )
+    payload: dict[str, Any] = {
+        "name": CHECK_NAME,
+        "head_sha": head_sha,
+        "status": "completed",
+        "conclusion": conclusion,
+        "output": {"title": "Protected safety review", "summary": summary},
+    }
+    if workflow_run_id:
+        payload["external_id"] = workflow_run_id
+    if workflow_url:
+        payload["details_url"] = workflow_url
+    api.request("/check-runs", method="POST", data=payload)
+    return conclusion, errors
+
+
+def _fetch_pr_evidence(
+    api: Any,
+    number: int,
+    *,
+    repository: dict[str, Any],
+    main_sha: str,
+    manifest: Any,
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
     pull_request = api.request(f"/pulls/{number}")
-    head_sha = pull_request.get("head", {}).get("sha")
-    errors: list[str]
-    initial_comment_snapshot: list[str] | None = None
+    files = api.pages(f"/pulls/{number}/files")
+    commits = api.pages(f"/pulls/{number}/commits")
+    comments = api.pages(f"/issues/{number}/comments")
+    errors = evaluate_pull_request(
+        repository=repository,
+        pull_request=pull_request,
+        main_sha=main_sha,
+        files=files,
+        commits=commits,
+        comments=comments,
+        manifest=manifest,
+    )
+    return pull_request, comments, errors
+
+
+def run(
+    event: dict[str, Any],
+    trusted_base_sha: str,
+    api: Any,
+    *,
+    event_name: str | None = None,
+    workflow_run_id: str | None = None,
+    workflow_attempt: str | None = None,
+    workflow_sha: str | None = None,
+) -> tuple[str, list[str]]:
+    """Evaluate PR-head evidence and publish a check from a trusted workflow."""
+    if event_name is None:
+        event_name = (
+            "merge_group"
+            if isinstance(event.get("merge_group"), dict)
+            else "pull_request_target"
+            if isinstance(event.get("pull_request"), dict)
+            else "issue_comment"
+        )
+    if workflow_run_id and workflow_attempt:
+        workflow_run_id = f"{workflow_run_id}:{workflow_attempt}"
+    run_id = workflow_run_id.split(":", 1)[0] if workflow_run_id else None
+    group = event.get("merge_group") if event_name == "merge_group" else None
+    known_head = (
+        group.get("head_sha")
+        if isinstance(group, dict)
+        else event.get("pull_request", {}).get("head", {}).get("sha")
+    )
+    head_sha = known_head if isinstance(known_head, str) else None
+    errors: list[str] = []
+    workflow_run: Any = None
+    comments_by_pr: dict[int, list[str]] = {}
+    initial_heads: dict[int, str] = {}
     try:
-        if pull_request.get("base", {}).get("ref") != "main":
-            errors = ["pull request base must be main"]
+        if run_id:
+            workflow_run = api.request(f"/actions/runs/{run_id}")
+            errors.extend(
+                _workflow_provenance_errors(
+                    workflow_run,
+                    event_name=event_name,
+                    workflow_attempt=workflow_attempt,
+                    workflow_sha=workflow_sha,
+                )
+            )
+        if event.get("repository", {}).get("full_name", REPOSITORY) != REPOSITORY:
+            errors.append("event repository does not match this repository")
+        if not isinstance(trusted_base_sha, str) or not SHA.fullmatch(trusted_base_sha):
+            errors.append("trusted workflow base SHA is missing or malformed")
+        repository = api.request("")
+        main = api.request("/git/ref/heads/main")
+        main_sha = main.get("object", {}).get("sha")
+        if event_name == "merge_group":
+            if not isinstance(group, dict):
+                raise EvidenceError("merge-group payload is missing")
+            if group.get("base_sha") != trusted_base_sha:
+                errors.append("workflow did not run from the merge-group base SHA")
+            if main_sha != trusted_base_sha:
+                errors.append("merge-group base changed from the trusted main commit")
+            group_entries = _merge_group_entries(api, group)
+            numbers = [entry["pullRequest"]["number"] for entry in group_entries]
         else:
-            repository = api.request("")
-            main = api.request("/git/ref/heads/main")
-            files = api.pages(f"/pulls/{number}/files")
-            commits = api.pages(f"/pulls/{number}/commits")
-            comments = api.pages(f"/issues/{number}/comments")
-            initial_comment_snapshot = _comment_snapshot(comments)
-            manifest_path = Path(os.environ.get("SAFETY_MANIFEST", str(MANIFEST_PATH)))
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            errors = evaluate_pull_request(
+            group_entries = []
+            number = _pull_request_number(event)
+            numbers = [number]
+
+        manifest_path = Path(os.environ.get("SAFETY_MANIFEST", str(MANIFEST_PATH)))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        for number in numbers:
+            pull_request, comments, pr_errors = _fetch_pr_evidence(
+                api,
+                number,
                 repository=repository,
-                pull_request=pull_request,
-                main_sha=main.get("object", {}).get("sha"),
-                files=files,
-                commits=commits,
-                comments=comments,
+                main_sha=main_sha,
                 manifest=manifest,
             )
-        if pull_request.get("base", {}).get("sha") != trusted_base_sha:
-            errors.append("workflow did not run from the exact PR base SHA")
+            pr_head = pull_request.get("head", {}).get("sha")
+            if not isinstance(pr_head, str) or not SHA.fullmatch(pr_head):
+                errors.append(f"pull request {number} has a malformed head SHA")
+            else:
+                initial_heads[number] = pr_head
+                if len(numbers) == 1 and head_sha is None:
+                    head_sha = pr_head
+            if (
+                event_name == "pull_request_target"
+                and pull_request.get("base", {}).get("sha") != trusted_base_sha
+            ):
+                errors.append("workflow did not run from the exact PR base SHA")
+            if event_name == "merge_group":
+                entry = next(
+                    item
+                    for item in group_entries
+                    if item["pullRequest"]["number"] == number
+                )
+                if entry["pullRequest"].get("headRefOid") != pr_head:
+                    errors.append(
+                        f"pull request {number} head changed from its queue entry"
+                    )
+            comments_by_pr[number] = _comment_snapshot(comments)
+            errors.extend(f"PR #{number}: {error}" for error in pr_errors)
+
         latest_repository = api.request("")
-        latest_pull_request = api.request(f"/pulls/{number}")
         latest_main = api.request("/git/ref/heads/main")
         if latest_repository.get("full_name") != REPOSITORY:
             errors.append("repository identity changed before status publication")
         if latest_repository.get("default_branch") != "main":
             errors.append("repository default branch is no longer main")
         if (
-            latest_pull_request.get("base", {}).get("repo", {}).get("full_name")
-            != REPOSITORY
+            event_name == "merge_group"
+            and latest_main.get("object", {}).get("sha") != trusted_base_sha
         ):
-            errors.append(
-                "pull request base repository changed before status publication"
-            )
-        if latest_pull_request.get("head", {}).get("sha") != head_sha:
-            errors.append(
-                "pull request head changed during review; rerun on the current head"
-            )
-        if latest_pull_request.get("base", {}).get(
-            "ref"
-        ) != "main" or latest_pull_request.get("base", {}).get(
-            "sha"
-        ) != latest_main.get("object", {}).get("sha"):
-            errors.append("pull request is no longer based on current main")
-        if initial_comment_snapshot is not None:
-            latest_comments = api.pages(f"/issues/{number}/comments")
-            if _comment_snapshot(latest_comments) != initial_comment_snapshot:
+            errors.append("merge-group base changed before status publication")
+        for number in numbers:
+            latest_pull_request = api.request(f"/pulls/{number}")
+            if latest_pull_request.get("head", {}).get("sha") != initial_heads.get(
+                number
+            ):
                 errors.append(
-                    "PR comments changed during review; rerun on current evidence"
+                    f"PR #{number} head changed during review; rerun on current head"
                 )
+            if latest_pull_request.get("state") != "open":
+                errors.append(f"PR #{number} is no longer open")
+            if (
+                latest_pull_request.get("base", {}).get("repo", {}).get("full_name")
+                != REPOSITORY
+            ):
+                errors.append(f"PR #{number} base repository changed")
+            if latest_pull_request.get("base", {}).get("ref") != "main":
+                errors.append(f"PR #{number} is no longer based on main")
+            latest_comments = api.pages(f"/issues/{number}/comments")
+            if _comment_snapshot(latest_comments) != comments_by_pr[number]:
+                errors.append(
+                    f"PR #{number} comments changed during review; rerun on current evidence"
+                )
+        if event_name == "issue_comment" and trusted_base_sha != main_sha:
+            errors.append(
+                "workflow was not checked out from its trusted default-branch SHA"
+            )
+        if event_name == "merge_group":
+            latest_entries = _merge_group_entries(api, group)
+            if [
+                (
+                    entry["baseCommit"]["oid"],
+                    entry["headCommit"]["oid"],
+                    entry["pullRequest"]["number"],
+                )
+                for entry in latest_entries
+            ] != [
+                (
+                    entry["baseCommit"]["oid"],
+                    entry["headCommit"]["oid"],
+                    entry["pullRequest"]["number"],
+                )
+                for entry in group_entries
+            ]:
+                errors.append("merge-group queue mapping changed before publication")
     except Exception as exc:  # noqa: BLE001 - fail closed on any unavailable metadata
-        errors = [f"safety review could not verify GitHub metadata: {exc}"]
-    if not isinstance(head_sha, str) or not SHA.fullmatch(head_sha):
-        raise EvidenceError("cannot publish status: pull request head SHA is malformed")
-    conclusion = "failure" if errors else "success"
-    summary = (
-        "\n".join(f"- {error}" for error in errors)
-        if errors
-        else "All protected-path evidence is present for the exact current PR head."
+        errors.append(f"safety review could not verify GitHub metadata: {exc}")
+    if head_sha is None:
+        raise EvidenceError("cannot publish failure: event contains no known check SHA")
+    return _publish_check(
+        api,
+        head_sha=head_sha,
+        errors=errors,
+        workflow_run_id=workflow_run_id,
+        workflow_url=(
+            workflow_run.get("html_url") if isinstance(workflow_run, dict) else None
+        ),
     )
-    api.request(
-        "/check-runs",
-        method="POST",
-        data={
-            "name": CHECK_NAME,
-            "head_sha": head_sha,
-            "status": "completed",
-            "conclusion": conclusion,
-            "output": {
-                "title": "Protected safety review",
-                "summary": summary,
-            },
-        },
-    )
-    return conclusion, errors
 
 
 def main() -> int:
     event_path = os.environ.get("GITHUB_EVENT_PATH")
     token = os.environ.get("GITHUB_TOKEN")
     trusted_base_sha = os.environ.get("TRUSTED_BASE_SHA", "")
-    if not event_path or not token:
-        print("missing GitHub event path or token", file=sys.stderr)
+    event_name = os.environ.get("GITHUB_EVENT_NAME")
+    workflow_run_id = os.environ.get("GITHUB_RUN_ID")
+    workflow_attempt = os.environ.get("GITHUB_RUN_ATTEMPT")
+    workflow_sha = os.environ.get("GITHUB_SHA")
+    if (
+        not event_path
+        or not token
+        or not workflow_run_id
+        or not workflow_attempt
+        or not event_name
+        or not workflow_sha
+    ):
+        print(
+            "missing GitHub event path, token, event name, run id/attempt, or SHA",
+            file=sys.stderr,
+        )
         return 2
     try:
         event = json.loads(Path(event_path).read_text(encoding="utf-8"))
-        conclusion, errors = run(event, trusted_base_sha, GitHubApi(token))
+        conclusion, errors = run(
+            event,
+            trusted_base_sha,
+            GitHubApi(token),
+            event_name=event_name,
+            workflow_run_id=workflow_run_id,
+            workflow_attempt=workflow_attempt,
+            workflow_sha=workflow_sha,
+        )
     except Exception as exc:  # noqa: BLE001 - malformed inputs must exit nonzero
         print(f"unable to publish protected safety review: {exc}", file=sys.stderr)
         return 2

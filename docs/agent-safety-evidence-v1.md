@@ -49,7 +49,6 @@ exactly one fenced JSON object in this shape:
     {"argv": ["uv", "run", "pytest", "-q", "tests/test_example.py"], "exit_code": 0}
   ],
   "completed_before_commit": true,
-  "hook_bypass": false,
   "completed_utc": "2026-11-05T17:59:00Z"
 }
 ```
@@ -59,34 +58,39 @@ later than the commit timestamp from Git metadata. The verifier compares the
 commit, ordered parents, and tree with trusted Git plumbing. It requires a
 nonempty command list and a zero integer exit code for every entry. Unknown or
 missing fields, unsupported versions, mismatched metadata, invalid times,
-nonzero exits, `completed_before_commit` other than `true`, or
-`hook_bypass` other than `false` fail closed. The statements about completion
-and hook use remain declarations; the parser cannot establish that they are
-true.
+nonzero exits, or `completed_before_commit` other than `true` fail closed. The
+completion statement is self-reported; the parser cannot establish that
+commands ran, that they ran before the commit, or whether a hook was bypassed.
 
-The workflow must obtain PR and comment metadata through read-only GitHub API
-permissions, and must not import, run, or otherwise execute pull-request-head
-code with a token. Its source, manifest, and parser come from the trusted base
-commit. The workflow reads PR metadata, files, commits, and issue comments via
-the GitHub API, then publishes the stable `protected-safety-review` check for
-the exact PR head with `checks: write`. The report parser is pure and does not
-make network requests. This reduces accidental misuse under a shared account;
-the self-reported declarations are not proof against a malicious actor. The
-verifier compares file and commit API result counts to PR metadata, rejects
+The workflow reads PR and comment metadata through the GitHub API. The verifier
+and manifest come from a trusted base SHA; it does not check out or execute PR
+head code with the token. For merge-group events, it checks out the event's
+validated base SHA and publishes status on the separate merge-group head SHA.
+It maps the group head to queue entries through GitHub's `baseCommit` and
+`headCommit` chain for queues configured to use merge commits, re-evaluates
+each mapped PR at its current head, and fails closed if the chain or queue
+response is incomplete or ambiguous. Rebase and squash queue methods are
+unsupported because they can rewrite commit history. The stable
+`protected-safety-review` check is linked to the running workflow record. This
+is an accidental-misuse control; the shared GitHub Actions app and self-reported
+comments do not prove command execution or defend against malicious actors.
+
+The verifier compares file and commit API result counts to PR metadata, rejects
 duplicate IDs and over-limit commit histories, and includes both sides of file
-renames when matching the protected-path manifest. It fetches comments again
-before publishing and fails if their IDs, bodies, authors, associations, or
-update times changed. Per-PR workflow concurrency cancels an earlier run when
-a newer review event arrives.
+renames when matching the protected-path manifest. Accepted author, review,
+coordinator, and precommit comments must be unedited (`created_at` equals
+`updated_at`). It fetches comments again before publishing and fails if their
+IDs, bodies, authors, associations, creation times, or update times changed.
+Per-PR and per-merge-group workflow concurrency cancels an earlier run when a
+newer review event arrives. Rebase onto the current main tip is not required;
+the workflow and manifest remain pinned to the trusted event base.
 
 ## Enforcement bootstrap
 
-GitHub only starts `pull_request_target` and `issue_comment` workflows when
-their workflow file exists on the default branch. This first change therefore
-has no running check before it reaches `main`; its own PR's status is **UNRUN**.
-After it reaches `main`, adding the workflow still does not make its status a
-required branch protection check. The repository owner must separately
-configure the exact stable status name in the applicable ruleset. Until the
-coordinator confirms the workflow is on `main` and that ruleset is active, the
-merge freeze remains in force. This change does not modify repository settings
-or claim enforcement before that confirmation.
+This first change has no running check before it reaches `main`; its own PR's
+status is **UNRUN**. After it reaches `main`, adding the workflow still does
+not make its status a required branch protection check. The repository owner
+must separately configure the exact stable status name in the applicable
+ruleset. Until the coordinator confirms the workflow is on `main` and that
+ruleset is active, the merge freeze remains in force. This change does not
+modify repository settings or claim enforcement before that confirmation.
