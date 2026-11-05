@@ -4030,6 +4030,7 @@ class PlaywrightBackend:
         if binding is None:
             return None
         guard = binding.guard
+        value_before, label_before = binding.value, binding.label
         try:
             loc = self._token_locator(guard.token, guard.scope)
             if loc.count() != 1:
@@ -4046,6 +4047,12 @@ class PlaywrightBackend:
                 return None
             # Apply the same duplicate/disabled/label rules as replay.
             contract = NativeSelectContract.model_validate(observed)
+            if (
+                not isinstance(value_before, str)
+                or not isinstance(label_before, str)
+                or contract.value == value_before
+            ):
+                return None
             binding.value, binding.label = contract.value, contract.label
             observed = loc.evaluate(
                 _NATIVE_SELECT_COMMIT_OBSERVATION_JS, self._native_select_args(binding)
@@ -4054,6 +4061,8 @@ class PlaywrightBackend:
                 return None
             return {
                 **observed,
+                "value_before": value_before,
+                "label_before": label_before,
                 "selector": binding.selector,
                 "frame_path": list(guard.frame_path),
             }

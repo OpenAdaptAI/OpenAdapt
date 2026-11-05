@@ -69,6 +69,7 @@ from openadapt_flow.ir import (
     Workflow,
     structural_locator_is_locatable,
 )
+from openadapt_flow.native_selection_capture import demonstrated_native_choice
 from openadapt_flow.risk import (
     PRESUMED_COMMIT_EXPLANATION,
     confirmation_opener_step_ids,
@@ -239,7 +240,7 @@ def _native_selection_contract(
     ):
         return None
     try:
-        return NativeSelectContract.model_validate(
+        contract = NativeSelectContract.model_validate(
             {
                 "kind": raw.get("kind", "html_single_select"),
                 "value": raw.get("value"),
@@ -249,6 +250,14 @@ def _native_selection_contract(
         )
     except ValueError:
         return None
+    if not demonstrated_native_choice(
+        contract,
+        value_before=raw.get("value_before"),
+        label_before=raw.get("label_before"),
+        typed_text=typed.text,
+    ):
+        return None
+    return contract
 
 
 def _exact_ocr_value_present(png: bytes, text: str, region: Region) -> bool:
@@ -2469,6 +2478,32 @@ def _compile_recording(
         meta, backend_hints, target_surface
     )
     events = _load_events(recording)
+    # Keep the original actions as evidence, but never admit an unproved native
+    # choice through ordinary TYPE when the guarded recording refused it.
+    for index, event in enumerate(events):
+        if "control_refusal" in event:
+            raise ValueError("recording refused an unproved native selection")
+        if "native_selection" not in event:
+            continue
+        raw = event["native_selection"]
+        if not isinstance(raw, dict):
+            raise ValueError("native selection lacks demonstrated choice evidence")
+        try:
+            choice = NativeSelectContract.model_validate(
+                {key: raw.get(key) for key in ("value", "label", "options")}
+            )
+        except ValueError as exc:
+            raise ValueError(
+                "native selection lacks demonstrated choice evidence"
+            ) from exc
+        typed_event = events[index - 1] if index else {}
+        if typed_event.get("kind") != "type" or not demonstrated_native_choice(
+            choice,
+            value_before=raw.get("value_before"),
+            label_before=raw.get("label_before"),
+            typed_text=typed_event.get("text"),
+        ):
+            raise ValueError("native selection lacks demonstrated choice evidence")
     params: dict[str, str] = dict(meta.get("params") or {})
     secret_params: list[str] = list(meta.get("secret_params") or [])
     # Operator-CONFIRMED parameter decisions (the one-shot confirm pass):

@@ -206,6 +206,8 @@ def test_native_capture_retains_focused_control_and_exact_census(
     assert observed["frame_path"] == []
     assert observed["value"] == "code-b"
     assert observed["label"] == "Alpine"
+    assert observed["value_before"] == "base"
+    assert observed["label_before"] == "Choose"
     assert len(observed["options"]) == 3
     assert backend.finish_native_select(token) is None
 
@@ -373,6 +375,7 @@ def test_native_delivery_exception_is_uncertain_without_retry(
     native_page: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from playwright.sync_api import Locator
+
     from openadapt_flow.backend import ActionDeliveryUncertain
     from openadapt_flow.backends import playwright_backend as implementation
 
@@ -708,3 +711,57 @@ def test_native_frame_focus_theft_and_restore_during_input_is_uncertain(
     assert frame.evaluate("document.activeElement === choice")
     assert frame.evaluate("seen") == [["input", "code-b"]]
     assert backend.native_selected_option_at(*handle.point) is None
+
+
+def test_native_capture_refuses_unmatched_unchanged_default(native_page: Any) -> None:
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    native_page.set_content(
+        '<select id="choice"><option value="cat">Cat</option>'
+        '<option value="dog">Dog</option></select>'
+    )
+    native_page.locator("#choice").focus()
+    backend = PlaywrightBackend(native_page)
+    token = backend.begin_native_select()
+    assert token is not None
+    native_page.keyboard.type("zzz")
+    native_page.keyboard.press("Enter")
+    assert native_page.locator("#choice").input_value() == "cat"
+    assert backend.finish_native_select(token) is None
+
+
+def test_recorder_refuses_real_native_default_as_a_demonstrated_choice(
+    native_page: Any, tmp_path: Any
+) -> None:
+    import json
+
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+    from openadapt_flow.recorder import Recorder
+
+    native_page.set_content(
+        '<label for="choice">Animal</label>'
+        '<select id="choice"><option value="cat">Cat</option>'
+        '<option value="dog">Dog</option></select>'
+    )
+    box = native_page.locator("#choice").bounding_box()
+    assert box is not None
+    point = (int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2))
+    recorder = Recorder(PlaywrightBackend(native_page), tmp_path, settle_interval_s=0)
+    recorder.click(*point)
+    recorder.type_text("zzz")
+    recorder.press("Enter")
+    recording = recorder.finish()
+    events = [
+        json.loads(line)
+        for line in (recording / "events.jsonl").read_text().splitlines()
+    ]
+    assert native_page.locator("#choice").input_value() == "cat"
+    assert [event["kind"] for event in events] == ["click", "type", "key"]
+    assert all("native_selection" not in event for event in events)
+    assert events[2]["control_refusal"] == "native_selection_not_demonstrated"
+    from openadapt_flow.compiler import compile_recording
+
+    bundle = tmp_path / "refused-bundle"
+    with pytest.raises(ValueError, match="recording refused an unproved native selection"):
+        compile_recording(recording, bundle)
+    assert not (bundle / "workflow.json").exists()

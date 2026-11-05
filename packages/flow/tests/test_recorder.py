@@ -339,6 +339,8 @@ class NativeSelectRecordingBackend(FakeBackend):
         self.evidence: dict | None = {
             "selector": "#animal",
             "frame_path": [],
+            "value_before": "cat",
+            "label_before": "Cat",
             "value": "dog",
             "label": "Dog",
             "options": [
@@ -489,3 +491,59 @@ def test_recorder_native_selection_requires_retained_preclick_target(
     assert all("native_selection" not in event for event in _read_events(rec.finish()))
     assert backend.finished == []
     assert backend.cancelled == backend.tokens
+
+
+@pytest.mark.parametrize(
+    "mutation,text",
+    [
+        ("unchanged", "Dog"),
+        ("unmatched", "zzz"),
+        ("ambiguous_prefix", "d"),
+        ("missing_before", "Dog"),
+        ("unknown_before", "Dog"),
+    ],
+)
+def test_recorder_native_selection_requires_changed_choice_and_typed_match(
+    tmp_path: Path, mutation: str, text: str
+) -> None:
+    backend = NativeSelectRecordingBackend()
+    assert backend.evidence is not None
+    if mutation == "unchanged":
+        backend.evidence.update(value_before="dog", label_before="Dog")
+    elif mutation == "ambiguous_prefix":
+        backend.evidence["options"].append(
+            {"value": "dogwood", "label": "Dogwood", "disabled": False}
+        )
+    elif mutation == "missing_before":
+        backend.evidence.pop("value_before")
+    elif mutation == "unknown_before":
+        backend.evidence["value_before"] = "not-in-the-census"
+    recorder = Recorder(backend, tmp_path, settle_interval_s=0)
+    recorder.click(10, 20)
+    recorder.type_text(text)
+    recorder.press("Enter")
+    events = _read_events(recorder.finish())
+    assert [event["kind"] for event in events] == ["click", "type", "key"]
+    assert all("native_selection" not in event for event in events)
+    assert events[2]["control_refusal"] == "native_selection_not_demonstrated"
+    assert backend.finished == backend.tokens == backend.cancelled
+
+
+@pytest.mark.parametrize("text,competitor_disabled", [("Dog", False), ("d", True)])
+def test_recorder_native_choice_accepts_exact_label_or_unique_enabled_prefix(
+    tmp_path: Path, text: str, competitor_disabled: bool
+) -> None:
+    backend = NativeSelectRecordingBackend()
+    assert backend.evidence is not None
+    backend.evidence["options"].append(
+        {"value": "dogwood", "label": "Dogwood", "disabled": competitor_disabled}
+    )
+    recorder = Recorder(backend, tmp_path, settle_interval_s=0)
+    recorder.click(10, 20)
+    recorder.type_text(text)
+    recorder.press("Enter")
+    evidence = _read_events(recorder.finish())[2]["native_selection"]
+    assert evidence["value"] == "dog"
+    assert evidence["value_before"] == "cat"
+    assert evidence["label_before"] == "Cat"
+    assert evidence["source_type_text"] == text

@@ -73,6 +73,7 @@ from openadapt_flow.ir import (
     NativeSelectContract,
     StructuralLocator,
 )
+from openadapt_flow.native_selection_capture import demonstrated_native_choice
 
 #: Bound on waiting for a newly opened page's first navigation.
 _NEW_PAGE_LOAD_TIMEOUT_S = 10.0
@@ -823,10 +824,11 @@ class Recorder:
             return event
         if event.get("kind") != "key" or pending.type_index is None:
             return event
+        refused = {**event, "control_refusal": "native_selection_not_demonstrated"}
         try:
             evidence = pending.backend.finish_native_select(pending.token)
             if not isinstance(evidence, dict):
-                return event
+                return refused
             selector, frame_path = evidence.get("selector"), evidence.get("frame_path")
             if (
                 not isinstance(selector, str)
@@ -838,7 +840,7 @@ class Recorder:
                     for frame in frame_path
                 )
             ):
-                return event
+                return refused
             contract = NativeSelectContract.model_validate(
                 {
                     "value": evidence.get("value"),
@@ -846,10 +848,19 @@ class Recorder:
                     "options": evidence.get("options"),
                 }
             )
+            if not demonstrated_native_choice(
+                contract,
+                value_before=evidence.get("value_before"),
+                label_before=evidence.get("label_before"),
+                typed_text=pending.text,
+            ):
+                return refused
             event = {
                 **event,
                 "native_selection": {
                     **contract.model_dump(mode="json"),
+                    "value_before": evidence["value_before"],
+                    "label_before": evidence["label_before"],
                     "selector": selector,
                     "frame_path": frame_path,
                     "source_click_index": pending.click_index,
@@ -859,7 +870,7 @@ class Recorder:
                 },
             }
         except Exception:
-            pass  # No complete readback means no compiler selection contract.
+            return refused  # Missing proof must not compile to raw TYPE.
         finally:
             self._cancel_native_select()
         return event

@@ -1975,6 +1975,8 @@ def native_select_events() -> list[dict]:
                 "click_focus_only": True,
                 "source_type_index": 1,
                 "source_type_text": "d",
+                "value_before": "cat",
+                "label_before": "Cat",
                 "value": "dog",
                 "label": "Dog",
                 "options": [
@@ -2229,3 +2231,97 @@ def test_native_select_preserves_click_with_independent_semantics(
         ActionKind.KEY,
     ]
     assert all(step.native_selection is None for step in workflow.steps)
+
+
+@pytest.mark.parametrize(
+    "mutation,text",
+    [
+        ("unchanged", "Dog"),
+        ("unmatched", "zzz"),
+        ("ambiguous_prefix", "d"),
+        ("missing_before", "Dog"),
+        ("unknown_before", "Dog"),
+    ],
+)
+def test_native_select_compile_requires_changed_choice_and_typed_match(
+    tmp_path: Path, native_select_events: list[dict], mutation: str, text: str
+) -> None:
+    from openadapt_flow.compiler.compile import _native_selection_contract
+    from openadapt_flow.ir import Anchor, Step, StructuralLocator
+
+    click_event, typed_event, key_event = native_select_events
+    raw = key_event["native_selection"]
+    if mutation == "unchanged":
+        raw.update(value_before="dog", label_before="Dog")
+    elif mutation == "ambiguous_prefix":
+        raw["options"].append(
+            {"value": "dogwood", "label": "Dogwood", "disabled": False}
+        )
+    elif mutation == "missing_before":
+        raw.pop("value_before")
+    elif mutation == "unknown_before":
+        raw["value_before"] = "not-in-the-census"
+    typed_event["text"] = raw["source_type_text"] = text
+    click = Step(
+        id="step_000",
+        intent="focus animal",
+        action=ActionKind.CLICK,
+        anchor=Anchor(
+            template="animal.png",
+            region=(200, 180, 160, 48),
+            click_point=(300, 200),
+            structural=StructuralLocator.model_validate(click_event["structural"]),
+        ),
+    )
+    typed = Step(
+        id="step_001", intent="literal choice", action=ActionKind.TYPE, text=text
+    )
+    committed = Step(id="step_002", intent="commit", action=ActionKind.KEY, key="Enter")
+    assert (
+        _native_selection_contract(click, typed, committed, *native_select_events)
+        is None
+    )
+    recording = tmp_path / "unproved-recording"
+    recording.mkdir()
+    (recording / "meta.json").write_text(
+        json.dumps({"id": "unproved-native", "viewport": list(VIEWPORT), "params": {}})
+    )
+    (recording / "events.jsonl").write_text(
+        "\n".join(json.dumps(event) for event in native_select_events) + "\n"
+    )
+    bundle = tmp_path / "bundle"
+    with pytest.raises(ValueError, match="lacks demonstrated choice evidence"):
+        compile_recording(recording, bundle)
+    assert not (bundle / "workflow.json").exists()
+
+
+@pytest.mark.parametrize(
+    "text,disabled,expected",
+    [
+        ("Dog", False, True),
+        ("d", False, False),
+        ("d", True, True),
+        ("dOg", False, True),
+        ("code-17", False, False),
+    ],
+)
+def test_native_choice_corroboration_uses_observed_enabled_labels(
+    native_select_events: list[dict], text: str, disabled: bool, expected: bool
+) -> None:
+    from openadapt_flow.ir import NativeSelectContract
+    from openadapt_flow.native_selection_capture import demonstrated_native_choice
+
+    raw = native_select_events[2]["native_selection"]
+    raw["options"][1]["value"] = raw["value"] = "code-17"
+    raw["options"].append(
+        {"value": "dogwood", "label": "Dogwood", "disabled": disabled}
+    )
+    contract = NativeSelectContract(
+        value=raw["value"], label=raw["label"], options=raw["options"]
+    )
+    assert (
+        demonstrated_native_choice(
+            contract, value_before="cat", label_before="Cat", typed_text=text
+        )
+        is expected
+    )
