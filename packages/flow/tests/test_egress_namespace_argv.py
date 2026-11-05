@@ -34,3 +34,21 @@ def test_namespace_without_forward_only_sets_path() -> None:
     assert argv[2] == "env"
     assert any(a.startswith("PATH=") for a in argv)
     assert not any(a.startswith("OPENADAPT_") for a in argv)
+
+
+def test_root_unsets_sit_before_assignments() -> None:
+    """GNU env treats anything after NAME=VALUE as the command; -u must precede."""
+    argv = ns._namespace("/bin/true")
+    env_i = argv.index("env")
+    argv[env_i + 1 : env_i + 1] = ["-u", "SUDO_UID", "-u", "SUDO_GID"]
+    assert argv[env_i : env_i + 5] == [
+        "env",
+        "-u",
+        "SUDO_UID",
+        "-u",
+        "SUDO_GID",
+    ]
+    path_i = next(i for i, a in enumerate(argv) if a.startswith("PATH="))
+    assert path_i > env_i + 4
+    # Regression: the old argv[4:4] insert put -u after PATH= and broke CI.
+    assert argv[4] != "-u"
