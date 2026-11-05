@@ -9682,12 +9682,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--permission",
         "--admission",
+        dest="admission",
         action="append",
-        metavar="NAME=ENVELOPE",
+        metavar="NAME=FILE",
         help=(
-            "QualificationAdmissionEnvelope for NAME. A compiled recording "
-            "without an envelope is not an admitted capability."
+            "Signed run permission for NAME. Each child needs its own permission. "
+            "--admission is deprecated; use --permission."
         ),
     )
     p.add_argument(
@@ -9753,10 +9755,15 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("variant_set", help="Variant-set directory")
     q.add_argument("--variant", required=True, metavar="NAME=BUNDLE")
     q.add_argument(
+        "--permission",
         "--admission",
+        dest="admission",
         required=True,
-        metavar="ENVELOPE",
-        help="The bundle's own QualificationAdmissionEnvelope",
+        metavar="FILE",
+        help=(
+            "The bundle's own signed run permission. "
+            "--admission is deprecated; use --permission."
+        ),
     )
     q.add_argument(
         "--when-input",
@@ -10056,13 +10063,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--managed-dispatch-file", default=None, help=argparse.SUPPRESS)
     p.add_argument(
+        "--permission-trust",
         "--qualification-trust",
+        dest="qualification_trust",
         default=None,
         metavar="PATH",
         help=(
-            "Qualification signer trust registry for a process-contract parent. "
+            "Trusted signers for process run permissions. "
             "Also OPENADAPT_QUALIFICATION_TRUST or qualification-trust.json "
-            "beside process-contract.json"
+            "beside process-contract.json. "
+            "--qualification-trust is deprecated; use --permission-trust."
         ),
     )
     p.add_argument(

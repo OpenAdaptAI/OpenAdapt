@@ -151,7 +151,7 @@ def cmd_process(args: argparse.Namespace) -> int:
         f"{len(contract.children)} admitted child(ren), "
         f"{len(contract.handoffs)} handoff(s). "
         "certify/run this directory; replay refuses it. "
-        "Each child keeps its own QualificationAdmissionEnvelope."
+        "Each child keeps its own signed run permission."
     )
     return 0
 
@@ -190,7 +190,7 @@ def cmd_certify_process(args: argparse.Namespace) -> int:
             )
         except Exception as exc:
             print(
-                f"child {spec.name}: REFUSED (no valid QualificationAdmissionEnvelope: "
+                f"child {spec.name}: REFUSED (no valid signed run permission: "
                 f"{type(exc).__name__})"
             )
             child_results[spec.name] = False
