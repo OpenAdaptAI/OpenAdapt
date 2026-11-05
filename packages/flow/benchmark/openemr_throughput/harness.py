@@ -274,7 +274,29 @@ def build_worker(user: str, opts: dict[str, Any]) -> Any:
             self.page = page
 
     def open_form(page: Any) -> None:
+        """Open the blank form, once more if a navigation raced the setup (#1348).
+
+        Sign-in or the previous item's chart can still be navigating the page
+        when a worker claims its next item; an ``evaluate`` then loses its
+        execution context. That is a setup race, not an engine failure: wait
+        for the page to load and run the setup again, once.
+        """
+        try:
+            _open_form(page)
+        except Exception as exc:  # noqa: BLE001 - only the navigation race retries
+            if "Execution context was destroyed" not in str(exc):
+                raise
+            page.wait_for_load_state("load", timeout=60_000)
+            for frame in page.frames:
+                try:
+                    frame.wait_for_load_state("load", timeout=60_000)
+                except Exception:  # noqa: BLE001 - a frame may detach meanwhile
+                    continue
+            _open_form(page)
+
+    def _open_form(page: Any) -> None:
         """Start each item where the recording started: no chart open, blank form."""
+        page.wait_for_load_state("load", timeout=60_000)
         if page.evaluate(
             "() => !!(window.app_view_model && app_view_model.application_data.patient())"
         ):
@@ -306,7 +328,14 @@ def build_worker(user: str, opts: dict[str, Any]) -> Any:
         if not session:
             session.append(fixture.token_session("oracle"))
         oracle = OpenEMRPatientOracle(fixture.api_base_url, session[0], spec)
-        backend = demo._BasePlaywrightBackend(page)
+        # Replay with the backend the bundle was recorded with: a bundle the
+        # demo's ``record`` made carries the OpenEMR adapter's field identity.
+        backend_cls = (
+            demo.OpenEMRPlaywrightBackend
+            if opts.get("backend") == "openemr"
+            else demo._BasePlaywrightBackend
+        )
+        backend = backend_cls(page)
         prof = None
         if opts.get("profile"):
             from benchmark.openemr_throughput.profiler import RunProfiler
@@ -398,6 +427,7 @@ def run(a: argparse.Namespace) -> dict[str, Any]:
         "window": a.window, "profile": a.profile, "keep_pngs": a.keep_pngs,
         "page_quiet_ms": a.page_quiet_ms, "ocr_threads": a.ocr_threads,
         "speed": a.speed,
+        "backend": a.backend,
     }
     if a.processes:
         from openadapt_flow.runtime.worklist_pool import ProcessWorker
@@ -495,6 +525,8 @@ def main() -> None:
     r.add_argument("--window", type=int, default=0)
     r.add_argument("--halt-at", type=int, default=None)
     r.add_argument("--profile", action="store_true")
+    r.add_argument("--backend", choices=["base", "openemr"], default="base",
+                   help="the browser backend the bundle was recorded with")
     r.add_argument("--speed", choices=["standard", "fast"], default="standard",
                    help="named speed profile (openadapt_flow.runtime.speed)")
     r.add_argument("--ocr-threads", type=int, default=None,

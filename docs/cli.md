@@ -30,12 +30,10 @@ installs only the launcher and every engine command prints the fix:
 `uv tool install --python 3.12 openadapt`. The `uvx --python 3.12` form above
 needs no install step.
 
-To serve compiled programs to an MCP client, install the agent bridge by name.
-Launcher 1.16.0 on PyPI doesn't include it, and `openadapt-agent` 2.0.1
-requires `--bundles`:
+To serve compiled programs to an MCP client, use the agent bridge.
+`pip install openadapt` (1.19.0) installs it as `openadapt-agent` (2.2.1):
 
 ```bash
-python -m pip install --upgrade openadapt-agent
 openadapt-agent serve --bundles <bundle or directory of bundles> --allow-run
 ```
 

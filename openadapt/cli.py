@@ -849,9 +849,9 @@ def _warn_about_launcher_conflicts() -> None:
 _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")
 # Flow 1.33 and 1.34 probe four X11 libraries in the wrong case, so on Linux
 # they refuse to download Chromium on hosts that have them. 1.35.0 fixed it.
-# Launcher 1.19 requires Flow 2.5: `openadapt shadow` forwards to its shadow
-# command, and `openadapt verify serve` offers its recheck.
-_SUPPORTED_FLOW_RANGE = ">=2.5.0,<3.0.0"
+# Launcher 1.20 requires Flow 2.6: ledger listing uses its persistent
+# owed-recheck API.
+_SUPPORTED_FLOW_RANGE = ">=2.6.0,<3.0.0"
 _RDP_INSTALL_COMMAND = _pip_install("openadapt[rdp]")
 _CHROMIUM_SYSTEM_LIBS_COMMAND = (
     f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
@@ -861,7 +861,7 @@ _CHROMIUM_SYSTEM_LIBS_COMMAND = (
 def _supported_flow_version(value: str) -> bool:
     """Return whether a stable Flow version is in the launcher's supported range."""
     parsed = _release_tuple(value)
-    return parsed is not None and (2, 5, 0) <= parsed < (3, 0, 0)
+    return parsed is not None and (2, 6, 0) <= parsed < (3, 0, 0)
 
 
 # The Python modules each native or remote Flow backend imports when its
@@ -1350,12 +1350,23 @@ def verify_ledger() -> None:
 @verify_ledger.command("list")
 @_LEDGER_OPTION
 def verify_ledger_list(ledger_dir: Optional[str]) -> None:
-    """Show held and open writes: key, state, when it began, outcome."""
+    """Show held and open writes: key, state, when it began, outcome.
+
+    Also each provisional CONFIRMED whose recheck is still owed, with its due
+    time, so a recheck isn't lost when the server that holds it restarts.
+    """
     ledger = _write_ledger(ledger_dir)
     rows = ledger.unresolved()
-    if not rows:
-        click.echo("No held or open writes.")
+    owed = ledger.rechecks_owed()
+    if not rows and not owed:
+        click.echo("No held or open writes. No rechecks owed.")
         return
+    for key, attempt in owed:
+        click.echo(
+            f"{key}  recheck-owed  began {attempt.begun.get('at')}  "
+            f"due {attempt.recheck_owed}  by {attempt.begun.get('actor_kind')}:"
+            f"{attempt.begun.get('actor_id')}"
+        )
     for key, attempt in rows:
         outcome = (attempt.resolved or {}).get("outcome", "-")
         state = "review" if attempt.review else ledger.state(attempt)
