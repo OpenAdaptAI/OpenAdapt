@@ -1002,6 +1002,7 @@ def observe_receipt_records(
     salt: bytes,
     at: str,
     reads: Optional[Mapping[str, tuple[Any, Optional[list[dict[str, Any]]]]]] = None,
+    read_facts: Optional[Mapping[str, Mapping[str, Any]]] = None,
     targets: Sequence[tuple[str, Mapping[str, Any]]] = (),
     identity_field: Optional[str] = None,
     ignore_fields: Sequence[str] = (),
@@ -1014,8 +1015,9 @@ def observe_receipt_records(
 ) -> tuple[ReceiptObservation, Optional[dict[str, Any]]]:
     """Bind existing complete native reads through the shared producer.
 
-    This function performs no I/O. A SQL adapter's successful fetchall proves
-    only its declared projection. A declared settled Snapshot supplies its own
+    This function performs no I/O. A SQL adapter's successful fetchall or a
+    REST adapter's actual bound completion proves only its declared projection.
+    A declared settled Snapshot supplies its own
     schema/key/whole-database proof; no synthetic FHIR state, search, history,
     additional query or second per-field judge is constructed.
     """
@@ -1023,6 +1025,7 @@ def observe_receipt_records(
         Snapshot, cell_hash, key_text, mac_key, row_key_hash, unpack,
     )
     from openadapt_flow.runtime.effects.sql import SqlRecordVerifier
+    from openadapt_flow.runtime.effects.rest import RestRecordVerifier
 
     def table_read(name: str) -> Any:
         if not isinstance(snapshot, Snapshot) or not snapshot.code_visible:
@@ -1053,8 +1056,13 @@ def observe_receipt_records(
             raise TargetedUnreadable("no independently matched native receipt records")
         for surface, target in targets:
             adapter, records = reads.get(surface, (None, None))
-            if not isinstance(adapter, SqlRecordVerifier) or records is None:
-                raise TargetedUnreadable("the declared native SQL projection is unavailable")
+            if records is None:
+                raise TargetedUnreadable("the declared native projection is unavailable")
+            if isinstance(adapter, RestRecordVerifier):
+                if not adapter._projection_matches_capture(records, (read_facts or {}).get(surface)):
+                    raise TargetedUnreadable("the actual REST projection capture is incomplete or unbound")
+            elif not isinstance(adapter, SqlRecordVerifier):
+                raise TargetedUnreadable("the declared native projection is unsupported")
             ignored = set(ignore_fields) - ({identity_field} if identity_field else set())
             projected = {k: v for k, v in target.items() if k not in ignored}
             wanted = _native_projection(projected)

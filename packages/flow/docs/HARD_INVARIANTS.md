@@ -143,3 +143,17 @@ Each receipt discloses this limit, along with the absence of intermediate
 history. Declared database side-record coverage remains independently checked.
 The optional strict global predicates and the FHIR targeted guarantee retain
 their own required observations.
+
+REST observations use that same declared-projection path. The existing fetch
+records agreement between the requested and observed source, completed page count,
+declared termination and any checked total. The producer validates closed
+facts against the actual same adapter capture and its unchanged configuration.
+Copied facts or a caller's completeness assertion cannot replace that capture.
+Malformed record lists, known partial responses, changed response sources and
+missing required completion observations cannot establish the native proof.
+
+An unpaged REST contract covers its entire declared response projection. It
+makes no claim about a server-wide dataset, native primary keys, an atomic
+multi-page snapshot or an undeclared identifying search. Required FHIR Reference,
+version, history, cache and identifying-search checks retain their own binding
+and completion requirements; changing a source kind changes the bound contract.

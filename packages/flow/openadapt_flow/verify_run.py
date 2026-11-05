@@ -1541,6 +1541,14 @@ def judge_run_frame(
                 for name, (_old, current) in slices.items()
                 if name not in (db.slices if db is not None else {})
             }
+            from openadapt_flow.runtime.effects.rest import PROJECTION_DETAIL
+
+            captured_detail = after.detail if isinstance(after, EffectState) and isinstance(after.detail, dict) else {}
+            read_facts: dict[str, Mapping[str, Any]] = {}
+            for name in own_reads:
+                detail_now = captured_detail.get(name, {}) if isinstance(routed, dict) and routed else captured_detail
+                if isinstance(detail_now, Mapping) and isinstance(detail_now.get(PROJECTION_DETAIL), Mapping):
+                    read_facts[name] = detail_now[PROJECTION_DETAIL]
             records: list[tuple[str, Mapping[str, Any]]] = []
             if not database_only:
                 for effect, effect_result in zip(bound_effects, receipt_verdicts):
@@ -1571,6 +1579,7 @@ def judge_run_frame(
                 salt=salt,
                 at=db.post_read_at if db is not None and db.post is not None else _now(),
                 reads=own_reads,
+                read_facts=read_facts,
                 targets=records,
                 identity_field=spec.identity_field,
                 ignore_fields=[name for name in spec.ignore_fields if name not in required],
