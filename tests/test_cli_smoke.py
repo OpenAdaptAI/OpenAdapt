@@ -811,26 +811,16 @@ def test_deploy_preflight_fails_for_unsupported_flow(monkeypatch, flow_version):
     assert "Preflight passed" not in result.output
 
 
-def test_top_level_help_leads_with_flow():
-    """`openadapt --help` must list flow before the other commands."""
-    runner = CliRunner()
-    result = runner.invoke(cli_main, ["--help"])
+def test_top_level_help_lists_fifteen_tasks_with_verify_second():
+    from openadapt.cli_tasks import TASKS
+
+    result = CliRunner().invoke(cli_main, ["--help"])
     assert result.exit_code == 0
-    # Quick Start headline and Commands listing both lead with flow.
-    assert "openadapt flow demo-record" in result.output
-    assert "openadapt quickstart" in result.output
-    # openadapt-agent 2.0.1 requires --bundles; the help names a command that
-    # works with every released agent and every install method.
-    assert "openadapt agent serve --bundles DIR --mode production" in result.output
-    assert "openadapt agent serve --allow-run" not in result.output
-    assert "effect-verified first run" in result.output
-    assert "Standalone local human GUI capture" in result.output
-    assert "Research: evaluate" in result.output
-    assert "Research: train" in result.output
-    commands_idx = result.output.index("Commands:")
-    flow_idx = result.output.index("flow", commands_idx)
-    capture_idx = result.output.index("capture", commands_idx)
-    assert flow_idx < capture_idx, "flow should be listed before capture"
+    section = result.output.split("Commands:\n", 1)[1]
+    names = [line.split()[0] for line in section.splitlines() if line.startswith("  ")]
+    assert names == list(TASKS)
+    assert len(names) == 15
+    assert names[:2] == ["demo", "verify"]
 
 
 def test_capture_start_refuses_when_recorder_never_becomes_ready(monkeypatch):
@@ -1109,13 +1099,13 @@ def test_unwrapped_flow_command_delegates_to_engine(monkeypatch):
     ]
 
 
-def test_flow_help_lists_delegated_launch_commands():
+def test_flow_help_lists_tasks_and_legacy_help_names_the_replacement():
     result = CliRunner().invoke(cli_main, ["flow", "--help"])
-
     assert result.exit_code == 0, result.output
+    # The launcher also supports released engines with the previous help view.
+    for command in ("run", "teach", "compile"):
+        assert command in result.output
     for command in (
-        "run",
-        "teach",
         "connect",
         "login",
         "sanitize",
@@ -1125,7 +1115,9 @@ def test_flow_help_lists_delegated_launch_commands():
         "push",
         "report-break",
     ):
-        assert command in result.output
+        alias = CliRunner().invoke(cli_main, ["flow", command, "--help"])
+        assert alias.exit_code == 0, alias.output
+        assert command in alias.output
 
 
 def test_top_level_connect_is_one_command_and_delegates_narrow_pairing(monkeypatch):

@@ -40,19 +40,85 @@ from openadapt.version import __version__
 
 
 class _FlowFirstGroup(click.Group):
-    """Command group that lists ``flow`` first in ``--help``.
-
-    The demonstration compiler is the flagship, so it should lead the
-    command listing instead of sorting alphabetically behind ``capture``.
-    Everything else keeps its normal alphabetical order.
-
-    On an interpreter the engine doesn't support, the help starts with the
-    remedy, so a bare ``openadapt`` explains the problem before anything else.
-    """
+    """Present task names while retaining every original Click command."""
 
     def list_commands(self, ctx):
-        commands = super().list_commands(ctx)
-        return sorted(commands, key=lambda name: (name != "flow", name))
+        from openadapt.cli_tasks import TASKS
+
+        return list(TASKS)
+
+    def format_commands(self, ctx, formatter):
+        from openadapt.cli_tasks import TASKS
+
+        with formatter.section("Commands"):
+            formatter.write_dl(list(TASKS.items()))
+
+    def parse_args(self, ctx, args):
+        from openadapt.cli_tasks import alias_help, alias_notice, group_help, translate
+
+        raw = list(args)
+        if (
+            not ctx.resilient_parsing
+            and raw[:1] == ["verify"]
+            and raw[1:] in ([], ["-h"], ["--help"])
+        ):
+            click.echo(
+                group_help(ctx.command_path, "verify"), err=len(raw) == 1, nl=False
+            )
+            ctx.exit(2 if len(raw) == 1 else 0)
+        if (
+            not ctx.resilient_parsing
+            and raw[:1]
+            and raw[0] in {"inspect", "workflow", "services", "research"}
+            and raw[1:] in (["-h"], ["--help"])
+        ):
+            click.echo(group_help(ctx.command_path, raw[0]), nl=False)
+            ctx.exit()
+        routed = translate(raw, set(self.commands))
+        if routed != raw and routed[:1] == ["flow"]:
+            # Click strips a standalone -- from passthrough arguments. New
+            # direct task names must retain it to protect literal paths.
+            ctx.meta["task_argv"] = routed[1:]
+        if routed == raw and raw:
+            command = self.commands.get(raw[0])
+            if command is not None and (
+                command.context_settings.get("help_option_names") == []
+                or raw[:2] == ["verify", "serve"]
+            ):
+                ctx.meta["alias_help"] = alias_help(raw, ctx.command_path)
+        result = super().parse_args(ctx, routed)
+        if routed == raw and not ctx.resilient_parsing:
+            alias_notice(raw, ctx.command_path)
+        return result
+
+    def invoke(self, ctx):
+        try:
+            return super().invoke(ctx)
+        except (SystemExit, click.exceptions.Exit) as exc:
+            code = getattr(exc, "exit_code", getattr(exc, "code", None))
+            if code == 0 and ctx.meta.get("alias_help"):
+                click.echo("\n" + ctx.meta["alias_help"])
+            raise
+
+    def get_command(self, ctx, name):
+        from openadapt.cli_tasks import NATIVE_ROUTES, TASKS
+
+        command = super().get_command(ctx, name)
+        if command is not None:
+            aliases = [
+                " ".join(path) for path, old in NATIVE_ROUTES.items() if old == (name,)
+            ]
+            note = "Also available as: " + ", ".join(aliases) if aliases else ""
+            if name == "setup":
+                note += "\nOperations: " + ", ".join(
+                    path[1] for path in NATIVE_ROUTES if path[0] == "setup"
+                )
+            if note and note not in (command.epilog or ""):
+                command.epilog = "\n".join(filter(None, [command.epilog, note]))
+            return command
+        # Completion can discover the visible Flow task names too. Execution
+        # still reaches the original flow command through parse_args above.
+        return self.commands.get("flow") if name in TASKS else None
 
     def format_help(self, ctx, formatter):
         if not _python_supported():
@@ -260,16 +326,25 @@ def _invoke_flow(argv: list[str]) -> int:
         click.echo("Engine only: pip install openadapt-flow", err=True)
         return 1
 
-    _correct_released_flow_x11_sonames()
-    if argv[:1] != ["tutorial"]:
-        return int(flow_main(argv))
-    # The tutorial is the first-run path and ends by printing next steps.
-    # Rewrite only its human-readable output; other verbs can print
-    # machine-readable output that must stay byte-for-byte.
-    from contextlib import redirect_stdout
+    from contextlib import nullcontext
 
-    with redirect_stdout(_LauncherSpellingStream(sys.stdout, _flow_verbs())):
-        return int(flow_main(argv))
+    try:
+        from openadapt_flow.cli_tasks import suppress_alias_notices
+    except ImportError:
+        suppress_alias_notices = nullcontext
+    # The launcher already knows whether the person used an old or a new
+    # spelling. Do not print a second notice for its internal engine call.
+    with suppress_alias_notices():
+        _correct_released_flow_x11_sonames()
+        if argv[:1] != ["tutorial"]:
+            return int(flow_main(argv))
+        # The tutorial is the first-run path and ends by printing next steps.
+        # Rewrite only its human-readable output; other verbs can print
+        # machine-readable output that must stay byte-for-byte.
+        from contextlib import redirect_stdout
+
+        with redirect_stdout(_LauncherSpellingStream(sys.stdout, _flow_verbs())):
+            return int(flow_main(argv))
 
 
 def _run_flow(argv: list[str]) -> None:
@@ -1136,7 +1211,7 @@ def flow(command_ctx: click.Context) -> None:
     command list, help, options, validation, and exit codes identical to the
     installed engine version.
     """
-    _run_flow(list(command_ctx.args))
+    _run_flow(command_ctx.meta.get("task_argv", list(command_ctx.args)))
 
 
 @main.command(
