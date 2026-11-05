@@ -837,7 +837,9 @@ class Shadow:
         # The record read directly outranks a change feed that can't be read.
         if moved:
             ep.late_verdict = REFUTED
-        elif r.evidence.get("unreadable"):
+        elif r.evidence.get("invariants_refuted"):
+            ep.late_verdict = REFUTED
+        elif r.evidence.get("unreadable") or r.evidence.get("invariants_unknown"):
             ep.late_verdict = UNCERTAIN
         elif r.outcome != "found_existing":
             ep.late_verdict = REFUTED
@@ -909,7 +911,9 @@ class Shadow:
         elif result.outcome == "found_existing":
             # A conditional create answered with the record already there.
             ep.verdict, ep.reasons = CONFIRMED, list(result.reasons)
-        elif ev.get("unreadable"):
+        elif ev.get("invariants_refuted"):
+            ep.verdict, ep.reasons = REFUTED, list(result.reasons)
+        elif ev.get("unreadable") or ev.get("invariants_unknown"):
             ep.verdict, ep.reasons = UNCERTAIN, list(result.reasons)
         elif result.outcome == "needs_review" and landed == 0 and "agent_writes" in ev:
             # Nothing of the agent's landed: never CONFIRMED (the write isn't

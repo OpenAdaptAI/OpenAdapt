@@ -295,3 +295,71 @@ def test_malformed_early_history_does_not_hide_a_later_known_duplicate():
     gone = change("Patient/gone", "C", "D", bodies=[patient("gone")], by=OTHER)
     verdict = result({unreadable.ref: unreadable, **created(), gone.ref: gone})
     assert checks(verdict)["at_most_one"].status == "refuted"
+
+
+# Production admission is stricter than the independent field/operation judge.
+# These retain that judge's original assertions and test the separate gate.
+
+
+def production(changes, *, c=None, before=(), after=None, body=None):
+    from openadapt_flow.ensure_invariants import enforce_ensure_invariants
+
+    c = c or contract()
+    baseline = Baseline(T0, {record["id"]: record for record in before})
+    after = {"x": patient("x")} if after is None else after
+    original = judge(c, PARAMS, baseline, changes, after, body or patient("x"))
+    return original, enforce_ensure_invariants(
+        original, c, PARAMS, baseline, changes, after
+    )
+
+
+def test_production_does_not_upgrade_snapshot_only_create_to_verified():
+    original, guarded = production(created())
+    assert original.outcome == "created_verified"
+    assert guarded.outcome == "needs_review"
+    assert guarded.record_id is None
+    assert guarded.evidence["invariants_unknown"] is True
+    assert guarded.evidence["hard_invariants"]["status"] == "not_checked"
+    assert all("hard_invariant:" in reason for reason in guarded.reasons[1:])
+
+
+def test_production_search_only_admission_is_unknown():
+    c = contract(change_feed={"audit": None, "history": False, "sweep_types": ["Patient"]})
+    original, guarded = production(created(), c=c)
+    assert original.outcome == "created_verified"
+    assert guarded.outcome == "needs_review"
+    assert guarded.evidence["invariants_unknown"] is True
+
+
+def test_production_found_existing_also_needs_authenticated_target_proof():
+    original, guarded = production({}, before=[patient("x")])
+    assert original.outcome == "found_existing"
+    assert guarded.outcome == "needs_review"
+    assert guarded.evidence["invariants_unknown"] is True
+
+
+def test_production_known_scope_failure_remains_refuted_when_history_unknown():
+    outside = change("Observation/outside", "U", bodies=[{"resourceType": "Observation", "id": "outside"}])
+    original, guarded = production({**created(), outside.ref: outside})
+    assert original.outcome == guarded.outcome == "needs_review"
+    assert guarded.evidence["invariants_refuted"] is True
+    assert "invariants_unknown" not in guarded.evidence
+
+
+def test_production_unknown_history_does_not_excuse_wrong_scalar():
+    bad = patient("x", telecom=[{"system": "phone", "value": "5550199"}])
+    original, guarded = production(created(telecom=bad["telecom"]), after={"x": bad}, body=bad)
+    assert original.outcome == guarded.outcome == "needs_review"
+    assert any("phone" in reason for reason in guarded.reasons)
+    assert "invariants_unknown" not in guarded.evidence
+
+
+def test_production_actor_and_search_absence_are_not_run_receipt_binding():
+    c = contract(operations={"cardinality": {"own_transient": True}})
+    gone = change("Patient/gone", "C", "D", bodies=[patient("gone")])
+    original, guarded = production({**created(), gone.ref: gone}, c=c)
+    assert original.outcome == "created_verified"
+    assert guarded.outcome == "needs_review"
+    assert guarded.evidence["invariants_refuted"] is True
+    assert any("own_transient_receipt_binding_missing" in reason for reason in guarded.reasons)
+    assert "invariants_unknown" not in guarded.evidence

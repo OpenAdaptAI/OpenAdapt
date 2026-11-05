@@ -55,7 +55,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, Mapping, Optional, Sequence, cast
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Optional, Sequence, cast
 from uuid import uuid4
 
 from openadapt_types.approval import (
@@ -91,6 +91,9 @@ from openadapt_flow.verification import (
     verifier_effect_tier,
     verify_effect_without_mutation,
 )
+
+if TYPE_CHECKING:
+    from openadapt_flow.runtime.effects.targeted import TargetedObservation
 
 EFFECT_RECEIPT_SCHEMA = "openadapt.effect-receipt/v1"
 EFFECT_EVIDENCE_SCHEMA = "openadapt.effect-evidence/v1"
@@ -1142,6 +1145,31 @@ def _declared_by_surface(
     return keys
 
 
+def _apply_hard_invariants(
+    frame: FrameVerdict,
+    observation: Optional["TargetedObservation"] = None,
+) -> FrameVerdict:
+    """Gate on the receipt/search domain, preserving independent refutations."""
+    from openadapt_flow.frame_invariants import judge_frame_invariants
+
+    if observation is None:
+        observation = getattr(frame, "targeted_observation", None)
+    verdict = judge_frame_invariants(frame, observation)
+    frame.hard_invariants = verdict
+    if frame.status == "refuted":
+        return frame
+    if verdict.status == "refuted" or (
+        verdict.status == "not_checked" and frame.status == "held"
+    ):
+        frame.status = verdict.status
+        frame.reason = "; ".join(
+            f"hard_invariant:{check.name}:{check.reason}"
+            for check in verdict.checks
+            if check.status != "held"
+        )
+    return frame
+
+
 def judge_run_frame(
     cfg: VerifyConfig,
     verifier: Any,
@@ -2072,10 +2100,16 @@ def verify_run(
             status="not_checked",
             reason="no baseline, so what else changed can't be known",
         )
-    # A record outside the declared delta moved: the save's effect on the
-    # store is not the declared one, whatever the per-effect reads say.
+    frame = _apply_hard_invariants(frame)
+    # A known field/frame violation still refutes. Missing required in-scope
+    # evidence cannot turn a field read into an overall CONFIRMED claim.
     effect_verdict: EffectVerdictLabel = (
-        "REFUTED" if frame.status == "refuted" else delta_verdict
+        "REFUTED"
+        if frame.status == "refuted" or delta_verdict == "REFUTED"
+        else "INDETERMINATE"
+        if frame.hard_invariants is not None
+        and frame.hard_invariants.status != "held"
+        else delta_verdict
     )
     if frame.status == "refuted" and observed_effect in ("absent", "present"):
         observed_effect = "conflicting"
@@ -2574,7 +2608,7 @@ def recheck_run(
         # A later write whose frame wasn't judged excuses nothing, so what
         # refuted this write may be that write's own change.
         verdict.excused_by.add(late_write.LATER_WRITE_UNJUDGED)
-    return verdict, _now()
+    return _apply_hard_invariants(verdict), _now()
 
 
 def write_result(result: Mapping[str, Any], out_dir: Path) -> Path:

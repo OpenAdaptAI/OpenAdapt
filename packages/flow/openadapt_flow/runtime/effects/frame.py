@@ -74,6 +74,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from openadapt_flow.app_profiles import Owner, table_name
+from openadapt_flow.hard_invariants import HardInvariantVerdict
 from openadapt_flow.runtime.effects.db_snapshot import DEFAULT_READ_ROW_BUDGET
 from openadapt_flow.runtime.effects.effect import (
     Effect,
@@ -656,6 +657,8 @@ class FrameChange:
     key: Any = None
     #: In memory only: the audit entry behind an ``audit_only`` change.
     entry: Any = None
+    #: Actual removal/tombstone, not a missing expected side row.
+    observed_delete: bool = False
 
 
 @dataclass
@@ -688,6 +691,8 @@ class FrameVerdict:
     #: and when it was read). Never put in a receipt; only its salted digest
     #: is.
     post_state: Optional[dict[str, Any]] = None
+    #: Count-only named checks; raw reader observations are never serialized.
+    hard_invariants: Optional[HardInvariantVerdict] = None
 
     @property
     def held(self) -> bool:
@@ -698,6 +703,11 @@ class FrameVerdict:
 
         return {
             "status": self.status,
+            **(
+                {"hard_invariants": self.hard_invariants.evidence()}
+                if self.hard_invariants is not None
+                else {}
+            ),
             "frame_sha256": spec.digest(),
             "attribution": self.attribution,
             "records_compared": self.records_compared,
@@ -1813,7 +1823,11 @@ def judge_frame(
                     continue
                 note(
                     FrameChange(
-                        name, "removed", attribute(name, key, before, None), key=key
+                        name,
+                        "removed",
+                        attribute(name, key, before, None),
+                        key=key,
+                        observed_delete=True,
                     )
                 )
             elif before is not None and after is not None:

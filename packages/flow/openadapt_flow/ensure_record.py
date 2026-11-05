@@ -1678,11 +1678,27 @@ def verify_ensure(
         result = judge(
             contract, params, baseline, changes, after_matches, created, existing_now
         )
+        from openadapt_flow.ensure_invariants import enforce_ensure_invariants
+
+        result = enforce_ensure_invariants(
+            result, contract, params, baseline, changes, after_matches
+        )
         # Where the read window closed, for a write receipt's scope.
         result.evidence["window_until"] = until.isoformat()
         return result
     except Unreadable as exc:
-        return _review([f"unreadable: {exc}"], {"unreadable": True})
+        from openadapt_flow.frame_invariants import judge_frame_invariants
+        from openadapt_flow.runtime.effects.frame import FrameVerdict
+
+        unknown = judge_frame_invariants(FrameVerdict("not_checked", "unreadable"))
+        return _review(
+            [f"unreadable: {exc}"],
+            {
+                "unreadable": True,
+                "invariants_unknown": True,
+                "hard_invariants": unknown.evidence(),
+            },
+        )
 
 
 __all__ = [

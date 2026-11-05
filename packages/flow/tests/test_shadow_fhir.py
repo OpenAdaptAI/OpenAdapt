@@ -410,3 +410,44 @@ def test_a_lost_retry_in_a_known_episode_makes_a_late_refutation_uncertain(
     env["calls"]["ev"] = {"agent_writes": 1}
     sh.run_rechecks(now=True, only=[sh.episodes[0]])
     assert sh.episodes[0].late_verdict == "UNCERTAIN"
+
+
+@pytest.mark.parametrize(
+    "flag, expected",
+    [("invariants_unknown", "UNCERTAIN"), ("invariants_refuted", "REFUTED")],
+)
+def test_named_invariant_result_maps_initial_shadow_without_replay(
+    env: dict[str, Any], flag: str, expected: str
+) -> None:
+    env["calls"]["outcome"] = "needs_review"
+    env["calls"]["ev"] = {"agent_writes": 1, flag: True}
+    _send(env["sh"], "POST", "/fhir/R4/AllergyIntolerance", _allergy("Patient/p1"))
+    env["sh"].flush()
+    assert env["sh"].episodes[0].verdict == expected
+    assert len([call for call in env["fhir"].received if call[0] == "POST"]) == 1
+
+
+@pytest.mark.parametrize(
+    "flag, expected",
+    [("invariants_unknown", "UNCERTAIN"), ("invariants_refuted", "REFUTED")],
+)
+def test_named_invariant_result_maps_late_shadow_without_replay(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch, flag: str, expected: str
+) -> None:
+    _confirmed(env, monkeypatch)
+    env["calls"]["outcome"] = "needs_review"
+    env["calls"]["ev"] = {"agent_writes": 1, flag: True}
+    env["sh"].run_rechecks(now=True)
+    assert env["sh"].episodes[0].late_verdict == expected
+    assert len([call for call in env["fhir"].received if call[0] == "POST"]) == 1
+
+
+def test_a_moved_target_still_refutes_beside_unknown_invariant_history(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stored = _confirmed(env, monkeypatch)
+    stored["now"] = _stored("Patient/p2")
+    env["calls"]["outcome"] = "needs_review"
+    env["calls"]["ev"] = {"invariants_unknown": True}
+    env["sh"].run_rechecks(now=True)
+    assert env["sh"].episodes[0].late_verdict == "REFUTED"

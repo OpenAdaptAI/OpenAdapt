@@ -26,5 +26,61 @@ before asserting their completeness.
 This adapter evaluates record-level scope. Existing field comparisons still
 check the values on the target record. A proven declared transient cleanup
 can satisfy scope and delete checks while refuting the literal history
-predicate. The callable returns evidence independently and does not change
-ensure-record admission, verify-run receipts or per-field comparisons.
+predicate. That independent callable does not itself grant admission.
+
+## Production guarantee
+
+The mandatory targeted layer uses receipt-bound records, the plan's declared
+schema-key-bound identifying search at write time and at late recheck, and the
+final state. Its evidence schema is `openadapt.targeted-hard-invariants/v1`.
+It records receipt, contract and schema commitments, target identity MACs,
+search counts and observation times. Raw records, references and actors remain
+in memory. It performs no reads or model calls.
+
+Initial evidence uses phase `write`: both searches occurred at write time,
+and the later search remains owed. It contains no pre-issuance receipt hash;
+the outer issued receipt binds the target commitments and observations.
+Phase `late` names the original issued receipt and the actual late search.
+Write-phase observations cannot discharge the owed recheck or establish a
+final result.
+
+The shared targeted reader authenticates the issued state, plan membership,
+receipt, parameters and exact target commitments before producing observations.
+The fixed judge consumes those observations; a caller's completeness flag is
+not an authority. Both identifying searches must be complete. Each required
+record history must be bound to the exact written-version anchor and cover the
+ordered post-anchor versions through the recheck. Missing required in-scope
+evidence produces a named `not_checked` result and prevents confirmation.
+
+Every receipt names `outside_receipt_intermediate_history` as `UNKNOWN`.
+A duplicate created and deleted outside the receipt IDs, or an unrelated
+create/delete between the two identifying searches, is outside this guarantee.
+That disclosed limitation does not downgrade an otherwise complete in-scope
+result. The stricter global historical callable above remains available as an
+optional check where the application supplies complete history.
+
+A contract can explicitly limit itself to final-state checks. Its receipt then
+also names per-record intermediate history as `UNKNOWN`; unavailable history
+never becomes an empty complete history. This is a smaller stated guarantee,
+not proof that no intermediate change occurred. The targeted producer supports
+record writes and field checks, not delete tasks. A delete task needs separate
+authenticated plan authorization before this producer can qualify it.
+
+Known scope and delete failures already adjudicated by the existing frame
+remain refutations. An observed removed row is distinct from a missing expected
+side row. Changes authoritatively attributed to other actors remain theirs.
+Field matching, version binding and legitimate-other edit checks remain
+independent requirements. An unknown never authorizes replay of a dispatched
+write; reconciliation is read-only.
+
+Transient cleanup requires this run's write receipts to bind the resource
+identity, a declared cleanup plan and an explicit final absence read. Actor
+equality and absence from a search do not supply that binding. The legacy
+Ensure path has no such receipt input, so its cleanup exception refutes with
+`own_transient_receipt_binding_missing`. Without authenticated targeted
+observations, production checks report a named unknown rather than infer
+complete coverage from a snapshot.
+
+The targeted adapter's synthetic controls are component checks. They do not
+qualify a real application or establish wider historical absence. Per-field
+matching and the optional global callable's controls are unchanged.

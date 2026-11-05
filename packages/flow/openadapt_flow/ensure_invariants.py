@@ -1,8 +1,8 @@
-"""Adapt ensure-record's authoritative read observations to hard invariants.
+"""Optional global predicates and the production targeted admission boundary.
 
-This callable does not change legacy admission or per-field comparisons.
-History/search completeness must be asserted by the reader after its complete
-reads. An audit-free sweep cannot prove that no record was deleted.
+The independent global callable does not grant admission. The production
+boundary requires the shared targeted reader's authenticated observations;
+per-field comparisons remain separate and unchanged.
 """
 
 from __future__ import annotations
@@ -13,7 +13,8 @@ from typing import TYPE_CHECKING, Any
 from openadapt_flow.hard_invariants import HardInvariantVerdict, judge_hard_invariants
 
 if TYPE_CHECKING:
-    from openadapt_flow.ensure_record import Baseline, Change, EnsureContract
+    from openadapt_flow.ensure_record import Baseline, Change, EnsureContract, EnsureResult
+    from openadapt_flow.runtime.effects.targeted import TargetedObservation
 
 
 def judge_ensure_invariants(
@@ -138,3 +139,93 @@ def judge_ensure_invariants(
         history_complete=key_history_complete,
         search_complete=search_complete,
     )
+
+
+def enforce_ensure_invariants(
+    result: EnsureResult,
+    contract: EnsureContract,
+    params: Mapping[str, Any],
+    baseline: Baseline,
+    changes: Mapping[str, Change],
+    after_matches: Mapping[str, Mapping[str, Any]],
+    *,
+    observation: TargetedObservation | None = None,
+) -> EnsureResult:
+    """Gate production admission without changing the independent field judge.
+
+    The shared targeted producer must bind receipt targets and the declared
+    searches before this gate can hold. The optional global historical judge
+    remains independent; unobserved outside-ID history is not a mandatory gate.
+    """
+    from dataclasses import replace
+
+    from openadapt_flow.ensure_record import EnsureResult, _ref
+    from openadapt_flow.frame_invariants import judge_frame_invariants
+    from openadapt_flow.runtime.effects.frame import FrameVerdict
+
+    observed = judge_ensure_invariants(
+        contract, params, baseline, changes, after_matches
+    )
+    verdict = judge_frame_invariants(
+        FrameVerdict(
+            "held" if result.outcome in {"created_verified", "found_existing"}
+            else "not_checked",
+            "independent ensure field/operation judgment",
+        ),
+        observation,
+    )
+    # Preserve existing adjudicated scope/delete failures. A duplicate only
+    # seen in wider history remains part of the optional global predicate.
+    known_failures = {
+        check.name: check for check in observed.checks
+        if check.status == "refuted" and check.name != "at_most_one"
+    }
+    verdict = replace(verdict, checks=tuple(
+        known_failures.get(check.name, check) for check in verdict.checks
+    ))
+    selves = {_ref(actor) for actor in contract.self_actors}
+    transient = sum(
+        ref.startswith(contract.resource_type + "/")
+        and {"C", "D"} <= change.actions
+        and (
+            not change.attributed
+            or not change.authors
+            or bool(change.authors & selves)
+        )
+        for ref, change in changes.items()
+    )
+    if transient and contract.operations.cardinality.own_transient:
+        # Actor equality and search absence do not bind a resource to this
+        # run's write receipts. No such authenticated input exists here.
+        verdict = replace(verdict, checks=tuple(
+                replace(
+                    check,
+                    status="refuted",
+                    reason="own_transient_receipt_binding_missing",
+                    observed_count=transient,
+                )
+                if check.name in {"declared_scope", "no_undeclared_deletes"}
+                else check
+                for check in verdict.checks
+            )
+        )
+    evidence = {**result.evidence, "hard_invariants": verdict.evidence()}
+    reasons = list(result.reasons)
+    outcome, identity = result.outcome, result.record_id
+    if verdict.status == "refuted":
+        evidence["invariants_refuted"] = True
+        reasons.extend(
+            f"hard_invariant:{check.name}:{check.reason}"
+            for check in verdict.checks
+            if check.status == "refuted"
+        )
+        outcome, identity = "needs_review", None
+    elif verdict.status != "held" and outcome in {"created_verified", "found_existing"}:
+        evidence["invariants_unknown"] = True
+        reasons.extend(
+            f"hard_invariant:{check.name}:{check.reason}"
+            for check in verdict.checks
+            if check.status == "not_checked"
+        )
+        outcome, identity = "needs_review", None
+    return EnsureResult(outcome, identity, reasons, evidence)
