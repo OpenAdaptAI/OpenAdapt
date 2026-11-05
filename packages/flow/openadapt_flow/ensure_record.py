@@ -798,10 +798,11 @@ def _by_instant(bodies: list[dict[str, Any]]) -> Optional[list[dict[str, Any]]]:
     and the server's return order is not a chronology, so a tie refuses."""
 
     try:
-        times = [_when((b.get("meta") or {}).get("lastUpdated")) for b in bodies]
+        read = [_when((b.get("meta") or {}).get("lastUpdated")) for b in bodies]
     except Unreadable:
         return None
-    if any(when is None for when in times):
+    times = [when for when in read if when is not None]
+    if len(times) != len(bodies):
         return None
     if len(set(times)) != len(times):
         return None
