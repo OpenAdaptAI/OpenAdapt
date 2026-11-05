@@ -3197,3 +3197,181 @@ def test_real_deployment_constructor_wires_backend_environment_observer() -> Non
         replayer.qualification_environment_observer,
         BackendQualificationEnvironmentObserver,
     )
+
+
+@pytest.mark.parametrize("mutation", ["value", "label", "options", "kind", "remote"])
+def test_native_selection_fields_are_bound_to_admitted_workflow(mutation):
+    from openadapt_flow.ir import NativeSelectContract
+
+    native = NativeSelectContract(
+        value="code-17",
+        label="Dog",
+        options=[
+            {"value": "code-17", "label": "Dog", "disabled": False},
+        ],
+    )
+    step = Step(
+        id="choose",
+        intent="select Dog",
+        action=ActionKind.SELECT_OPTION,
+        text="Dog",
+        native_selection=native,
+        anchor=Anchor(
+            template="templates/select.png",
+            region=(10, 10, 40, 20),
+            click_point=(20, 20),
+            structural=StructuralLocator(selector="#species"),
+        ),
+    )
+    workflow = Workflow(name="native", steps=[step], surface="web")
+    before = workflow_contract_sha256(workflow)
+    replayer = Replayer(object())
+    replayer._install_execution_snapshots(workflow)
+    if mutation == "remote":
+        step.native_selection = None
+        step.selection_commit_key = "Enter"
+        step.selection_region = (10, 10, 40, 20)
+    else:
+        changes = {
+            "value": {"value": "different"},
+            "label": {"label": "Cat"},
+            "options": {"options": ()},
+            "kind": {"kind": "opaque_remote"},
+        }
+        step.native_selection = native.model_copy(update=changes[mutation])
+    assert workflow_contract_sha256(workflow) != before
+    assert replayer._workflow_snapshot_refusal(workflow) is not None
+
+
+class _NativeSelectionObservedBackend(_ObservedBackend):
+    def select_native_option_guarded(self, contract, *, locator, handle):
+        self._guard()
+        self.actions.append(("select_native_option", *handle.point))
+        self._native_observed = contract.model_dump(mode="json")
+        return ActionDeliveryReceipt(
+            receipt_id=f"native-fixture-{len(self.actions)}",
+            operation="guarded_dom_select",
+            native=False,
+            target_fingerprint=handle.target_fingerprint,
+            selection_value_sha256=hashlib.sha256(contract.value.encode()).hexdigest(),
+            delivered_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+    def native_selected_option_at(self, _x, _y):
+        return self._native_observed
+
+
+@pytest.mark.parametrize(
+    ("mutation", "value"),
+    [
+        ("operation", "guarded_dom_type"),
+        ("selection_commit_key", "Tab"),
+        ("selection_value_sha256", "0" * 64),
+        ("target_fingerprint", "0" * 64),
+        ("native", True),
+    ],
+)
+def test_native_selection_receipt_binds_value_commit_and_target(
+    tmp_path: Path,
+    mutation: str,
+    value: Any,
+) -> None:
+    driver = _FaultDriver(QualificationCaseKind.MISSING_EFFECT)
+    workflow, bundle = _two_write_fault_workflow(
+        tmp_path,
+        driver,
+    )
+    from openadapt_flow.ir import NativeSelectContract
+
+    native = NativeSelectContract(
+        value="species-17",
+        label="Dog",
+        options=[{"value": "species-17", "label": "Dog", "disabled": False}],
+    )
+    workflow.steps[0] = Step.model_validate(
+        {
+            **workflow.steps[0].model_dump(mode="json"),
+            "action": "select_option",
+            "text": "Dog",
+            "native_selection": native,
+        }
+    )
+    backend = _NativeSelectionObservedBackend()
+    assert workflow.qualification is not None
+    workflow.qualification.environment.environment_observer_id = (
+        BackendQualificationEnvironmentObserver(backend).observer_id
+    )
+    workflow.save(bundle)
+    workflow = Workflow.load(bundle)
+    run_id = f"prior-select-{mutation}"
+    run_dir = tmp_path / f"run-{run_id}"
+    report = Replayer(
+        backend,
+        vision=vision_module,
+        governed_authorization=_fault_authorization(
+            workflow,
+            QualificationCaseKind.MISSING_EFFECT,
+            driver,
+            run_id=run_id,
+            action_paths={"prepare": "gui", "submit": "gui"},
+            required_identity_step_ids=("prepare", "submit"),
+            fault_step_id="submit",
+        ),
+        qualification_fault_driver=driver,
+        effect_verifier=_StrongEffectVerifier(),
+        durable=True,
+        require_settled=True,
+        poll_interval_s=0.0,
+    ).run(
+        workflow,
+        bundle_dir=bundle,
+        run_dir=run_dir,
+        run_id=run_id,
+        execution_target_kind="web",
+    )
+    from openadapt_flow.action_evidence import action_evidence_error
+
+    assert action_evidence_error(workflow.steps[0], report.results[0]) is None
+    receipt = report.results[0].delivery_receipt
+    assert receipt is not None, report.model_dump_json()
+    assert receipt.operation == "guarded_dom_select"
+    assert report.results[0].actuation == "dom"
+    project = workflow.qualification
+    assert project is not None
+    valid_root = tmp_path / f"evidence-select-valid-{mutation}"
+    valid_case, valid_result = _fault_case_integrity_result(
+        workflow=workflow,
+        report=report,
+        evidence_root=valid_root,
+        run_dir=run_dir,
+    )
+    assert (
+        _case_run_report_integrity_error(
+            workflow=workflow,
+            project=project,
+            case=valid_case,
+            result=valid_result,
+            evidence_root=valid_root,
+        )
+        is None
+    )
+
+    changed = report.model_copy(deep=True)
+    changed.results[0].delivery_receipt = receipt.model_copy(update={mutation: value})
+    assert action_evidence_error(workflow.steps[0], changed.results[0]) is not None
+    changed_root = tmp_path / f"evidence-select-forged-{mutation}"
+    changed_case, changed_result = _fault_case_integrity_result(
+        workflow=workflow,
+        report=changed,
+        evidence_root=changed_root,
+        run_dir=run_dir,
+    )
+    error = _case_run_report_integrity_error(
+        workflow=workflow,
+        project=project,
+        case=changed_case,
+        result=changed_result,
+        evidence_root=changed_root,
+    )
+    assert error is not None
+    assert "prior action" in error[1]

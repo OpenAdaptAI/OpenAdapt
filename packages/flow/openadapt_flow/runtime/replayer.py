@@ -81,6 +81,7 @@ from openadapt_flow.backend import (
     GuardedKeyboardActionBackend,
     GuardedRemotePointerActionBackend,
     GuardedSelectOptionBackend,
+    NativeSelectBackend,
     PreparedPointerActuationBackend,
     RemoteActuationBackend,
     RemoteFrameContractBackend,
@@ -11353,6 +11354,22 @@ class Replayer:
 
         if step.action is not ActionKind.SELECT_OPTION:
             return None
+        if step.native_selection is not None:
+            try:
+                Step.model_validate(step.model_dump(mode="json"))
+            except Exception:
+                return f"Step '{step.id}' has an invalid native selection contract"
+            kind, _mode = self._active_surface_binding(workflow)
+            if (
+                kind not in (None, "web")
+                or isinstance(self.backend, RemoteActuationBackend)
+                or not isinstance(self.backend, NativeSelectBackend)
+            ):
+                return (
+                    f"Step '{step.id}' requires an exact native HTML selection "
+                    "capability on a browser surface; refusing input"
+                )
+            return None
         if step.selection_region is None or step.selection_commit_key is None:
             return (
                 f"Step '{step.id}' ({step.intent}) has an incomplete exact "
@@ -12186,7 +12203,8 @@ class Replayer:
         # is None and resolution uses the visual ladder unchanged.
         structural = (
             self.backend
-            if self.use_structural and hasattr(self.backend, "locate_structural")
+            if (self.use_structural or step.native_selection is not None)
+            and hasattr(self.backend, "locate_structural")
             else None
         )
         try:
@@ -12194,7 +12212,9 @@ class Replayer:
                 step.anchor,
                 screen_png,
                 self.vision,
-                self.grounder if allow_grounder else None,
+                self.grounder
+                if allow_grounder and step.native_selection is None
+                else None,
                 step.intent,
                 template_png=template_png,
                 viewport=_frame_viewport(screen_png),
@@ -12221,6 +12241,8 @@ class Replayer:
                 ),
             )
         resolution, matched_region = resolved
+        if step.native_selection is not None and resolution.rung != "structural":
+            return None, None, "Native selection requires exact structural resolution"
         resolution, matched_region = self._retarget_by_record_key(
             step, resolution, matched_region
         )
@@ -14013,6 +14035,46 @@ class Replayer:
                     f"Step '{step.id}' ({step.intent}) requires a drag, but "
                     "this backend does not implement it"
                 )
+            return None
+
+        if (
+            step.action is ActionKind.SELECT_OPTION
+            and step.native_selection is not None
+        ):
+            contract_error = self._selection_contract_error(step, workflow)
+            if contract_error is not None:
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                return contract_error
+            if (
+                resolution is None
+                or resolution.rung != "structural"
+                or resolution.structural_handle is None
+                or step.anchor is None
+                or step.anchor.structural is None
+            ):
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                return "Native selection requires the exact fresh structural target"
+            refusal = self._delivery_authorization_refusal(
+                workflow, params, step, result
+            )
+            if refusal is not None:
+                return refusal
+            self._require_qualification_environment_current()
+            native_select = cast(NativeSelectBackend, self.backend)
+            native_contract = step.native_selection
+            native_locator = step.anchor.structural
+            native_handle = resolution.structural_handle
+            result.delivery_receipt = self._deliver_backend_call(
+                result,
+                lambda: native_select.select_native_option_guarded(
+                    native_contract,
+                    locator=native_locator,
+                    handle=native_handle,
+                ),
+            )
+            result.actuation = "dom"
             return None
 
         if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
@@ -18046,6 +18108,34 @@ class Replayer:
         caller passes the one final frame used by all post-action checks.
         """
 
+        if step.native_selection is not None:
+            result.input_verified = False
+            resolution, _region, error = self._resolve_step(
+                step, after_png, bundle_dir, workflow, allow_grounder=False
+            )
+            if (
+                error is None
+                and resolution is not None
+                and resolution.rung == "structural"
+                and isinstance(self.backend, NativeSelectBackend)
+            ):
+                observed = self.backend.native_selected_option_at(*resolution.point)
+                contract = step.native_selection
+                if (
+                    isinstance(observed, dict)
+                    and observed.get("value") == contract.value
+                    and observed.get("label") == contract.label
+                    and observed.get("options")
+                    == [option.model_dump(mode="json") for option in contract.options]
+                ):
+                    result.input_verified = True
+                    return None
+            result.safety_halt = True
+            result.failure_category = "governed_refusal"
+            return (
+                f"Native selected option for step '{step.id}' could not be verified "
+                "on the same committed control; refusing continuation without retry"
+            )
         qualified_readback = step.selection_region
         qualified_target = step.anchor.region if step.anchor is not None else None
         if qualified_readback is None or qualified_target is None:

@@ -326,3 +326,166 @@ def test_dialog_records_nonrow_evidence_without_structured_identity(
     event = _read_events(rec.finish())[0]
     assert event.get("dialog_row") is expected
     assert "structured_identity" not in event
+
+
+class NativeSelectRecordingBackend(FakeBackend):
+    """Synthetic readback seam; no browser or selection input implementation."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.tokens: list[object] = []
+        self.finished: list[object] = []
+        self.cancelled: list[object] = []
+        self.evidence: dict | None = {
+            "selector": "#animal",
+            "frame_path": [],
+            "value": "dog",
+            "label": "Dog",
+            "options": [
+                {"value": "cat", "label": "Cat", "disabled": False},
+                {"value": "dog", "label": "Dog", "disabled": False},
+            ],
+        }
+        self.fail_action: str | None = None
+        self.same_control = True
+
+    def begin_native_select(self, *, x: int, y: int) -> object:
+        token = object()
+        self.tokens.append(token)
+        return token
+
+    def continue_native_select(self, token: object) -> bool:
+        return (
+            self.same_control and token in self.tokens and token not in self.cancelled
+        )
+
+    def finish_native_select(self, token: object) -> dict | None:
+        self.finished.append(token)
+        return self.evidence
+
+    def cancel_native_select(self, token: object) -> None:
+        self.cancelled.append(token)
+
+    def type_text(self, text: str) -> None:
+        if self.fail_action == "type":
+            raise RuntimeError("synthetic input failure")
+        super().type_text(text)
+
+    def press(self, key: str) -> None:
+        if self.fail_action == "key":
+            raise RuntimeError("synthetic input failure")
+        super().press(key)
+
+
+def test_recorder_native_selection_keeps_prefix_and_committed_evidence(
+    tmp_path: Path,
+) -> None:
+    backend = NativeSelectRecordingBackend()
+    rec = Recorder(backend, tmp_path, settle_interval_s=0)
+    rec.click(10, 20)
+    rec.type_text("d")
+    rec.press("Enter")
+    events = _read_events(rec.finish())
+    assert [event["kind"] for event in events] == ["click", "type", "key"]
+    assert events[1]["text"] == "d"
+    assert "native_selection" not in events[1]
+    evidence = events[2]["native_selection"]
+    assert evidence["source_click_index"] == 0
+    assert evidence["click_focus_only"] is True
+    assert evidence["source_type_index"] == 1
+    assert evidence["source_type_text"] == "d"
+    assert evidence["label"] == "Dog"
+    assert evidence["value"] == "dog"
+    assert evidence["options"] == backend.evidence["options"]
+    assert backend.finished == backend.tokens == backend.cancelled
+    assert backend.calls == [("click", 10, 20, False), ("type", "d"), ("key", "Enter")]
+
+
+@pytest.mark.parametrize(
+    "intervening", ["click", "scroll", "key", "observed", "switch", "finish"]
+)
+def test_recorder_cancels_native_selection_on_intervening_action(
+    tmp_path: Path, intervening: str
+) -> None:
+    backend = NativeSelectRecordingBackend()
+    rec = Recorder(backend, tmp_path, settle_interval_s=0, surface_kind="web")
+    rec.click(10, 20)
+    rec.type_text("d")
+    if intervening == "click":
+        rec.click(20, 30)
+    elif intervening == "scroll":
+        rec.scroll(0, 20)
+    elif intervening == "key":
+        rec.press("Tab")
+    elif intervening == "observed":
+        rec.record_observed(
+            {"kind": "key", "key": "Enter", "native_selection": backend.evidence},
+            before_png=backend.screenshot(),
+            after_png=backend.screenshot(),
+            structural_before={},
+        )
+    elif intervening == "switch":
+        rec.switch_surface("second", backend=FakeBackend(), kind="web")
+    else:
+        rec.finish()
+    rec.press("Enter")
+    events = _read_events(rec.finish())
+    assert all("native_selection" not in event for event in events)
+    assert backend.cancelled == backend.tokens
+    assert backend.finished == []
+
+
+@pytest.mark.parametrize("failure", ["type", "key"])
+def test_recorder_cancels_native_selection_on_input_failure(
+    tmp_path: Path, failure: str
+) -> None:
+    backend = NativeSelectRecordingBackend()
+    rec = Recorder(backend, tmp_path, settle_interval_s=0)
+    rec.click(10, 20)
+    if failure == "key":
+        rec.type_text("d")
+    backend.fail_action = failure
+    with pytest.raises(RuntimeError, match="synthetic input failure"):
+        if failure == "type":
+            rec.type_text("d")
+        else:
+            rec.press("Enter")
+    assert backend.cancelled == backend.tokens
+    backend.fail_action = None
+    rec.press("Enter")
+    assert all("native_selection" not in event for event in _read_events(rec.finish()))
+
+
+def test_recorder_native_selection_rejects_parameters_and_incomplete_readback(
+    tmp_path: Path,
+) -> None:
+    backend = NativeSelectRecordingBackend()
+    rec = Recorder(backend, tmp_path, settle_interval_s=0)
+    rec.type_text("d", param="animal")
+    rec.press("Enter")
+    assert backend.tokens == []
+    backend.evidence = {"selector": "#animal", "frame_path": [], "label": "Dog"}
+    rec.click(10, 20)
+    rec.type_text("d")
+    rec.press("Enter")
+    assert all("native_selection" not in event for event in _read_events(rec.finish()))
+    assert backend.tokens == backend.cancelled
+
+
+@pytest.mark.parametrize("phase", ["after_click", "before_type", "without_click"])
+def test_recorder_native_selection_requires_retained_preclick_target(
+    tmp_path: Path, phase: str
+) -> None:
+    backend = NativeSelectRecordingBackend()
+    rec = Recorder(backend, tmp_path, settle_interval_s=0)
+    if phase == "after_click":
+        backend.same_control = False
+    if phase != "without_click":
+        rec.click(10, 20)
+    if phase == "before_type":
+        backend.same_control = False
+    rec.type_text("d")
+    rec.press("Enter")
+    assert all("native_selection" not in event for event in _read_events(rec.finish()))
+    assert backend.finished == []
+    assert backend.cancelled == backend.tokens

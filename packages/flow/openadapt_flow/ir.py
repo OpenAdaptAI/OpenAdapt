@@ -2008,6 +2008,45 @@ class HoverEvidence(BaseModel):
     dwell_ms: int = Field(default=800, ge=0, le=5000)
 
 
+class NativeSelectOption(BaseModel):
+    """One option in a bounded, observed native HTML select census."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    value: str = Field(max_length=512, strict=True)
+    label: str = Field(max_length=512, strict=True)
+    disabled: bool = Field(strict=True)
+
+
+class NativeSelectContract(BaseModel):
+    """Exact semantic selection, distinct from remote text-and-key input."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: Literal["html_single_select"] = "html_single_select"
+    value: str = Field(max_length=512, strict=True)
+    label: str = Field(min_length=1, max_length=512, strict=True)
+    options: tuple[NativeSelectOption, ...] = Field(min_length=1, max_length=2048)
+
+    @model_validator(mode="after")
+    def _unique_option(self) -> "NativeSelectContract":
+        chosen = [option for option in self.options if option.value == self.value]
+        normalized = " ".join(self.label.split()).casefold()
+        if (
+            not normalized
+            or len(chosen) != 1
+            or chosen[0].label != self.label
+            or chosen[0].disabled
+            or sum(
+                " ".join(option.label.split()).casefold() == normalized
+                for option in self.options
+            )
+            != 1
+        ):
+            raise ValueError("native selection needs one enabled, unambiguous option")
+        return self
+
+
 class Step(BaseModel):
     id: str
     intent: str = Field(description="Human-readable purpose of the step")
@@ -2042,6 +2081,7 @@ class Step(BaseModel):
             " compiler.annotate.FieldLabelAnnotator)."
         ),
     )
+    native_selection: Optional[NativeSelectContract] = None
     selection_commit_key: Optional[Literal["Enter", "Tab"]] = Field(
         default=None,
         description=(
@@ -2244,6 +2284,8 @@ class Step(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.target_param is None:
             data.pop("target_param", None)
+        if self.native_selection is None:
+            data.pop("native_selection", None)
         return data
 
     @model_validator(mode="after")
@@ -2272,6 +2314,22 @@ class Step(BaseModel):
                 raise ValueError("HOTKEY steps require a key and at least one modifier")
         elif self.modifiers:
             raise ValueError("modifiers are valid only for HOTKEY steps")
+        if self.native_selection is not None:
+            if (
+                self.action is not ActionKind.SELECT_OPTION
+                or self.selection_commit_key is not None
+                or self.selection_region is not None
+                or self.secret
+                or self.param is not None
+                or self.text != self.native_selection.label
+                or self.anchor is None
+                or self.anchor.structural is None
+                or not self.anchor.structural.selector
+            ):
+                raise ValueError(
+                    "native selection requires a literal SELECT_OPTION with an exact "
+                    "structural anchor and no remote selection contract"
+                )
         if (self.selection_commit_key is None) != (self.selection_region is None):
             raise ValueError(
                 "selection_commit_key and selection_region must be set together"
@@ -2288,9 +2346,9 @@ class Step(BaseModel):
                     "option-selection contracts require the demonstrated field "
                     "anchor for fresh pre-commit re-resolution"
                 )
-        elif self.action is ActionKind.SELECT_OPTION:
+        elif self.action is ActionKind.SELECT_OPTION and self.native_selection is None:
             raise ValueError(
-                "SELECT_OPTION requires selection_commit_key and selection_region"
+                "SELECT_OPTION requires a native contract or selection_commit_key and selection_region"
             )
         if self.submit_binding is not None:
             # The binding stands in for a record identity on the visual path
@@ -3915,8 +3973,8 @@ class ActionDeliveryReceipt(BaseModel):
         default=None,
         pattern=r"^[0-9a-f]{64}$",
         description=(
-            "SELECT_OPTION only: SHA-256 of the exact option text dispatched "
-            "without retaining the possibly sensitive value."
+            "SELECT_OPTION only: SHA-256 of the exact native option value, "
+            "or the remote type-ahead text dispatched, without retaining it."
         ),
     )
     selection_commit_key: Optional[Literal["Enter", "Tab"]] = Field(

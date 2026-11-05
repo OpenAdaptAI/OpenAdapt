@@ -188,6 +188,10 @@ def _delivery_receipt_error(
     if receipt is None:
         return "GUI action lacks its exact delivery receipt"
     allowed = _DELIVERY_OPERATIONS.get((result.actuation, step.action), set())
+    if step.action is ActionKind.SELECT_OPTION and step.native_selection is not None:
+        allowed = (
+            {("guarded_dom_select", False)} if result.actuation == "dom" else set()
+        )
     if (receipt.operation, receipt.native) not in allowed:
         return "delivery receipt operation conflicts with the compiled action"
 
@@ -231,12 +235,29 @@ def _delivery_receipt_error(
         return "non-drag delivery receipt contains a destination fingerprint"
 
     if step.action is ActionKind.SELECT_OPTION:
-        selected_value = params.get(step.param) if step.param is not None else step.text
-        selected = (
-            runtime_param_text(selected_value) if selected_value is not None else None
-        )
-        if selected is None or step.selection_commit_key is None:
-            return "selection delivery receipt lacks its compiled input contract"
+        selected: Optional[str]
+        if step.native_selection is not None:
+            if (
+                step.param is not None
+                or step.selection_commit_key is not None
+                or step.selection_region is not None
+                or step.text != step.native_selection.label
+            ):
+                return "native selection delivery receipt has a mixed input contract"
+            if result.resolution is None or result.resolution.rung != "structural":
+                return "native selection delivery receipt lacks structural target proof"
+            selected = step.native_selection.value
+        else:
+            selected_value = (
+                params.get(step.param) if step.param is not None else step.text
+            )
+            selected = (
+                runtime_param_text(selected_value)
+                if selected_value is not None
+                else None
+            )
+            if selected is None or step.selection_commit_key is None:
+                return "selection delivery receipt lacks its compiled input contract"
         if (
             receipt.selection_value_sha256
             != hashlib.sha256(selected.encode("utf-8")).hexdigest()

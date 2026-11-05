@@ -395,3 +395,82 @@ class TestNewTab:
         )
         assert report.success is True, describe(report, state)
         assert report.results[0].postconditions_ok is True
+
+
+def test_native_selection_preserves_distinct_submitted_value(_browser, tmp_path):
+    """Real record/compile/replay must commit the option's value, not its label."""
+    from urllib.parse import parse_qs
+
+    from openadapt_flow.ir import ActionKind, Workflow
+    from openadapt_flow.runtime import Replayer
+
+    url = "https://native-selection.example/form"
+    html = """<!doctype html><html><body>
+      <form method="post" action="/save">
+        <label for="species">Species</label>
+        <select id="species" name="species">
+          <option value="">Choose</option>
+          <option value="record-code-17">Dog</option>
+          <option value="record-code-29">Dogwood</option>
+        </select>
+        <button id="submit" type="submit">Save</button>
+      </form><p id="status">Ready</p>
+      <script>
+        document.querySelector('#species').addEventListener('change', e => {
+          document.querySelector('#status').textContent =
+            'Chosen ' + e.target.selectedOptions[0].label;
+        });
+      </script></body></html>"""
+    rec_dir, bundle_dir = tmp_path / "rec", tmp_path / "bundle"
+    page = _browser.new_page(viewport=VIEWPORT)
+    try:
+        page.route(
+            "https://native-selection.example/**",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="text/html",
+                body=html,
+            ),
+        )
+        page.goto(url)
+        recorder = Recorder(PlaywrightBackend(page), rec_dir, app_url=url)
+        recorder.click(*center(page, "#species"))
+        recorder.type_text("d")
+        recorder.press("Enter")
+        recorder.finish()
+        assert page.locator("#species").input_value() == "record-code-17"
+    finally:
+        page.close()
+    workflow = compile_recording(rec_dir, bundle_dir, name="native-value")
+    choices = [
+        step for step in workflow.steps if step.action is ActionKind.SELECT_OPTION
+    ]
+    assert len(choices) == 1
+    assert choices[0].native_selection.value == "record-code-17"
+    assert choices[0].native_selection.label == "Dog"
+    payloads = []
+    page = _browser.new_page(viewport=VIEWPORT)
+    try:
+
+        def serve(route):
+            if route.request.method == "POST":
+                payloads.append(parse_qs(route.request.post_data or ""))
+                route.fulfill(status=200, content_type="text/html", body="Saved")
+            else:
+                route.fulfill(status=200, content_type="text/html", body=html)
+
+        page.route("https://native-selection.example/**", serve)
+        page.goto(url)
+        report = Replayer(PlaywrightBackend(page), use_structural=False).run(
+            Workflow.load(bundle_dir),
+            bundle_dir=bundle_dir,
+            run_dir=tmp_path / "run",
+        )
+        assert report.success, report.model_dump_json()
+        assert page.locator("#species").input_value() == "record-code-17"
+        assert page.locator("#status").text_content() == "Chosen Dog"
+        page.locator("#submit").click()
+        page.wait_for_url("**/save")
+        assert payloads == [{"species": ["record-code-17"]}]
+    finally:
+        page.close()
