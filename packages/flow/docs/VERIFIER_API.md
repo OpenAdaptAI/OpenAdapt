@@ -512,9 +512,9 @@ not enter the receipt.
 `quiet_s` and its `setup_evidence_sha256`. Its `search` is the pinned
 schema-key identifying contract. The verifier uses the same search at write
 time and at the late read. The private `RecheckState.target_ids` stays in
-memory. After a restart, `RecheckState.load(..., target_ids=...)` requires
-locators from the caller's private run state that resolve the exact issued
-identity commitments.
+memory. After a restart, load the saved state with `RecheckState.load(...)`
+and set its `target_ids` from the caller's private run state. Rechecking still
+requires those locators to resolve the exact issued identity commitments.
 
 The receipt names wider intermediate history outside those records and
 search observations as `UNKNOWN`. Available per-record history must retain

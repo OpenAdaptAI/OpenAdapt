@@ -417,9 +417,8 @@ def test_persisted_state_and_receipt_never_contain_locators_or_values(
     assert path.stat().st_mode & 0o777 == 0o600
     missing = api.RecheckState.load(path, params=PARAMS)
     assert late(cfg, missing, ledger).outcome == "UNCERTAIN"
-    correct = api.RecheckState.load(
-        path, params=PARAMS, target_ids=[f"Basic/{RECORD_ID}"]
-    )
+    correct = api.RecheckState.load(path, params=PARAMS)
+    correct.target_ids = (f"Basic/{RECORD_ID}",)
     loaded_result = late(cfg, correct, ledger)
     assert loaded_result.outcome == "UNCERTAIN"
     assert not loaded_result.verified and not loaded_result.final

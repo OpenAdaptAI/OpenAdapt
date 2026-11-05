@@ -266,8 +266,8 @@ def test_saved_state_does_not_restore_clock_even_in_live_process(
     loaded = api.RecheckState.load(
         state.save(tmp_path / "saved-state.json"),
         params=params,
-        target_ids=state.target_ids,
     )
+    loaded.target_ids = state.target_ids
     assert loaded._targeted_read_clock is None
     monkeypatch.setattr(api, "seconds_until", lambda due: 0)
     result = api.recheck(cfg, loaded, params=params, actor=ACTOR, ledger=ledger)

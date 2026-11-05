@@ -1477,6 +1477,9 @@ def judge_run_frame(
             return profile_excuse(name, before, after, fields)
 
     if isinstance(verifier, EnsureEffectVerifier) and not database_only:
+        # The native Ensure collector validates FHIR resource IDs. Match its
+        # declared IDs against that same identity, not a whole-row digest.
+        identities = {**(identities or {}), "": "id"}
         declared_rows[""] = verifier.declared_ids()
     verdict = judge_frame(
         spec,

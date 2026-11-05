@@ -837,7 +837,6 @@ class RecheckState:
         path: str | Path,
         *,
         params: Optional[Mapping[str, object]] = None,
-        target_ids: Sequence[str] = (),
     ) -> "RecheckState":
         """Read a state :meth:`save` wrote. Raises :class:`VerifierError`
         when it can't be read as one; :func:`recheck` checks the rest."""
@@ -850,7 +849,7 @@ class RecheckState:
         problem = state_problem(payload)
         if problem is not None:
             raise VerifierError(problem)
-        return cls(payload, params=params, path=source, target_ids=tuple(target_ids))
+        return cls(payload, params=params, path=source)
 
 
 class RecheckNotDue(VerifierError):
@@ -966,6 +965,30 @@ def _resolve_ledger(ledger: Any) -> Optional[Ledger]:
 
 
 def begin_write(
+    contract: Contract,
+    params: Mapping[str, Any],
+    *,
+    actor: Actor,
+    ledger: Any = _NO_LEDGER,
+    write_key: Optional[str] = None,
+    authorization_ref: str = "",
+    workdir: Union[str, Path, None] = None,
+    declared_by: DeclaredBy = "agent",
+) -> PendingWrite:
+    """Consult the ledger and independently capture the state before a write."""
+    return _begin_write(
+        contract,
+        params,
+        actor=actor,
+        ledger=ledger,
+        write_key=write_key,
+        authorization_ref=authorization_ref,
+        workdir=workdir,
+        declared_by=declared_by,
+    )
+
+
+def _begin_write(
     contract: Contract,
     params: Mapping[str, Any],
     *,
@@ -1430,6 +1453,34 @@ def verify_write(
     actor: Optional[Actor] = None,
     authorization_ref: str = "verify_write",
     write_receipt: bool = False,
+) -> WriteResult:
+    """Read the system of record and judge the write without resending it."""
+    return _verify_write(
+        pending,
+        before,
+        write_attempted=write_attempted,
+        source=source,
+        seal=seal,
+        delivered=delivered,
+        params=params,
+        actor=actor,
+        authorization_ref=authorization_ref,
+        write_receipt=write_receipt,
+    )
+
+
+def _verify_write(
+    pending: Union[PendingWrite, Contract],
+    before: Optional["Snapshot"] = None,
+    *,
+    write_attempted: bool = True,
+    source: Optional[Source] = None,
+    seal: bool = True,
+    delivered: bool = True,
+    params: Optional[Mapping[str, object]] = None,
+    actor: Optional[Actor] = None,
+    authorization_ref: str = "verify_write",
+    write_receipt: bool = False,
     _ensure_context: Any = None,
 ) -> WriteResult:
     """Read the system of record now and judge the write against the
@@ -1850,7 +1901,7 @@ def _judge(
         .get("purpose")
         == "read_only_reconciliation",
         recheck_due_at=receipt.get("recheck_due_at")
-        or (state.due_at if state is not None else None),
+        or (state.due_at or None if state is not None else None),
         **base,
     )
 
@@ -2039,7 +2090,9 @@ def _reasons(evidence: Mapping[str, Any], receipt_outcome: str) -> list[str]:
     for check in ((evidence.get("frame") or {}).get("hard_invariants") or {}).get(
         "checks", []
     ):
-        if check.get("status") in {"refuted", "not_checked"}:
+        if check.get("status") == "refuted" or (
+            check.get("status") == "not_checked" and check.get("required", True)
+        ):
             out.append(f"hard_invariant:{check.get('name')}:{check.get('reason')}")
     for row in (evidence.get("readback") or {}).get("effects") or []:
         if not isinstance(row, Mapping) or str(row.get("verdict")) == "CONFIRMED":

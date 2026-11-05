@@ -695,6 +695,9 @@ class Shadow:
                 obligation.update(
                     reason="recheck_due_time_unreadable", executable=False
                 )
+                ep.late_verdict = UNCERTAIN
+                ep.late_reasons = ["the recheck due time can't be read"]
+                return
         # Unknown/no-state is still an owed obligation. A bounded scheduled
         # attempt records its refusal; it never guesses a target or polls a row.
         if self.recheck_s is not None:

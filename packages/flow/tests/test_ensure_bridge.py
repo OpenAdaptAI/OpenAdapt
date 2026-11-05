@@ -75,7 +75,7 @@ def test_serialized_or_copied_snapshot_loses_authority(
     baseline = Baseline(T0, {})
     baseline._pending_authority = PrivateMarker()
     restored = copy_data(baseline)
-    monkeypatch.setattr(api, "verify_write", forbidden)
+    monkeypatch.setattr(api, "_verify_write", forbidden)
     result = verify_ensure(ensure(), PARAMS, restored)
     assert result.outcome == "needs_review" and result.record_id is None
     assert result.reasons == ["ensure_baseline_authority_missing"]
@@ -83,7 +83,7 @@ def test_serialized_or_copied_snapshot_loses_authority(
 
 
 def test_handbuilt_baseline_never_authorizes_readback(monkeypatch: Any) -> None:
-    monkeypatch.setattr(api, "verify_write", forbidden)
+    monkeypatch.setattr(api, "_verify_write", forbidden)
     result = verify_ensure(ensure(), PARAMS, Baseline(T0, {}))
     assert result.outcome == "needs_review"
     assert result.evidence["invariants_unknown"] is True
@@ -105,7 +105,7 @@ def test_live_baseline_binding_refuses_changes_before_canonical_read(
     )
     context = EnsureContext()
     baseline._pending_authority = _EnsureAuthority(baseline, pending, context)
-    monkeypatch.setattr(api, "verify_write", forbidden)
+    monkeypatch.setattr(api, "_verify_write", forbidden)
     params, reader, declared = dict(PARAMS), None, ()
     if mutation == "contract":
         contract = ensure(closed=True)
@@ -278,7 +278,7 @@ def test_direct_ensure_uses_canonical_ledger_default_unless_explicitly_disabled(
         options["_ensure_context"].baseline = Baseline(T0, {})
         return SimpleNamespace(contract=contract, params=dict(params))
 
-    monkeypatch.setattr(api, "begin_write", begin)
+    monkeypatch.setattr(api, "_begin_write", begin)
     begin_ensure(ensure(), PARAMS, **({"ledger": None} if explicit_none else {}))
     assert ("ledger" in seen) is explicit_none
     if explicit_none:

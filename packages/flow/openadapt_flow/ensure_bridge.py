@@ -144,11 +144,11 @@ def begin_ensure(
     workdir: Optional[Path] = None,
     targeted: Any = None,
 ) -> Baseline:
-    from openadapt_flow.verifier import Actor, Contract, begin_write
+    from openadapt_flow.verifier import Actor, Contract, _begin_write
 
     context = EnsureContext(reader)
     bound = Contract.from_ensure(contract, params, targeted=targeted)
-    pending = begin_write(
+    pending = _begin_write(
         bound,
         params,
         actor=actor or Actor("agent", "ensure-record"),
@@ -195,7 +195,7 @@ def finish_ensure(
     sleep: Callable[[float], None] = time.sleep,
     declared: Collection[str] = (),
 ) -> EnsureResult:
-    from openadapt_flow.verifier import Contract, Outcome, verify_write
+    from openadapt_flow.verifier import Contract, Outcome, _verify_write
 
     authority = getattr(baseline, "_pending_authority", None)
     if not isinstance(authority, _EnsureAuthority) or authority.owner is not baseline:
@@ -219,7 +219,7 @@ def finish_ensure(
     ):
         return _invalidate(authority, "ensure_baseline_binding_invalid")
     authority.context.sleep = sleep
-    result = verify_write(pending, seal=False, _ensure_context=authority.context)
+    result = _verify_write(pending, seal=False, _ensure_context=authority.context)
     authority.result = result
     observation = authority.context.observation
     original = (
