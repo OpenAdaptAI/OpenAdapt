@@ -2,7 +2,7 @@
 
 One run of `run.py run` on the pre-registered fixture set
 (`fixtures.json`, sha256 `f75c31b6…3d933278d`, committed before any run), with
-the specs in this folder and the reconciler at `9e55728fa`. The design is in
+the specs in this folder and the reconciler at `5e3242460`. The design is in
 [`docs/RECONCILE.md`](../../docs/RECONCILE.md).
 
 ## Systems
@@ -31,7 +31,7 @@ hours after seeding.
 | Clean and look-alike units `CONFIRMED` | 17 of 17 |
 | Units still inside their deadline reported `UNCERTAIN` | 3 of 3 |
 | `REFUTED` breaks on a clean or in-flight unit | 0 |
-| Median time to reconcile one unit | 0.024 s |
+| Median time to reconcile one unit | 0.026 s |
 
 The run also reported breaks that the fixture set doesn't list:
 
