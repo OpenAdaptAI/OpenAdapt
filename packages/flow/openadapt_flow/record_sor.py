@@ -424,11 +424,7 @@ def _proposed_duplicate_key(
             "no "
             f"{DEFAULT_IDEMPOTENCY_KEY_FIELD!r} field on the new record; "
             "proposed composite_key from parameter-bound match fields"
-            + (
-                " plus record identity fields"
-                if record_field_names
-                else ""
-            )
+            + (" plus record identity fields" if record_field_names else "")
             + " for a person to confirm"
         )
         return None, composite, notes

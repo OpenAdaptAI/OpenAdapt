@@ -152,9 +152,7 @@ def test_composite_key_includes_named_record_identity_fields():
         [],
         [{"id": 7, "patient_id": "p1", "note": NOTE, "key": None}],
     )
-    proposal = propose_effects(
-        diff, {"note": NOTE}, record_fields={"patient_id": "p1"}
-    )
+    proposal = propose_effects(diff, {"note": NOTE}, record_fields={"patient_id": "p1"})
     [effect] = proposal.effects
     assert effect.idempotency_key is None
     assert effect.composite_key == {
@@ -170,9 +168,7 @@ def test_single_field_key_becomes_idempotency_key_not_composite():
         [],
         [{"id": 7, "patient_id": "p1", "note": NOTE, "key": "run-abc"}],
     )
-    proposal = propose_effects(
-        diff, {"note": NOTE}, record_fields={"patient_id": "p1"}
-    )
+    proposal = propose_effects(diff, {"note": NOTE}, record_fields={"patient_id": "p1"})
     [effect] = proposal.effects
     assert effect.idempotency_key == ValueExpr(literal="run-abc")
     assert effect.composite_key == {}
@@ -185,9 +181,7 @@ def test_no_key_and_no_param_bound_fields_notes_missing_composite():
     [effect] = proposal.effects
     assert effect.idempotency_key is None
     assert effect.composite_key == {}
-    assert any(
-        "clinical-write policy will refuse" in n for n in proposal.not_proposed
-    )
+    assert any("clinical-write policy will refuse" in n for n in proposal.not_proposed)
 
 
 def test_changed_fields_become_field_equals_on_that_record():
