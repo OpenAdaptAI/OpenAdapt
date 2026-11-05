@@ -110,9 +110,7 @@ def check_search_outcome(outcome: Mapping[str, Any], *, has_matches: bool) -> No
             and issue.get("diagnostics") is None
         ):
             continue
-        if code in ("informational", "not-found", "processing") and isinstance(
-            details, dict
-        ):
+        if code == "informational" and isinstance(details, dict):
             coding = details.get("coding")
             no_match = isinstance(coding, list) and bool(coding) and all(
                 isinstance(item, dict)

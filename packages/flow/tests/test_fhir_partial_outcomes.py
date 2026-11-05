@@ -146,3 +146,13 @@ def test_outcome_mode_cannot_hide_another_resource_type(kind):
     body["entry"][0]["resource"]["resourceType"] = "Patient"
     records, _ = read(kind, [body])
     assert records is None
+
+
+@pytest.mark.parametrize("kind", ["ensure", "effect"])
+@pytest.mark.parametrize("severity", ["warning", "information"])
+@pytest.mark.parametrize("code", ["processing", "not-found"])
+def test_no_match_detail_cannot_override_a_noninformational_issue(kind, severity, code):
+    issue = no_match(severity)
+    issue["code"] = code
+    records, _ = read(kind, [page(issue)])
+    assert records is None
