@@ -406,9 +406,8 @@ def centered_in(region: Region, scope: Region) -> bool:
 
     Scopes the identity band to the active dialog: a line belongs to the
     dialog when its center is inside the dialog's box, so a form label beside
-    the dialog (OpenEMR's "County:" left of "Confirm Create New Patient") is
-    not identity evidence, while a line the dialog's edge only clips is judged
-    by where most of it sits.
+    the dialog is not identity evidence. A line the dialog's edge only clips
+    is judged by where most of it sits.
     """
     x, y, w, h = region
     sx, sy, sw, sh = scope

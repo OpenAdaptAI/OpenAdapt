@@ -15979,7 +15979,7 @@ class Replayer:
         assert anchor is not None
         # The live dialog box this check reads in, for the extra looks it may
         # take on fresh frames (see _look_again). None outside a dialog.
-        self._identity_dialog_box: Optional[Region] = None
+        self._identity_dialog_box = None
         unscoped_png = before_png
         if anchor.dialog_region is not None:
             # The target was recorded inside a dialog and its identity band

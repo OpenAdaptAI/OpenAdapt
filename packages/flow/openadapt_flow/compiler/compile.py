@@ -2512,9 +2512,8 @@ def _compile_recording(
             # 160x64 template — see runtime.identity). Verified against the
             # live band before every click at replay time.
             # A target inside a dialog: read its identity band on the frame
-            # with everything outside the dialog blanked, so a label of the
-            # page behind it (OpenEMR's "County:" beside "Confirm Create New
-            # Patient") is not frozen into the identity (#1347).
+            # with everything outside the dialog blanked, so labels on the
+            # page behind it are not frozen into the identity (#1347).
             dialog_region = _event_dialog_region(
                 event, (frame.shape[1], frame.shape[0])
             )
