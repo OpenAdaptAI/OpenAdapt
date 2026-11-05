@@ -250,6 +250,7 @@ class RunService:
         allow_run: bool,
         require_all_inputs: bool = True,
         repair_desk: Any = None,
+        intake_provenance: Optional[dict[str, Any]] = None,
     ) -> None:
         self.repair_desk = repair_desk
         self.store = store
@@ -257,6 +258,10 @@ class RunService:
         self.mode = mode
         self.allow_run = allow_run
         self.require_all_inputs = require_all_inputs
+        #: Shared with AgentBridge: catalog/legacy name -> ProvenanceFile.
+        self.intake_provenance: dict[str, Any] = (
+            intake_provenance if intake_provenance is not None else {}
+        )
         self._active: dict[str, threading.Event] = {}
         self._lock = threading.Lock()
         # Reserving a request and marking its run active happen together, so a
@@ -298,6 +303,56 @@ class RunService:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return float(default)
         return float(min(max(value, 0), MAX_WAIT_SECONDS))
+
+    # -- intake provenance gate (#1890) ----------------------------------------
+
+    def _intake_param_gate(
+        self, entry: CatalogEntry, inputs: Mapping[str, Any]
+    ) -> Optional[str]:
+        """Return a refusal reason when intake-bound params disagree.
+
+        Uses operator-registered provenance only. Never reads provenance from
+        the caller's inputs.
+        """
+
+        info = entry.info
+        if info is None:
+            return None
+        from openadapt_flow.intake.param_gate import (
+            check_tool_params,
+            requires_intake_provenance,
+        )
+        from openadapt_flow.ir import ParamKind, ParamSpec
+
+        # Prefer live param_specs from the bundle; fall back to param_types.
+        specs: dict[str, Any] = {}
+        try:
+            from openadapt_flow.ir import Workflow
+
+            wf = Workflow.load(info.bundle_dir)
+            specs = dict(wf.param_specs or {})
+        except Exception:  # noqa: BLE001 - use discovered types
+            for name, meta in (getattr(info, "param_types", None) or {}).items():
+                kind = str(meta.get("type") or "string")
+                try:
+                    param_kind = ParamKind(kind)
+                except ValueError:
+                    param_kind = ParamKind.STRING
+                specs[name] = ParamSpec(
+                    name=name,
+                    type=param_kind,
+                    choices=list(meta.get("choices") or []),
+                    intake_field=meta.get("intake_field"),
+                )
+        if not requires_intake_provenance(specs):
+            return None
+        provenance = self.intake_provenance.get(entry.name)
+        if provenance is None and entry.legacy_id:
+            provenance = self.intake_provenance.get(entry.legacy_id)
+        result = check_tool_params(inputs, provenance, specs)
+        if result.ok:
+            return None
+        return result.reason
 
     # -- run_workflow ----------------------------------------------------------
 
@@ -347,6 +402,14 @@ class RunService:
                 request_id=request_id,
                 workflow=entry.name,
                 invalid_inputs=problems,
+            )
+        intake_refusal = self._intake_param_gate(entry, inputs)
+        if intake_refusal is not None:
+            return self._refuse(
+                "invalid_input",
+                request_id=request_id,
+                workflow=entry.name,
+                invalid_inputs=[{"input": "(intake)", "problem": intake_refusal}],
             )
         event = threading.Event()
         with self._begin_lock:

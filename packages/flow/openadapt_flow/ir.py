@@ -1179,6 +1179,11 @@ class ParamSpec(BaseModel):
     required, and enum choices. Additive: ``Workflow.param_specs`` lives
     ALONGSIDE the frozen ``Workflow.params`` dict; a bundle with an empty
     ``param_specs`` behaves exactly as before.
+
+    ``intake_field`` (optional) names the intake document field this tool
+    parameter may come from. When set, the MCP/runtime gate refuses a call
+    whose value does not match the trusted intake provenance for that field
+    (#1890). Unset means the parameter is not intake-bound.
     """
 
     name: str
@@ -1192,6 +1197,23 @@ class ParamSpec(BaseModel):
     choices: list[str] = Field(
         default_factory=list, description="Allowed values for an enum param."
     )
+    intake_field: Optional[str] = Field(
+        default=None,
+        description=(
+            "Intake field name this parameter may be filled from. When set, "
+            "a taught-tool call must match the registered intake provenance "
+            "for that field, or it is refused."
+        ),
+    )
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Omit unset ``intake_field`` so existing bundle digests stay stable."""
+
+        data: dict[str, Any] = handler(self)
+        if self.intake_field is None:
+            data.pop("intake_field", None)
+        return data
 
 
 class PredicateKind(str, Enum):

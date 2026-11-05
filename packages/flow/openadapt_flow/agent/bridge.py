@@ -241,6 +241,9 @@ class AgentBridge:
         self._entries_by_id = {
             entry.legacy_id: entry for entry in self.catalog.values() if entry.legacy_id
         }
+        #: Operator-registered intake provenance per catalog/legacy workflow
+        #: name. Never accepted from tool arguments (#1890).
+        self.intake_provenance: dict[str, Any] = {}
 
     def add_catalog_entry(self, entry: CatalogEntry) -> None:
         """Add a workflow while the server runs (a program taught over MCP).
@@ -266,6 +269,7 @@ class AgentBridge:
                 allow_run=self.allow_run,
                 require_all_inputs=not self.allow_recorded_defaults,
                 repair_desk=self.repair_desk,
+                intake_provenance=self.intake_provenance,
             )
         return self._service
 
@@ -979,7 +983,79 @@ class AgentBridge:
         payload.pop("workflow_id", None)
         return payload
 
+    def register_intake_provenance(self, workflow: str, path: Path | str) -> None:
+        """Attach operator-trusted intake provenance for a taught workflow.
+
+        The path is the ``*.provenance.json`` written by ``openadapt-flow
+        intake``. Tool callers cannot supply or replace this file through
+        arguments; only this registration is consulted (#1890).
+        """
+
+        from openadapt_flow.provenance import load_provenance
+
+        if workflow not in self.catalog and workflow not in self.workflows:
+            raise BridgeError("unknown workflow for intake provenance")
+        self.intake_provenance[workflow] = load_provenance(path)
+        # Same object is shared with RunService once constructed.
+        if self._service is not None:
+            self._service.intake_provenance = self.intake_provenance
+
+    def _param_specs_for(self, info: WorkflowInfo) -> dict[str, Any]:
+        """Load ``param_specs`` from the bundle, or rebuild from ``param_types``."""
+
+        try:
+            from openadapt_flow.ir import ParamKind, ParamSpec, Workflow
+
+            wf = Workflow.load(info.bundle_dir)
+            return dict(wf.param_specs or {})
+        except Exception:  # noqa: BLE001 - fall back to discovered types
+            from openadapt_flow.ir import ParamKind, ParamSpec
+
+            specs: dict[str, Any] = {}
+            for name, meta in (info.param_types or {}).items():
+                kind = str(meta.get("type") or "string")
+                try:
+                    param_kind = ParamKind(kind)
+                except ValueError:
+                    param_kind = ParamKind.STRING
+                specs[name] = ParamSpec(
+                    name=name,
+                    type=param_kind,
+                    choices=list(meta.get("choices") or []),
+                    intake_field=meta.get("intake_field"),
+                )
+            return specs
+
+    def _gate_intake_params(
+        self, workflow_key: str, info: WorkflowInfo, params: dict[str, str]
+    ) -> None:
+        """Refuse taught-tool params that disagree with intake provenance."""
+
+        from openadapt_flow.intake.param_gate import (
+            IntakeParamGateRefusal,
+            check_tool_params,
+            requires_intake_provenance,
+        )
+
+        specs = self._param_specs_for(info)
+        if not requires_intake_provenance(specs):
+            return
+        provenance = self.intake_provenance.get(workflow_key)
+        if provenance is None:
+            # Try the public catalog name for this legacy id.
+            for name, entry in self.catalog.items():
+                if entry.legacy_id == workflow_key or name == workflow_key:
+                    provenance = self.intake_provenance.get(name)
+                    if provenance is not None:
+                        break
+        result = check_tool_params(params, provenance, specs)
+        try:
+            result.raise_if_refused()
+        except IntakeParamGateRefusal as exc:
+            raise BridgeError(exc.reason) from exc
+
     def _run(self, workflow_id: str, arguments: dict) -> dict:
+
         info = self._require_workflow(workflow_id)
         if not self.allow_run:
             raise BridgeError(
@@ -1007,6 +1083,7 @@ class AgentBridge:
                 "arguments do not match the declared workflow parameter schema"
             )
         params = dict(arguments)
+        self._gate_intake_params(workflow_id, info, params)
         outcome = self.runner.run(
             workflow=workflow_id,
             bundle_dir=info.bundle_dir,
