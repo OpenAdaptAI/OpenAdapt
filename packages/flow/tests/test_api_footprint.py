@@ -30,12 +30,12 @@ def _save(n: int, tag: str, *, audit: bool = True, agent: str = "Chrome") -> dic
     return diff_dumps(before, after)
 
 
-def test_ids_and_times_vary_between_gui_saves_so_they_are_server_owned():
+def test_varying_insert_ids_and_times_do_not_prove_server_ownership():
     gui = [_save(1, "g1"), _save(2, "g2")]
     api = [_save(3, "a1"), _save(4, "a2")]
     v = footprint_verdict(gui, api, ["g1", "g2"], ["a1", "a2"])
-    assert v["equivalent"], v["differences"]
-    assert "ticket.id" in v["server_owned"] and "ticket.created" in v["server_owned"]
+    assert not v["equivalent"]
+    assert v["server_owned"] == []
     assert "ticket.summary" not in v["server_owned"]
 
 
@@ -69,3 +69,57 @@ def test_admission_refuses_an_api_step_with_another_footprint():
             admitted_by="a person",
             footprint={"equivalent": False, "differences": ["audit added 1 row"]},
         )
+
+
+def _change(row_id, before, after):
+    return diff_dumps(
+        {"collateral": [{"id": row_id, "counter": before, "status": "old"}]},
+        {"collateral": [{"id": row_id, "counter": after, "status": "saved"}]},
+    )
+
+
+def test_unchanged_identity_of_a_changed_row_is_required():
+    gui = [_change(17, n, n) for n in (100, 101, 102)]
+    api = [_change(29, n, n) for n in (100, 101, 102)]
+    verdict = footprint_verdict(gui, api, ["g"] * 3, ["a"] * 3)
+    assert not verdict["equivalent"]
+    assert any("before.id" in d and "after.id" in d for d in verdict["differences"])
+
+
+def test_varying_business_increment_cannot_be_ignored():
+    gui = [_change(17, n, n + 1) for n in (100, 101, 102)]
+    api = [_change(17, n, n) for n in (100, 101, 102)]
+    verdict = footprint_verdict(gui, api, ["g"] * 3, ["a"] * 3)
+    assert not verdict["equivalent"]
+    assert verdict["server_owned"] == []
+    assert any("after.counter" in d for d in verdict["differences"])
+
+
+def test_matching_varying_business_increment_is_allowed():
+    gui = [_change(17, n, n + 1) for n in (100, 101, 102)]
+    verdict = footprint_verdict(gui, gui, ["g"] * 3, ["a"] * 3)
+    assert verdict["equivalent"], verdict["differences"]
+    assert verdict["server_owned"] == []
+
+
+def test_existing_row_identity_and_business_changes_are_both_compared():
+    gui = [_change(17, n, n + 1) for n in (100, 101, 102)]
+    api = [_change(29, n, n) for n in (100, 101, 102)]
+    verdict = footprint_verdict(
+        gui,
+        api,
+        ["g"] * 3,
+        ["a"] * 3,
+    )
+    assert not verdict["equivalent"]
+    assert any(
+        "after.counter" in d and "before.id" in d for d in verdict["differences"]
+    )
+
+
+def test_changed_rows_with_equal_new_values_still_compare_prior_states():
+    gui = [_change(17, n, 200) for n in (100, 101)]
+    api = [_change(17, n + 10, 200) for n in (100, 101)]
+    verdict = footprint_verdict(gui, api, ["g"] * 2, ["a"] * 2)
+    assert not verdict["equivalent"]
+    assert any("before.counter" in d for d in verdict["differences"])

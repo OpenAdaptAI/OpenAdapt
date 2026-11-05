@@ -8,13 +8,11 @@ skipped. So an API step is qualified by its footprint: the whole database
 after N saves through the GUI and N through the API step, on the same
 synthetic inputs, compared table by table and field by field.
 
-The comparison is differential. Some columns differ on every save whatever
-the path (an id, a creation time, a hash): a column whose value varies
-between the GUI saves themselves is **server-owned** and isn't compared.
-Every other difference between a GUI save and the API save on the same
-inputs is one the API step caused: a table one path wrote and the other
-didn't, a different number of rows, or a column with another value. Any
-difference keeps the save on the GUI (:func:`admit_api_step` refuses it).
+Changed rows retain both complete row states, including their unchanged
+identity. Variation between GUI saves does not establish server ownership:
+a business counter can vary too. Every field is compared, including
+inserted IDs and times. Dumps alone cannot prove that a differing field
+is generated or safe to omit, so unexplained differences refuse.
 
 Each run's own unique marker (the tag that keeps repeated runs from
 colliding) is replaced by ``<run>`` before comparing. Values are compared in
@@ -108,7 +106,7 @@ def _norm(value: Any, markers: Iterable[str]) -> Any:
 def _items(
     changes: Changes, markers: Sequence[str]
 ) -> dict[tuple[str, str], list[dict[str, Any]]]:
-    """``(table, op) -> rows``, normalized; a changed row is its changed columns' new values."""
+    """``(table, op) -> rows``, preserving complete changed-row transitions."""
 
     out: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for table, entry in changes.items():
@@ -124,9 +122,8 @@ def _items(
             b, a = pair["before"], pair["after"]
             changed.append(
                 {
-                    k: _norm(a.get(k), markers)
-                    for k in a
-                    if str(a.get(k)) != str(b.get(k))
+                    state: {k: _norm(v, markers) for k, v in row.items()}
+                    for state, row in (("before", b), ("after", a))
                 }
             )
         if changed:
@@ -148,7 +145,9 @@ def footprint_verdict(
 
     ``gui[i]`` and ``api[i]`` are the changes of saves with the same inputs
     apart from their run markers (``gui_markers[i]``, ``api_markers[i]``).
-    Needs at least two GUI saves, to tell server-owned columns from values.
+    Needs at least two pairs. No field is excluded based on variation.
+    Existing rows retain complete before/after values. Generated insert
+    fields that differ also refuse: dumps do not establish ownership.
     """
 
     if (
@@ -169,22 +168,14 @@ def footprint_verdict(
     g = [_items(c, [m]) for c, m in zip(gui, gui_markers)]
     a = [_items(c, [m]) for c, m in zip(api, api_markers)]
     differences: list[str] = []
-    # Server-owned: columns whose value varies between the GUI saves alone.
-    owned: set[tuple[str, str]] = set()
     keys = set().union(*[set(x) for x in g])
     for key in sorted(keys):
-        runs = [_sorted(x.get(key, [])) for x in g]
+        runs = [x.get(key, []) for x in g]
         if len({len(r) for r in runs}) != 1:
             differences.append(
                 f"{key[0]}: the GUI saves themselves {key[1]} different numbers of rows "
                 f"({', '.join(str(len(r)) for r in runs)}); the footprint isn't stable"
             )
-            continue
-        for rows in zip(*runs):
-            cols = set().union(*[set(r) for r in rows])
-            for col in cols:
-                if len({str(r.get(col)) for r in rows}) > 1:
-                    owned.add((key[0], col))
     tables: dict[str, dict[str, int]] = {}
     for i, (gi, ai) in enumerate(zip(g, a), 1):
         for key in sorted(set(gi) | set(ai)):
@@ -199,13 +190,18 @@ def footprint_verdict(
                     f"{len(arow)} through the API step"
                 )
                 continue
-            strip = lambda r: {k: v for k, v in r.items() if (table, k) not in owned}  # noqa: E731
-            for gr, ar in zip(
-                _sorted([strip(r) for r in grow]), _sorted([strip(r) for r in arow])
-            ):
-                differ = sorted(
-                    c for c in set(gr) | set(ar) if str(gr.get(c)) != str(ar.get(c))
-                )
+            for gr, ar in zip(grow, arow):
+                if op == "changed":
+                    differ = sorted(
+                        f"{state}.{column}"
+                        for state in ("before", "after")
+                        for column in set(gr[state]) | set(ar[state])
+                        if gr[state].get(column) != ar[state].get(column)
+                    )
+                else:
+                    differ = sorted(
+                        c for c in set(gr) | set(ar) if gr.get(c) != ar.get(c)
+                    )
                 if differ:
                     differences.append(
                         f"pair {i}: {table} {op} rows differ in {', '.join(differ[:8])}"
@@ -215,7 +211,7 @@ def footprint_verdict(
         "schema": SCHEMA,
         "equivalent": not differences,
         "differences": differences,
-        "server_owned": sorted(f"{t}.{c}" for t, c in owned),
+        "server_owned": [],
         "tables": tables,
         "pairs": len(gui),
     }

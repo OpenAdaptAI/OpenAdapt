@@ -387,3 +387,48 @@ def test_a_graphql_error_halts_and_is_not_retried(spa, tmp_path):
         binding, {"first": "Ada", "last": "Park", "age": "41"}
     )
     assert ok.status is ActuationStatus.ACTUATED, ok.reason
+
+
+@pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE"])
+@pytest.mark.parametrize("stamp", [7.2, 7.4, 10.0])
+def test_a_trailing_json_write_refuses_proposal(tmp_path, method, stamp):
+    rec = _recording(tmp_path, BODY)
+    lines = [json.loads(s) for s in (rec / nc.NETWORK_FILE).read_text().splitlines()]
+    lines.append(
+        {
+            "t": stamp,
+            "method": method,
+            "url": "http://app/api/audit",
+            "status": 200,
+            "resource_type": "fetch",
+        }
+    )
+    (rec / nc.NETWORK_FILE).write_text("".join(json.dumps(s) + "\n" for s in lines))
+    original = _workflow()
+    proposed, step, reasons = propose_api_step(original, rec)
+    assert step is None and proposed == original
+    assert f"{method} /api/audit" in " ".join(reasons)
+
+
+@pytest.mark.parametrize("stamp", [-0.5, 7.4])
+def test_load_time_writes_and_trailing_graphql_queries_are_not_step_writes(
+    tmp_path, stamp
+):
+    rec = _recording(tmp_path, BODY)
+    lines = [json.loads(s) for s in (rec / nc.NETWORK_FILE).read_text().splitlines()]
+    body = {"query": "query { health }"} if stamp > 0 else {"event": "load"}
+    lines.append(
+        {
+            "t": stamp,
+            "method": "POST",
+            "url": "http://app/graphql",
+            "status": 200,
+            "resource_type": "fetch",
+            "request_type": "application/json",
+            "body": json.dumps(body),
+        }
+    )
+    lines[1:] = sorted(lines[1:], key=lambda line: line["t"])
+    (rec / nc.NETWORK_FILE).write_text("".join(json.dumps(s) + "\n" for s in lines))
+    _, step, reasons = propose_api_step(_workflow(), rec)
+    assert step is not None, reasons

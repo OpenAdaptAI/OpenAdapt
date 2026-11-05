@@ -196,7 +196,8 @@ Nothing is proposed when:
   each save (a UUID, a date and time), which can't be sent again;
 - the body isn't a JSON object (a batch), was cut at capture, or the recorded
   save wasn't accepted (2xx);
-- the steps on the page also sent another write, or a step checks text that
+- the steps on the page also sent another write, including one captured
+  after the selected save, or a step checks text that
   a request's response carries (a JSON save is repeated alone, with no
   pre-checks); a step's other on-screen checks are listed as screen-only;
 - the recording doesn't say which headers the save carried (a capture from
@@ -218,6 +219,15 @@ A JSON save succeeds on its recorded status. A GraphQL server answers 200
 with errors in the body, so a GraphQL save also needs a response with data
 and no `errors`; anything else halts it and it is not retried. The record
 check reads the record back, as for every API step.
+
+`api_footprint.footprint_verdict` compares paired GUI/API database changes.
+Changed rows retain their complete before/after values, including unchanged
+row IDs. Every field is compared after normalizing each run's marker.
+Variation between GUI saves does not prove server ownership: counters and
+other business values can vary too. Unexplained differences keep the save
+on the GUI, including generated insert IDs or times that the dumps alone
+cannot justify omitting. A matching footprint is optional at admission;
+known additional JSON writes refuse the proposal even without one.
 
 ## Other writes in the span
 
