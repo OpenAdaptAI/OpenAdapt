@@ -792,9 +792,10 @@ def bookkeeping_only(
 
 def _by_instant(bodies: list[dict[str, Any]]) -> Optional[list[dict[str, Any]]]:
     """``bodies`` oldest first by the instant of ``meta.lastUpdated``, or None
-    when one has no readable time (none, unparseable, or no time zone).
-    Compared as instants, not text: with mixed offsets the text order is not
-    the time order."""
+    when one has no readable time (none, unparseable, or no time zone) or
+    two share an instant. Compared as instants, not text: with mixed offsets
+    the text order is not the time order. Tied versions have no known order,
+    and the server's return order is not a chronology, so a tie refuses."""
 
     try:
         times = [_when((b.get("meta") or {}).get("lastUpdated")) for b in bodies]
@@ -802,7 +803,9 @@ def _by_instant(bodies: list[dict[str, Any]]) -> Optional[list[dict[str, Any]]]:
         return None
     if any(when is None for when in times):
         return None
-    order = sorted(range(len(bodies)), key=lambda i: (times[i], i))
+    if len(set(times)) != len(times):
+        return None
+    order = sorted(range(len(bodies)), key=lambda i: times[i])
     return [bodies[i] for i in order]
 
 

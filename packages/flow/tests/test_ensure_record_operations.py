@@ -831,3 +831,49 @@ def test_bookkeeping_with_a_version_time_without_a_zone_is_refused():
     ]
     r = judge(contract(**BOOK), PARAMS, base(), created_with(c), {"x": x}, x)
     assert r.outcome == "needs_review"
+
+
+def test_bookkeeping_versions_at_the_same_instant_are_refused():
+    # The prior stamp is 12:10:00. The first update moves it to its own time,
+    # 12:00:02; the second moves it back to 12:10:00, ten minutes past that
+    # version's time. Both versions name the same instant, so nothing says
+    # which came last, and the server's newest-first order read as oldest
+    # first would hide the final move.
+    book = {
+        "bookkeeping": [
+            {"resource_type": "Practitioner", "paths": BOOK_PATHS, "now_checks": True}
+        ]
+    }
+    late = [{"url": "urn:app:last-seen", "valueInstant": "2026-10-28T12:10:00Z"}]
+    own = [{"url": "urn:app:last-seen", "valueInstant": "2026-10-28T12:00:02Z"}]
+    prior = {**DOC, "extension": late}
+    first = {
+        **DOC,
+        "meta": {"versionId": "2", "lastUpdated": "2026-10-28T12:00:02Z"},
+        "extension": own,
+    }
+    second = {
+        **DOC,
+        "meta": {"versionId": "3", "lastUpdated": "2026-10-28T17:00:02+05:00"},
+        "extension": late,
+    }
+    c = Change(
+        ref="Practitioner/d",
+        actions={"U"},
+        authors={BOT},
+        events=[(_t(2), "U", frozenset({BOT})), (_t(2), "U", frozenset({BOT}))],
+        versions=2,
+        bodies=[second, first],
+        prior=prior,
+    )
+    x = patient("x")
+    r = judge(contract(**book), PARAMS, base(), created_with(c), {"x": x}, x)
+    assert r.outcome == "needs_review"
+    # Written with one offset the tie is just as unknown.
+    second_z = {
+        **second,
+        "meta": {"versionId": "3", "lastUpdated": "2026-10-28T12:00:02Z"},
+    }
+    c.bodies = [second_z, first]
+    r = judge(contract(**book), PARAMS, base(), created_with(c), {"x": x}, x)
+    assert r.outcome == "needs_review"
