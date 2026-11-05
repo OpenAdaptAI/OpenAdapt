@@ -498,10 +498,10 @@ WORDS = (
 HELDOUT_CONDITIONS = ("unchanged", "moved", "dark", "transfer_missing", "transfer_none")
 
 
-def heldout_seed() -> int:
+def heldout_seed(prereg: str = "PREREGISTRATION_2.md") -> int:
     import hashlib
 
-    digest = hashlib.sha256((HERE / "PREREGISTRATION_2.md").read_bytes()).hexdigest()
+    digest = hashlib.sha256((HERE / prereg).read_bytes()).hexdigest()
     return int(digest[:16], 16)
 
 
@@ -787,6 +787,11 @@ def main() -> int:
         help="rdp_capture.py output folders; the first is the recording",
     )
     parser.add_argument(
+        "--heldout-prereg",
+        default="PREREGISTRATION_2.md",
+        help="the pre-registration whose bytes seed the held-out pages",
+    )
+    parser.add_argument(
         "--suites", default="drift21,controls,avc444,rdp_live", help="comma-separated"
     )
     args = parser.parse_args()
@@ -807,7 +812,7 @@ def main() -> int:
         if "avc444" in suites and args.avc444:
             rows += score(avc444_cases(args.avc444, Path(tmpdir)), grounder)
         if "heldout" in suites:
-            rows += score(heldout_cases(), grounder)
+            rows += score(heldout_cases(heldout_seed(args.heldout_prereg)), grounder)
         if "rdp_live" in suites and args.rdp_live:
             rows += score(rdp_live_cases(args.rdp_live), grounder)
 
