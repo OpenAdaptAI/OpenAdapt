@@ -47,6 +47,62 @@ def _module_names(root: Path, package: str) -> dict[str, Path]:
 _DYNAMIC = {"import_module", "__import__"}
 
 
+class Importers:
+    """What a module's own bindings make an importing call.
+
+    ``names`` are plain names bound to ``importlib.import_module`` or
+    ``__import__`` (``from importlib import import_module as load``), plus
+    the builtin ``__import__`` unless the module binds that name itself.
+    ``modules`` are names bound to ``importlib`` or ``builtins``, whose
+    ``import_module``/``__import__`` attributes import. A same-named local
+    function or an unrelated method is not an importer.
+    """
+
+    def __init__(self, tree: ast.AST) -> None:
+        self.names: dict[str, str] = {}
+        self.modules: set[str] = set()
+        shadowed = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    top = alias.name.partition(".")[0]
+                    if alias.asname and alias.name in ("importlib", "builtins"):
+                        self.modules.add(alias.asname)
+                    elif not alias.asname and top in ("importlib", "builtins"):
+                        self.modules.add(top)
+            elif isinstance(node, ast.ImportFrom) and not node.level:
+                for alias in node.names:
+                    if (node.module, alias.name) in (
+                        ("importlib", "import_module"),
+                        ("importlib", "__import__"),
+                        ("builtins", "__import__"),
+                    ):
+                        self.names[alias.asname or alias.name] = alias.name
+            elif isinstance(
+                node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+            ):
+                shadowed |= node.name == "__import__"
+            elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                shadowed |= node.id == "__import__"
+        if not shadowed:
+            self.names.setdefault("__import__", "__import__")
+
+    def called(self, call: ast.Call) -> str | None:
+        """``import_module`` or ``__import__`` when ``call`` is one, else None."""
+
+        func = call.func
+        if isinstance(func, ast.Name):
+            return self.names.get(func.id)
+        if (
+            isinstance(func, ast.Attribute)
+            and func.attr in _DYNAMIC
+            and isinstance(func.value, ast.Name)
+            and func.value.id in self.modules
+        ):
+            return func.attr
+        return None
+
+
 def _str(node: ast.AST | None) -> str | None:
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
@@ -59,22 +115,18 @@ def _arg(call: ast.Call, index: int, keyword: str) -> ast.AST | None:
     return next((k.value for k in call.keywords if k.arg == keyword), None)
 
 
-def _dynamic_targets(node: ast.AST, module: str, *, is_package: bool) -> list[str]:
+def _dynamic_targets(
+    node: ast.AST, module: str, importers: Importers, *, is_package: bool
+) -> list[str]:
     """Modules a call ``import_module(...)`` or ``__import__(...)`` loads, when
-    its module name is a string literal; ``[]`` when it can't be read."""
+    its module name is a string literal, positional or ``name=``; ``[]``
+    when it can't be read or the call is not an importer."""
 
-    if not isinstance(node, ast.Call) or not node.args:
+    if not isinstance(node, ast.Call):
         return []
-    func = node.func
-    called = (
-        func.id
-        if isinstance(func, ast.Name)
-        else func.attr
-        if isinstance(func, ast.Attribute)
-        else None
-    )
-    name = _str(node.args[0])
-    if called not in _DYNAMIC or not name:
+    called = importers.called(node)
+    name = _str(_arg(node, 0, "name"))
+    if called is None or not name:
         return []
     if called == "import_module" and name.startswith("."):
         package = _arg(node, 1, "package")
@@ -164,34 +216,77 @@ def _guard_names(test: ast.AST) -> set[str]:
     return found
 
 
+def _fed_tables(
+    func: ast.FunctionDef, tables: set[str], importers: Importers
+) -> set[str]:
+    """Tables whose values ``func`` passes to an importing call.
+
+    The module name is the table read itself (``_T[name]``, ``_T.get(name)``)
+    or a local assigned from one; a table read for anything else is not an
+    import.
+    """
+
+    def reads(expr: ast.AST) -> set[str]:
+        return {
+            n.id for n in ast.walk(expr) if isinstance(n, ast.Name) and n.id in tables
+        }
+
+    assigned: dict[str, set[str]] = {}
+    for node in ast.walk(func):
+        targets = (
+            node.targets
+            if isinstance(node, ast.Assign)
+            else [node.target]
+            if isinstance(node, (ast.AnnAssign, ast.NamedExpr)) and node.value
+            else []
+        )
+        for target in targets:
+            if isinstance(target, ast.Name):
+                assigned.setdefault(target.id, set()).update(reads(node.value))
+    fed: set[str] = set()
+    for node in ast.walk(func):
+        if not isinstance(node, ast.Call) or importers.called(node) is None:
+            continue
+        arg = _arg(node, 0, "name")
+        if arg is None:
+            continue
+        fed |= reads(arg)
+        for sub in ast.walk(arg):
+            if isinstance(sub, ast.Name):
+                fed |= assigned.get(sub.id, set())
+    return fed
+
+
 def _lazy_exports(tree: ast.Module, module: str) -> dict[str, set[str]]:
     """Names a package ``__getattr__`` imports on demand, mapped to modules.
 
-    Read from ``from m import n`` (name ``n``), ``import a.b`` and literal
-    ``import_module``/``__import__`` calls (the module's last name, any
-    ``as`` name, and every name an enclosing ``if`` compares against), and
-    the string tables ``__getattr__`` reads, such as ``_LAZY_EXPORTS``.
+    Read from ``from m import n [as a]`` (the name it binds), ``import a.b``
+    and literal ``import_module``/``__import__`` calls (the module's last
+    name, any ``as`` name, and every name an enclosing ``if`` compares
+    against), and the string tables, such as ``_LAZY_EXPORTS``, whose values
+    ``__getattr__`` passes to an importing call.
     """
 
     out: dict[str, set[str]] = {}
     tables = _module_tables(tree)
+    importers = Importers(tree)
 
     def add(key: str, target: str) -> None:
         out.setdefault(key, set()).add(target)
 
     def visit(node: ast.AST, guards: set[str]) -> None:
         if isinstance(node, ast.ImportFrom):
-            for target in _from_targets(node, module, is_package=True):
-                add(target.rpartition(".")[2], target)
+            targets = _from_targets(node, module, is_package=True)
+            for alias, target in zip(node.names, targets):
+                for key in {alias.asname or alias.name, *guards}:
+                    add(key, target)
+            add(targets[-1].rpartition(".")[2], targets[-1])
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 for key in {alias.name.rpartition(".")[2], alias.asname, *guards}:
                     if key:
                         add(key, alias.name)
-        elif isinstance(node, ast.Name) and node.id in tables:
-            for key, target in tables[node.id].items():
-                add(key, target)
-        for target in _dynamic_targets(node, module, is_package=True):
+        for target in _dynamic_targets(node, module, importers, is_package=True):
             for key in {target.rpartition(".")[2], *guards}:
                 add(key, target)
         inner = guards | _guard_names(node.test) if isinstance(node, ast.If) else guards
@@ -201,6 +296,9 @@ def _lazy_exports(tree: ast.Module, module: str) -> dict[str, set[str]]:
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and node.name == "__getattr__":
             visit(node, set())
+            for table in _fed_tables(node, set(tables), importers):
+                for key, target in tables[table].items():
+                    add(key, target)
     return out
 
 
@@ -235,6 +333,7 @@ def build_graph(root: Path, package: str) -> Graph:
     graph: Graph = {}
     for name, tree in trees.items():
         is_package = mods[name].name == "__init__.py"
+        importers = Importers(tree)
         skip: set[int] = set()
         if is_package:
             for node in tree.body:
@@ -253,7 +352,7 @@ def build_graph(root: Path, package: str) -> Graph:
                 for alias in node.names:
                     raw.extend(sorted(lazy.get(prefix, {}).get(alias.name, ())))
             else:
-                raw = _dynamic_targets(node, name, is_package=is_package)
+                raw = _dynamic_targets(node, name, importers, is_package=is_package)
             for target in raw:
                 if target == "benchmark" or target.startswith("benchmark."):
                     out.setdefault("benchmark", set()).add(node.lineno)
@@ -426,13 +525,31 @@ def test_every_exception_is_documented_and_still_needed(
         ), f"exception needs a public issue link: {edge}"
 
 
-def test_contract_names_real_modules(graph: Graph, contract: dict) -> None:
+def name_problems(graph: Graph, contract: dict) -> list[str]:
+    """Contract names that match no module; empty when all do.
+
+    Every core name must select a module of the package: a core list that
+    selects nothing would check nothing. A forbidden name may also be the
+    top-level ``benchmark`` package, which is outside it.
+    """
+
+    problems = [
+        f"no core module {prefix}"
+        for prefix in contract["core"]
+        if not any(_under(m, [prefix]) for m in graph)
+    ]
     names = set(graph) | {"benchmark"}
-    prefixes = list(contract["core"])
     for group in contract["forbidden"].values():
-        prefixes += group
-    for prefix in prefixes:
-        assert any(_under(m, [prefix]) for m in names), f"no module {prefix}"
+        problems += [
+            f"no module {prefix}"
+            for prefix in group
+            if not any(_under(m, [prefix]) for m in names)
+        ]
+    return problems
+
+
+def test_contract_names_real_modules(graph: Graph, contract: dict) -> None:
+    assert name_problems(graph, contract) == []
 
 
 # The checker itself, against a planted package.
@@ -516,6 +633,13 @@ def test_checker_follows_a_lazy_package_reexport(tmp_path: Path) -> None:
         "def go():\n    return import_module('planted.demo.app', package=None)\n",
         "import sys\ndef go():\n    return __import__('planted.demo.app')\n",
         "import sys\ndef go():\n    return __import__('planted.demo', fromlist=['app'])\n",
+        # a function alias, a module alias, and the module name as a keyword
+        "from importlib import import_module as load\n"
+        "def go():\n    return load('planted.demo.app')\n",
+        "import importlib as il\ndef go():\n    return il.import_module('planted.demo.app')\n",
+        "import importlib\n"
+        "def go():\n    return importlib.import_module(name='planted.demo.app')\n",
+        "import sys\ndef go():\n    return __import__(name='planted.demo.app')\n",
     ],
 )
 def test_checker_finds_a_literal_dynamic_import(tmp_path: Path, engine: str) -> None:
@@ -523,6 +647,29 @@ def test_checker_finds_a_literal_dynamic_import(tmp_path: Path, engine: str) -> 
     assert direct_violations(graph, _PLANTED_CONTRACT) == [
         "planted.core.engine -> planted.demo.app (app, lines [3])",
     ]
+
+
+@pytest.mark.parametrize(
+    "engine",
+    [
+        # a local function that happens to be named import_module
+        "def import_module(name):\n    return name\n"
+        "def go():\n    return import_module('planted.demo.app')\n",
+        # an unrelated method of that name
+        "def go(registry):\n    return registry.import_module('planted.demo.app')\n",
+        # a module that defines its own __import__
+        "def __import__(name):\n    return name\n"
+        "def go():\n    return __import__('planted.demo.app')\n",
+        # a nested function that only returns the module's name
+        "def go():\n    def name():\n        return 'planted.demo.app'\n    return name()\n",
+    ],
+)
+def test_checker_ignores_a_string_that_is_not_imported(
+    tmp_path: Path, engine: str
+) -> None:
+    graph = _plant(tmp_path, **{"core/engine.py": engine, "helper.py": ""})
+    assert direct_violations(graph, _PLANTED_CONTRACT) == []
+    assert transitive_violations(graph, _PLANTED_CONTRACT) == []
 
 
 def test_checker_ignores_a_dynamic_import_it_cannot_read(tmp_path: Path) -> None:
@@ -563,6 +710,15 @@ def test_checker_ignores_a_dynamic_import_it_cannot_read(tmp_path: Path) -> None
         "    if module_name is None:\n"
         "        raise AttributeError(name)\n"
         "    return getattr(import_module(module_name), name)\n",
+        # the table read straight into the call
+        "import importlib\n"
+        "_LAZY_EXPORTS = {'Window': 'planted.ui.window'}\n"
+        "def __getattr__(name):\n"
+        "    return getattr(importlib.import_module(_LAZY_EXPORTS[name]), name)\n",
+        # a from-import re-exported under another name, with no guard
+        "def __getattr__(name):\n"
+        "    from planted.ui.window import window as Window\n"
+        "    return {'Window': Window}[name]\n",
     ],
 )
 def test_checker_follows_every_kind_of_lazy_reexport(tmp_path: Path, ui: str) -> None:
@@ -579,6 +735,39 @@ def test_checker_follows_every_kind_of_lazy_reexport(tmp_path: Path, ui: str) ->
         **{"ui/__init__.py": ui, "helper.py": "from planted.ui import text\n"},
     )
     assert transitive_violations(clean, _PLANTED_CONTRACT) == []
+
+
+def test_checker_ignores_a_table_no_import_reads(tmp_path: Path) -> None:
+    # A string table __getattr__ returns from, without importing its values.
+    ui = (
+        "from importlib import import_module\n"
+        "_DOCS = {'Window': 'planted.ui.window'}\n"
+        "def __getattr__(name):\n"
+        "    if name in _DOCS:\n"
+        "        return _DOCS[name]\n"
+        "    return import_module('planted.ui.text')\n"
+    )
+    graph = _plant(
+        tmp_path,
+        **{"ui/__init__.py": ui, "helper.py": "from planted.ui import Window\n"},
+    )
+    assert transitive_violations(graph, _PLANTED_CONTRACT) == []
+
+
+def test_a_core_name_must_select_a_package_module(tmp_path: Path) -> None:
+    # The external benchmark package may be forbidden, but as the only core
+    # name it selects nothing, and a core import of the app would pass.
+    graph = _plant(tmp_path, **{"core/engine.py": "import planted.demo.app\n"})
+    selects_nothing = {**_PLANTED_CONTRACT, "core": ["benchmark"]}
+    assert policy_problems(selects_nothing) == []
+    assert direct_violations(graph, selects_nothing) == []
+    assert name_problems(graph, selects_nothing) == ["no core module benchmark"]
+    assert name_problems(graph, _PLANTED_CONTRACT) == []
+    forbids_benchmark = {
+        **_PLANTED_CONTRACT,
+        "forbidden": {**_PLANTED_CONTRACT["forbidden"], "bench": ["benchmark"]},
+    }
+    assert name_problems(graph, forbids_benchmark) == []
 
 
 @pytest.mark.parametrize(
