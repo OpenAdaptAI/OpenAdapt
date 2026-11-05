@@ -266,6 +266,21 @@ assert_eq "a refused update leaves the live owner's lock" "$$" \
 rm -f "$ROOT/releases/.update.lock/pid"
 rmdir "$ROOT/releases/.update.lock"
 
+# A pid path that already exists as a FIFO with a reader: bash's noclobber
+# opens an existing FIFO without O_EXCL, so the write "succeeds". The lock must
+# refuse any existing path, whatever its type, and leave it alone.
+mkdir "$ROOT/releases/.update.lock"
+mkfifo "$ROOT/releases/.update.lock/pid"
+sleep 30 <> "$ROOT/releases/.update.lock/pid" &
+fifo_reader=$!
+apply_release "$ROOT" "$ARC6" >/dev/null 2>&1
+assert "update lock refuses an existing FIFO pid path" test "$?" -ne 0
+assert "a refused update leaves the FIFO in place" test -p "$ROOT/releases/.update.lock/pid"
+kill "$fifo_reader" 2>/dev/null || true
+wait "$fifo_reader" 2>/dev/null || true
+rm -f "$ROOT/releases/.update.lock/pid"
+rmdir "$ROOT/releases/.update.lock"
+
 chmod -x "$ROOT/releases/2.0.0/venv/bin/openadapt-flow"
 rel_do_rollback "$ROOT" "" >/dev/null 2>&1
 assert "incomplete rollback target is refused" test "$?" -ne 0
@@ -329,6 +344,19 @@ else
   fail "audit writers stay serialized when mkdir(1) never reports EEXIST"
   printf '%s\n' "$audit_output" | sed 's/^/    /'
 fi
+
+FIFO_LOG="$WORK/fifo-audit/audit.log"
+mkdir -p "$FIFO_LOG.lock"
+mkfifo "$FIFO_LOG.lock/pid"
+sleep 30 <> "$FIFO_LOG.lock/pid" &
+fifo_reader=$!
+OPENADAPT_ONPREM_AUDIT_LOG="$FIFO_LOG" \
+  bash "$OPENADAPT_ONPREM_AUDIT_BIN" started fifo-lock --note test >/dev/null 2>&1
+assert "audit writer refuses an existing FIFO lock file" test "$?" -ne 0
+assert "a refused audit writer appends nothing" test ! -s "$FIFO_LOG"
+assert "a refused audit writer leaves the FIFO in place" test -p "$FIFO_LOG.lock/pid"
+kill "$fifo_reader" 2>/dev/null || true
+wait "$fifo_reader" 2>/dev/null || true
 
 # A writer that finds a lock owned by an exited process may break it. Force the
 # race where, between that writer reading the dead owner and breaking the
