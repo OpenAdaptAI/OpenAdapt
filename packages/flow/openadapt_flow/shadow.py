@@ -510,7 +510,7 @@ class Shadow:
                 raise Unreadable("ensure_baseline_parameter_names_changed")
             targeted = getattr(source.config.frame, "targeted", None)
         return capture_baseline(contract, params, actor=Actor("agent", self.actor_id),
-                                workdir=self.out / "writes", targeted=targeted)
+                                workdir=self.out / "writes", targeted=targeted, ledger=None)
 
     def _sql_episode(self, method: str, path: str, doc: Any) -> Episode:
         line = f"{method} {urlsplit(path).path}"

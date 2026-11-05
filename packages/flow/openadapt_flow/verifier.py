@@ -417,6 +417,15 @@ class Contract:
             }
         )
 
+    def _parameter_config(self) -> dict[str, Any]:
+        """Ensure schema/rule metadata is data, never a ValueExpr declaration."""
+        dumped = self.config.model_dump(mode="json", exclude={"ensure_record"})
+        if self.config.ensure_record is not None:
+            target = (dumped.get("frame") or {}).get("targeted")
+            if isinstance(target, dict):
+                target.pop("search", None)
+        return dumped
+
     @property
     def params(self) -> list[str]:
         """Every ``{"param": name}`` the contract's reads and effects bind."""
@@ -434,7 +443,7 @@ class Contract:
                 for item in value:
                     walk(item)
 
-        walk(self.config.model_dump(mode="json", exclude={"ensure_record"}))
+        walk(self._parameter_config())
         if self.config.ensure_record is not None:
             found.update(self.config.ensure_record.parameters)
         return sorted(found)
@@ -462,7 +471,7 @@ class Contract:
                 for item in value:
                     walk(item, where)
 
-        dumped = self.config.model_dump(mode="json")
+        dumped = self._parameter_config()
         for section, body in dumped.items():
             if section != "effects":
                 walk(body, section)

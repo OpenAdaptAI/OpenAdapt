@@ -272,6 +272,11 @@ class VerifyConfig(BaseModel):
                     for rule in source.fields.values())):
                 raise ValueError("ensure frame cannot ignore declared fields")
             targeted = getattr(self.frame, "targeted", None)
+            allowed = set(source.fields)
+            if targeted is not None:
+                allowed.update(expr.param for expr in targeted.self_actors if expr.param is not None)
+            if set(self.ensure_record.parameters) - allowed:
+                raise ValueError("ensure parameters name neither fields nor declared actor bindings")
             if targeted is not None and targeted.search != source:
                 raise ValueError("ensure adapter and targeted search must bind the same full contract")
         return self
@@ -2326,33 +2331,47 @@ def verify_run(
     if cfg.ensure_record is not None:
         cast(dict[str, Any], evidence["readback"])["ensure_params_mac"] = salted_digest(salt, "ensure:params", dict(params))
     database_spec = frame_spec.database
+    targeted_spec = getattr(frame_spec, "targeted", None)
+    history_spec = getattr(frame_spec, "history", None)
+    recheck_after_s = (
+        targeted_spec.quiet_s if targeted_spec is not None
+        else history_spec.quiet_s if history_spec is not None
+        else database_spec.recheck_after_s if database_spec is not None else None
+    )
     recheck_due_at: Optional[str] = None
-    if (
-        frame.post_state is not None
-        and database_spec is not None
-        and database_spec.recheck_after_s is not None
-    ):
-        # A write that lands after the settled read lands after this verdict:
-        # say when the database is read again (a verified write only), and
-        # bind what it compares with. A write of any outcome binds its
-        # post-save state, so a recheck of an earlier write can tell what
-        # this one's own window covered.
+    from openadapt_flow.verifier import Outcome, classify
+
+    nonfinal = classify(outcome.value, checked, evidence)[0] is Outcome.UNCERTAIN
+    if frame.post_state is not None and recheck_after_s is not None:
+        # An owed attempt is distinct from eligible positive proof. The pure
+        # preparation/fence still refuses unresolved IDs or missing initial
+        # proof, before any native read; no admission gate is relaxed here.
         schedule = late_write.schedule(
             frame.post_state,
-            database_spec.recheck_after_s,
+            recheck_after_s,
             salted_digest(salt, late_write.POST_STATE_LABEL, frame.post_state),
-            due=verified,
+            due=verified or nonfinal,
+            **({"purpose": "late_recheck" if verified else "read_only_reconciliation"
+                if nonfinal else "observation_only"} if targeted_spec is not None else {}),
         )
         cast(dict[str, Any], evidence["frame"])[late_write.EVIDENCE_KEY] = schedule
         recheck_due_at = schedule["due_at"]
         if post_state_out is not None:
             post_state_out.update(frame.post_state)
-    if not verified and effect_verdict != "REFUTED":
+    if nonfinal:
         target = (frame.post_state or {}).get("targeted") or {}
+        # No locator, missing initial proof or no configured schedule remains
+        # visibly owed; a deadline never manufactures authority to execute it.
+        eligible = bool(
+            target and target.get("status") != "unresolved"
+            and landed and checked["delta"] == "held"
+            and checked["source"] in ("held", "instruction")
+            and frame.status != "refuted" and admitted and self_approved is not True
+        )
         evidence["reconciliation"] = {
             "status": "owed", "purpose": "read_only_reconciliation",
             "reason": target.get("reason", "independent_proof_incomplete"),
-            "executable": bool(frame.post_state is not None and recheck_due_at),
+            "executable": eligible and bool(recheck_due_at),
         }
     contracts = ExecuteEvidenceContractV1(
         # A reference was bound and the approver is not the executor;
@@ -2401,7 +2420,7 @@ def verify_run(
         receipt["remediates"] = remediates
     if correlation_id is not None:
         receipt["correlation_id"] = correlation_id
-    if recheck_due_at is not None:
+    if recheck_due_at is not None and verified:
         receipt[RECHECK_RECEIPT_FIELD] = recheck_due_at
     problem = receipt_problem(receipt) or evidence_problem(evidence, receipt)
     if problem is not None:  # pragma: no cover - a producer bug, never input
@@ -2799,6 +2818,61 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
     return None
 
 
+def _owed_reconciliation(
+    evidence: Mapping[str, Any], receipt: Mapping[str, Any], schedule: Any,
+) -> bool:
+    """A private owed deadline is not a public positive receipt claim.
+
+    This recognizes only an explicit nonverified obligation. It never makes
+    that state eligible for a native recheck; pure preparation retains every
+    initial landed/source/actor/coverage and target-binding gate.
+    """
+    from openadapt_flow.verifier import Outcome, classify
+
+    owed = evidence.get("reconciliation")
+    if not (
+        isinstance(owed, Mapping)
+        and set(owed) == {"status", "purpose", "reason", "executable"}
+        and owed.get("status") == "owed"
+        and owed.get("purpose") == "read_only_reconciliation"
+        and owed.get("reason") in {"independent_proof_incomplete", "independent_target_identity_unknown", "independent_readback_unavailable"}
+        and isinstance(owed.get("executable"), bool)
+        and receipt.get("outcome") == "reconciliation_required"
+        and receipt.get("delivery_uncertain") is True
+        and isinstance(receipt.get("checked"), Mapping)
+        and RECHECK_RECEIPT_FIELD not in receipt
+        and classify(str(receipt.get("outcome")), receipt.get("checked") or {}, evidence)[0] is Outcome.UNCERTAIN
+        and isinstance(schedule, Mapping)
+        and schedule.get("compares") in {late_write.COMPARES, "history_since_checkpoint", "receipt_records_and_identifying_search"}
+        and schedule.get("purpose") in (None, "read_only_reconciliation")
+        and isinstance(schedule.get("post_state_sha256"), str)
+        and _SALTED.fullmatch(schedule["post_state_sha256"])
+    ):
+        return False
+    schedule_keys = {"compares", "after_s", "post_save_read_at", "due_at", "post_state_sha256"}
+    targeted = schedule["compares"] == "receipt_records_and_identifying_search"
+    if targeted:
+        schedule_keys.add("purpose")
+    if set(schedule) != schedule_keys or (targeted and schedule.get("purpose") != "read_only_reconciliation"):
+        return False
+    try:
+        after = schedule["after_s"]
+        if isinstance(after, bool) or not isinstance(after, (int, float)) or after <= 0:
+            return False
+        if schedule["due_at"] != late_write.due_at(schedule["post_save_read_at"], after):
+            return False
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
+    if owed["executable"]:
+        parts = receipt.get("checked") or {}
+        if not (parts.get("delta") == "held" and parts.get("source") in ("held", "instruction")
+                and parts.get("frame") != "refuted"
+                and (evidence.get("authorization") or {}).get("self_approved") is not True
+                and (parts.get("coverage") or {}).get("policy", "met") == "met"):
+            return False
+    return True
+
+
 def evidence_problem(
     evidence: Mapping[str, Any], receipt: Mapping[str, Any]
 ) -> Optional[str]:
@@ -2828,7 +2902,7 @@ def evidence_problem(
         frame.get(late_write.EVIDENCE_KEY) if isinstance(frame, Mapping) else None
     )
     due = schedule.get("due_at") if isinstance(schedule, Mapping) else None
-    if receipt.get(RECHECK_RECEIPT_FIELD) != due:
+    if receipt.get(RECHECK_RECEIPT_FIELD) != due and not _owed_reconciliation(evidence, receipt, schedule):
         return "evidence_mismatch"
     if salting.get("scheme") != SALT_SCHEME or not _DIGEST.match(
         str(salting.get("salt_commitment", ""))

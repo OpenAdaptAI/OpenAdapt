@@ -27,6 +27,7 @@ from openadapt_flow.runtime.effects.fhir import FhirEffectVerifier
 from openadapt_flow.runtime.effects.frame import FrameVerdict
 
 DETAIL = "openadapt:ensure_record"
+_DEFAULT_LEDGER = object()
 
 
 class EnsureBinding(BaseModel):
@@ -40,8 +41,6 @@ class EnsureBinding(BaseModel):
     def _names(self) -> "EnsureBinding":
         if self.parameters != sorted(set(self.parameters)):
             raise ValueError("ensure parameter names must be unique and sorted")
-        if set(self.parameters) - set(self.contract.fields):
-            raise ValueError("ensure parameters name undeclared fields")
         return self
 
 
@@ -104,7 +103,7 @@ def _invalidate(authority: _EnsureAuthority, reason: str) -> EnsureResult:
 
 def begin_ensure(
     contract: EnsureContract, params: Mapping[str, Any], *,
-    reader: Optional[FhirReader] = None, actor: Any = None, ledger: Any = None,
+    reader: Optional[FhirReader] = None, actor: Any = None, ledger: Any = _DEFAULT_LEDGER,
     workdir: Optional[Path] = None, targeted: Any = None,
 ) -> Baseline:
     from openadapt_flow.verifier import Actor, Contract, begin_write
@@ -112,7 +111,8 @@ def begin_ensure(
     context = EnsureContext(reader)
     bound = Contract.from_ensure(contract, params, targeted=targeted)
     pending = begin_write(bound, params, actor=actor or Actor("agent", "ensure-record"),
-                          ledger=ledger, workdir=workdir, _ensure_context=context)
+                          workdir=workdir, _ensure_context=context,
+                          **({} if ledger is _DEFAULT_LEDGER else {"ledger": ledger}))
     baseline = context.baseline
     if baseline is None:
         pending.release()
@@ -240,7 +240,8 @@ class EnsureEffectVerifier(FhirEffectVerifier):
             return EffectVerdict(verdict=Verdict.CONFIRMED if confirmed else Verdict.REFUTED
                     if result.evidence.get("agent_writes") else Verdict.INDETERMINATE,
                 kind=expected.kind, substrate=self.substrate,
-                reason="; ".join(result.reasons), observed_count=len(observation.after_matches),
+                reason="; ".join(result.reasons), observed_count=(len(observation.after_matches) if confirmed
+                    else max(len(observation.after_matches), int(result.evidence.get("agent_writes") or 0))),
                 expected_count=1, matched_records=records if confirmed else [])
         except (Unreadable, KeyError, TypeError, ValueError):
             return EffectVerdict(verdict=Verdict.INDETERMINATE, kind=expected.kind,

@@ -168,3 +168,111 @@ def test_initial_refuted_shadow_attempt_never_enters_native_recheck(monkeypatch:
     assert ep.recheck_at == 0
     shadow._recheck(ep)
     assert ep.late_verdict == "REFUTED"
+
+
+def test_known_wrong_write_is_conflicting_even_when_identity_search_is_empty(monkeypatch: Any) -> None:
+    from openadapt_flow import ensure_bridge
+    from openadapt_flow.ensure_bridge import EnsureBinding, EnsureEffectVerifier
+    from openadapt_flow.ensure_record import EnsureObservation, EnsureResult
+    from openadapt_flow.runtime.effects.effect import Effect, EffectKind, EffectState
+
+    baseline = Baseline(T0, {})
+    wrong = {"id": "independent-wrong-record", "name": "wrong"}
+    observation = EnsureObservation(EnsureResult("needs_review", None,
+        ["wrong declared value"], {"agent_writes": 1}), baseline, {}, {}, wrong, None)
+    monkeypatch.setattr(ensure_bridge, "_collect_ensure", lambda *a, **kw: observation)
+    adapter = object.__new__(EnsureEffectVerifier)
+    adapter.binding = EnsureBinding(contract=ensure(), parameters=["name"])
+    adapter.params, adapter.reader, adapter.context = dict(PARAMS), None, EnsureContext()
+    state = EffectState(substrate="fhir", reachable=True,
+                        detail={ensure_bridge.DETAIL: {"started": T0.isoformat(), "candidates": 0}})
+    result = adapter.verify(Effect(kind=EffectKind.RECORD_WRITTEN), state)
+    assert result.observed_count == 1
+    assert result.observed_effect == "conflicting"
+    assert not result.confirmed
+
+
+@pytest.mark.parametrize("explicit_none", [False, True])
+def test_direct_ensure_uses_canonical_ledger_default_unless_explicitly_disabled(monkeypatch: Any, explicit_none: bool) -> None:
+    from openadapt_flow.ensure_bridge import begin_ensure
+
+    seen = {}
+    def begin(contract: Any, params: Any, **options: Any) -> Any:
+        seen.update(options)
+        options["_ensure_context"].baseline = Baseline(T0, {})
+        return SimpleNamespace(contract=contract, params=dict(params))
+    monkeypatch.setattr(api, "begin_write", begin)
+    begin_ensure(ensure(), PARAMS, **({"ledger": None} if explicit_none else {}))
+    assert ("ledger" in seen) is explicit_none
+    if explicit_none:
+        assert seen["ledger"] is None
+
+
+def owed_document() -> tuple[dict[str, Any], dict[str, Any]]:
+    from openadapt_flow.verify_run import SALT_SCHEME, sha256_tagged
+    from openadapt_flow.runtime.effects import late_write
+
+    at = "2026-11-05T00:00:00Z"
+    mac = "hmac-sha256:" + "a" * 64
+    evidence = {
+        "effect_verdict": "INDETERMINATE", "checked": {
+            "delta": "not_checked", "frame": "not_checked", "source": "instruction"},
+        "executor": {"kind": "agent", "run_record_sha256": mac},
+        "readback": {"verification_tier": "unchecked", "checked_how": "unchecked",
+                     "baseline_sha256": None, "baseline_read_at": None, "read_at": at},
+        "authorization": {"reference_sha256": mac, "self_approved": None},
+        "salting": {"scheme": SALT_SCHEME, "salt_commitment": "sha256:" + "b" * 64},
+        "frame": {"status": "not_checked", "recheck": late_write.schedule(
+            {"read_at": at}, 1.0, mac, due=True)},
+        "reconciliation": {"status": "owed", "purpose": "read_only_reconciliation",
+                           "reason": "independent_target_identity_unknown", "executable": False},
+    }
+    receipt = {"outcome": "reconciliation_required", "delivery_uncertain": True,
+               "effect_verdict": "INDETERMINATE", "executor_kind": "agent",
+               "verification_tier": "unchecked", "checked_how": "unchecked",
+               "checked": dict(evidence["checked"]), "issued_at": at,
+               "evidence_digest": sha256_tagged(evidence)}
+    return evidence, receipt
+
+
+def test_nonverified_owed_deadline_is_evidence_only_not_a_positive_receipt() -> None:
+    from openadapt_flow.verify_run import evidence_problem
+
+    evidence, receipt = owed_document()
+    assert "recheck_due_at" not in receipt
+    assert evidence_problem(evidence, receipt) is None
+    assert api.classify(receipt["outcome"], receipt["checked"], evidence)[0] is api.Outcome.UNCERTAIN
+
+
+@pytest.mark.parametrize("fault", ["verified", "refuted", "extra", "reason", "executable", "delivery", "deadline", "schedule_extra"])
+def test_owed_shape_cannot_bypass_positive_or_binding_checks(fault: str) -> None:
+    from openadapt_flow.verify_run import evidence_problem, sha256_tagged
+
+    evidence, receipt = owed_document()
+    if fault == "verified":
+        receipt["outcome"] = "verified"
+    elif fault == "refuted":
+        receipt["checked"]["frame"] = "refuted"
+        evidence["checked"]["frame"] = "refuted"
+        evidence["frame"]["status"] = "refuted"
+    elif fault == "extra":
+        evidence["reconciliation"]["target_id"] = "reply-only-id"
+    elif fault == "reason":
+        evidence["reconciliation"]["reason"] = "a caller supplied explanation"
+    elif fault == "executable":
+        evidence["reconciliation"]["executable"] = True
+    elif fault == "delivery":
+        receipt["delivery_uncertain"] = False
+    elif fault == "deadline":
+        evidence["frame"]["recheck"]["due_at"] = "2026-11-05T00:00:00Z"
+    else:
+        evidence["frame"]["recheck"]["caller_complete"] = True
+    receipt["evidence_digest"] = sha256_tagged(evidence)
+    assert evidence_problem(evidence, receipt) == "evidence_mismatch"
+
+
+def test_schema_mapping_named_param_does_not_declare_an_extra_runtime_input() -> None:
+    contract = api.Contract.from_ensure(ensure(fields={
+        "name": {"path": "name", "map": {"param": "a-stored-code"}}}), PARAMS)
+    assert contract.params == ["name"]
+    assert contract.null_unsafe_params() == {}
