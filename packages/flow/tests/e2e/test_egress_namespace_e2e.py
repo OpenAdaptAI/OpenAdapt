@@ -45,7 +45,7 @@ def _namespace(*argv: str) -> list[str]:
 
 
 @pytest.mark.parametrize("root", [False, True])
-def test_real_namespace_and_invoking_identity(root: bool) -> None:
+def test_real_namespace_and_invoking_identity(root: bool, tmp_path: Path) -> None:
     code = (
         "import json,os,subprocess; print(json.dumps(dict("
         "uid=os.getuid(),gid=os.getgid(),netns=os.readlink('/proc/self/ns/net'),"
@@ -57,6 +57,11 @@ def test_real_namespace_and_invoking_identity(root: bool) -> None:
     if root:
         argv[4:4] = ["-u", "SUDO_UID", "-u", "SUDO_GID"]
     proc = _invoke(argv)
+    (tmp_path / "namespace-identity.json").write_text(
+        json.dumps(
+            {"returncode": proc.returncode, "stdout": proc.stdout, "stderr": proc.stderr}
+        )
+    )
     assert proc.returncode == 0, proc.stderr
     result = json.loads(proc.stdout)
     assert result["uid"] == (0 if root else os.getuid())
@@ -146,6 +151,7 @@ def test_owned_pathname_unix_relay_remains_outside_the_ip_restriction(
     ack = b"synthetic-boundary-ack"
     receipts: list[bytes] = []
     errors: list[str] = []
+    observations: dict[str, object] = {}
     # AF_UNIX paths have a short OS limit; pytest's evidence path may be long.
     with tempfile.TemporaryDirectory(prefix="oa-egress-") as directory:
         unix_path = str(Path(directory) / "relay.sock")
@@ -212,6 +218,11 @@ def test_owned_pathname_unix_relay_remains_outside_the_ip_restriction(
                     PYTHONPATH=str(FLOW),
                 )
                 baseline = _invoke([sys.executable, "-c", code], env=env)
+                observations["baseline"] = {
+                    "returncode": baseline.returncode,
+                    "stdout": baseline.stdout,
+                    "stderr": baseline.stderr,
+                }
                 assert baseline.returncode == 0, baseline.stderr
                 assert json.loads(baseline.stdout)["ack"] == ack.decode()
                 assert receipts == [b"direct-control", marker]
@@ -222,8 +233,18 @@ def test_owned_pathname_unix_relay_remains_outside_the_ip_restriction(
                     "\nexcept OSError as exc: assert exc.errno in (errno.ENETUNREACH,errno.ECONNREFUSED), exc"
                 )
                 direct = _invoke(_namespace(sys.executable, "-c", direct_code), env=env)
+                observations["direct"] = {
+                    "returncode": direct.returncode,
+                    "stdout": direct.stdout,
+                    "stderr": direct.stderr,
+                }
                 assert direct.returncode == 0, direct.stderr
                 isolated = _invoke(_namespace(sys.executable, "-c", code), env=env)
+                observations["isolated"] = {
+                    "returncode": isolated.returncode,
+                    "stdout": isolated.stdout,
+                    "stderr": isolated.stderr,
+                }
                 assert isolated.returncode == 0, isolated.stderr
                 result = json.loads(isolated.stdout)
                 assert result["netns"] != os.readlink("/proc/self/ns/net")
@@ -233,7 +254,11 @@ def test_owned_pathname_unix_relay_remains_outside_the_ip_restriction(
                     worker.join(20)
                 (tmp_path / "independent-relay-receipt.json").write_text(
                     json.dumps(
-                        {"received": [x.decode() for x in receipts], "errors": errors}
+                        {
+                            "received": [x.decode() for x in receipts],
+                            "errors": errors,
+                            "observations": observations,
+                        }
                     )
                 )
             assert not any(worker.is_alive() for worker in workers)

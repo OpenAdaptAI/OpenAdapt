@@ -121,11 +121,18 @@ def test_native_child_attempt_is_blocked_without_a_python_refusal(
         import json
         import subprocess
         import openadapt_flow
+        # A location environment variable alone must not authorize this probe.
+        links = subprocess.check_output(["ip", "-o", "link", "show"], text=True)
+        routes4 = subprocess.check_output(["ip", "route", "show"], text=True)
+        routes6 = subprocess.check_output(["ip", "-6", "route", "show"], text=True)
+        assert [line.split(": ", 2)[1] for line in links.splitlines()] == ["lo"]
+        assert routes4 == routes6 == ""
         proc = subprocess.run(
             ["/bin/bash", "-c", "printf native-marker >/dev/tcp/192.0.2.123/443"],
             capture_output=True, text=True, timeout=5,
         )
-        print(json.dumps({"returncode": proc.returncode, "stderr": proc.stderr}))
+        print(json.dumps({"returncode": proc.returncode, "stderr": proc.stderr,
+                          "links": links, "routes4": routes4, "routes6": routes6}))
         """
     )
     env = _strict_env(log)
@@ -136,6 +143,11 @@ def test_native_child_attempt_is_blocked_without_a_python_refusal(
         capture_output=True,
         text=True,
         timeout=30,
+    )
+    (tmp_path / "native-child-result.json").write_text(
+        json.dumps(
+            {"returncode": proc.returncode, "stdout": proc.stdout, "stderr": proc.stderr}
+        )
     )
     assert proc.returncode == 0, proc.stderr
     child = json.loads(proc.stdout)
