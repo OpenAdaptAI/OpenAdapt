@@ -227,20 +227,22 @@ def analyze(plan: Sequence[Trial], rows: Sequence[Observation]) -> dict[str, Any
     for app, mode, block in sorted(pair_keys):
         arms = [by_slot.get(Trial(app, mode, block, state), []) for state in (False, True)]
         if all(len(a) == 1 and a[0].verified and a[0].wall_ms is not None for a in arms):
-            pairs.append({"app": app, "mode": mode, "block": block,
-                          "delta_ms": arms[1][0].wall_ms - arms[0][0].wall_ms})
+            off, on = arms[0][0].wall_ms, arms[1][0].wall_ms
+            if off is not None and on is not None:
+                pairs.append({"app": app, "mode": mode, "block": block,
+                              "delta_ms": on - off})
 
     def distribution(values: list[float | None]) -> dict[str, Any]:
-        values = [v for v in values if v is not None]
-        return {"n": len(values), "median_ms": statistics.median(values) if values else None,
-                "min_ms": min(values) if values else None, "max_ms": max(values) if values else None}
+        measured_values = [v for v in values if v is not None]
+        return {"n": len(measured_values), "median_ms": statistics.median(measured_values) if measured_values else None,
+                "min_ms": min(measured_values) if measured_values else None, "max_ms": max(measured_values) if measured_values else None}
 
-    groups = []
+    groups: list[dict[str, Any]] = []
     for app, mode, profiled in sorted({(t.app, t.mode, t.profiled) for t in plan}):
         observed = [r for r in rows if (r.trial.app, r.trial.mode, r.trial.profiled) == (app, mode, profiled)]
         good = [r for r in observed if r.verified]
         valid = [r for r in good if not r.step_issues]
-        costs = []
+        costs: list[dict[str, Any]] = []
         for phase in sorted(set(STEP_GROUPS.values()) - {"unattributed_step"}):
             values = [r.step_exclusive_ms.get(phase, 0.0) for r in valid]
             costs.append({"phase": phase, "observed_median_ms": statistics.median(values) if values else None,
