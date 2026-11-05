@@ -47,57 +47,164 @@ def _module_names(root: Path, package: str) -> dict[str, Path]:
 _DYNAMIC = {"import_module", "__import__"}
 
 
-class Importers:
-    """What a module's own bindings make an importing call.
+_IMPORTER_MODULES = ("importlib", "builtins")
+_IMPORTER_NAMES = {
+    ("importlib", "import_module"),
+    ("importlib", "__import__"),
+    ("builtins", "__import__"),
+}
 
-    ``names`` are plain names bound to ``importlib.import_module`` or
-    ``__import__`` (``from importlib import import_module as load``), plus
-    the builtin ``__import__`` unless the module binds that name itself.
-    ``modules`` are names bound to ``importlib`` or ``builtins``, whose
-    ``import_module``/``__import__`` attributes import. A same-named local
-    function or an unrelated method is not an importer.
+
+class _Scope:
+    """One lexical scope: the module, a function or lambda, or a class body."""
+
+    def __init__(self, kind: str, parent: _Scope | None) -> None:
+        self.kind = kind
+        self.parent = parent
+        # name -> [(line, what the binding makes it)]; "import_module" or
+        # "__import__" for an importer, "module" for importlib/builtins,
+        # "other" for anything else.
+        self.bindings: dict[str, list[tuple[int, str]]] = {}
+        self.globals: set[str] = set()
+        self.nonlocals: set[str] = set()
+
+
+class Importers:
+    """What each call's own lexical scope makes an importing call.
+
+    A plain name is an importer where the scope Python resolves it in binds it
+    to ``importlib.import_module`` or ``__import__`` (``from importlib import
+    import_module as load``), or where no scope binds ``__import__`` (the
+    builtin). ``m.import_module``/``m.__import__`` imports where ``m`` resolves
+    to ``importlib`` or ``builtins``. A shadow or an alias in one function
+    does not change what the same name means in another; within the call's
+    own scope the latest binding above the call wins, and in an enclosing
+    scope any importer binding counts. A same-named local function or an
+    unrelated method is not an importer.
     """
 
     def __init__(self, tree: ast.AST) -> None:
-        self.names: dict[str, str] = {}
-        self.modules: set[str] = set()
-        shadowed = False
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    top = alias.name.partition(".")[0]
-                    if alias.asname and alias.name in ("importlib", "builtins"):
-                        self.modules.add(alias.asname)
-                    elif not alias.asname and top in ("importlib", "builtins"):
-                        self.modules.add(top)
-            elif isinstance(node, ast.ImportFrom) and not node.level:
-                for alias in node.names:
-                    if (node.module, alias.name) in (
-                        ("importlib", "import_module"),
-                        ("importlib", "__import__"),
-                        ("builtins", "__import__"),
-                    ):
-                        self.names[alias.asname or alias.name] = alias.name
-            elif isinstance(
-                node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-            ):
-                shadowed |= node.name == "__import__"
-            elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
-                shadowed |= node.id == "__import__"
-        if not shadowed:
-            self.names.setdefault("__import__", "__import__")
+        self._scope_of: dict[int, _Scope] = {}
+        self._module = _Scope("module", None)
+        self._visit(tree, self._module)
+
+    def _bind(self, scope: _Scope, name: str, what: str, line: int) -> None:
+        if name in scope.globals:
+            scope = self._module
+        elif name in scope.nonlocals:
+            outer = scope.parent
+            while outer is not None and outer.kind != "function":
+                outer = outer.parent
+            scope = outer or self._module
+        scope.bindings.setdefault(name, []).append((line, what))
+
+    def _visit(self, node: ast.AST, scope: _Scope) -> None:
+        self._scope_of[id(node)] = scope
+        line = getattr(node, "lineno", 0)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            if not isinstance(node, ast.Lambda):
+                self._bind(scope, node.name, "other", line)
+                for sub in [*node.decorator_list, node.returns]:
+                    if sub is not None:
+                        self._visit(sub, scope)
+            args = node.args
+            for sub in [*args.defaults, *(d for d in args.kw_defaults if d)]:
+                self._visit(sub, scope)
+            inner = _Scope("function", scope)
+            for arg in [
+                *args.posonlyargs,
+                *args.args,
+                *args.kwonlyargs,
+                *([args.vararg] if args.vararg else []),
+                *([args.kwarg] if args.kwarg else []),
+            ]:
+                self._bind(inner, arg.arg, "other", line)
+            body = node.body if isinstance(node.body, list) else [node.body]
+            for sub in body:
+                self._visit(sub, inner)
+            return
+        if isinstance(node, ast.ClassDef):
+            self._bind(scope, node.name, "other", line)
+            for sub in [*node.decorator_list, *node.bases, *node.keywords]:
+                self._visit(sub, scope)
+            inner = _Scope("class", scope)
+            for sub in node.body:
+                self._visit(sub, inner)
+            return
+        if isinstance(node, ast.Global):
+            scope.globals.update(node.names)
+        elif isinstance(node, ast.Nonlocal):
+            scope.nonlocals.update(node.names)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                top = alias.name.partition(".")[0]
+                if alias.asname:
+                    what = "module" if alias.name in _IMPORTER_MODULES else "other"
+                    self._bind(scope, alias.asname, what, line)
+                else:
+                    what = "module" if top in _IMPORTER_MODULES else "other"
+                    self._bind(scope, top, what, line)
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name == "*":
+                    continue
+                what = (
+                    alias.name
+                    if not node.level and (node.module, alias.name) in _IMPORTER_NAMES
+                    else "other"
+                )
+                self._bind(scope, alias.asname or alias.name, what, line)
+        elif isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            self._bind(scope, node.id, "other", line)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            self._bind(scope, node.name, "other", line)
+        elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name:
+            self._bind(scope, node.name, "other", line)
+        elif isinstance(node, ast.MatchMapping) and node.rest:
+            self._bind(scope, node.rest, "other", line)
+        for child in ast.iter_child_nodes(node):
+            self._visit(child, scope)
+
+    def _resolve(self, node: ast.AST, name: str) -> set[str]:
+        """What ``name`` may be where ``node`` reads it; empty for the builtin."""
+
+        scope: _Scope | None = self._scope_of.get(id(node), self._module)
+        line = getattr(node, "lineno", 0)
+        own = True
+        while scope is not None:
+            if name in scope.globals and scope is not self._module:
+                scope, own = self._module, False
+                continue
+            if name in scope.nonlocals:
+                scope, own = scope.parent, False
+                continue
+            if (own or scope.kind != "class") and name in scope.bindings:
+                binds = scope.bindings[name]
+                if own:
+                    prior = [what for at, what in binds if at <= line]
+                    if prior:
+                        return {prior[-1]}
+                    if scope.kind == "function":
+                        return {what for _, what in binds}
+                else:
+                    return {what for _, what in binds}
+            scope, own = scope.parent, False
+        return set()
 
     def called(self, call: ast.Call) -> str | None:
         """``import_module`` or ``__import__`` when ``call`` is one, else None."""
 
         func = call.func
         if isinstance(func, ast.Name):
-            return self.names.get(func.id)
+            found = self._resolve(call, func.id)
+            if not found:
+                return "__import__" if func.id == "__import__" else None
+            return next((what for what in sorted(found) if what in _DYNAMIC), None)
         if (
             isinstance(func, ast.Attribute)
             and func.attr in _DYNAMIC
             and isinstance(func.value, ast.Name)
-            and func.value.id in self.modules
+            and "module" in self._resolve(call, func.value.id)
         ):
             return func.attr
         return None
@@ -222,8 +329,8 @@ def _fed_tables(
     """Tables whose values ``func`` passes to an importing call.
 
     The module name is the table read itself (``_T[name]``, ``_T.get(name)``)
-    or a local assigned from one; a table read for anything else is not an
-    import.
+    or a local assigned from one, directly or through other locals; a table
+    read for anything else is not an import.
     """
 
     def reads(expr: ast.AST) -> set[str]:
@@ -231,7 +338,9 @@ def _fed_tables(
             n.id for n in ast.walk(expr) if isinstance(n, ast.Name) and n.id in tables
         }
 
-    assigned: dict[str, set[str]] = {}
+    # Each local's sources: the names its assigned values read, so a table
+    # read forwarded through other locals (``m = _T[n]; t = m``) still counts.
+    sources: dict[str, set[str]] = {}
     for node in ast.walk(func):
         targets = (
             node.targets
@@ -242,7 +351,9 @@ def _fed_tables(
         )
         for target in targets:
             if isinstance(target, ast.Name):
-                assigned.setdefault(target.id, set()).update(reads(node.value))
+                sources.setdefault(target.id, set()).update(
+                    n.id for n in ast.walk(node.value) if isinstance(n, ast.Name)
+                )
     fed: set[str] = set()
     for node in ast.walk(func):
         if not isinstance(node, ast.Call) or importers.called(node) is None:
@@ -251,9 +362,16 @@ def _fed_tables(
         if arg is None:
             continue
         fed |= reads(arg)
-        for sub in ast.walk(arg):
-            if isinstance(sub, ast.Name):
-                fed |= assigned.get(sub.id, set())
+        seen: set[str] = set()
+        pending = [n.id for n in ast.walk(arg) if isinstance(n, ast.Name)]
+        while pending:
+            local = pending.pop()
+            if local in seen:
+                continue
+            seen.add(local)
+            if local in tables:
+                fed.add(local)
+            pending.extend(sources.get(local, ()))
     return fed
 
 
@@ -672,6 +790,84 @@ def test_checker_ignores_a_string_that_is_not_imported(
     assert transitive_violations(graph, _PLANTED_CONTRACT) == []
 
 
+# A binding means what Python's lexical scoping makes it mean where it's read.
+
+
+@pytest.mark.parametrize(
+    "engine",
+    [
+        # a shadow inside one function leaves the builtin in another
+        "def other():\n"
+        "    def __import__(name):\n"
+        "        return name\n"
+        "    return __import__('planted.ui.text')\n"
+        "def go():\n    return __import__('planted.demo.app')\n",
+        "def other():\n"
+        "    __import__ = str\n"
+        "    return __import__('planted.ui.text')\n"
+        "def go():\n    return __import__('planted.demo.app')\n",
+        # an alias bound in the calling function, after a non-importer
+        "def go():\n"
+        "    load = str\n"
+        "    from importlib import import_module as load\n"
+        "    return load('planted.demo.app')\n",
+        # an alias bound in an enclosing function
+        "def go():\n"
+        "    from importlib import import_module as load\n"
+        "    def inner():\n"
+        "        return load('planted.demo.app')\n"
+        "    return inner()\n",
+    ],
+    ids=["nested-def-shadow", "local-shadow", "rebound-alias", "enclosing-alias"],
+)
+def test_checker_resolves_an_importer_in_its_own_scope(
+    tmp_path: Path, engine: str
+) -> None:
+    graph = _plant(tmp_path, **{"core/engine.py": engine, "helper.py": ""})
+    line = next(
+        n for n, text in enumerate(engine.splitlines(), 1) if "demo.app" in text
+    )
+    assert direct_violations(graph, _PLANTED_CONTRACT) == [
+        f"planted.core.engine -> planted.demo.app (app, lines [{line}])",
+    ]
+
+
+@pytest.mark.parametrize(
+    "engine",
+    [
+        # an importer alias bound only inside another function
+        "def load(name):\n    return name\n"
+        "def other():\n"
+        "    from importlib import import_module as load\n"
+        "    return load('planted.ui.text')\n"
+        "def go():\n    return load('planted.demo.app')\n",
+        # the alias rebound to something else before the call
+        "def go():\n"
+        "    from importlib import import_module as load\n"
+        "    load = str\n"
+        "    return load('planted.demo.app')\n",
+        # a class-body alias is not visible inside its methods
+        "def load(name):\n    return name\n"
+        "class C:\n"
+        "    from importlib import import_module as load\n"
+        "    def go(self):\n"
+        "        return load('planted.demo.app')\n",
+        # importlib bound in another function only
+        "def other():\n"
+        "    import importlib\n"
+        "    return importlib.import_module('planted.ui.text')\n"
+        "def go(importlib):\n    return importlib.import_module('planted.demo.app')\n",
+    ],
+    ids=["alias-in-other-function", "rebound", "class-body", "module-param"],
+)
+def test_checker_ignores_a_name_another_scope_binds(
+    tmp_path: Path, engine: str
+) -> None:
+    graph = _plant(tmp_path, **{"core/engine.py": engine, "helper.py": ""})
+    assert direct_violations(graph, _PLANTED_CONTRACT) == []
+    assert transitive_violations(graph, _PLANTED_CONTRACT) == []
+
+
 def test_checker_ignores_a_dynamic_import_it_cannot_read(tmp_path: Path) -> None:
     engine = (
         "import importlib\ndef go(name):\n    return importlib.import_module(name)\n"
@@ -715,6 +911,13 @@ def test_checker_ignores_a_dynamic_import_it_cannot_read(tmp_path: Path) -> None
         "_LAZY_EXPORTS = {'Window': 'planted.ui.window'}\n"
         "def __getattr__(name):\n"
         "    return getattr(importlib.import_module(_LAZY_EXPORTS[name]), name)\n",
+        # the table read forwarded through more than one local
+        "from importlib import import_module\n"
+        "_T = {'Window': 'planted.ui.window'}\n"
+        "def __getattr__(name):\n"
+        "    module_name = _T[name]\n"
+        "    target = module_name\n"
+        "    return getattr(import_module(target), name)\n",
         # a from-import re-exported under another name, with no guard
         "def __getattr__(name):\n"
         "    from planted.ui.window import window as Window\n"
