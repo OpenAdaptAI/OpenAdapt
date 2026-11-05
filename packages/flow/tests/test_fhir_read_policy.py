@@ -80,9 +80,7 @@ def test_every_page_requests_no_cache_and_reads_over_one_hundred(kind):
         assert "no-store" not in kwargs["headers"]["Cache-Control"]
         assert kwargs["headers"]["Accept"] == "application/fhir+json"
         if kind == "effect":
-            assert (
-                kwargs["headers"]["Authorization"] == "Bearer synthetic-test-token"
-            )
+            assert kwargs["headers"]["Authorization"] == "Bearer synthetic-test-token"
             assert kwargs["verify"] is True
 
 
@@ -104,9 +102,7 @@ def test_one_hundred_result_cap_is_incomplete(kind):
     ],
 )
 def test_malformed_next_link_cannot_disguise_truncation(kind, links):
-    records, _ = read(
-        kind, [bundle([1], total=1, links=links), bundle([], total=1)]
-    )
+    records, _ = read(kind, [bundle([1], total=1, links=links), bundle([], total=1)])
     assert records is None
 
 
