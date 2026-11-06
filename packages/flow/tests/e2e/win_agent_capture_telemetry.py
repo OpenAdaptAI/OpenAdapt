@@ -266,15 +266,49 @@ def instrument_make_handler_class(
             if current is not None:
                 # Defer hashing, decoding and file I/O until the unchanged
                 # handler has completed its guard/input decision.
-                current["captures"].append(png)
+                if len(current["captures"]) < _RING_LIMIT:
+                    current["captures"].append(png)
+                else:
+                    current["capture_overflow"] = True
             return png
 
         handler = original_factory(config, observed_grab, *args, **kwargs)
 
         class InstrumentedHandler(handler):
+            @staticmethod
+            def _finish_telemetry(state: dict[str, Any]) -> None:
+                if state["telemetry_finalized"]:
+                    return
+                state["telemetry_finalized"] = True
+                sequences: list[int] = []
+                try:
+                    for png in state["captures"]:
+                        sequence = telemetry.capture(png)
+                        if sequence is not None:
+                            sequences.append(sequence)
+                    if (
+                        state["stale_frame"]
+                        and not state["capture_overflow"]
+                        and len(sequences) == 1
+                    ):
+                        telemetry.refused_guard(state["expected_sha256"], sequences[0])
+                except Exception:  # noqa: BLE001 - telemetry never changes request outcome
+                    pass
+
+            def send_response(self, code: int, message: str | None = None) -> None:
+                # The route has completed its decision (including guarded
+                # input) before this hook. Flush metadata before the status
+                # line/body become visible to the client.
+                current = getattr(request_state, "request", None)
+                if code >= 200 and current is not None:
+                    self._finish_telemetry(current)
+                super().send_response(code, message)
+
             def handle_one_request(self) -> None:  # noqa: N802 - stdlib handler contract
                 state: dict[str, Any] = {
                     "captures": [],
+                    "capture_overflow": False,
+                    "telemetry_finalized": False,
                     "expected_sha256": None,
                     "stale_frame": False,
                 }
@@ -282,20 +316,12 @@ def instrument_make_handler_class(
                 try:
                     super().handle_one_request()
                 finally:
+                    # Only abnormal paths which never reached send_response
+                    # use this bounded fallback; normal responses finalize
+                    # before their first response bytes are written.
+                    self._finish_telemetry(state)
                     if hasattr(request_state, "request"):
                         del request_state.request
-                    sequences: list[int] = []
-                    try:
-                        for png in state["captures"]:
-                            sequence = telemetry.capture(png)
-                            if sequence is not None:
-                                sequences.append(sequence)
-                        if state["stale_frame"] and len(sequences) == 1:
-                            telemetry.refused_guard(
-                                state["expected_sha256"], sequences[0]
-                            )
-                    except Exception:  # noqa: BLE001 - telemetry never changes request outcome
-                        pass
 
             def do_POST(self) -> None:  # noqa: N802 - stdlib handler contract
                 if self.path != "/input/guarded":

@@ -47,7 +47,9 @@ class _RunningServer:
 
         def tracked_capture(png: bytes) -> int | None:
             self.processing_events.append("capture")
-            return original_capture(png)
+            result = original_capture(png)
+            self.processing_events.append("capture_flushed")
+            return result
 
         self.telemetry.capture = tracked_capture
         original_factory = agent_server.make_handler_class
@@ -55,15 +57,21 @@ class _RunningServer:
         def tracked_factory(config, grab_fn, *args, **kwargs):
             handler = original_factory(config, grab_fn, *args, **kwargs)
             original_send_json = handler._send_json
+            original_send_response = handler.send_response
 
             def tracked_send_json(instance, status, payload):
-                result = original_send_json(instance, status, payload)
                 if status == 409 and isinstance(payload, dict):
                     if payload.get("code") == "stale_frame":
-                        self.processing_events.append("stale_response")
-                return result
+                        self.processing_events.append("stale_decision")
+                return original_send_json(instance, status, payload)
+
+            def tracked_send_response(instance, status, message=None):
+                if status >= 200 and instance.path == "/input/guarded":
+                    self.processing_events.append("guard_response_started")
+                return original_send_response(instance, status, message)
 
             handler._send_json = tracked_send_json
+            handler.send_response = tracked_send_response
             return handler
 
         monkeypatch.setattr(
@@ -169,6 +177,11 @@ def test_guard_refusal_correlates_expected_and_exact_request_capture(
         assert response.json()["code"] == "stale_frame"
         assert running.context_calls == 0
         assert running.input_calls == []
+        events = running.processing_events
+        stale_decision = events.index("stale_decision")
+        capture_flushed = events.index("capture_flushed", stale_decision)
+        assert stale_decision < capture_flushed
+        assert capture_flushed < events.index("guard_response_started")
         projection = capture_telemetry.safe_projection(running.sidecar)
         assert projection["status"] == "available"
         if os.name != "nt":
@@ -208,11 +221,11 @@ def test_matching_frame_preserves_tls_auth_capture_count_and_input(
         assert running.cursor == 2
         assert running.context_calls == 1
         assert len(running.input_calls) == 1
-        assert (
-            running.processing_events.index("input")
-            < len(running.processing_events) - 1
-        )
-        assert running.processing_events[-1] == "capture"
+        events = running.processing_events
+        input_decision = events.index("input")
+        capture_flushed = events.index("capture_flushed", input_decision)
+        assert input_decision < capture_flushed
+        assert capture_flushed < events.index("guard_response_started")
         assert capture_telemetry.safe_projection(running.sidecar) == {
             "status": "available",
             "diagnoses": [],
@@ -270,11 +283,11 @@ def test_sidecar_failure_does_not_change_capture_or_guard_refusal(
         assert refused.status_code == 409
         assert refused.json()["code"] == "stale_frame"
         assert running.context_calls == 0 and running.input_calls == []
-        assert (
-            running.processing_events.index("stale_response")
-            < len(running.processing_events) - 1
-        )
-        assert running.processing_events[-1] == "capture"
+        events = running.processing_events
+        stale_decision = events.index("stale_decision")
+        capture_flushed = events.index("capture_flushed", stale_decision)
+        assert stale_decision < capture_flushed
+        assert capture_flushed < events.index("guard_response_started")
         assert (
             capture_telemetry.safe_projection(missing_parent)["status"] == "unavailable"
         )
@@ -317,6 +330,67 @@ def test_telemetry_exception_does_not_mask_guard_refusal(
         assert refused.json()["code"] == "stale_frame"
         assert running.context_calls == 0 and running.input_calls == []
     finally:
+        running.close()
+
+
+def test_client_waits_for_diagnostic_flush_after_guard_decision(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    expected = _png((10, 20, 30), compression=0)
+    current = _png((90, 20, 30), compression=9)
+    running = _RunningServer(monkeypatch, tmp_path, [expected, current])
+    flush_entered = threading.Event()
+    release_flush = threading.Event()
+    client_completed = threading.Event()
+    responses: list[requests.Response] = []
+    try:
+        screenshot = running.session.get(f"{running.url}/screenshot", timeout=5)
+        assert screenshot.status_code == 200
+        original_capture = running.telemetry.capture
+
+        def blocked_capture(png: bytes) -> int | None:
+            running.processing_events.append("flush_entered")
+            flush_entered.set()
+            if not release_flush.wait(timeout=5):
+                raise TimeoutError("test flush was not released")
+            result = original_capture(png)
+            running.processing_events.append("blocked_flush_completed")
+            return result
+
+        running.telemetry.capture = blocked_capture  # type: ignore[method-assign]
+
+        def issue_request() -> None:
+            try:
+                responses.append(
+                    _guard(running.session, running.url, screenshot.content)
+                )
+            finally:
+                client_completed.set()
+
+        client = threading.Thread(target=issue_request, daemon=True)
+        client.start()
+        assert flush_entered.wait(timeout=5)
+        events = running.processing_events
+        assert "stale_decision" in events
+        assert events.index("stale_decision") < events.index("flush_entered")
+        assert running.context_calls == 0 and running.input_calls == []
+        assert not client_completed.is_set()
+
+        release_flush.set()
+        assert client_completed.wait(timeout=5)
+        client.join(timeout=5)
+        assert len(responses) == 1
+        assert responses[0].status_code == 409
+        assert responses[0].json()["code"] == "stale_frame"
+        events = running.processing_events
+        assert events.index("blocked_flush_completed") < events.index(
+            "guard_response_started"
+        )
+        assert (
+            capture_telemetry.safe_projection(running.sidecar)["status"] == "available"
+        )
+    finally:
+        release_flush.set()
         running.close()
 
 
