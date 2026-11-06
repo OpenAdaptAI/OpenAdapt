@@ -39,15 +39,38 @@ class _RunningServer:
         self.frames = frames
         self.context_calls = 0
         self.input_calls: list[dict[str, Any]] = []
+        self.processing_events: list[str] = []
         self.cert = generate_self_signed_cert(dirpath=str(tmp_path / "tls"))
         self.sidecar = sidecar or (tmp_path / "capture-sidecar.json")
         self.telemetry = capture_telemetry.CaptureTelemetry(self.sidecar)
+        original_capture = self.telemetry.capture
+
+        def tracked_capture(png: bytes) -> int | None:
+            self.processing_events.append("capture")
+            return original_capture(png)
+
+        self.telemetry.capture = tracked_capture
         original_factory = agent_server.make_handler_class
+
+        def tracked_factory(config, grab_fn, *args, **kwargs):
+            handler = original_factory(config, grab_fn, *args, **kwargs)
+            original_send_json = handler._send_json
+
+            def tracked_send_json(instance, status, payload):
+                result = original_send_json(instance, status, payload)
+                if status == 409 and isinstance(payload, dict):
+                    if payload.get("code") == "stale_frame":
+                        self.processing_events.append("stale_response")
+                return result
+
+            handler._send_json = tracked_send_json
+            return handler
+
         monkeypatch.setattr(
             agent_server,
             "make_handler_class",
             capture_telemetry.instrument_make_handler_class(
-                original_factory, self.telemetry
+                tracked_factory, self.telemetry
             ),
         )
 
@@ -58,6 +81,7 @@ class _RunningServer:
 
         def context() -> dict[str, str]:
             self.context_calls += 1
+            self.processing_events.append("context")
             return {
                 "application": "fixture-app",
                 "session": "fixture-session",
@@ -66,6 +90,7 @@ class _RunningServer:
 
         def input_action(payload: dict[str, Any]) -> dict[str, str]:
             self.input_calls.append(payload)
+            self.processing_events.append("input")
             return {"status": "ok"}
 
         self.httpd = agent_server.create_server(
@@ -179,6 +204,8 @@ def test_matching_frame_preserves_tls_auth_capture_count_and_input(
         assert running.cursor == 2
         assert running.context_calls == 1
         assert len(running.input_calls) == 1
+        assert running.processing_events.index("input") < len(running.processing_events) - 1
+        assert running.processing_events[-1] == "capture"
         assert capture_telemetry.safe_projection(running.sidecar) == {
             "status": "available",
             "diagnoses": [],
@@ -232,7 +259,49 @@ def test_sidecar_failure_does_not_change_capture_or_guard_refusal(
         assert refused.status_code == 409
         assert refused.json()["code"] == "stale_frame"
         assert running.context_calls == 0 and running.input_calls == []
+        assert running.processing_events.index("stale_response") < len(
+            running.processing_events
+        ) - 1
+        assert running.processing_events[-1] == "capture"
         assert capture_telemetry.safe_projection(missing_parent)["status"] == "unavailable"
+    finally:
+        running.close()
+
+
+def test_sidecar_update_refuses_to_replace_changed_foreign_content(
+    tmp_path: Path,
+) -> None:
+    sidecar = tmp_path / "capture-sidecar.json"
+    telemetry = capture_telemetry.CaptureTelemetry(sidecar)
+    first = _png((10, 20, 30), compression=6)
+    changed = _png((90, 20, 30), compression=6)
+
+    assert telemetry.capture(first) == 1
+    foreign_content = b"foreign sidecar state"
+    sidecar.write_bytes(foreign_content)
+
+    assert telemetry.capture(changed) is None
+    assert sidecar.read_bytes() == foreign_content
+
+
+def test_telemetry_exception_does_not_mask_guard_refusal(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    first = _png((10, 20, 30), compression=6)
+    current = _png((90, 20, 30), compression=6)
+    running = _RunningServer(monkeypatch, tmp_path, [first, current])
+
+    def fail_capture(_png_bytes: bytes) -> int:
+        raise RuntimeError("synthetic telemetry failure")
+
+    running.telemetry.capture = fail_capture  # type: ignore[method-assign]
+    try:
+        screenshot = running.session.get(f"{running.url}/screenshot", timeout=5)
+        assert screenshot.status_code == 200 and screenshot.content == first
+        refused = _guard(running.session, running.url, screenshot.content)
+        assert refused.status_code == 409
+        assert refused.json()["code"] == "stale_frame"
+        assert running.context_calls == 0 and running.input_calls == []
     finally:
         running.close()
 

@@ -13,6 +13,7 @@ import importlib
 import io
 import json
 import os
+import stat
 import sys
 import tempfile
 import threading
@@ -46,6 +47,8 @@ class CaptureTelemetry:
         self._refusals: deque[dict[str, Any]] = deque(maxlen=_RING_LIMIT)
         self._sequence = 0
         self._enabled = False
+        self._owned_identity: tuple[int, int] | None = None
+        self._owned_payload_sha256: str | None = None
         try:
             if not sidecar.is_absolute() or sidecar.name in {"", ".", ".."}:
                 return
@@ -66,8 +69,33 @@ class CaptureTelemetry:
             "guarded_refusals": list(self._refusals),
         }
 
+    def _owned_sidecar_matches(self) -> bool:
+        """Require the regular file and bytes to remain ours before update."""
+
+        try:
+            metadata = self.sidecar.lstat()
+            if not stat.S_ISREG(metadata.st_mode):
+                return False
+            if (metadata.st_dev, metadata.st_ino) != self._owned_identity:
+                return False
+            if metadata.st_size > _MAX_SIDECAR_BYTES:
+                return False
+            content = self.sidecar.read_bytes()
+            return (
+                len(content) == metadata.st_size
+                and self._owned_payload_sha256 is not None
+                and hashlib.sha256(content).hexdigest()
+                == self._owned_payload_sha256
+            )
+        except Exception:  # noqa: BLE001 - foreign sidecar state disables telemetry
+            return False
+
     def _write_snapshot_locked(self) -> bool:
-        if not self._enabled and self.sidecar.exists():
+        is_initial = self._owned_identity is None
+        if is_initial:
+            if self.sidecar.exists() or self.sidecar.is_symlink():
+                return False
+        elif not self._owned_sidecar_matches():
             return False
         temporary: Path | None = None
         try:
@@ -90,10 +118,22 @@ class CaptureTelemetry:
             except BaseException:
                 os.close(fd)
                 raise
-            if self.sidecar.exists() or self.sidecar.is_symlink():
+            if is_initial:
+                # Hard-link publication is create-only: never replace a file
+                # that appeared after the initial absence check.
+                os.link(temporary, self.sidecar)
+                temporary.unlink()
+                temporary = None
+            else:
+                if not self._owned_sidecar_matches():
+                    return False
+                os.replace(temporary, self.sidecar)
+                temporary = None
+            metadata = self.sidecar.lstat()
+            if not stat.S_ISREG(metadata.st_mode):
                 return False
-            os.replace(temporary, self.sidecar)
-            temporary = None
+            self._owned_identity = (metadata.st_dev, metadata.st_ino)
+            self._owned_payload_sha256 = hashlib.sha256(payload).hexdigest()
             try:
                 os.chmod(self.sidecar, 0o600)
             except OSError:
@@ -218,18 +258,41 @@ def instrument_make_handler_class(
     def make_handler_class(config: Any, grab_fn: Callable[..., bytes], *args: Any, **kwargs: Any):
         def observed_grab() -> bytes:
             png = grab_fn()
-            try:
-                sequence = telemetry.capture(png)
-            except Exception:  # noqa: BLE001 - telemetry must never alter capture
-                sequence = None
-            current = getattr(request_state, "guard", None)
+            current = getattr(request_state, "request", None)
             if current is not None:
-                current["current_sequence"] = sequence
+                # Defer hashing, decoding and file I/O until the unchanged
+                # handler has completed its guard/input decision.
+                current["captures"].append(png)
             return png
 
         handler = original_factory(config, observed_grab, *args, **kwargs)
 
         class InstrumentedHandler(handler):
+            def handle_one_request(self) -> None:  # noqa: N802 - stdlib handler contract
+                state: dict[str, Any] = {
+                    "captures": [],
+                    "expected_sha256": None,
+                    "stale_frame": False,
+                }
+                request_state.request = state
+                try:
+                    super().handle_one_request()
+                finally:
+                    if hasattr(request_state, "request"):
+                        del request_state.request
+                    sequences: list[int] = []
+                    try:
+                        for png in state["captures"]:
+                            sequence = telemetry.capture(png)
+                            if sequence is not None:
+                                sequences.append(sequence)
+                        if state["stale_frame"] and len(sequences) == 1:
+                            telemetry.refused_guard(
+                                state["expected_sha256"], sequences[0]
+                            )
+                    except Exception:  # noqa: BLE001 - telemetry never changes request outcome
+                        pass
+
             def do_POST(self) -> None:  # noqa: N802 - stdlib handler contract
                 if self.path != "/input/guarded":
                     super().do_POST()
@@ -237,13 +300,9 @@ def instrument_make_handler_class(
                 original_rfile = self.rfile
                 original_send_json = self._send_json
                 tap = _ReadTap(original_rfile)
-                state: dict[str, Any] = {
-                    "expected_sha256": None,
-                    "current_sequence": None,
-                }
+                state = request_state.request
                 try:
                     self.rfile = tap
-                    request_state.guard = state
 
                     def send_json(status: int, payload: dict[str, Any]) -> None:
                         try:
@@ -255,10 +314,7 @@ def instrument_make_handler_class(
                                 state["expected_sha256"] = _extract_expected_hash(
                                     tap.bytes_read()
                                 )
-                                telemetry.refused_guard(
-                                    state["expected_sha256"],
-                                    state["current_sequence"],
-                                )
+                                state["stale_frame"] = True
                         except Exception:  # noqa: BLE001 - sidecar is diagnostic only
                             pass
                         original_send_json(status, payload)
@@ -266,8 +322,6 @@ def instrument_make_handler_class(
                     self._send_json = send_json
                     super().do_POST()
                 finally:
-                    if hasattr(request_state, "guard"):
-                        del request_state.guard
                     self.rfile = original_rfile
                     self._send_json = original_send_json
 
