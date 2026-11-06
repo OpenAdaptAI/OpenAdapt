@@ -11,13 +11,23 @@ import hashlib
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from openadapt_flow.backends.rdp_backend import FreeRDPBackend
 from openadapt_flow.backends.xfreerdp import XFreeRDPTransport
 from openadapt_flow.qualify.qualification_pixel_fault_task import OwnedPixelTasks
 from openadapt_flow.qualify.rdp_pairing import RdpPairing, Rect
 from openadapt_flow.qualify.windows_pixel_fault_controller import _request_for
+
+
+class PixelTaskOwner(Protocol):
+    """Existing guest-task operations supplied by a trusted Python session."""
+
+    def launch(self, request: dict[str, Any]) -> Any: ...
+
+    def wait_ready(self, handle: Any, *, timeout_s: float = 15) -> str | None: ...
+
+    def close(self) -> None: ...
 
 
 @dataclass
@@ -49,7 +59,7 @@ class RdpQualificationPixelFaultController:
         backend: FreeRDPBackend,
         transport: XFreeRDPTransport,
         pairing: RdpPairing,
-        tasks: OwnedPixelTasks,
+        tasks: PixelTaskOwner,
         *,
         guest_digest: str,
         environment_identity: tuple[str, str, str, str],
@@ -164,6 +174,7 @@ def open_rdp_qualification_session(
     close_owner: Callable[[], None],
     lifetime_seconds: int = 60,
     readiness_probe: Callable[[bytes], bool] | None = None,
+    task_owner_factory: Callable[[str], PixelTaskOwner] | None = None,
 ) -> tuple[FreeRDPBackend, Callable[[], None]]:
     """Build an ``app.session`` result from an existing owned RDP session.
 
@@ -171,6 +182,9 @@ def open_rdp_qualification_session(
     validation, this hook takes responsibility for calling ``close_owner`` on
     setup failure or close. That callback must dispose only the session resources
     its caller actually owns. Guest tasks are separately creation-receipt bound.
+    A trusted Python session may supply ``task_owner_factory`` for its guest
+    environment; this callable is never loaded from qualification YAML. Without
+    it, the existing Windows guest task implementation is used unchanged.
     """
     if type(transport) is not XFreeRDPTransport or not callable(close_owner):
         raise ValueError("RDP qualification requires its existing owned transport")
@@ -181,8 +195,26 @@ def open_rdp_qualification_session(
         raise ValueError(
             "RDP qualification needs positive application/environment probes"
         )
+    if task_owner_factory is not None and not callable(task_owner_factory):
+        raise ValueError("task owner factory must come from the Python session hook")
     state = _SessionState()
-    task_owners: list[OwnedPixelTasks] = []
+    task_owners: list[PixelTaskOwner] = []
+
+    def make_tasks(binding: str) -> PixelTaskOwner:
+        owner = (
+            OwnedPixelTasks(lab, guest_dir=guest_dir, session_binding_sha256=binding)
+            if task_owner_factory is None
+            else task_owner_factory(binding)
+        )
+        # Track the returned owner before validation so setup failure also closes it.
+        task_owners.append(owner)
+        if not all(
+            callable(getattr(owner, name, None))
+            for name in ("launch", "wait_ready", "close")
+        ):
+            raise ValueError("session task owner does not implement the task lifecycle")
+        return owner
+
     backend: FreeRDPBackend | None = None
     controller: RdpQualificationPixelFaultController | None = None
 
@@ -256,12 +288,7 @@ def open_rdp_qualification_session(
                 "RDP application environment is unavailable before pairing"
             )
         request = pairing.guest_request()
-        witness_tasks = OwnedPixelTasks(
-            lab,
-            guest_dir=guest_dir,
-            session_binding_sha256=request["connection_digest"],
-        )
-        task_owners.append(witness_tasks)
+        witness_tasks = make_tasks(request["connection_digest"])
         witness = witness_tasks.launch(request)
         if not witness_tasks.wait_ready(witness, timeout_s=min(15, lifetime_seconds)):
             raise ValueError("RDP guest pairing did not become ready")
@@ -272,10 +299,7 @@ def open_rdp_qualification_session(
         if identity is None or identity[2] != request["connection_digest"]:
             raise ValueError("RDP guest witness does not bind the observed environment")
         guest_digest = status.rsplit(":", 1)[1]
-        fault_tasks = OwnedPixelTasks(
-            lab, guest_dir=guest_dir, session_binding_sha256=guest_digest
-        )
-        task_owners.append(fault_tasks)
+        fault_tasks = make_tasks(guest_digest)
         controller = RdpQualificationPixelFaultController(
             backend,
             transport,
