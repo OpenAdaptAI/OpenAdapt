@@ -6,7 +6,8 @@ name: Desktop replay
 # - replay: records, compiles and replays the in-tree WinForms Patient Notes
 #   app through WindowsBackend and the real win_agent on Windows, and judges
 #   every replay from the app's SQLite record
-#   (packages/flow/tests/e2e/test_windows_hosted_replay.py).
+#   (packages/flow/tests/e2e/test_windows_hosted_replay.py), then runs the
+#   six-case native campaign against the same synthetic application.
 # - freerdp: a FreeRDP transport round trip on Linux, not a replay. xfreerdp3
 #   connects over loopback to freerdp-shadow-cli3 serving an Xvfb display, and
 #   FreeRDPBackend looks up three accounts in a synthetic read-only ledger app
@@ -21,6 +22,7 @@ on:
       - packages/flow/scripts/desktop/pn_db.py
       - packages/flow/scripts/desktop/patient_notes.ps1
       - packages/flow/tests/e2e/test_windows_hosted_replay.py
+      - packages/flow/tests/e2e/test_windows_hosted_campaign.py
       - packages/flow/tests/test_xfreerdp.py
       - packages/flow/tests/test_windows_attempt_ledger.py
       - packages/flow/benchmark/rdp_pool/**
@@ -84,19 +86,41 @@ jobs:
           mkdir -p runs
           pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/wr" \
             tests/e2e/test_windows_hosted_replay.py --junitxml=runs/windows-replay-junit.xml
-      - name: The replay ran (no skips)
+      - name: Native Windows campaign, judged from the record
+        env:
+          OAFLOW_WINDOWS_HOSTED_E2E: "1"
+        run: |
+          mkdir -p runs
+          pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/wc" \
+            tests/e2e/test_windows_hosted_campaign.py::test_windows_hosted_six_case_campaign \
+            --junitxml=runs/windows-campaign-junit.xml
+      - name: The replay and campaign ran (no skips)
         run: |
           python - <<'PY'
+          import json
+          import os
           import sys
           import xml.etree.ElementTree as ET
-          cases = [
-              case
-              for name in ("windows-guards", "windows-replay")
-              for case in ET.parse(f"runs/{name}-junit.xml").getroot().iter("testcase")
-          ]
+          from pathlib import Path
+          cases = []
+          for name in ("windows-guards", "windows-replay", "windows-campaign"):
+              selected = list(ET.parse(f"runs/{name}-junit.xml").getroot().iter("testcase"))
+              if not selected:
+                  sys.exit(f"{name} did not run: no test cases")
+              cases.extend(selected)
           skipped = [c for c in cases if c.find("skipped") is not None]
           if not cases or skipped:
               sys.exit(f"windows replay did not run: {len(cases)} cases, {len(skipped)} skipped")
+          summaries = list(
+              (Path(os.environ["RUNNER_TEMP"]) / "wc").glob(
+                  "**/hosted-campaign/campaign-evidence.json"
+              )
+          )
+          if len(summaries) != 1:
+              sys.exit("windows campaign did not produce exactly one safe outcome summary")
+          summary = json.loads(summaries[0].read_text(encoding="utf-8"))
+          if not isinstance(summary, dict) or not summary:
+              sys.exit("windows campaign outcome summary is empty")
           PY
       - name: Keep the evidence
         if: always()
@@ -108,6 +132,10 @@ jobs:
             ${{ runner.temp }}/wr/**/*.png
             ${{ runner.temp }}/wr/**/agent.log
             ${{ runner.temp }}/wr/**/report.json
+            ${{ runner.temp }}/wc/**/hosted-campaign/campaign-evidence.json
+            packages/flow/runs/windows-guards-junit.xml
+            packages/flow/runs/windows-replay-junit.xml
+            packages/flow/runs/windows-campaign-junit.xml
           if-no-files-found: ignore
           retention-days: 14
 
