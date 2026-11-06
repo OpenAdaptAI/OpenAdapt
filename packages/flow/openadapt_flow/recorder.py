@@ -254,6 +254,10 @@ class Recorder:
         # backend must never advertise an authoritative business-effect oracle
         # merely because the recorder can query a separate read-only source.
         self._system_of_record_reader = system_of_record_reader
+        #: Optional callbacks that pump an attached capture/guard while the
+        #: recorder waits for a consequential action to settle. These run
+        #: before each frame and SOR snapshot, on the recording thread.
+        self._settle_callbacks: list[Callable[[float], None]] = []
         #: Set by :meth:`expect_write` for the next event only.
         self._write_wait_s = 0.0
         self._settle_interval_s = settle_interval_s
@@ -1265,6 +1269,7 @@ class Recorder:
         start = time.monotonic()
         limit = start + self._settle_timeout_s
         before_pixels = _pixels(before) if before is not None else None
+        self._run_settle_callbacks(limit)
         png = self._backend.screenshot()
         prev = _phash(png)
         consecutive = 1
@@ -1288,6 +1293,7 @@ class Recorder:
             if time.monotonic() >= limit:
                 return png
             time.sleep(self._settle_interval_s)
+            self._run_settle_callbacks(limit)
             png = self._backend.screenshot()
             cur = _phash(png)
             if cur == prev:
@@ -1295,6 +1301,20 @@ class Recorder:
             else:
                 consecutive = 1
             prev = cur
+
+    def add_settle_callback(self, callback: Callable[[float], None]) -> None:
+        """Pump an attached guard while an action's settled state is captured.
+
+        Callbacks run on the recording thread immediately before settle
+        screenshots, including the screen and system-of-record snapshots that
+        become the action's after-state.
+        """
+
+        self._settle_callbacks.append(callback)
+
+    def _run_settle_callbacks(self, deadline: float) -> None:
+        for callback in tuple(self._settle_callbacks):
+            callback(deadline)
 
     def _page_quiet(self) -> Optional[bool]:
         """The browser page's DOM + network probe, or None when it has none."""
