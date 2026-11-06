@@ -12,8 +12,12 @@ from typing import Any
 
 import pytest
 
-from tests.e2e.rdp_campaign_fixture import LoopbackSession
+from tests.e2e.rdp_campaign_fixture import PROFILE, LoopbackSession
 from tests.fixtures import rdp_write_app as app
+from tests.fixtures.freerdp_profile_parser import (
+    ProfilePreflightError,
+    assert_lossless_profile,
+)
 
 NOTE = "Synthetic account note"
 _SESSIONS: dict[str, Any] = {}
@@ -125,6 +129,9 @@ def test_loopback_six_primary_pixel_cases(tmp_path):
         "lossless": True,
     }
     try:
+        evidence["codec_preflight"] = assert_lossless_profile(
+            PROFILE.client_args(), cwd=root
+        )
         backend, close = owner.open()
         try:
             observed = backend.qualification_environment_identity()
@@ -234,6 +241,12 @@ def test_loopback_six_primary_pixel_cases(tmp_path):
         evidence["status"] = "PASSED"
     except BaseException as exc:
         evidence.update(status="FAILED", exception_type=type(exc).__name__)
+        if isinstance(exc, ProfilePreflightError):
+            evidence["codec_preflight"] = {
+                "status": "refused",
+                "reason": exc.reason,
+                "child_returncode": exc.returncode,
+            }
         raise
     finally:
         _SESSIONS.pop(name, None)

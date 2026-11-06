@@ -28,7 +28,13 @@ def test_profile_pins_display_settings():
     args = SessionProfile().client_args()
     for a in ("/size:1280x800", "/bpp:24", "/scale:100", "/scale-desktop:100"):
         assert a in args
-    for a in ("-gfx", "-rfx", "-nsc", "-fonts", "-wallpaper", "-themes", "+clipboard"):
+    # These optional-value/flag options enable their codecs even with a minus.
+    # The real installed parser preflight additionally checks all three settings.
+    assert not any(
+        option.lstrip("+-/").split(":", 1)[0] in {"gfx", "rfx", "nsc"}
+        for option in args
+    )
+    for a in ("-fonts", "-wallpaper", "-themes", "+clipboard"):
         assert a in args
 
 
