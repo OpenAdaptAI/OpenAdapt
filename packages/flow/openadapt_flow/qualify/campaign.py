@@ -52,6 +52,11 @@ from openadapt_flow.lookup_capabilities import (
     resolve_deployment_surface,
     surface_offers_structure,
 )
+from openadapt_flow.qualification_environment import (
+    QualificationEnvironmentObservation,
+    QualificationEnvironmentObserver,
+)
+from openadapt_flow.qualification_faults import QualificationFaultDriver
 from openadapt_flow.qualify.config import (
     CASE_IDS,
     RULE_CASE_PREFIX,
@@ -61,17 +66,13 @@ from openadapt_flow.qualify.config import (
 )
 from openadapt_flow.qualify.environment import (
     observe_campaign_environment,
+    web_environment_digest,
 )
 from openadapt_flow.qualify.faults import WebFaultDriver, WindowsPixelFaultDriver
 from openadapt_flow.qualify.keys import LocalTestKey, new_local_test_key
 from openadapt_flow.qualify.windows_pixel_fault_controller import (
     WindowsQualificationPixelFaultController,
 )
-from openadapt_flow.qualification_environment import (
-    QualificationEnvironmentObservation,
-    QualificationEnvironmentObserver,
-)
-from openadapt_flow.qualification_faults import QualificationFaultDriver
 from openadapt_flow.verification import VerificationTier
 
 #: (case id, expected outcome, oracle kind), in run order.

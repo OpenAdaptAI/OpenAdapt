@@ -360,12 +360,12 @@ def test_windows_ambiguity_request_places_exact_pixel_clone_in_search_region():
 def test_a_qualified_bundle_can_be_qualified_again():
     # A sealed or repaired copy of a qualified bundle carries its project.
     # Qualifying it again replaces the project with its next revision.
-    from openadapt_flow.qualify.campaign import configure_project
-    from openadapt_flow.qualify.environment import WebEnvironmentObserver
-    from openadapt_flow.qualify.faults import WebFaultDriver
     from openadapt_flow.qualification_environment import (
         QualificationEnvironmentObservation,
     )
+    from openadapt_flow.qualify.campaign import configure_project
+    from openadapt_flow.qualify.environment import WebEnvironmentObserver
+    from openadapt_flow.qualify.faults import WebFaultDriver
 
     workflow = _workflow()
     config = _config()
