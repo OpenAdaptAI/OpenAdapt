@@ -5,6 +5,12 @@ Chrome talks to this process over stdin/stdout (length-prefixed JSON). Each
 EXTENSION_EVIDENCE message is appended to the recording directory named in
 OPENADAPT_EXTENSION_RECORDING (or --recording). No remote calls.
 
+With ``--active-file`` (or OPENADAPT_EXTENSION_ACTIVE_FILE), the host writes
+only while that file exists and the recording directory already exists.
+OpenAdapt Desktop creates the file when a recording starts and removes it when
+the recording stops, so a host Chrome keeps running after the stop writes
+nothing more and never recreates a deleted recording folder.
+
 This is the unpack-first host for local development. A store listing and
 installer come later (OpenAdapt#1872).
 """
@@ -54,6 +60,11 @@ def main(argv: list[str] | None = None) -> int:
         default=os.environ.get("OPENADAPT_EXTENSION_RECORDING", ""),
         help="Recording directory that receives extension_evidence.jsonl",
     )
+    parser.add_argument(
+        "--active-file",
+        default=os.environ.get("OPENADAPT_EXTENSION_ACTIVE_FILE", ""),
+        help="Write only while this file exists (set by OpenAdapt Desktop)",
+    )
     args, _unknown = parser.parse_known_args(argv)
     if not args.recording:
         # Fail closed: without a recording dir we acknowledge nothing useful.
@@ -61,6 +72,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     recording = Path(args.recording)
+    active_file = Path(args.active_file) if args.active_file else None
     buf = ExtensionEvidenceBuffer()
     # Reload any existing lines so reconnects append.
     existing = recording / "extension_evidence.jsonl"
@@ -78,6 +90,12 @@ def main(argv: list[str] | None = None) -> int:
             evidence = validate_native_message(msg)
         except ValueError as exc:
             write_message({"ok": False, "error": str(exc)})
+            continue
+        if active_file is not None and not (
+            active_file.is_file() and recording.is_dir()
+        ):
+            # Fail closed: the recording that registered this host has ended.
+            write_message({"ok": False, "error": "not_recording"})
             continue
         buf.append(evidence)
         buf.write(recording)

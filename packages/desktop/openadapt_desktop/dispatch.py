@@ -253,6 +253,11 @@ class EngineDispatcher:
         # tray's pause/resume-sync commands and the frontend sync banner.
         self._sync_paused = False
         self._flow_recording: _ActiveFlowRecording | None = None
+        from openadapt_desktop.chrome_extension_host import ExtensionHostRegistrar
+
+        # Opt-in Chrome extension evidence: registered only while a native
+        # recording runs, removed on stop (OpenAdapt#1872).
+        self.extension_host = ExtensionHostRegistrar(config)
         self._pending_run_memory: dict[tuple[str, str], tuple[Path, str, bool]] = {}
         # Work items whose run this engine process started and hasn't
         # finished. A queued item that isn't here was interrupted.
@@ -708,6 +713,7 @@ class EngineDispatcher:
             task_description=str(task),
             metadata=recording_metadata,
         )
+        self.extension_host.start(str(capture_id), getattr(controller, "current_capture_dir", None))
         self._remember_first_workflow_recording(
             params=params,
             capture_id=capture_id,
@@ -764,9 +770,13 @@ class EngineDispatcher:
                 self._flow_recording = None
             return self._finalize_flow_capture(active, result)
         if not controller.is_recording:
+            self.extension_host.stop()
             self.emit("recording_error", {"error": "No recording is active"})
             return {"capture_id": None, "recording": False}
-        metadata = controller.stop()
+        try:
+            metadata = controller.stop()
+        finally:
+            self.extension_host.stop()
         self.emit("recording_stopped", metadata)
         self.emit("status_update", self._status_dict(controller))
         self.clear_coach()

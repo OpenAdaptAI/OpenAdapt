@@ -131,6 +131,11 @@ class RecordingController:
         """ID of the current capture session, or None if idle."""
         return self._current_capture_id
 
+    @property
+    def current_capture_dir(self) -> Path | None:
+        """Folder of the current capture session, or None if idle."""
+        return self._capture_dir
+
     def start(
         self,
         quality: str | None = None,
