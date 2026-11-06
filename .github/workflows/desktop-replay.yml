@@ -23,6 +23,7 @@ on:
       - packages/flow/scripts/desktop/patient_notes.ps1
       - packages/flow/tests/e2e/test_windows_hosted_replay.py
       - packages/flow/tests/e2e/test_windows_hosted_campaign.py
+      - packages/flow/tests/e2e/win_agent_capture_telemetry.py
       - packages/flow/tests/test_xfreerdp.py
       - packages/flow/tests/e2e/test_linux_rdp_campaign.py
       - packages/flow/tests/e2e/rdp_campaign_fixture.py
