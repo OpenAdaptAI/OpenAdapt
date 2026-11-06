@@ -120,7 +120,9 @@ def test_protocol_shaped_backend_cannot_substitute_for_concrete_transport(rig):
         close()
 
 
-@pytest.mark.parametrize("changed", ["session", "environment", "version", "application"])
+@pytest.mark.parametrize(
+    "changed", ["session", "environment", "version", "application"]
+)
 def test_changed_observation_or_expected_identity_refuses(rig, changed):
     backend, close = rig.open()
     config = config_for()
@@ -145,7 +147,9 @@ def test_citrix_remains_refused_by_readiness_and_components(rig):
     save, _ = campaign.apply_verify_config(workflow, config)
     assert any(
         "no implemented" in problem
-        for problem in campaign.check_ready(workflow, config, save, dict(workflow.params))
+        for problem in campaign.check_ready(
+            workflow, config, save, dict(workflow.params)
+        )
     )
     backend, close = rig.open()
     backend.qualification_target_kind = "citrix"
@@ -205,7 +209,14 @@ def test_ordinary_native_run_hands_no_fault_driver_to_replayer(
     monkeypatch.setattr(runtime, "Replayer", intercept_replayer)
     workflow = _workflow()
     ctx = campaign.TrialContext(
-        "representative", "", "", 0, tmp_path, tmp_path, "synthetic-run", dict(workflow.params)
+        "representative",
+        "",
+        "",
+        0,
+        tmp_path,
+        tmp_path,
+        "synthetic-run",
+        dict(workflow.params),
     )
     hooks = campaign.QualifyHooks(
         open_session=lambda: (backend, owned_close),
@@ -227,5 +238,5 @@ def test_ordinary_native_run_hands_no_fault_driver_to_replayer(
     assert len(seen) == 1
     assert seen[0][0] is backend
     assert seen[0][1]["qualification_fault_driver"] is None
-    assert not seen[0][1]["qualification_environment_observer"] is None
+    assert seen[0][1]["qualification_environment_observer"] is not None
     assert len(rig.requests) == (1 if target == "rdp" else 0)
