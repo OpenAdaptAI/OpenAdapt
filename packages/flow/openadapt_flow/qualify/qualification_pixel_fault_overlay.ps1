@@ -71,14 +71,14 @@ public static class OAFlowQualificationSession {
         public uint DynamicAvailable;
         public uint GroupCount;
         public uint PrivilegeCount;
-        public uint ModifiedId;
+        public Luid ModifiedId;
     }
     [DllImport("kernel32.dll")] private static extern IntPtr GetCurrentProcess();
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool ProcessIdToSessionId(uint processId, out uint sessionId);
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool CloseHandle(IntPtr handle);
-    [DllImport("kernel32.dll", SetLastError = true)]
+    [DllImport("advapi32.dll", SetLastError = true)]
     private static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
     [DllImport("advapi32.dll", SetLastError = true)]
     private static extern bool GetTokenInformation(IntPtr token, int infoClass,
@@ -175,6 +175,30 @@ public sealed class OAFlowQualificationOverlay : Form {
         throw 'interactive task is not in the observed application session'
     }
 
+    $makeOverlay = {
+        param([int]$Left, [int]$Top, [int]$BoxWidth, [int]$BoxHeight, [string]$Label)
+        $form = New-Object OAFlowQualificationOverlay
+        $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
+        $form.ShowInTaskbar = $false
+        $form.TopMost = $true
+        $form.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual
+        $form.Location = New-Object System.Drawing.Point($Left, $Top)
+        $form.Size = New-Object System.Drawing.Size($BoxWidth, $BoxHeight)
+        $form.BackColor = [System.Drawing.Color]::FromArgb(25, 70, 135)
+        $form.Opacity = 0.92
+        $labelControl = New-Object System.Windows.Forms.Label
+        $labelControl.Dock = [System.Windows.Forms.DockStyle]::Fill
+        $labelControl.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+        $labelControl.ForeColor = [System.Drawing.Color]::White
+        $labelControl.BackColor = [System.Drawing.Color]::FromArgb(25, 70, 135)
+        $labelControl.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
+        $labelControl.Text = $Label
+        [void]$form.Controls.Add($labelControl)
+        [void]$form.Show()
+        [System.Windows.Forms.Application]::DoEvents()
+        return $form
+    }
+
     if ($isPairing) {
         $region = $request.region
         if ($x -lt 0 -or $y -lt 0 -or
@@ -202,41 +226,24 @@ public sealed class OAFlowQualificationOverlay : Form {
                 }
             }
         }
-        $forms += & $makeOverlay $x $y 52 52 ''
-        $forms[-1].BackgroundImage = $bitmap
-        $forms[-1].BackgroundImageLayout = [System.Windows.Forms.ImageLayout]::Stretch
+        $form = New-Object OAFlowQualificationOverlay
+        $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
+        $form.ShowInTaskbar = $false
+        $form.TopMost = $true
+        $form.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual
+        $form.Location = New-Object System.Drawing.Point($x, $y)
+        $form.Size = New-Object System.Drawing.Size(52, 52)
+        $form.BackColor = [System.Drawing.Color]::Black
+        $form.BackgroundImageLayout = [System.Windows.Forms.ImageLayout]::None
+        $form.BackgroundImage = $bitmap
+        [void]$form.Show()
+        $forms += $form
         $bitmaps += $bitmap
         [System.Windows.Forms.Application]::DoEvents()
         [System.IO.File]::WriteAllText($StatusPath, "ready:$nonce:$guestDigest")
         Start-Sleep -Seconds ([int]$request.lifetime_seconds)
     }
     elseif ($request.kind -eq 'ambiguity') {
-
-    $makeOverlay = {
-        param([int]$Left, [int]$Top, [int]$BoxWidth, [int]$BoxHeight, [string]$Label)
-        $form = New-Object OAFlowQualificationOverlay
-        $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
-        $form.ShowInTaskbar = $false
-        $form.TopMost = $true
-        $form.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual
-        $form.Location = New-Object System.Drawing.Point($Left, $Top)
-        $form.Size = New-Object System.Drawing.Size($BoxWidth, $BoxHeight)
-        $form.BackColor = [System.Drawing.Color]::FromArgb(25, 70, 135)
-        $form.Opacity = 0.92
-        $labelControl = New-Object System.Windows.Forms.Label
-        $labelControl.Dock = [System.Windows.Forms.DockStyle]::Fill
-        $labelControl.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-        $labelControl.ForeColor = [System.Drawing.Color]::White
-        $labelControl.BackColor = [System.Drawing.Color]::FromArgb(25, 70, 135)
-        $labelControl.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
-        $labelControl.Text = $Label
-        [void]$form.Controls.Add($labelControl)
-        [void]$form.Show()
-        [System.Windows.Forms.Application]::DoEvents()
-        return $form
-    }
-
-    if ($request.kind -eq 'ambiguity') {
         $duplicate = $request.duplicate
         if ($null -eq $duplicate) { throw 'duplicate region missing' }
         $pad = [int]$request.search_pad
