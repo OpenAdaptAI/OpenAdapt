@@ -230,8 +230,7 @@ def focus_failure_stage(stderr: object) -> str:
     if re.fullmatch(badwindow, stderr):
         return "focus_badwindow_property"
     if stderr.startswith(pointer_root) and re.fullmatch(
-        badwindow.replace(rb"0x[0-9a-fA-F]{1,16}", rb"0x1"),
-        stderr[len(pointer_root) :]
+        badwindow.replace(rb"0x[0-9a-fA-F]{1,16}", rb"0x1"), stderr[len(pointer_root) :]
     ):
         return "focus_reported_pointer_root"
     if re.fullmatch(

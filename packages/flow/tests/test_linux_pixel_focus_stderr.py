@@ -26,12 +26,9 @@ POINTER_ROOT = (
     b"XGetInputFocus returned the focused window of 1. "
     b"This is likely a bug in the X server.\n"
 )
-DISPLAY_OPEN = (
-    b"Error: Can't open display: (null)\nFailed creating new xdo instance\n"
-)
+DISPLAY_OPEN = b"Error: Can't open display: (null)\nFailed creating new xdo instance\n"
 SANE_QUERY = (
-    b"xdo_get_focused_window_sane failed (code=1)\n"
-    b"xdo_focus_window reported an error\n"
+    b"xdo_get_focused_window_sane failed (code=1)\nxdo_focus_window reported an error\n"
 )
 KNOWN = (
     (BADWINDOW, "focus_badwindow_property"),
@@ -125,7 +122,9 @@ def test_cli_exports_only_fixed_refusal_and_parent_never_accepts_ready(
 
     monkeypatch.setattr(renderer.subprocess, "run", query)
     monkeypatch.setattr(renderer, "render", render)
-    monkeypatch.setattr(renderer.sys, "stdin", SimpleNamespace(buffer=io.BytesIO(b"{}")))
+    monkeypatch.setattr(
+        renderer.sys, "stdin", SimpleNamespace(buffer=io.BytesIO(b"{}"))
+    )
     assert renderer.main() == 1
     output = capsys.readouterr()
     assert output == (f"refused:{expected}\n", "")
