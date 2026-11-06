@@ -141,11 +141,17 @@ def owned(monkeypatch, tmp_path):
     monkeypatch.setattr(renderer, "display_identity", lambda _: dict(identity))
     actual = []
     calls = []
-    child_program = (
-        "import sys,json,hashlib,time; e=json.load(sys.stdin); "
-        "digest=hashlib.sha256(json.dumps(e['identity'],sort_keys=True,separators=(',',':')).encode()).hexdigest(); "
-        "print('ready:'+e['request']['nonce']+':'+digest,flush=True); time.sleep(60)"
-    )
+    child_program = """
+import sys,json,hashlib,time
+e=json.load(sys.stdin)
+if e['request']['nonce'] in {'e'*32, 'f'*32}:
+    status = 'refused:map' if e['request']['nonce'] == 'e'*32 else 'refused:arbitrary detail'
+    print(status,flush=True)
+    sys.exit(1)
+digest=hashlib.sha256(json.dumps(e['identity'],sort_keys=True,separators=(',',':')).encode()).hexdigest()
+print('ready:'+e['request']['nonce']+':'+digest,flush=True)
+time.sleep(60)
+"""
 
     def intercepted(argv, **kwargs):
         assert argv == [
@@ -365,3 +371,30 @@ def test_kernel_peer_identity_refuses_foreign_replaced_or_dead_server(
     else:
         with pytest.raises(ValueError):
             renderer.display_identity(":999")
+
+
+@pytest.mark.parametrize("nonce,expected", [("e" * 32, "map"), ("f" * 32, None)])
+def test_exited_renderer_can_report_only_fixed_refusal_stage(owned, nonce, expected):
+    owner, _, _, _, _ = owned
+    data = request()
+    data["nonce"] = nonce
+    handle = owner.launch(data)
+    assert handle.process.wait(timeout=3) == 1
+    assert owner.wait_ready(handle) is None
+    assert handle.ready_status is None and handle.refusal_stage == expected
+
+
+@pytest.mark.parametrize("stage", sorted(renderer.REFUSAL_STAGES))
+def test_renderer_failure_exports_only_fixed_stage(monkeypatch, capsys, stage):
+    from types import SimpleNamespace
+
+    def failed(_envelope, *, stage):
+        stage[0] = selected
+        raise RuntimeError("arbitrary guest payload must not escape")
+
+    selected = stage
+    monkeypatch.setattr(renderer.sys, "stdin", SimpleNamespace(buffer=io.BytesIO(b"{}")))
+    monkeypatch.setattr(renderer, "render", failed)
+    assert renderer.main() == 1
+    output = capsys.readouterr()
+    assert output.out == f"refused:{stage}\n" and output.err == ""

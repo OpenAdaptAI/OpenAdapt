@@ -23,6 +23,7 @@ from typing import Any
 
 PAIRING = "openadapt.rdp-pairing/v1"
 FAULT = "openadapt.qualification-pixel-fault/v1"
+REFUSAL_STAGES = frozenset({"request", "identity", "geometry", "capture", "render", "map", "liveness"})
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 NONCE = re.compile(r"[0-9a-f]{32}\Z")
 DISPLAY = re.compile(r":([0-9]{1,5})\Z")
@@ -201,7 +202,7 @@ def focus(env: dict[str, str]) -> int:
     return int(value)
 
 
-def render(envelope: dict[str, Any]) -> None:
+def render(envelope: dict[str, Any], *, stage: list[str]) -> None:
     import tkinter as tk
 
     display = envelope["display"]
@@ -209,10 +210,12 @@ def render(envelope: dict[str, Any]) -> None:
     request = envelope["request"]
     binding = envelope["binding"]
     viewport = tuple(envelope["viewport"])
+    stage[0] = "identity"
     actual = display_identity(display)
     if actual != expected:
         raise ValueError("display generation changed")
     guest = identity_digest(actual)
+    stage[0] = "geometry"
     region = validate_request(request, binding, viewport)
     pairing = request["schema"] == PAIRING
     if not pairing and binding != guest:
@@ -221,6 +224,7 @@ def render(envelope: dict[str, Any]) -> None:
     env = {key: os.environ[key] for key in ("PATH", "HOME", "DISPLAY")}
     if env["DISPLAY"] != display:
         raise ValueError("display mismatch")
+    stage[0] = "capture"
     focused = focus(env)
     expires = time.monotonic() + (request["lifetime_seconds"] if pairing else 8)
     if pairing:
@@ -250,6 +254,7 @@ def render(envelope: dict[str, Any]) -> None:
             raise ValueError("unbounded image response")
     else:
         pixels = None
+    stage[0] = "render"
     root = tk.Tk(screenName=display)
     root.withdraw()
     try:
@@ -289,6 +294,7 @@ def render(envelope: dict[str, Any]) -> None:
             or time.monotonic() >= expires
         ):
             raise ValueError("display changed before mapping")
+        stage[0] = "map"
         root.deiconify()
         root.update()
         if (
@@ -306,7 +312,12 @@ def render(envelope: dict[str, Any]) -> None:
             raise ValueError("overlay changed display focus or geometry")
         print(f"ready:{request['nonce']}:{guest}", flush=True)
 
+        failed = [False]
+
         def tick() -> None:
+            if time.monotonic() >= expires:
+                root.quit()
+                return
             try:
                 current = (
                     time.monotonic() < expires
@@ -316,26 +327,31 @@ def render(envelope: dict[str, Any]) -> None:
             except Exception:
                 current = False
             if not current:
+                failed[0] = True
                 root.quit()
                 return
             root.after(100, tick)
 
+        stage[0] = "liveness"
         root.after(100, tick)
         root.mainloop()
+        if failed[0]:
+            raise ValueError("display changed while overlay was live")
     finally:
         root.destroy()
 
 
 def main() -> int:
+    stage = ["request"]
     try:
         raw = sys.stdin.buffer.read(16385)
         if len(raw) > 16384:
             raise ValueError("request too large")
-        render(json.loads(raw))
+        render(json.loads(raw), stage=stage)
         return 0
     except Exception:
         # No request contents, guest metadata, pixels or exception text escape.
-        print("refused", flush=True)
+        print("refused:" + (stage[0] if stage[0] in REFUSAL_STAGES else "request"), flush=True)
         return 1
 
 

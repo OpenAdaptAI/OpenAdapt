@@ -25,6 +25,7 @@ class LinuxPixelTaskHandle:
     request_sha256: str
     deadline: float
     ready_status: str | None = None
+    refusal_stage: str | None = None
 
 
 class LinuxPixelTasks:
@@ -161,15 +162,20 @@ class LinuxPixelTasks:
             while (
                 time.monotonic() < deadline
                 and self._current()
-                and handle.process.poll() is None
             ):
                 if not selector.select(min(0.1, max(0, deadline - time.monotonic()))):
+                    if handle.process.poll() is not None:
+                        return None
                     continue
                 chunk = os.read(stream.fileno(), 256)
                 if not chunk or len(data) + len(chunk) > 128:
                     return None
                 data.extend(chunk)
                 if b"\n" in data:
+                    for stage in renderer.REFUSAL_STAGES:
+                        if bytes(data) == f"refused:{stage}\n".encode("ascii"):
+                            handle.refusal_stage = stage
+                            return None
                     if bytes(data) != (expected + "\n").encode("ascii"):
                         return None
                     if (
