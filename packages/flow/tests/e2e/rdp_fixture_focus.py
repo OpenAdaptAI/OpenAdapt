@@ -107,8 +107,12 @@ def _tree_child(display_name: str, toplevel: int) -> None:
     lib.XCloseDisplay.argtypes = [c.c_void_p]
     lib.XCloseDisplay.restype = c.c_int
     lib.XQueryTree.argtypes = [
-        c.c_void_p, window, c.POINTER(window), c.POINTER(window),
-        c.POINTER(children_type), c.POINTER(c.c_uint),
+        c.c_void_p,
+        window,
+        c.POINTER(window),
+        c.POINTER(window),
+        c.POINTER(children_type),
+        c.POINTER(c.c_uint),
     ]
     lib.XQueryTree.restype = c.c_int
     lib.XFree.argtypes = [c.c_void_p]
@@ -134,11 +138,20 @@ def _tree_child(display_name: str, toplevel: int) -> None:
         children = children_type()
         try:
             status = lib.XQueryTree(
-                display, target, c.byref(root), c.byref(parent),
-                c.byref(children), c.byref(count),
+                display,
+                target,
+                c.byref(root),
+                c.byref(parent),
+                c.byref(children),
+                c.byref(count),
             )
             lib.XSync(display, 0)
-            if not status or failed[0] or count.value > 32 or (count.value and not children):
+            if (
+                not status
+                or failed[0]
+                or count.value > 32
+                or (count.value and not children)
+            ):
                 raise ValueError("tree query")
             return root.value, parent.value, [children[i] for i in range(count.value)]
         finally:
@@ -149,8 +162,11 @@ def _tree_child(display_name: str, toplevel: int) -> None:
         root, parent, _ = query(toplevel)
         wrapper_root, wrapper_parent, children = query(parent)
         proof = {
-            "root": root, "parent": parent, "wrapper_root": wrapper_root,
-            "wrapper_parent": wrapper_parent, "children": children,
+            "root": root,
+            "parent": parent,
+            "wrapper_root": wrapper_root,
+            "wrapper_parent": wrapper_parent,
+            "children": children,
         }
         _verified_wrapper(toplevel, proof)
         lib.XSync(display, 0)
@@ -164,9 +180,19 @@ def _tree_child(display_name: str, toplevel: int) -> None:
 
 def _read_wrapper(env: dict[str, str], toplevel: int) -> int:
     observed = subprocess.run(
-        ["/usr/bin/python3", "-I", "-S", str(Path(__file__).resolve()),
-         "--tree", env["DISPLAY"], str(toplevel)],
-        env=env, capture_output=True, timeout=3, check=True,
+        [
+            "/usr/bin/python3",
+            "-I",
+            "-S",
+            str(Path(__file__).resolve()),
+            "--tree",
+            env["DISPLAY"],
+            str(toplevel),
+        ],
+        env=env,
+        capture_output=True,
+        timeout=3,
+        check=True,
     )
     if len(observed.stdout) > 1024:
         raise ValueError("tree proof size")
@@ -293,7 +319,8 @@ def _condition(tmp_path: Path, *, literal_parent: bool) -> None:
         ready = json.loads(_line(child.stdout.fileno(), 1024, 10))
         if (
             not isinstance(ready, dict)
-            or set(ready) != {"toplevel", "wm_frame", "mapped", "geometry", "tk_version"}
+            or set(ready)
+            != {"toplevel", "wm_frame", "mapped", "geometry", "tk_version"}
             or type(ready["toplevel"]) is not int
             or not 1 < ready["toplevel"] < 2**32
             or type(ready["wm_frame"]) is not int
