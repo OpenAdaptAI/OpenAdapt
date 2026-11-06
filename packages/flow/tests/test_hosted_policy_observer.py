@@ -187,3 +187,31 @@ def test_violation_limit_does_not_emit_partial_report(monkeypatch):
         assert policy_module.evaluate_policy(workflow, policy) is report
     assert evidence["policy_checks"] == []
     assert evidence["policy_diagnostic_failure_code"] == "projection_failed"
+
+
+def test_actual_certification_gate_preserves_refusal_and_safe_rules():
+    from openadapt_flow.run_gate import _gate_certification
+
+    workflow, policy = _inputs()
+    original = policy_module.evaluate_policy
+    evidence = {}
+    with observer.observe_policy(evidence):
+        result = _gate_certification(
+            workflow,
+            policy.name,
+            require_current_risk_certification=False,
+            certifying_policy=policy,
+        )
+    assert policy_module.evaluate_policy is original
+    assert result.passed is False
+    assert result.offenders == ["step_002"]
+    assert len(evidence["policy_checks"]) == 1
+    check = evidence["policy_checks"][0]
+    assert check["passed"] is False
+    assert check["require_current_risk_certification"] is False
+    assert check["violations"] == [
+        {"rule": "prohibit_vacuous_postconditions", "step_id": "step_002"},
+        {"rule": "max_unverified_steps", "step_id": None},
+    ]
+    assert "reason" not in json.dumps(evidence)
+    assert workflow.name not in json.dumps(evidence)
