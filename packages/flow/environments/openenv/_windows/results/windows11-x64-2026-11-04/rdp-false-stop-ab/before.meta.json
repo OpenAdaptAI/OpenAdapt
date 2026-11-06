@@ -1,0 +1,7 @@
+{
+  "protocol": "benchmark/rdp_avc_real, Patient Notes arm",
+  "transport": "aardwolf 0.2.14 (pure-Python RDP), macOS client -> Windows 11 Pro x64",
+  "codec": "RDP bitmap codecs negotiated by aardwolf; not H.264/AVC444",
+  "candidate_commit": "5c984f38d9f7915867dc2f8a91475f9ac0f562cf",
+  "started_at": "2026-11-04T06:06:16.048113+00:00"
+}

@@ -17,7 +17,155 @@
 
 ## Unreleased
 
+### Changed
+
+- No command falls back to the demo app on its own. `replay` needs a target: `--url`, `backend.url` in `--config`, or `--demo-app` to serve the bundled MockMed (the tutorial and quickstart commands pass it; `--drift` needs it). The variant router's first-screen probe captures nothing without a URL. `qualify accept`'s break-it check no longer runs every workflow's oracle against MockMed: it builds the lie from the workflow itself (a store that did not change, and a screen showing the workflow's own success text and every value the run typed). The reference Execute worker refuses, before running anything, an admission whose `target_url` it cannot drive, instead of resetting and reading that app as if it were the demo.
+
+### Fixes
+
+- The OpenEMR contracts (`benchmark/lifecycle_proof/verify.yaml`, `benchmark/openemr_local/verify.yaml`) now declare how the New Patient form stores what was typed: street and city in capitals, names with each word capitalized. Without it the exact record check refuted 19 of 20 correct saves on the stand-in suites (#1811). A contract value's `stored` form gains `capitalize_words` (OpenEMR's "C" fields); the set stays closed and the check stays exact.
+
+## v2.6.0 (2026-11-04)
+
+Flow adds signed teach authorizations, encrypted local artifacts, durable
+rollback, and more ways to train and evaluate agents. Verification still
+refuses a write when the record or its outcome cannot be established.
+
+### Upgrade notes
+
+- A differing record identifier now counts as a contradiction, even when most
+  of the identity band matches. Runs may refuse some same-record pairs they
+  accepted before. Check the stopped record before retrying.
+- Agent-taught drafts now need a signed teach authorization in every admission
+  mode. The authorization also covers self-repair and approval of an agent's
+  fix. Browser teach no longer teaches or runs write tools. See
+  [Teach authorization](docs/TEACH_AUTHORIZATION.md).
+- Benchmark harnesses and test-only helpers are no longer shipped in the wheel.
+  Replace imports from `openadapt_flow.benchmark` and
+  `openadapt_flow.instrument` with `benchmark.harness` from a source checkout.
+  The `harness2` extra is removed; `openadapt-flow benchmark` needs a checkout.
+- REST verifiers require the app's record path, record key and delete path;
+  FHIR verifiers require its resource type and field map. API-save admission
+  and idempotency-key detection use explicit app configuration. Contracts that
+  pin an app profile must adopt its updated digest before using the revised
+  bookkeeping rules. Existing verifier identities and contract digests stay
+  unchanged when their configuration is unchanged.
+- Re-record macOS bundles whose record identity was captured from a table cell.
+  Identity now uses the whole row; a table with no accessible row falls back
+  to its recorded identity band.
+
 ### Features
+
+- A code-as-action agent is now the default for the first run. Every save is
+  read back before that run becomes a replayable program. Form scripts can run
+  before an admitted API save.
+- Teach authorizations bind the task, origins, inputs, permitted write and
+  forbidden actions to a person on the signed approver roster. Create, sign
+  and verify them with `openadapt-flow teach-authorization`.
+- Generated contracts can be admitted through a sandbox without setup answers.
+  They compare their own tables at recheck, support field sets absent from a
+  manifest, and refuse joins or parameter bindings the demonstrations cannot
+  distinguish. Dialog checks can be learned in any language when multiple
+  demonstrations agree; an ambiguous check is refused.
+- Learn an app's per-request bookkeeping writes, then enforce the rules a
+  person approved. See [Learned excuses](docs/LEARNED_EXCUSES.md).
+- Signed write receipts bind each verifier verdict to the stores and time
+  window checked, its strength, and an explicit list of what was not checked.
+  The `receipts` extra supports offline verification and optional transparency
+  log anchoring. See [Write receipts](docs/WRITE_RECEIPTS.md).
+- Encrypt recordings and bundles at rest with a local key. Strict mode refuses
+  unsealed inputs. Compile, compose, route, process, visualize, variant, teach
+  and library paths can read sealed artifacts without a plaintext export.
+  Attended state, checkpoints and the approval journal are encrypted by default;
+  legacy plaintext state is upgraded before use, and raw authority paths are
+  refused in strict mode. See [Encryption at rest](docs/phi_at_rest.md).
+- Roll back durable runs, including after a crash. Desktop and remote-display
+  rollback checks the starting screen through the same step resolver used by
+  a run. The ledger retains owed rechecks across restarts and distinguishes a
+  consumed, missing or incorrectly invoked recheck.
+- Serve record-checked fault environments through OpenEnv and Prime Intellect,
+  with shared observation types and MCP tools. Windows desktop packs cover
+  UI Automation and pixel-only remote display. The `openenv` extra requires
+  Python 3.11 or later; individual environments retain their documented host
+  and qualification requirements.
+- A confirmed write followed by an escalation can earn configurable partial
+  reward credit; the default is 0.5.
+
+### Fixes
+
+- Rollback and qualification read-back distinguish nulls from missing fields
+  and the text `None`. An unresolved parameter mapping cannot establish that
+  an uncertain write landed. An on-screen check with no expected value reports
+  `INDETERMINATE` instead of matching only the record selector. SQL reward
+  read-back compares typed numbers by value.
+- Bookkeeping learning excludes fields the agent sent or read, including
+  bracketed form-field names and requests captured while verification runs.
+  Those fields cannot be proposed as excuses for unrelated database changes.
+- A versions check with an unknown `target_surface` reports `not_checked`
+  with `unknown_surface`. A surface read only by a zero-count guard cannot
+  supply a write target. Generated setup questions now show a missing version
+  check instead of leaving it unnoticed.
+- Typed input must match the complete field value. Native and pixel-only runs
+  stop when delivery cannot be confirmed. Windows input checks the foreground
+  window throughout delivery and reports when focus changes may leave partial
+  input. Native date fields receive ISO dates correctly.
+- Read-back compares exact, typed whole-field values. Generated save checks
+  retain duplicate keys and recognize a copied value even when it also looks
+  like the row's own key. A value is bound to a parameter only when equality
+  distinguishes it from every other candidate.
+- Rechecks hold for review when a later write's frame was not judged. A failed
+  saved state cannot supply a trusted ledger id. Later successful HTTP writes
+  without a known record count as unexplained changes. Volatile FHIR metadata
+  is refused before the first run.
+- Whole-database checks reject ambiguous PostgreSQL table and sequence names
+  and non-PostgreSQL schema wildcards. A column rule cannot excuse a row with
+  no cell hashes. Rollback audit entries identify exactly one snapshot table.
+  API spans re-read checks after writes and preserve an earlier halt reason.
+- Covered or off-viewport targets stop before pixel fallback. Self-repair may
+  dismiss a proved app-owned notice over the identity band, then checks the
+  full identity again. It refuses questions, unrelated windows and incomplete
+  coverage of the obscured band.
+- macOS supports the pinned window's AppKit sheet, Qt field delivery and row
+  identity, and receipts bound to the resolved click target. Remote-display
+  focus checks apply pending workspace updates before reading the active app.
+  Function keys F1–F12 have native key codes.
+- Linux reads editable field values and element identities through AT-SPI;
+  password fields abstain. Physical input accepts an already focused pinned
+  window. Governed self-repair can admit a new click with a unique element
+  identity and a record check.
+- Desktop self-repair can start a fresh app session for each probe when the
+  backend can bind its local window to the configured process. Windows over
+  its agent and FreeRDP still refuse this mode. Probe read-back handles words
+  joined by OCR without weakening single-word checks.
+- Windows qualification observes the executable, machine, OS and live session,
+  including connected remote sessions. Input remains bound to that environment;
+  an old agent without the required fields refuses. Lab profiles choose the
+  test app's interpreter, and headless FreeRDP can request AVC444.
+- Strict no-outbound mode permits child processes only under named containment.
+  Redaction identifies credential names by their parts. Sealed input admission
+  checks named path arguments and refuses a missing deployment key.
+
+### Evaluation and packaging
+
+- The threat model explains which verification layer provides each guarantee.
+  Additional adversarial tests exercise exact read-back and capture ambiguity.
+- Verification benchmarks include operation semantics, model-judge and API
+  read-back baselines, and revised public leaderboard scores. These reports
+  retain their stated task and evaluation scope.
+- Qualification includes Linux AT-SPI, native macOS record/compile/run cases,
+  desktop replay on hosted runners, and backend capability evidence by surface.
+  Published qualification results do not qualify every app or deployment.
+- Benchmark outputs, demo fixtures and restricted reference environments stay
+  outside distributed package artifacts. CI checks application-independent
+  engine code and validates the built wheel and source distribution.
+
+## v2.5.0 (2026-11-02)
+
+Shadow mode checks the writes of an agent you already run against the system of record without blocking any of them, the whole-database frame works on PostgreSQL, a write that lands after the verdict can be caught by a recheck, and several verifier checks that could be unreadable or pass on the wrong value now read and compare exactly.
+
+### Features
+
+- Self-repair's new clicks no longer need a browser. On a backend with an accessibility tree, a click with no record identity under it is admitted when its element (role, name, ancestry, window) is the only one with that locator in the pinned window and a record check covers every save: a system-of-record verifier, a `standard` or `regulated` profile, and confirmed effects and an armed identity check on each save. On a pixel-only backend the record check alone admits it. The new step carries the dialog around it as its identity band, a screen pre-check, and only a person approves such a fix; a signed standard change can't. The browser rule is unchanged. `MacOSBackend.element_identity_at` reads the AX element, the repair hold answers `element_identity`, and agent teach takes the dialog box from it. Design: `docs/REPAIR_ON_EVERY_BACKEND.md` ([#1709](https://github.com/OpenAdaptAI/OpenAdapt/pull/1709)).
 
 - Shadow mode: `openadapt shadow` runs beside an agent you already have, as a loopback pass-through proxy, and checks each write it makes against the system of record (`CONFIRMED`, `REFUTED`, `UNCERTAIN`). It never blocks, changes or resends a write; the only delay is the read before a write, at most `hold_ms`, measured per write. FHIR writes are checked by `ensure_record.verify_ensure` and SQL writes by `verifier.begin_write`/`verify_write` with the whole-database frame. Each `CONFIRMED` is checked again later (`recheck_s`, or the contract's `recheck_after_s`), and a late `REFUTED` gets its own line in `report.html` and `report.json`. `verify_ensure` takes `declared`: resources of other writes the caller saw, judged on their own ([#1678](https://github.com/OpenAdaptAI/OpenAdapt/pull/1678)).
 
@@ -89,7 +237,7 @@ A person's approval counts only when a registered approver key signed it, and th
 - Under `problems_only`, problems with an item's own input leave the switch on and send that item to a person; program and environment problems turn it off, and a person re-arms it with one signed tap ([#1517](https://github.com/OpenAdaptAI/OpenAdapt/pull/1517)).
 - Look-alike rows are counted on Windows, macOS, Linux and pixel-only surfaces, so a step that picks a row halts when it cannot tell the target from its twin ([#1504](https://github.com/OpenAdaptAI/OpenAdapt/pull/1504), [#1518](https://github.com/OpenAdaptAI/OpenAdapt/pull/1518), [#1557](https://github.com/OpenAdaptAI/OpenAdapt/pull/1557)).
 - `openadapt-agent serve --teach-browser` lets a coding agent turn a read-only browser task into a named tool it calls again with new values; `openadapt setup` registers it with Claude Code, Cursor, Codex and Gemini CLI ([#1502](https://github.com/OpenAdaptAI/OpenAdapt/pull/1502)).
-- `induce --held-out` scores each held-out item by running it and checking the record independently ([#1527](https://github.com/OpenAdaptAI/OpenAdapt/pull/1527)).
+- `openadapt_flow.validation.behavioral_generalization` scores each held-out item by running it and checking the record independently. `induce --held-out` prints structural trace coverage ([#1527](https://github.com/OpenAdaptAI/OpenAdapt/pull/1527)).
 
 ### Fixes
 

@@ -73,6 +73,13 @@ def register(sub: argparse._SubParsersAction) -> None:
         help="fhir: check each CONFIRMED write again this long after (default "
         "300; 0 turns it off); --until-idle waits for the rechecks",
     )
+    p.add_argument(
+        "--receipts",
+        action="store_true",
+        default=None,
+        help="sign each verdict as a write receipt under OUT/receipts "
+        "(docs/WRITE_RECEIPTS.md)",
+    )
     p.set_defaults(func=cmd_shadow)
 
 
@@ -97,6 +104,7 @@ def load(args: argparse.Namespace) -> dict[str, Any]:
         "hold_ms",
         "quiet_s",
         "recheck_s",
+        "receipts",
     ):
         value = getattr(args, key, None)
         if value is not None:
@@ -153,6 +161,7 @@ def build(cfg: dict[str, Any], out: Path) -> Any:
         upstream_timeout_s=float(cfg.get("upstream_timeout_s", 300)),
         recheck_s=_recheck_s(cfg.get("recheck_s", 300)),
         quiet_s=float(cfg.get("quiet_s", 5)),
+        receipts=bool(cfg.get("receipts", False)),
     )
 
 

@@ -443,7 +443,14 @@ def save_snapshot(path: Path, rows: Mapping[str, TableRows]) -> None:
 
 
 def load_snapshot(path: Path) -> dict[str, TableRows]:
-    data = json.loads(path.read_text(encoding="utf-8"))
+    return snapshot_from_bytes(path.read_bytes())
+
+
+def snapshot_from_bytes(raw: bytes) -> dict[str, TableRows]:
+    """A snapshot from the bytes of its file (so a caller can digest exactly
+    what it parsed)."""
+
+    data = json.loads(raw.decode("utf-8"))
     return {n: TableRows(dict(t["rows"]), t.get("count_only")) for n, t in data.items()}
 
 

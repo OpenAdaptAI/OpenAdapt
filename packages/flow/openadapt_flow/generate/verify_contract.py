@@ -56,6 +56,7 @@ from openadapt_flow.generate.demo_analysis import (
     best,
     column_roles,
     is_identifier,
+    is_link_column,
     link_columns,
     locate,
     pick_anchor,
@@ -69,6 +70,73 @@ MAX_VARIANTS = 64
 MAX_LIST = 10
 #: The recheck window proposed when the person hasn't answered.
 DEFAULT_RECHECK_S = 300
+
+
+class Unpinned(ValueError):
+    """A column of a new row that no rule checks, in one field set only (seen
+    in one demonstration, or two explanations the demonstrations can't tell
+    apart), and that the answer doesn't name under ``unchecked``: that field
+    set gets no contract."""
+
+
+def _computed(role: ColumnRole) -> bool:
+    """A column the app computes from a date the task gives (its day, its
+    month): recognized, so a field set whose own demonstrations leave it open
+    still gets a contract. A text holding the row's own key is not exempt:
+    it is listed in the question like any other open column."""
+
+    why = str(role.detail.get("why") or "")
+    return why.startswith("the ") and "of a date the task gives" in why
+
+
+def _strict(roles: Mapping[str, ColumnRole], on: bool) -> dict[str, ColumnRole]:
+    """``roles`` with each column two readings fit made a ``strict`` role
+    (checked both ways) when ``strict_pins`` is on; else unchanged."""
+
+    if not on:
+        return dict(roles)
+    return {
+        c: ColumnRole("strict", detail=dict(r.detail["strict"]))
+        if r.role == "varies" and r.detail.get("strict")
+        else r
+        for c, r in roles.items()
+    }
+
+
+def _found_role(role: ColumnRole) -> Optional[ColumnRole]:
+    """The part of a role a ``found`` contract checks. Who made the record and
+    what it copied may differ for a record already there (a person entered
+    it), so ``actor`` and ``copied`` are left out, and a ``strict`` role keeps
+    only its constant half. None: nothing to check."""
+
+    if role.role in ("actor", "copied"):
+        return None
+    if role.role == "strict":
+        if "constant" not in role.detail:
+            return None
+        return ColumnRole("strict", detail={"constant": role.detail["constant"]})
+    return role
+
+
+def _strict_pins(
+    b: "SqlBuilder", surf: "Surface", table: str, col: str, detail: Mapping[str, Any],
+    match: dict[str, Any],
+) -> None:  # fmt: skip
+    """Both checks of a ``strict`` role: the constant (or the acting user),
+    and the copy of the column its key points to."""
+
+    if "constant" in detail:
+        alias = _add_column(
+            surf, f"pin__{_alias(col)}", b.pin("t", table, col, detail["constant"])
+        )
+        match[alias] = {"literal": "1"}
+    if "actor" in detail:
+        match.setdefault(col, {"param": detail["actor"]})
+    if detail.get("copied"):
+        alias = _add_column(
+            surf, f"copy__{_alias(col)}", b.copied("t", detail["copied"], table, col)
+        )
+        match[alias] = {"literal": "1"}
 
 
 class GenerateError(RuntimeError):
@@ -138,11 +206,23 @@ def load_kinds(path: Path) -> list[KindSpec]:
     return out
 
 
-def load_demos(demo_dir: Path) -> list[Demo]:
+def load_demos(demo_dir: Path, digest: Any = None) -> list[Demo]:
+    """The demonstrations in ``demo_dir``. ``digest`` (a ``hashlib`` object):
+    fed every byte read, demonstration and snapshot alike (a snapshot path
+    outside the folder too), in one pass, so it covers exactly what was
+    parsed."""
+
     demos = []
     for f in sorted(Path(demo_dir).glob("*.demo.json")):
-        d = json.loads(f.read_text(encoding="utf-8"))
-        after = store.load_snapshot(Path(demo_dir) / d["after_snapshot"])
+        raw = f.read_bytes()
+        d = json.loads(raw.decode("utf-8"))
+        snap = Path(demo_dir) / d["after_snapshot"]
+        snap_raw = snap.read_bytes()
+        if digest is not None:
+            for part in (f.name, raw, str(d["after_snapshot"]), snap_raw):
+                b = part.encode("utf-8") if isinstance(part, str) else part
+                digest.update(len(b).to_bytes(8, "big") + b)
+        after = store.snapshot_from_bytes(snap_raw)
         demos.append(
             Demo(
                 kind=d["kind"],
@@ -268,6 +348,8 @@ class KindPlan:
     #: More places a value is in: rows the write added beside the record
     #: (a call's lead is its parent and also an attendee row).
     extra: dict[str, list[Location]] = field(default_factory=dict)
+    #: The acting user's ids (``--actor-param``), for the roles of new rows.
+    actor_values: dict[str, str] = field(default_factory=dict)
 
 
 def _scalars(values: Mapping[str, Any]) -> dict[str, Any]:
@@ -299,6 +381,7 @@ def analyze(
     actor_values: Mapping[str, str],
 ) -> KindPlan:
     plan = KindPlan(spec.kind, params=list(spec.parameters))
+    plan.actor_values = dict(actor_values)
     mine = [d for d in demos if d.kind == spec.kind and d.diff.changes]
     if not mine:
         plan.refused.append(
@@ -392,6 +475,17 @@ def analyze(
                 continue
         all_found = _intersect(found[p])
         loc, tied = _pick(p, all_found, plan.demos, schema)
+        if (
+            loc is not None
+            and _by_value_only(loc)
+            and any(x != loc and not _by_value_only(x) for x in all_found)
+        ):
+            # The best place reaches the value through a key that only equal
+            # values support (no declared foreign key, no column named after
+            # its table), and a place whose every key is supported fits every
+            # demonstration too: the demonstrations can't tell a real join
+            # from ids that happened to be equal. A person picks.
+            loc, tied = None, sorted(all_found, key=_rank)
         if loc is not None:
             plan.extra[p] = [
                 x
@@ -429,10 +523,14 @@ def analyze(
             for c in loc.columns
         }
         for name, tied in list(plan.unresolved.items()):
+            # A place one key away through a column another value already
+            # holds is that value's row, not this one's. A longer path through
+            # it (a customer behind the project) still counts.
             left = [
                 loc
                 for loc in tied
-                if (loc.hops[0].column if loc.hops else loc.columns[0]) not in claimed
+                if len(loc.hops) > 1
+                or (loc.hops[0].column if loc.hops else loc.columns[0]) not in claimed
             ]
             if len(left) == 1 and name in plan.params:
                 plan.locations[name] = left[0]
@@ -464,6 +562,13 @@ def analyze(
     _children(schema, plan, lists)
     _sides(schema, plan, actor_values, demos)
     return plan
+
+
+def _by_value_only(loc: Location) -> bool:
+    """Does the place go through a hop that only a value match supports (no
+    declared foreign key, no column named after the table)?"""
+
+    return any(_hop_cost(h) >= 2 for h in loc.hops)
 
 
 def _share_locations(
@@ -741,11 +846,37 @@ def _children(
             ):
                 co.append(q)
                 explained |= {h[0].hops[0].column for h in hits}
+        roles = column_roles(
+            schema, loc.hops[0].table, rows, explained, plan.actor_values
+        )
+        if len(rows) < 2:
+            # One demonstration gives this value. Every row of the table the
+            # kind's demonstrations added for their record is evidence for a
+            # column that holds the same in all of them (a journal's type).
+            linked = [
+                (d, ch.after)
+                for d, a in zip(plan.demos, plan.anchors)
+                for ch in d.diff.of(loc.hops[0].table, "added")
+                if ch.after is not None
+                and ch.after.get(loc.hops[0].column)
+                == (a.after or {}).get(loc.hops[0].ref_column)
+            ]
+            if len({id(d) for d, _ in linked}) >= 2:
+                wide = column_roles(
+                    schema, loc.hops[0].table, linked, explained, plan.actor_values
+                )
+                for col, role in roles.items():
+                    if role.detail.get(
+                        "why"
+                    ) == "seen in one demonstration only" and wide.get(
+                        col, role
+                    ).role in ("constant", "actor", "copied"):
+                        roles[col] = wide[col]
         group = ChildGroup(
             loc.hops[0].table,
             loc.hops[0],
             {p: rel},
-            column_roles(schema, loc.hops[0].table, rows, explained, {}),
+            roles,
             1,
             co_owners=co,
             param=p,
@@ -758,6 +889,8 @@ def _children(
         per_key: dict[str, list[list[Location]]] = {}
         table = link = None
         rows = []
+        #: Columns that hold the record's key in every list row so far.
+        link_cols: Optional[set[str]] = None
         for d, a in zip(plan.demos, plan.anchors):
             items = d.values.get(p)
             if not isinstance(items, list):
@@ -791,12 +924,18 @@ def _children(
                     }
                     if all(found_at.values()):
                         used.add(i)
-                        link_col = next(c for c, v in after.items() if v == key)
+                        here = {
+                            c
+                            for c, v in after.items()
+                            if v == key
+                            and is_link_column(schema, ch.table, c, plan.anchor, v)
+                        }
+                        link_cols = here if link_cols is None else link_cols & here
                         table = ch.table
                         link = Hop(
                             "child",
                             ch.table,
-                            link_col,
+                            "",
                             schema.tables[plan.anchor].primary_key[0],
                         )
                         for k, ls in found_at.items():
@@ -808,6 +947,30 @@ def _children(
         if table is None or link is None:
             plan.unresolved.setdefault(p, [])
             continue
+        # The column that links an item to its record: the one that holds
+        # the record's key in every item row. Two that always agree (an
+        # item's own id equal to the record's) can't be told apart, unless
+        # exactly one is a declared foreign key to the record.
+        cols = sorted(link_cols or [])
+        declared = [
+            c
+            for c in cols
+            if any(
+                fk.column == c and fk.table == plan.anchor
+                for fk in schema.tables[table].foreign_keys
+            )
+        ]
+        if len(cols) != 1 and len(declared) == 1:
+            cols = declared
+        if len(cols) != 1:
+            plan.refused.append(
+                f"{p}: the demonstrations can't tell which column of {table} "
+                "links an item to its record ("
+                + (", ".join(cols) or "none holds the record's key in every item")
+                + "); record a demonstration where they differ"
+            )
+            return
+        link = Hop("child", table, cols[0], link.ref_column)
         item_locs: dict[str, Location] = {}
         for k, per in per_key.items():
             item_loc, tied = best(_intersect(per))
@@ -821,7 +984,7 @@ def _children(
             table,
             link,
             item_locs,
-            column_roles(schema, table, rows, explained, {}),
+            column_roles(schema, table, rows, explained, plan.actor_values),
             list_param=p,
         )
 
@@ -840,6 +1003,19 @@ def _all_groups(plan: KindPlan, dv: Optional[str] = None) -> list[ChildGroup]:
 def _demo_groups(plan: KindPlan, d: Demo) -> list[ChildGroup]:
     dv = str(d.values.get(plan.dispatch)) if plan.dispatch else None
     return _all_groups(plan, dv) if dv is not None else list(plan.children.values())
+
+
+def _link_keys(schema: Schema, plan: KindPlan, d: Demo) -> set[str]:
+    """Keys a row added beside a write may link to: the rows that write
+    added, and its main record (an update's journal names the issue)."""
+
+    keys = set(getattr(d, "_added_keys", set()))
+    if d in plan.demos:
+        a = plan.anchors[plan.demos.index(d)]
+        key = (a.after or a.before or {}).get(plan_pk(schema, plan.anchor))
+        if key is not None:
+            keys.add(key)
+    return keys
 
 
 def _sides(
@@ -913,8 +1089,30 @@ def _sides(
     for t, cs in sorted(counts.items()):
         rows = [r for group in pure.get(t, []) for r in group]
         if len(set(cs)) == 1 and cs[0] > 0 and rows:
-            links: list[set[str]] = [getattr(d, "_added_keys", set()) for d, _ in rows]
+            links: list[set[str]] = [_link_keys(schema, plan, d) for d, _ in rows]
             roles = column_roles(schema, t, rows, set(), actor_values, links)
+            if len(rows) < 2:
+                # Seen beside one write only (the other writes gave the
+                # value this row holds): every row the kind's writes added
+                # here is evidence for a column that holds the same in all.
+                wide = [
+                    (d, ch.after)
+                    for d in plan.demos
+                    for ch in d.diff.of(t, "added")
+                    if ch.after is not None
+                ]
+                if len({id(d) for d, _ in wide}) >= 2:
+                    wide_links = [_link_keys(schema, plan, d) for d, _ in wide]
+                    more = column_roles(
+                        schema, t, wide, set(), actor_values, wide_links
+                    )
+                    for col, role in roles.items():
+                        if role.detail.get(
+                            "why"
+                        ) == "seen in one demonstration only" and more.get(
+                            col, role
+                        ).role in ("constant", "actor", "copied", "link"):
+                            roles[col] = more[col]
             plan.sides.append(SideSpec(t, cs[0], roles, unless=child_tables.get(t)))
         elif rows:
             # The number of added rows differs between demonstrations: a log
@@ -1019,42 +1217,41 @@ def _touched_rows(
         demos_with = {id(d) for d, _, _ in items}
         selector: Optional[dict[str, Any]] = None
         how = ""
-        if (
+        # Reached from the main record by a key column whose target row holds
+        # located values in single columns (the task's project). Tried first:
+        # when every demonstration happened to touch the same such row, its
+        # literal key would excuse that one row for every write, and a
+        # correct write naming another row would stop.
+        for p, loc in plan.locations.items():
+            if not loc.hops or loc.hops[0].kind != "fk" or loc.hops[0].table != table:
+                continue
+            hop = loc.hops[0]
+            if all(
+                (a.after or {}).get(hop.column) == (ch.after or {}).get(pk)
+                for _, a, ch in items
+            ):
+                sel = {
+                    x.columns[0]: {"param": q}
+                    for q, x in plan.locations.items()
+                    if len(x.hops) == 1
+                    and x.hops[0] == hop
+                    and len(x.columns) == 1
+                    and x.rule == "exact"
+                }
+                if sel:
+                    selector = sel
+                    how = f"the {table} row the task's {', '.join(sorted(v['param'] for v in sel.values()))} name"
+                    break
+        if selector is None and (
             len(keys) == 1
             and len(demos_with) == len(plan.demos)
             and len(items) == len(plan.demos)
         ):
+            # The same row (by key) in every demonstration: a counter row.
             key = (items[0][2].after or {}).get(pk)
             if key is not None:
                 selector = {pk: {"literal": key}}
                 how = f"{table} row {pk}={key}"
-        if selector is None:
-            # Reached from the main record by a key column whose target row
-            # holds located values in single columns.
-            for p, loc in plan.locations.items():
-                if (
-                    not loc.hops
-                    or loc.hops[0].kind != "fk"
-                    or loc.hops[0].table != table
-                ):
-                    continue
-                hop = loc.hops[0]
-                if all(
-                    (a.after or {}).get(hop.column) == (ch.after or {}).get(pk)
-                    for _, a, ch in items
-                ):
-                    sel = {
-                        x.columns[0]: {"param": q}
-                        for q, x in plan.locations.items()
-                        if len(x.hops) == 1
-                        and x.hops[0] == hop
-                        and len(x.columns) == 1
-                        and x.rule == "exact"
-                    }
-                    if sel:
-                        selector = sel
-                        how = f"the {table} row the task's {', '.join(sorted(v['param'] for v in sel.values()))} name"
-                        break
         if selector is None or len(items) != len({id(d) for d, _, _ in items}):
             plan.unexcused.setdefault(table, set()).update(cols)
             continue
@@ -1246,7 +1443,7 @@ def _versions_frame(
         return {
             "read": {"kind": "sql", **settings.read, "sql_query": sql},
             "record_field": "id",
-            "target_field": "id",
+            "target_field": _key_alias(b.schema, plan.anchor),
             "target_surface": "record",
             "version_field": "ver",
         }
@@ -1271,7 +1468,7 @@ def _versions_frame(
     return {
         "read": {"kind": "sql", **settings.read, "sql_query": sql},
         "record_field": "id",
-        "target_field": "id",
+        "target_field": _key_alias(b.schema, plan.anchor),
         "target_surface": "record",
         "version_field": "ver",
         "author_field": "author",
@@ -1575,6 +1772,29 @@ class SqlBuilder:
             return f"CASE WHEN {ref} = CAST({self.literal(value)} AS DATE) THEN '1' ELSE '0' END"
         return f"CASE WHEN {self.text(alias, table, column)} = {self.literal(value)} THEN '1' ELSE '0' END"
 
+    def now(self, alias: str, column: str, window_s: int) -> str:
+        """A flag: this date-time column holds a time within ``window_s``
+        seconds before the read (or 5 minutes after it, for clock skew), by
+        the database's local clock or by UTC (an app may store either).
+        NULL is not a time, so it fails."""
+
+        ref = f"{alias}.{self.q(column)}"
+        w, ahead = int(window_s), 300
+        if self.d == "mysql":
+            clocks = ("NOW()", "UTC_TIMESTAMP()")
+            spans = [
+                f"{ref} BETWEEN {c} - INTERVAL {w} SECOND AND {c} + INTERVAL {ahead} SECOND"
+                for c in clocks
+            ]
+        else:
+            clocks = ("LOCALTIMESTAMP", "(NOW() AT TIME ZONE 'UTC')")
+            spans = [
+                f"CAST({ref} AS timestamp) BETWEEN {c} - INTERVAL '{w} seconds' "
+                f"AND {c} + INTERVAL '{ahead} seconds'"
+                for c in clocks
+            ]
+        return f"CASE WHEN {' OR '.join(spans)} THEN '1' ELSE '0' END"
+
     def empty(self, alias: str, table: str, column: str) -> str:
         col = self.schema.tables[table].column(column)
         ref = f"{alias}.{self.q(column)}"
@@ -1621,15 +1841,28 @@ class Surface:
         return f"SELECT {cols} FROM {b.qt(self.table)} {self.alias}"
 
 
+def _key_alias(schema: Schema, table: str) -> str:
+    """The name a surface reads the table's key under: ``id``, unless the
+    table has its own ``id`` column that is not the whole primary key (a
+    ``uuid`` key, a key of ``id`` and ``rev``), which must be read as it is."""
+
+    t = schema.tables[table]
+    if t.column("id") is None or t.primary_key == ["id"]:
+        return "id"
+    return "oa_key"
+
+
 def _base_columns(b: SqlBuilder, table: str, alias: str = "t") -> list[tuple[str, str]]:
+    """Every column of ``table`` by its own name, and the key under
+    :func:`_key_alias` when that isn't a column already."""
+
     t = b.schema.tables[table]
     cols: list[tuple[str, str]] = []
     key = b.key(alias, table)
-    if key is not None:
-        cols.append(("id", key))
+    name = _key_alias(b.schema, table)
+    if key is not None and t.column(name) is None:
+        cols.append((name, key))
     for c in t.columns:
-        if c.name == "id" and key is not None:
-            continue
         cols.append((c.name, b.text(alias, table, c.name)))
     return cols
 
@@ -1674,6 +1907,23 @@ class Settings:
     #: Table -> columns of a new row the person named as not checked (they
     #: vary, are free text left empty, or are the write's time stamp).
     unchecked: dict[str, set[str]] = field(default_factory=dict)
+    #: ``now_checks`` answered true: a date-time column of the main record
+    #: that is the write's time stamp (named unchecked on a create, or the
+    #: target's excused bookkeeping on an update) must hold a time near the
+    #: read, instead of any value.
+    now_checks: bool = False
+    #: ``strict_pins`` answered true: a new-row column two readings fit in
+    #: every demonstration (a constant and a copy of a column a key points
+    #: to, or the acting user and such a copy) is checked both ways, instead
+    #: of refusing the kind.
+    strict_pins: bool = False
+
+    @property
+    def now_window_s(self) -> int:
+        """How old the write's time stamp may be when it is read: the
+        execution window plus the recheck, plus a minute."""
+
+        return int(self.max_window_s + (self.recheck_after_s or 0) + 60)
 
 
 #: Roles of a new row's column that no rule checks: named by the person
@@ -1724,6 +1974,8 @@ def build_contract(
     #: Surface -> the fields its declared rows may change.
     by_surface: dict[str, set[str]] = {}
     named_tables: set[str] = {anchor}
+    #: Table -> the surface that reads it in full (``frame.database.judged_by``).
+    judged: dict[str, str] = {anchor: "record"}
 
     # The main record, with every column and the values its parameters reach.
     main = Surface(
@@ -1752,13 +2004,29 @@ def build_contract(
         target_fields.update(
             c for c in plan.anchor_extra if c in excused.get(anchor, set())
         )
+        if settings.now_checks:
+            for c in sorted(plan.anchor_extra):
+                column = schema.tables[anchor].column(c)
+                if (
+                    c in excused.get(anchor, set())
+                    and column is not None
+                    and column.kind == "datetime"
+                ):
+                    alias = _add_column(
+                        main, f"now__{_alias(c)}", b.now("t", c, settings.now_window_s)
+                    )
+                    match[alias] = {"literal": "1"}
     if plan.mode == "create":
         # ``found`` pins the same constants as ``create`` (a soft-delete
         # flag, a status, a type): a trashed record with the task's values
         # is not "already there". Who created it may differ.
-        roles = _anchor_roles(schema, plan, variant, settings.actor_params)
-        for col, role in sorted(roles.items()):
-            if flavor == "found" and role.role in ("actor", "copied"):
+        roles = _strict(
+            _anchor_roles(schema, plan, variant, settings.actor_params),
+            settings.strict_pins,
+        )
+        for col, full in sorted(roles.items()):
+            role = _found_role(full) if flavor == "found" else full
+            if role is None:
                 continue
             _pin(
                 b,
@@ -1770,6 +2038,19 @@ def build_contract(
                 settings.actor_params,
                 settings.unchecked,
             )
+            column = schema.tables[anchor].column(col)
+            if (
+                settings.now_checks
+                and flavor == "create"
+                and role.role == "timestamp"
+                and col in settings.unchecked.get(anchor, set())
+                and column is not None
+                and column.kind == "datetime"
+            ):
+                alias = _add_column(
+                    main, f"now__{_alias(col)}", b.now("t", col, settings.now_window_s)
+                )
+                match[alias] = {"literal": "1"}
     if plan.mode == "create" and flavor == "create":
         support = _support(plan, variant)
         for p in plan.optional:
@@ -1849,6 +2130,7 @@ def build_contract(
                 sname, settings.views.get(g.table, g.table), scols
             )
             named_tables.add(g.table)
+            judged.setdefault(g.table, sname)
         surf = surfaces[sname]
         items = range(variant.lists[p]) if g.list_param else [None]
         for i in items:
@@ -1874,8 +2156,11 @@ def build_contract(
                     m[key] = {"literal": "1"}
                 else:
                     m[key] = _value_expr(pname, loc.rule)
-            for col, role in sorted(g.roles.items()):
-                if role.role == "link" or (found and role.role in ("actor", "copied")):
+            for col, full in sorted(_strict(g.roles, settings.strict_pins).items()):
+                if full.role == "link":
+                    continue
+                role = _found_role(full) if found else full
+                if role is None:
                     continue
                 _pin(
                     b,
@@ -1977,7 +2262,8 @@ def build_contract(
         if found or (side.unless is not None and side.unless in fields):
             continue
         m = {}
-        for col, role in sorted(side.roles.items()):
+        side_roles = _strict(side.roles, settings.strict_pins)
+        for col, role in sorted(side_roles.items()):
             if role.role == "constant" and role.value is not None:
                 m[col] = {"literal": role.value}
             elif role.role == "actor":
@@ -1991,7 +2277,7 @@ def build_contract(
                 side.table,
                 m,
                 side.count,
-                side.roles,
+                side_roles,
                 f"{side.count} row(s) the app adds to {side.table}",
             )
         )
@@ -2025,29 +2311,24 @@ def build_contract(
         if t in named_tables:
             continue
         allow.append({"table": t})
-    for t in sorted(named_tables):
-        if plan.mode == "create" or flavor == "found":
-            # The contract's own read judges the rows the write adds; the
-            # whole-database frame still sees any existing row change,
-            # now and at the recheck (a late edit to a look-alike).
-            allow.append({"table": t})
-            continue
-        # An update changes a row here, which an append-only table
-        # can't allow: its own read judges this table, and the recheck
-        # (database only) doesn't see it.
-        allow.append(
-            {
-                "table": t,
-                "mode": "skip",
-                "reason": "read in full, every column, by this contract's own surface",
-            }
-        )
-    views = {s.table: s.name for s in surfaces.values() if s.name.startswith("raw_")}
+    # A table the contract's own read covers, every row and column, is
+    # compared like any other: after the save, the rows that read saw move
+    # are left to it (the target, or the rows the write adds, each with only
+    # its declared fields), and every other row of the table must not move.
+    # A recheck reads no surface, so there any change to the table since the
+    # post-save read (a late checkout of a look-alike) stops the write.
+    judged_by = {t: judged[t] for t in sorted(named_tables)}
+    views = {
+        s.table: s.name
+        for s in surfaces.values()
+        if s.name.startswith("raw_") and s.table not in judged_by
+    }
     db: dict[str, Any] = {
         "dialect": schema.dialect,
         "read": dict(settings.read),
         "allow_tables": allow,
         "views": views,
+        "judged_by": judged_by,
         "settle_s": 1,
         "settle_attempts": 5,
     }
@@ -2056,6 +2337,12 @@ def build_contract(
         for s in surfaces.values()
         if s.name.startswith("raw_") and getattr(s, "_new_row_fields", None)
     }
+    for t in judged_by:
+        # A row the contract's own read declares is judged by the table
+        # too, every column exactly. A new one may set any column: the read
+        # checks each (placed, pinned, pinned empty, or named unchecked by
+        # the person).
+        nrf.setdefault(t, sorted(c.name for c in schema.tables[t].columns))
     if nrf:
         db["new_row_fields"] = nrf
     if settings.recheck_after_s:
@@ -2106,6 +2393,16 @@ def _pin(
     actor_params: Mapping[str, str],
     unchecked: Mapping[str, set[str]] = {},
 ) -> None:
+    if role.role == "strict":
+        _strict_pins(b, surf, table, col, role.detail, match)
+        return
+    if (
+        role.role == "varies"
+        and col not in unchecked.get(table, set())
+        and not _computed(role)
+    ):
+        why = role.detail.get("why") or "it differs between demonstrations"
+        raise Unpinned(f"{table}.{col} is not checked ({why})")
     if role.role == "free" and col not in unchecked.get(table, set()):
         # Empty in every demonstration and not named as unchecked: it stays
         # empty.
@@ -2203,6 +2500,10 @@ def _raw_effect(
         role = roles.get(c.name)
         if role is not None and role.role == "constant" and role.value is None:
             continue
+        if role is not None and role.role == "strict":
+            _strict_pins(b, surf, table, c.name, role.detail, m)
+            nrf.add(c.name)
+            continue
         if (
             role is None
             or role.role != "constant"
@@ -2266,6 +2567,16 @@ def _anchor_roles(
                 v is not None and _TOKEN.match(v) for v in values
             ):
                 roles[col] = role
+            elif (
+                len(support) < 2
+                and roles.get(col, role).detail.get("why")
+                == "seen in one demonstration only"
+                and role.role in ("constant", "actor", "copied")
+            ):
+                # One demonstration gives this field set, but every
+                # demonstration of the kind stored the same there: that
+                # agreement is the evidence for the pin.
+                roles[col] = role
     return roles
 
 
@@ -2328,6 +2639,8 @@ def variants(
         for n in range(1, len(changes) + 1):
             for combo in itertools.combinations(changes, n):
                 out.append(Variant(plan.kind, sorted(set(plan.identity) | set(combo))))
+                if len(out) == MAX_VARIANTS:
+                    return out
         return out[:MAX_VARIANTS]
     located = set(plan.locations)
     base_sets = []
@@ -2407,7 +2720,9 @@ def sample_values(
     out: dict[str, Any] = {}
     for d in [*plan.demos, *others]:
         for k, v in d.values.items():
-            if v is not None and k not in out:
+            # An empty list gives no item to read with: a later
+            # demonstration's items fill ``lines.0.qty`` and the rest.
+            if v is not None and v != [] and k not in out:
                 out[k] = v
     if variant.dispatch_value is not None and plan.dispatch:
         out[plan.dispatch] = variant.dispatch_value
@@ -2473,6 +2788,7 @@ def dry_read(path: Path, params: Mapping[str, Any], mysql: bool) -> Optional[str
                     key=mac_key(b"0" * 32),
                     modes=database.modes(),
                     max_rows=database.max_rows,
+                    read_row_budget=database.read_row_budget,
                     extra_queries=_audit_sql(contract.config),
                     ignore=database.all_ignore_columns(),
                     ref_columns=_ref_columns(contract.config),
@@ -2766,12 +3082,27 @@ def propose(
     reader_account: str = "",
     validate: bool = True,
     grant_trigger_flag: bool = False,
+    only: Optional[tuple[str, list[str], dict[str, int]]] = None,
+    schema_sha256: str = "",
+    demos_sha256: str = "",
 ) -> dict[str, Any]:
-    """Analyze, ask, emit and validate. Returns the report (also written)."""
+    """Analyze, ask, emit and validate. Returns the report (also written).
+
+    ``only`` (kind, fields, lists): build the contracts of that one field set
+    and nothing else (``choose`` for a set the manifest doesn't list). The
+    answers must leave no question open and the schema must still have
+    ``schema_sha256``; the manifest, report and questions are not rewritten.
+    Returns ``{"files": {flavor: path}}``."""
 
     connect = store.connector(read)
     dialect = store.dialect_of(read)
     schema = store.read_schema(connect, dialect)
+    schema_digest = _digest(schema.to_json())
+    if only is not None and schema_digest != schema_sha256:
+        raise GenerateError(
+            "the store's schema changed since the contracts were proposed; "
+            "run propose again"
+        )
     problems = check_read_only(connect, dialect)
     if problems:
         raise GenerateError(
@@ -2794,7 +3125,14 @@ def propose(
                 "--grant-trigger --admin-read <admin.yaml> --reader-account <account>, "
                 "or have the DBA run: GRANT TRIGGER ON <database>.* TO <account>"
             )
-    demos = load_demos(demo_dir)
+    read_bytes = hashlib.sha256()
+    demos = load_demos(demo_dir, read_bytes)
+    demos_digest = "sha256:" + read_bytes.hexdigest()
+    if only is not None and demos_digest != demos_sha256:
+        raise GenerateError(
+            "the demonstrations changed since the contracts were proposed; "
+            "run propose again"
+        )
     env = environment_id or f"generated-{schema.database}"
     env = re.sub(r"[^A-Za-z0-9._:-]", "-", env)
     if len(env) < 8:
@@ -2976,21 +3314,28 @@ def propose(
         excused[t] = (took | columns_add.get(t, set())) - columns_remove.get(t, set())
     # Columns of a new row no rule checks, per kind and table.
     open_by_kind: dict[str, dict[str, dict[str, str]]] = {}
+    #: Why a column can't be pinned, where the demonstrations can't tell
+    #: (one demonstration, or two explanations that agree).
+    why_open: dict[str, str] = {}
     for p in plans:
         own: dict[str, dict[str, str]] = {}
+        groups: list[tuple[str, dict[str, ColumnRole]]] = []
         if p.mode == "create" and p.demos:
             for v in [Variant(p.kind, sorted(p.locations))]:
-                for col, role in _anchor_roles(schema, p, v, actor_params).items():
-                    if role.role in OPEN_ROLES:
-                        own.setdefault(p.anchor, {})[col] = role.role
-        for g in [*p.children.values(), *p.lists.values()]:
-            for col, role in g.roles.items():
+                groups.append((p.anchor, _anchor_roles(schema, p, v, actor_params)))
+        groups += [
+            (g.table, g.roles) for g in [*p.children.values(), *p.lists.values()]
+        ]
+        groups += [(sd.table, sd.roles) for sd in p.sides]
+        strict_on = _answer(answers, "strict_pins") is True
+        groups = [(t, _strict(r, strict_on)) for t, r in groups]
+        for table, group_roles in groups:
+            for col, role in group_roles.items():
                 if role.role in OPEN_ROLES:
-                    own.setdefault(g.table, {})[col] = role.role
-        for sd in p.sides:
-            for col, role in sd.roles.items():
-                if role.role in OPEN_ROLES:
-                    own.setdefault(sd.table, {})[col] = role.role
+                    own.setdefault(table, {})[col] = role.role
+                    reason = str(role.detail.get("why") or "")
+                    if "one demonstration" in reason or "can't tell" in reason:
+                        why_open[f"{table}.{col}"] = reason
         open_by_kind[p.kind] = own
     unchecked: dict[str, set[str]] = {}
     for own_cols in open_by_kind.values():
@@ -3000,7 +3345,7 @@ def propose(
     for own_cols in open_by_kind.values():
         for t, roles_of in own_cols.items():
             for c, role_name in roles_of.items():
-                if role_name != "free":
+                if role_name != "free" and f"{t}.{c}" not in why_open:
                     proposed_open.setdefault(t, [])
                     if c not in proposed_open[t]:
                         proposed_open[t].append(c)
@@ -3104,6 +3449,14 @@ def propose(
                 )
                 + "."
             )
+        if why_open:
+            lines.append(
+                "The demonstrations can't tell what these hold, so they are not "
+                "pinned: "
+                + "; ".join(f"{c} ({w})" for c, w in sorted(why_open.items()))
+                + ". Record a demonstration where they differ, or name them "
+                "under unchecked."
+            )
         questions.append(
             Question(
                 "bookkeeping",
@@ -3140,12 +3493,18 @@ def propose(
         _children(schema, p, [], only_missing=True)
     questions.extend(location_questions)
     questions_open = [q for q in questions if _answer(answers, q.key) is None]
+    if only is not None and questions_open:
+        raise GenerateError(
+            "open questions: " + ", ".join(q.key for q in questions_open)
+        )
     settings = Settings(
         read,
         dict(actor_params),
         recheck or DEFAULT_RECHECK_S,
         env,
         unchecked=unchecked_named,
+        now_checks=_answer(answers, "now_checks") is True,
+        strict_pins=_answer(answers, "strict_pins") is True,
     )
 
     # Tables whose name the SQL guard refuses: a view, or a refusal.
@@ -3187,6 +3546,10 @@ def propose(
                         "<account> to read it through a view, or wait for the guard fix"
                     )
 
+    if only is not None:
+        return _emit_one(
+            schema, plans, kinds, only, out, settings, excused, demos, validate
+        )
     out.mkdir(parents=True, exist_ok=True)
     manifest: dict[str, Any] = {
         "schema_version": MANIFEST_SCHEMA,
@@ -3195,6 +3558,29 @@ def propose(
         "actor_params": sorted(actor_params),
         "questions_open": [q.key for q in questions_open],
         "kinds": {},
+        # What ``choose`` needs to build a field set this manifest doesn't
+        # list, the same way: the same inputs, each pinned by its digest.
+        "field_sets": {
+            "read": dict(read),
+            "kinds": [
+                {
+                    "kind": k.kind,
+                    "parameters": list(k.parameters),
+                    "examples": list(k.examples),
+                }
+                for k in kinds
+            ],
+            "demos": str(Path(demo_dir).resolve()),
+            "demos_sha256": demos_digest,
+            # The code that builds a contract: a run-time build under other
+            # rules than the listed contracts is refused.
+            "generator_sha256": generator_digest(),
+            "answers": json.loads(json.dumps(answers or {}, default=str)),
+            "actor_params": dict(actor_params),
+            "environment_id": environment_id,
+            "schema_sha256": schema_digest,
+            "validate": validate,
+        },
     }
     report: dict[str, Any] = {
         "applied": applied,
@@ -3218,6 +3604,9 @@ def propose(
             "mode": p.mode,
             "main_table": p.anchor,
             "parameters": p.params,
+            # Any set of these (an update's identity always in it) gets a
+            # contract from ``choose``, listed below or not.
+            "fields": _settable(p),
             "identity": sorted(p.identity),
             "lists": sorted(p.lists),
             "dispatch": p.dispatch,
@@ -3248,6 +3637,16 @@ def propose(
             "touched_rows": p.touched,
             "unexcused": {t: sorted(c) for t, c in p.unexcused.items()},
             "refused": list(p.refused),
+            # Parameters no demonstration placed: a task that gives one is
+            # stopped until a demonstration gives it.
+            "not_placed": sorted(
+                set(p.params)
+                - set(p.locations)
+                - {g.param for g in p.children.values()}
+                - set(p.lists)
+                - {p.dispatch or ""}
+                - set(p.unresolved)
+            ),
             "unresolved": {
                 k: [loc.describe(p.anchor) for loc in v]
                 for k, v in sorted(p.unresolved.items())
@@ -3276,9 +3675,16 @@ def propose(
                 continue
             ok = True
             for flavor in flavors:
-                doc = build_contract(
-                    schema, p, v, flavor, settings, excused, set(p.logs)
-                )
+                try:
+                    doc = build_contract(
+                        schema, p, v, flavor, settings, excused, set(p.logs)
+                    )
+                except Unpinned as exc:
+                    rep["rejected"].append(
+                        {"variant": v.slug, "flavor": flavor, "why": str(exc)}
+                    )
+                    ok = False
+                    break
                 rel = Path("contracts") / p.kind / f"{v.slug}.{flavor}.yaml"
                 path = out / rel
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -3322,6 +3728,16 @@ def propose(
                     (out / f).unlink(missing_ok=True)
         manifest["kinds"][p.kind] = entry
         report["kinds"][p.kind] = rep
+    # Every listed contract as written. A person may edit them (a hand fix);
+    # a run-time build never sees the edit, so any change to a listed file
+    # refuses run-time builds rather than let one be looser.
+    manifest["field_sets"]["listed_sha256"] = {
+        f: _file_digest(out / f)
+        for e in manifest["kinds"].values()
+        for var in e.get("variants") or []
+        for k, f in var.items()
+        if k in ("create", "update", "found") and isinstance(f, str)
+    }
     (out / "manifest.yaml").write_text(
         yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True), encoding="utf-8"
     )
@@ -3333,6 +3749,121 @@ def propose(
     )
     report["questions_open"] = [q.key for q in questions_open]
     return report
+
+
+def _digest(data: Any) -> str:
+    text = json.dumps(data, sort_keys=True, default=str)
+    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def generator_digest() -> str:
+    """A digest of the generator's own code (this package's modules)."""
+
+    h = hashlib.sha256()
+    for f in sorted(Path(__file__).parent.glob("*.py")):
+        raw = f.read_bytes()
+        h.update(f.name.encode() + b"\0" + len(raw).to_bytes(8, "big") + raw)
+    return "sha256:" + h.hexdigest()
+
+
+def _file_digest(path: Path) -> str:
+    return "sha256:" + hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def _settable(p: KindPlan) -> dict[str, Any]:
+    """The fields a task of this kind may give, for ``choose``: an update
+    must give its identity and at least one change; a create its required
+    fields, and any optional one. None for a kind with a dispatch field."""
+
+    if p.refused or not p.mode or p.dispatch is not None:
+        return {}
+    if p.mode == "update":
+        return {
+            "identity": sorted(p.identity),
+            "changes": sorted(c for c in p.changes if c in p.locations),
+            "lists": sorted(p.lists),
+        }
+    located = set(p.locations) | {g.param for g in p.children.values()}
+    optional = set(p.optional) & located
+    return {
+        "required": sorted(located - optional),
+        "optional": sorted(optional),
+        "lists": sorted(p.lists),
+    }
+
+
+def _fits(spec: Mapping[str, Any], given: set[str], lists: Mapping[str, int]) -> bool:
+    """Does a task's field set fit a kind's settable fields?"""
+
+    if not spec:
+        return False
+    if set(lists) - set(spec.get("lists") or []) or any(
+        not (1 <= n <= MAX_LIST) for n in lists.values()
+    ):
+        return False
+    if "identity" in spec:
+        ident, changes = set(spec["identity"]), set(spec["changes"])
+        rest = given - ident
+        return ident <= given and bool(rest) and rest <= changes and not lists
+    required, optional = set(spec["required"]), set(spec["optional"])
+    return required <= given and given <= required | optional
+
+
+def _emit_one(
+    schema: Schema,
+    plans: Sequence[KindPlan],
+    kinds: Sequence[KindSpec],
+    only: tuple[str, list[str], dict[str, int]],
+    out: Path,
+    settings: Settings,
+    excused: Mapping[str, set[str]],
+    demos: Sequence[Demo],
+    validate: bool,
+) -> dict[str, Any]:
+    """The contracts of one field set, built as ``propose`` builds the
+    listed ones, checked by the SQL guard and a dry read."""
+
+    kind, fields, lists = only
+    plan = next((p for p in plans if p.kind == kind), None)
+    if plan is None or plan.refused or not plan.mode:
+        raise GenerateError(f"kind {kind!r} has no contracts")
+    if not _fits(_settable(plan), set(fields), lists):
+        raise GenerateError(f"kind {kind!r} has no contract for these fields")
+    v = Variant(kind, sorted(fields), lists=dict(lists))
+    files: dict[str, str] = {}
+    flavors = ["create", "found"] if plan.mode == "create" else ["update", "found"]
+    for flavor in flavors:
+        try:
+            doc = build_contract(
+                schema, plan, v, flavor, settings, excused, set(plan.logs)
+            )
+        except Unpinned as exc:
+            raise GenerateError(f"no contract for these fields: {exc}") from exc
+        why = None
+        for sub in doc["verifier"]["surfaces"].values():
+            why = why or guard_problem(sub["sql_query"])
+        rel = Path("field_sets") / kind / f"{v.slug}.{flavor}.yaml"
+        path = out / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # A name of its own per call (threads share a process id).
+        fd, tmp_name = tempfile.mkstemp(
+            dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+        )
+        tmp = Path(tmp_name)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(
+                f"# Generated by openadapt_flow.generate.verify_contract on demand: "
+                f"kind {kind}, {flavor}, fields {', '.join(v.fields)}.\n"
+                + yaml.safe_dump(doc, sort_keys=False, allow_unicode=True, width=100)
+            )
+        if why is None and validate:
+            why = dry_read(tmp, flatten(sample_values(plan, v, demos)), True)
+        if why is not None:
+            tmp.unlink(missing_ok=True)
+            raise GenerateError(f"the {flavor} contract for these fields fails: {why}")
+        os.replace(tmp, path)
+        files[flavor] = str(rel)
+    return {"files": files}
 
 
 def _questions_md(
@@ -3365,6 +3896,26 @@ def _questions_md(
                 "doesn't give must hold the value it held then. Record a second create "
                 "with other values, so a column computed from the values (a price with "
                 "tax) is told apart from a constant."
+            )
+        if rep.get("not_placed") and rep["mode"]:
+            lines.append(
+                "  - No demonstration gave, and no column is named like: "
+                + ", ".join(f"`{x}`" for x in rep["not_placed"])
+                + ". A task that gives one is stopped: record a demonstration "
+                "that gives it now, before tasks need it."
+            )
+        if (
+            rep["mode"] == "update"
+            and "versions" in rep
+            and rep["versions"] is None
+            and not rep["refused"]
+        ):
+            lines.append(
+                "  - No version check: the main table has no version column and "
+                "no audit trail names the record and the acting user in every "
+                "demonstration, so another user's save to the same record in the "
+                "window (a lost update) is not seen. Write `frame.versions` by "
+                "hand if the app keeps versions somewhere else."
             )
         for r in rep["refused"]:
             lines.append(f"  - Refused: {r}")
@@ -3422,11 +3973,78 @@ def choose(
         if _exists(found, params):
             return found, params
         return _load_for(base / var[entry["mode"]], params), params
+    files = _field_set(manifest_path, manifest, kind, entry, given, lists)
+    if files is not None:
+        params = {**flatten(values), **dict(extra_params or {})}
+        base = manifest_path.parent
+        found = _load_for(base / files["found"], params)
+        if _exists(found, params):
+            return found, params
+        return _load_for(base / files[entry["mode"]], params), params
     raise GenerateError(
         f"no {kind} contract for the fields {sorted(given)}"
         + (f" and lists {lists}" if lists else "")
         + ": record a demonstration that gives them, or the task is stopped"
     )
+
+
+def _field_set(
+    manifest_path: Path,
+    manifest: Mapping[str, Any],
+    kind: str,
+    entry: Mapping[str, Any],
+    given: set[str],
+    lists: Mapping[str, int],
+) -> Optional[dict[str, str]]:
+    """The contracts of a field set the manifest doesn't list, built from the
+    same inputs as the listed ones (``propose(only=...)``). None when the set
+    doesn't fit the kind's fields; raises when the inputs changed."""
+
+    spec = entry.get("fields") or {}
+    inputs = manifest.get("field_sets")
+    if not inputs or not _fits(spec, given, lists):
+        return None
+    demo_dir = Path(inputs["demos"])
+    if inputs.get("generator_sha256") != generator_digest():
+        raise GenerateError(
+            "the contract generator changed since the contracts were proposed; "
+            "run propose again"
+        )
+    listed = inputs.get("listed_sha256")
+    if not isinstance(listed, dict) or not listed:
+        raise GenerateError("the manifest doesn't pin its listed contracts")
+    base = manifest_path.parent
+    for rel, want in sorted(listed.items()):
+        try:
+            have = _file_digest(base / rel)
+        except OSError:
+            have = ""
+        if have != want:
+            raise GenerateError(
+                f"the listed contract {rel} changed since it was proposed (a hand "
+                "edit?): a contract built at run time wouldn't have the edit, so "
+                "none is built; run propose again"
+            )
+    kinds = [
+        KindSpec(
+            str(k["kind"]), list(k["parameters"]), "", list(k.get("examples") or [])
+        )
+        for k in inputs["kinds"]
+    ]
+    result = propose(
+        read=dict(inputs["read"]),
+        kinds=kinds,
+        demo_dir=demo_dir,
+        out=manifest_path.parent,
+        actor_params=dict(inputs["actor_params"]),
+        answers=dict(inputs["answers"]),
+        environment_id=str(inputs.get("environment_id") or ""),
+        validate=bool(inputs.get("validate", True)),
+        only=(kind, sorted(given), dict(lists)),
+        schema_sha256=str(inputs["schema_sha256"]),
+        demos_sha256=str(inputs["demos_sha256"]),
+    )
+    return dict(result["files"])
 
 
 def _load_for(path: Path, params: Mapping[str, Any]) -> Any:

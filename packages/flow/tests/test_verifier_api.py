@@ -288,6 +288,8 @@ def test_the_public_api_is_stable() -> None:
         "capture",
         "capture_database",
         "diff_database",
+        "issue_recheck_receipt",
+        "issue_write_receipt",
         "recheck",
         "reconcile",
         "verified_write",
@@ -322,17 +324,22 @@ def test_the_public_api_is_stable() -> None:
         ("params", "KEYWORD_ONLY"),
         ("actor", "KEYWORD_ONLY"),
         ("authorization_ref", "KEYWORD_ONLY"),
+        ("write_receipt", "KEYWORD_ONLY"),
     ]
     assert [n for n in inspect.signature(capture_database).parameters] == [
         "read",
         "dialect",
         "allow_tables",
         "max_rows",
+        "read_row_budget",
         "key",
         "profile",
         "before",
         "actor_names",
     ]
+    budget = inspect.signature(capture_database).parameters["read_row_budget"]
+    assert budget.kind is inspect.Parameter.KEYWORD_ONLY
+    assert budget.default == 1_000_000
     assert list(WriteResult.__dataclass_fields__)[:5] == [
         "outcome",
         "scope",
@@ -340,9 +347,11 @@ def test_the_public_api_is_stable() -> None:
         "reasons",
         "retry_safe",
     ]
-    assert list(WriteResult.__dataclass_fields__)[-2:] == [
+    assert list(WriteResult.__dataclass_fields__)[-4:] == [
         "recheck",
         "recheck_due_at",
+        "write_receipt",
+        "write_receipt_path",
     ]
     assert params(recheck) == [
         ("contract", "POSITIONAL_OR_KEYWORD"),
@@ -404,3 +413,72 @@ def test_a_pending_write_repr_shows_no_values(tmp_path: Path) -> None:
     text = repr(pending)
     assert "Ada" not in text and "example.test" not in text
     pending.release()
+
+
+#: Contract hashes as openadapt-flow 2.5.0 computed them. A field that lost
+#: its default (records_path, resource_type) must not move them: the write
+#: ledger and reward certificates are keyed on these.
+_PINNED_CONTRACT_HASHES = {
+    "fhir": {
+        "digest": "91c4a3ebe007fb29ff109ab420e004c69d18344776d91b833275cafa0764fd20",
+        "identity": "5035aab8eb04079931ced609318a886d463b270031edb967650e3966206919e3",
+        "store": "20d025f2007789ef2271b5cef933e38fd47d4114d559fc820aca9283d6d827fd",
+    },
+    "rest": {
+        "digest": "5ab1d6ebc5bae6c5fba13a3f2ce60e2b65292c2126e6f858ef95190ee4b1104f",
+        "identity": "f287cf9ea6af74fd36dba0e42ae64a3024518c4c45ac7e063a1b4fee7dd2e678",
+        "store": "32521d4b64cce55ed24443f4d35ec1e73f472cd88ebc4d57e6a92d06161611a7",
+    },
+    "sql": {
+        "digest": "45ea6035db9bf63b39e7bf31db07dab820e42a9a218ba39906ea54e283cb5b22",
+        "identity": "60cf99eaa0beed0335bff2e85e23ac1a29b90882075d728eb8952a71305b52a2",
+        "store": "f333364923dd35c0e086046de0494ee84df7c766bc5c9a53209e58cad4594a9c",
+    },
+}
+
+
+def test_contract_hashes_do_not_change() -> None:
+    record = {
+        "name": "patient",
+        "match": ["email", "lname"],
+        "fields": {"fname": "fname", "lname": "lname", "email": "email"},
+    }
+    verifiers = {
+        "sql": {
+            "kind": "sql",
+            "sqlite_database": "/data/app.db",
+            "sql_query": "SELECT * FROM patient",
+        },
+        "rest": {
+            "kind": "rest",
+            "base_url": "http://app.local",
+            "records_path": "/api/db",
+            "records_key": "records",
+        },
+        "fhir": {
+            "kind": "fhir",
+            "base_url": "https://fhir.local/r4",
+            "resource_type": "Observation",
+            "field_paths": {
+                "id": "id",
+                "email": "email",
+                "lname": "lname",
+                "fname": "fname",
+            },
+        },
+    }
+    for kind, verifier in verifiers.items():
+        contract = Contract.from_dict(
+            {
+                "schema_version": "openadapt.verify/v1",
+                "verifier": verifier,
+                "record": record,
+                "frame": {"identity_field": "id"},
+            }
+        )
+        got = {
+            "digest": contract.digest,
+            "store": contract.store,
+            "identity": contract.identity,
+        }
+        assert got == _PINNED_CONTRACT_HASHES[kind], kind

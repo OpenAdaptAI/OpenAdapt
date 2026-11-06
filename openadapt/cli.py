@@ -3,7 +3,7 @@
 Usage:
     openadapt flow record --url <app> --out rec   # record a workflow
     openadapt flow compile rec --out bundle        # compile it
-    openadapt flow replay bundle                    # run it, local, $0
+    openadapt flow replay bundle --url <app>        # run it, local, $0
     openadapt flow lint bundle
     openadapt flow certify bundle --policy clinical-write
 
@@ -24,6 +24,7 @@ Usage:
     openadapt doctor
 """
 
+import json
 import os
 import platform
 import re
@@ -116,7 +117,7 @@ def main():
         openadapt flow compile rec --out bundle --name demo
         openadapt flow lint bundle
         openadapt flow certify bundle --policy permissive
-        openadapt flow replay bundle
+        openadapt flow replay bundle --demo-app
 
     Lint lists the demo's coverage gaps. The demo has warnings, so
     `lint --strict` exits 1 on it.
@@ -848,9 +849,9 @@ def _warn_about_launcher_conflicts() -> None:
 _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")
 # Flow 1.33 and 1.34 probe four X11 libraries in the wrong case, so on Linux
 # they refuse to download Chromium on hosts that have them. 1.35.0 fixed it.
-# Launcher 1.18 requires Flow 2.2: the quickstart uses its offline Seals,
-# shared browser and OCR prewarm.
-_SUPPORTED_FLOW_RANGE = ">=2.2.0,<3.0.0"
+# Launcher 1.20 requires Flow 2.6: ledger listing uses its persistent
+# owed-recheck API.
+_SUPPORTED_FLOW_RANGE = ">=2.6.0,<3.0.0"
 _RDP_INSTALL_COMMAND = _pip_install("openadapt[rdp]")
 _CHROMIUM_SYSTEM_LIBS_COMMAND = (
     f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
@@ -860,7 +861,7 @@ _CHROMIUM_SYSTEM_LIBS_COMMAND = (
 def _supported_flow_version(value: str) -> bool:
     """Return whether a stable Flow version is in the launcher's supported range."""
     parsed = _release_tuple(value)
-    return parsed is not None and (2, 2, 0) <= parsed < (3, 0, 0)
+    return parsed is not None and (2, 6, 0) <= parsed < (3, 0, 0)
 
 
 # The Python modules each native or remote Flow backend imports when its
@@ -1349,12 +1350,23 @@ def verify_ledger() -> None:
 @verify_ledger.command("list")
 @_LEDGER_OPTION
 def verify_ledger_list(ledger_dir: Optional[str]) -> None:
-    """Show held and open writes: key, state, when it began, outcome."""
+    """Show held and open writes: key, state, when it began, outcome.
+
+    Also each provisional CONFIRMED whose recheck is still owed, with its due
+    time, so a recheck isn't lost when the server that holds it restarts.
+    """
     ledger = _write_ledger(ledger_dir)
     rows = ledger.unresolved()
-    if not rows:
-        click.echo("No held or open writes.")
+    owed = ledger.rechecks_owed()
+    if not rows and not owed:
+        click.echo("No held or open writes. No rechecks owed.")
         return
+    for key, attempt in owed:
+        click.echo(
+            f"{key}  recheck-owed  began {attempt.begun.get('at')}  "
+            f"due {attempt.recheck_owed}  by {attempt.begun.get('actor_kind')}:"
+            f"{attempt.begun.get('actor_id')}"
+        )
     for key, attempt in rows:
         outcome = (attempt.resolved or {}).get("outcome", "-")
         state = "review" if attempt.review else ledger.state(attempt)
@@ -1499,12 +1511,15 @@ def seal(command_ctx: click.Context) -> None:
 
     A folder is a run folder (or a folder of them, such as the quickstart's)
     signed on this computer; each run's report is checked against its
-    `seal.json`. Also `openadapt seal keys pin` to pin Cloud's Seal keys after
-    a person confirms them. Every other argument passes to `openadapt-agent
-    seal` unchanged.
+    `seal.json`. `openadapt seal view RUN_DIR` writes the run's Seal as one
+    offline page (`RUN_DIR/seal.html`) and opens it. Also `openadapt seal keys
+    pin` to pin Cloud's Seal keys after a person confirms them. Every other
+    argument passes to `openadapt-agent seal` unchanged.
     """
     _require_supported_python()
     args = list(command_ctx.args)
+    if args[:1] == ["view"]:
+        sys.exit(_view_sealed_runs(args[1:]))
     if len(args) >= 2 and args[0] == "verify" and Path(args[1]).is_dir():
         sys.exit(_verify_sealed_runs(Path(args[1]), args[2:]))
     try:
@@ -1523,6 +1538,81 @@ def seal(command_ctx: click.Context) -> None:
         click.echo("Upgrade with: pip install --upgrade openadapt-agent", err=True)
         sys.exit(1)
     sys.exit(int(agent_main(["seal", *command_ctx.args]) or 0))
+
+
+def _view_sealed_runs(argv: list[str]) -> int:
+    """`openadapt seal view RUN_DIR`: write each sealed run's offline Seal page."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="openadapt seal view",
+        description=(
+            "Write a sealed run's Seal as one offline page, RUN_DIR/seal.html, and "
+            "open it. The page checks the Ed25519 signature over the run's report "
+            "in the browser, replays the run over its program map, and makes no "
+            "network requests. A folder of runs (such as the quickstart's) gets "
+            "one page per sealed run."
+        ),
+    )
+    parser.add_argument(
+        "run_dir", type=Path, help="a sealed run folder, or a folder of them"
+    )
+    parser.add_argument(
+        "--keys",
+        type=Path,
+        default=None,
+        help="the Seal key registry to trust (default: this computer's Seal key)",
+    )
+    parser.add_argument(
+        "--bundle",
+        type=Path,
+        default=None,
+        help="the run's compiled bundle, for the program map (default: found next to the run)",
+    )
+    parser.add_argument("--no-open", action="store_true", help="write the page only")
+    options = parser.parse_args(argv)
+    folder = options.run_dir
+    runs = _sealed_run_dirs(folder) if folder.is_dir() else []
+    if not runs:
+        click.echo(f"no sealed run in {folder} (no seal.json)", err=True)
+        return 1
+    try:
+        from openadapt.seal_view import SealViewError, open_page, write_seal_page
+    except ImportError:  # pragma: no cover - the viewer ships with the launcher
+        click.echo("This install has no Seal viewer.", err=True)
+        return 1
+    keys = None
+    if options.keys is not None:
+        try:
+            keys = json.loads(options.keys.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            click.echo(f"can't read the key registry {options.keys}: {exc}", err=True)
+            return 1
+    pages = []
+    for run in runs:
+        try:
+            page = write_seal_page(
+                run,
+                keys=keys,
+                bundle_dir=options.bundle,
+                commands=_hint(f"seal verify {_shell_quote(run)}"),
+            )
+        except (SealViewError, ImportError) as exc:
+            click.echo(f"  {run.name}  no page: {exc}", err=True)
+            continue
+        except Exception as exc:  # noqa: BLE001 - e.g. no Seal key on this computer
+            click.echo(f"  {run.name}  no page: {type(exc).__name__}: {exc}", err=True)
+            continue
+        pages.append(page)
+        click.echo(f"Seal: {page}")
+    if not pages:
+        return 1
+    if not options.no_open:
+        from openadapt.quickstart.engine import display_available
+
+        if display_available():
+            open_page(pages[0])
+    return 0 if len(pages) == len(runs) else 1
 
 
 def _sealed_run_dirs(folder: Path) -> list[Path]:

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-flow"
-version = "2.4.1"
+version = "2.6.0"
 description = "Compile demonstrated GUI workflows into deterministic local replay with governed repair and refusal"
 readme = "README.md"
 license = { text = "MIT" }
@@ -124,6 +124,9 @@ dev = [
     "jsonschema>=4.21",
     # Countersigned Seals tests (RFC 3161 tokens); see the `countersign` extra.
     "asn1crypto>=1.5",
+    # Write receipt tests (COSE); see the `receipts` extra.
+    "cwt>=3.3,<4",
+    "cbor2>=5.6,<6",
     # Browser tests remain part of the full development matrix even though the
     # published base runtime no longer installs Playwright for non-web users.
     "playwright>=1.44",
@@ -161,6 +164,13 @@ console = [
 countersign = [
     "asn1crypto>=1.5",
 ]
+# Signed write receipts (openadapt_flow.write_receipt, `openadapt-flow
+# receipt`): COSE_Sign1 checked through python-cwt (MIT), with cbor2 (MIT);
+# cwt also pulls pyhpke (MIT). See docs/WRITE_RECEIPTS.md.
+receipts = [
+    "cwt>=3.3,<4",
+    "cbor2>=5.6,<6",
+]
 # Customer-held offline Seal keys (openadapt_flow.seal_keys). `keychain`
 # stores the key in the OS keychain through keyring (MIT): macOS Keychain,
 # Windows Credential Manager (DPAPI), Linux Secret Service. `pkcs11` signs on
@@ -187,12 +197,16 @@ reward = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
 ]
-# Harness² integration (openadapt_flow.integrations.harness2): GUI tasks on
-# resettable apps, scored by reading the system of record, for
-# google-research/harness2's harness search. Harness² (Apache-2.0, Python
-# 3.12+) is not on PyPI, and a published wheel cannot name a git URL, so it is
-# installed beside this extra; docs/HARNESS2.md gives the pinned command.
-harness2 = ["playwright>=1.44"]
+# Standard RL environments (openadapt_flow.rl_env): the record-checked apps
+# served over the OpenEnv protocol (BSD-3-Clause) and rewarded by verify-run.
+# See environments/openenv/README.md. Python 3.11+: on 3.10 the OpenEnv stack
+# resolves to a dnspython release with a known advisory (GHSA-45c3-73f7-pv4m).
+openenv = [
+    "openenv>=0.11,<0.12; python_version >= '3.11'",
+    "playwright>=1.44; python_version >= '3.11'",
+    "fastapi>=0.110; python_version >= '3.11'",
+    "uvicorn>=0.29; python_version >= '3.11'",
+]
 # Native macOS window capture/input. Imported lazily; other platforms never
 # install or import these framework bindings.
 macos = [
@@ -329,11 +343,15 @@ exclude = [
     "/benchmark/**/outputs",
     "/benchmark/**/recording-live*",
     "/benchmark/**/results-*",
+    "/benchmark/**/RESULTS-*",
     "/benchmark/**/state",
     "/benchmark/**/work",
     "/benchmark/**/_bundle",
     "/benchmark/**/_recording",
     "/benchmark/**/_work",
+    # Verifier-baselines evidence (judge views, rubrics, scores) is repository-only.
+    "/benchmark/verifier_baselines/results",
+    "/benchmark/verifier_baselines/inputs",
     "/public-demo",
     "/benchmark/reliability",
     "/docs/validation/IDENTITY_ROC.md",
@@ -343,6 +361,7 @@ exclude = [
     "/docs/validation/identity_roc.json",
     "/docs/validation/identity_roc.png",
     "/openadapt_flow/benchmark/reliability_corpus.py",
+    "/benchmark/harness/reliability_corpus.py",
     "/openadapt_flow/validation/adversary_corpus.py",
     "/openadapt_flow/validation/adversary_corpus_v2.py",
     "/openadapt_flow/validation/adversary_corpus_v3.py",
@@ -388,11 +407,15 @@ exclude = [
     "/benchmark/**/outputs",
     "/benchmark/**/recording-live*",
     "/benchmark/**/results-*",
+    "/benchmark/**/RESULTS-*",
     "/benchmark/**/state",
     "/benchmark/**/work",
     "/benchmark/**/_bundle",
     "/benchmark/**/_recording",
     "/benchmark/**/_work",
+    # Verifier-baselines evidence (judge views, rubrics, scores) is repository-only.
+    "/benchmark/verifier_baselines/results",
+    "/benchmark/verifier_baselines/inputs",
     "/public-demo",
     "/THIRD_PARTY_NOTICES.md",
     "/benchmark/openimis_claims",
@@ -406,10 +429,12 @@ exclude = [
     "/docs/validation/identity_roc.json",
     "/docs/validation/identity_roc.png",
     "/openadapt_flow/benchmark/reliability_corpus.py",
+    "/benchmark/harness/reliability_corpus.py",
     "/openadapt_flow/validation/adversary_corpus.py",
     "/openadapt_flow/validation/adversary_corpus_v2.py",
     "/openadapt_flow/validation/adversary_corpus_v3.py",
     "/openadapt_flow/validation/identity_roc.py",
+    "/environments/openenv/openimis_claims",
     "/scripts/openimis_claims_demo.py",
     "/scripts/openimis_eligibility_demo.py",
     "/scripts/openimis_submit_binding_probe.py",
@@ -491,8 +516,8 @@ required-environments = [
 target-version = "py310"
 line-length = 88
 # Generated / non-package trees at the repo root are not part of the lint
-# surface. Anchored with a leading slash so the package's own
-# openadapt_flow/benchmark/ IS still linted (a bare "benchmark" would match it).
+# surface. The benchmark harness (benchmark/harness/) is linted by naming it
+# explicitly in CI (`ruff check openadapt_flow benchmark/harness`).
 extend-exclude = ["/benchmark", "/docs", "/runs", "/dist"]
 
 [tool.ruff.lint]
@@ -582,7 +607,7 @@ follow_imports_for_stubs = true
 #   - alternate backends: backends.playwright_backend, backends.rdp_backend
 #   - benchmark & interactive tooling: benchmark.desktop_benchmark,
 #     interactive_recorder
-#   - learning-loop synthesis: learning.synth_stream
+#   - learning-loop synthesis: learning.induce
 #   - disambiguation heuristics: compiler.disambiguation
 #   - runtime helpers still on untyped deps: runtime.effects._common,
 #     runtime.grounder, runtime.healing.perturbation
@@ -595,10 +620,9 @@ module = [
     "openadapt_flow.__main__",
     "openadapt_flow.backends.playwright_backend",
     "openadapt_flow.backends.rdp_backend",
-    "openadapt_flow.benchmark.desktop_benchmark",
     "openadapt_flow.compiler.disambiguation",
     "openadapt_flow.interactive_recorder",
-    "openadapt_flow.learning.synth_stream",
+    "openadapt_flow.learning.induce",
     "openadapt_flow.report",
     "openadapt_flow.runtime.effects._common",
     "openadapt_flow.runtime.grounder",

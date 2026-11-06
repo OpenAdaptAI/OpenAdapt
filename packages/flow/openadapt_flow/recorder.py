@@ -254,6 +254,8 @@ class Recorder:
         # backend must never advertise an authoritative business-effect oracle
         # merely because the recorder can query a separate read-only source.
         self._system_of_record_reader = system_of_record_reader
+        #: Set by :meth:`expect_write` for the next event only.
+        self._write_wait_s = 0.0
         self._settle_interval_s = settle_interval_s
         self._settle_stable_frames = settle_stable_frames
         self._settle_timeout_s = settle_timeout_s
@@ -709,6 +711,13 @@ class Recorder:
 
         return self._i
 
+    def expect_write(self, wait_s: float = 3.0) -> None:
+        """The next action may write to the system of record: its after-read
+        waits up to ``wait_s`` for the records to change (see :meth:`_commit`).
+        Changes nothing else about the event."""
+
+        self._write_wait_s = max(float(wait_s), 0.0)
+
     # -- internals -----------------------------------------------------------
 
     def _record(self, event: dict[str, Any], act: Callable[[], None]) -> None:
@@ -760,6 +769,17 @@ class Recorder:
                         # scrolls out of a virtualized list, the text check
                         # alone would pass on it: replay halts before a write.
                         event = {**event, "structured_ambiguous": True}
+            # The active dialog holding the target, when it sits in one: the
+            # compiler cuts the identity band to its box, so a label of the
+            # page behind the dialog is not frozen into the identity.
+            dialog = self._dialog_region_at(int(event["x"]), int(event["y"]))
+            if dialog is not None:
+                event = {**event, "dialog_region": list(dialog)}
+                # A whole-dialog fallback is valid only for a control that
+                # positively has no record row, never for unreadable row text.
+                census = self._identity_census_at(int(event["x"]), int(event["y"]))
+                if census is not None:
+                    event = {**event, "dialog_row": census.get("row") is not False}
             # The part of the form the target sits in (a legend, an accordion
             # or tab header, a heading), for the program's named sections.
             # Display only: the compiler never puts it on a step.
@@ -995,6 +1015,19 @@ class Recorder:
             line[f"{key}_before"] = value
         if structural_after is None:
             structural_after = self._structural_state()
+            wait_s, self._write_wait_s = self._write_wait_s, 0.0
+            if wait_s > 0 and "sor" in structural_before:
+                # The caller said this action may write (a save the gate let
+                # through). A system of record can show the write a moment
+                # after the screen settles; read again until it changes, so
+                # the write is bound to this event.
+                deadline = time.monotonic() + wait_s
+                while (
+                    structural_after.get("sor") == structural_before.get("sor")
+                    and time.monotonic() < deadline
+                ):
+                    time.sleep(0.25)
+                    structural_after = self._structural_state()
         for key, value in structural_after.items():
             line[f"{key}_after"] = value
         line["t"] = round(time.monotonic() - self._t0, 3)
@@ -1118,6 +1151,22 @@ class Recorder:
             return getter(int(x), int(y))
         except Exception:
             return None
+
+    def _dialog_region_at(self, x: int, y: int) -> Optional[tuple[int, ...]]:
+        """Box of the active dialog holding (x, y), if the backend can say.
+
+        Backends MAY expose ``dialog_region_at`` (the Playwright backend
+        does). None when the point is in no dialog, the backend cannot tell,
+        or the probe failed: the band then stays full width, as before.
+        """
+        getter = getattr(self._backend, "dialog_region_at", None)
+        if getter is None:
+            return None
+        try:
+            status, box = getter(int(x), int(y))
+        except Exception:
+            return None
+        return tuple(box) if status == "dialog" and box else None
 
     def _identity_census_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
         """The row census under (x, y), if the backend exposes one.

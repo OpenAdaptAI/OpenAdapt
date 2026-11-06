@@ -257,6 +257,42 @@ row added, changed or removed anywhere is collateral unless a declared
 effect, a declared side record, an attributed concurrent write or an
 allow-listed bookkeeping table explains it.
 
+Each snapshot has a `frame.database.read_row_budget` of 1,000,000 data rows
+by default. It counts all non-skipped tables, including append-only logs,
+and auxiliary audit-query results. If table counts exceed the budget, their
+contents are not fetched. Audit queries have a server-side result limit;
+one row beyond the remaining budget refuses the entire snapshot. A baseline,
+post-save, settling or recheck read over budget makes the frame
+`not_checked` with a `frame too large` reason. It can never verify from a
+partial read. Set a different positive budget in the contract when needed;
+that change is bound by the contract's digest. The default is omitted from
+serialization so existing contract digests stay unchanged.
+
+For a declared append-only table on MySQL or MariaDB with a single
+AUTO_INCREMENT primary key, historical bodies stay on the database server.
+The baseline records each key and a keyed MAC over server-computed SHA-256
+content digests. Later reads check every old key and digest in the same
+consistent transaction, and fetch full values only for keys absent from the
+baseline. The cursor is that key set, so an insertion into an old id gap is
+seen too. An edit or deletion of an old row still refuses the frame. No log
+row is excused by assuming that the database enforces immutability.
+
+Old baselines keep their original full-row encoding. PostgreSQL, SQLite and
+tables without this key shape retain full reads and the row-budget fallback.
+The optimization reduces historical payload transfer; the server still
+reads and hashes historical contents, so its work can grow with log size.
+
+This is a row limit, not a deadline or a byte limit. Counting and reading
+large cells can still be expensive. `max_rows` is a separate setting: it
+limits retained cell hashes, not rows read. Within the read budget, every
+row is still compared, so edits and deletions of old audit rows remain
+visible. Logged agent writes to audit tables still require an explanation.
+
+An app that writes on every request (the acting user's `last_login`, a
+token's `last_seen`) moves rows in every window. `frame.learned` excuses
+exactly those moves on the acting user's own rows (never the written row),
+once a person approves them: see [LEARNED_EXCUSES.md](LEARNED_EXCUSES.md).
+
 This is the frame of an EspoCRM "create opportunity" contract on MariaDB:
 
 ```yaml
@@ -299,6 +335,35 @@ planned call or a note on the account, is unexplained, and the frame is
 refuted. The read account needs `TRIGGER` and `SHOW VIEW` besides `SELECT`:
 without them a trigger planted in the window can't be seen, and the frame is
 not checked.
+
+`judged_by` names a table whose rows one of the contract's own reads
+declares, such as an update's read of its main record's table:
+
+```yaml
+    judged_by:
+      assets: record            # the table, and the surface that declares its rows
+```
+
+The surface only says which rows are declared: its records, before or after
+the save, that an effect routed to it selects, matched to the table by
+primary key. The table judges every row itself, every column exactly as
+stored, so a lossy read (`substr`, `COALESCE`, a cast) can't hide a change.
+A declared row may change only the surface's fields in
+`target_fields_by_surface`, and a declared new row may set only the columns
+the effects name or `new_row_fields` lists; every other column must hold its
+default. Every other row of the table must not move, and the app profile's
+bookkeeping rules apply as on any table. A recheck reads no surface, so
+there nothing is declared and any change since the post-save read refutes
+the write.
+
+A `judged_by` table is compared, not allow-listed, so it can't also appear
+in `allow_tables` or `views`. One surface declares rows of one table only,
+and the surface may not ignore a field (`frame.ignore_fields`, or a
+`record_field` attribution's `server_set`) that the table doesn't ignore
+(`ignore_columns`). When a declared record's key can't be read, nothing is
+declared, and the change stops the write. The database is read before the
+surfaces, so a change can't land between the surface's read and the read a
+recheck compares with.
 
 Every column type is read, and none is dropped. On MySQL and MariaDB each
 row is read as `JSON_OBJECT`. A type whose value it can't carry as exact text
@@ -499,9 +564,11 @@ only a whole-number version's value is kept, to count steps. The receipt's
 `evidence.frame.versions` holds counts and a problem code (`another_author`,
 `extra_steps`, `went_back`, `no_author`, `not_a_number`, `null_version`,
 `duplicate_version`, `no_new_version`, `history_changed`, `missing`,
-`no_target_id`, `unreadable`, `self_unresolved`), never ids or values. A
-refuted check refutes the frame (`checked.frame: refuted`); one that can't be
-judged leaves the frame `not_checked`.
+`no_target_id`, `unreadable`, `self_unresolved`, `unknown_surface`), never
+ids or values. A refuted check refutes the frame (`checked.frame: refuted`);
+one that can't be judged leaves the frame `not_checked`. A `target_surface`
+that no write effect reads is `unknown_surface`: with no target there is
+nothing to hold.
 
 ## What the receipt says was checked
 

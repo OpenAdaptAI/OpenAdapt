@@ -14,6 +14,7 @@ from __future__ import annotations
 import http.client
 import json
 import re
+import secrets
 import threading
 import time
 import traceback
@@ -101,6 +102,13 @@ class Episode:
     #: The recheck read the record itself and found it changed or gone (a
     #: finding no later write of the agent's can explain away).
     late_moved: bool = False
+    #: The recheck's read time (sql), for the recheck's write receipt.
+    late_read_at: str = ""
+    #: Signed write receipts (``--receipts``): paths, newest last, and why
+    #: one wasn't issued. A receipt never changes a verdict.
+    receipts: list[str] = field(default_factory=list)
+    receipt_sha256: str = ""
+    receipt_note: str = ""
 
 
 def _body_doc(body: bytes, content_type: str) -> Any:
@@ -156,6 +164,7 @@ class Shadow:
         upstream_timeout_s: float = 300.0,
         recheck_s: Optional[float] = 300.0,
         quiet_s: float = 5.0,
+        receipts: bool = False,
     ) -> None:
         if mode not in ("fhir", "sql"):
             raise ShadowConfigError(f"mode {mode!r} is not fhir or sql")
@@ -187,6 +196,9 @@ class Shadow:
         #: for a step that learns from checked traffic. Its errors go in
         #: ``errors``; it never changes a verdict.
         self.on_checked: Optional[Callable[[Episode, Any], None]] = None
+        #: Sign each verdict as a write receipt under ``out/receipts``.
+        self.receipts = receipts
+        self.session = secrets.token_hex(6)
         self.started = time.time()
         self.episodes: list[Episode] = []
         self.writes: list[Write] = []
@@ -413,7 +425,8 @@ class Shadow:
         return ep
 
     def _fhir_episode(self, method: str, path: str, doc: Any) -> Episode:
-        from openadapt_flow.ensure_record import extract, normalize
+        from openadapt_flow.ensure_record import extract, normalize, reference_field
+        from openadapt_flow.fhir_reference import reference_value
 
         segs = [s for s in urlsplit(path).path.split("/") if s]
         if any(s == "_search" or s.startswith("$") for s in segs):
@@ -434,7 +447,13 @@ class Shadow:
         if isinstance(doc, dict) and doc.get("resourceType") == rtype:
             for name, rule in contract.fields.items():
                 value = extract(doc, rule.path)
-                if value is not None and not isinstance(value, (dict, list)):
+                if value is not None and (
+                    not isinstance(value, (dict, list))
+                    or (
+                        reference_field(contract, rule.path) is not None
+                        and isinstance(value, dict)
+                    )
+                ):
                     params[name] = value
         done = self._by_ref.get(ref) if ref else None
         if done is not None and done.checked:
@@ -450,7 +469,15 @@ class Shadow:
                     key = (
                         rtype,
                         tuple(
-                            (p, normalize(params[p], contract.fields[p], task=True))
+                            (
+                                p,
+                                json.dumps(reference_value(params[p]), sort_keys=True)
+                                if reference_field(contract, contract.fields[p].path)
+                                is not None
+                                else normalize(
+                                    params[p], contract.fields[p], task=True
+                                ),
+                            )
                             for p in rule
                         ),
                     )
@@ -602,6 +629,7 @@ class Shadow:
                     ep.checked = True
                     ep.checked_at = time.time()
                     self._schedule_recheck(ep)
+                self._receipt(ep)
 
     def _schedule_recheck(self, ep: Episode) -> None:
         if ep.verdict != CONFIRMED or ep.result is None:
@@ -690,6 +718,7 @@ class Shadow:
                         "reasons": ep.late_reasons,
                         "at": time.time(),
                     }
+                self._receipt(ep, late=True)
 
     def _later(self, ep: Episode) -> list[Episode]:
         return [
@@ -700,18 +729,23 @@ class Shadow:
 
     def _unexplained_later(self, ep: Episode) -> int:
         """Later writes through the shadow a recheck can't excuse: in fhir,
-        a write whose record isn't known (a lost reply); in sql, a write
-        under no contract or another one, or with no result."""
+        a write whose record isn't known (a lost reply or a 2xx write that
+        names no record); in sql, a write under no contract or another one,
+        or with no result."""
 
         n = 0
         for o in self._later(ep):
             if ep.kind == "fhir":
                 # Per write: a create whose reply didn't come back may have
                 # made a record no one knows, even in an episode that has one.
+                # A 2xx reply with no known record (minimal return without
+                # Location, transaction bundle, conditional write) is also
+                # unexplained.
                 n += sum(
                     1
                     for w in o.writes
-                    if w.status // 100 != 2 and (w.method == "POST" or not o.refs)
+                    if (w.status // 100 != 2 and (w.method == "POST" or not o.refs))
+                    or (w.status // 100 == 2 and not o.refs)
                 )
             else:
                 n += not (o.kind == "sql" and o.contract is ep.contract and o.result)
@@ -739,6 +773,7 @@ class Shadow:
             ledger=None,
         )
         ep.late_verdict = str(late.outcome)
+        ep.late_read_at = late.read_at
         # Shadow mode keeps no ledger, so the verifier's note about one is
         # noise here.
         ep.late_reasons = [r for r in late.reasons if "ledger" not in r]
@@ -753,6 +788,7 @@ class Shadow:
             verify_ensure,
             wrong_fields,
         )
+        from openadapt_flow.fhir_reference import ReferenceUnreadable
 
         contract = ep.contract
         rid = str(ep.result.record_id or "")
@@ -766,7 +802,13 @@ class Shadow:
         reader = FhirReader(contract)
         try:
             _, now = reader.fetch(f"{reader.base_url}/{ref}")
-        except Unreadable as exc:
+            references = reader.reference_evidence(
+                contract, ep.params, [now] if isinstance(now, dict) else []
+            )
+            # Resolve all supplied and stored identities before a late verdict.
+            if isinstance(now, dict):
+                wrong_fields(contract, now, ep.params, references)
+        except (Unreadable, ReferenceUnreadable) as exc:
             gone = re.search(r"returned HTTP (404|410)\b", str(exc))
             ep.late_moved = bool(gone)
             ep.late_verdict = REFUTED if gone else UNCERTAIN
@@ -777,10 +819,12 @@ class Shadow:
             ]
             return
         moved: list[str] = []
-        if not isinstance(now, dict) or not is_person(contract, now, ep.params):
+        if not isinstance(now, dict) or not is_person(
+            contract, now, ep.params, references
+        ):
             moved.append("the confirmed record is no longer the person")
         else:
-            wrong = wrong_fields(contract, now, ep.params)
+            wrong = wrong_fields(contract, now, ep.params, references)
             if wrong:
                 moved.append(
                     "the confirmed record now holds other values: " + ", ".join(wrong)
@@ -813,6 +857,7 @@ class Shadow:
                 )
             reasons += list(r.reasons)
         ep.late_reasons = [f"since the first check: {x}" for x in reasons]
+        ep.late_read_at = str(r.evidence.get("window_until") or "")
         # The record read directly outranks a change feed that can't be read.
         if moved:
             ep.late_verdict = REFUTED
@@ -850,9 +895,10 @@ class Shadow:
             Unreadable,
             extra_elements,
             extract,
-            same,
             verify_ensure,
+            wrong_fields,
         )
+        from openadapt_flow.fhir_reference import ReferenceUnreadable
 
         contract = ep.contract
         with self._lock:
@@ -916,6 +962,11 @@ class Shadow:
         for ref, res in stored.items():
             if not isinstance(res, dict) or "unreadable" in res:
                 continue
+            references = reader.reference_evidence(contract, ep.params, [res])
+            try:
+                mismatches = wrong_fields(contract, res, ep.params, references)
+            except ReferenceUnreadable:
+                mismatches = list(contract.fields)
             for name, rule in contract.fields.items():
                 got = extract(res, rule.path)
                 sent = ep.params.get(name)
@@ -927,8 +978,7 @@ class Shadow:
                         "field": name,
                         "sent": sent,
                         "stored": got,
-                        "same": name in ep.params
-                        and same(contract, name, got, ep.params[name]),
+                        "same": name in ep.params and name not in mismatches,
                     }
                 )
             if contract.closed:
@@ -973,6 +1023,121 @@ class Shadow:
         delta = (result.evidence or {}).get("delta")
         if delta is not None:
             ep.evidence["delta"] = delta
+
+    def _receipt(self, ep: Episode, *, late: bool = False) -> None:
+        """Sign the episode's verdict (``late``: its recheck's) as a write
+        receipt. A failure is noted; the verdict stands either way."""
+
+        if not self.receipts:
+            return
+        from openadapt_flow import write_receipt as wr
+
+        try:
+            fields = self._receipt_fields(ep, late)
+            kind = "recheck" if late else "check"
+            name = f"{self.session}-{ep.id:04d}-{kind}.receipt.cbor"
+            issued = wr.issue(
+                self.out / "receipts" / name,
+                evidence={
+                    "sent": ep.params,
+                    "verdict": ep.verdict,
+                    "reasons": ep.reasons,
+                    "late": {"verdict": ep.late_verdict, "reasons": ep.late_reasons},
+                    "evidence": ep.evidence,
+                },
+                supersedes=ep.receipt_sha256 if late and ep.receipt_sha256 else None,
+                **fields,
+            )
+        except Exception as exc:  # noqa: BLE001 - never change a verdict
+            ep.receipt_note = f"not issued: {exc}"
+            self._note_error(f"receipt for check {ep.id}: {exc!r}")
+            return
+        ep.receipts.append(str(issued.path))
+        ep.receipt_sha256 = issued.sha256
+        ep.receipt_note = ""
+
+    def _receipt_fields(self, ep: Episode, late: bool) -> dict[str, Any]:
+        from datetime import datetime, timezone
+
+        from openadapt_flow import write_receipt as wr
+        from openadapt_flow.shadow_report import _final
+
+        verdict = ep.verdict or UNCERTAIN
+        due = None
+        if late:
+            verdict = _final(verdict, {"verdict": ep.late_verdict or UNCERTAIN})
+            if verdict == CONFIRMED and ep.late_verdict != CONFIRMED:
+                verdict = UNCERTAIN  # no recheck verdict: never a pass
+        elif ep.late_verdict:
+            # The recheck already failed to schedule: never a plain pass.
+            verdict = _final(verdict, {"verdict": ep.late_verdict})
+        elif verdict == CONFIRMED and ep.recheck_at:
+            due = wr.iso(datetime.fromtimestamp(ep.recheck_at, timezone.utc))
+        write_id = f"shadow-{self.session}-{ep.id}"
+        if ep.kind == "sql" and ep.result is not None:
+            scope = wr.scope_of_result(ep.result)
+            write_id = ep.result.write_id or write_id
+            subject = {
+                "contract_sha256": None,
+                "verify_run_receipt_sha256": ep.result.receipt_sha256 or None,
+            }
+            value = str((ep.result.receipt or {}).get("workflow_digest") or "")
+            if re.fullmatch(r"sha256:[0-9a-f]{64}", value):
+                subject["contract_sha256"] = value[7:]
+            checked = dict(ep.result.checked)
+        elif ep.kind == "fhir" and ep.result is not None:
+            ev = ep.result.evidence or {}
+            started = getattr(ep.base, "started", None)
+            until = ev.get("window_until")
+            scope = wr.fhir_scope(
+                unreadable=bool(ev.get("unreadable")),
+                started=wr.iso(started),
+                read_at=wr.iso(datetime.fromisoformat(until)) if until else None,
+                audit=ep.contract.change_feed.audit is not None,
+            )
+            subject = {"contract_sha256": None, "verify_run_receipt_sha256": None}
+            checked = {}
+        else:
+            scope = {
+                "read_paths": [],
+                "stores": [],
+                "unread": [],
+                "window": {
+                    "baseline_read_at": None,
+                    "read_at": None,
+                    "max_execution_window_s": None,
+                },
+                "strength": "unchecked",
+                "not_covered": [
+                    "this write: the store couldn't be read before it, or no "
+                    "contract covers it, so nothing about it was checked"
+                ],
+            }
+            subject = {"contract_sha256": None, "verify_run_receipt_sha256": None}
+            checked = {}
+            verdict = UNCERTAIN
+        if late:
+            # The window stays the check's; a line says what the recheck
+            # read again, and until when.
+            read_at = ep.late_read_at
+            if verdict == CONFIRMED and not read_at:
+                verdict = UNCERTAIN
+            when = (
+                wr.iso(datetime.fromisoformat(read_at.replace("Z", "+00:00")))
+                if read_at
+                else None
+            )
+            reread = ["frame.database"] if ep.kind == "sql" else list(scope["stores"])
+            scope = wr.recheck_scope(scope, reread, when)
+        return {
+            "source": f"shadow.{self.mode}",
+            "verdict": verdict,
+            "scope": scope,
+            "checked": checked,
+            "write_id": write_id,
+            "recheck_due_at": due,
+            **subject,
+        }
 
     def _notify(self, ep: Episode, result: Any) -> None:
         if self.on_checked is None:

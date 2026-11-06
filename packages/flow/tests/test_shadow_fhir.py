@@ -36,6 +36,7 @@ class Fhir:
         self.status = 201
         self.received: list[tuple[str, str, bytes]] = []
         self.on_write: Any = None
+        self.reply_body: Any = None
         fx = self
 
         class H(BaseHTTPRequestHandler):
@@ -48,8 +49,11 @@ class Fhir:
                 fx.received.append((self.command, self.path, body))
                 if fx.on_write:
                     fx.on_write()
-                rid = f"a{len(fx.received)}"
-                out = json.dumps({"resourceType": "AllergyIntolerance", "id": rid})
+                if fx.reply_body is not None:
+                    out = fx.reply_body
+                else:
+                    rid = f"a{len(fx.received)}"
+                    out = json.dumps({"resourceType": "AllergyIntolerance", "id": rid})
                 self.send_response(fx.status)
                 self.send_header("Content-Type", "application/fhir+json")
                 self.send_header("Content-Length", str(len(out)))
@@ -290,6 +294,22 @@ def test_a_later_write_with_no_known_record_makes_a_late_refutation_uncertain(
     assert "can't tell apart" in sh.episodes[0].late_reasons[0]
 
 
+def test_a_later_2xx_write_with_no_known_record_makes_a_late_refutation_uncertain(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sh = env["sh"]
+    _confirmed(env, monkeypatch)
+    env["fhir"].status = 200
+    env["fhir"].reply_body = "{}"  # a 2xx reply that carries no id or Location
+    _send(sh, "POST", "/fhir/R4/AllergyIntolerance", _allergy("Patient/p2"))
+    env["calls"]["outcome"] = "needs_review"
+    env["calls"]["ev"] = {"agent_writes": 1}
+    sh.flush()
+    sh.run_rechecks(now=True)
+    assert sh.episodes[0].late_verdict == "UNCERTAIN"
+    assert "can't tell apart" in sh.episodes[0].late_reasons[0]
+
+
 def test_a_recheck_that_cant_be_scheduled_says_so(
     env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -390,3 +410,113 @@ def test_a_lost_retry_in_a_known_episode_makes_a_late_refutation_uncertain(
     env["calls"]["ev"] = {"agent_writes": 1}
     sh.run_rechecks(now=True, only=[sh.episodes[0]])
     assert sh.episodes[0].late_verdict == "UNCERTAIN"
+
+
+@pytest.mark.parametrize(
+    "target,expected",
+    [
+        ("Patient/p1", "CONFIRMED"),
+        ("Patient/p2", "REFUTED"),
+        ("Patient/missing", "UNCERTAIN"),
+    ],
+)
+def test_reference_identity_and_display_use_the_same_late_path(
+    env, monkeypatch, target, expected
+):
+    from openadapt_flow.fhir_reference import ReferenceSchema
+    from tests.test_fhir_reference import schema
+
+    stored = _confirmed(env, monkeypatch)
+    ep = env["sh"].episodes[0]
+    c = ep.contract
+    c.reference_schema = ReferenceSchema.model_validate(
+        schema("AllergyIntolerance", "patient")
+    )
+    # The existing synthetic contract binds the patient reference and scalar
+    # clinical values. A stored display is presentation even when unbound.
+    stored["now"] = _stored(target)
+    stored["now"]["patient"]["display"] = "A different presentation"
+
+    def fetch(self, url, params=None):
+        if "/Patient/" in url:
+            pid = url.rsplit("/", 1)[-1]
+            if pid == "missing":
+                raise ensure_record.Unreadable("synthetic missing target")
+            return {}, {"resourceType": "Patient", "id": pid}
+        return {}, stored["now"]
+
+    monkeypatch.setattr(ensure_record.FhirReader, "fetch", fetch)
+    env["sh"].run_rechecks(now=True)
+    assert ep.late_verdict == expected, ep.late_reasons
+
+
+def test_multivalued_reference_late_exception_stays_uncertain(env, monkeypatch):
+    from tests.test_fhir_reference import schema
+
+    stored = _confirmed(env, monkeypatch)
+    ep = env["sh"].episodes[0]
+    # A repeated ancestor preserves scalar Reference leaves. A list directly
+    # in AllergyIntolerance.patient is malformed and refuses before this path.
+    data = ep.contract.model_dump(by_alias=True)
+    data.update(
+        resource_type="CareTeam",
+        reference_schema=schema("CareTeam", "participant.member"),
+        fields={
+            "patient": {"path": "participant.member.reference"},
+            "code": {"path": "category.coding.code"},
+        },
+        allow=[],
+    )
+    ep.contract = ensure_record.EnsureContract.model_validate(data)
+    ep.params = {"patient": ep.params["patient"], "code": ep.params["code"]}
+    stored["now"] = {
+        "resourceType": "CareTeam",
+        "id": "a1",
+        "participant": [
+            {"member": {"reference": "Patient/p2"}},
+            {"member": {"reference": "Patient/missing"}},
+        ],
+        "category": [{"coding": [{"code": ep.params["code"]}]}],
+    }
+
+    def fetch(self, url, params=None):
+        if "/Patient/" in url:
+            pid = url.rsplit("/", 1)[-1]
+            if pid == "missing":
+                raise ensure_record.Unreadable("synthetic missing target")
+            return {}, {"resourceType": "Patient", "id": pid}
+        return {}, stored["now"]
+
+    monkeypatch.setattr(ensure_record.FhirReader, "fetch", fetch)
+    env["sh"].run_rechecks(now=True)
+    assert ep.late_verdict == "UNCERTAIN"
+    assert any("ReferenceUnreadable" in reason for reason in ep.late_reasons)
+
+
+def test_invalid_singular_reference_array_is_refused(env, monkeypatch):
+    from openadapt_flow.fhir_reference import ReferenceSchema
+    from tests.test_fhir_reference import schema
+
+    stored = _confirmed(env, monkeypatch)
+    ep = env["sh"].episodes[0]
+    ep.contract.reference_schema = ReferenceSchema.model_validate(
+        schema("AllergyIntolerance", "patient")
+    )
+    stored["now"] = _stored("Patient/p2")
+    stored["now"]["patient"] = [
+        {"reference": "Patient/p2"},
+        {"reference": "Patient/missing"},
+    ]
+
+    def fetch(self, url, params=None):
+        if "/Patient/" in url:
+            pid = url.rsplit("/", 1)[-1]
+            if pid == "missing":
+                raise ensure_record.Unreadable("synthetic missing target")
+            return {}, {"resourceType": "Patient", "id": pid}
+        return {}, stored["now"]
+
+    monkeypatch.setattr(ensure_record.FhirReader, "fetch", fetch)
+    env["sh"].run_rechecks(now=True)
+    assert ep.late_verdict == "REFUTED"
+    assert any("no longer the person" in reason for reason in ep.late_reasons)

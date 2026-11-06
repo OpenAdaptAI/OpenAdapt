@@ -73,10 +73,24 @@ def _job_steps(job: dict) -> dict[str, dict]:
     return {str(step.get("name") or step.get("uses")): step for step in job["steps"]}
 
 
+def _action_uses(steps: list[dict]) -> list[str]:
+    """Every action the steps use, with a local composite action's own steps in its place."""
+
+    uses = []
+    for step in steps:
+        if "uses" not in step:
+            continue
+        if step["uses"].startswith("./.github/actions/"):
+            action = yaml.safe_load((ROOT.parents[1] / step["uses"] / "action.yml").read_text())
+            assert action["runs"]["using"] == "composite"
+            uses.extend(_action_uses(action["runs"]["steps"]))
+        else:
+            uses.append(step["uses"])
+    return uses
+
+
 def _workflow_uses(payload: dict) -> list[str]:
-    return [
-        step["uses"] for job in payload["jobs"].values() for step in job["steps"] if "uses" in step
-    ]
+    return [use for job in payload["jobs"].values() for use in _action_uses(job["steps"])]
 
 
 def test_native_versions_are_synchronized() -> None:

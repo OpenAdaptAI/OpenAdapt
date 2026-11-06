@@ -147,7 +147,28 @@ keeps, in this order:
    the table defines first when they hold the same value in every row;
 3. the place another kind's demonstrations used for the same table.
 
-If places are still tied, that is a question. A value that is also in a row
+If places are still tied, that is a question.
+
+Equal ids are not a join. Demonstrations made on a fresh install often give
+a new row the same id as an unrelated row, so:
+
+- A row's own whole single-column key holding a generated number is never
+  a key to another table, and a new row's such key never links it to its
+  record, unless a declared foreign key says so. A member of a composite key
+  (an order line's `order_id` in `(order_id, line_no)`) and a copied token
+  (an extension table keyed by its parent's UUID) still link.
+- A value is never placed in the column a path arrived by (a child row's
+  link column holds the record's key by construction).
+- A list item's link is the column that holds the record's key in every
+  item row of every demonstration. When two always agree and no declared
+  foreign key picks one, the list is refused until a demonstration tells
+  them apart.
+- When the best place goes through a key only equal values support (no
+  declared foreign key, no column named after its table) and a place whose
+  keys are all supported fits every demonstration too, that is a question
+  (`locations.<kind>`), never a silent pick.
+
+A value that is also in a row
 the write added beside the record (a call's lead is its parent and an
 attendee row) is checked in both places.
 
@@ -171,6 +192,33 @@ is no lead). A row the app adds with an empty value when a field is left out
 (Redmine's custom field values, a journal with no note) is expected then
 too. A list parameter gets a contract per length, from 1 to 10 items.
 
+A field set the manifest doesn't list still gets a contract, so a task's set
+doesn't need its own demonstration. Each kind in `manifest.yaml` lists the
+fields a set may hold (`fields`): an update's identity fields and the fields
+it may change, or a create's required and optional fields. For a set of those
+that isn't listed (past the cap of 64, or optional fields no demonstration
+combined), `choose` builds the contracts the way `propose` builds the listed
+ones: from the same demonstrations, answers and schema, checked by the SQL
+guard and a dry read, and written under `field_sets/`. A field the set leaves
+out must stay as it was (an update) or be empty (a create), as in every
+contract. `field_sets` in the manifest pins, by digest, every byte the
+demonstrations' load read (snapshots outside the folder too, digested in the
+same read), the schema, the generator's own code, and every listed contract
+file as `propose` wrote it. `choose` refuses, and the write stops, when any
+of these changed: so a listed contract a person edited by hand (a tighter
+check) stops every run-time build, since a built contract wouldn't have the
+edit; run `propose` again and reapply the edit to build more sets. It also
+refuses when a question is still open, when the set has a field no
+demonstration placed, or when a column of the new row would be left
+unchecked without the person's answer. A kind whose value names the field to
+change (`field: status`) gets only its listed sets. Each build writes
+through a temporary file of its own, so threads building one set at once
+don't collide.
+
+`QUESTIONS.md` lists, per kind, the parameters no demonstration gave and no
+column is named like (`not_placed` in `report.json`): record a demonstration
+that gives them before tasks need them.
+
 **Create, found, update.**
 
 - `create`: exactly one new main record holds the task's values, and
@@ -193,7 +241,18 @@ too. A list parameter gets a contract per length, from 1 to 10 items.
 user, to the value every demonstration held, or to a copy of a column of the
 row a key points to (an invoice line's price from its product). A key, a
 link to a row the write added, the year, month, week or day of a date the
-task gives, and a generated token (a UUID) are recognized as such. Columns
+task gives, and a generated token (a UUID) are recognized as such. A link
+needs two demonstrations. A column that is not a copy and, in two or more
+demonstrations, holds the row's own key in the same text (`INV-{key}`) is
+listed in the question as holding the row's own key, and is left unchecked
+only if the answer names it, like any column that varies. A copy is
+checked as a copy even when its values read as the own key (prices 15 and
+25 on rows 1 and 2). A date part must differ between the demonstrations: a constant
+that happens to equal the month of every demonstration's date is a
+constant. A copy is taken only through a declared key or a column named
+after its table, and only when the source differs between demonstrations:
+a column and its source that hold one value in every demonstration fit a
+constant and a copy alike, so the question lists the column. Columns
 that differ between demonstrations, free text every demonstration left
 empty, and the write's time stamps are listed in the bookkeeping question,
 and each is left unchecked only if the answer names it (`unchecked`). Free
@@ -204,6 +263,20 @@ the answer doesn't name gets no contract. The proposed answer names the
 columns that vary or are time stamps, so accepting it is explicit, and
 leaves free text out: a person adds a free-text column to `unchecked` only
 on purpose.
+
+A pin needs two rows that agree. A value seen beside one write only (a field
+set one demonstration alone gives, a row only one demonstration added) is
+pinned only when every row of that table the kind's demonstrations wrote
+holds it. Otherwise the bookkeeping question lists it as one the
+demonstrations can't tell, it is left out of the proposed answer, and the
+kind has no contract until a person names it under `unchecked` or records a
+demonstration where it differs. A field set whose own demonstrations leave
+such a column open, while the kind's full set pins it, gets no contract
+(`rejected` in `report.json`). A column that holds the acting user's id in
+every row is the actor, unless it is also a copy of a column of a row it
+points to, or a link: then the demonstrations can't tell, and the question
+lists it. Pins and widening count demonstrations, not rows. A row the app adds beside an update may hold the target's key: that is a
+link to the record, never a pinned id.
 
 **Rows the app adds on its own.** A row type the app added the same number of
 times in every demonstration (an agenda event, a stream note, a price-history
@@ -219,9 +292,12 @@ is a log from its name.
 
 **Changes the app makes to existing rows.** A column of an existing row that
 the demonstrations changed with no task value is excused only on that row:
-the target itself, a row with the same key in every demonstration (a counter
-row), or the row the task's values name through a key of the main record
-(the account a contact belongs to). It is never excused by name on other
+the target itself, the row the task's values name through a key of the main
+record (the account a contact belongs to), or a row with the same key in
+every demonstration (a counter row). A row the task's values name is named
+by them even when every demonstration happened to touch the same one (both
+demonstrations were in one project), so a correct write in another project
+is not stopped. It is never excused by name on other
 rows or tables. Time stamps set during the write, counters that went up and
 columns set to the acting user are proposed; anything else is listed and
 excused only if the person adds it (`columns_add`). A changed row the
@@ -241,7 +317,17 @@ refused. A mapping without `accept: true` takes only what it names.
 in any table that the contract doesn't declare stops the write, except rows
 added to a table the person named as a log. The main record's table and the
 tables of rows that hold values are read by the contract's own reads, with
-every column. On PostgreSQL the read account also needs `SELECT` on the
+every row and column. Those tables are compared too
+(`frame.database.judged_by`): the rows the contract's read declares (the
+target, or the rows the write adds) are judged by the table, every column
+exactly, with only their declared fields allowed to change, and any other
+row that moves stops the write. A table's key is read as `id` unless the
+table has its own `id` column that isn't the whole key; then it is read as
+`oa_key` and `id` as it is. A new declared row may set any column of these
+tables (`new_row_fields`), since the contract's read checks each one. An excused column is excused only on the rows the
+write declares, never on a look-alike row of the same table. The recheck
+compares these tables like any other, so a late change to any of their rows
+stops the write. On PostgreSQL the read account also needs `SELECT` on the
 sequences (see [VERIFY_RUN.md](VERIFY_RUN.md)); without it the dry read
 fails and no contract is written.
 
@@ -266,9 +352,33 @@ saves. Only the main record is a target (`target_surface`). A target
 the read before the write doesn't show as new is treated as existing, and
 with no version before the write it stops as `missing` (a record saved
 before the trail began, or outside the app). With neither, the update has no
-version check, and `report.json` shows `versions: null`. If the app stops
+version check: `report.json` shows `versions: null`, and `QUESTIONS.md`
+says so under the kind. If the app stops
 writing the trail (an agenda setting turned off), the agent's own save has
 no new version, and the verifier stops the write rather than pass it.
+
+**Time stamps checked against the clock.** With `now_checks: true` in the
+answers, a date-time column of the main record that the bookkeeping answer
+leaves unchecked on a create (the write's own time stamp), or excuses on the
+target of an update (its modified time), must hold a time near the read: no
+older than the execution window plus the recheck window plus a minute, and
+no more than five minutes ahead, by the database's local clock or by UTC. A
+NULL fails. Without it, such a column may hold any value. It only adds a
+check.
+
+**Checking both readings.** With `strict_pins: true`, a new-row column the
+demonstrations can't settle is checked instead of refusing the kind, in
+three cases: it holds one value that is also a copy of a column a key points
+to (both are checked), it holds the acting user's id and such a copy (both
+are checked), or its field set was seen in one demonstration only with one
+value (that value is pinned). Each only adds a check: a wrong guess stops
+correct writes, never passes a wrong one.
+
+**Setting up with no person answers.** `python -m
+openadapt_flow.generate.zero_touch` answers these questions by fixed rules
+and admits a kind only after a sandbox copy of the store confirms held-out
+writes and stops planted faults; see
+[research/ZERO_TOUCH_DESIGN.md](research/ZERO_TOUCH_DESIGN.md).
 
 **The recheck window.** One question asks how long the
 app can still write on its own after a verified write. The answer is

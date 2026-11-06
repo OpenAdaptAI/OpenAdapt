@@ -85,3 +85,48 @@ def test_a_binding_comes_from_one_effect() -> None:
         )
     ]
     assert "city" not in bindings(two)
+
+
+def test_capitalize_words_is_the_forms_capitalize_me() -> None:
+    # OpenEMR's "C" fields: each space-separated word gets a capital first
+    # letter, the rest keeps its case, and extra spaces are dropped.
+    words = ValueExpr(param="fname", stored="capitalize_words")
+    assert words.resolve({"fname": "ada  grace"}) == "Ada Grace"
+    assert words.resolve({"fname": " mcQuill "}) == "McQuill"
+    assert words.resolve({"fname": "ADA"}) == "ADA"
+    assert words.resolve({"fname": "ßa"}) == "SSa"  # toUpperCase of one letter
+    assert words.resolve({"fname": "   "}) == ""
+    # charAt(0) is one UTF-16 unit: a first letter outside the BMP stays as
+    # typed, so a wrong-case value is not confirmed (Adlam).
+    assert words.resolve({"fname": "\U0001e922\U0001e923"}) == "\U0001e922\U0001e923"
+    assert words.resolve({"fname": "\U0001e900\U0001e923"}) == "\U0001e900\U0001e923"
+    with pytest.raises(ValueError):
+        ValueExpr(literal="ada", stored="capitalize_words")
+
+
+@pytest.mark.parametrize(
+    ("declared", "stored", "verdict"),
+    [
+        ("capitalize_words", "Ada Grace", "confirmed"),
+        ("capitalize_words", "ada grace", "refuted"),  # exact: no other casing
+        ("capitalize_words", "Ada Grac", "refuted"),
+        ("capitalize_words", "ADA GRACE", "refuted"),
+        # A form declared that the app doesn't apply refutes the right save:
+        # it fails closed, never open.
+        ("upper", "Ada Grace", "refuted"),
+        (None, "Ada Grace", "refuted"),
+    ],
+)
+def test_a_declared_form_is_exact(declared, stored, verdict) -> None:
+    value = {"param": "fname"} | ({"stored": declared} if declared else {})
+    effect = Effect(
+        kind=EffectKind.FIELD_EQUALS, match={"id": "1"}, field="fname", value=value
+    ).resolve({"fname": "ada  grace"})
+    before = EffectState(substrate="t", reachable=True, records=[])
+    got = judge_records(effect, before, [{"id": "1", "fname": stored}], substrate="t")
+    assert got.verdict.value == verdict
+
+
+def test_an_unknown_form_is_refused() -> None:
+    with pytest.raises(ValueError):
+        ValueExpr(param="fname", stored="title")  # type: ignore[arg-type]

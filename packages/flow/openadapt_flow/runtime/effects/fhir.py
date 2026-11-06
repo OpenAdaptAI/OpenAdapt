@@ -47,6 +47,13 @@ from __future__ import annotations
 import time
 from typing import Any, Optional, Protocol
 
+from openadapt_flow.fhir_read import (
+    check_search_coverage,
+    check_search_outcome,
+    fhir_read_headers,
+    next_page_url,
+    search_total,
+)
 from openadapt_flow.runtime.effects._common import drop_record_fields, judge_records
 from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
@@ -56,8 +63,9 @@ from openadapt_flow.runtime.effects.effect import (
 )
 from openadapt_flow.verification import VerificationTier
 
-#: OpenEMR's FHIR field paths for the canonical patient-note-as-Observation
-#: write. Callers override for DocumentReference / Encounter / etc.
+#: A field map for a note kept as a FHIR R4 Observation (the note in
+#: ``valueString``). Not a default: a caller whose app stores its writes this
+#: way passes it as ``field_paths``; any other resource or app names its own.
 DEFAULT_OBSERVATION_PATHS: dict[str, str] = {
     "id": "id",
     "patient": "subject.reference",
@@ -70,19 +78,6 @@ DEFAULT_OBSERVATION_PATHS: dict[str, str] = {
 #: A search result longer than this many pages reads as unreadable, never as
 #: the first pages.
 MAX_PAGES = 50
-
-
-def _next_link(bundle: dict[str, Any]) -> Optional[str]:
-    """The Bundle's ``next`` page URL, if any."""
-
-    links = bundle.get("link")
-    if not isinstance(links, list):
-        return None
-    for link in links:
-        if isinstance(link, dict) and link.get("relation") == "next":
-            url = link.get("url")
-            return url if isinstance(url, str) and url else None
-    return None
 
 
 def _origin(url: str) -> str:
@@ -188,18 +183,18 @@ def extract_path(resource: dict[str, Any], dotted: str) -> Any:
 
 
 class FhirEffectVerifier(VerifierAdapterBase):
-    """Verify effects against an OpenEMR FHIR R4 system of record.
+    """Verify effects against a FHIR R4 system of record.
 
     Args:
-        base_url: FHIR base URL (e.g.
-            ``https://demo.openemr.io/apis/default/fhir/R4``).
+        base_url: FHIR base URL (e.g. ``https://fhir.example.org/R4``).
         resource_type: FHIR resource type to search (``Observation``,
-            ``DocumentReference``, ``Encounter``, ...).
+            ``DocumentReference``, ``Encounter``, ...). Required.
         search_params: Query params identifying the candidate resource set
             (e.g. ``{"patient": "9", "category": "social-history"}``); used
             for both the pre-state snapshot and the post-action read.
         field_paths: Flat Effect key -> dotted FHIRPath-lite for flattening a
-            resource into the dict :func:`judge_records` matches on.
+            resource into the dict :func:`judge_records` matches on. Required:
+            where a field lives depends on the app and the resource.
         access_token: OAuth2 bearer token (``Authorization: Bearer ...``).
         token_source: Gets a token per read instead of ``access_token``
             (mutually exclusive with it).
@@ -218,9 +213,9 @@ class FhirEffectVerifier(VerifierAdapterBase):
         self,
         base_url: str,
         *,
-        resource_type: str = "Observation",
+        resource_type: str,
+        field_paths: dict[str, str],
         search_params: Optional[dict[str, str]] = None,
-        field_paths: Optional[dict[str, str]] = None,
         access_token: Optional[str] = None,
         token_source: Optional[AccessTokenSource] = None,
         session: Any = None,
@@ -233,7 +228,9 @@ class FhirEffectVerifier(VerifierAdapterBase):
         self.drop_fields = tuple(drop_fields)
         self.resource_type = resource_type
         self.search_params = dict(search_params or {})
-        self.field_paths = dict(field_paths or DEFAULT_OBSERVATION_PATHS)
+        if not resource_type or not field_paths:
+            raise ValueError("a FHIR read needs its resource_type and field_paths")
+        self.field_paths = dict(field_paths)
         if access_token and token_source is not None:
             raise ValueError("give access_token or token_source, not both")
         self.access_token = access_token
@@ -282,7 +279,7 @@ class FhirEffectVerifier(VerifierAdapterBase):
 
     def _headers(self) -> Optional[dict[str, str]]:
         """Request headers, or None when the token source has no token."""
-        headers = {"Accept": "application/fhir+json"}
+        headers = fhir_read_headers()
         token = self.access_token
         if self.token_source is not None:
             token = self.token_source.access_token()
@@ -364,9 +361,15 @@ class FhirEffectVerifier(VerifierAdapterBase):
         if bundle is None:
             return None
         out: list[dict[str, Any]] = []
+        outcomes: list[dict[str, Any]] = []
         matches = 0
-        total: Any = bundle.get("total")
+        total: Optional[int] = None
         for _page in range(MAX_PAGES):
+            try:
+                total = search_total(bundle, total)
+            except ValueError as exc:
+                self.read_problem = str(exc)
+                return None
             entries = bundle.get("entry", [])
             if not isinstance(entries, list):
                 self.read_problem = "a Bundle's entry is not a list"
@@ -380,25 +383,26 @@ class FhirEffectVerifier(VerifierAdapterBase):
                     self.read_problem = "a Bundle entry has no resource"
                     return None
                 mode = (entry.get("search") or {}).get("mode")
-                if mode == "outcome" or (
-                    mode is None and resource.get("resourceType") == "OperationOutcome"
+                if (
+                    mode == "outcome"
+                    or resource.get("resourceType") == "OperationOutcome"
                 ):
-                    # A message about the search, not a record (Epic sends a
-                    # warning "returns no results" on an empty search). An
-                    # error in it means the set may be partial.
-                    issues = resource.get("issue") or []
-                    if not isinstance(issues, list) or any(
-                        not isinstance(i, dict)
-                        or i.get("severity") not in ("warning", "information")
-                        for i in issues
-                    ):
-                        self.read_problem = "the search returned an error outcome"
-                        return None
+                    outcomes.append(resource)
                     continue
                 if mode != "include":
                     matches += 1
                 out.append(self._flatten(resource))
-            next_url = _next_link(bundle)
+            try:
+                for outcome in outcomes:
+                    check_search_outcome(outcome, has_matches=matches > 0)
+            except ValueError as exc:
+                self.read_problem = str(exc)
+                return None
+            try:
+                next_url = next_page_url(bundle)
+            except ValueError as exc:
+                self.read_problem = str(exc)
+                return None
             if next_url is None:
                 break
             if not _same_origin(next_url, self.base_url):
@@ -414,11 +418,10 @@ class FhirEffectVerifier(VerifierAdapterBase):
         else:
             self.read_problem = f"more than {MAX_PAGES} pages"
             return None  # never a truncated read
-        if isinstance(total, int) and not isinstance(total, bool) and total != matches:
-            # The server counts a different number of matches than it returned.
-            self.read_problem = (
-                f"the Bundle's total is {total}, the read returned {matches} matches"
-            )
+        try:
+            check_search_coverage(total, matches)
+        except ValueError as exc:
+            self.read_problem = str(exc)
             return None
         return drop_record_fields(out, self.drop_fields)
 

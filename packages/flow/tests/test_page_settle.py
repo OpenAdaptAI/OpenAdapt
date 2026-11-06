@@ -368,7 +368,7 @@ def _typed(label, text="Massachusetts"):
     r.backend = _SelectBackend(label)
     r.vision = _PixelVision()
     r._settle_seeded = lambda: b"after"
-    r._field_region = lambda point, region: (0, 0, 10, 10)
+    r._field_region = lambda point, region, *, masked=False: (0, 0, 10, 10)
     return r._typed_input_landed(text, (5, 5), b"before"), r.vision.ocr_calls
 
 

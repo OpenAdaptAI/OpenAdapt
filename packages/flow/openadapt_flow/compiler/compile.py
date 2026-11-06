@@ -8,6 +8,7 @@ Input is a recording directory (``meta.json`` + ``events.jsonl`` +
 
 from __future__ import annotations
 
+import dataclasses
 import difflib
 import hashlib
 import json
@@ -30,11 +31,20 @@ from typing import (
 
 if TYPE_CHECKING:
     from openadapt_flow.compiler.annotate import StepAnnotator
+    from openadapt_flow.compiler.binding_admission import AdmissionFixture
 
 import numpy as np
 
 from openadapt_flow import sealed_set as _sealed
 from openadapt_flow import volatility
+from openadapt_flow.compiler.empty_result_guard import (
+    MinedGuard,
+    carries_value,
+    dialog_statement,
+    has_text_check,
+    is_empty_result_statement,
+    mine_empty_result_guard,
+)
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
@@ -63,14 +73,17 @@ from openadapt_flow.risk import (
     confirmation_opener_step_ids,
     infer_step_risk,
     is_meaningful_label,
+    opener_explanation,
     presumed_commit_step_ids,
 )
+from openadapt_flow.runtime.effects.effect import DEFAULT_IDEMPOTENCY_KEY_FIELD
 from openadapt_flow.runtime.identity import (
     band_region,
     context_from_lines,
     context_region_from_lines,
     coverage,
     identifier_text_from_lines,
+    mask_outside,
 )
 from openadapt_flow.vision import imgops
 from openadapt_flow.vision.hashing import phash_distance, phash_png
@@ -801,6 +814,20 @@ def _matches_label(text: str, labels: tuple[str, ...]) -> bool:
     return False
 
 
+def _clicked_labels(steps: Sequence[Step]) -> tuple[str, ...]:
+    """The labels of every control the demonstration clicked."""
+
+    labels: list[str] = []
+    for step in steps:
+        if step.anchor is None:
+            continue
+        if step.anchor.ocr_text:
+            labels.append(step.anchor.ocr_text)
+        if step.anchor.structural is not None and step.anchor.structural.name:
+            labels.append(step.anchor.structural.name)
+    return tuple(labels)
+
+
 def _text_carries_phi(text: str) -> bool:
     """Whether the optional Presidio pass flags this text as carrying PII/PHI.
 
@@ -1327,7 +1354,14 @@ def lint_param_leakage(workflow: Workflow, param_values: tuple[str, ...]) -> lis
                         f"{step.id}: focus_on postcondition {focus!r} embeds a "
                         "demo parameter value"
                     )
-            if pc.text and _contains_excluded(pc.text, values):
+            # An empty-result statement is built from a fixed vocabulary, so a
+            # value can only be in it as a whole word; the fuzzy screen would
+            # flag "No matches were found." against a title like "Ms.".
+            if pc.text and (
+                carries_value(pc.text, values)
+                if is_empty_result_statement(pc.text)
+                else _contains_excluded(pc.text, values)
+            ):
                 violations.append(
                     f"{step.id}: {pc.kind.value} postcondition "
                     f"{pc.text!r} embeds a demo parameter value"
@@ -1566,6 +1600,26 @@ def _clamp_to_frame(region: Region, frame_size: tuple[int, int]) -> Optional[Reg
     return (x0, y0, x1 - x0, y1 - y0)
 
 
+def _event_dialog_region(
+    event: dict[str, Any], frame_size: tuple[int, int]
+) -> Optional[Region]:
+    """The recorded dialog box holding the click target, clamped to the frame.
+
+    The recorder stores ``dialog_region`` on a pointer event whose target sat
+    in an open dialog (``PlaywrightBackend.dialog_region_at``). A malformed
+    value or one off the frame is ignored: the band then stays full width.
+    """
+    value = event.get("dialog_region")
+    if not isinstance(value, (list, tuple)) or len(value) != 4:
+        return None
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value):
+        return None
+    x, y, w, h = (int(v) for v in value)
+    if w <= 0 or h <= 0:
+        return None
+    return _clamp_to_frame((x, y, w, h), frame_size)
+
+
 def _marked_identifier_region(value: object, *, source: str) -> Optional[Region]:
     """Validate an explicitly marked identifier region from the recording.
 
@@ -1654,6 +1708,8 @@ def _emit_identifier_crop(
     crop_region: Region,
     click: Point,
     reference_date: Optional[date],
+    scope: Optional[Region] = None,
+    dialog_row: bool = True,
 ) -> tuple[Optional[str], Optional[Region], Optional[str]]:
     """Emit the pixel identifier crop for one click step, or say why not.
 
@@ -1705,10 +1761,11 @@ def _emit_identifier_crop(
         band_box = context_region_from_lines(
             frame_lines,
             exclude_region=crop_region,
-            band=band_region(click, crop_region[3], frame_size),
-            point=click,
+            band=scope or band_region(click, crop_region[3], frame_size),
+            point=None if scope is not None and not dialog_row else click,
             min_confidence=MIN_OCR_CONFIDENCE,
             reference_date=reference_date,
+            scope=scope,
         )
         region = _clamp_to_frame(band_box, frame_size) if band_box else None
         if region is None:
@@ -2043,26 +2100,35 @@ def compile_recording(
     set, see :mod:`openadapt_flow.sealed_set`) is read in memory and compiles
     into a sealed bundle: every crop, sidecar and ``workflow.json`` is
     encrypted before it reaches the disk, under ``OPENADAPT_BUNDLE_KEY`` or,
-    when that is unset, the recording's own key. Without a key the compile
-    refuses before reading anything.
+    when that is unset, the recording key. A plaintext recording compiles
+    into a sealed bundle when :func:`openadapt_flow.at_rest.seal_new` says so
+    (``OPENADAPT_FLOW_AT_REST=strict``); otherwise the plaintext bundle is
+    named on stderr and in the ledger.
     """
     recording = Path(recording_dir)
     bundle = Path(out_bundle_dir)
     sealed_input = _sealed.is_sealed(recording)
     sealed_output = _sealed.is_sealed(bundle)
-    if _sealed.active_writer(bundle) is not None or not (sealed_input or sealed_output):
+    if _sealed.active_writer(bundle) is not None:
         return _compile_recording(recording, bundle, name=name, **kwargs)
+    if not (sealed_input or sealed_output):
+        from openadapt_flow import at_rest
+
+        # A plaintext recording (one made before encryption was the default,
+        # or under the opt-out) still compiles to a sealed bundle unless
+        # plaintext is explicitly allowed.
+        if not at_rest.seal_new("a compiled bundle", bundle):
+            return _compile_recording(recording, bundle, name=name, **kwargs)
     if sealed_input:
         # Opening the recording verifies its whole file set before compiling.
         _sealed.open_set(recording)
-    passphrase = _sealed.passphrase_for("bundle") or _sealed.recording_key()
+    passphrase = _sealed.output_bundle_key()
     if not passphrase:
         raise _sealed.SealedSetKeyError(_sealed.missing_key_message(bundle, "bundle"))
     if not sealed_output and bundle.exists() and any(bundle.iterdir()):
         raise _sealed.SealedSetError(
-            f"{bundle} already holds an unencrypted bundle; compile an "
-            "encrypted recording into a new directory so no plaintext is mixed "
-            "into the sealed output"
+            f"{bundle} already holds an unencrypted bundle; compile into a new "
+            "directory so no plaintext is mixed into the sealed output"
         )
     with _sealed.writing(bundle, "bundle", passphrase, resume=sealed_output):
         return _compile_recording(recording, bundle, name=name, **kwargs)
@@ -2078,7 +2144,8 @@ def _compile_recording(
     secret_param_steps: Optional[Iterable[str]] = None,
     mine_effects: bool = False,
     admit_api_bindings: bool = False,
-    admission_fixture_url: Optional[str] = None,
+    admission_fixture: Optional["AdmissionFixture"] = None,
+    idempotency_key_field: Optional[str] = DEFAULT_IDEMPOTENCY_KEY_FIELD,
     skill_library_root: Optional[Path | str] = None,
     annotate: bool = False,
     annotator: Optional["StepAnnotator"] = None,
@@ -2177,13 +2244,20 @@ def _compile_recording(
             consequential write whose Effect was mined from an observed
             system-of-record delta, propose a REST binding and copy it onto
             the step only if the same Effect CONFIRMs on the held-out
-            fixture at ``admission_fixture_url``. A refused proposal leaves
+            ``admission_fixture``. A refused proposal leaves
             the step on the GUI ladder. FHIR / MCP / tool bindings are not
             synthesized. Default False keeps the bundle byte-identical.
-        admission_fixture_url: Base URL of the held-out REST fixture
-            (MockMed ``fault_server`` in tests). Required when
-            ``admit_api_bindings`` is True; without it the compiler logs
-            and leaves every step on the GUI ladder.
+        idempotency_key_field: With ``mine_effects``, the record field that
+            carries this app's at-most-once key (from its contract or
+            deployment config). Defaults to the ``key`` convention
+            (:data:`~openadapt_flow.compiler.effect_mining.DEFAULT_IDEMPOTENCY_KEY_FIELD`);
+            ``None``: no key is mined.
+        admission_fixture: The held-out REST fixture
+            (:class:`~openadapt_flow.compiler.binding_admission.AdmissionFixture`:
+            base URL, and the app's own read and write paths). Required when
+            ``admit_api_bindings`` is True; without it the compiler logs and
+            leaves every step on the GUI ladder. Its ``params`` default to the
+            recording's.
         skill_library_root: Optional
             :class:`~openadapt_flow.learning.library.SkillLibrary` root.
             When a binding is admitted, the lifted program is stored with
@@ -2437,19 +2511,51 @@ def _compile_recording(
             # (a table row's discriminative name column sits outside the
             # 160x64 template — see runtime.identity). Verified against the
             # live band before every click at replay time.
+            # A target inside a dialog: read its identity band on the frame
+            # with everything outside the dialog blanked, so labels on the
+            # page behind it are not frozen into the identity (#1347).
+            dialog_region = _event_dialog_region(
+                event, (frame.shape[1], frame.shape[0])
+            )
+            identity_lines = frame_lines
+            if dialog_region is not None:
+                masked = mask_outside(before_png, dialog_region)
+                identity_lines = (
+                    cached_lines(i, "dialog", masked) if masked is not None else []
+                )
+            # Keep the clicked row inside the dialog. Only a positively
+            # identified standalone control may fall back to the whole dialog
+            # when its row has too little text to arm identity.
+            dialog_row = True
+            context_band = dialog_region or band_region(
+                click, crop_region[3], (frame.shape[1], frame.shape[0])
+            )
             context_text = context_from_lines(
-                frame_lines,
+                identity_lines,
                 exclude_region=crop_region,
-                band=band_region(
-                    click, crop_region[3], (frame.shape[1], frame.shape[0])
-                ),
+                band=context_band,
                 # Row refinement: record only the click point's OWN text
                 # row, matching what replay-time verification reads (the
                 # 64px band spans 2-3 rows of a dense table).
                 point=click,
                 min_confidence=MIN_OCR_CONFIDENCE,
                 reference_date=reference_date,
+                scope=dialog_region,
             )
+            if (
+                context_text is None
+                and dialog_region is not None
+                and event.get("dialog_row") is False
+            ):
+                dialog_row = False
+                context_text = context_from_lines(
+                    identity_lines,
+                    exclude_region=crop_region,
+                    band=context_band,
+                    min_confidence=MIN_OCR_CONFIDENCE,
+                    reference_date=reference_date,
+                    scope=dialog_region,
+                )
             # Structured identity (DOM / a11y text of the clicked row),
             # captured by the recorder when the recording backend exposed it
             # (openadapt_flow.backend.IdentityBackend). Stored alongside the
@@ -2505,10 +2611,12 @@ def _compile_recording(
                     ),
                     context_text=context_text,
                     structured_identity=structured_identity,
-                    frame_lines=frame_lines,
+                    frame_lines=identity_lines,
                     crop_region=crop_region,
                     click=click,
                     reference_date=reference_date,
+                    scope=dialog_region,
+                    dialog_row=dialog_row,
                 )
             )
             # The OCR fallback must compare like-for-like evidence. Derive the
@@ -2520,7 +2628,7 @@ def _compile_recording(
             cropped_context: Optional[str] = None
             if identifier_region is not None:
                 cropped_context = identifier_text_from_lines(
-                    frame_lines,
+                    identity_lines,
                     region=identifier_region,
                     min_confidence=MIN_OCR_CONFIDENCE,
                     reference_date=reference_date,
@@ -2582,6 +2690,8 @@ def _compile_recording(
                 landmarks=anchor_landmarks,
                 identifier_crop=identifier_crop_rel,
                 identifier_region=identifier_region,
+                dialog_region=dialog_region,
+                dialog_row=dialog_row if dialog_region is not None else None,
             )
             drag_end_anchor: Optional[Anchor] = None
             if kind == "drag":
@@ -2637,7 +2747,7 @@ def _compile_recording(
             unarmed_reason: Optional[str] = None
             if not identity_armed:
                 unarmed_reason = _identity_unarmed_reason(
-                    frame_lines,
+                    identity_lines,
                     band=band_region(
                         click,
                         crop_region[3],
@@ -3182,17 +3292,93 @@ def _compile_recording(
     # A click that only opens a confirmation dialog is not the save: the
     # dialog's Confirm click is. Explicit risk_overrides below still win.
     by_step_id = {step.id: step for step in steps}
+    frames_by_step_id = {
+        step.id: (before, after, event) for step, before, after, event in pending
+    }
+    guard_notes: list[dict[str, Any]] = []
     for opener_id, confirm_id in confirmation_opener_step_ids(steps):
         opener = by_step_id[opener_id]
         opener.risk = "reversible"
-        opener.risk_explanation = (
-            f"opens a confirmation dialog; the save is the next click ({confirm_id})"
-        )
+        opener.risk_explanation = opener_explanation(confirm_id)
         opener.risk_review_required = False
         confirm = by_step_id[confirm_id]
         confirm.risk_explanation = (
             f"confirms the dialog opened by {opener_id}; this click saves"
         )
+        # The dialog's empty result ("No matches were found.") is what the
+        # person confirmed through: check it after the opener and again right
+        # before the Confirm click. A pair with no such check is noted.
+        opener_before, opener_after, opener_event = frames_by_step_id[opener_id]
+        confirm_before, _, confirm_event = frames_by_step_id[confirm_id]
+        # A line in other words than the English vocabulary: kept as a
+        # candidate for induction, which checks it across demonstrations.
+        dialog_line: Optional[str] = None
+        dialog_line_note = ""
+        if opener_before is None or opener_after is None or confirm_before is None:
+            dialog_check = MinedGuard(note="the recording lacks the dialog's frames")
+        else:
+            dialog_frames = (
+                cached_lines(int(opener_event["i"]), "before", opener_before),
+                cached_lines(int(opener_event["i"]), "after", opener_after),
+                cached_lines(int(confirm_event["i"]), "before", confirm_before),
+            )
+            dialog_check = mine_empty_result_guard(
+                *dialog_frames,
+                reject=lambda text: (
+                    carries_value(text, exclude_texts) or _text_carries_phi(text)
+                ),
+            )
+            section = confirm_event.get("section")
+            if dialog_check.guard is None and "x" in confirm_event:
+                dialog_line, dialog_line_note = dialog_statement(
+                    *dialog_frames,
+                    confirm_point=(int(confirm_event["x"]), int(confirm_event["y"])),
+                    title=(
+                        str(section.get("text") or "")
+                        if isinstance(section, dict) and section.get("kind") == "dialog"
+                        else None
+                    ),
+                    labels=_clicked_labels(steps),
+                    # Not built from a fixed vocabulary: the fuzzy value screen
+                    # too, which also catches a value OCR read without spaces.
+                    reject=lambda text: (
+                        carries_value(text, exclude_texts)
+                        or _contains_excluded(text, exclude_texts)
+                        or _text_carries_phi(text)
+                    ),
+                )
+        if dialog_check.postcondition is not None and dialog_check.guard is not None:
+            if not has_text_check(opener.expect, dialog_check.postcondition.text or ""):
+                opener.expect = [*opener.expect, dialog_check.postcondition]
+            if confirm.guard is None:
+                confirm.guard = dialog_check.guard
+            guard_notes.append(
+                {
+                    "change": "empty_result_guard",
+                    "step": opener_id,
+                    "confirm_step": confirm_id,
+                    "evidence": "exact empty search result in the dialog, "
+                    "checked after the opener and before the Confirm click",
+                }
+            )
+        else:
+            logger.warning(
+                "no empty-result check for the dialog %s opens (confirmed by %s): %s",
+                opener_id,
+                confirm_id,
+                dialog_check.note,
+            )
+            missed: dict[str, Any] = {
+                "change": "no_empty_result_guard",
+                "step": opener_id,
+                "confirm_step": confirm_id,
+                "warning": f"no check that the dialog found nothing: {dialog_check.note}",
+            }
+            if dialog_line is not None:
+                missed["dialog_line"] = dialog_line
+            elif dialog_line_note:
+                missed["dialog_line_note"] = dialog_line_note
+            guard_notes.append(missed)
 
     # Local edits the recording proves stayed local (select-all before
     # typing, Enter on a typed dropdown option, an in-form tab): classified
@@ -3304,6 +3490,7 @@ def _compile_recording(
                 param_bindings=bindings or None,
                 store_unchanged=unchanged,
                 write_requests=write_requests,
+                idempotency_key_field=idempotency_key_field,
             )
             if mined.effects:
                 step.effects = mined.effects
@@ -3357,15 +3544,14 @@ def _compile_recording(
 
     if admit_api_bindings:
         from openadapt_flow.compiler.binding_admission import (
-            AdmissionFixture,
             certify_steps_on_fixture,
         )
         from openadapt_flow.learning.library import SkillLibrary
 
-        if not admission_fixture_url:
+        if admission_fixture is None:
             logger.info(
-                "admit_api_bindings requested but admission_fixture_url is "
-                "empty -- leaving every step on the GUI ladder"
+                "admit_api_bindings requested but admission_fixture is "
+                "unset -- leaving every step on the GUI ladder"
             )
         else:
             library = (
@@ -3376,9 +3562,10 @@ def _compile_recording(
             decisions = certify_steps_on_fixture(
                 steps,
                 [event for _step, _sb, _sa, event in pending],
-                fixture=AdmissionFixture(
-                    base_url=admission_fixture_url,
-                    params=dict(params),
+                fixture=(
+                    admission_fixture
+                    if admission_fixture.params
+                    else dataclasses.replace(admission_fixture, params=dict(params))
                 ),
                 exclude_texts=exclude_texts,
                 params=dict(params),
@@ -3413,6 +3600,7 @@ def _compile_recording(
         pixel_verify_enabled=pixel_verify_enabled,
         drop_redundant_keys=drop_redundant_keys,
     )
+    compile_notes = [*compile_notes, *guard_notes]
     for note in compile_notes:
         logger.info("compile-pass %s: %s", note["step"], note["change"])
 
@@ -3470,7 +3658,9 @@ def _compile_recording(
         ),
         "mine_effects": mine_effects,
         "admit_api_bindings": admit_api_bindings,
-        "admission_fixture_url": admission_fixture_url,
+        "admission_fixture_url": (
+            admission_fixture.base_url if admission_fixture is not None else None
+        ),
         "name": name,
         "param_overrides": dict(sorted((param_overrides or {}).items())),
         "risk_overrides": dict(sorted((risk_overrides or {}).items())),
@@ -3480,6 +3670,21 @@ def _compile_recording(
     if bind_effect_params:
         # Recorded only when set, so every existing compile keeps its digest.
         compiler_config["bind_effect_params"] = True
+    if idempotency_key_field != DEFAULT_IDEMPOTENCY_KEY_FIELD:
+        # Recorded only when not the default, so every existing compile keeps
+        # its digest.
+        compiler_config["idempotency_key_field"] = idempotency_key_field
+    if admission_fixture is not None:
+        # Added only when set, so a compile without one hashes as before.
+        admission: dict[str, Any] = {
+            "records_path": admission_fixture.records_path,
+            "records_key": admission_fixture.records_key,
+            "write_path": admission_fixture.write_path,
+            "write_method": admission_fixture.write_method,
+            "server_fields": sorted(admission_fixture.server_fields),
+            "idempotency_key_field": admission_fixture.idempotency_key_field,
+        }
+        compiler_config["admission_fixture"] = admission
     compiler_config_sha256 = hashlib.sha256(
         json.dumps(
             compiler_config,
