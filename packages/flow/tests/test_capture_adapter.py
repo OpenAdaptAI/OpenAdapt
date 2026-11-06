@@ -567,8 +567,14 @@ def test_meta_matches_recorder_contract(converted: Path) -> None:
     assert meta["source"] == "openadapt-capture"
     assert meta["task_description"] == "add a note"
     # Regression: a NON-window session's meta carries exactly the recorder
-    # contract keys — no window-mode fields may leak into it.
-    assert set(meta.keys()) == {
+    # contract keys — no window-mode fields may leak into it. The one
+    # addition is this computer's locale, date order and keyboard layout
+    # (#1897), present whenever the OS reports any of them, and exactly what
+    # it reports.
+    from openadapt_flow.locale_invariants import observe_locale_invariants
+
+    host = observe_locale_invariants()
+    expected = {
         "id",
         "created_at",
         "viewport",
@@ -577,6 +583,10 @@ def test_meta_matches_recorder_contract(converted: Path) -> None:
         "source",
         "task_description",
     }
+    if host.unknown() != ["locale", "date_order", "keyboard_layout"]:
+        expected.add("locale_invariants")
+        assert meta["locale_invariants"] == host.model_dump()
+    assert set(meta.keys()) == expected
 
 
 def test_frames_selected_from_video(converted: Path) -> None:
