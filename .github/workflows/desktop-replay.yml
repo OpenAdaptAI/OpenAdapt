@@ -28,6 +28,7 @@ on:
       - packages/flow/tests/e2e/test_linux_rdp_campaign.py
       - packages/flow/tests/e2e/rdp_campaign_fixture.py
       - packages/flow/tests/fixtures/rdp_write_app.py
+      - packages/flow/tests/e2e/test_rdp_fixture_focus.py
       - packages/flow/tests/test_windows_attempt_ledger.py
       - packages/flow/benchmark/rdp_pool/**
       - packages/flow/pyproject.toml
@@ -200,6 +201,32 @@ jobs:
           if len(cases) != 1 or skipped:
               sys.exit(f"freerdp round trip did not run: {len(cases)} cases, {len(skipped)} skipped")
           PY
+      - name: Fixture startup owns real X focus (parent and candidate)
+        timeout-minutes: 2
+        run: |
+          mkdir -p runs
+          pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/rf" \
+            tests/e2e/test_rdp_fixture_focus.py --junitxml=runs/rdp-focus-junit.xml
+      - name: Both focus conditions ran (no skips)
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          cases = list(ET.parse("runs/rdp-focus-junit.xml").getroot().iter("testcase"))
+          assert len(cases) == 2 and {case.get("name") for case in cases} == {
+              "test_literal_parent_retains_pointer_root", "test_fixture_startup_owns_raw_focus"
+          }
+          assert all(case.find(kind) is None for case in cases for kind in ("skipped", "failure", "error"))
+          root = (Path(os.environ["RUNNER_TEMP"]) / "rf").resolve(strict=True)
+          paths = {p.resolve(strict=True) for p in root.glob("**/fixture-focus/focus-evidence.json")}
+          assert len(paths) == 2 and all(p.is_relative_to(root) for p in paths)
+          summaries = [json.loads(p.read_text()) for p in paths]
+          assert {s["condition"] for s in summaries} == {"literal_parent", "candidate"}
+          assert all(s["status"] == "PASSED" for s in summaries)
+          assert all(c["started"] is True and c["waited"] is True for s in summaries for c in s["cleanup"].values())
+          PY
       - name: Six primary pixel cases through loopback RDP
         env:
           OAFLOW_RDP_CAMPAIGN_E2E: "1"
@@ -236,6 +263,16 @@ jobs:
           assert all(row["passed"] is True and row["fault_detector_error"] is None for row in oracles)
           assert summary["sessions"] and all(row["closed"] is True and row["cleanup_failed"] is False for row in summary["sessions"])
           PYTHON
+      - name: Keep the fixture focus evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rdp-focus-evidence
+          path: |
+            ${{ runner.temp }}/rf/**/fixture-focus/focus-evidence.json
+            packages/flow/runs/rdp-focus-junit.xml
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Keep the RDP campaign evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
