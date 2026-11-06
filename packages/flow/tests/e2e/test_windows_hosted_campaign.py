@@ -601,6 +601,7 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
     owner = None
     backend = None
     name = f"hosted-campaign-{uuid.uuid4().hex}"
+    capture_telemetry = root / "agent-capture-telemetry.json"
     evidence: dict[str, Any] = {
         "primary_planned": 6,
         "informational_planned": 6,
@@ -609,7 +610,7 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
     }
     try:
         try:
-            backend = host.start_agent()
+            backend = host.start_agent(capture_telemetry_sidecar=capture_telemetry)
         except Exception:
             raise AssertionError("hosted agent startup failed") from None
         assert {"typed_input_v1", "uia_v1"}.issubset(backend.agent_capabilities())
@@ -797,4 +798,13 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
             evidence["informational_completed"] = sum(
                 item["informational"] for item in evidence.get("oracles", [])
             )
+            try:
+                from tests.e2e.win_agent_capture_telemetry import safe_projection
+
+                evidence["frame_guard_diagnostics"] = safe_projection(capture_telemetry)
+            except Exception:  # noqa: BLE001 - telemetry never changes test outcome
+                evidence["frame_guard_diagnostics"] = {
+                    "status": "unavailable",
+                    "code": "capture_telemetry_projection_failed",
+                }
             (root / "campaign-evidence.json").write_text(json.dumps(evidence, indent=2))
