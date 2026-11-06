@@ -1616,13 +1616,24 @@ def _judge(
         )
         path: Optional[str] = str(write_result(doc, pending.workdir))
     except Exception as exc:  # noqa: BLE001 - unreadable store, timeout, used baseline
+        reasons = [
+            "the system of record could not be read back "
+            f"({type(exc).__name__}); the write may still land"
+        ]
+        if isinstance(exc, VerifyRunError):
+            code = (
+                exc.validation_reason if type(exc) is VerifyRunError else "unclassified"
+            )
+            label = (
+                "unclassified"
+                if code == "unclassified"
+                else f"receipt_validation.{code}"
+            )
+            reasons.append(f"verification diagnostic: {label}")
         return WriteResult(
             outcome=Outcome.UNCERTAIN,
             scope=_scope(pending.contract, {}),
-            reasons=[
-                "the system of record could not be read back "
-                f"({type(exc).__name__}); the write may still land"
-            ],
+            reasons=reasons,
             **base,
         )
     receipt = dict(doc["receipt"])

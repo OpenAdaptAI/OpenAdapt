@@ -425,7 +425,8 @@ class Shadow:
         return ep
 
     def _fhir_episode(self, method: str, path: str, doc: Any) -> Episode:
-        from openadapt_flow.ensure_record import extract, normalize
+        from openadapt_flow.ensure_record import extract, normalize, reference_field
+        from openadapt_flow.fhir_reference import reference_value
 
         segs = [s for s in urlsplit(path).path.split("/") if s]
         if any(s == "_search" or s.startswith("$") for s in segs):
@@ -446,7 +447,13 @@ class Shadow:
         if isinstance(doc, dict) and doc.get("resourceType") == rtype:
             for name, rule in contract.fields.items():
                 value = extract(doc, rule.path)
-                if value is not None and not isinstance(value, (dict, list)):
+                if value is not None and (
+                    not isinstance(value, (dict, list))
+                    or (
+                        reference_field(contract, rule.path) is not None
+                        and isinstance(value, dict)
+                    )
+                ):
                     params[name] = value
         done = self._by_ref.get(ref) if ref else None
         if done is not None and done.checked:
@@ -462,7 +469,15 @@ class Shadow:
                     key = (
                         rtype,
                         tuple(
-                            (p, normalize(params[p], contract.fields[p], task=True))
+                            (
+                                p,
+                                json.dumps(reference_value(params[p]), sort_keys=True)
+                                if reference_field(contract, contract.fields[p].path)
+                                is not None
+                                else normalize(
+                                    params[p], contract.fields[p], task=True
+                                ),
+                            )
                             for p in rule
                         ),
                     )
@@ -773,6 +788,7 @@ class Shadow:
             verify_ensure,
             wrong_fields,
         )
+        from openadapt_flow.fhir_reference import ReferenceUnreadable
 
         contract = ep.contract
         rid = str(ep.result.record_id or "")
@@ -786,7 +802,13 @@ class Shadow:
         reader = FhirReader(contract)
         try:
             _, now = reader.fetch(f"{reader.base_url}/{ref}")
-        except Unreadable as exc:
+            references = reader.reference_evidence(
+                contract, ep.params, [now] if isinstance(now, dict) else []
+            )
+            # Resolve all supplied and stored identities before a late verdict.
+            if isinstance(now, dict):
+                wrong_fields(contract, now, ep.params, references)
+        except (Unreadable, ReferenceUnreadable) as exc:
             gone = re.search(r"returned HTTP (404|410)\b", str(exc))
             ep.late_moved = bool(gone)
             ep.late_verdict = REFUTED if gone else UNCERTAIN
@@ -797,10 +819,12 @@ class Shadow:
             ]
             return
         moved: list[str] = []
-        if not isinstance(now, dict) or not is_person(contract, now, ep.params):
+        if not isinstance(now, dict) or not is_person(
+            contract, now, ep.params, references
+        ):
             moved.append("the confirmed record is no longer the person")
         else:
-            wrong = wrong_fields(contract, now, ep.params)
+            wrong = wrong_fields(contract, now, ep.params, references)
             if wrong:
                 moved.append(
                     "the confirmed record now holds other values: " + ", ".join(wrong)
@@ -871,9 +895,10 @@ class Shadow:
             Unreadable,
             extra_elements,
             extract,
-            same,
             verify_ensure,
+            wrong_fields,
         )
+        from openadapt_flow.fhir_reference import ReferenceUnreadable
 
         contract = ep.contract
         with self._lock:
@@ -937,6 +962,11 @@ class Shadow:
         for ref, res in stored.items():
             if not isinstance(res, dict) or "unreadable" in res:
                 continue
+            references = reader.reference_evidence(contract, ep.params, [res])
+            try:
+                mismatches = wrong_fields(contract, res, ep.params, references)
+            except ReferenceUnreadable:
+                mismatches = list(contract.fields)
             for name, rule in contract.fields.items():
                 got = extract(res, rule.path)
                 sent = ep.params.get(name)
@@ -948,8 +978,7 @@ class Shadow:
                         "field": name,
                         "sent": sent,
                         "stored": got,
-                        "same": name in ep.params
-                        and same(contract, name, got, ep.params[name]),
+                        "same": name in ep.params and name not in mismatches,
                     }
                 )
             if contract.closed:
