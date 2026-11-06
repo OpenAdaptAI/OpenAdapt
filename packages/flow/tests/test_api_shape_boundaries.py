@@ -29,6 +29,7 @@ FORM = """<!doctype html><html><head></head><body>
 <form id="entry" action="/publish" method="post">
 <input name="title" id="title"><button id="send" name="decision" value="Send">Send</button>
 </form></body></html>"""
+CAPTURE_COMPLETION_TIMEOUT_S = 3.0
 
 
 class Site:
@@ -49,6 +50,7 @@ class Site:
                         "path": self.path,
                         "content_type": self.headers.get("Content-Type", ""),
                         "body": raw.decode("utf-8"),
+                        "received_monotonic": time.monotonic(),
                     }
                 )
                 body = (
@@ -65,6 +67,7 @@ class Site:
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+        self.last_capture_diagnostics: dict[str, Any] | None = None
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
 
     def close(self) -> None:
@@ -73,6 +76,104 @@ class Site:
 
     def writes(self) -> list[dict[str, Any]]:
         return [r for r in self.requests if r["method"] == "POST"]
+
+
+def _safe_capture_diagnostics(
+    capture: NetworkCapture,
+    site: Site,
+    page: Any,
+    t0: float,
+    click_started: float,
+    stopped: float,
+) -> dict[str, Any]:
+    """Project capture timing and shape without exposing request contents."""
+    try:
+        posts = [line for line in capture.lines(t0) if line.get("method") == "POST"]
+        server_posts = site.writes()
+        return {
+            "schema": "openadapt.test-capture-diagnostics/1",
+            "available": True,
+            "captured_post_count": len(posts),
+            "captured_post_with_form_count": sum(
+                isinstance(line.get("form"), list) for line in posts
+            ),
+            "captured_post_failed_count": sum(
+                line.get("failed") is True for line in posts
+            ),
+            "captured_post_body_omitted_count": sum(
+                "body_omitted" in line for line in posts
+            ),
+            "captured_post_multipart_count": sum(
+                line.get("request_type") == "multipart/form-data" for line in posts
+            ),
+            "captured_post_urlencoded_count": sum(
+                line.get("request_type") == "application/x-www-form-urlencoded"
+                for line in posts
+            ),
+            "captured_post_other_content_type_count": sum(
+                line.get("request_type")
+                not in (
+                    None,
+                    "multipart/form-data",
+                    "application/x-www-form-urlencoded",
+                )
+                for line in posts
+            ),
+            "captured_post_elapsed_ms": [
+                round((float(line["t"]) - (click_started - t0)) * 1000)
+                for line in posts
+                if isinstance(line.get("t"), (int, float))
+            ],
+            "page_pending_write_count": len(capture.pending_writes([page])),
+            "server_post_count": len(server_posts),
+            "server_post_elapsed_ms": [
+                round((float(item["received_monotonic"]) - click_started) * 1000)
+                for item in server_posts
+                if isinstance(item.get("received_monotonic"), (int, float))
+            ],
+            "capture_stop_after_click_ms": round((stopped - click_started) * 1000),
+        }
+    except Exception:  # noqa: BLE001 - diagnostics must not replace the test result
+        return {
+            "schema": "openadapt.test-capture-diagnostics/1",
+            "available": False,
+        }
+
+
+def _proposal_reason_codes(reasons: list[str]) -> list[str]:
+    """Keep assertion diagnostics to fixed labels, never request-derived text."""
+    return [
+        "no_form_request"
+        if reason == "no form request was sent by the save step"
+        else "other"
+        for reason in reasons
+    ]
+
+
+def _wait_for_captured_post(
+    capture: NetworkCapture,
+    page: Any,
+    post_url: str,
+    *,
+    t0: float,
+    click_started: float,
+    sequence_checkpoint: int,
+    timeout_s: float = CAPTURE_COMPLETION_TIMEOUT_S,
+) -> bool:
+    """Wait for this submit's terminal capture event, without parsing its body."""
+    deadline = click_started + timeout_s
+    while True:
+        if any(
+            line.get("method") == "POST"
+            and line.get("url") == post_url
+            and type(line.get("seq")) is int
+            and line["seq"] >= sequence_checkpoint
+            for line in capture.lines(t0)
+        ):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        page.wait_for_timeout(10)
 
 
 @pytest.fixture(scope="module")
@@ -148,10 +249,23 @@ def binding_from_browser(tmp_path: Path, site: Site, page: Any):
                 "structural": {"selector": "#send", "role": "button", "name": "Send"},
             }
         )
+        sequence_checkpoint = len(capture.lines(clock))
+        click_started = time.monotonic()
         page.click("#send")
-        page.wait_for_timeout(180)
+        _wait_for_captured_post(
+            capture,
+            page,
+            site.base + "/publish",
+            t0=clock,
+            click_started=click_started,
+            sequence_checkpoint=sequence_checkpoint,
+        )
     finally:
+        stopped = time.monotonic()
         capture.stop()
+    site.last_capture_diagnostics = _safe_capture_diagnostics(
+        capture, site, page, clock, click_started, stopped
+    )
     capture.write(recording, clock)
     (recording / "events.jsonl").write_text(
         "".join(json.dumps(e) + "\n" for e in events)
@@ -183,7 +297,13 @@ def binding_from_browser(tmp_path: Path, site: Site, page: Any):
         ],
     )
     proposed, step, reasons = propose_api_step(workflow, recording)
-    assert step is not None, reasons
+    assert step is not None, json.dumps(
+        {
+            "proposal_reason_codes": _proposal_reason_codes(reasons),
+            "capture": site.last_capture_diagnostics,
+        },
+        sort_keys=True,
+    )
     admitted, identifiers = admit_api_step(
         proposed, admitted_by="synthetic-shape-check"
     )
@@ -339,6 +459,72 @@ def test_live_native_submit_and_api_agree(mode, allowed, tmp_path, site_page):
     else:
         assert result.status is ActuationStatus.UNAVAILABLE, result.reason
         assert not site.writes()
+
+
+def test_capture_waits_for_a_delayed_native_submit(tmp_path, site_page):
+    site, page = site_page
+    site.html = FORM.replace(
+        "</form>",
+        """</form><script>
+          (() => {
+            let deferred = false;
+            const form = document.getElementById('entry');
+            form.addEventListener('submit', event => {
+              if (deferred) return;
+              event.preventDefault();
+              deferred = true;
+              const submitter = event.submitter;
+              setTimeout(() => form.requestSubmit(submitter), 350);
+            });
+          })();
+        </script>""",
+    )
+
+    binding = binding_from_browser(tmp_path, site, page)
+
+    diagnostics = site.last_capture_diagnostics
+    assert binding.admitted()
+    assert diagnostics is not None and diagnostics["available"] is True
+    assert diagnostics["captured_post_count"] == 1
+    assert diagnostics["captured_post_with_form_count"] == 1
+    assert diagnostics["captured_post_failed_count"] == 0
+    assert diagnostics["server_post_count"] == 1
+    assert len(diagnostics["captured_post_elapsed_ms"]) == 1
+    assert diagnostics["captured_post_elapsed_ms"][0] >= 250
+    assert diagnostics["page_pending_write_count"] == 0
+
+
+def test_capture_wait_ignores_prior_post_with_rounded_same_timestamp():
+    post_url = "http://127.0.0.1/publish"
+    click_started = time.monotonic()
+    t0 = click_started - 0.1004
+    prior_post_t = round(0.1001, 3)
+
+    class Capture:
+        def lines(self, t0_monotonic):
+            return [
+                {
+                    "method": "POST",
+                    "url": post_url,
+                    "t": prior_post_t,
+                    "seq": 4,
+                }
+            ]
+
+    class Page:
+        def wait_for_timeout(self, milliseconds):
+            time.sleep(milliseconds / 1000)
+
+    assert round(click_started - t0, 3) == prior_post_t == 0.1
+    assert not _wait_for_captured_post(
+        Capture(),
+        Page(),
+        post_url,
+        t0=t0,
+        click_started=click_started,
+        sequence_checkpoint=5,
+        timeout_s=0.02,
+    )
 
 
 @pytest.mark.parametrize(
