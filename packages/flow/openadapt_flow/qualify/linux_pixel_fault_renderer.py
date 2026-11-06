@@ -232,7 +232,9 @@ def focus(env: dict[str, str], *, stage: list[str] | None = None) -> int:
             stage[0] = (
                 "focus_malformed"
                 if not value.isdigit()
-                else "focus_none" if int(value) == 0 else "focus_pointer_root"
+                else "focus_none"
+                if int(value) == 0
+                else "focus_pointer_root"
             )
         raise ValueError("display focus unavailable")
     if stage is not None and outer_stage is not None:
