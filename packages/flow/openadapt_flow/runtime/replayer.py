@@ -14281,6 +14281,13 @@ class Replayer:
             baseline_field_value = self._text_value_at(field_point)
             if baseline_field_value is None:
                 baseline_field_value = self._text_value_at(None)
+            # Focus (this step's click or the previous click-to-focus) may have
+            # changed the active keyboard layout. Recheck before any keystroke.
+            locale_refusal = self._require_locale_invariants_before_keyboard(workflow)
+            if locale_refusal is not None:
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                return locale_refusal
             if step.selection_commit_key is not None:
                 selection_commit_key = step.selection_commit_key
                 assert step.selection_region is not None
@@ -14417,6 +14424,11 @@ class Replayer:
                 if step.action is ActionKind.HOTKEY
                 else step.key
             )
+            locale_refusal = self._require_locale_invariants_before_keyboard(workflow)
+            if locale_refusal is not None:
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                return locale_refusal
             requires_atomic_keyboard = self._requires_atomic_identity_keyboard(
                 step, workflow
             )
@@ -14889,6 +14901,31 @@ class Replayer:
             )
         set_guard(self._require_qualification_environment_current)
         return None, observed, ids
+
+    def _require_locale_invariants_before_keyboard(
+        self, workflow: Workflow
+    ) -> Optional[str]:
+        """Recheck locale/layout after focus, before keystroke delivery (#1897).
+
+        The run-start gate is not enough: a focusing click can change the
+        active input layout before TYPE/KEY/HOTKEY. Re-observe the target
+        facts now and refuse when they disagree with the recording or when
+        a needed fact cannot be read. A workflow with no binding (pre-#1897)
+        is unchecked.
+        """
+
+        if getattr(workflow, "locale_invariants", None) is None:
+            return None
+        from openadapt_flow.locale_invariants import (
+            LocaleInvariantMismatch,
+            enforce_workflow_locale_invariants,
+        )
+
+        try:
+            enforce_workflow_locale_invariants(workflow)
+        except LocaleInvariantMismatch as exc:
+            return exc.reason
+        return None
 
     def _require_qualification_environment_current(self) -> None:
         """Recheck the bound environment immediately before an input edge."""
@@ -18012,6 +18049,12 @@ class Replayer:
         if refusal is not None:
             result.input_verified = False
             return refusal
+        locale_refusal = self._require_locale_invariants_before_keyboard(workflow)
+        if locale_refusal is not None:
+            result.input_verified = False
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
+            return locale_refusal
         self._require_qualification_environment_current()
         self._deliver_backend_call(result, lambda: self.backend.type_text(text))
         landed, _changed = self._typed_input_landed(

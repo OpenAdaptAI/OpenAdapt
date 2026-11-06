@@ -21,12 +21,14 @@ Facts come from the OS, not from Python's start-up ``C`` locale:
   ``nl_langinfo(D_FMT)``, and the layout of the X server's active XKB group
   (``XkbGetState`` with ``setxkbmap -query``).
 
-Limits: the layout is that of whatever has keyboard focus when it is read,
-which is the recorded application at recording time but may be another
-window when replay is checked. Wayland has no common API for the active
-layout, and ``XKB_DEFAULT_LAYOUT``/``localectl`` name configuration, not the
-active group, so on Wayland, or with several X layouts and no readable group,
-the layout is unknown.
+Limits: the layout is that of whatever has keyboard focus when it is read.
+At recording time that is the recorded application. At replay the runtime
+checks once before any action and again after focus, immediately before
+keyboard delivery, so a layout change caused by the focusing click is
+caught. Wayland has no common API for the active layout, and
+``XKB_DEFAULT_LAYOUT``/``localectl`` name configuration, not the active
+group, so on Wayland, or with several X layouts and no readable group, the
+layout is unknown.
 
 A fact that can't be read is ``None`` (unknown). Unknown is never filled in
 with ``en_US``, ``mdy`` or ``us``. A workflow with no binding at all is a

@@ -514,3 +514,227 @@ def test_capture_producer_readers_are_the_same_code() -> None:
             getattr(locale_invariants, name)
         ), name
     assert facts._TIS_SCRIPT == locale_invariants._TIS_SCRIPT
+
+
+# -- replayer: recheck after focus, before keyboard delivery ----------------------
+
+
+def _locale_replayer_harness(tmp_path, monkeypatch, *, layouts):
+    """Deterministic Replayer control with a scripted current layout.
+
+    ``layouts`` is consumed by each ``observe_locale_invariants`` call. A
+    focusing click can advance the script (simulate an app that switches the
+    input layout on focus) by appending to ``layouts`` from the backend.
+    """
+
+    import io
+
+    from PIL import Image
+
+    from openadapt_flow.ir import ActionKind, Anchor, Step, Workflow
+    from openadapt_flow.runtime.replayer import Replayer
+
+    observations: list[str | None] = []
+    script = list(layouts)
+
+    def observe(**_kwargs):
+        from openadapt_flow.locale_invariants import LocaleInvariants
+
+        layout = script.pop(0) if script else "us"
+        observations.append(layout)
+        return LocaleInvariants(
+            locale="en_US", date_order="mdy", keyboard_layout=layout
+        )
+
+    monkeypatch.setattr(
+        "openadapt_flow.locale_invariants.observe_locale_invariants", observe
+    )
+
+    def make_png(size=(300, 200), color=(240, 240, 240)) -> bytes:
+        buf = io.BytesIO()
+        Image.new("RGB", size, color).save(buf, format="PNG")
+        return buf.getvalue()
+
+    class Match:
+        def __init__(self, point, region, confidence=0.95):
+            self.point = point
+            self.region = region
+            self.confidence = confidence
+
+    class Vision:
+        def __init__(self):
+            self.template_results = [
+                Match(point=(110, 105), region=(100, 100, 50, 20)),
+                Match(point=(110, 105), region=(100, 100, 50, 20)),
+            ]
+            self.pixels_changed_results: list = []
+
+        def find_template(self, *a, **k):
+            return self.template_results.pop(0) if self.template_results else None
+
+        def find_structural_template(self, *a, **k):
+            return None
+
+        def find_text(self, *a, **k):
+            return None
+
+        def text_present(self, *a, **k):
+            return False
+
+        def ocr(self, *a, **k):
+            return []
+
+        def pixels_changed(self, *a, **k):
+            if self.pixels_changed_results:
+                return self.pixels_changed_results.pop(0)
+            return True
+
+        def phash_png(self, *a, **k):
+            return "aa"
+
+        def phash_distance(self, *a, **k):
+            return 0
+
+        def wait_settled(self, backend, **k):
+            return backend.screenshot()
+
+    class Backend:
+        def __init__(self, on_click=None):
+            self._frame = make_png()
+            self.actions: list = []
+            self._on_click = on_click
+            self._viewport = (300, 200)
+            self._text_value = ""
+
+        @property
+        def viewport(self):
+            return self._viewport
+
+        def screenshot(self):
+            return self._frame
+
+        def click(self, x, y, *, double=False):
+            self.actions.append(("click", x, y, double))
+            if self._on_click is not None:
+                self._on_click()
+
+        def type_text(self, text):
+            self.actions.append(("type", text))
+            self._text_value = self._text_value + text
+
+        def press(self, key):
+            self.actions.append(("press", key))
+
+        def text_value_at(self, x, y):
+            return self._text_value
+
+        def focused_text_value(self):
+            return self._text_value
+
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True)
+    (bundle / "templates" / "btn.png").write_bytes(make_png((50, 20)))
+    run_dir = tmp_path / "run"
+
+    from openadapt_flow.locale_invariants import LocaleInvariants
+
+    workflow = Workflow(
+        name="locale-focus",
+        locale_invariants=LocaleInvariants(
+            locale="en_US", date_order="mdy", keyboard_layout="us"
+        ),
+        steps=[
+            Step(
+                id="s1",
+                intent="focus field",
+                action=ActionKind.CLICK,
+                anchor=Anchor(
+                    template="templates/btn.png",
+                    region=(100, 100, 50, 20),
+                    click_point=(110, 105),
+                    ocr_text="Field",
+                ),
+            ),
+            Step(
+                id="s2",
+                intent="type note",
+                action=ActionKind.TYPE,
+                text="hello",
+            ),
+        ],
+    )
+    return observations, script, Backend, Vision, workflow, bundle, run_dir, Replayer
+
+
+def test_layout_change_after_focus_refuses_type_before_delivery(
+    tmp_path, monkeypatch
+) -> None:
+    """P2 at 760632e99: a focusing click can switch the layout before TYPE.
+
+    The run-start gate only saw US. After the click the controlled layout is
+    German; TYPE must refuse before keystroke delivery.
+    """
+
+    observations, script, Backend, Vision, workflow, bundle, run_dir, Replayer = (
+        _locale_replayer_harness(tmp_path, monkeypatch, layouts=["us"])
+    )
+
+    def on_click():
+        # App switches the active input layout when the field takes focus.
+        script.append("de")
+
+    backend = Backend(on_click=on_click)
+    vision = Vision()
+    report = Replayer(backend, vision=vision, poll_interval_s=0.01).run(
+        workflow, bundle_dir=bundle, run_dir=run_dir
+    )
+    assert report.success is False
+    assert ("type", "hello") not in backend.actions
+    assert observations == ["us", "de"]
+    assert any(r.error and "keyboard_layout" in r.error for r in report.results), [
+        r.error for r in report.results
+    ]
+
+
+def test_stable_layout_still_passes_after_focus_recheck(tmp_path, monkeypatch) -> None:
+    """Positive: the same US layout before and after focus still succeeds."""
+
+    observations, script, Backend, Vision, workflow, bundle, run_dir, Replayer = (
+        _locale_replayer_harness(tmp_path, monkeypatch, layouts=["us"])
+    )
+
+    def on_click():
+        script.append("us")
+
+    backend = Backend(on_click=on_click)
+    vision = Vision()
+    report = Replayer(backend, vision=vision, poll_interval_s=0.01).run(
+        workflow, bundle_dir=bundle, run_dir=run_dir
+    )
+    assert report.success is True
+    assert ("type", "hello") in backend.actions
+    assert observations == ["us", "us"]
+
+
+def test_unavailable_layout_after_focus_refuses_type(tmp_path, monkeypatch) -> None:
+    """Refuse when the post-focus target observation cannot read the layout."""
+
+    observations, script, Backend, Vision, workflow, bundle, run_dir, Replayer = (
+        _locale_replayer_harness(tmp_path, monkeypatch, layouts=["us"])
+    )
+
+    def on_click():
+        script.append(None)
+
+    backend = Backend(on_click=on_click)
+    vision = Vision()
+    report = Replayer(backend, vision=vision, poll_interval_s=0.01).run(
+        workflow, bundle_dir=bundle, run_dir=run_dir
+    )
+    assert report.success is False
+    assert ("type", "hello") not in backend.actions
+    assert observations == ["us", None]
+    assert any(
+        r.error and "could not be read on this computer" in r.error
+        for r in report.results
+    ), [r.error for r in report.results]
