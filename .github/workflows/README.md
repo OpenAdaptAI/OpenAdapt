@@ -117,7 +117,7 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 | desktop-test.yml | `test-python` | ubuntu-latest, Python 3.12 | ubuntu-latest, Python 3.12 | Linux, macOS and Windows, Python 3.11 and 3.12 |
 | desktop-test.yml | `qualification-contract` | yes | yes | yes |
 | desktop-build.yml | `frontend`, `python-distribution` | yes | yes | yes |
-| desktop-build.yml | `python-sidecar` | ubuntu-22.04 | no | Linux, macOS 14 and Windows |
+| desktop-build.yml | `python-sidecar` | ubuntu-22.04 | no | Linux, macOS 15 arm64 and Windows |
 | desktop-build.yml | `native-installers` | no | no | macOS arm64, macOS Intel, Windows, Linux bundles |
 | desktop-dependency-audit.yml | `python`, `npm`, `rust` | when Desktop changes | no | when Desktop changes, and weekly |
 | desktop-dependency-audit.yml | `python-macos-intel` | no | no | when Desktop changes, and weekly |
