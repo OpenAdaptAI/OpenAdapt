@@ -110,9 +110,7 @@ class _RunningServer:
         self.url = f"https://127.0.0.1:{self.httpd.server_port}"
         self.session = requests.Session()
         self.session.verify = self.cert.certfile
-        self.session.headers.update(
-            {"Authorization": "Bearer synthetic-agent-token"}
-        )
+        self.session.headers.update({"Authorization": "Bearer synthetic-agent-token"})
 
     def close(self) -> None:
         self.session.close()
@@ -140,8 +138,14 @@ def _guard(session: requests.Session, url: str, expected_png: bytes):
 @pytest.mark.parametrize(
     ("current", "expected_code"),
     [
-        pytest.param(_png((10, 20, 30), compression=9), "encoding_only_change", id="same-rgb"),
-        pytest.param(_png((90, 20, 30), compression=9), "decoded_raster_changed", id="changed-rgb"),
+        pytest.param(
+            _png((10, 20, 30), compression=9), "encoding_only_change", id="same-rgb"
+        ),
+        pytest.param(
+            _png((90, 20, 30), compression=9),
+            "decoded_raster_changed",
+            id="changed-rgb",
+        ),
     ],
 )
 def test_guard_refusal_correlates_expected_and_exact_request_capture(
@@ -204,7 +208,10 @@ def test_matching_frame_preserves_tls_auth_capture_count_and_input(
         assert running.cursor == 2
         assert running.context_calls == 1
         assert len(running.input_calls) == 1
-        assert running.processing_events.index("input") < len(running.processing_events) - 1
+        assert (
+            running.processing_events.index("input")
+            < len(running.processing_events) - 1
+        )
         assert running.processing_events[-1] == "capture"
         assert capture_telemetry.safe_projection(running.sidecar) == {
             "status": "available",
@@ -214,7 +221,11 @@ def test_matching_frame_preserves_tls_auth_capture_count_and_input(
         running.close()
 
 
-@pytest.mark.parametrize("scenario", ["missing", "ambiguous"], ids=["missing-provenance", "ambiguous-provenance"])
+@pytest.mark.parametrize(
+    "scenario",
+    ["missing", "ambiguous"],
+    ids=["missing-provenance", "ambiguous-provenance"],
+)
 def test_projection_refuses_unproven_capture_correlation(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, scenario: str
 ) -> None:
@@ -259,11 +270,14 @@ def test_sidecar_failure_does_not_change_capture_or_guard_refusal(
         assert refused.status_code == 409
         assert refused.json()["code"] == "stale_frame"
         assert running.context_calls == 0 and running.input_calls == []
-        assert running.processing_events.index("stale_response") < len(
-            running.processing_events
-        ) - 1
+        assert (
+            running.processing_events.index("stale_response")
+            < len(running.processing_events) - 1
+        )
         assert running.processing_events[-1] == "capture"
-        assert capture_telemetry.safe_projection(missing_parent)["status"] == "unavailable"
+        assert (
+            capture_telemetry.safe_projection(missing_parent)["status"] == "unavailable"
+        )
     finally:
         running.close()
 
@@ -319,8 +333,13 @@ def test_telemetry_exception_does_not_mask_guard_refusal(
         {
             "schema": "openadapt.test-win-agent-capture-telemetry/v1",
             "captures": [
-                {"sequence": True, "png_sha256": "0" * 64, "rgb_sha256": "0" * 64,
-                 "width": 1, "height": 1}
+                {
+                    "sequence": True,
+                    "png_sha256": "0" * 64,
+                    "rgb_sha256": "0" * 64,
+                    "width": 1,
+                    "height": 1,
+                }
             ],
             "guarded_refusals": [],
         },

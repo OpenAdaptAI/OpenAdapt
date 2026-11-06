@@ -136,7 +136,10 @@ class _Host:
             ),
         ]
         if capture_telemetry_sidecar is not None:
-            if capture_telemetry_sidecar.exists() or capture_telemetry_sidecar.is_symlink():
+            if (
+                capture_telemetry_sidecar.exists()
+                or capture_telemetry_sidecar.is_symlink()
+            ):
                 raise AssertionError("capture telemetry sidecar must be new")
             command.extend(
                 ["--capture-telemetry-sidecar", str(capture_telemetry_sidecar)]

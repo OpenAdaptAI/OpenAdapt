@@ -801,9 +801,7 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
             try:
                 from tests.e2e.win_agent_capture_telemetry import safe_projection
 
-                evidence["frame_guard_diagnostics"] = safe_projection(
-                    capture_telemetry
-                )
+                evidence["frame_guard_diagnostics"] = safe_projection(capture_telemetry)
             except Exception:  # noqa: BLE001 - telemetry never changes test outcome
                 evidence["frame_guard_diagnostics"] = {
                     "status": "unavailable",

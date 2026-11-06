@@ -83,8 +83,7 @@ class CaptureTelemetry:
             return (
                 len(content) == metadata.st_size
                 and self._owned_payload_sha256 is not None
-                and hashlib.sha256(content).hexdigest()
-                == self._owned_payload_sha256
+                and hashlib.sha256(content).hexdigest() == self._owned_payload_sha256
             )
         except Exception:  # noqa: BLE001 - foreign sidecar state disables telemetry
             return False
@@ -254,7 +253,9 @@ def instrument_make_handler_class(
 
     request_state = threading.local()
 
-    def make_handler_class(config: Any, grab_fn: Callable[..., bytes], *args: Any, **kwargs: Any):
+    def make_handler_class(
+        config: Any, grab_fn: Callable[..., bytes], *args: Any, **kwargs: Any
+    ):
         def observed_grab() -> bytes:
             png = grab_fn()
             current = getattr(request_state, "request", None)
@@ -378,7 +379,8 @@ def safe_projection(path: Path) -> dict[str, Any]:
         for row in payload["captures"]:
             if (
                 not isinstance(row, dict)
-                or set(row) != {"sequence", "png_sha256", "rgb_sha256", "width", "height"}
+                or set(row)
+                != {"sequence", "png_sha256", "rgb_sha256", "width", "height"}
                 or type(row.get("sequence")) is not int
                 or row["sequence"] <= 0
                 or row["sequence"] in seen_sequences
@@ -399,8 +401,7 @@ def safe_projection(path: Path) -> dict[str, Any]:
         for event in payload["guarded_refusals"]:
             if (
                 not isinstance(event, dict)
-                or set(event)
-                != {"phase", "expected_png_sha256", "current_sequence"}
+                or set(event) != {"phase", "expected_png_sha256", "current_sequence"}
                 or event.get("phase") != "input_guard_frame_compare"
                 or not _valid_sha256(event.get("expected_png_sha256"))
                 or type(event.get("current_sequence")) is not int
@@ -413,9 +414,7 @@ def safe_projection(path: Path) -> dict[str, Any]:
                 if row["png_sha256"] == event["expected_png_sha256"]
             ]
             current_matches = [
-                row
-                for row in captures
-                if row["sequence"] == event["current_sequence"]
+                row for row in captures if row["sequence"] == event["current_sequence"]
             ]
             diagnosis: dict[str, Any] = {
                 "phase": event["phase"],
