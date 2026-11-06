@@ -40,7 +40,7 @@ import shutil
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional, Protocol
 
 from openadapt_flow import __version__ as FLOW_VERSION
 from openadapt_flow.ir import RunReport, Workflow
@@ -52,6 +52,11 @@ from openadapt_flow.lookup_capabilities import (
     resolve_deployment_surface,
     surface_offers_structure,
 )
+from openadapt_flow.qualification_environment import (
+    QualificationEnvironmentObservation,
+    QualificationEnvironmentObserver,
+)
+from openadapt_flow.qualification_faults import QualificationFaultDriver
 from openadapt_flow.qualify.config import (
     CASE_IDS,
     RULE_CASE_PREFIX,
@@ -59,19 +64,12 @@ from openadapt_flow.qualify.config import (
     QualifyConfigError,
     VerifyConfig,
 )
-from openadapt_flow.qualify.environment import (
-    observe_campaign_environment,
-)
+from openadapt_flow.qualify.environment import observe_campaign_environment
 from openadapt_flow.qualify.faults import WebFaultDriver, WindowsPixelFaultDriver
 from openadapt_flow.qualify.keys import LocalTestKey, new_local_test_key
 from openadapt_flow.qualify.windows_pixel_fault_controller import (
     WindowsQualificationPixelFaultController,
 )
-from openadapt_flow.qualification_environment import (
-    QualificationEnvironmentObservation,
-    QualificationEnvironmentObserver,
-)
-from openadapt_flow.qualification_faults import QualificationFaultDriver
 from openadapt_flow.verification import VerificationTier
 
 #: (case id, expected outcome, oracle kind), in run order.
@@ -389,9 +387,13 @@ def check_ready(
             f"save step {save.id} has an unconfirmed placeholder record check"
         )
     structural = save.anchor.structural if save.anchor is not None else None
-    if config.app.target == "web" and save.anchor is not None and (
-        structural is None
-        or not (structural.selector or (structural.role and structural.name))
+    if (
+        config.app.target == "web"
+        and save.anchor is not None
+        and (
+            structural is None
+            or not (structural.selector or (structural.role and structural.name))
+        )
     ):
         problems.append(
             f"save step {save.id} has no structural locator (a selector, or a "
@@ -402,15 +404,27 @@ def check_ready(
     return problems
 
 
-_NATIVE_CAMPAIGN_CAPABILITIES = frozenset(
+_NATIVE_BASE_CAPABILITIES = frozenset(
     {
         "pixel_frame_capture",
         "pixel_input",
         "qualification_environment_identity",
-        "qualification_fault_driver",
-        "qualification_pixel_fault_controller",
     }
 )
+_NATIVE_FAULT_CAPABILITIES = frozenset(
+    {"qualification_fault_driver", "qualification_pixel_fault_controller"}
+)
+
+
+class _CampaignFaultDriver(QualificationFaultDriver, Protocol):
+    """Driver details used by the campaign recorder beyond the runtime API."""
+
+    attestation_key_id: str
+    public_key_base64: str
+    declined: Optional[str]
+
+    @staticmethod
+    def mutation_bytes(kind: str) -> bytes: ...
 
 
 def _driver_binding(driver: Any) -> tuple[str, str, str, str]:
@@ -424,7 +438,9 @@ def _driver_binding(driver: Any) -> tuple[str, str, str, str]:
     )
     values = tuple(getattr(driver, name, None) for name in names)
     if any(not isinstance(value, str) or not value for value in values):
-        raise QualifyConfigError("session-owned qualification fault driver is incomplete")
+        raise QualifyConfigError(
+            "session-owned qualification fault driver is incomplete"
+        )
     if not callable(getattr(driver, "mutate", None)):
         raise QualifyConfigError("session-owned qualification fault driver is invalid")
     return values  # type: ignore[return-value]
@@ -437,10 +453,11 @@ def _campaign_session_components(
     *,
     campaign_id: str,
     fault_key: Optional[LocalTestKey] = None,
+    require_fault_driver: bool = True,
 ) -> tuple[
     QualificationEnvironmentObserver,
     QualificationEnvironmentObservation,
-    QualificationFaultDriver,
+    Optional[_CampaignFaultDriver],
     list[str],
 ]:
     """Bind one live session to its observer and actual backend capabilities."""
@@ -483,23 +500,25 @@ def _campaign_session_components(
         application_identity=app.application_identity,
     )
     controller = getattr(backend, "qualification_pixel_fault_controller", None)
-    if (
-        type(controller) is not WindowsQualificationPixelFaultController
-        or getattr(controller, "qualification_target_kind", None) != app.target
-        or getattr(controller, "session_identity_sha256", None)
-        != observation.session_identity_sha256
-        or not controller.matches_observation(backend, observation)
-    ):
-        raise QualifyConfigError(
-            "native session has no matching environment-owned pixel fault controller"
+    driver: Optional[_CampaignFaultDriver] = None
+    if require_fault_driver:
+        if (
+            type(controller) is not WindowsQualificationPixelFaultController
+            or getattr(controller, "qualification_target_kind", None) != app.target
+            or getattr(controller, "session_identity_sha256", None)
+            != observation.session_identity_sha256
+            or not controller.matches_observation(backend, observation)
+        ):
+            raise QualifyConfigError(
+                "native session has no matching environment-owned pixel fault controller"
+            )
+        driver = WindowsPixelFaultDriver(
+            workflow,
+            controller,
+            key=fault_key,
+            key_id=f"{campaign_id}-fault-driver",
         )
-    driver = WindowsPixelFaultDriver(
-        workflow,
-        controller,
-        key=fault_key,
-        key_id=f"{campaign_id}-fault-driver",
-    )
-    driver_binding = _driver_binding(driver)
+        driver_binding = _driver_binding(driver)
     provider = getattr(backend, "qualification_capabilities", None)
     if not callable(provider):
         raise QualifyConfigError("native session does not report live capabilities")
@@ -510,10 +529,14 @@ def _campaign_session_components(
         raise QualifyConfigError("native session capability evidence is invalid")
     capabilities = set(reported)
     capabilities.add("qualification_environment_identity")
-    capabilities.update(
-        {"qualification_fault_driver", "qualification_pixel_fault_controller"}
+    if driver is not None:
+        capabilities.update(
+            {"qualification_fault_driver", "qualification_pixel_fault_controller"}
+        )
+    required = _NATIVE_BASE_CAPABILITIES | (
+        _NATIVE_FAULT_CAPABILITIES if driver is not None else frozenset()
     )
-    missing = sorted(_NATIVE_CAMPAIGN_CAPABILITIES - capabilities)
+    missing = sorted(required - capabilities)
     if missing:
         raise QualifyConfigError(
             "native session lacks required live capabilities: " + ", ".join(missing)
@@ -526,10 +549,10 @@ def _campaign_session_components(
         )
     # The trusted driver is obtained from the same opened backend/session as
     # the observer. No config string or separate import hook can mint it.
-    if _driver_binding(driver) != driver_binding:
+    if driver is not None and _driver_binding(driver) != driver_binding:
         raise QualifyConfigError("native session fault-driver binding changed")
-    required = sorted(_NATIVE_CAMPAIGN_CAPABILITIES | set(app.required_capabilities))
-    return observer, observation, driver, required
+    required_capabilities = sorted(required | set(app.required_capabilities))
+    return observer, observation, driver, required_capabilities
 
 
 # ---------------------------------------------------------------------------
@@ -541,7 +564,7 @@ def _campaign_session_components(
 class CampaignSetup:
     runner_key: LocalTestKey
     fault_key: LocalTestKey
-    driver: QualificationFaultDriver
+    driver: _CampaignFaultDriver
     observer: QualificationEnvironmentObserver
     environment: QualificationEnvironmentObservation
     required_capabilities: list[str]
@@ -555,7 +578,7 @@ def configure_project(
     params: Mapping[str, str],
     environment: QualificationEnvironmentObservation,
     observer: QualificationEnvironmentObserver,
-    driver: QualificationFaultDriver,
+    driver: _CampaignFaultDriver,
     required_capabilities: list[str],
     campaign_id: str,
     minimum_effect_tier: Any,
@@ -923,7 +946,6 @@ def _run(
     marks["browser_ready"] = time.time()
     try:
         observer = setup.observer
-        fault_driver = setup.driver
         if config.app.target != "web":
             active_observer, _observation, active_driver, _capabilities = (
                 _campaign_session_components(
@@ -932,18 +954,24 @@ def _run(
                     workflow,
                     campaign_id=ctx.case_id,
                     fault_key=setup.fault_key,
+                    require_fault_driver=fault_driver is not None,
                 )
             )
             if (
                 active_observer.observer_id != setup.observer.observer_id
                 or active_observer.contract_sha256 != setup.observer.contract_sha256
-                or _driver_binding(active_driver) != _driver_binding(setup.driver)
+                or (
+                    fault_driver is not None
+                    and active_driver is not None
+                    and _driver_binding(active_driver) != _driver_binding(setup.driver)
+                )
             ):
                 raise QualifyError(
                     "native trial session does not match the campaign observer/driver"
                 )
             observer = active_observer
-            fault_driver = active_driver
+            if fault_driver is not None:
+                fault_driver = active_driver
         verifier = hooks.make_verifier(ctx.params)
         gate_kwargs = dict(
             bundle_dir=bundle_dir,
@@ -993,7 +1021,9 @@ def _run(
             bundle_dir=bundle_dir,
             run_dir=ctx.run_dir,
             execution_target_kind=config.app.target,
-            execution_origin=(config.app.origin if config.app.target == "web" else None),
+            execution_origin=(
+                config.app.origin if config.app.target == "web" else None
+            ),
             execution_entry_url=(
                 backend.page.url if config.app.target == "web" else None
             ),
@@ -1588,6 +1618,8 @@ def qualify(
                 fault_key=native_fault_key,
             )
         )
+        if driver is None:
+            raise QualifyConfigError("qualification session has no fault driver")
         if native_preflight is not None:
             preflight_observer, preflight_environment, preflight_driver, _caps = (
                 native_preflight
@@ -2003,7 +2035,7 @@ def qualify(
         notes=notes,
         reports=reports,
         observer=setup.observer,
-        environment_digest=web_environment_digest(environment),
+        environment_digest=environment.environment_digest,
         result=qresult,
         admission_note=admission_note,
         lookup=lookup_record,

@@ -72,6 +72,15 @@ WINDOWS_PIXEL_FAULT_DRIVER_CONTRACT_SHA256 = hashlib.sha256(
         "effect faults replace only the verifier input\n"
     ).encode("utf-8")
 ).hexdigest()
+NATIVE_PIXEL_FAULT_DRIVER_ID = "openadapt.qualify.native-pixel-faults"
+NATIVE_PIXEL_FAULT_DRIVER_CONTRACT_SHA256 = hashlib.sha256(
+    (
+        "openadapt.qualify.native-pixel-faults/v1\n"
+        "screen faults delegate to the exact observed session controller\n"
+        "receipts bind the exact engine capture before and after mutation\n"
+        "effect faults replace only the verifier input\n"
+    ).encode("utf-8")
+).hexdigest()
 #: The label a wrong-identity save control is given.
 WRONG_ACTION_LABEL = "Merge Into Existing Record"
 SCREEN_FAULTS = frozenset({"ambiguity", "wrong_identity", "stale_identity"})
@@ -280,6 +289,7 @@ class WebFaultDriver:
     def mutate(
         self, context: QualificationFaultContext
     ) -> Optional[QualificationFaultMutation]:
+        self.declined = None
         kind = context.fault_kind
         replacement: Any = context.effect_verifier
         replace_effect_verifier = False
@@ -323,8 +333,8 @@ class WebFaultDriver:
         )
 
 
-class WindowsPixelFaultDriver:
-    """Bind generic campaign faults to one session-owned Windows controller.
+class NativePixelFaultDriver:
+    """Bind generic campaign faults to one observed native pixel controller.
 
     The controller is supplied by the existing ``app.session`` owner and is
     never imported from config. It receives the real backend and workflow
@@ -333,32 +343,38 @@ class WindowsPixelFaultDriver:
     exact before/after frame bytes before accepting the signed receipt.
     """
 
-    driver_id = WINDOWS_PIXEL_FAULT_DRIVER_ID
-    contract_sha256 = WINDOWS_PIXEL_FAULT_DRIVER_CONTRACT_SHA256
+    driver_id = NATIVE_PIXEL_FAULT_DRIVER_ID
+    contract_sha256 = NATIVE_PIXEL_FAULT_DRIVER_CONTRACT_SHA256
 
     def __init__(
         self,
         workflow: Any,
         controller: Any,
         *,
+        target_kind: str,
         key: Optional[LocalTestKey] = None,
-        key_id: str = "qualify-windows-pixel-fault-driver",
+        key_id: str = "qualify-native-pixel-fault-driver",
     ) -> None:
         from openadapt_flow.traversal import iter_workflow_steps
 
+        if target_kind not in {"windows", "rdp"}:
+            raise ValueError("native pixel fault driver target is unsupported")
         self._steps = {step.id: step for step in iter_workflow_steps(workflow)}
         self._controller = controller
+        self._target_kind = target_kind
         self._key = key or new_local_test_key(key_id)
         self.attestation_key_id = self._key.key_id
         self.public_key_base64 = self._key.public_key_base64
+        self.declined: Optional[str] = None
 
     @staticmethod
     def mutation_bytes(kind: str) -> bytes:
-        return f"{WINDOWS_PIXEL_FAULT_DRIVER_ID}/{kind}/v1\n".encode("ascii")
+        return f"{NATIVE_PIXEL_FAULT_DRIVER_ID}/{kind}/v1\n".encode("ascii")
 
     def mutate(
         self, context: QualificationFaultContext
     ) -> Optional[QualificationFaultMutation]:
+        self.declined = None
         kind = context.fault_kind
         replacement: Any = context.effect_verifier
         replace_effect_verifier = False
@@ -374,21 +390,28 @@ class WindowsPixelFaultDriver:
                 or context.backend is None
                 or context.capture_frame is None
                 or getattr(self._controller, "qualification_target_kind", None)
-                != "windows"
+                != self._target_kind
+                or getattr(context.backend, "qualification_target_kind", None)
+                != self._target_kind
             ):
+                self.declined = "screen_fault_session_binding_unavailable"
                 return None
             apply_fault = getattr(self._controller, "apply_screen_fault", None)
             if not callable(apply_fault):
+                self.declined = "screen_fault_controller_unavailable"
                 return None
             try:
                 changed = apply_fault(context, step)
                 if changed is not True:
+                    self.declined = "screen_fault_controller_declined"
                     return None
                 after_frame = context.capture_frame()
             except Exception:  # noqa: BLE001 - unsupported/failed controller declines
+                self.declined = "screen_fault_controller_failed"
                 return None
             after = sha256_bytes(after_frame)
             if after == context.before_input_sha256:
+                self.declined = "screen_fault_frame_unchanged"
                 return None
         else:
             return None
@@ -420,12 +443,42 @@ class WindowsPixelFaultDriver:
         )
 
 
+class WindowsPixelFaultDriver(NativePixelFaultDriver):
+    """Compatibility wrapper for callers bound to a Windows controller."""
+
+    driver_id = WINDOWS_PIXEL_FAULT_DRIVER_ID
+    contract_sha256 = WINDOWS_PIXEL_FAULT_DRIVER_CONTRACT_SHA256
+
+    def __init__(
+        self,
+        workflow: Any,
+        controller: Any,
+        *,
+        key: Optional[LocalTestKey] = None,
+        key_id: str = "qualify-windows-pixel-fault-driver",
+    ) -> None:
+        super().__init__(
+            workflow,
+            controller,
+            target_kind="windows",
+            key=key,
+            key_id=key_id,
+        )
+
+    @staticmethod
+    def mutation_bytes(kind: str) -> bytes:
+        return f"{WINDOWS_PIXEL_FAULT_DRIVER_ID}/{kind}/v1\n".encode("ascii")
+
+
 __all__ = [
     "SCREEN_FAULTS",
     "WEB_FAULT_DRIVER_CONTRACT_SHA256",
     "WEB_FAULT_DRIVER_ID",
     "WINDOWS_PIXEL_FAULT_DRIVER_CONTRACT_SHA256",
     "WINDOWS_PIXEL_FAULT_DRIVER_ID",
+    "NATIVE_PIXEL_FAULT_DRIVER_CONTRACT_SHA256",
+    "NATIVE_PIXEL_FAULT_DRIVER_ID",
+    "NativePixelFaultDriver",
     "WRONG_ACTION_LABEL",
     "ScreenOnlyRecordCheck",
     "WebFaultDriver",

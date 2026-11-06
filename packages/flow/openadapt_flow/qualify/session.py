@@ -45,6 +45,15 @@ def playwright_session(config: VerifyConfig) -> SessionOpener:
     """Open a fresh browser context at ``entry_url`` for each trial."""
 
     app: AppConfig = config.app
+    if app.target != "web":
+        raise QualifyConfigError(
+            "the built-in Playwright session requires app.target=web"
+        )
+    target_url = app.entry_url or app.url
+    if not isinstance(target_url, str) or not target_url:
+        raise QualifyConfigError(
+            "app.url or app.entry_url is required for a web session"
+        )
     storage_state = (
         str(config.resolve_path(app.storage_state)) if app.storage_state else None
     )
@@ -70,7 +79,7 @@ def playwright_session(config: VerifyConfig) -> SessionOpener:
 
             # Guard the page's WebSockets from its first document (wire check).
             prepare_ws_guard(page)
-            page.goto(app.entry_url or app.url)
+            page.goto(target_url)
         except Exception:
             pw.stop()
             raise
