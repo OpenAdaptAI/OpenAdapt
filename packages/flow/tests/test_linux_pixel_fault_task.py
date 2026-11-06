@@ -398,3 +398,66 @@ def test_renderer_failure_exports_only_fixed_stage(monkeypatch, capsys, stage):
     assert renderer.main() == 1
     output = capsys.readouterr()
     assert output.out == f"refused:{stage}\n" and output.err == ""
+
+
+@pytest.mark.parametrize("change", ["none", "physical_alias", "skip", "missing", "escape", "duplicate", "partial", "informational", "certified", "unknown_case", "oracle_failed", "cleanup_failed"])
+def test_hosted_gate_preserves_exact_denominator_and_safe_summary_root(tmp_path, monkeypatch, change):
+    import xml.etree.ElementTree as ET
+
+    import yaml
+
+    from openadapt_flow.qualify.config import CASE_IDS
+
+    workflow_path = Path(__file__).resolve().parents[3] / ".github/workflows/desktop-replay.yml"
+    workflow = yaml.load(workflow_path.read_text(), Loader=yaml.BaseLoader)
+    run = next(step["run"] for step in workflow["jobs"]["freerdp"]["steps"] if step.get("name") == "The six primary RDP cases qualified (no skips)")
+    code = run.split("python - <<'PYTHON'\n", 1)[1].rsplit("PYTHON", 1)[0]
+    root = tmp_path / "rc"
+    summary_dir = root / "one/rdp-campaign"
+    summary_dir.mkdir(parents=True)
+    summary = {"status": "PASSED", "qualification_passed": True, "certified": False, "certification_requested": False,
+               "primary_planned": 6, "primary_completed": 6, "informational_planned": 0, "informational_completed": 0,
+               "oracles": [{"case_id": case, "passed": True, "fault_detector_error": None} for case in CASE_IDS],
+               "sessions": [{"closed": True, "cleanup_failed": False}]}
+    if change == "partial":
+        summary["primary_completed"] = 5
+    elif change == "informational":
+        summary["informational_completed"] = 1
+    elif change == "certified":
+        summary["certified"] = True
+    elif change == "unknown_case":
+        summary["oracles"][0]["case_id"] = "unknown"
+    elif change == "oracle_failed":
+        summary["oracles"][0]["passed"] = False
+    elif change == "cleanup_failed":
+        summary["sessions"][0]["cleanup_failed"] = True
+    path = summary_dir / "campaign-evidence.json"
+    if change != "missing":
+        path.write_text(json.dumps(summary))
+    if change == "physical_alias":
+        alias = root / "alias/rdp-campaign"
+        alias.mkdir(parents=True)
+        (alias / path.name).symlink_to(path)
+    elif change == "escape":
+        outside = tmp_path / "outside.json"
+        outside.write_text(path.read_text())
+        path.unlink()
+        path.symlink_to(outside)
+    elif change == "duplicate":
+        other = root / "two/rdp-campaign"
+        other.mkdir(parents=True)
+        (other / path.name).write_text(path.read_text())
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    suite = ET.Element("testsuite")
+    case = ET.SubElement(suite, "testcase", name="test_loopback_six_primary_pixel_cases")
+    if change == "skip":
+        ET.SubElement(case, "skipped")
+    ET.ElementTree(suite).write(runs / "rdp-campaign-junit.xml")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+    if change in {"none", "physical_alias"}:
+        exec(compile(code, "hosted-rdp-success-gate", "exec"), {})
+    else:
+        with pytest.raises(AssertionError):
+            exec(compile(code, "hosted-rdp-success-gate", "exec"), {})
