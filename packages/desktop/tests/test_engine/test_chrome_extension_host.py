@@ -97,10 +97,23 @@ class TestRegister:
 
     @pytest.mark.parametrize(
         "bad",
-        ["", "*", "chrome-extension://*/", "ABCDEFGHIJKLMNOPABCDEFGHIJKLMNOP", "a" * 31, "q" * 32],
+        [
+            None,
+            "",
+            "*",
+            "chrome-extension://*/",
+            "ABCDEFGHIJKLMNOPABCDEFGHIJKLMNOP",
+            "a" * 31,
+            "q" * 32,
+            EXT_ID + "\n",
+            "\n" + EXT_ID,
+            EXT_ID[:16] + "\n" + EXT_ID[16:],
+            EXT_ID + "\r\n",
+            EXT_ID + " ",
+        ],
     )
     def test_bad_extension_id_writes_nothing(
-        self, tmp_path: Path, host_script: Path, bad: str
+        self, tmp_path: Path, host_script: Path, bad: str | None
     ) -> None:
         hosts = tmp_path / "hosts"
         recording = tmp_path / "capture"
@@ -116,6 +129,16 @@ class TestRegister:
             )
         assert not hosts.exists()
         assert not (tmp_path / "active").exists()
+        assert sorted(p.name for p in tmp_path.iterdir()) == ["capture", "flow"]
+
+    @pytest.mark.parametrize(
+        "bad", [None, "", EXT_ID + "\n", "\n" + EXT_ID, EXT_ID[:16] + "\n" + EXT_ID[16:]]
+    )
+    def test_build_manifest_refuses_incomplete_id_match(
+        self, tmp_path: Path, bad: str | None
+    ) -> None:
+        with pytest.raises(ValueError):
+            host.build_manifest(bad, tmp_path / host.LAUNCHER_FILE)
 
     def test_missing_recording_folder_is_refused(self, tmp_path: Path, host_script: Path) -> None:
         with pytest.raises(ValueError, match="recording folder"):
@@ -298,7 +321,7 @@ class TestDispatcherLifecycle:
         finally:
             db.close()
 
-    @pytest.mark.parametrize("bad", ["*", "not-an-extension-id"])
+    @pytest.mark.parametrize("bad", ["*", "not-an-extension-id", EXT_ID + "\n", "\n" + EXT_ID])
     def test_bad_id_skips_registration_but_still_records(
         self, tmp_path: Path, host_script: Path, linux, bad: str
     ) -> None:

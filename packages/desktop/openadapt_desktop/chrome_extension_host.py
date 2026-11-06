@@ -46,7 +46,8 @@ MANIFEST_FILE = f"{HOST_NAME}.json"
 LAUNCHER_FILE = f"{HOST_NAME}-host.sh"
 OWNER_MARKER = "# openadapt-desktop: registered for the active recording"
 ACTIVE_PREFIX = ".extension-active-"
-EXTENSION_ID = re.compile(r"^[a-p]{32}$")
+# Matched with fullmatch: "$" alone would also accept a trailing newline.
+EXTENSION_ID = re.compile(r"[a-p]{32}")
 BROWSERS = ("chrome", "chromium")
 
 _USER_DIRS = {
@@ -102,7 +103,7 @@ def find_host_script() -> Path | None:
 def build_manifest(extension_id: str, launcher: Path) -> dict[str, Any]:
     """The host manifest allowing exactly one extension origin."""
 
-    if not isinstance(extension_id, str) or not EXTENSION_ID.match(extension_id):
+    if not isinstance(extension_id, str) or not EXTENSION_ID.fullmatch(extension_id):
         raise ValueError("extension id must be 32 letters a-p")
     if not Path(launcher).is_absolute():
         raise ValueError("launcher path must be absolute")
