@@ -38,6 +38,83 @@ pytestmark = [
     pytest.mark.timeout(900),
 ]
 _SESSIONS: dict[str, Any] = {}
+_SAFE_TASK_PHASES = {
+    "preflight",
+    "build_action",
+    "build_principal",
+    "build_settings",
+    "register_definition",
+    "verify_definition_count",
+    "verify_description",
+    "verify_action_count",
+    "verify_action_executable",
+    "verify_action_arguments",
+    "verify_principal_user",
+    "verify_principal_logon",
+    "verify_principal_runlevel",
+    "start_instance",
+    "observe_instance",
+    "readiness_poll",
+    "transport_result",
+    "unknown",
+}
+_SAFE_TASK_REGISTRATION = {
+    "not_attempted",
+    "preexisting",
+    "unknown",
+    "absent",
+    "ambiguous",
+    "mismatch",
+    "registered_unverified",
+    "verified_owned",
+    "started_owned",
+    "owned_handle",
+}
+_SAFE_TASK_CLEANUP = {
+    "not_attempted",
+    "not_needed",
+    "unknown",
+    "removed_exact_owned_definition",
+    "left_running_instance_unproven",
+    "left_ambiguous_instances",
+    "left_mismatched_definition",
+    "failed_or_unknown",
+}
+_SAFE_CONTROLLER_DECLINES = {
+    "session_binding_unavailable",
+    "session_identity_changed",
+    "fault_request_unavailable",
+    "task_creation_failed",
+    "task_readiness_failed",
+    "task_readiness_unconfirmed",
+}
+
+
+def _safe_task_diagnostic(value: Any) -> dict[str, Any] | None:
+    phase = value.get("phase") if isinstance(value, dict) else None
+    registration = value.get("registration") if isinstance(value, dict) else None
+    cleanup = value.get("cleanup") if isinstance(value, dict) else None
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"phase", "registration", "cleanup", "exit_status"}
+        or not isinstance(phase, str)
+        or phase not in _SAFE_TASK_PHASES
+        or not isinstance(registration, str)
+        or registration not in _SAFE_TASK_REGISTRATION
+        or not isinstance(cleanup, str)
+        or cleanup not in _SAFE_TASK_CLEANUP
+        or (
+            value.get("exit_status") is not None
+            and type(value["exit_status"]) is not int
+        )
+    ):
+        return None
+    return {
+        "phase": value["phase"],
+        "registration": value["registration"],
+        "cleanup": value["cleanup"],
+        "exit_status": value["exit_status"],
+    }
 
 
 def _safe_environment_identity(value: Any) -> dict[str, str] | None:
@@ -344,6 +421,8 @@ class _CampaignHost:
             "tasks": [],
             "controller_bound_identity": None,
             "identity_before_open_return": None,
+            "fault_declined": None,
+            "task_diagnostic": None,
         }
         self.sessions.append(evidence)
         try:
@@ -413,6 +492,16 @@ class _CampaignHost:
                 }
                 for h in handles
             ]
+            controller_decline = controller.last_decline_code
+            evidence["fault_declined"] = (
+                controller_decline
+                if isinstance(controller_decline, str)
+                and controller_decline in _SAFE_CONTROLLER_DECLINES
+                else None
+            )
+            evidence["task_diagnostic"] = _safe_task_diagnostic(
+                controller.last_task_diagnostic
+            )
             try:
                 controller.close()
                 for handle in handles:

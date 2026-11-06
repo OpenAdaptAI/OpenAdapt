@@ -25,6 +25,79 @@ _TASK_PREFIX = "OAFlowQualificationPixelFault"
 _SAFE_GUEST_PATH = re.compile(r"^[A-Za-z0-9_ .:\\-]+$")
 _HELPER_NAME = "qualification_pixel_fault_overlay.ps1"
 _STATUS_TIMEOUT_S = 15.0
+_DIAGNOSTIC_PREFIX = "OPENADAPT_TASK_DIAGNOSTIC:"
+_LAUNCH_PHASES = frozenset(
+    {
+        "preflight",
+        "build_action",
+        "build_principal",
+        "build_settings",
+        "register_definition",
+        "verify_definition_count",
+        "verify_description",
+        "verify_action_count",
+        "verify_action_executable",
+        "verify_action_arguments",
+        "verify_principal_user",
+        "verify_principal_logon",
+        "verify_principal_runlevel",
+        "start_instance",
+        "observe_instance",
+        "readiness_poll",
+        "transport_result",
+        "unknown",
+    }
+)
+_REGISTRATION_STATES = frozenset(
+    {
+        "not_attempted",
+        "preexisting",
+        "unknown",
+        "absent",
+        "ambiguous",
+        "mismatch",
+        "registered_unverified",
+        "verified_owned",
+        "started_owned",
+        "owned_handle",
+    }
+)
+_CLEANUP_STATES = frozenset(
+    {
+        "not_attempted",
+        "not_needed",
+        "unknown",
+        "removed_exact_owned_definition",
+        "left_running_instance_unproven",
+        "left_ambiguous_instances",
+        "left_mismatched_definition",
+        "failed_or_unknown",
+    }
+)
+
+
+@dataclass(frozen=True)
+class TaskLaunchDiagnostic:
+    """Allowlisted task-launch failure metadata; contains no command or output."""
+
+    phase: str
+    registration: str
+    cleanup: str
+    exit_status: int
+
+
+class TaskLaunchError(RuntimeError):
+    """Preserve a nonzero task-launch result with its safe diagnostic."""
+
+    def __init__(self, diagnostic: TaskLaunchDiagnostic) -> None:
+        message = (
+            "owned task name already exists"
+            if diagnostic.registration == "preexisting"
+            else "create owned qualification task failed "
+            f"with status {diagnostic.exit_status}"
+        )
+        super().__init__(message)
+        self.diagnostic = diagnostic
 
 
 def _valid_guest_directory(value: str) -> bool:
@@ -88,6 +161,46 @@ def _split_command(command_line: str) -> tuple[str, str]:
     return executable, arguments if separator else ""
 
 
+def _task_launch_diagnostic(stdout: str, status: int) -> TaskLaunchDiagnostic:
+    """Parse only one fixed, allowlisted diagnostic emitted by the PS guard."""
+
+    if type(status) is not int or status == 0:
+        raise ValueError("task launch diagnostic requires a nonzero exit status")
+    matches = [
+        line[len(_DIAGNOSTIC_PREFIX) :]
+        for line in stdout.splitlines()
+        if line.startswith(_DIAGNOSTIC_PREFIX)
+    ]
+    if len(matches) == 1:
+        try:
+            value = json.loads(matches[0])
+        except (TypeError, json.JSONDecodeError):
+            value = None
+        if (
+            isinstance(value, dict)
+            and set(value) == {"schema", "phase", "registration", "cleanup"}
+            and value.get("schema") == "openadapt.owned-task-diagnostic/v1"
+            and isinstance(value.get("phase"), str)
+            and value["phase"] in _LAUNCH_PHASES
+            and isinstance(value.get("registration"), str)
+            and value["registration"] in _REGISTRATION_STATES
+            and isinstance(value.get("cleanup"), str)
+            and value["cleanup"] in _CLEANUP_STATES
+        ):
+            return TaskLaunchDiagnostic(
+                phase=value["phase"],
+                registration=value["registration"],
+                cleanup=value["cleanup"],
+                exit_status=status,
+            )
+    return TaskLaunchDiagnostic(
+        phase="unknown",
+        registration="unknown",
+        cleanup="unknown",
+        exit_status=status,
+    )
+
+
 def launch_owned_interactive_task(
     lab: Any,
     command_line: str,
@@ -131,25 +244,50 @@ $description = {_ps_quote(description)}
 $expectedExe = {_ps_quote(executable)}
 $expectedArgs = {_ps_quote(arguments)}
 $expectedUser = {_ps_quote(user)}
-$existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-if ($null -ne $existing) {{ throw 'owned task name already exists' }}
+$phase = 'preflight'
+$registration = 'not_attempted'
+$cleanup = 'not_attempted'
+$registrationAttempted = $false
 try {{
+$existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+if ($null -ne $existing) {{
+    $registration = 'preexisting'
+    throw 'owned task name already exists'
+}}
+$phase = 'build_action'
 $action = New-ScheduledTaskAction -Execute $expectedExe -Argument $expectedArgs
+$phase = 'build_principal'
 $principal = New-ScheduledTaskPrincipal -UserId $expectedUser -LogonType Interactive -RunLevel Limited
+$phase = 'build_settings'
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+$phase = 'register_definition'
+$registration = 'unknown'
+$registrationAttempted = $true
 Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Settings $settings -Description $description | Out-Null
+$registration = 'registered_unverified'
+$phase = 'verify_definition_count'
 $createdSet = @(Get-ScheduledTask -TaskName $taskName -ErrorAction Stop)
 if ($createdSet.Count -ne 1) {{ throw 'created task name is ambiguous' }}
 $created = $createdSet[0]
-if ($created.Description -cne $description -or @($created.Actions).Count -ne 1 -or
-    $created.Actions[0].Execute -cne $expectedExe -or
-    $created.Actions[0].Arguments -cne $expectedArgs -or
-    $created.Principal.UserId -cne $expectedUser -or
-    $created.Principal.LogonType.ToString() -cne 'Interactive' -or
-    $created.Principal.RunLevel.ToString() -cne 'Limited') {{
-    throw 'created task identity does not match request'
-}}
+$phase = 'verify_description'
+if ($created.Description -cne $description) {{ throw 'created task description does not match request' }}
+$phase = 'verify_action_count'
+if (@($created.Actions).Count -ne 1) {{ throw 'created task action count does not match request' }}
+$phase = 'verify_action_executable'
+if ($created.Actions[0].Execute -cne $expectedExe) {{ throw 'created task executable does not match request' }}
+$phase = 'verify_action_arguments'
+if ($created.Actions[0].Arguments -cne $expectedArgs) {{ throw 'created task arguments do not match request' }}
+$phase = 'verify_principal_user'
+if ($created.Principal.UserId -cne $expectedUser) {{ throw 'created task principal does not match request' }}
+$phase = 'verify_principal_logon'
+if ($created.Principal.LogonType.ToString() -cne 'Interactive') {{ throw 'created task logon type does not match request' }}
+$phase = 'verify_principal_runlevel'
+if ($created.Principal.RunLevel.ToString() -cne 'Limited') {{ throw 'created task run level does not match request' }}
+$registration = 'verified_owned'
+$phase = 'start_instance'
 Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
+$registration = 'started_owned'
+$phase = 'observe_instance'
 $service = New-Object -ComObject 'Schedule.Service'
 $service.Connect()
 $folder = $service.GetFolder([string]::Concat([char]92))
@@ -173,39 +311,86 @@ if ($null -eq $instance -or [string]::IsNullOrEmpty($instance.InstanceGuid)) {{
 }} catch {{
     $creationError = $_
     try {{
-        $partialSet = @(Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)
-        if ($partialSet.Count -eq 1) {{
-            $partial = $partialSet[0]
+        if ($registration -eq 'preexisting') {{
+            $cleanup = 'not_attempted'
         }} else {{
-            $partial = $null
-        }}
-        if ($null -ne $partial -and $partial.Description -ceq $description -and
-            @($partial.Actions).Count -eq 1 -and
-            $partial.Actions[0].Execute -ceq $expectedExe -and
-            $partial.Actions[0].Arguments -ceq $expectedArgs -and
-            $partial.Principal.UserId -ceq $expectedUser -and
-            $partial.Principal.LogonType.ToString() -ceq 'Interactive' -and
-            $partial.Principal.RunLevel.ToString() -ceq 'Limited') {{
-            $partialService = New-Object -ComObject 'Schedule.Service'
-            $partialService.Connect()
-            $partialFolder = $partialService.GetFolder([string]::Concat([char]92))
-            $partialPath = [string]::Concat([char]92, $taskName)
-            $partialInstances = @($partialFolder.GetTask($partialPath).GetInstances(0))
-            if ($partialInstances.Count -eq 0) {{
-                Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
+            if ($registrationAttempted) {{ $registration = 'unknown' }}
+            $partialSet = @(Get-ScheduledTask -TaskName $taskName -ErrorAction Stop)
+            if ($partialSet.Count -eq 0) {{
+                if ($registrationAttempted) {{
+                    $registration = 'unknown'
+                    $cleanup = 'unknown'
+                }} else {{
+                    $registration = 'not_attempted'
+                    $cleanup = 'not_needed'
+                }}
+            }} elseif ($partialSet.Count -gt 1) {{
+                $registration = 'ambiguous'
+                $cleanup = 'not_attempted'
+            }} else {{
+                $partial = $partialSet[0]
+                if ($partial.Description -ceq $description -and
+                    @($partial.Actions).Count -eq 1 -and
+                    $partial.Actions[0].Execute -ceq $expectedExe -and
+                    $partial.Actions[0].Arguments -ceq $expectedArgs -and
+                    $partial.Principal.UserId -ceq $expectedUser -and
+                    $partial.Principal.LogonType.ToString() -ceq 'Interactive' -and
+                    $partial.Principal.RunLevel.ToString() -ceq 'Limited') {{
+                    $registration = 'verified_owned'
+                    $partialService = New-Object -ComObject 'Schedule.Service'
+                    $partialService.Connect()
+                    $partialFolder = $partialService.GetFolder([string]::Concat([char]92))
+                    $partialPath = [string]::Concat([char]92, $taskName)
+                    $partialInstances = @($partialFolder.GetTask($partialPath).GetInstances(0))
+                    if ($partialInstances.Count -eq 0) {{
+                        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
+                        $registration = 'absent'
+                        $cleanup = 'removed_exact_owned_definition'
+                    }} elseif ($partialInstances.Count -eq 1) {{
+                        $cleanup = 'left_running_instance_unproven'
+                    }} else {{
+                        $cleanup = 'left_ambiguous_instances'
+                    }}
+                }} else {{
+                    $registration = 'mismatch'
+                    $cleanup = 'left_mismatched_definition'
+                }}
             }}
         }}
     }} catch {{
-        throw 'owned task setup failed; exact partial cleanup could not be proven'
+        if ($registrationAttempted -and $registration -ne 'verified_owned' -and
+            $registration -ne 'started_owned') {{
+            $registration = 'unknown'
+        }}
+        $cleanup = 'failed_or_unknown'
     }}
+    $diagnostic = @{{
+        schema = 'openadapt.owned-task-diagnostic/v1'
+        phase = $phase
+        registration = $registration
+        cleanup = $cleanup
+    }}
+    Write-Output ('{_DIAGNOSTIC_PREFIX}' + ($diagnostic | ConvertTo-Json -Compress))
     throw $creationError
 }}
 """
-    output = lab.run_ps(
+    result = lab.run_ps(
         script,
+        check=False,
         timeout_s=20.0,
         operation="create owned qualification task",
-    ).stdout.strip()
+    )
+    exit_status = getattr(result, "status", None)
+    if type(exit_status) is not int:
+        raise RuntimeError("owned task launch status is unavailable")
+    if exit_status != 0:
+        stdout = getattr(result, "stdout", "")
+        raise TaskLaunchError(
+            _task_launch_diagnostic(
+                stdout if isinstance(stdout, str) else "", exit_status
+            )
+        )
+    output = result.stdout.strip()
     try:
         receipt = json.loads(output)
         instance_guid = str(uuid.UUID(receipt["instance_guid"]))
@@ -339,10 +524,12 @@ class OwnedPixelTasks:
         self._session_binding_sha256 = session_binding_sha256
         self._helper_path = Path(__file__).with_name(_HELPER_NAME)
         self._tasks: list[OwnedPixelTaskHandle] = []
+        self.last_failure_diagnostic: dict[str, Any] | None = None
 
     def launch(self, request: dict[str, Any]) -> OwnedPixelTaskHandle:
         """Launch one fixed helper request only when its binding is exact."""
 
+        self.last_failure_diagnostic = None
         if not isinstance(request, dict):
             raise ValueError("pixel helper request must be an object")
         schema = request.get("schema")
@@ -406,14 +593,24 @@ exit $LASTEXITCODE
             "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand "
             + encoded
         )
-        task = launch_owned_interactive_task(
-            self._lab,
-            command,
-            nonce=nonce,
-            request_sha256=request_sha256,
-            session_binding_sha256=self._session_binding_sha256,
-            helper_sha256=helper_sha256,
-        )
+        self.last_failure_diagnostic = None
+        try:
+            task = launch_owned_interactive_task(
+                self._lab,
+                command,
+                nonce=nonce,
+                request_sha256=request_sha256,
+                session_binding_sha256=self._session_binding_sha256,
+                helper_sha256=helper_sha256,
+            )
+        except TaskLaunchError as exc:
+            self.last_failure_diagnostic = {
+                "phase": exc.diagnostic.phase,
+                "registration": exc.diagnostic.registration,
+                "cleanup": exc.diagnostic.cleanup,
+                "exit_status": exc.diagnostic.exit_status,
+            }
+            raise
         handle = OwnedPixelTaskHandle(
             nonce=nonce,
             helper_path=remote_helper,
@@ -442,13 +639,25 @@ exit $LASTEXITCODE
             return None
         deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline:
-            status = self._lab.run_ps(
+            result = self._lab.run_ps(
                 f"if (Test-Path -LiteralPath {_ps_quote(handle.status_path)}) "
                 f"{{ Get-Content -Raw -LiteralPath {_ps_quote(handle.status_path)} }}",
                 check=False,
                 timeout_s=2.0,
                 operation="qualification pixel task status",
-            ).stdout.strip()
+            )
+            result_status = getattr(result, "status", None)
+            if type(result_status) is not int or result_status != 0:
+                self.last_failure_diagnostic = {
+                    "phase": "readiness_poll",
+                    "registration": "owned_handle",
+                    "cleanup": "not_attempted",
+                    "exit_status": result_status
+                    if type(result_status) is int
+                    else None,
+                }
+                return None
+            status = result.stdout.strip()
             if status == f"refused:{handle.nonce}":
                 return None
             prefix = f"ready:{handle.nonce}:"

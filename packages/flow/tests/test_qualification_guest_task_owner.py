@@ -12,6 +12,7 @@ import json
 import subprocess
 from pathlib import Path
 from runpy import run_path
+from types import SimpleNamespace
 
 import pytest
 
@@ -39,6 +40,7 @@ $script:state = $payload.state
 $script:trace = [System.Collections.Generic.List[string]]::new()
 $script:failure = $null
 $script:output = ''
+$script:outputLines = [System.Collections.Generic.List[string]]::new()
 $tokens = $null
 $errors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseInput([string]$payload.script, [ref]$tokens, [ref]$errors)
@@ -46,7 +48,7 @@ if (@($errors).Count -ne 0) { throw 'boundary: invalid PowerShell syntax' }
 $allowed = @('Get-ScheduledTask','New-ScheduledTaskAction','New-ScheduledTaskPrincipal',
 'New-ScheduledTaskSettingsSet','New-TimeSpan','Register-ScheduledTask','Out-Null',
 'Start-ScheduledTask','New-Object','Start-Sleep','ConvertTo-Json','Unregister-ScheduledTask',
-'Test-Path','Get-Content')
+'Test-Path','Get-Content','Write-Output')
 $commands = $ast.FindAll({param($node) $node -is [System.Management.Automation.Language.CommandAst]}, $true)
 foreach ($command in $commands) {
     if ($command.InvocationOperator -ne [System.Management.Automation.Language.TokenKind]::Unknown -or
@@ -74,28 +76,45 @@ function Record([string]$value) { $script:trace.Add($value) }
 function Get-ScheduledTask {
     [CmdletBinding()]param([string]$TaskName)
     Record ('get-definition:' + $TaskName)
+    $script:state.definition_reads++
+    if ($script:state.mode -eq 'readback_fail' -and $script:state.definition_reads -ge 2) {
+        throw 'synthetic definition readback failure'
+    }
     if ($null -eq $script:state.name) { $script:state.name = $TaskName }
     if ($TaskName -cne $script:state.name) { throw 'synthetic: wrong task name' }
     if ($script:state.definition) { $script:state.definition }
 }
 function New-ScheduledTaskAction {
     param([string]$Execute,[string]$Argument)
+    if ($script:state.mode -eq 'action_factory_fail') { throw 'synthetic action factory failure' }
     [pscustomobject]@{Execute=$Execute;Arguments=$Argument}
 }
 function New-ScheduledTaskPrincipal {
     param([string]$UserId,[string]$LogonType,[string]$RunLevel)
+    if ($script:state.mode -eq 'principal_factory_fail') { throw 'synthetic principal factory failure' }
     [pscustomobject]@{UserId=$UserId;LogonType=$LogonType;RunLevel=$RunLevel}
 }
 function New-ScheduledTaskSettingsSet {
     param([switch]$AllowStartIfOnBatteries,[switch]$DontStopIfGoingOnBatteries,$ExecutionTimeLimit)
+    if ($script:state.mode -eq 'settings_factory_fail') { throw 'synthetic settings factory failure' }
     [pscustomobject]@{ExecutionTimeLimit=$ExecutionTimeLimit}
 }
 function Register-ScheduledTask {
     [CmdletBinding()]param([string]$TaskName,$Action,$Principal,$Settings,[string]$Description)
     Record 'register'
     if ($script:state.definition) { throw 'synthetic: register cannot replace' }
+    if ($script:state.mode -eq 'register_fail_no_effect') { throw 'synthetic register failure' }
     $script:state.definition = [pscustomobject]@{TaskName=$TaskName;Description=$Description;Actions=@($Action);Principal=$Principal}
-    if ($script:state.mode -eq 'created_action_swap') { $script:state.definition.Actions[0].Arguments = 'foreign' }
+    switch ($script:state.mode) {
+        'created_description_swap' { $script:state.definition.Description = 'foreign' }
+        'created_action_count_swap' { $script:state.definition.Actions += $Action }
+        'created_executable_swap' { $script:state.definition.Actions[0].Execute = 'foreign' }
+        'created_action_swap' { $script:state.definition.Actions[0].Arguments = 'foreign' }
+        'created_user_swap' { $script:state.definition.Principal.UserId = 'foreign' }
+        'created_logon_swap' { $script:state.definition.Principal.LogonType = 'ServiceAccount' }
+        'created_runlevel_swap' { $script:state.definition.Principal.RunLevel = 'Highest' }
+    }
+    if ($script:state.mode -eq 'register_fail_after_create') { throw 'synthetic register failure' }
 }
 function Start-ScheduledTask {
     [CmdletBinding()]param([string]$TaskName)
@@ -127,6 +146,7 @@ function Get-Content { param([switch]$Raw,[string]$LiteralPath) $script:state.st
 function New-Object {
     [CmdletBinding()]param([string]$ComObject)
     if ($ComObject -cne 'Schedule.Service') { throw 'boundary: unrecognized COM request' }
+    if ($script:state.mode -eq 'service_fail') { throw 'synthetic service failure' }
     Record 'synthetic-service'
     $service = [pscustomobject]@{}
     $service | Add-Member ScriptMethod Connect { Record 'connect' }
@@ -165,10 +185,13 @@ function New-Object {
     $service
 }
 try {
-    $script:output = (@(& ([scriptblock]::Create([string]$payload.script))) -join "`n")
+    & ([scriptblock]::Create([string]$payload.script)) | ForEach-Object {
+        $script:outputLines.Add([string]$_)
+    }
 } catch {
     $script:failure = $_.Exception.Message
 } finally {
+    $script:output = $script:outputLines -join "`n"
     [pscustomobject]@{state=$script:state;trace=@($script:trace.ToArray());output=$script:output;error=$script:failure} | ConvertTo-Json -Depth 12 -Compress
 }
 """
@@ -182,6 +205,7 @@ class SyntheticLab:
             "name": None,
             "definition": None,
             "instances": [],
+            "definition_reads": 0,
             "mode": mode,
             "status": None,
             "existing": [],
@@ -236,6 +260,97 @@ def launch(lab: SyntheticLab):
     )
 
 
+def test_task_diagnostic_parser_accepts_only_the_fixed_schema():
+    prefix = owner._DIAGNOSTIC_PREFIX
+    valid = prefix + json.dumps(
+        {
+            "schema": "openadapt.owned-task-diagnostic/v1",
+            "phase": "start_instance",
+            "registration": "verified_owned",
+            "cleanup": "left_running_instance_unproven",
+        }
+    )
+    assert owner._task_launch_diagnostic(valid, 1) == owner.TaskLaunchDiagnostic(
+        phase="start_instance",
+        registration="verified_owned",
+        cleanup="left_running_instance_unproven",
+        exit_status=1,
+    )
+
+    for untrusted in (
+        prefix
+        + json.dumps(
+            {
+                "schema": "openadapt.owned-task-diagnostic/v1",
+                "phase": "start_instance",
+                "registration": "verified_owned",
+                "cleanup": "left_running_instance_unproven",
+                "stderr": "do not retain",
+            }
+        ),
+        prefix
+        + json.dumps(
+            {
+                "schema": "openadapt.owned-task-diagnostic/v1",
+                "phase": [],
+                "registration": "verified_owned",
+                "cleanup": "left_running_instance_unproven",
+            }
+        ),
+        prefix
+        + json.dumps(
+            {
+                "schema": "openadapt.owned-task-diagnostic/v1",
+                "phase": "start_instance",
+                "registration": {},
+                "cleanup": "left_running_instance_unproven",
+            }
+        ),
+        prefix
+        + json.dumps(
+            {
+                "schema": "openadapt.owned-task-diagnostic/v1",
+                "phase": "start_instance",
+                "registration": "verified_owned",
+                "cleanup": [],
+            }
+        ),
+        prefix
+        + json.dumps(
+            {
+                "schema": "openadapt.owned-task-diagnostic/v1",
+                "phase": "untrusted command content",
+                "registration": "verified_owned",
+                "cleanup": "left_running_instance_unproven",
+            }
+        ),
+        valid + "\n" + valid,
+    ):
+        assert owner._task_launch_diagnostic(
+            untrusted, 1
+        ) == owner.TaskLaunchDiagnostic(
+            phase="unknown",
+            registration="unknown",
+            cleanup="unknown",
+            exit_status=1,
+        )
+
+
+def test_hosted_summary_accepts_only_bounded_task_diagnostic_fields():
+    from tests.e2e.test_windows_hosted_campaign import _safe_task_diagnostic
+
+    valid = {
+        "phase": "observe_instance",
+        "registration": "started_owned",
+        "cleanup": "left_running_instance_unproven",
+        "exit_status": 1,
+    }
+    assert _safe_task_diagnostic(valid) == valid
+    assert _safe_task_diagnostic({**valid, "stderr": "never retain"}) is None
+    assert _safe_task_diagnostic({**valid, "phase": ["untrusted"]}) is None
+    assert _safe_task_diagnostic({**valid, "exit_status": True}) is None
+
+
 def destructive_calls(lab: SyntheticLab) -> list[str]:
     return [
         x
@@ -287,7 +402,13 @@ def test_preexisting_name_is_not_replaced():
     [
         ("start_fail_empty", True),
         ("start_fail_live", False),
+        ("created_description_swap", False),
+        ("created_action_count_swap", False),
+        ("created_executable_swap", False),
         ("created_action_swap", False),
+        ("created_user_swap", False),
+        ("created_logon_swap", False),
+        ("created_runlevel_swap", False),
         ("multiple_created", False),
     ],
 )
@@ -300,6 +421,144 @@ def test_failed_create_cleanup_requires_exact_empty_definition(
     assert destructive_calls(lab) == (["unregister"] if expected_unregister else [])
     if not expected_unregister:
         assert lab.state["definition"] is not None
+
+
+@pytest.mark.parametrize(
+    "mode,expected_phase,expected_registration,expected_cleanup,expected_calls",
+    [
+        (
+            "register_fail_after_create",
+            "register_definition",
+            "absent",
+            "removed_exact_owned_definition",
+            ["unregister"],
+        ),
+        (
+            "register_fail_no_effect",
+            "register_definition",
+            "unknown",
+            "unknown",
+            [],
+        ),
+        (
+            "start_fail_empty",
+            "start_instance",
+            "absent",
+            "removed_exact_owned_definition",
+            ["unregister"],
+        ),
+        (
+            "start_fail_live",
+            "start_instance",
+            "verified_owned",
+            "left_running_instance_unproven",
+            [],
+        ),
+        (
+            "multiple_created",
+            "observe_instance",
+            "verified_owned",
+            "left_ambiguous_instances",
+            [],
+        ),
+        (
+            "service_fail",
+            "observe_instance",
+            "verified_owned",
+            "failed_or_unknown",
+            [],
+        ),
+        (
+            "readback_fail",
+            "verify_definition_count",
+            "unknown",
+            "failed_or_unknown",
+            [],
+        ),
+        (
+            "action_factory_fail",
+            "build_action",
+            "not_attempted",
+            "not_needed",
+            [],
+        ),
+        (
+            "principal_factory_fail",
+            "build_principal",
+            "not_attempted",
+            "not_needed",
+            [],
+        ),
+        (
+            "settings_factory_fail",
+            "build_settings",
+            "not_attempted",
+            "not_needed",
+            [],
+        ),
+    ],
+)
+def test_failed_creation_emits_only_fixed_phase_and_cleanup_metadata(
+    mode, expected_phase, expected_registration, expected_cleanup, expected_calls
+):
+    lab = SyntheticLab(mode)
+    with pytest.raises(owner.TaskLaunchError) as failure:
+        launch(lab)
+    diagnostic = failure.value.diagnostic
+    assert diagnostic == owner.TaskLaunchDiagnostic(
+        phase=expected_phase,
+        registration=expected_registration,
+        cleanup=expected_cleanup,
+        exit_status=1,
+    )
+    assert "synthetic" not in str(failure.value).lower()
+    assert destructive_calls(lab) == expected_calls
+    assert all(
+        "command" not in row and "stdout" not in row and "stderr" not in row
+        for row in lab.records
+    )
+
+
+@pytest.mark.parametrize(
+    "mode,expected_phase",
+    [
+        ("created_description_swap", "verify_description"),
+        ("created_action_count_swap", "verify_action_count"),
+        ("created_executable_swap", "verify_action_executable"),
+        ("created_action_swap", "verify_action_arguments"),
+        ("created_user_swap", "verify_principal_user"),
+        ("created_logon_swap", "verify_principal_logon"),
+        ("created_runlevel_swap", "verify_principal_runlevel"),
+    ],
+)
+def test_definition_mismatch_phases_are_bounded_and_never_cleanup_foreign_task(
+    mode, expected_phase
+):
+    lab = SyntheticLab(mode)
+    with pytest.raises(owner.TaskLaunchError) as failure:
+        launch(lab)
+    assert failure.value.diagnostic == owner.TaskLaunchDiagnostic(
+        phase=expected_phase,
+        registration="mismatch",
+        cleanup="left_mismatched_definition",
+        exit_status=1,
+    )
+    assert destructive_calls(lab) == []
+
+
+def test_preexisting_task_diagnostic_does_not_cleanup_foreign_definition():
+    lab = SyntheticLab()
+    lab.state["definition"] = {"foreign": True}
+    with pytest.raises(owner.TaskLaunchError) as failure:
+        launch(lab)
+    assert failure.value.diagnostic == owner.TaskLaunchDiagnostic(
+        phase="preflight",
+        registration="preexisting",
+        cleanup="not_attempted",
+        exit_status=1,
+    )
+    assert destructive_calls(lab) == []
+    assert lab.state["definition"] == {"foreign": True}
 
 
 @pytest.mark.parametrize(
@@ -384,6 +643,59 @@ def test_owned_handle_readiness_requires_available_nonce_and_session(status):
     result = tasks.wait_ready(handle, timeout_s=0.01)
     assert result == (f"ready:{NONCE}:{SESSION}" if status == "matching" else None)
     assert handle.ready_status == result
+
+
+@pytest.mark.parametrize("schema", ["fault", "pairing"])
+@pytest.mark.parametrize(
+    "reported_status,expected_status",
+    [(7, 7), (True, None), (False, None), (None, None), ("missing", None)],
+)
+def test_matching_ready_stdout_with_invalid_status_is_refused(
+    schema, reported_status, expected_status
+):
+    class NonzeroReadinessLab(SyntheticLab):
+        def run_ps(self, script, **kwargs):
+            result = super().run_ps(script, **kwargs)
+            if kwargs.get("operation") == "qualification pixel task status":
+                if reported_status == "missing":
+                    return SimpleNamespace(stdout=result.stdout)
+                return LabResult(
+                    status=reported_status,
+                    stdout=result.stdout,
+                    stderr="suppressed",
+                )
+            return result
+
+    lab = NonzeroReadinessLab()
+    tasks = owner.OwnedPixelTasks(
+        lab, guest_dir=r"C:\Synthetic", session_binding_sha256=SESSION
+    )
+    if schema == "fault":
+        request = {
+            "schema": "openadapt.qualification-pixel-fault/v1",
+            "nonce": NONCE,
+            "session_identity_sha256": SESSION,
+        }
+        ready = f"ready:{NONCE}:{SESSION}"
+    else:
+        request = {
+            "schema": "openadapt.rdp-pairing/v1",
+            "operation": "pairing_witness",
+            "nonce": NONCE,
+            "connection_digest": SESSION,
+        }
+        ready = f"ready:{NONCE}:{HELPER}"
+    handle = tasks.launch(request)
+    lab.state["status"] = ready
+
+    assert tasks.wait_ready(handle, timeout_s=0.01) is None
+    assert handle.ready_status is None
+    assert tasks.last_failure_diagnostic == {
+        "phase": "readiness_poll",
+        "registration": "owned_handle",
+        "cleanup": "not_attempted",
+        "exit_status": expected_status,
+    }
 
 
 @pytest.mark.parametrize(

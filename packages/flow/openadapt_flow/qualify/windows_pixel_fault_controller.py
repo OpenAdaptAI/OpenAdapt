@@ -157,6 +157,8 @@ class WindowsQualificationPixelFaultController:
         self._lab = lab
         self._environment_identity = environment_identity
         self.session_identity_sha256 = session_identity_sha256
+        self.last_decline_code: str | None = None
+        self.last_task_diagnostic: dict[str, Any] | None = None
         self._guest_dir = guest_dir.rstrip("\\/")
         from openadapt_flow.qualify.qualification_pixel_fault_task import (
             OwnedPixelTasks,
@@ -185,11 +187,14 @@ class WindowsQualificationPixelFaultController:
     def apply_screen_fault(self, context: Any, step: Any) -> bool:
         """Show one generic overlay in the observed target region, or decline."""
 
+        self.last_decline_code = None
+        self.last_task_diagnostic = None
         if (
             context.backend is not self._backend
             or getattr(self._backend, "qualification_target_kind", None) != "windows"
             or getattr(context, "actuation_path", None) != "gui"
         ):
+            self.last_decline_code = "session_binding_unavailable"
             return False
         observer = getattr(self._backend, "qualification_environment_identity", None)
         identity = observer() if callable(observer) else None
@@ -198,18 +203,43 @@ class WindowsQualificationPixelFaultController:
             or len(identity) != 4
             or identity != self._environment_identity
         ):
+            self.last_decline_code = "session_identity_changed"
             return False
         nonce = uuid.uuid4().hex
         request = _request_for(context, step, nonce)
         if request is None:
+            self.last_decline_code = "fault_request_unavailable"
             return False
         request["session_identity_sha256"] = self.session_identity_sha256
 
         try:
             handle = self._pixel_tasks.launch(request)
             status = self._pixel_tasks.wait_ready(handle)
-            return status == f"ready:{nonce}:{self.session_identity_sha256}"
-        except Exception:  # noqa: BLE001 - unsupported transport declines safely
+            if status == f"ready:{nonce}:{self.session_identity_sha256}":
+                return True
+            self.last_task_diagnostic = self._pixel_tasks.last_failure_diagnostic
+            self.last_decline_code = (
+                "task_readiness_failed"
+                if self.last_task_diagnostic is not None
+                else "task_readiness_unconfirmed"
+            )
+            return False
+        except Exception as exc:  # noqa: BLE001 - unsupported transport declines safely
+            from openadapt_flow.qualify.qualification_pixel_fault_task import (
+                TaskLaunchError,
+            )
+
+            if isinstance(exc, TaskLaunchError):
+                diagnostic = exc.diagnostic
+                self.last_task_diagnostic = {
+                    "phase": diagnostic.phase,
+                    "registration": diagnostic.registration,
+                    "cleanup": diagnostic.cleanup,
+                    "exit_status": diagnostic.exit_status,
+                }
+            else:
+                self.last_task_diagnostic = self._pixel_tasks.last_failure_diagnostic
+            self.last_decline_code = "task_creation_failed"
             return False
 
     def close(self) -> None:
