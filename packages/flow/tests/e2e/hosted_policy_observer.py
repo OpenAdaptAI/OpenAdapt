@@ -38,10 +38,7 @@ def _safe_projection(report: Any, policy: Any, risk_flag: Any) -> dict[str, Any]
             or _RULE.fullmatch(rule) is None
             or (
                 step_id is not None
-                and (
-                    not isinstance(step_id, str)
-                    or _STEP.fullmatch(step_id) is None
-                )
+                and (not isinstance(step_id, str) or _STEP.fullmatch(step_id) is None)
             )
         ):
             raise ValueError("unsafe violation projection")
