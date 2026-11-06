@@ -141,11 +141,11 @@ def test_real_cache_deduplicates_and_evicts_without_unbounded_storage(tmp_path):
     first = png(bytes([10, 20, 30]) * 12)
     owner.capture(first)
     owner.capture(first)
-    assert len(owner._raster_cache) == 1
+    assert len(owner._raster_cache._items) == 1
     assert owner._raster_cache.byte_count == 36
     for value in range(4):
         owner.capture(png(bytes([value, 20, 30]) * 12))
-        assert len(owner._raster_cache) <= 2
+        assert len(owner._raster_cache._items) <= 2
         assert owner._raster_cache.byte_count <= 72
     result = event(owner, first, 6)["pixel_diff"]
     assert_unavailable(result)
@@ -289,7 +289,7 @@ def test_cache_refuses_image_exceeding_each_byte_or_pixel_bound(
     owner = telemetry_module.CaptureTelemetry(tmp_path / "bounded.json")
     before, _ = pair()
     owner.capture(png(before))
-    assert len(owner._raster_cache) == 0
+    assert len(owner._raster_cache._items) == 0
     assert owner._raster_cache.byte_count == 0
 
 
@@ -325,3 +325,35 @@ def test_projection_rejects_malformed_spatial_values_without_export(
         "status": "unavailable",
         "code": "invalid_capture_telemetry",
     }
+
+
+@pytest.mark.parametrize("failed_capture", [1, 2])
+def test_cache_failure_preserves_original_capture_and_refusal_metadata(
+    tmp_path, monkeypatch, failed_capture
+):
+    owner = telemetry_module.CaptureTelemetry(tmp_path / "cache-failure.json")
+    before, after = pair()
+    first, changed = png(before), png(after)
+    original_put = owner._raster_cache.put
+    calls = []
+
+    def put(*args, **kwargs):
+        calls.append(True)
+        if len(calls) == failed_capture:
+            raise RuntimeError("PRIVATE_CACHE_FAILURE")
+        return original_put(*args, **kwargs)
+
+    monkeypatch.setattr(owner._raster_cache, "put", put)
+    assert owner.capture(first) == 1
+    assert owner.capture(changed) == 2
+    measured = event(owner, first, 2)["pixel_diff"]
+    assert_unavailable(measured)
+    projection = telemetry_module.safe_projection(owner.sidecar)
+    assert projection["status"] == "available"
+    (diagnosis,) = projection["diagnoses"]
+    assert diagnosis["status"] == "classified"
+    assert diagnosis["code"] == "decoded_raster_changed"
+    payload = json.loads(owner.sidecar.read_text())
+    assert [row["sequence"] for row in payload["captures"]] == [1, 2]
+    assert len(payload["guarded_refusals"]) == 1
+    assert "PRIVATE_CACHE_FAILURE" not in owner.sidecar.read_text()
