@@ -197,8 +197,57 @@ _SIGNATURE_FIELDS = frozenset(
 )
 
 
+_RECEIPT_VALIDATION_REASONS = frozenset(
+    {
+        "schema_version",
+        "unknown_field",
+        "missing_field",
+        "execute_v1_rules",
+        "issued_at",
+        "executor_kind",
+        "executor_ref_sha256",
+        "effect_verdict",
+        "verification_tier",
+        "remediates",
+        "correlation_id",
+        "recheck_due_at",
+        "checked_how",
+        "checked",
+        "verified_without_every_part",
+        "verified_without_independent_readback",
+        "delivery_uncertain",
+        "evidence_mismatch",
+        "unsalted",
+        "baseline_window",
+        "self_approved",
+        "issued_before_read",
+    }
+)
+
+
 class VerifyRunError(ValueError):
-    """verify-run refused its inputs. Nothing was read or written."""
+    """A refusal with an optional closed receipt-validation diagnostic.
+
+    All existing validator codes are listed above. Other refusals and unknown
+    future codes stay unclassified. This diagnostic grants no authority and
+    does not change the exception's existing arguments or message.
+    """
+
+    def __init__(self, *args: object, validation_reason: object = None) -> None:
+        super().__init__(*args)
+        self._validation_reason = VerifyRunError._closed_reason(validation_reason)
+
+    @staticmethod
+    def _closed_reason(value: object) -> str:
+        return (
+            value
+            if type(value) is str and value in _RECEIPT_VALIDATION_REASONS
+            else "unclassified"
+        )
+
+    @property
+    def validation_reason(self) -> str:
+        return VerifyRunError._closed_reason(self.__dict__.get("_validation_reason"))
 
 
 class VerifyConfig(BaseModel):
@@ -2302,7 +2351,10 @@ def verify_run(
         receipt[RECHECK_RECEIPT_FIELD] = recheck_due_at
     problem = receipt_problem(receipt) or evidence_problem(evidence, receipt)
     if problem is not None:  # pragma: no cover - a producer bug, never input
-        raise VerifyRunError(f"verify-run built an invalid receipt: {problem}")
+        raise VerifyRunError(
+            f"verify-run built an invalid receipt: {problem}",
+            validation_reason=problem,
+        )
     return {
         "schema_version": EFFECT_RECEIPT_SCHEMA,
         "receipt": receipt,
