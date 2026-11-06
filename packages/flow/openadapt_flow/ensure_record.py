@@ -91,8 +91,26 @@ class EnsureRecordError(ValueError):
     """The contract can't be loaded or bound (never a failed check)."""
 
 
+_NATIVE_READ_CODES = frozenset(
+    {"change_feed_unstable", "write_after_window", "known_match_omitted"}
+)
+
+
 class Unreadable(RuntimeError):
     """A read the judgment needs did not give a complete answer."""
+
+    def __init__(self, *args: object, diagnostic_code: object = None) -> None:
+        super().__init__(*args)
+        self._diagnostic_code = diagnostic_code
+
+    @property
+    def diagnostic_code(self) -> str:
+        value = self.__dict__.get("_diagnostic_code")
+        return (
+            value
+            if type(value) is str and value in _NATIVE_READ_CODES
+            else "unclassified"
+        )
 
 
 # -- the contract ----------------------------------------------------------------
@@ -1354,7 +1372,10 @@ def _find_matches(
 
 def _require_matches(matches: Mapping[str, Any], expected_ids: Sequence[str]) -> None:
     if set(expected_ids) - set(matches):
-        raise Unreadable("identifying search did not return a known matching record")
+        raise Unreadable(
+            "identifying search did not return a known matching record",
+            diagnostic_code="known_match_omitted",
+        )
 
 
 def find_matches(
@@ -2056,7 +2077,8 @@ def _collect_ensure(
         changes = again
     else:
         raise Unreadable(
-            f"the change feed was still changing after {contract.stable_reads} reads"
+            f"the change feed was still changing after {contract.stable_reads} reads",
+            diagnostic_code="change_feed_unstable",
         )
     after_matches, _ = find_matches(contract, reader, params)
     selfs = {_ref(a) for a in contract.self_actors}
@@ -2111,7 +2133,10 @@ def _collect_ensure(
     # when the window closed (a lost response) lands outside it.
     late = _agents_part(changes_since(None), selfs)
     if late != _agents_part(changes, selfs):
-        raise Unreadable("the agent wrote after the window closed")
+        raise Unreadable(
+            "the agent wrote after the window closed",
+            diagnostic_code="write_after_window",
+        )
     resources = [r for r in (created, existing_now) if isinstance(r, Mapping)]
     resources += [body for change in changes.values() for body in change.bodies]
     resources += list(after_matches.values())

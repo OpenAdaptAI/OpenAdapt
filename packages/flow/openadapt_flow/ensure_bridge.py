@@ -65,13 +65,14 @@ class EnsureBinding(BaseModel):
 class EnsureContext:
     """Explicit per-call native transport; never a contract or an artifact."""
 
-    __slots__ = ("reader", "sleep", "baseline", "observation")
+    __slots__ = ("reader", "sleep", "baseline", "observation", "read_problem")
 
     def __init__(self, reader: Optional[FhirReader] = None) -> None:
         self.reader = reader
         self.sleep: Callable[[float], None] = time.sleep
         self.baseline: Optional[Baseline] = None
         self.observation: Optional[EnsureObservation] = None
+        self.read_problem: Optional[EnsureResult] = None
 
     def __reduce_ex__(self, protocol: SupportsIndex) -> Any:
         raise TypeError("ensure runtime context cannot be serialized")
@@ -225,7 +226,7 @@ def finish_ensure(
     original = (
         observation.result
         if observation is not None
-        else _unknown("ensure_readback_unknown")
+        else authority.context.read_problem or _unknown("ensure_readback_unknown")
     )
     evidence = {
         **original.evidence,
@@ -237,19 +238,16 @@ def finish_ensure(
             "status": "owed" if not getattr(result, "final", False) else "complete"
         },
     }
+    reasons = list(dict.fromkeys([*original.reasons, *result.reasons]))
     if result.outcome is Outcome.CONFIRMED and original.outcome != "needs_review":
-        return EnsureResult(
-            original.outcome, original.record_id, list(result.reasons), evidence
-        )
+        return EnsureResult(original.outcome, original.record_id, reasons, evidence)
     key = (
         "invariants_refuted"
         if result.outcome is Outcome.REFUTED
         else "invariants_unknown"
     )
     evidence[key] = True
-    return EnsureResult(
-        "needs_review", None, list(result.reasons) or list(original.reasons), evidence
-    )
+    return EnsureResult("needs_review", None, reasons, evidence)
 
 
 class EnsureEffectVerifier(FhirEffectVerifier):
@@ -417,7 +415,19 @@ class EnsureEffectVerifier(FhirEffectVerifier):
                 expected_count=1,
                 matched_records=records if confirmed else [],
             )
-        except (Unreadable, KeyError, TypeError, ValueError):
+        except (Unreadable, KeyError, TypeError, ValueError) as exc:
+            code = exc.diagnostic_code if type(exc) is Unreadable else "unclassified"
+            problem = {
+                "change_feed_unstable": "the change feed was still changing",
+                "write_after_window": "the agent wrote after the window closed",
+                "known_match_omitted": "identifying search did not return a known matching record",
+            }.get(code, "the independent ensure read was unreadable")
+            self.context.read_problem = EnsureResult(
+                "needs_review",
+                None,
+                [problem],
+                {"unreadable": True, "native_read_failure": code},
+            )
             return EffectVerdict(
                 verdict=Verdict.INDETERMINATE,
                 kind=expected.kind,

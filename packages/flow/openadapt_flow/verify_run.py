@@ -1586,7 +1586,7 @@ def judge_run_frame(
                 "ids": _audit_ids(entries_now or [], salt),
             },
         }
-    if spec.targeted is None and spec.history is None:
+    if spec.targeted is None and (spec.history is None or not database_only):
         from openadapt_flow.runtime.effects.surfaces import surface_of
         from openadapt_flow.runtime.effects.targeted import observe_receipt_records
 
@@ -2634,14 +2634,11 @@ def verify_run(
                 frame.status = "not_checked"
                 frame.reason = "receipt-bound records or the identifying search could not be established"
     frame = _apply_hard_invariants(frame)
-    # A known field/frame violation still refutes. Missing required in-scope
-    # evidence cannot turn a field read into an overall CONFIRMED claim.
+    # Preserve known field/frame contradictions. Missing frame proof
+    # does not erase the local effect read; the whole receipt still needs
+    # frame.held, source proof and admission before it can be verified.
     effect_verdict: EffectVerdictLabel = (
-        "REFUTED"
-        if frame.status == "refuted" or delta_verdict == "REFUTED"
-        else "INDETERMINATE"
-        if frame.hard_invariants is not None and frame.hard_invariants.status != "held"
-        else delta_verdict
+        "REFUTED" if frame.status == "refuted" else delta_verdict
     )
     if frame.status == "refuted" and observed_effect in ("absent", "present"):
         observed_effect = "conflicting"
@@ -3027,11 +3024,17 @@ def recheck_problem(
     if schedule.get("post_state_sha256") != digest:
         return "the recheck state is not the post-save state its receipt names"
     is_verified = receipt.get("outcome") == "verified"
+    from openadapt_flow.verifier import Outcome, classify
+
+    nonfinal = (
+        classify(receipt["outcome"], receipt["checked"], evidence)[0]
+        is Outcome.UNCERTAIN
+    )
     if dict(schedule) != late_write.schedule(
         post,
         after_s,
         digest,
-        due=is_verified or targeted_reconciliation,
+        due=is_verified or nonfinal,
         purpose=purpose if targeted is not None else None,
     ):
         return (
