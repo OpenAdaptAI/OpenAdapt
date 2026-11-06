@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -253,3 +254,276 @@ def test_registration_for_a_taught_over_mcp_entry_is_refused(setup) -> None:
         bridge.register_intake_provenance(
             "taught_over_mcp", _provenance(tmp / "a.json", "Jane Testcase")
         )
+
+
+# -- admitted bundle identity through dispatch (#1978 Codex BLOCK) ------------
+
+
+class _FlipDesk:
+    """Return one bundle for register/gate, another for execute."""
+
+    def __init__(self, admitted: Path, switched: Path, *, admit_calls: int = 2) -> None:
+        self.admitted = Path(admitted)
+        self.switched = Path(switched)
+        self.admit_calls = admit_calls
+        self.calls = 0
+
+    def active_bundle(self, workflow: str, default: Path) -> Path:
+        self.calls += 1
+        if self.calls <= self.admit_calls:
+            return self.admitted
+        return self.switched
+
+
+def _bridge_with_desk(tmp: Path, desk: Any, monkeypatch: pytest.MonkeyPatch):
+    bundle = tmp / "bundles" / "intake-note"
+    _save_bundle(bundle)
+    stub = _Stub()
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
+    bridge = AgentBridge(
+        bundle.parent,
+        RunnerConfig(
+            flow_cli=("openadapt-flow-stub",), runs_dir=tmp / "runs", timeout_s=5
+        ),
+        allow_run=True,
+        repair_desk=desk,
+    )
+    return bridge, stub, bundle
+
+
+def test_repair_switched_after_gate_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A repair (or other active bundle) switched after the gate must not run.
+
+    Fails on 63783926f: execute re-resolves the active repair and reaches the
+    CLI with bytes the grant never admitted.
+    """
+
+    admitted = tmp_path / "admitted"
+    switched = tmp_path / "switched"
+    _save_bundle(admitted)
+    _save_bundle(switched, intent="Type the patient into another field")
+    # Put the catalog bundle aside; the desk supplies the real paths.
+    catalog = tmp_path / "bundles" / "intake-note"
+    catalog.parent.mkdir(parents=True)
+    shutil.copytree(admitted, catalog)
+    desk = _FlipDesk(admitted, switched, admit_calls=2)
+    bridge, stub, _ = _bridge_with_desk(tmp_path, desk, monkeypatch)
+    # Force the catalog entry's bundle_dir to admitted so register/gate hash it
+    # when the desk returns admitted.
+    entry = bridge.catalog[_name(bridge)]
+    entry.info.bundle_dir = admitted
+    bridge.register_intake_provenance(
+        _name(bridge), _provenance(tmp_path / "a.json", "Jane Testcase")
+    )
+    result = _run(bridge, "Jane Testcase", "req-flip-001")
+    assert result.get("outcome") == "did_not_run", result
+    assert stub.params == []
+    assert desk.calls >= 3
+
+
+def test_bundle_bytes_changed_after_gate_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Editing the active bundle after the gate must not reach the CLI."""
+
+    bundle = tmp_path / "bundles" / "intake-note"
+    _save_bundle(bundle)
+    stub = _Stub()
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
+    bridge = AgentBridge(
+        bundle.parent,
+        RunnerConfig(
+            flow_cli=("openadapt-flow-stub",), runs_dir=tmp_path / "runs", timeout_s=5
+        ),
+        allow_run=True,
+    )
+    bridge.register_intake_provenance(
+        _name(bridge), _provenance(tmp_path / "a.json", "Jane Testcase")
+    )
+    original_start = bridge.service._start
+
+    def mutate_then_start(*args, **kwargs):
+        _save_bundle(bundle, intent="Type the patient into another field")
+        return original_start(*args, **kwargs)
+
+    monkeypatch.setattr(bridge.service, "_start", mutate_then_start)
+    result = _run(bridge, "Jane Testcase", "req-mutate-001")
+    assert result.get("outcome") == "did_not_run", result
+    assert stub.params == []
+
+
+def test_stable_repaired_bundle_still_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A repaired bundle that stays active through dispatch still runs."""
+
+    repaired = tmp_path / "repaired"
+    _save_bundle(repaired)
+    catalog = tmp_path / "bundles" / "intake-note"
+    catalog.parent.mkdir(parents=True)
+    shutil.copytree(repaired, catalog)
+
+    class _StableDesk:
+        def active_bundle(self, workflow: str, default: Path) -> Path:
+            return repaired
+
+    bridge, stub, _ = _bridge_with_desk(tmp_path, _StableDesk(), monkeypatch)
+    entry = bridge.catalog[_name(bridge)]
+    entry.info.bundle_dir = repaired
+    bridge.register_intake_provenance(
+        _name(bridge), _provenance(tmp_path / "a.json", "Jane Testcase")
+    )
+    result = _run(bridge, "Jane Testcase", "req-stable-001")
+    assert result["outcome"] == "done", result
+    assert stub.params == [{"patient": "Jane Testcase"}]
+
+
+def _save_typed_bundle(
+    bundle: Path, *, kind: ParamKind, param: str, intake: str
+) -> None:
+    # IR params are strings; ParamSpec carries the declared card type.
+    default = (
+        "0"
+        if kind is ParamKind.NUMBER
+        else ("false" if kind is ParamKind.BOOLEAN else "x")
+    )
+    Workflow(
+        name="Intake Typed",
+        params={param: default},
+        param_specs={param: ParamSpec(name=param, type=kind, intake_field=intake)},
+        steps=[
+            Step(
+                id="s1",
+                intent="Fill the field",
+                action=ActionKind.TYPE,
+                text=default,
+                param=param,
+            )
+        ],
+    ).save(bundle)
+
+
+def _provenance_field(path: Path, field: str, value: str, doc: str = DOC_A) -> Path:
+    path.write_text(
+        ProvenanceFile(
+            params={
+                field: ParamProvenance(
+                    value=value,
+                    source=SourceRef(kind="document", sha256=doc, line=2, label=field),
+                    extractor="intake:local",
+                )
+            }
+        ).model_dump_json()
+    )
+    return path
+
+
+def test_numeric_proven_value_keeps_declared_type(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Provenance strings must not demote a valid number input to text.
+
+    Fails on 63783926f: applying the proven string makes the card schema
+    refuse a run whose caller already matched the document as a number.
+    """
+
+    bundle = tmp_path / "bundles" / "amount-note"
+    _save_typed_bundle(
+        bundle, kind=ParamKind.NUMBER, param="amount", intake="amount_due"
+    )
+    stub = _Stub()
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
+    bridge = AgentBridge(
+        bundle.parent,
+        RunnerConfig(
+            flow_cli=("openadapt-flow-stub",), runs_dir=tmp_path / "runs", timeout_s=5
+        ),
+        allow_run=True,
+    )
+    name = _name(bridge)
+    bridge.register_intake_provenance(
+        name, _provenance_field(tmp_path / "a.json", "amount_due", "42")
+    )
+    result = bridge.dispatch(
+        "run_workflow",
+        {
+            "workflow": name,
+            "inputs": {"amount": 42},
+            "request_id": "req-num-001",
+            "wait_seconds": 10,
+        },
+    )
+    assert result["outcome"] == "done", result
+    assert stub.params == [{"amount": "42"}]
+
+
+def test_boolean_proven_value_keeps_declared_type(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Provenance strings must not demote a valid boolean input to text."""
+
+    bundle = tmp_path / "bundles" / "flag-note"
+    _save_typed_bundle(
+        bundle, kind=ParamKind.BOOLEAN, param="urgent", intake="is_urgent"
+    )
+    stub = _Stub()
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
+    bridge = AgentBridge(
+        bundle.parent,
+        RunnerConfig(
+            flow_cli=("openadapt-flow-stub",), runs_dir=tmp_path / "runs", timeout_s=5
+        ),
+        allow_run=True,
+    )
+    name = _name(bridge)
+    bridge.register_intake_provenance(
+        name, _provenance_field(tmp_path / "a.json", "is_urgent", "true")
+    )
+    result = bridge.dispatch(
+        "run_workflow",
+        {
+            "workflow": name,
+            "inputs": {"urgent": True},
+            "request_id": "req-bool-001",
+            "wait_seconds": 10,
+        },
+    )
+    assert result["outcome"] == "done", result
+    assert stub.params == [{"urgent": "true"}]
+
+
+def test_mismatched_numeric_caller_still_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A caller number that disagrees with provenance is still refused."""
+
+    bundle = tmp_path / "bundles" / "amount-note"
+    _save_typed_bundle(
+        bundle, kind=ParamKind.NUMBER, param="amount", intake="amount_due"
+    )
+    stub = _Stub()
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
+    bridge = AgentBridge(
+        bundle.parent,
+        RunnerConfig(
+            flow_cli=("openadapt-flow-stub",), runs_dir=tmp_path / "runs", timeout_s=5
+        ),
+        allow_run=True,
+    )
+    name = _name(bridge)
+    bridge.register_intake_provenance(
+        name, _provenance_field(tmp_path / "a.json", "amount_due", "42")
+    )
+    result = bridge.dispatch(
+        "run_workflow",
+        {
+            "workflow": name,
+            "inputs": {"amount": 99},
+            "request_id": "req-num-bad",
+            "wait_seconds": 10,
+        },
+    )
+    assert _refused(result), result
+    assert stub.params == []

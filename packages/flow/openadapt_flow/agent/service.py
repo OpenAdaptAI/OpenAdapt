@@ -91,6 +91,8 @@ class Engine(Protocol):
         run_id: str,
         inputs: dict[str, str],
         raw: Mapping[str, Any],
+        *,
+        admitted_bundle_sha256: Optional[str] = None,
     ) -> EngineResult: ...
 
     def refresh(self, entry: "CatalogEntry", run_id: str) -> Optional[EngineResult]: ...
@@ -141,11 +143,24 @@ class FlowCliEngine:
         run_id: str,
         inputs: dict[str, str],
         raw: Mapping[str, Any],
+        *,
+        admitted_bundle_sha256: Optional[str] = None,
     ) -> EngineResult:
         bundle_dir = Path(entry.info.bundle_dir)
         if self.repair_desk is not None:
             # A person-approved repair, once activated, replaces the bundle.
             bundle_dir = self.repair_desk.active_bundle(entry.name, bundle_dir)
+        if admitted_bundle_sha256 is not None:
+            # The intake grant admitted one digest. A switched repair or edited
+            # bundle after the gate must not reach the CLI with other bytes.
+            from openadapt_flow.intake.param_gate import bundle_sha256
+
+            try:
+                digest = bundle_sha256(bundle_dir)
+            except Exception:
+                digest = None
+            if digest != admitted_bundle_sha256:
+                return EngineResult(reason="policy_refused")
         outcome = self.runner.run(
             workflow=entry.legacy_id or entry.name,
             bundle_dir=bundle_dir,
@@ -451,7 +466,12 @@ class RunService:
             return self.get(begin.run_id, wait_seconds=wait, replayed=True)
         try:
             self._start(
-                entry, begin.record, coerce_inputs(entry.card, inputs), inputs, event
+                entry,
+                begin.record,
+                coerce_inputs(entry.card, inputs),
+                inputs,
+                event,
+                admitted_bundle_sha256=intake.bundle_sha256,
             )
         except BaseException:
             # No worker owns the run, so get_run reports it as interrupted
@@ -469,6 +489,8 @@ class RunService:
         rendered: dict[str, str],
         raw: Mapping[str, Any],
         event: threading.Event,
+        *,
+        admitted_bundle_sha256: Optional[str] = None,
     ) -> None:
         """Run one reserved attempt on a worker; ``run`` already marked it active."""
         run_id = record["run_id"]
@@ -476,7 +498,13 @@ class RunService:
         def work() -> None:
             try:
                 try:
-                    outcome = entry.engine.execute(entry, run_id, rendered, raw)
+                    outcome = entry.engine.execute(
+                        entry,
+                        run_id,
+                        rendered,
+                        raw,
+                        admitted_bundle_sha256=admitted_bundle_sha256,
+                    )
                 except Exception:
                     # The engine may have acted before it failed: uncertain.
                     _LOG.exception(

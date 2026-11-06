@@ -32,6 +32,7 @@ __all__ = [
     "IntakeParamGateResult",
     "bound_param_names",
     "bundle_sha256",
+    "typed_proven_value",
     "check_tool_params",
     "load_param_specs",
     "requires_intake_provenance",
@@ -216,6 +217,54 @@ def bundle_sha256(bundle_dir: Path | str) -> str:
     return bundle_digest(Path(bundle_dir))
 
 
+def _param_kind(spec: Any) -> str:
+    """Declared ParamSpec / mapping type as a plain string."""
+
+    from openadapt_flow.ir import ParamKind
+
+    kind = getattr(spec, "type", None)
+    if isinstance(spec, Mapping):
+        kind = spec.get("type", kind)
+    value = getattr(kind, "value", kind)
+    if value is None:
+        return "string"
+    if isinstance(value, ParamKind):
+        return value.value
+    return str(value)
+
+
+def typed_proven_value(spec: Any, proven_text: str) -> Any:
+    """Declared-type form of a trusted provenance string.
+
+    Provenance stores strings. A number or boolean workflow input must keep its
+    declared type after the proven value replaces the caller's, or the card
+    schema check refuses a run that already matched the document. Unparseable
+    text is left as a string so the schema check still fails closed.
+    """
+
+    kind = _param_kind(spec)
+    text = "" if proven_text is None else str(proven_text)
+    if kind == "number":
+        from decimal import Decimal, InvalidOperation
+
+        raw = text.strip().replace(",", "")
+        try:
+            amount = Decimal(raw)
+        except InvalidOperation:
+            return text
+        if amount == amount.to_integral_value():
+            return int(amount)
+        return float(amount)
+    if kind == "boolean":
+        key = text.strip().lower()
+        if key in {"true", "yes", "y", "1", "x", "checked"}:
+            return True
+        if key in {"false", "no", "n", "0", "unchecked"}:
+            return False
+        return text
+    return text
+
+
 def _declares_intake(param_types: Optional[Mapping[str, Any]]) -> bool:
     return any(
         isinstance(meta, Mapping) and meta.get("intake_field")
@@ -248,6 +297,11 @@ class IntakeGateDecision:
     #: for every bound parameter, so normalization can't pick another record.
     values: dict[str, Any] = field(default_factory=dict)
     grant: Optional[IntakeGrant] = None
+    #: Digest of the bundle that passed the gate. Execution must refuse any
+    #: other bytes (a switched repair or an edited bundle after the gate).
+    bundle_sha256: Optional[str] = None
+    #: Absolute path of that admitted bundle, for logs and pinned checks.
+    bundle_dir: Optional[str] = None
 
 
 _LEGACY_SINGLE_USE = "\x00legacy-run"
@@ -393,6 +447,14 @@ class IntakeGrantRegistry:
             for name in bound_param_names(specs):
                 intake_name = _intake_field(specs[name])
                 assert intake_name is not None
-                values[name] = grant.provenance.params[intake_name].value
+                proven_text = grant.provenance.params[intake_name].value
+                values[name] = typed_proven_value(specs[name], proven_text)
             grant.consumed_by = token
-            return IntakeGateDecision(ok=True, values=values, grant=grant)
+            admitted_dir = str(Path(bundle_dir).resolve())
+            return IntakeGateDecision(
+                ok=True,
+                values=values,
+                grant=grant,
+                bundle_sha256=digest,
+                bundle_dir=admitted_dir,
+            )
