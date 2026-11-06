@@ -48,6 +48,9 @@ from openadapt_flow.qualification import (
     init_project,
     set_qualified_lookup,
 )
+from openadapt_flow.qualification_environment import (
+    QualificationEnvironmentObservation,
+)
 from openadapt_flow.qualify import QualifyError, parse_verify_config, qualify
 from openadapt_flow.runtime.replayer import Replayer
 from openadapt_flow.verification import VerificationTier
@@ -456,8 +459,23 @@ class _Campaign:
             "case_result",
             lambda **kw: SimpleNamespace(case_id=kw["case_id"], detail_code="x"),
         )
-        monkeypatch.setattr(campaign, "web_environment_payload", lambda *a, **k: {})
-        monkeypatch.setattr(campaign, "web_environment_digest", lambda _e: "e" * 64)
+        observation = QualificationEnvironmentObservation(
+            target_kind="web",
+            application_identity=APP["url"].rstrip("/"),
+            application_version=APP["version"],
+            session_identity_sha256="d" * 64,
+            environment_digest="e" * 64,
+        )
+        observer = SimpleNamespace(
+            observer_id="test.web-environment",
+            contract_sha256="a" * 64,
+            observe=lambda _backend, _target: observation,
+        )
+        monkeypatch.setattr(
+            campaign,
+            "observe_campaign_environment",
+            lambda *_a, **_kw: (observer, observation),
+        )
         monkeypatch.setattr(
             qualification_mod,
             "record_case_results",
@@ -547,6 +565,7 @@ def test_qualify_records_capabilities_and_reports_the_pixels_only_rate(
     # The pixels-only pass is informational on a local surface: one failure
     # lowers the rate but the campaign still passes.
     assert result.passed
+    assert result.environment_digest == "e" * 64
     assert result.lookup is not None
     assert result.lookup.surface == "local"
     assert result.lookup.capabilities_used == ["structure"]

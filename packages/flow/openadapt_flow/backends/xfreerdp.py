@@ -95,8 +95,8 @@ class SessionProfile:
         desktop_scale: Scaling the remote desktop applies to its apps, in
             percent. 100 means no Windows display scaling.
         dpi: Virtual display DPI on the client side.
-        lossless: Turn off the GFX, RemoteFX and NSCodec lossy codecs so
-            frames are pixel-identical across runs.
+        lossless: Omit the GFX, RemoteFX and NSCodec enabling options.
+            Explicit color depth prevents automatic codec selection.
         font_smoothing: ClearType on the remote. Off keeps glyph pixels
             stable across sessions.
         wallpaper, themes: Off removes pixels that vary between sessions.
@@ -141,9 +141,10 @@ class SessionProfile:
             f"/scale-desktop:{self.desktop_scale}",
             f"/kbd:layout:{self.keyboard_layout}",
         ]
-        if self.lossless:
-            args += ["-gfx", "-rfx", "-nsc"]
-        elif self.avc444:
+        # FreeRDP 3 treats gfx as optional-valued and rfx/nsc as presence
+        # flags: a minus prefix still enables them. Explicit bpp above
+        # suppresses automatic codec defaults, so lossless omits all three.
+        if not self.lossless and self.avc444:
             args.append("/gfx:AVC444:on")
         args.append("+fonts" if self.font_smoothing else "-fonts")
         args.append("+wallpaper" if self.wallpaper else "-wallpaper")
@@ -321,6 +322,8 @@ class XFreeRDPTransport:
         self._connect_timeout_s = connect_timeout_s
         self._display: Optional[int] = None
         self._procs: list[subprocess.Popen[bytes]] = []
+        self._client_proc: Optional[subprocess.Popen[bytes]] = None
+        self._session_client: Optional[subprocess.Popen[bytes]] = None
         self._session_digest: Optional[str] = None
         self._last_pointer = (0, 0)
 
@@ -350,6 +353,8 @@ class XFreeRDPTransport:
 
     def connect(self) -> None:
         """Start the virtual display and client; block until a frame shows."""
+        self._session_digest = None
+        self._session_client = None
         xvfb = _require("Xvfb")
         client = _require("xfreerdp3")
         _require("xdotool")
@@ -393,6 +398,7 @@ class XFreeRDPTransport:
             argv += p.client_args()
             argv += ["/log-level:ERROR"]
             proc = self._spawn(argv, stdin=subprocess.PIPE)
+            self._client_proc = proc
             assert proc.stdin is not None
             proc.stdin.write((self._password() + "\n").encode("utf-8"))
             proc.stdin.close()
@@ -405,6 +411,8 @@ class XFreeRDPTransport:
             if wm:
                 self._spawn([wm])
                 time.sleep(0.5)
+            self._require_live_client(proc)
+            self._session_client = proc
             self._session_digest = hashlib.sha256(
                 f"openadapt.xfreerdp/{self._display}/{proc.pid}/{started}".encode()
             ).hexdigest()
@@ -442,9 +450,32 @@ class XFreeRDPTransport:
         _release_display(self._display)
         self._display = None
         self._session_digest = None
+        self._client_proc = None
+        self._session_client = None
+
+    def _require_live_client(
+        self, expected: Optional[subprocess.Popen[bytes]] = None
+    ) -> subprocess.Popen[bytes]:
+        """Check the owned child object, never an independently looked-up PID."""
+        client = self._client_proc
+        if client is None or (expected is not None and client is not expected):
+            raise XFreeRDPError("RDP client ownership is unavailable or changed")
+        try:
+            exited = client.poll() is not None
+        except Exception as exc:
+            raise XFreeRDPError("RDP client liveness is unavailable") from exc
+        if exited:
+            raise XFreeRDPError("RDP client has exited")
+        return client
 
     def session_identity(self) -> Optional[str]:
-        """64-hex digest unique to this live session."""
+        """64-hex digest unique to this live owned client, or unavailable."""
+        if self._session_client is None:
+            return None
+        try:
+            self._require_live_client(self._session_client)
+        except XFreeRDPError:
+            return None
         return self._session_digest
 
     # -- frames and input --------------------------------------------------
@@ -452,10 +483,13 @@ class XFreeRDPTransport:
     def framebuffer(self) -> Framebuffer:
         from PIL import ImageGrab
 
+        client = self._require_live_client()
         img = ImageGrab.grab(xdisplay=self.display).convert("RGB")
+        self._require_live_client(client)
         return img, img.width, img.height
 
     def _xdotool(self, *args: str) -> None:
+        client = self._require_live_client()
         subprocess.run(
             ["xdotool", *args],
             env=self._env(),
@@ -464,6 +498,9 @@ class XFreeRDPTransport:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        # An exit during dispatch is uncertain delivery; propagate refusal,
+        # never retry the input against another client.
+        self._require_live_client(client)
 
     def pointer(self, x: int, y: int, button: str, down: bool) -> None:
         self._last_pointer = (int(x), int(y))

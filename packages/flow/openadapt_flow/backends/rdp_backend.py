@@ -290,6 +290,13 @@ class FreeRDPBackend:
             are rejected. Mutually exclusive with ``session_marker``.
     """
 
+    qualification_target_kind = "rdp"
+
+    def qualification_capabilities(self) -> frozenset[str]:
+        """Capabilities this connected pixel transport actually exposes."""
+
+        return frozenset({"pixel_frame_capture", "pixel_input"})
+
     def __init__(
         self,
         transport: RDPTransport,
