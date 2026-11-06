@@ -496,11 +496,11 @@ try {{
         raise RuntimeError("owned task creation receipt is invalid") from exc
     principal_sid_sha256 = receipt.get("principal_sid_sha256")
     if (
-        set(receipt) != {"task_name", "description", "instance_guid", "principal_sid_sha256"}
+        set(receipt)
+        != {"task_name", "description", "instance_guid", "principal_sid_sha256"}
         or not isinstance(principal_sid_sha256, str)
         or not _HEX64.fullmatch(principal_sid_sha256)
-        or
-        receipt.get("task_name") != task_name
+        or receipt.get("task_name") != task_name
         or receipt.get("description") != description
     ):
         raise RuntimeError("owned task creation receipt binding changed")
