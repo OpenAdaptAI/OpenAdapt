@@ -58,6 +58,107 @@ def _safe_environment_identity(value: Any) -> dict[str, str] | None:
     }
 
 
+def _normalized_identity(text: str) -> str:
+    return "".join(character.casefold() for character in text if character.isalnum())
+
+
+def _live_patient_header(
+    backend: Any, identity_parts: tuple[str, ...]
+) -> tuple[int, int, int, int] | None:
+    """Return the live UIA label region only when its pixels show the target."""
+    from openadapt_flow.ir import StructuralLocator
+    from openadapt_flow.vision.ocr import ocr
+
+    handle = backend.locate_structural(StructuralLocator(automation_id="patientHeader"))
+    region = handle.region if handle is not None else None
+    if region is None:
+        return None
+    x, y, width, height = region
+    viewport_width, viewport_height = backend.viewport
+    if (
+        x < 0
+        or y < 0
+        or width <= 0
+        or height <= 0
+        or x + width > viewport_width
+        or y + height > viewport_height
+    ):
+        return None
+    observed = " ".join(line.text for line in ocr(backend.screenshot(), region=region))
+    normalized = _normalized_identity(observed)
+    if not all(_normalized_identity(part) in normalized for part in identity_parts):
+        return None
+    return region
+
+
+def _prime_patient_context(host: _Host, backend: Any):
+    """Select the real target through the app, then clear only its query text."""
+    rows_before = host.rows()
+    target = next((row for row in rows_before if row["id"] == TARGET_ID), None)
+    if target is None:
+        raise AssertionError("fixture target record is unavailable")
+    identity_parts = tuple(
+        str(target[field]) for field in ("first", "last", "dob") if target[field]
+    )
+    if len(identity_parts) != 3 or any(row["note"] for row in rows_before):
+        raise AssertionError(
+            "fixture target identity or blank-note precondition failed"
+        )
+
+    points = _points(backend)
+    backend.click(*points["searchBox"])
+    backend.type_text(DEMO_SEARCH)
+    backend.press("Enter")
+    deadline = time.monotonic() + 30
+    region = None
+    while time.monotonic() < deadline:
+        region = _live_patient_header(backend, identity_parts)
+        if region is not None:
+            break
+        time.sleep(0.1)
+    if region is None:
+        raise AssertionError("live patient identity header was not verified")
+
+    # The selected record and its visible identity remain in place while the
+    # query is cleared, so the recorded search still starts with that identity
+    # visibly present before the first recorded action.
+    backend.click(*points["searchBox"])
+    backend.press("ControlOrMeta+a")
+    backend.press("Backspace")
+    if _live_patient_header(backend, identity_parts) != region:
+        raise AssertionError("patient identity header changed while clearing query")
+    if host.rows() != rows_before:
+        raise AssertionError("read-only patient selection changed the fixture records")
+    return region, identity_parts, points
+
+
+def _assert_recorded_patient_identity(
+    recording: Path,
+    identifier_region: tuple[int, int, int, int],
+    identity_parts: tuple[str, ...],
+) -> None:
+    """Check the marked region in each recorded click's exact before-frame."""
+    from openadapt_flow import sealed_set
+    from openadapt_flow.vision.ocr import ocr
+
+    events = [
+        json.loads(line)
+        for line in sealed_set.read_text(recording / "events.jsonl").splitlines()
+        if line.strip()
+    ]
+    clicks = [event for event in events if event.get("kind") == "click"]
+    if len(clicks) != len(CONTROLS):
+        raise AssertionError("recorded click denominator changed")
+    for event in clicks:
+        frame = sealed_set.read_bytes(
+            recording / "frames" / f"{int(event['i']):04d}_before.png"
+        )
+        observed = " ".join(line.text for line in ocr(frame, region=identifier_region))
+        normalized = _normalized_identity(observed)
+        if not all(_normalized_identity(part) in normalized for part in identity_parts):
+            raise AssertionError("recorded click before-frame lacks target identity")
+
+
 @dataclass(frozen=True)
 class _Result:
     status: int
@@ -154,9 +255,13 @@ class _CampaignHost:
         backend: Any,
         guest: _LocalGuest,
         expected_identity: tuple[str, str, str, str],
+        identifier_region: tuple[int, int, int, int],
+        patient_identity_parts: tuple[str, ...],
     ) -> None:
         self.host, self.prototype, self.guest = host, backend, guest
         self.expected_identity = expected_identity
+        self.identifier_region = identifier_region
+        self.patient_identity_parts = patient_identity_parts
         self._backends: list[Any] = []
         self._controllers: list[Any] = []
         self.sessions: list[dict[str, Any]] = []
@@ -205,8 +310,18 @@ class _CampaignHost:
 
     def reset(self) -> None:
         self.host.launch_app()
-        _points(self.prototype)
-        assert all(row["note"] == "" for row in self.host.rows())
+        region, identity_parts, _points_by_id = _prime_patient_context(
+            self.host, self.prototype
+        )
+        if (
+            region != self.identifier_region
+            or identity_parts != self.patient_identity_parts
+        ):
+            raise AssertionError(
+                "trial reset changed the marked patient identity region"
+            )
+        if any(row["note"] != "" for row in self.host.rows()):
+            raise AssertionError("trial reset did not restore blank patient notes")
 
     def open(self):
         import requests
@@ -410,7 +525,9 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
         assert {"typed_input_v1", "uia_v1"}.issubset(backend.agent_capabilities())
         assert "legacy_exec" not in backend.agent_capabilities()
         host.launch_app()
-        points = _points(backend)
+        identifier_region, patient_identity_parts, points = _prime_patient_context(
+            host, backend
+        )
         observed = backend.qualification_environment_identity()
         assert observed is not None
         executable = shutil.which("powershell.exe")
@@ -431,6 +548,7 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
             "application_version": observed[1],
         }
         before_demo = {row["id"]: row for row in host.rows()}
+        assert all(row["note"] == "" for row in before_demo.values())
 
         def driver(rec) -> None:
             rec.click(*points["searchBox"])
@@ -444,7 +562,15 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
             rec.click(*points["saveButton"])
             time.sleep(0.4)
 
-        recording = record_desktop_demo(backend, root / "recording", driver)
+        recording = record_desktop_demo(
+            backend,
+            root / "recording",
+            driver,
+            identifier_region=identifier_region,
+        )
+        _assert_recorded_patient_identity(
+            recording, identifier_region, patient_identity_parts
+        )
         expected = {key: dict(row) for key, row in before_demo.items()}
         expected[TARGET_ID]["note"] = DEMO_NOTE
         assert {row["id"]: row for row in host.rows()} == expected
@@ -453,6 +579,14 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
         coverage = structural_armed_coverage(workflow)
         assert coverage["armed_coverage"] == 1.0
         assert coverage["click_steps"] == len(CONTROLS)
+        click_steps = [
+            step
+            for step in workflow.steps
+            if step.anchor is not None and step.anchor.structural is not None
+        ]
+        assert len(click_steps) == len(CONTROLS)
+        assert all(step.identity_armed for step in click_steps)
+        assert all(step.anchor.identifier_crop for step in click_steps)
         saves = [
             step
             for step in workflow.steps
@@ -462,7 +596,14 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
         ]
         assert len(saves) == 1 and saves[0].identity_armed
         guest = _LocalGuest(guest_root)
-        owner = _CampaignHost(host, backend, guest, observed)
+        owner = _CampaignHost(
+            host,
+            backend,
+            guest,
+            observed,
+            identifier_region,
+            patient_identity_parts,
+        )
         _SESSIONS[name] = owner
         config = parse_verify_config(
             {

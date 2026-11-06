@@ -13,8 +13,10 @@ import io
 import json
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
+from openadapt_flow import sealed_set
 from openadapt_flow.adapters.desktop_recorder import (
     record_desktop_demo,
     structural_armed_coverage,
@@ -91,6 +93,123 @@ def test_record_desktop_demo_arms_structural_per_click(tmp_path: Path) -> None:
     assert clicks[1]["structural"]["automation_id"] == "btn_60_90"
     for c in clicks:
         assert c["structural"]["role"] == "button"
+    assert "identifier_region" not in json.loads(
+        sealed_set.read_text(out / "meta.json")
+    )
+
+
+def test_record_desktop_demo_stamps_operator_marked_identifier_region(
+    tmp_path: Path,
+) -> None:
+    backend = FakeStructuralBackend()
+    out = record_desktop_demo(
+        backend,
+        tmp_path / "recording",
+        lambda rec: rec.click(20, 30),
+        identifier_region=(10, 11, 40, 20),
+        settle_interval_s=0.01,
+        settle_stable_frames=1,
+        settle_timeout_s=0.5,
+    )
+
+    assert json.loads(sealed_set.read_text(out / "meta.json"))["identifier_region"] == [
+        10,
+        11,
+        40,
+        20,
+    ]
+
+
+@pytest.mark.parametrize(
+    "region",
+    [
+        [10, 11, 40, 20],
+        (10, 11, 40, True),
+        (-1, 11, 40, 20),
+        (10, 11, 0, 20),
+        (190, 11, 20, 20),
+        (10, 111, 20, 20),
+    ],
+)
+def test_invalid_identifier_region_refuses_before_recording(
+    tmp_path: Path, region: object
+) -> None:
+    backend = FakeStructuralBackend()
+    out = tmp_path / "recording"
+    driver_called = False
+
+    def driver(_rec) -> None:
+        nonlocal driver_called
+        driver_called = True
+
+    with pytest.raises(ValueError, match="identifier_region"):
+        record_desktop_demo(
+            backend,
+            out,
+            driver,
+            identifier_region=region,  # type: ignore[arg-type]
+        )
+
+    assert not driver_called
+    assert not out.exists()
+
+
+def test_identifier_region_stamp_uses_enclosing_sealed_writer(tmp_path: Path) -> None:
+    backend = FakeStructuralBackend()
+    out = tmp_path / "recording"
+    passphrase = "synthetic desktop recorder test key"
+
+    with sealed_set.writing(out, "recording", passphrase):
+        record_desktop_demo(
+            backend,
+            out,
+            lambda rec: rec.click(20, 30),
+            identifier_region=(10, 11, 40, 20),
+            settle_interval_s=0.01,
+            settle_stable_frames=1,
+            settle_timeout_s=0.5,
+        )
+
+    assert not (out / "meta.json").exists()
+    opened = sealed_set.SealedSet.open(out, passphrase, expect="recording")
+    assert json.loads(opened.read_bytes("meta.json"))["identifier_region"] == [
+        10,
+        11,
+        40,
+        20,
+    ]
+    opened.verify_all()
+
+
+def test_marked_recording_failure_preserves_enclosing_sealed_writer(
+    tmp_path: Path,
+) -> None:
+    backend = FakeStructuralBackend()
+    out = tmp_path / "recording"
+    passphrase = "synthetic desktop recorder failure key"
+
+    def fail_after_recording_action(rec) -> None:
+        rec.click(20, 30)
+        raise RuntimeError("synthetic driver failure")
+
+    with sealed_set.writing(out, "recording", passphrase):
+        with pytest.raises(RuntimeError, match="synthetic driver failure"):
+            record_desktop_demo(
+                backend,
+                out,
+                fail_after_recording_action,
+                identifier_region=(10, 11, 40, 20),
+                settle_interval_s=0.01,
+                settle_stable_frames=1,
+                settle_timeout_s=0.5,
+            )
+        # The failed Recorder must unregister only a writer it owns. The outer
+        # context still owns this set and can seal subsequent writes.
+        sealed_set.write_text(out / "meta.json", "{}")
+
+    opened = sealed_set.SealedSet.open(out, passphrase, expect="recording")
+    assert opened.read_bytes("meta.json") == b"{}"
+    opened.verify_all()
 
 
 # -- structural_armed_coverage metric ----------------------------------------
