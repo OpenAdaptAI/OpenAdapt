@@ -351,6 +351,7 @@ class WindowsPixelFaultDriver:
         self._key = key or new_local_test_key(key_id)
         self.attestation_key_id = self._key.key_id
         self.public_key_base64 = self._key.public_key_base64
+        self.declined: Optional[str] = None
 
     @staticmethod
     def mutation_bytes(kind: str) -> bytes:
@@ -359,6 +360,7 @@ class WindowsPixelFaultDriver:
     def mutate(
         self, context: QualificationFaultContext
     ) -> Optional[QualificationFaultMutation]:
+        self.declined = None
         kind = context.fault_kind
         replacement: Any = context.effect_verifier
         replace_effect_verifier = False
@@ -376,19 +378,24 @@ class WindowsPixelFaultDriver:
                 or getattr(self._controller, "qualification_target_kind", None)
                 != "windows"
             ):
+                self.declined = "screen_fault_session_binding_unavailable"
                 return None
             apply_fault = getattr(self._controller, "apply_screen_fault", None)
             if not callable(apply_fault):
+                self.declined = "screen_fault_controller_unavailable"
                 return None
             try:
                 changed = apply_fault(context, step)
                 if changed is not True:
+                    self.declined = "screen_fault_controller_declined"
                     return None
                 after_frame = context.capture_frame()
             except Exception:  # noqa: BLE001 - unsupported/failed controller declines
+                self.declined = "screen_fault_controller_failed"
                 return None
             after = sha256_bytes(after_frame)
             if after == context.before_input_sha256:
+                self.declined = "screen_fault_frame_unchanged"
                 return None
         else:
             return None

@@ -277,7 +277,7 @@ def attach_windows_qualification_pixel_fault_controller(
         guest_dir=guest_dir,
         helper_path=helper_path,
     )
-    backend.qualification_pixel_fault_controller = controller
+    setattr(backend, "qualification_pixel_fault_controller", controller)
     return controller
 
 

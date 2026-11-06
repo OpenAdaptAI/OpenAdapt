@@ -40,7 +40,7 @@ import shutil
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional, Protocol
 
 from openadapt_flow import __version__ as FLOW_VERSION
 from openadapt_flow.ir import RunReport, Workflow
@@ -64,10 +64,7 @@ from openadapt_flow.qualify.config import (
     QualifyConfigError,
     VerifyConfig,
 )
-from openadapt_flow.qualify.environment import (
-    observe_campaign_environment,
-    web_environment_digest,
-)
+from openadapt_flow.qualify.environment import observe_campaign_environment
 from openadapt_flow.qualify.faults import WebFaultDriver, WindowsPixelFaultDriver
 from openadapt_flow.qualify.keys import LocalTestKey, new_local_test_key
 from openadapt_flow.qualify.windows_pixel_fault_controller import (
@@ -419,6 +416,17 @@ _NATIVE_FAULT_CAPABILITIES = frozenset(
 )
 
 
+class _CampaignFaultDriver(QualificationFaultDriver, Protocol):
+    """Driver details used by the campaign recorder beyond the runtime API."""
+
+    attestation_key_id: str
+    public_key_base64: str
+    declined: Optional[str]
+
+    @staticmethod
+    def mutation_bytes(kind: str) -> bytes: ...
+
+
 def _driver_binding(driver: Any) -> tuple[str, str, str, str]:
     """Read the identity the existing runtime fault-driver protocol binds."""
 
@@ -449,7 +457,7 @@ def _campaign_session_components(
 ) -> tuple[
     QualificationEnvironmentObserver,
     QualificationEnvironmentObservation,
-    Optional[QualificationFaultDriver],
+    Optional[_CampaignFaultDriver],
     list[str],
 ]:
     """Bind one live session to its observer and actual backend capabilities."""
@@ -492,7 +500,7 @@ def _campaign_session_components(
         application_identity=app.application_identity,
     )
     controller = getattr(backend, "qualification_pixel_fault_controller", None)
-    driver: Optional[QualificationFaultDriver] = None
+    driver: Optional[_CampaignFaultDriver] = None
     if require_fault_driver:
         if (
             type(controller) is not WindowsQualificationPixelFaultController
@@ -556,7 +564,7 @@ def _campaign_session_components(
 class CampaignSetup:
     runner_key: LocalTestKey
     fault_key: LocalTestKey
-    driver: QualificationFaultDriver
+    driver: _CampaignFaultDriver
     observer: QualificationEnvironmentObserver
     environment: QualificationEnvironmentObservation
     required_capabilities: list[str]
@@ -570,7 +578,7 @@ def configure_project(
     params: Mapping[str, str],
     environment: QualificationEnvironmentObservation,
     observer: QualificationEnvironmentObserver,
-    driver: QualificationFaultDriver,
+    driver: _CampaignFaultDriver,
     required_capabilities: list[str],
     campaign_id: str,
     minimum_effect_tier: Any,
@@ -1610,6 +1618,8 @@ def qualify(
                 fault_key=native_fault_key,
             )
         )
+        if driver is None:
+            raise QualifyConfigError("qualification session has no fault driver")
         if native_preflight is not None:
             preflight_observer, preflight_environment, preflight_driver, _caps = (
                 native_preflight
@@ -2025,7 +2035,7 @@ def qualify(
         notes=notes,
         reports=reports,
         observer=setup.observer,
-        environment_digest=web_environment_digest(environment),
+        environment_digest=environment.environment_digest,
         result=qresult,
         admission_note=admission_note,
         lookup=lookup_record,
