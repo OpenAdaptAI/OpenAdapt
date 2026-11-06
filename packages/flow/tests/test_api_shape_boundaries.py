@@ -496,9 +496,9 @@ def test_capture_waits_for_a_delayed_native_submit(tmp_path, site_page):
 
 def test_capture_wait_ignores_prior_post_with_rounded_same_timestamp():
     post_url = "http://127.0.0.1/publish"
-    click_started = time.monotonic() + 0.01
-    click_t = round(click_started - 0.101, 3)
-    prior_post_t = click_t - 0.001
+    click_started = time.monotonic()
+    t0 = click_started - 0.1004
+    prior_post_t = round(0.1001, 3)
 
     class Capture:
         def lines(self, t0_monotonic):
@@ -515,12 +515,12 @@ def test_capture_wait_ignores_prior_post_with_rounded_same_timestamp():
         def wait_for_timeout(self, milliseconds):
             time.sleep(milliseconds / 1000)
 
-    assert round(click_t - prior_post_t, 3) == 0.001
+    assert round(click_started - t0, 3) == prior_post_t == 0.1
     assert not _wait_for_captured_post(
         Capture(),
         Page(),
         post_url,
-        t0=click_started - 0.101,
+        t0=t0,
         click_started=click_started,
         sequence_checkpoint=5,
         timeout_s=0.02,
