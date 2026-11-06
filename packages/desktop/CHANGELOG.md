@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.26.1 (2026-11-05)
+
+### Features
+
+- Ask before sending Desktop usage stats; add a daily update check
+
+### Bug Fixes
+
+- **desktop**: honor TELEMETRY=0 and stop stale update GET clobber
+
+
 ## v0.26.0 (2026-11-03)
 
 ### Features
