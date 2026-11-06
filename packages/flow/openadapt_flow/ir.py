@@ -55,6 +55,7 @@ if TYPE_CHECKING:
     # Type-only import for the Step.effects forward reference. The RUNTIME
     # import is at the BOTTOM of this module (see the note there) to avoid a
     # circular import through openadapt_flow.runtime's package init.
+    from openadapt_flow.locale_invariants import LocaleInvariants
     from openadapt_flow.qualification import QualificationProject
     from openadapt_flow.runtime.effects.effect import Effect
 
@@ -3317,6 +3318,9 @@ class Workflow(BaseModel):
     # or a hosted run summary. Empty for browser/native bundles, preserving
     # their serialized form through the compatibility serializer below.
     backend_hints: Optional[BackendHints] = None
+    #: Locale, date order and keyboard layout recorded with the demonstration
+    #: (#1897). Checked before replay; omitted from serialized bytes when unset.
+    locale_invariants: Optional["LocaleInvariants"] = None
     # -- surface binding (roadmap Section 5) --------------------------------
     # The exact execution surface this workflow was recorded/qualified on and
     # the execution mode that surface implies. A bound workflow refuses to run
@@ -3436,6 +3440,8 @@ class Workflow(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.backend_hints is None:
             data.pop("backend_hints", None)
+        if self.locale_invariants is None:
+            data.pop("locale_invariants", None)
         if self.surface is None:
             data.pop("surface", None)
         if self.execution_mode is None:
@@ -6422,6 +6428,7 @@ class RunReport(BaseModel):
 # OCR/cv2/model deps) runtime package loads cleanly and Step's schema can be
 # completed. Effect enters this module's globals so ``model_rebuild`` resolves
 # the forward reference; bundles with no effects are unaffected.
+from openadapt_flow.locale_invariants import LocaleInvariants  # noqa: E402,F401
 from openadapt_flow.qualification import QualificationProject  # noqa: E402,F401
 from openadapt_flow.runtime.effects.effect import Effect  # noqa: E402,F401
 
