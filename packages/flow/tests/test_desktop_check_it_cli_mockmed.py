@@ -40,20 +40,13 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 import openadapt_flow.__main__ as main  # noqa: E402
+from openadapt_flow.approval_mode.approver_roster import ROOT_ENV  # noqa: E402
 from openadapt_flow.backends.playwright_backend import PlaywrightBackend  # noqa: E402
 from openadapt_flow.compiler import compile_recording  # noqa: E402
 from openadapt_flow.ir import RunReport, Workflow  # noqa: E402
 from openadapt_flow.jit.authority import KEY_PASSPHRASE_ENV  # noqa: E402
-from openadapt_flow.approval_mode.approver_roster import ROOT_ENV  # noqa: E402
 from openadapt_flow.jit.lifecycle import KEY_DIR_ENV  # noqa: E402
 from openadapt_flow.mockmed.fault_server import serve  # noqa: E402
-from openadapt_flow.qualify.environment import (  # noqa: E402
-    WEB_OBSERVER_CONTRACT_SHA256,
-    WEB_OBSERVER_ID,
-    WebEnvironmentObserver,
-    web_environment_digest,
-    web_environment_payload,
-)
 from openadapt_flow.qualification import (  # noqa: E402
     ActionRiskClass,
     ActionRiskClassification,
@@ -83,6 +76,13 @@ from openadapt_flow.qualification_faults import (  # noqa: E402
     FaultMutationReceipt,
     expected_fault_detector,
     fault_detector_contract_error,
+)
+from openadapt_flow.qualify.environment import (  # noqa: E402
+    WEB_OBSERVER_CONTRACT_SHA256,
+    WEB_OBSERVER_ID,
+    WebEnvironmentObserver,
+    web_environment_digest,
+    web_environment_payload,
 )
 from openadapt_flow.runtime.authorization import (  # noqa: E402
     runtime_inputs_bytes,
@@ -186,7 +186,7 @@ def _records(base_url: str) -> list[dict[str, Any]]:
 
 
 @pytest.fixture(scope="module")
-def check_it(tmp_path_factory: pytest.TempPathFactory):
+def check_it(tmp_path_factory: pytest.TempPathFactory, module_durable_authority):
     work = tmp_path_factory.mktemp("desktop-check-it")
     home = work / "openadapt-home"
     saved_env = {
@@ -552,6 +552,7 @@ def test_flow_accepts_every_case_result_desktop_records(check_it):
 
 def test_run_it_saves_once_after_approval_and_never_saves_a_form_nobody_sees(
     check_it,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     """Run it: ``run --approval-mode each_item``, through the CLI.
 
@@ -570,6 +571,11 @@ def test_run_it_saves_once_after_approval_and_never_saves_a_form_nobody_sees(
     outcome: MockMed's record store is the check here.
     """
 
+    # Match the CLI children's saved environment after function isolation.
+    monkeypatch.setenv(
+        "OPENADAPT_DURABLE_AUTHORITY_DB",
+        check_it.env["OPENADAPT_DURABLE_AUTHORITY_DB"],
+    )
     base_url = check_it.base_url
     demo._http_json(f"{base_url}api/reset", method="POST", body={})
     params_file = check_it.work / "run-it-params.json"
