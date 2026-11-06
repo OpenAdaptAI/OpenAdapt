@@ -34,6 +34,10 @@ REFUSAL_STAGES = frozenset(
         "liveness",
         "focus_missing_tool",
         "focus_nonzero",
+        "focus_display_open",
+        "focus_reported_pointer_root",
+        "focus_badwindow_property",
+        "focus_sane_query",
         "focus_timeout",
         "focus_malformed",
         "focus_none",
@@ -204,6 +208,46 @@ def witness_ppm(nonce: str, connection: str, guest: str) -> bytes:
     return b"P6\n52 52\n255\n" + pixels
 
 
+def focus_failure_stage(stderr: object) -> str:
+    """Project only complete known xdotool/Xlib diagnostics; never raw text.
+
+    These are observations of a refused command, not permission to use focus.
+    Unknown versions, extra lines and malformed output keep the generic refusal.
+    """
+    if type(stderr) is not bytes or len(stderr) > 8192:
+        return "focus_nonzero"
+    pointer_root = (
+        b"XGetInputFocus returned the focused window of 1. "
+        b"This is likely a bug in the X server.\n"
+    )
+    badwindow = (
+        rb"X Error of failed request:  BadWindow \(invalid Window parameter\)\n"
+        rb"  Major opcode of failed request:  20 \(X_GetProperty\)\n"
+        rb"  Resource id in failed request:  0x[0-9a-fA-F]{1,16}\n"
+        rb"  Serial number of failed request:  [0-9]{1,20}\n"
+        rb"  Current serial number in output stream:  [0-9]{1,20}\n"
+    )
+    if re.fullmatch(badwindow, stderr):
+        return "focus_badwindow_property"
+    if stderr.startswith(pointer_root) and re.fullmatch(
+        badwindow.replace(rb"0x[0-9a-fA-F]{1,16}", rb"0x1"),
+        stderr[len(pointer_root) :]
+    ):
+        return "focus_reported_pointer_root"
+    if re.fullmatch(
+        rb"Error: Can't open display: [\x20-\x7e]{1,128}\n"
+        rb"Failed creating new xdo instance\n",
+        stderr,
+    ):
+        return "focus_display_open"
+    if stderr == (
+        b"xdo_get_focused_window_sane failed (code=1)\n"
+        b"xdo_focus_window reported an error\n"
+    ):
+        return "focus_sane_query"
+    return "focus_nonzero"
+
+
 def focus(env: dict[str, str], *, stage: list[str] | None = None) -> int:
     outer_stage = stage[0] if stage is not None else None
     try:
@@ -218,9 +262,9 @@ def focus(env: dict[str, str], *, stage: list[str] | None = None) -> int:
         if stage is not None:
             stage[0] = "focus_missing_tool"
         raise
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as error:
         if stage is not None:
-            stage[0] = "focus_nonzero"
+            stage[0] = focus_failure_stage(error.stderr)
         raise
     except subprocess.TimeoutExpired:
         if stage is not None:
