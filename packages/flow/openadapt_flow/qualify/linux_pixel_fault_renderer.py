@@ -56,26 +56,37 @@ def display_identity(display: str) -> dict[str, Any]:
     start = process_start(pid)
     after = path.lstat()
     if (before.st_dev, before.st_ino, before.st_ctime_ns) != (
-        after.st_dev, after.st_ino, after.st_ctime_ns
+        after.st_dev,
+        after.st_ino,
+        after.st_ctime_ns,
     ):
         raise ValueError("X11 socket generation changed")
     return {
         "schema": "openadapt.linux-x11-display/v1",
-        "pid": pid, "uid": uid, "start_ticks": start,
-        "socket_device": after.st_dev, "socket_inode": after.st_ino,
+        "pid": pid,
+        "uid": uid,
+        "start_ticks": start,
+        "socket_device": after.st_dev,
+        "socket_inode": after.st_ino,
         "socket_ctime_ns": after.st_ctime_ns,
         "boot_id": Path("/proc/sys/kernel/random/boot_id").read_text().strip(),
     }
 
 
 def identity_digest(identity: dict[str, Any]) -> str:
-    return hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return hashlib.sha256(
+        json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
 
 
 def rectangle(value: Any, viewport: tuple[int, int]) -> tuple[int, int, int, int]:
     if isinstance(value, dict) and set(value) == {"x", "y", "width", "height"}:
         value = [value[key] for key in ("x", "y", "width", "height")]
-    if not isinstance(value, (list, tuple)) or len(value) != 4 or any(type(v) is not int for v in value):
+    if (
+        not isinstance(value, (list, tuple))
+        or len(value) != 4
+        or any(type(v) is not int for v in value)
+    ):
         raise ValueError("invalid rectangle")
     x, y, w, h = value
     if min(x, y) < 0 or min(w, h) <= 0 or x + w > viewport[0] or y + h > viewport[1]:
@@ -89,22 +100,44 @@ def overlap(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> bool:
     return x < u + c and u < x + w and y < v + d and v < y + h
 
 
-def validate_request(request: dict[str, Any], binding: str, viewport: tuple[int, int]) -> tuple[int, int, int, int]:
-    if (not isinstance(request, dict) or not NONCE.fullmatch(str(request.get("nonce", "")))
-        or not HEX64.fullmatch(binding) or len(viewport) != 2
-        or any(type(v) is not int or not 0 < v <= 8192 for v in viewport)):
+def validate_request(
+    request: dict[str, Any], binding: str, viewport: tuple[int, int]
+) -> tuple[int, int, int, int]:
+    if (
+        not isinstance(request, dict)
+        or not NONCE.fullmatch(str(request.get("nonce", "")))
+        or not HEX64.fullmatch(binding)
+        or len(viewport) != 2
+        or any(type(v) is not int or not 0 < v <= 8192 for v in viewport)
+    ):
         raise ValueError("invalid task binding")
     if request.get("schema") == PAIRING:
-        if (set(request) != {"schema", "operation", "nonce", "connection_digest", "viewport", "region", "lifetime_seconds"}
+        if (
+            set(request)
+            != {
+                "schema",
+                "operation",
+                "nonce",
+                "connection_digest",
+                "viewport",
+                "region",
+                "lifetime_seconds",
+            }
             or request["operation"] != "pairing_witness"
-            or request["connection_digest"] != binding or request["viewport"] != list(viewport)
-            or type(request["lifetime_seconds"]) is not int or not 1 <= request["lifetime_seconds"] <= 300):
+            or request["connection_digest"] != binding
+            or request["viewport"] != list(viewport)
+            or type(request["lifetime_seconds"]) is not int
+            or not 1 <= request["lifetime_seconds"] <= 300
+        ):
             raise ValueError("invalid pairing request")
         region = rectangle(request["region"], viewport)
         if region[2:] != (52, 52):
             raise ValueError("invalid witness dimensions")
         return region
-    if request.get("schema") != FAULT or request.get("session_identity_sha256") != binding:
+    if (
+        request.get("schema") != FAULT
+        or request.get("session_identity_sha256") != binding
+    ):
         raise ValueError("invalid fault binding")
     if request.get("screen") != {"width": viewport[0], "height": viewport[1]}:
         raise ValueError("changed viewport")
@@ -117,12 +150,19 @@ def validate_request(request: dict[str, Any], binding: str, viewport: tuple[int,
             raise ValueError("invalid ambiguity request")
         duplicate = rectangle(request["duplicate"], viewport)
         pad = request["search_pad"]
-        if (type(pad) is not int or not 0 < pad <= max(viewport) or duplicate[2:] != target[2:]
-            or overlap(target, duplicate) or abs(duplicate[0] - target[0]) > pad
-            or abs(duplicate[1] - target[1]) > pad):
+        if (
+            type(pad) is not int
+            or not 0 < pad <= max(viewport)
+            or duplicate[2:] != target[2:]
+            or overlap(target, duplicate)
+            or abs(duplicate[0] - target[0]) > pad
+            or abs(duplicate[1] - target[1]) > pad
+        ):
             raise ValueError("duplicate outside original search area")
         return duplicate
-    if request.get("kind") not in {"wrong_identity", "stale_identity"} or set(request) != base | {"identifier_region"}:
+    if request.get("kind") not in {"wrong_identity", "stale_identity"} or set(
+        request
+    ) != base | {"identifier_region"}:
         raise ValueError("unsupported fault")
     region = rectangle(request["identifier_region"], viewport)
     if region[2] * region[3] > viewport[0] * viewport[1] // 2:
@@ -131,9 +171,13 @@ def validate_request(request: dict[str, Any], binding: str, viewport: tuple[int,
 
 
 def witness_ppm(nonce: str, connection: str, guest: str) -> bytes:
-    if not NONCE.fullmatch(nonce) or not all(HEX64.fullmatch(v) for v in (connection, guest)):
+    if not NONCE.fullmatch(nonce) or not all(
+        HEX64.fullmatch(v) for v in (connection, guest)
+    ):
         raise ValueError("invalid witness identities")
-    digest = hashlib.sha256("\0".join((PAIRING, nonce, connection, guest)).encode("ascii")).digest()
+    digest = hashlib.sha256(
+        "\0".join((PAIRING, nonce, connection, guest)).encode("ascii")
+    ).digest()
     pixels = bytearray()
     for y in range(52):
         for x in range(52):
@@ -144,7 +188,13 @@ def witness_ppm(nonce: str, connection: str, guest: str) -> bytes:
 
 
 def focus(env: dict[str, str]) -> int:
-    result = subprocess.run(["/usr/bin/xdotool", "getwindowfocus"], env=env, capture_output=True, timeout=3, check=True)
+    result = subprocess.run(
+        ["/usr/bin/xdotool", "getwindowfocus"],
+        env=env,
+        capture_output=True,
+        timeout=3,
+        check=True,
+    )
     value = result.stdout.strip()
     if not value.isdigit() or int(value) <= 1:
         raise ValueError("display focus unavailable")
@@ -178,8 +228,22 @@ def render(envelope: dict[str, Any]) -> None:
     elif request["kind"] == "ambiguity":
         x, y, w, h = rectangle(request["target"], viewport)
         result = subprocess.run(
-            ["/usr/bin/import", "-display", display, "-window", "root", "-crop", f"{w}x{h}+{x}+{y}", "-depth", "8", "ppm:-"],
-            env=env, capture_output=True, timeout=3, check=True,
+            [
+                "/usr/bin/import",
+                "-display",
+                display,
+                "-window",
+                "root",
+                "-crop",
+                f"{w}x{h}+{x}+{y}",
+                "-depth",
+                "8",
+                "ppm:-",
+            ],
+            env=env,
+            capture_output=True,
+            timeout=3,
+            check=True,
         )
         pixels = result.stdout
         if len(pixels) > w * h * 6 + 4096:
@@ -195,7 +259,15 @@ def render(envelope: dict[str, Any]) -> None:
         root.overrideredirect(True)
         root.attributes("-topmost", True)
         root.geometry(f"{w}x{h}+{x}+{y}")
-        canvas = tk.Canvas(root, width=w, height=h, highlightthickness=0, borderwidth=0, background="white", takefocus=0)
+        canvas = tk.Canvas(
+            root,
+            width=w,
+            height=h,
+            highlightthickness=0,
+            borderwidth=0,
+            background="white",
+            takefocus=0,
+        )
         canvas.pack()
         if pixels is not None:
             picture = tk.PhotoImage(data=pixels, format="PPM", master=root)
@@ -203,22 +275,44 @@ def render(envelope: dict[str, Any]) -> None:
                 raise ValueError("image dimensions changed")
             canvas.create_image(0, 0, image=picture, anchor="nw")
         else:
-            text = "Different record" if request["kind"] == "wrong_identity" else "Identity unavailable"
-            canvas.create_text(2, h // 2, text=text, anchor="w", fill="black", font=("DejaVu Sans", 14))
-        if display_identity(display) != expected or focus(env) != focused or time.monotonic() >= expires:
+            text = (
+                "Different record"
+                if request["kind"] == "wrong_identity"
+                else "Identity unavailable"
+            )
+            canvas.create_text(
+                2, h // 2, text=text, anchor="w", fill="black", font=("DejaVu Sans", 14)
+            )
+        if (
+            display_identity(display) != expected
+            or focus(env) != focused
+            or time.monotonic() >= expires
+        ):
             raise ValueError("display changed before mapping")
         root.deiconify()
         root.update()
-        if (display_identity(display) != expected or focus(env) != focused or time.monotonic() >= expires
-            or (root.winfo_rootx(), root.winfo_rooty(), root.winfo_width(), root.winfo_height()) != region):
+        if (
+            display_identity(display) != expected
+            or focus(env) != focused
+            or time.monotonic() >= expires
+            or (
+                root.winfo_rootx(),
+                root.winfo_rooty(),
+                root.winfo_width(),
+                root.winfo_height(),
+            )
+            != region
+        ):
             raise ValueError("overlay changed display focus or geometry")
         print(f"ready:{request['nonce']}:{guest}", flush=True)
 
         def tick() -> None:
             try:
-                current = (time.monotonic() < expires
-                           and display_identity(display) == expected
-                           and focus(env) == focused)
+                current = (
+                    time.monotonic() < expires
+                    and display_identity(display) == expected
+                    and focus(env) == focused
+                )
             except Exception:
                 current = False
             if not current:

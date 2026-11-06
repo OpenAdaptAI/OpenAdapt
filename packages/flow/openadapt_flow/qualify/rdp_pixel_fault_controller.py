@@ -208,10 +208,13 @@ def open_rdp_qualification_session(
         )
         # Track the returned owner before validation so setup failure also closes it.
         task_owners.append(owner)
-        if not all(callable(getattr(owner, name, None)) for name in
-                   ("launch", "wait_ready", "close")):
+        if not all(
+            callable(getattr(owner, name, None))
+            for name in ("launch", "wait_ready", "close")
+        ):
             raise ValueError("session task owner does not implement the task lifecycle")
         return owner
+
     backend: FreeRDPBackend | None = None
     controller: RdpQualificationPixelFaultController | None = None
 

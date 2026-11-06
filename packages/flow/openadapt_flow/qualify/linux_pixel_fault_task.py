@@ -48,7 +48,9 @@ class LinuxPixelTasks:
     ) -> None:
         if not renderer.HEX64.fullmatch(session_binding_sha256):
             raise ValueError("invalid session binding")
-        if server.poll() is not None or any(child.poll() is not None for child in children):
+        if server.poll() is not None or any(
+            child.poll() is not None for child in children
+        ):
             raise ValueError("owned display session is not live")
         self._identity = renderer.display_identity(display)
         if self._identity["pid"] != server.pid:
@@ -75,7 +77,8 @@ class LinuxPixelTasks:
                 and self._server.poll() is None
                 and all(child.poll() is None for child in self._children)
                 and renderer.display_identity(self._display) == self._identity
-                and hashlib.sha256(self._source.read_bytes()).hexdigest() == self._source_digest
+                and hashlib.sha256(self._source.read_bytes()).hexdigest()
+                == self._source_digest
             )
         except Exception:
             return False
@@ -89,23 +92,41 @@ class LinuxPixelTasks:
             raise ValueError("task nonce already used")
         self._nonces.add(nonce)
         encoded = json.dumps(request, sort_keys=True, separators=(",", ":")).encode()
-        envelope = json.dumps({
-            "display": self._display, "identity": self._identity,
-            "viewport": self._viewport, "binding": self._binding, "request": request,
-        }).encode()
+        envelope = json.dumps(
+            {
+                "display": self._display,
+                "identity": self._identity,
+                "viewport": self._viewport,
+                "binding": self._binding,
+                "request": request,
+            }
+        ).encode()
         if len(envelope) > 16384:
             raise ValueError("request too large")
-        lifetime = request["lifetime_seconds"] if request["schema"] == renderer.PAIRING else 8
+        lifetime = (
+            request["lifetime_seconds"] if request["schema"] == renderer.PAIRING else 8
+        )
         started = time.monotonic()
         process = subprocess.Popen(
             ["/usr/bin/python3", "-I", "-S", str(self._source)],
-            env={"PATH": "/usr/bin:/bin", "HOME": str(self._home), "DISPLAY": self._display},
-            cwd=self._home, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            env={
+                "PATH": "/usr/bin:/bin",
+                "HOME": str(self._home),
+                "DISPLAY": self._display,
+            },
+            cwd=self._home,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
         )
         handle = LinuxPixelTaskHandle(
-            process, nonce, self._binding, renderer.identity_digest(self._identity),
-            self._source_digest, hashlib.sha256(encoded).hexdigest(), started + lifetime,
+            process,
+            nonce,
+            self._binding,
+            renderer.identity_digest(self._identity),
+            self._source_digest,
+            hashlib.sha256(encoded).hexdigest(),
+            started + lifetime,
         )
         # Record ownership before writing stdin: a broken pipe still needs close.
         self._handles.append(handle)
@@ -120,9 +141,14 @@ class LinuxPixelTasks:
             self.close()
             raise
 
-    def wait_ready(self, handle: LinuxPixelTaskHandle, *, timeout_s: float = 15) -> str | None:
-        if (not any(handle is owned for owned in self._handles)
-            or type(timeout_s) not in (int, float) or not 0 < timeout_s <= 15):
+    def wait_ready(
+        self, handle: LinuxPixelTaskHandle, *, timeout_s: float = 15
+    ) -> str | None:
+        if (
+            not any(handle is owned for owned in self._handles)
+            or type(timeout_s) not in (int, float)
+            or not 0 < timeout_s <= 15
+        ):
             return None
         deadline = min(handle.deadline, time.monotonic() + timeout_s)
         expected = f"ready:{handle.nonce}:{handle.guest_digest}"
@@ -132,7 +158,11 @@ class LinuxPixelTasks:
         with selectors.DefaultSelector() as selector:
             selector.register(stream, selectors.EVENT_READ)
             data = bytearray()
-            while time.monotonic() < deadline and self._current() and handle.process.poll() is None:
+            while (
+                time.monotonic() < deadline
+                and self._current()
+                and handle.process.poll() is None
+            ):
                 if not selector.select(min(0.1, max(0, deadline - time.monotonic()))):
                     continue
                 chunk = os.read(stream.fileno(), 256)
@@ -142,7 +172,11 @@ class LinuxPixelTasks:
                 if b"\n" in data:
                     if bytes(data) != (expected + "\n").encode("ascii"):
                         return None
-                    if self._current() and handle.process.poll() is None and time.monotonic() < deadline:
+                    if (
+                        self._current()
+                        and handle.process.poll() is None
+                        and time.monotonic() < deadline
+                    ):
                         handle.ready_status = expected
                         return expected
                     return None
