@@ -247,6 +247,8 @@ def test_loopback_six_primary_pixel_cases(tmp_path):
             evidence["sessions"] = [
                 {
                     "phase": s.phase,
+                    "readiness_first": s.readiness_first,
+                    "readiness_last": s.readiness_last,
                     "closed": s.closed,
                     "cleanup_failed": s.cleanup_failed,
                     "child_exits": [p.poll() for p in s.processes],
