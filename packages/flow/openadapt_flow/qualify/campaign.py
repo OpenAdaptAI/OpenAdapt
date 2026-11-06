@@ -65,7 +65,11 @@ from openadapt_flow.qualify.config import (
     VerifyConfig,
 )
 from openadapt_flow.qualify.environment import observe_campaign_environment
-from openadapt_flow.qualify.faults import WebFaultDriver, WindowsPixelFaultDriver
+from openadapt_flow.qualify.faults import (
+    NativePixelFaultDriver,
+    WebFaultDriver,
+    WindowsPixelFaultDriver,
+)
 from openadapt_flow.qualify.keys import LocalTestKey, new_local_test_key
 from openadapt_flow.qualify.windows_pixel_fault_controller import (
     WindowsQualificationPixelFaultController,
@@ -329,7 +333,7 @@ def check_ready(
     if config.app.target == "web" and not config.app.url:
         problems.append("app.url is required for a web qualification campaign")
     if config.app.target != "web":
-        if config.app.target != "windows":
+        if config.app.target not in {"windows", "rdp"}:
             problems.append(
                 f"app.target {config.app.target!r} has no implemented "
                 "session-owned pixel fault controller"
@@ -488,7 +492,7 @@ def _campaign_session_components(
         raise QualifyConfigError(
             "opened session backend does not identify the configured native target"
         )
-    if app.target != "windows":
+    if app.target not in {"windows", "rdp"}:
         raise QualifyConfigError(
             f"native qualification target {app.target!r} has no implemented "
             "session-owned pixel fault controller"
@@ -502,8 +506,16 @@ def _campaign_session_components(
     controller = getattr(backend, "qualification_pixel_fault_controller", None)
     driver: Optional[_CampaignFaultDriver] = None
     if require_fault_driver:
+        if app.target == "windows":
+            controller_type = WindowsQualificationPixelFaultController
+        else:
+            from openadapt_flow.qualify.rdp_pixel_fault_controller import (
+                RdpQualificationPixelFaultController,
+            )
+
+            controller_type = RdpQualificationPixelFaultController
         if (
-            type(controller) is not WindowsQualificationPixelFaultController
+            type(controller) is not controller_type
             or getattr(controller, "qualification_target_kind", None) != app.target
             or getattr(controller, "session_identity_sha256", None)
             != observation.session_identity_sha256
@@ -512,12 +524,21 @@ def _campaign_session_components(
             raise QualifyConfigError(
                 "native session has no matching environment-owned pixel fault controller"
             )
-        driver = WindowsPixelFaultDriver(
-            workflow,
-            controller,
-            key=fault_key,
-            key_id=f"{campaign_id}-fault-driver",
-        )
+        if app.target == "windows":
+            driver = WindowsPixelFaultDriver(
+                workflow,
+                controller,
+                key=fault_key,
+                key_id=f"{campaign_id}-fault-driver",
+            )
+        else:
+            driver = NativePixelFaultDriver(
+                workflow,
+                controller,
+                target_kind="rdp",
+                key=fault_key,
+                key_id=f"{campaign_id}-fault-driver",
+            )
         driver_binding = _driver_binding(driver)
     provider = getattr(backend, "qualification_capabilities", None)
     if not callable(provider):
