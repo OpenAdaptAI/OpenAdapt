@@ -390,9 +390,13 @@ def check_ready(
             f"save step {save.id} has an unconfirmed placeholder record check"
         )
     structural = save.anchor.structural if save.anchor is not None else None
-    if config.app.target == "web" and save.anchor is not None and (
-        structural is None
-        or not (structural.selector or (structural.role and structural.name))
+    if (
+        config.app.target == "web"
+        and save.anchor is not None
+        and (
+            structural is None
+            or not (structural.selector or (structural.role and structural.name))
+        )
     ):
         problems.append(
             f"save step {save.id} has no structural locator (a selector, or a "
@@ -426,7 +430,9 @@ def _driver_binding(driver: Any) -> tuple[str, str, str, str]:
     )
     values = tuple(getattr(driver, name, None) for name in names)
     if any(not isinstance(value, str) or not value for value in values):
-        raise QualifyConfigError("session-owned qualification fault driver is incomplete")
+        raise QualifyConfigError(
+            "session-owned qualification fault driver is incomplete"
+        )
     if not callable(getattr(driver, "mutate", None)):
         raise QualifyConfigError("session-owned qualification fault driver is invalid")
     return values  # type: ignore[return-value]
@@ -1007,7 +1013,9 @@ def _run(
             bundle_dir=bundle_dir,
             run_dir=ctx.run_dir,
             execution_target_kind=config.app.target,
-            execution_origin=(config.app.origin if config.app.target == "web" else None),
+            execution_origin=(
+                config.app.origin if config.app.target == "web" else None
+            ),
             execution_entry_url=(
                 backend.page.url if config.app.target == "web" else None
             ),

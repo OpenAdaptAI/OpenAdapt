@@ -149,9 +149,14 @@ class WindowsQualificationPixelFaultController:
         if (
             not isinstance(environment_identity, tuple)
             or len(environment_identity) != 4
-            or any(not isinstance(value, str) or not value for value in environment_identity)
+            or any(
+                not isinstance(value, str) or not value
+                for value in environment_identity
+            )
         ):
-            raise ValueError("Windows controller needs a complete atomic environment identity")
+            raise ValueError(
+                "Windows controller needs a complete atomic environment identity"
+            )
         session_identity_sha256 = environment_identity[2]
         if not _SHA256.fullmatch(session_identity_sha256):
             raise ValueError("Windows controller needs an opaque session digest")
@@ -221,9 +226,7 @@ class WindowsQualificationPixelFaultController:
             f'-StatusPath "{remote_status}"'
         )
         try:
-            self._lab.launch_interactive(
-                command, name="OAFlowQualificationPixelFault"
-            )
+            self._lab.launch_interactive(command, name="OAFlowQualificationPixelFault")
             deadline = time.monotonic() + _STATUS_TIMEOUT_S
             while time.monotonic() < deadline:
                 status = self._lab.run_ps(
