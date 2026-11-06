@@ -57,6 +57,122 @@ def _close(process: subprocess.Popen[bytes] | None) -> dict:
         return {"started": True, "waited": False, "exit": None}
 
 
+def _verified_wrapper(toplevel: int, proof: dict) -> int:
+    """Bind one hidden wrapper to the exact app window, never any ancestor."""
+    fields = {"root", "parent", "wrapper_root", "wrapper_parent", "children"}
+    if type(proof) is not dict or set(proof) != fields:
+        raise ValueError("wrapper proof shape")
+    ids = [toplevel, *(proof[name] for name in fields - {"children"})]
+    if any(type(value) is not int or not 1 < value < 2**32 for value in ids):
+        raise ValueError("wrapper proof ids")
+    if (
+        len({toplevel, proof["root"], proof["parent"]}) != 3
+        or proof["wrapper_root"] != proof["root"]
+        or proof["wrapper_parent"] != proof["root"]
+        or type(proof["children"]) is not list
+        or len(proof["children"]) != 1
+        or type(proof["children"][0]) is not int
+        or proof["children"][0] != toplevel
+    ):
+        raise ValueError("wrapper relation")
+    return proof["parent"]
+
+
+def _focus_matches(window: int, wrapper: int, *, literal_parent: bool) -> bool:
+    if type(window) is not int or not 0 <= window < 2**32:
+        return False
+    if type(wrapper) is not int or not 1 < wrapper < 2**32:
+        return False
+    return window == (1 if literal_parent else wrapper)
+
+
+def _tree_child(display_name: str, toplevel: int) -> None:
+    """Read exact X relations in isolation; fatal X I/O cannot kill pytest."""
+    import ctypes as c
+    import resource
+
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    if (
+        not display_name.startswith(":")
+        or not display_name[1:].isdigit()
+        or not 0 <= int(display_name[1:]) < 65536
+        or not 1 < toplevel < 2**32
+    ):
+        raise ValueError("tree arguments")
+    lib = c.CDLL("libX11.so.6")
+    window = c.c_ulong
+    children_type = c.POINTER(window)
+    lib.XOpenDisplay.argtypes = [c.c_char_p]
+    lib.XOpenDisplay.restype = c.c_void_p
+    lib.XCloseDisplay.argtypes = [c.c_void_p]
+    lib.XCloseDisplay.restype = c.c_int
+    lib.XQueryTree.argtypes = [
+        c.c_void_p, window, c.POINTER(window), c.POINTER(window),
+        c.POINTER(children_type), c.POINTER(c.c_uint),
+    ]
+    lib.XQueryTree.restype = c.c_int
+    lib.XFree.argtypes = [c.c_void_p]
+    lib.XFree.restype = c.c_int
+    lib.XSync.argtypes = [c.c_void_p, c.c_int]
+    lib.XSync.restype = c.c_int
+    lib.XSetErrorHandler.argtypes = [c.c_void_p]
+    lib.XSetErrorHandler.restype = c.c_void_p
+    failed = [False]
+
+    @c.CFUNCTYPE(c.c_int, c.c_void_p, c.c_void_p)
+    def on_error(_display, _event):
+        failed[0] = True
+        return 0
+
+    lib.XSetErrorHandler(c.cast(on_error, c.c_void_p))
+    display = lib.XOpenDisplay(display_name.encode("ascii"))
+    if not display:
+        raise ValueError("tree display")
+
+    def query(target: int) -> tuple[int, int, list[int]]:
+        root, parent, count = window(), window(), c.c_uint()
+        children = children_type()
+        try:
+            status = lib.XQueryTree(
+                display, target, c.byref(root), c.byref(parent),
+                c.byref(children), c.byref(count),
+            )
+            lib.XSync(display, 0)
+            if not status or failed[0] or count.value > 32 or (count.value and not children):
+                raise ValueError("tree query")
+            return root.value, parent.value, [children[i] for i in range(count.value)]
+        finally:
+            if children:
+                lib.XFree(children)
+
+    try:
+        root, parent, _ = query(toplevel)
+        wrapper_root, wrapper_parent, children = query(parent)
+        proof = {
+            "root": root, "parent": parent, "wrapper_root": wrapper_root,
+            "wrapper_parent": wrapper_parent, "children": children,
+        }
+        _verified_wrapper(toplevel, proof)
+        lib.XSync(display, 0)
+        if failed[0]:
+            raise ValueError("tree query")
+    finally:
+        lib.XCloseDisplay(display)
+    # Handles are private pipe data, never emitted to the safe artifact.
+    print(json.dumps(proof), flush=True)
+
+
+def _read_wrapper(env: dict[str, str], toplevel: int) -> int:
+    observed = subprocess.run(
+        ["/usr/bin/python3", "-I", "-S", str(Path(__file__).resolve()),
+         "--tree", env["DISPLAY"], str(toplevel)],
+        env=env, capture_output=True, timeout=3, check=True,
+    )
+    if len(observed.stdout) > 1024:
+        raise ValueError("tree proof size")
+    return _verified_wrapper(toplevel, json.loads(observed.stdout))
+
+
 def _child(source: Path, digest: str, database: Path) -> None:
     import tkinter as tk
 
@@ -70,7 +186,9 @@ def _child(source: Path, digest: str, database: Path) -> None:
             print(
                 json.dumps(
                     {
-                        "wrapper": int(root.frame(), 0),
+                        # wm frame is not the hidden wrapper on bare Xvfb.
+                        "toplevel": root.winfo_id(),
+                        "wm_frame": int(root.frame(), 0),
                         "mapped": bool(root.winfo_ismapped()),
                         "geometry": [
                             root.winfo_rootx(),
@@ -96,7 +214,7 @@ def _condition(tmp_path: Path, *, literal_parent: bool) -> None:
     out = tmp_path / "fixture-focus"
     out.mkdir()
     result = {
-        "schema": "openadapt.fixture-focus/v1",
+        "schema": "openadapt.fixture-focus/v2",
         "condition": "literal_parent" if literal_parent else "candidate",
         "status": "UNRUN",
         "stage": "source",
@@ -175,15 +293,26 @@ def _condition(tmp_path: Path, *, literal_parent: bool) -> None:
         ready = json.loads(_line(child.stdout.fileno(), 1024, 10))
         if (
             not isinstance(ready, dict)
-            or set(ready) != {"wrapper", "mapped", "geometry", "tk_version"}
-            or type(ready["wrapper"]) is not int
-            or ready["wrapper"] <= 1
+            or set(ready) != {"toplevel", "wm_frame", "mapped", "geometry", "tk_version"}
+            or type(ready["toplevel"]) is not int
+            or not 1 < ready["toplevel"] < 2**32
+            or type(ready["wm_frame"]) is not int
+            or not 1 < ready["wm_frame"] < 2**32
             or type(ready["mapped"]) is not bool
             or not isinstance(ready["tk_version"], str)
             or len(ready["tk_version"]) > 32
             or not all(c in "0123456789.ab" for c in ready["tk_version"])
         ):
             raise ValueError("readiness shape")
+        result["stage"] = "wrapper_relation"
+        if not _owned(server, number) or child.poll() is not None:
+            raise ValueError("server ownership")
+        wrapper = _read_wrapper(env, ready["toplevel"])
+        result.update(
+            exact_parent_relation=True,
+            single_wrapper_child=True,
+            wrapper_is_root_child=True,
+        )
         result["stage"] = "raw_focus"
         # -f returns XGetInputFocus itself, without ancestor/WM_CLASS traversal.
         observed = subprocess.run(
@@ -203,7 +332,8 @@ def _condition(tmp_path: Path, *, literal_parent: bool) -> None:
             else "pointer_root"
             if window == 1
             else "window",
-            raw_focus_matches_owned_wrapper=window == ready["wrapper"],
+            raw_focus_matches_wm_frame=window == ready["wm_frame"],
+            raw_focus_matches_verified_wrapper=window == wrapper,
             mapped=ready["mapped"],
             geometry_exact=ready["geometry"] == [0, 0, 1280, 800],
             tk_version=ready["tk_version"],
@@ -216,7 +346,7 @@ def _condition(tmp_path: Path, *, literal_parent: bool) -> None:
                 db.execute("SELECT id,holder,note FROM accounts ORDER BY id").fetchall()
                 == _ROWS
             )
-        expected = window == 1 if literal_parent else window == ready["wrapper"]
+        expected = _focus_matches(window, wrapper, literal_parent=literal_parent)
         checks = (
             "mapped",
             "geometry_exact",
@@ -278,8 +408,11 @@ def test_fixture_startup_owns_raw_focus(tmp_path: Path) -> None:
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) != 5 or sys.argv[1] != "--child":
+        if len(sys.argv) == 5 and sys.argv[1] == "--child":
+            _child(Path(sys.argv[2]), sys.argv[3], Path(sys.argv[4]))
+        elif len(sys.argv) == 4 and sys.argv[1] == "--tree":
+            _tree_child(sys.argv[2], int(sys.argv[3]))
+        else:
             raise ValueError("child arguments")
-        _child(Path(sys.argv[2]), sys.argv[3], Path(sys.argv[4]))
     except Exception:
         raise SystemExit(1) from None
