@@ -857,3 +857,86 @@ def test_unresolved_owed_deadline_survives_pure_refusal_without_landed_claim(
     assert not list((tmp_path / "authority").rglob("*.inflight"))
     with pytest.raises(api.WriteHeld):
         api.begin_write(cfg, PARAMS, actor=ACTOR, ledger=ledger)
+
+
+@pytest.mark.parametrize(
+    "omit_search,expected", [(False, "CONFIRMED"), (True, "UNCERTAIN")]
+)
+def test_colleague_nonidentity_edit_still_requires_complete_identifying_search(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    server: Any,
+    omit_search: bool,
+    expected: str,
+) -> None:
+    monkeypatch.setenv("OPENADAPT_VERIFIER_STATE_DIR", str(tmp_path / "authority"))
+    store, base = server
+    doc = contract(base).config.model_dump(mode="json", by_alias=True)
+    doc["verifier"]["field_paths"]["note"] = "note"
+    cfg = api.Contract.from_dict(doc)
+    ledger = api.Ledger(api.MemoryLedger())
+    pending = api.begin_write(
+        cfg, PARAMS, actor=ACTOR, ledger=ledger, workdir=tmp_path / "runs"
+    )
+    store.save()
+    store.current[RECORD_ID]["note"] = "original-note"
+    store.history[RECORD_ID][-1]["note"] = "original-note"
+    write = api.verify_write(pending, write_attempted=True)
+    assert write.outcome is api.Outcome.CONFIRMED, write.reasons
+    store.save(author="actor/colleague")
+    store.current[RECORD_ID]["note"] = "colleague-note"
+    store.history[RECORD_ID][-1]["note"] = "colleague-note"
+    store.omit_identifying_search = omit_search
+    result = late(cfg, write, ledger)
+    assert result.evidence["targeted"]["legitimate_later_user_edits"] == 1
+    assert result.outcome == expected, result.reasons
+    assert result.evidence["targeted"]["late_search_status"] == (
+        "UNKNOWN" if omit_search else "complete"
+    )
+    assert result.final is (not omit_search)
+
+
+@pytest.mark.parametrize("reference_kind", ["absolute", "versioned", "missing"])
+def test_known_reference_identity_cannot_be_hidden_by_an_empty_search(
+    server: Any,
+    reference_kind: str,
+) -> None:
+    from openadapt_flow.ensure_record import Unreadable
+    from openadapt_flow.fhir_reference import ReferenceUnreadable
+    from openadapt_flow.runtime.effects.fhir import FhirEffectVerifier
+    from openadapt_flow.runtime.effects.targeted import FrameTargeted, _search
+    from tests.test_fhir_reference import schema
+
+    store, base = server
+    data = contract(base).config.frame.targeted.model_dump(mode="json", by_alias=True)
+    data["search"]["fields"] = {"name": {"path": "subject.reference"}}
+    data["search"]["reference_schema"] = schema("Basic", "subject")
+    spec = FrameTargeted.model_validate(data)
+    patient = {"resourceType": "Patient", "id": "person", "meta": {"versionId": "2"}}
+    store.extra_resources["Patient/person"] = patient
+    store.extra_resources["Patient/person/_history/1"] = {
+        **patient,
+        "meta": {"versionId": "1"},
+    }
+    wanted = f"{base}/Patient/person"
+    if reference_kind == "versioned":
+        wanted += "/_history/1"
+    elif reference_kind == "missing":
+        wanted = "Patient/missing"
+    store.save(
+        name="Patient/person", fields={"subject": {"reference": "Patient/person"}}
+    )
+    current = copy.deepcopy(store.current[RECORD_ID])
+    store.omit_identifying_search = True
+    reader = FhirEffectVerifier(base, resource_type="Basic", field_paths={"id": "id"})
+    try:
+        with pytest.raises((Unreadable, ReferenceUnreadable)):
+            _search(
+                spec,
+                reader,
+                {**PARAMS, "name": wanted},
+                "2026-11-05T00:00:00Z",
+                current_records=(current,),
+            )
+    finally:
+        reader._get_session().close()

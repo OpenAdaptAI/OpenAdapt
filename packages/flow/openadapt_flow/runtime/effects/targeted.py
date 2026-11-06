@@ -440,14 +440,30 @@ def _reader(spec: Any, verifier: Any) -> Any:
 
 
 def _search(
-    spec: Any, reader: Any, params: Mapping[str, object], at: str
+    spec: Any,
+    reader: Any,
+    params: Mapping[str, object],
+    at: str,
+    *,
+    current_records: Sequence[Mapping[str, Any]] = (),
 ) -> SearchObservation:
-    from openadapt_flow.ensure_record import FhirReader, find_matches
+    from openadapt_flow.ensure_record import FhirReader, find_matches, is_person
 
     client = FhirReader(
         spec.search, get=lambda url, query: _transport(reader, url, query)
     )
-    matches, count = find_matches(spec.search, client, params)
+    # Bind search completeness to records independently observed by id. A
+    # colleague may change non-identity fields without changing who the
+    # record identifies; an identifying search that omits it is incomplete.
+    references = client.reference_evidence(spec.search, params, current_records)
+    expected_ids = tuple(
+        str(record["id"])
+        for record in current_records
+        if is_person(spec.search, record, params, references)
+    )
+    matches, count = find_matches(
+        spec.search, client, params, expected_ids=expected_ids
+    )
     from openadapt_flow.verify_run import _now
 
     at = _now()
@@ -516,9 +532,9 @@ def capture_targeted(
     reader = _reader(spec, verifier)
     if not targets:
         raise TargetedUnreadable("no independent landed target evidence")
-    search = _search(spec, reader, params, at)
     entries: list[_TargetedRecord] = []
     identities = []
+    current_records: list[Mapping[str, Any]] = []
     for target in targets:
         raw_id = target.get("id")
         identity = _identity(f"{reader.resource_type}/{raw_id}", reader.resource_type)
@@ -527,6 +543,8 @@ def capture_targeted(
         identities.append(identity)
         projected = {k: v for k, v in target.items() if k not in ignore}
         body = _current(spec, reader, identity)
+        if body is not None:
+            current_records.append(body)
         anchor = body is not None and _project(reader, body, ignore) == projected
         meta = body.get("meta") or {} if body is not None else {}
         version = meta.get("versionId") if isinstance(meta, Mapping) else None
@@ -542,6 +560,7 @@ def capture_targeted(
                 else None,
             }
         )
+    search = _search(spec, reader, params, at, current_records=current_records)
     # A successful empty query cannot contradict an independently read target.
     if not set(identities) <= search.matched_ids:
         raise TargetedUnreadable("identifying search omitted a receipt-bound target")
@@ -980,7 +999,17 @@ def observe_targeted(
             )
             if search_problem is not None:
                 raise TargetedUnreadable(search_problem)
-        late_search = _search(spec, reader, params, at)
+        late_search = _search(
+            spec,
+            reader,
+            params,
+            at,
+            current_records=tuple(
+                target.current
+                for target in targets
+                if target.current_status == "present" and target.current is not None
+            ),
+        )
         if (
             late_search.contract_sha256 != stored["contract_sha256"]
             or late_search.schema_sha256 != stored["schema_sha256"]
