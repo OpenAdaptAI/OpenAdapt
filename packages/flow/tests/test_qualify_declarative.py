@@ -314,7 +314,7 @@ def test_windows_pixel_fault_request_contains_only_bounded_geometry():
         "nonce": "a" * 32,
         "kind": "wrong_identity",
         "target": {"x": 12, "y": 30, "width": 80, "height": 24},
-        "identity": {"x": 20, "y": 28, "width": 40, "height": 10},
+        "identifier_region": {"x": 20, "y": 28, "width": 40, "height": 10},
         "screen": {"width": 800, "height": 600},
     }
     assert not {"text", "identity", "screenshot", "workflow"} & set(request)

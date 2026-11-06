@@ -6,21 +6,42 @@ param(
 $ErrorActionPreference = 'Stop'
 $nonce = ''
 $forms = @()
+$bitmaps = @()
 try {
     $request = Get-Content -Raw -LiteralPath $RequestPath | ConvertFrom-Json
-    if ($request.schema -ne 'openadapt.qualification-pixel-fault/v1' -or
-        $request.kind -notin @('ambiguity', 'wrong_identity', 'stale_identity') -or
-        $request.nonce -notmatch '^[a-f0-9]{32}$' -or
-        $request.session_identity_sha256 -notmatch '^[a-f0-9]{64}$') {
-        throw 'invalid request'
+    $isPairing = $request.schema -ceq 'openadapt.rdp-pairing/v1'
+    if ($isPairing) {
+        if ($request.operation -cne 'pairing_witness' -or
+            $request.nonce -notmatch '^[a-f0-9]{32}$' -or
+            $request.connection_digest -notmatch '^[a-f0-9]{64}$' -or
+            $request.lifetime_seconds -isnot [int] -or
+            $request.lifetime_seconds -lt 1 -or $request.lifetime_seconds -gt 300 -or
+            $request.viewport.Count -ne 2 -or $request.region.Count -ne 4 -or
+            [int]$request.region[2] -ne 52 -or [int]$request.region[3] -ne 52) {
+            throw 'invalid pairing request'
+        }
+        $screenWidth = [int]$request.viewport[0]
+        $screenHeight = [int]$request.viewport[1]
+        $x = [int]$request.region[0]
+        $y = [int]$request.region[1]
+        $width = 52
+        $height = 52
+    }
+    else {
+        if ($request.schema -cne 'openadapt.qualification-pixel-fault/v1' -or
+            $request.kind -notin @('ambiguity', 'wrong_identity', 'stale_identity') -or
+            $request.nonce -notmatch '^[a-f0-9]{32}$' -or
+            $request.session_identity_sha256 -notmatch '^[a-f0-9]{64}$') {
+            throw 'invalid request'
+        }
+        $screenWidth = [int]$request.screen.width
+        $screenHeight = [int]$request.screen.height
+        $x = [int]$request.target.x
+        $y = [int]$request.target.y
+        $width = [int]$request.target.width
+        $height = [int]$request.target.height
     }
     $nonce = [string]$request.nonce
-    $x = [int]$request.target.x
-    $y = [int]$request.target.y
-    $width = [int]$request.target.width
-    $height = [int]$request.target.height
-    $screenWidth = [int]$request.screen.width
-    $screenHeight = [int]$request.screen.height
     if ($screenWidth -le 0 -or $screenHeight -le 0 -or
         $width -le 0 -or $height -le 0 -or
         $x -lt 0 -or $y -lt 0 -or
@@ -28,17 +49,6 @@ try {
         ($y + $height) -gt $screenHeight -or
         ($width * $height) -gt (($screenWidth * $screenHeight) / 2)) {
         throw 'invalid geometry'
-    }
-
-    Add-Type -AssemblyName System.Windows.Forms
-    Add-Type -AssemblyName System.Drawing
-    [System.Windows.Forms.Application]::EnableVisualStyles()
-    if ([System.Windows.Forms.Screen]::AllScreens.Count -ne 1 -or
-        [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.X -ne 0 -or
-        [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Y -ne 0 -or
-        [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width -ne $screenWidth -or
-        [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height -ne $screenHeight) {
-        throw 'display geometry differs from the observed capture'
     }
 
     Add-Type -TypeDefinition @'
@@ -61,22 +71,49 @@ public static class OAFlowQualificationSession {
         public uint DynamicAvailable;
         public uint GroupCount;
         public uint PrivilegeCount;
-        public Luid ModifiedId;
+        public uint ModifiedId;
     }
     [DllImport("kernel32.dll")] private static extern IntPtr GetCurrentProcess();
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool ProcessIdToSessionId(uint processId, out uint sessionId);
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool CloseHandle(IntPtr handle);
-    [DllImport("advapi32.dll", SetLastError = true)]
+    [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
     [DllImport("advapi32.dll", SetLastError = true)]
     private static extern bool GetTokenInformation(IntPtr token, int infoClass,
         out TokenStatistics info, int infoLength, out int returnedLength);
+    [DllImport("kernel32.dll")]
+    private static extern uint WTSGetActiveConsoleSessionId();
+    [DllImport("wtsapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool WTSQuerySessionInformationW(IntPtr server, uint sessionId,
+        int infoClass, out IntPtr buffer, out uint bytesReturned);
+    [DllImport("wtsapi32.dll")] private static extern void WTSFreeMemory(IntPtr buffer);
+    [DllImport("shcore.dll")]
+    private static extern int SetProcessDpiAwareness(int awareness);
+    [DllImport("shcore.dll")]
+    private static extern int GetProcessDpiAwareness(IntPtr process, out int awareness);
+    public static bool EnablePerMonitorDpi() {
+        // PROCESS_PER_MONITOR_DPI_AWARE = 2. A prior manifest setting is
+        // accepted only if it already selected the same coordinate space.
+        int result = SetProcessDpiAwareness(2);
+        int awareness;
+        return GetProcessDpiAwareness(new IntPtr(-1), out awareness) == 0 && awareness == 2;
+    }
+    private static bool IsSessionActive(uint sessionId) {
+        if (sessionId == WTSGetActiveConsoleSessionId()) return true;
+        IntPtr buffer;
+        uint bytes;
+        if (!WTSQuerySessionInformationW(IntPtr.Zero, sessionId, 8, out buffer, out bytes))
+            return false;
+        try { return buffer != IntPtr.Zero && bytes >= 4 && Marshal.ReadInt32(buffer) == 0; }
+        finally { WTSFreeMemory(buffer); }
+    }
     public static string CurrentDigest() {
         uint sessionId;
         uint processId = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
-        if (!ProcessIdToSessionId(processId, out sessionId)) return null;
+        if (!ProcessIdToSessionId(processId, out sessionId) || !IsSessionActive(sessionId))
+            return null;
         IntPtr token;
         if (!OpenProcessToken(GetCurrentProcess(), 0x0008, out token)) return null;
         TokenStatistics stats;
@@ -105,6 +142,20 @@ public static class OAFlowQualificationSession {
     }
 }
 '@
+    if (-not [OAFlowQualificationSession]::EnablePerMonitorDpi()) {
+        throw 'process is not per-monitor DPI aware'
+    }
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+    [System.Windows.Forms.Application]::EnableVisualStyles()
+    if ([System.Windows.Forms.Screen]::AllScreens.Count -ne 1 -or
+        [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.X -ne 0 -or
+        [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Y -ne 0 -or
+        [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width -ne $screenWidth -or
+        [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height -ne $screenHeight) {
+        throw 'display geometry differs from the observed capture'
+    }
+
     Add-Type -ReferencedAssemblies System.Windows.Forms -TypeDefinition @'
 using System.Windows.Forms;
 public sealed class OAFlowQualificationOverlay : Form {
@@ -118,9 +169,48 @@ public sealed class OAFlowQualificationOverlay : Form {
     }
 }
 '@
-    if ([OAFlowQualificationSession]::CurrentDigest() -cne $request.session_identity_sha256) {
+    $guestDigest = [OAFlowQualificationSession]::CurrentDigest()
+    if (-not $guestDigest) { throw 'active session identity is unavailable' }
+    if (-not $isPairing -and $guestDigest -cne $request.session_identity_sha256) {
         throw 'interactive task is not in the observed application session'
     }
+
+    if ($isPairing) {
+        $region = $request.region
+        if ($x -lt 0 -or $y -lt 0 -or
+            ($x + $width) -gt $screenWidth -or ($y + $height) -gt $screenHeight) {
+            throw 'pairing witness is outside the observed display'
+        }
+        $material = 'openadapt.rdp-pairing/v1' + [char]0 + $nonce + [char]0 +
+            [string]$request.connection_digest + [char]0 + $guestDigest
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        try { $digestBytes = $sha.ComputeHash([System.Text.Encoding]::ASCII.GetBytes($material)) }
+        finally { $sha.Dispose() }
+        $bits = -join ($digestBytes | ForEach-Object { [Convert]::ToString([int]$_, 2).PadLeft(8, '0') })
+        $bitmap = New-Object System.Drawing.Bitmap(52, 52)
+        $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+        $graphics.Clear([System.Drawing.Color]::Black)
+        $graphics.Dispose()
+        for ($i = 0; $i -lt 256; $i++) {
+            if ($bits[$i] -eq '1') {
+                $cellX = 2 + (($i % 16) * 3)
+                $cellY = 2 + ([Math]::Floor($i / 16) * 3)
+                for ($py = 0; $py -lt 3; $py++) {
+                    for ($px = 0; $px -lt 3; $px++) {
+                        $bitmap.SetPixel($cellX + $px, $cellY + $py, [System.Drawing.Color]::White)
+                    }
+                }
+            }
+        }
+        $forms += & $makeOverlay $x $y 52 52 ''
+        $forms[-1].BackgroundImage = $bitmap
+        $forms[-1].BackgroundImageLayout = [System.Windows.Forms.ImageLayout]::Stretch
+        $bitmaps += $bitmap
+        [System.Windows.Forms.Application]::DoEvents()
+        [System.IO.File]::WriteAllText($StatusPath, "ready:$nonce:$guestDigest")
+        Start-Sleep -Seconds ([int]$request.lifetime_seconds)
+    }
+    elseif ($request.kind -eq 'ambiguity') {
 
     $makeOverlay = {
         param([int]$Left, [int]$Top, [int]$BoxWidth, [int]$BoxHeight, [string]$Label)
@@ -183,7 +273,7 @@ public sealed class OAFlowQualificationOverlay : Form {
         $forms += $form
     }
     elseif ($request.kind -eq 'wrong_identity') {
-        $identity = $request.identity
+        $identity = $request.identifier_region
         if ($null -eq $identity) { throw 'identity region missing' }
         if ([int]$identity.width -le 0 -or [int]$identity.height -le 0 -or
             [int]$identity.x -lt 0 -or [int]$identity.y -lt 0 -or
@@ -195,7 +285,7 @@ public sealed class OAFlowQualificationOverlay : Form {
             ([int]$identity.width) ([int]$identity.height) 'Different record'
     }
     else {
-        $identity = $request.identity
+        $identity = $request.identifier_region
         if ($null -eq $identity) { throw 'identity region missing' }
         if ([int]$identity.width -le 0 -or [int]$identity.height -le 0 -or
             [int]$identity.x -lt 0 -or [int]$identity.y -lt 0 -or
@@ -208,8 +298,10 @@ public sealed class OAFlowQualificationOverlay : Form {
     }
 
     [System.Windows.Forms.Application]::DoEvents()
-    [System.IO.File]::WriteAllText($StatusPath, "ready:$nonce")
-    Start-Sleep -Seconds 8
+    if (-not $isPairing) {
+        [System.IO.File]::WriteAllText($StatusPath, "ready:$nonce")
+        Start-Sleep -Seconds 8
+    }
 }
 catch {
     if ($nonce -match '^[a-f0-9]{32}$') {
@@ -220,6 +312,9 @@ catch {
 finally {
     foreach ($form in $forms) {
         if ($null -ne $form) { $form.Close(); $form.Dispose() }
+    }
+    foreach ($bitmap in $bitmaps) {
+        if ($null -ne $bitmap) { $bitmap.Dispose() }
     }
 }
 

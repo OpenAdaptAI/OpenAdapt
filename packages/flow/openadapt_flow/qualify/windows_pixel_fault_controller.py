@@ -123,7 +123,12 @@ def _request_for(context: Any, step: Any, nonce: str) -> dict[str, Any] | None:
             or iw * ih > screen_width * screen_height // 2
         ):
             return None
-        request["identity"] = {"x": ix, "y": iy, "width": iw, "height": ih}
+        request["identifier_region"] = {
+            "x": ix,
+            "y": iy,
+            "width": iw,
+            "height": ih,
+        }
     return request
 
 
