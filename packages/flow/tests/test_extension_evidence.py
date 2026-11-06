@@ -260,3 +260,43 @@ def test_frame_grouping_and_linking():
     assert "parent_frame_path" not in linked[2]
     # A child target with no matching frame_focus is returned unchanged.
     assert link_frame_targets([child]) == [child]
+
+
+@pytest.mark.parametrize(
+    "url,want",
+    [
+        ("http://[::1]:8443/child?token=T#f", "http://[::1]:8443/child"),
+        ("https://u:p@[2001:db8::1]/x?q=1", "https://[2001:db8::1]/x"),
+        ("http://[::1]/", "http://[::1]/"),
+        ("http://127.0.0.1:9000/a?b", "http://127.0.0.1:9000/a"),
+    ],
+)
+def test_strip_url_keeps_ipv6_brackets_and_is_idempotent(url, want):
+    from openadapt_flow.extension_evidence import strip_url
+
+    assert strip_url(url) == want
+    assert strip_url(want) == want
+
+
+def test_strip_url_refuses_an_invalid_port():
+    from openadapt_flow.extension_evidence import strip_url
+
+    assert strip_url("http://a.example:99999/x") is None
+
+
+def test_ipv6_frame_evidence_round_trips_through_write_and_load(tmp_path):
+    buf = ExtensionEvidenceBuffer()
+    buf.append(
+        {
+            "kind": "frame_focus",
+            "frame_url": "http://[::1]:8443/child?token=T#f",
+            "frame_src": "http://[::1]:8443/child?token=T",
+            "frame": {"tab_id": 1, "frame_id": 2, "origin": "http://[::1]:8443"},
+        }
+    )
+    buf.write(tmp_path)
+    (line,) = load_extension_evidence(tmp_path)
+    assert line["frame_url"] == "http://[::1]:8443/child"
+    assert line["frame_src"] == "http://[::1]:8443/child"
+    assert line["frame"]["origin"] == "http://[::1]:8443"
+    assert "token" not in json.dumps(line)

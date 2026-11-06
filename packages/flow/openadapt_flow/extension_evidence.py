@@ -55,8 +55,16 @@ def strip_url(url: Any) -> Optional[str]:
     scheme = parts.scheme.lower()
     if scheme in ("http", "https"):
         host = parts.hostname or ""
-        if parts.port is not None:
-            host = f"{host}:{parts.port}"
+        if ":" in host:
+            # IPv6 literal: keep the brackets, or the result is not a URL and
+            # the next pass (ingest re-redacts on load) can't parse it.
+            host = f"[{host}]"
+        try:
+            port = parts.port
+        except ValueError:
+            return None
+        if port is not None:
+            host = f"{host}:{port}"
         return f"{scheme}://{host}{parts.path}"
     if scheme == "about":
         return f"about:{parts.path}"
