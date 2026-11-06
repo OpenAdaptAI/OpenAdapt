@@ -55,6 +55,14 @@ Admission
     declared surface kind, and the workflow supplies every required input
     with the declared type. Any other case is a refusal with a stable code.
 
+Certification
+    :func:`certify_subroutine_uses` is the gate
+    :func:`openadapt_flow.qualification.certify_project` runs. It registers
+    the workflow as the user of the digests it embeds and then admits it, so
+    certifying is what puts a workflow on a subroutine's re-qualification
+    list. A workflow that embeds a subroutine is refused when no library is
+    supplied; one that embeds none is untouched.
+
 Detection
     :func:`mine_recurring_sequences` proposes candidate subroutines from the
     programs alone: it compares steps by shape (action kind, whether the step
@@ -71,9 +79,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import tempfile
 from collections import defaultdict
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Iterable, Literal, Mapping, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -742,6 +753,7 @@ class SubroutineLibrary:
 # -- admission --------------------------------------------------------------------
 
 RefusalCode = Literal[
+    "library_missing",
     "malformed_key",
     "unknown_subroutine",
     "name_mismatch",
@@ -934,6 +946,89 @@ def admit_workflow(
     return SubroutineAdmission(
         workflow_id=wid, uses=tuple(uses), refusals=tuple(refusals)
     )
+
+
+def uses_subroutines(workflow: Workflow) -> bool:
+    """True when any subflow key claims to be a subroutine (even malformed)."""
+
+    return any(key.startswith(SUBFLOW_PREFIX) for key in workflow.subflows)
+
+
+def certify_subroutine_uses(
+    workflow: Workflow,
+    library: Optional[SubroutineLibrary],
+    *,
+    workflow_id: Optional[str] = None,
+) -> SubroutineAdmission:
+    """The subroutine gate certification runs (``flow qualify``).
+
+    Certification is where a workflow becomes a registered user of the exact
+    subroutine digests it embeds, so this registers the workflow with
+    ``library`` (replacing its older pins) and then runs :func:`admit_workflow`.
+    A later :meth:`SubroutineLibrary.publish` of any of those names therefore
+    lists this workflow for re-qualification, and every other refusal
+    (unknown, superseded, not qualified, edited body, surface, inputs) still
+    applies.
+
+    Fail-closed: a workflow that embeds a subroutine is refused when no
+    library is supplied. A workflow that embeds none is admitted with no uses
+    and ``library`` is neither read nor changed.
+    """
+
+    wid = workflow_id or workflow.name
+    if not uses_subroutines(workflow):
+        return SubroutineAdmission(workflow_id=wid)
+    if library is None:
+        return SubroutineAdmission(
+            workflow_id=wid,
+            refusals=tuple(
+                SubroutineRefusal(
+                    code="library_missing",
+                    subflow=key[:96],
+                    message=(
+                        "workflow embeds a subroutine but no subroutine library "
+                        "was supplied to check it against"
+                    ),
+                )
+                for key in sorted(workflow.subflows)
+                if key.startswith(SUBFLOW_PREFIX)
+            ),
+        )
+    try:
+        library.register(wid, workflow)
+    except SubroutineError:
+        # A malformed key cannot be pinned; admission refuses it below.
+        pass
+    return admit_workflow(workflow, library, workflow_id=wid)
+
+
+def load_library(path: Path | str) -> SubroutineLibrary:
+    """Read a library JSON file (digests are re-derived; edits are refused)."""
+
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise SubroutineError(
+            f"cannot read subroutine library ({type(exc).__name__})"
+        ) from None
+    return SubroutineLibrary.from_json(text)
+
+
+def save_library(library: SubroutineLibrary, path: Path | str) -> None:
+    """Write a library JSON file atomically (temp file, then replace)."""
+
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".subroutines-", dir=target.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(library.to_json())
+            handle.write("\n")
+        os.replace(tmp, target)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
 
 
 # -- detection ----------------------------------------------------------------------

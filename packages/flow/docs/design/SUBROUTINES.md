@@ -1,6 +1,6 @@
 # Reusable subroutines
 
-Status: first slice (OpenAdapt#1892). Code: `openadapt_flow/subroutines.py`.
+Status: slices 1 and 2 (OpenAdapt#1892). Code: `openadapt_flow/subroutines.py`.
 
 Many workflows repeat the same few steps, such as searching for a record or
 picking a date. A subroutine lifts such a sequence out of the workflows into
@@ -58,9 +58,35 @@ refused until they embed the new version and are registered again.
 | `surface_undeclared`, `surface_kind_mismatch`, `multi_surface` | the workflow does not run on the declared surface kind |
 | `missing_input`, `input_type_mismatch`, `input_choices_mismatch`, `secret_input` | the workflow does not declare a matching input |
 | `malformed_key` | a subflow key looks like a subroutine key but is not one |
+| `library_missing` | certification was asked to admit a subroutine with no library (certification only) |
 
 Messages name subroutines, inputs and codes only. They never repeat screen
 text or recorded values.
+
+## Certification
+
+`certify_project()` (so `flow qualify certify` and `flow qualify <bundle>
+--certify`) runs `certify_subroutine_uses()` on every workflow:
+
+- A workflow with no `subroutine/` subflow is certified exactly as before;
+  no library is read or written.
+- A workflow that embeds one needs a library (`--subroutine-library
+  subroutines.json`). Without it, certification fails with
+  `subroutine_not_admitted` / `library_missing`, and the campaign form refuses
+  before running any case.
+- With a library, certification first registers the workflow as the user of
+  the exact digests it embeds (replacing its older pins), then runs
+  `admit_workflow()`. Every refusal above still applies; each becomes a
+  `subroutine_not_admitted` qualification refusal whose
+  `details.subroutine_code` is the code from the table. The CLI writes the
+  library back atomically when registration changed it.
+
+Registration happens even when certification fails, so a later version of
+the subroutine still lists the workflow for re-qualification. On a pass the
+report gains nothing, so `current_certification_matches()` reproduces it
+unchanged. Publishing a new version of a subroutine makes the next
+certification of every registered user fail with `superseded` until it
+embeds the new version.
 
 ## Detection
 
@@ -72,10 +98,15 @@ or runnable.
 
 ## Not in this slice
 
-- Wiring admission and registration into `flow qualify` and certification.
+- Re-checking admission at run time. A certification made before a newer
+  version was published stays valid for runs until the next certification;
+  the run gate does not yet consult the library.
+- Binding the library digest into the certification record, and `flow
+  certify` (policy-only) does not run the gate.
 - Renaming inputs at the call site. Today the caller must declare inputs
   with the same names.
 - Outputs (values a subroutine reads and hands back), writes, secrets and
   multi-surface bodies.
-- A sealed, on-disk library. The library is in memory with JSON
-  import and export.
+- A sealed library. The library is a plain JSON file whose digests are
+  re-derived on load (an edited subroutine is refused), but the file as a
+  whole is not signed or sealed.

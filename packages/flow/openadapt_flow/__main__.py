@@ -7086,17 +7086,60 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
 
     if verb == "certify":
         policy = _qualification_policy(args)
+        library_path = getattr(args, "subroutine_library", None)
+        library = _load_subroutine_library(library_path)
+        library_before = library.to_json() if library is not None else ""
         report = certify_project(
             workflow,
             policy=policy,
             evidence_root=args.evidence_root,
             execution_profile=args.profile,
+            subroutine_library=library,
+            subroutine_workflow_id=getattr(args, "subroutine_workflow_id", None),
         )
         save_qualified_workflow(workflow, args.bundle)
+        _save_subroutine_library(library, library_path, library_before)
         print(report.model_dump_json(indent=2) if args.json else report.render())
         return 0 if report.passed else 2
 
     raise SystemExit(f"unknown qualify command {verb!r}")
+
+
+def _load_subroutine_library(path: Optional[str]) -> Any:
+    """Load ``--subroutine-library`` (None when not given); refuse a bad file."""
+
+    if not path:
+        return None
+    from openadapt_flow.subroutines import SubroutineError, load_library
+
+    try:
+        return load_library(path)
+    except SubroutineError as exc:
+        raise SystemExit(f"subroutine library REFUSED: {exc}") from None
+
+
+def _save_subroutine_library(library: Any, path: Optional[str], before: str) -> None:
+    """Write back the library when certification registered a workflow in it."""
+
+    if library is None or not path or library.to_json() == before:
+        return
+    from openadapt_flow.subroutines import save_library
+
+    save_library(library, path)
+
+
+def _add_subroutine_library_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--subroutine-library",
+        default=None,
+        metavar="JSON",
+        help=(
+            "Subroutine library to admit embedded subroutines against. "
+            "Certifying registers this workflow in it, so a new version of a "
+            "subroutine it uses re-qualifies it. Required when the bundle "
+            "embeds a subroutine."
+        ),
+    )
 
 
 def _cmd_qualify_proposal(args: argparse.Namespace) -> int:
@@ -8974,6 +9017,9 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
         else Path("runs")
         / f"qualify-{bundle.resolve().name}-{time.strftime('%Y%m%d-%H%M%S')}"
     )
+    library_path = getattr(args, "subroutine_library", None)
+    library = _load_subroutine_library(library_path)
+    library_before = library.to_json() if library is not None else ""
     try:
         result = qualify(
             bundle,
@@ -8984,13 +9030,16 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
             certify=certify,
             run_params=run_params,
             campaign_id=args.campaign_id,
+            subroutine_library=library,
         )
     except QualifyConfigError as exc:
         print(str(exc), file=sys.stderr)
         return 2
     except QualifyError as exc:
+        _save_subroutine_library(library, library_path, library_before)
         print(f"qualify REFUSED: {exc}\nEvidence so far: {out}", file=sys.stderr)
         return 1
+    _save_subroutine_library(library, library_path, library_before)
     if not result.passed and result.partial:
         print(
             f"\nqualify PARTIAL: {len(result.rows)} trial(s) behaved as required in "
@@ -10991,6 +11040,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Campaign id (default: verify.yaml or generated)",
     )
+    _add_subroutine_library_flags(q)
     q.set_defaults(func=_cmd_qualify_campaign)
 
     q = qsub.add_parser("schema", help="Print the qualification-project JSON Schema")
@@ -11451,6 +11501,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     q.add_argument("--evidence-root", required=True)
     q.add_argument("--json", action="store_true")
+    _add_subroutine_library_flags(q)
+    q.add_argument(
+        "--subroutine-workflow-id",
+        default=None,
+        metavar="ID",
+        help="Id to register this workflow under (default: the workflow name)",
+    )
     q.set_defaults(func=_cmd_qualify)
 
     p = sub.add_parser(
