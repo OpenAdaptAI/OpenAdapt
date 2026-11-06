@@ -1266,6 +1266,15 @@ def convert_capture(
             "source": "openadapt-capture",
             "task_description": session.task_description,
         }
+        # Native replay types by keycode, so the computer's locale, date
+        # order and keyboard layout travel with the recording and are checked
+        # before replay (#1897). Conversion runs on the recording computer;
+        # facts it can't read are left unknown, never guessed.
+        from openadapt_flow.locale_invariants import observe_locale_invariants
+
+        invariants = observe_locale_invariants()
+        if invariants.unknown() != ["locale", "date_order", "keyboard_layout"]:
+            meta["locale_invariants"] = invariants.model_dump()
         # Name the space every recorded x/y is in, so a consumer fails closed
         # instead of assuming. Window and desktop scope are mutually exclusive
         # (a session carrying both is refused above). A session that declares
