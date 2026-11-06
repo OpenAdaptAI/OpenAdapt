@@ -541,13 +541,14 @@ def test_fuzzy_bounds_apply_after_nfkc_expansion() -> None:
 
 
 def test_fuzzy_total_work_is_bounded() -> None:
-    options = ",".join(("ab" * 128)[:255] + chr(65 + i % 26) for i in range(40))
+    options = ",".join(("ab" * 128)[:255] + chr(65 + i % 26) for i in range(35))
     result = _fast_predicate(
         "fuzzy_match(x, split(y, ','), 0.99) == 'z'",
         {"x": "ba" * 128, "y": options},
     )
     assert result.outcome == "unknown"
     assert result.refusal == RefusalCode.BOUNDS
+    assert "work" in result.reason
 
 
 def test_lower_is_length_checked_like_upper() -> None:
