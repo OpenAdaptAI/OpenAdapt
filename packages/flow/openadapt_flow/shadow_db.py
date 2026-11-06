@@ -97,6 +97,11 @@ class DatabaseShadow(Shadow):
                 "every action's contract must read the same database "
                 "(frame.database.dialect and read)"
             )
+        if any(database != dbs[0] for database in dbs[1:]):
+            raise ShadowConfigError(
+                "every action's contract must use the same frame.database "
+                "configuration for the database watch"
+            )
         names = [r.name for r in routes]
         if len(set(names)) != len(names):
             raise ShadowConfigError("two actions have the same name")
@@ -120,8 +125,8 @@ class DatabaseShadow(Shadow):
         self.audit_sql = audit_sql
         self.max_action_s = max_action_s
         self.check_timeout_s = check_timeout_s
-        #: The contract whose frame the watch reads with (its allow-list,
-        #: ignored columns and app profile).
+        #: Every action has the same database frame; only the action's
+        #: effect and other settings may differ.
         self._watch_cfg = routes[0].contract.config
         self._salt = secrets.token_bytes(32)
         self._gap_from: Optional[Mark] = None
@@ -381,11 +386,17 @@ class DatabaseShadow(Shadow):
             time.sleep(0.05)
         with self._lock:
             verdict = ep.verdict if ep.checked else "PENDING"
+            halted = self._halt_reason()
+            if not ep.checked and not halted:
+                halted = (
+                    f"check {ep.id} ({ep.name}) is PENDING: wait for its verdict "
+                    "before writing again"
+                )
             return 200, {
                 "action_id": ep_id,
                 "verdict": verdict,
                 "reasons": list(ep.reasons),
-                "halted": self._halt_reason(),
+                "halted": halted,
             }
 
     # -- actions ----------------------------------------------------------------------

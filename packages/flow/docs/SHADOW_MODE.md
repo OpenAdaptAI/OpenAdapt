@@ -187,8 +187,10 @@ transaction. A change in a gap is one no announced action covers:
   agent, when there is no `audit_sql`, or when the audit can't be read;
 - nothing, when the database didn't change.
 
-The reads use the contract's own allow-list, ignored columns and app
-profile, so the app's own logs don't show as changes. As in the frame, a
+Every action contract must have the same `frame.database` configuration;
+startup refuses a mismatch. The gap reads use that shared allow-list,
+ignored columns, profile and read bounds. Each action keeps its own effects
+and settings outside `frame.database`. As in the frame, a
 read account that can't see the database's triggers (on MySQL it needs the
 `TRIGGER` privilege) makes every gap `UNCERTAIN`: a trigger planted between
 two reads could pass unseen.
@@ -205,6 +207,8 @@ it to be checked, for at most `hold_ms` (default 30,000 ms in this mode).
   after a change between actions, and any action after a check that isn't
   `CONFIRMED`;
 - `end` waits for the check and answers with the verdict and its reasons.
+  A check that outlasts the wait returns `PENDING` with a halt reason; the
+  agent stops until the result is known.
 
 An agent that obeys stops at the first write that isn't right. A recheck
 runs later: a write that is `CONFIRMED` and then `REFUTED` on its recheck
@@ -214,6 +218,8 @@ between actions.
 
 ## Limits
 
+- Without audit history, gap reads compare states. An update reverted before
+  the next read is invisible; matching snapshots do not prove no write occurred.
 - Database mode sees changes in the database only: a client's write to
   a file, a message queue or another service doesn't show. The whole
   database is read at each `begin`, `end` and gap, so on a large schema
