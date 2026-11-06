@@ -506,29 +506,20 @@ def _campaign_session_components(
     controller = getattr(backend, "qualification_pixel_fault_controller", None)
     driver: Optional[_CampaignFaultDriver] = None
     if require_fault_driver:
+        matches_session = (
+            getattr(controller, "qualification_target_kind", None) == app.target
+            and getattr(controller, "session_identity_sha256", None)
+            == observation.session_identity_sha256
+        )
         if app.target == "windows":
-            controller_matches = (
-                type(controller) is WindowsQualificationPixelFaultController
-            )
-        else:
-            from openadapt_flow.qualify.rdp_pixel_fault_controller import (
-                RdpQualificationPixelFaultController,
-            )
-
-            controller_matches = (
-                type(controller) is RdpQualificationPixelFaultController
-            )
-        if (
-            not controller_matches
-            or getattr(controller, "qualification_target_kind", None) != app.target
-            or getattr(controller, "session_identity_sha256", None)
-            != observation.session_identity_sha256
-            or not controller.matches_observation(backend, observation)
-        ):
-            raise QualifyConfigError(
-                "native session has no matching environment-owned pixel fault controller"
-            )
-        if app.target == "windows":
+            if (
+                type(controller) is not WindowsQualificationPixelFaultController
+                or not matches_session
+                or not controller.matches_observation(backend, observation)
+            ):
+                raise QualifyConfigError(
+                    "native session has no matching environment-owned pixel fault controller"
+                )
             driver = WindowsPixelFaultDriver(
                 workflow,
                 controller,
@@ -536,6 +527,18 @@ def _campaign_session_components(
                 key_id=f"{campaign_id}-fault-driver",
             )
         else:
+            from openadapt_flow.qualify.rdp_pixel_fault_controller import (
+                RdpQualificationPixelFaultController,
+            )
+
+            if (
+                type(controller) is not RdpQualificationPixelFaultController
+                or not matches_session
+                or not controller.matches_observation(backend, observation)
+            ):
+                raise QualifyConfigError(
+                    "native session has no matching environment-owned pixel fault controller"
+                )
             driver = NativePixelFaultDriver(
                 workflow,
                 controller,
