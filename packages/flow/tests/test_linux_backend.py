@@ -1041,3 +1041,74 @@ def test_linux_authoring_refuses_replaced_window_binding(tmp_path):
     assert error.value.code == "stale_node"
     assert not [c for c in client.calls if c[0] in {"native", "physical-click"}]
     assert session._recorder.event_count == 0
+
+
+@pytest.mark.parametrize("ambiguous", [False, True], ids=["missing", "ambiguous"])
+def test_linux_authoring_never_falls_back_when_native_resolution_refuses(
+    tmp_path, ambiguous
+):
+    from openadapt_flow.authoring import AuthoringError
+
+    client = _UniqueAuthoringLinuxClient()
+    session, node = _linux_authoring_session(tmp_path, client)
+    client.candidates = [TARGET_ELEMENT, TARGET_ELEMENT] if ambiguous else []
+
+    with pytest.raises((AuthoringError, StructuralResolutionRefused)):
+        session.click(node_id=node["node_id"])
+
+    assert not [c for c in client.calls if c[0] in {"native", "physical-click"}]
+    assert session._recorder.event_count == 0
+    assert (tmp_path / "recording" / "events.jsonl").read_text() == ""
+
+
+def test_linux_authoring_rechecks_window_after_structural_resolution(tmp_path):
+    from dataclasses import replace
+
+    from openadapt_flow.authoring import AuthoringError
+
+    class ChangedDuringResolve(_UniqueAuthoringLinuxClient):
+        def find_candidates(self, window, locator):
+            result = super().find_candidates(window, locator)
+            self.windows = [replace(window, native_id="replacement")]
+            return result
+
+    client = ChangedDuringResolve()
+    session, node = _linux_authoring_session(tmp_path, client)
+
+    with pytest.raises(AuthoringError) as error:
+        session.click(node_id=node["node_id"])
+
+    assert error.value.code == "stale_node"
+    assert not [c for c in client.calls if c[0] in {"native", "physical-click"}]
+    assert session._recorder.event_count == 0
+    assert (tmp_path / "recording" / "events.jsonl").read_text() == ""
+
+
+def test_linux_authoring_mismatched_receipt_is_uncertain_without_retry(
+    tmp_path, monkeypatch
+):
+    from openadapt_flow.backend import ActionDeliveryUncertain
+
+    client = _UniqueAuthoringLinuxClient()
+    session, node = _linux_authoring_session(tmp_path, client)
+    original = session._backend.act_structural
+
+    def mismatched_receipt(locator, handle, *, double=False):
+        receipt = original(locator, handle, double=double)
+        wrong = "0" * 64 if receipt.target_fingerprint != "0" * 64 else "1" * 64
+        return receipt.model_copy(update={"target_fingerprint": wrong})
+
+    monkeypatch.setattr(session._backend, "act_structural", mismatched_receipt)
+
+    with pytest.raises(ActionDeliveryUncertain) as error:
+        session.click(node_id=node["node_id"])
+
+    assert error.value.operation == "authoring_structural_click"
+    assert error.value.native is True
+    # Delivery happened once. An absent completed event does not undo it.
+    assert [c for c in client.calls if c[0] == "native"] == [
+        ("native", TARGET_ELEMENT.native_id, "invoke")
+    ]
+    assert not [c for c in client.calls if c[0] == "physical-click"]
+    assert session._recorder.event_count == 0
+    assert (tmp_path / "recording" / "events.jsonl").read_text() == ""

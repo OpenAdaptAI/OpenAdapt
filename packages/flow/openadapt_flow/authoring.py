@@ -724,12 +724,77 @@ class AuthoringSession:
             px, py = target.center
             self._require_same_element(node_id, (px, py))
             self._last_target = target
-            self._as_agent(recorder, lambda: recorder.click(px, py))
+            self._as_agent(
+                recorder, lambda: self._record_node_click(recorder, node_id, (px, py))
+            )
             return
         if x is None or y is None:
             raise AuthoringError("click requires node_id or x/y", code="invalid_click")
         self._last_target = _NodePixels(x=int(x), y=int(y), w=0, h=0)
         self._as_agent(recorder, lambda: recorder.click(int(x), int(y)))
+
+    def _record_node_click(
+        self, recorder: Recorder, node_id: str, point: tuple[int, int]
+    ) -> None:
+        """Record a node action through the native backend's bound capability.
+
+        Keep Recorder's before/after observations and event commit. The action
+        callback rechecks the observed identity/window after those reads, then
+        resolves one fingerprint and delivers only through that capability.
+        A structural refusal never retries through coordinate input.
+        """
+        from openadapt_flow.backend import (
+            ActionDeliveryUncertain,
+            NativeStructuralActionBackend,
+            StructuralActionBackend,
+        )
+
+        backend = self._backend
+        if node_id not in self._identities or not isinstance(
+            backend, NativeStructuralActionBackend
+        ):
+            recorder.click(*point)
+            return
+        if not isinstance(backend, StructuralActionBackend):
+            raise AuthoringError(
+                "the native backend cannot resolve the observed control",
+                code="stale_node",
+            )
+
+        def act() -> None:
+            self._require_same_element(node_id, point)
+            identity = self._identities[node_id]
+            locator = backend.structural_locator_at(*point)
+            if locator is None or (
+                locator.automation_id,
+                locator.role,
+                locator.name,
+            ) != (identity.automation_id, identity.role, identity.name):
+                raise AuthoringError(
+                    "the locator no longer names the observed control",
+                    code="stale_node",
+                )
+            handle = backend.locate_structural(locator)
+            if (
+                handle is None
+                or tuple(handle.point) != point
+                or not handle.target_fingerprint
+            ):
+                raise AuthoringError(
+                    "the observed control no longer has one bound target",
+                    code="stale_node",
+                )
+            self._require_same_element(node_id, point)
+            receipt = backend.act_structural(locator, handle)
+            if receipt.target_fingerprint != handle.target_fingerprint:
+                raise ActionDeliveryUncertain(
+                    operation="authoring_structural_click",
+                    native=receipt.native,
+                    target_fingerprint=handle.target_fingerprint,
+                    cause_type="MismatchedDeliveryReceipt",
+                )
+
+        recorder._record({"kind": "click", "x": point[0], "y": point[1]}, act)
 
     def _require_same_element(self, node_id: str, point: tuple[int, int]) -> None:
         """Refuse a click by ``node_id`` unless the control there is the observed one.

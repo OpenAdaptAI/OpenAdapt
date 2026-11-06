@@ -962,3 +962,32 @@ def test_mac_authoring_refuses_a_different_window_at_the_input_point(tmp_path):
 
     assert not _clicks(client)
     assert session._recorder.event_count == 0
+
+
+def test_mac_authoring_rechecks_control_after_recorders_before_frame(tmp_path):
+    from dataclasses import replace
+
+    from openadapt_flow.authoring import AuthoringError
+
+    ax = _TreeAXClient()
+
+    class ChangedDuringCapture(FakeMacClient):
+        replace_target = False
+
+        def capture(self, window_id):
+            result = super().capture(window_id)
+            if self.replace_target:
+                ax.at_point = replace(SAVE_ELEMENT, name="Delete")
+            return result
+
+    client = ChangedDuringCapture()
+    session, node = _mac_authoring_session(tmp_path, client, ax)
+    client.replace_target = True
+
+    with pytest.raises(AuthoringError) as error:
+        session.click(node_id=node["node_id"])
+
+    assert error.value.code == "stale_node"
+    assert not _clicks(client)
+    assert session._recorder.event_count == 0
+    assert (tmp_path / "recording" / "events.jsonl").read_text() == ""

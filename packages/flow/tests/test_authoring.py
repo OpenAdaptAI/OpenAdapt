@@ -1246,3 +1246,24 @@ def test_pausing_on_a_native_node_checks_its_identity(tmp_path: Path) -> None:
     with pytest.raises(AuthoringError) as excinfo:
         session.pause_for_input(param="note", node_id=node["node_id"])
     assert excinfo.value.code == "stale_node"
+
+
+def test_native_authoring_without_a_resolver_refuses_before_input(tmp_path):
+    class IncompleteNativeBackend(_NativeTreeBackend):
+        def act_structural(self, locator, handle, *, double=False):
+            self.calls.append(("native-act",))
+            raise AssertionError("unresolved native input must not run")
+
+    backend = IncompleteNativeBackend([_native_node("Save", 100)])
+    backend.live[(120, 110)] = _identity("Save")
+    session = _native_session(tmp_path, backend)
+    (node,) = session.observe()["tree"]
+    session.start_record()
+
+    with pytest.raises(AuthoringError) as error:
+        session.click(node_id=node["node_id"])
+
+    assert error.value.code == "stale_node"
+    assert not [c for c in backend.calls if c[0] in {"click", "native-act"}]
+    assert session._recorder.event_count == 0
+    assert (tmp_path / "rec" / "events.jsonl").read_text() == ""
