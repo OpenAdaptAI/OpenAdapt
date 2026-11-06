@@ -100,6 +100,21 @@ A recording made by a script through the real recorder counts here.
 - **Citrix, TESTED.** `tests/test_citrix_workspace_backend.py`,
   `tests/test_jit_surface_pixels.py` (MockMed in a stand-in window).
 
+### Agent control authoring
+
+`AuthoringSession.observe()` lists actionable controls from Windows UI
+Automation, macOS Accessibility and Linux AT-SPI. Native node references keep
+the observed element identity inside the session. Before a node action, the
+session rechecks its identity and window, resolves a unique structural
+fingerprint, and dispatches through the backend's structural action. An
+unreadable, stale or ambiguous target refuses without a coordinate retry.
+RDP and Citrix observations remain screen-based.
+
+The component controls in `tests/test_authoring.py`,
+`tests/test_windows_backend.py`, `tests/test_win_agent_server.py`,
+`tests/test_macos_structural.py` and `tests/test_linux_backend.py` use
+intercepted native boundaries. They are **TESTED**, not live-OS qualification.
+
 ### Compile
 
 Compile reads files, so it runs anywhere. What differs by surface is the
