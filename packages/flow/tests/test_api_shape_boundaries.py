@@ -157,18 +157,17 @@ def _wait_for_captured_post(
     *,
     t0: float,
     click_started: float,
+    sequence_checkpoint: int,
     timeout_s: float = CAPTURE_COMPLETION_TIMEOUT_S,
 ) -> bool:
     """Wait for this submit's terminal capture event, without parsing its body."""
-    click_t = click_started - t0
     deadline = click_started + timeout_s
     while True:
         if any(
             line.get("method") == "POST"
             and line.get("url") == post_url
-            and isinstance(line.get("t"), (int, float))
-            # Capture event times are rounded to milliseconds in ``lines``.
-            and float(line["t"]) >= click_t - 0.001
+            and type(line.get("seq")) is int
+            and line["seq"] >= sequence_checkpoint
             for line in capture.lines(t0)
         ):
             return True
@@ -250,6 +249,7 @@ def binding_from_browser(tmp_path: Path, site: Site, page: Any):
                 "structural": {"selector": "#send", "role": "button", "name": "Send"},
             }
         )
+        sequence_checkpoint = len(capture.lines(clock))
         click_started = time.monotonic()
         page.click("#send")
         _wait_for_captured_post(
@@ -258,6 +258,7 @@ def binding_from_browser(tmp_path: Path, site: Site, page: Any):
             site.base + "/publish",
             t0=clock,
             click_started=click_started,
+            sequence_checkpoint=sequence_checkpoint,
         )
     finally:
         stopped = time.monotonic()
@@ -491,6 +492,39 @@ def test_capture_waits_for_a_delayed_native_submit(tmp_path, site_page):
     assert len(diagnostics["captured_post_elapsed_ms"]) == 1
     assert diagnostics["captured_post_elapsed_ms"][0] >= 250
     assert diagnostics["page_pending_write_count"] == 0
+
+
+def test_capture_wait_ignores_prior_post_with_rounded_same_timestamp():
+    post_url = "http://127.0.0.1/publish"
+    click_started = time.monotonic() + 0.01
+    click_t = round(click_started - 0.101, 3)
+    prior_post_t = click_t - 0.001
+
+    class Capture:
+        def lines(self, t0_monotonic):
+            return [
+                {
+                    "method": "POST",
+                    "url": post_url,
+                    "t": prior_post_t,
+                    "seq": 4,
+                }
+            ]
+
+    class Page:
+        def wait_for_timeout(self, milliseconds):
+            time.sleep(milliseconds / 1000)
+
+    assert round(click_t - prior_post_t, 3) == 0.001
+    assert not _wait_for_captured_post(
+        Capture(),
+        Page(),
+        post_url,
+        t0=click_started - 0.101,
+        click_started=click_started,
+        sequence_checkpoint=5,
+        timeout_s=0.02,
+    )
 
 
 @pytest.mark.parametrize(
