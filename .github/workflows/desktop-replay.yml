@@ -132,9 +132,17 @@ jobs:
             ${{ runner.temp }}/wr/**/*.png
             ${{ runner.temp }}/wr/**/agent.log
             ${{ runner.temp }}/wr/**/report.json
-            ${{ runner.temp }}/wc/**/hosted-campaign/campaign-evidence.json
             packages/flow/runs/windows-guards-junit.xml
             packages/flow/runs/windows-replay-junit.xml
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Keep the campaign evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-campaign-evidence
+          path: |
+            ${{ runner.temp }}/wc/**/hosted-campaign/campaign-evidence.json
             packages/flow/runs/windows-campaign-junit.xml
           if-no-files-found: ignore
           retention-days: 14
