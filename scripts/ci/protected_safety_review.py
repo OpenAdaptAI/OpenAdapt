@@ -622,6 +622,32 @@ def _workflow_provenance_errors(
     return errors
 
 
+def _trusted_workflow_source_errors(
+    api: Any, *, workflow_sha: str, current_main_sha: str
+) -> list[str]:
+    """Require the recorded trusted workflow source to belong to current main.
+
+    The merge-group run re-evaluates current PR evidence with its trusted
+    checkout, so a verdict need not have run at main's latest tip.
+    """
+    if not SHA.fullmatch(workflow_sha) or not SHA.fullmatch(current_main_sha):
+        return ["safety verdict workflow source SHA is missing or malformed"]
+    comparison = api.request(f"/compare/{workflow_sha}...{current_main_sha}")
+    merge_base_commit = (
+        comparison.get("merge_base_commit") if isinstance(comparison, dict) else None
+    )
+    merge_base = (
+        merge_base_commit.get("sha") if isinstance(merge_base_commit, dict) else None
+    )
+    if (
+        not isinstance(comparison, dict)
+        or comparison.get("status") not in {"ahead", "identical"}
+        or merge_base != workflow_sha
+    ):
+        return ["safety verdict workflow source is not an ancestor of current main"]
+    return []
+
+
 def _publish_check(
     api: Any,
     *,
@@ -738,15 +764,23 @@ def _passed_pr_head_verdict(
     event_name = workflow_run.get("event") if isinstance(workflow_run, dict) else None
     if event_name not in {"pull_request_target", "issue_comment"}:
         return [f"PR #{number} safety verdict came from an unsupported event"]
-    expected_workflow_sha = (
-        base.get("sha") if event_name == "pull_request_target" else main_sha
+    source_sha = (
+        workflow_run.get("head_sha") if isinstance(workflow_run, dict) else None
     )
     errors = _workflow_provenance_errors(
         workflow_run,
         event_name=event_name,
         workflow_attempt=attempt,
-        workflow_sha=expected_workflow_sha,
+        workflow_sha=source_sha if isinstance(source_sha, str) else None,
     )
+    if isinstance(source_sha, str) and isinstance(main_sha, str):
+        errors.extend(
+            _trusted_workflow_source_errors(
+                api, workflow_sha=source_sha, current_main_sha=main_sha
+            )
+        )
+    else:
+        errors.append("safety verdict workflow source SHA is missing or malformed")
     if latest.get("details_url") != workflow_run.get("html_url"):
         errors.append("safety check details do not match its trusted workflow run")
     if errors:

@@ -383,6 +383,7 @@ def test_merge_group_maps_multi_pr_chain_and_publishes_group_sha() -> None:
     group_head = "f" * 40
     first_head = "d" * 40
     prior_group_base = "9" * 40
+    older_main = "8" * 40
     queue = [
         _queue_entry(
             position=3,
@@ -406,6 +407,10 @@ def test_merge_group_maps_multi_pr_chain_and_publishes_group_sha() -> None:
 
     class GroupApi(FakeApi):
         missing_head_verdict = False
+        workflow_source_sha = BASE
+        workflow_source_is_ancestor = True
+        move_main_mid_run = False
+        main_reads = 0
 
         def request(self, path: str, *, method: str = "GET", data: Any = None) -> Any:
             if method == "POST" and path == "/check-runs":
@@ -414,7 +419,21 @@ def test_merge_group_maps_multi_pr_chain_and_publishes_group_sha() -> None:
             if path == "":
                 return {"full_name": "OpenAdaptAI/OpenAdapt", "default_branch": "main"}
             if path == "/git/ref/heads/main":
+                self.main_reads += 1
+                if self.move_main_mid_run and self.main_reads == 2:
+                    return {"object": {"sha": "7" * 40}}
                 return {"object": {"sha": BASE}}
+            if path == f"/compare/{self.workflow_source_sha}...{BASE}":
+                return {
+                    "status": "ahead"
+                    if self.workflow_source_is_ancestor
+                    else "diverged",
+                    "merge_base_commit": {
+                        "sha": self.workflow_source_sha
+                        if self.workflow_source_is_ancestor
+                        else "6" * 40
+                    },
+                }
             if path.startswith("/commits/") and "/check-runs?" in path:
                 if self.missing_head_verdict:
                     return {"total_count": 0, "check_runs": []}
@@ -440,7 +459,7 @@ def test_merge_group_maps_multi_pr_chain_and_publishes_group_sha() -> None:
                 return {
                     "path": ".github/workflows/protected-safety-review.yml",
                     "event": "issue_comment",
-                    "head_sha": BASE,
+                    "head_sha": self.workflow_source_sha,
                     "run_attempt": 1,
                     "repository": {"full_name": "OpenAdaptAI/OpenAdapt"},
                     "html_url": f"https://github.com/OpenAdaptAI/OpenAdapt/actions/runs/{run_id}",
@@ -485,6 +504,47 @@ def test_merge_group_maps_multi_pr_chain_and_publishes_group_sha() -> None:
     assert api.check_run is not None
     assert api.check_run["head_sha"] == group_head
 
+    # A verdict from an older main remains usable when its workflow source is
+    # still on main; the current trusted run re-evaluates the PR evidence.
+    api.workflow_source_sha = older_main
+    conclusion, errors = run(
+        event,
+        BASE,
+        api,
+        event_name="merge_group",
+        workflow_sha=group_head,
+    )
+    assert conclusion == "success", errors
+
+    api.workflow_source_is_ancestor = False
+    conclusion, errors = run(
+        event,
+        BASE,
+        api,
+        event_name="merge_group",
+        workflow_sha=group_head,
+    )
+    assert conclusion == "failure"
+    assert any("not an ancestor of current main" in error for error in errors)
+
+    api.workflow_source_sha = BASE
+    api.workflow_source_is_ancestor = True
+    api.move_main_mid_run = True
+    api.main_reads = 0
+    conclusion, errors = run(
+        event,
+        BASE,
+        api,
+        event_name="merge_group",
+        workflow_sha=group_head,
+    )
+    assert conclusion == "failure"
+    assert any(
+        "trusted workflow source changed before status publication" in error
+        for error in errors
+    )
+
+    api.move_main_mid_run = False
     api.missing_head_verdict = True
     conclusion, errors = run(
         event,
