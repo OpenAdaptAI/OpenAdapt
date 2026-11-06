@@ -78,6 +78,7 @@ class _Host:
             text=True,
             timeout=60,
             check=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         return done.stdout
 

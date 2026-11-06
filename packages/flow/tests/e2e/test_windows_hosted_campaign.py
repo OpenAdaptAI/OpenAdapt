@@ -107,6 +107,7 @@ class _LocalGuest:
                 text=True,
                 timeout=timeout_s,
                 check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
         except subprocess.TimeoutExpired:
             self.operations.append({"operation": operation, "status": "TIMEOUT"})
@@ -147,12 +148,60 @@ class _LocalGuest:
 
 
 class _CampaignHost:
-    def __init__(self, host: _Host, backend: Any, guest: _LocalGuest) -> None:
+    def __init__(
+        self,
+        host: _Host,
+        backend: Any,
+        guest: _LocalGuest,
+        expected_identity: tuple[str, str, str, str],
+    ) -> None:
         self.host, self.prototype, self.guest = host, backend, guest
+        self.expected_identity = expected_identity
         self._backends: list[Any] = []
         self._controllers: list[Any] = []
         self.sessions: list[dict[str, Any]] = []
         self.oracles: list[dict[str, Any]] = []
+
+    def _restore_pinned_app_foreground(self, backend: Any) -> None:
+        """Foreground only the uniquely resolved window owned by this app PID."""
+        from openadapt_flow.backends.win32_window_client import Win32WindowClient
+
+        app = self.host.app
+        if app is None or app.poll() is not None:
+            raise RuntimeError("owned hosted application process is unavailable")
+        executable = shutil.which("powershell.exe")
+        if executable is None:
+            raise RuntimeError("pinned hosted application executable is unavailable")
+
+        client = Win32WindowClient()
+        windows = client.find_windows(owner=Path(executable).stem, title=None)
+        owned = [window for window in windows if window.pid == app.pid]
+        if len(owned) != 1:
+            raise RuntimeError("owned hosted application window is not unique")
+        window = owned[0]
+        current = client.find_pinned_window(
+            owner=Path(executable).stem, window_id=window.window_id
+        )
+        if len(current) != 1 or current[0].pid != app.pid:
+            raise RuntimeError("owned hosted application window changed")
+        if app.poll() is not None:
+            raise RuntimeError("owned hosted application process exited")
+        client.activate(app.pid)
+        if app.poll() is not None:
+            raise RuntimeError("owned hosted application process exited")
+        current = client.find_pinned_window(
+            owner=Path(executable).stem, window_id=window.window_id
+        )
+        if len(current) != 1 or current[0].pid != app.pid:
+            raise RuntimeError("owned hosted application window changed")
+        if client.key_window_id(app.pid) != window.window_id:
+            raise RuntimeError("owned hosted application did not take foreground")
+        if app.poll() is not None:
+            raise RuntimeError("owned hosted application process exited")
+
+        identity = backend.qualification_environment_identity()
+        if identity is None or identity[:2] != self.expected_identity[:2]:
+            raise RuntimeError("live foreground identity differs from pinned app")
 
     def reset(self) -> None:
         self.host.launch_app()
@@ -198,9 +247,12 @@ class _CampaignHost:
             assert all(backend is not prior for prior in self._backends)
             assert all(client is not prior._session for prior in self._backends)
             _points(backend)
+            self._restore_pinned_app_foreground(backend)
             controller = attach_windows_qualification_pixel_fault_controller(
                 backend, self.guest, guest_dir=str(self.guest.root)
             )
+            if controller._environment_identity[:2] != self.expected_identity[:2]:
+                raise RuntimeError("controller identity differs from pinned app")
             evidence["controller_bound_identity"] = _safe_environment_identity(
                 controller._environment_identity
             )
@@ -410,7 +462,7 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
         ]
         assert len(saves) == 1 and saves[0].identity_armed
         guest = _LocalGuest(guest_root)
-        owner = _CampaignHost(host, backend, guest)
+        owner = _CampaignHost(host, backend, guest, observed)
         _SESSIONS[name] = owner
         config = parse_verify_config(
             {
