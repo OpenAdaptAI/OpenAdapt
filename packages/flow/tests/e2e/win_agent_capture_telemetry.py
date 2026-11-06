@@ -149,7 +149,6 @@ class _RasterCache:
         self,
         png_sha256: str,
         raster: tuple[bytes, int, int],
-        preserve_sha256: str | None = None,
     ) -> bool:
         if not _valid_sha256(png_sha256):
             return False
@@ -166,10 +165,7 @@ class _RasterCache:
             len(self._items) >= _RASTER_CACHE_IMAGE_LIMIT
             or self.byte_count + len(rgb) > _MAX_RASTER_CACHE_BYTES
         ):
-            victim = next((key for key in self._items if key != preserve_sha256), None)
-            if victim is None:
-                return False
-            old_rgb, _, _ = self._items.pop(victim)
+            _, (old_rgb, _, _) = self._items.popitem(last=False)
             self.byte_count -= len(old_rgb)
         if self.byte_count + len(rgb) > _MAX_RASTER_CACHE_BYTES:
             return False
@@ -393,7 +389,7 @@ class CaptureTelemetry:
                 except OSError:
                     pass
 
-    def capture(self, png: bytes, preserve_sha256: str | None = None) -> int | None:
+    def capture(self, png: bytes) -> int | None:
         """Record metadata and return its sequence without changing ``png``."""
 
         if not self._enabled:
@@ -431,11 +427,10 @@ class CaptureTelemetry:
             sequence = self._sequence
             record["sequence"] = sequence
             self._captures.append(record)
-            self._raster_cache.put(
-                record["png_sha256"],
-                (rgb, width, height),
-                preserve_sha256=preserve_sha256,
-            )
+            try:
+                self._raster_cache.put(record["png_sha256"], (rgb, width, height))
+            except Exception:  # noqa: BLE001 - preserve original capture metadata
+                self._raster_cache = _RasterCache()
             if not self._write_snapshot_locked():
                 self._enabled = False
                 return None
@@ -552,12 +547,7 @@ def instrument_make_handler_class(
                 sequences: list[int] = []
                 try:
                     for png in state["captures"]:
-                        sequence = telemetry.capture(
-                            png,
-                            preserve_sha256=state["expected_sha256"]
-                            if state["stale_frame"]
-                            else None,
-                        )
+                        sequence = telemetry.capture(png)
                         if sequence is not None:
                             sequences.append(sequence)
                     if (
