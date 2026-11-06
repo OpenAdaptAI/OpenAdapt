@@ -55,6 +55,7 @@ class Mark:
 
     at: float
     snapshot: Any = None  # db_snapshot.Snapshot, or None when unreadable
+    audit_before: Optional[set[str]] = None  # audit read before the snapshot
     audit: Optional[set[str]] = None  # the agent's audit entry ids
     errors: list[str] = field(default_factory=list)
 
@@ -86,7 +87,11 @@ class DatabaseShadow(Shadow):
                 "database mode needs frame.database in every action's contract: "
                 "the whole database is what shows a write no action covers"
             )
-        reads = {json.dumps([d.dialect, d.read], sort_keys=True) for d in dbs}
+        reads = {
+            json.dumps([d.dialect, d.read], sort_keys=True)
+            for d in dbs
+            if d is not None
+        }
         if len(reads) != 1:
             raise ShadowConfigError(
                 "every action's contract must read the same database "
@@ -279,6 +284,16 @@ class DatabaseShadow(Shadow):
         # the database is read after it.
         self._wait_checked(self.check_timeout_s if self.guard else self.hold_s)
         with self._lock:
+            if self._stop.is_set():
+                return self._refuse(action, "the shadow is stopping")
+            # A prior check may have finished while _wait_checked was
+            # sleeping. Recheck under the same lock as admission so a
+            # REFUTED/UNCERTAIN result, or another concurrent begin, cannot
+            # slip between the guard and the new ACTION write.
+            if self.guard:
+                why = self._guard_refusal(action, values)
+                if why:
+                    return self._refuse(action, why)
             self._seq += 1
             self._begun += 1
             write = Write(self._seq, "ACTION", action, started=time.time())
@@ -328,14 +343,14 @@ class DatabaseShadow(Shadow):
             why = ""
             if earlier or ep.kind != "sql" or ep.baseline_note:
                 why = ep.baseline_note or "the action can't be checked"
-            elif refused:
+            elif refused and ep.baseline is not None:
                 why = f"the database couldn't be read first: {ep.baseline.exception()}"
             elif gap is not None:
                 why = f"{gap.verdict} {GAP}: " + "; ".join(gap.reasons)
             if why:
                 self._end(ep, "refused: " + why)
                 return self._refuse(action, why, write=write)
-        reply = {
+        reply: dict[str, Any] = {
             "action_id": ep.id,
             "checked": ep.kind == "sql" and not ep.baseline_note,
         }
@@ -522,28 +537,40 @@ class DatabaseShadow(Shadow):
         from openadapt_flow.verify_run import _db_connect, _read_database
 
         mark = Mark(at=time.time())
+        if self.audit_sql:
+            mark.audit_before = self._read_audit(_db_connect, mark.errors)
         mark.snapshot = _read_database(self._watch_cfg, self._salt, errors=mark.errors)
         if self.audit_sql:
-            try:
-                conn = _db_connect(self._watch_cfg.frame.database.read)()
-                try:
-                    cur = conn.cursor()
-                    sql = self.audit_sql
-                    dialect = self._watch_cfg.frame.database.dialect
-                    if dialect == "sqlite":
-                        sql = sql.replace("%(actor)s", ":actor")
-                    elif dialect == "mysql":
-                        cur.execute("START TRANSACTION READ ONLY")
-                    else:
-                        cur.execute("SET TRANSACTION READ ONLY")
-                    cur.execute(sql, {"actor": self.actor_id})
-                    mark.audit = {str(row[0]) for row in cur.fetchall()}
-                    conn.rollback()
-                finally:
-                    conn.close()
-            except Exception as exc:  # noqa: BLE001 - unreadable, never clean
-                mark.errors.append(f"the audit couldn't be read: {exc}")
+            mark.audit = self._read_audit(_db_connect, mark.errors)
         return mark
+
+    def _read_audit(self, db_connect: Any, errors: list[str]) -> Optional[set[str]]:
+        """Read audit ids on both sides of a database watch snapshot."""
+
+        audit_sql = self.audit_sql
+        if audit_sql is None:
+            return None
+        try:
+            conn = db_connect(self._watch_cfg.frame.database.read)()
+            try:
+                cur = conn.cursor()
+                sql = audit_sql
+                dialect = self._watch_cfg.frame.database.dialect
+                if dialect == "sqlite":
+                    sql = sql.replace("%(actor)s", ":actor")
+                elif dialect == "mysql":
+                    cur.execute("START TRANSACTION READ ONLY")
+                else:
+                    cur.execute("SET TRANSACTION READ ONLY")
+                cur.execute(sql, {"actor": self.actor_id})
+                result = {str(row[0]) for row in cur.fetchall()}
+                conn.rollback()
+                return result
+            finally:
+                conn.close()
+        except Exception as exc:  # noqa: BLE001 - unreadable, never clean
+            errors.append(f"the audit couldn't be read: {exc}")
+            return None
 
     def _hole(self, before: str, *, why: str = "") -> Episode:
         """A stretch no read of the watch began: never clean."""
@@ -590,7 +617,7 @@ class DatabaseShadow(Shadow):
             moved = diff(start.snapshot, end.snapshot, key=mac_key(self._salt))
         new: set[str] = set()
         if self.audit_sql:
-            if start.audit is None or end.audit is None:
+            if start.audit_before is None or end.audit is None:
                 # The audit also sees writes the diff can't (ignored
                 # columns, skipped tables): unread, the gap is never clean.
                 verdict = verdict or UNCERTAIN
@@ -599,8 +626,8 @@ class DatabaseShadow(Shadow):
                     "can't be ruled out"
                 )
             else:
-                new = end.audit - start.audit
-                gone = start.audit - end.audit
+                new = end.audit - start.audit_before
+                gone = start.audit_before - end.audit
                 if new:
                     verdict = REFUTED
                     reasons.insert(
@@ -619,7 +646,9 @@ class DatabaseShadow(Shadow):
             who = (
                 "the audit names no write by the agent's user, but not every "
                 "change is audited"
-                if self.audit_sql and end.audit is not None and start.audit is not None
+                if self.audit_sql
+                and end.audit is not None
+                and start.audit_before is not None
                 else "who changed it wasn't checked"
             )
             reasons.append(f"the database changed {GAP}; {who}")

@@ -11,6 +11,7 @@ from __future__ import annotations
 import http.client
 import json
 import sqlite3
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -226,6 +227,56 @@ def test_a_write_before_the_first_action_is_caught(tmp_path: Path) -> None:
     assert _verdicts(sh) == [("sql", "CONFIRMED"), ("gap", "REFUTED")]
 
 
+def test_audit_writes_between_snapshot_and_audit_read_are_not_lost(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = _db(tmp_path)
+    client = Client(db)
+    route = Route(
+        None,  # type: ignore[arg-type] - actions are named, not matched
+        _contract(db),
+        {"fname": "first", "lname": "last", "email": "email"},
+        "create_patient",
+    )
+    sh = DatabaseShadow(
+        routes=[route],
+        actor_id="bot",
+        out=tmp_path / "out",
+        quiet_s=60,
+        audit_sql=AUDIT,
+    )
+
+    from openadapt_flow import verify_run
+
+    original_read = verify_run._read_database
+    interleaved = False
+
+    def read_then_revert(*args: Any, **kwargs: Any) -> Any:
+        nonlocal interleaved
+        snapshot = original_read(*args, **kwargs)
+        if not interleaved:
+            interleaved = True
+            client.sql("UPDATE patient SET phone = '99' WHERE id = 1")
+            client.sql("UPDATE patient SET phone = '1' WHERE id = 1")
+        return snapshot
+
+    monkeypatch.setattr(verify_run, "_read_database", read_then_revert)
+    sh.start()
+    sh.stop()
+
+    assert interleaved
+    assert _verdicts(sh) == [("gap", "REFUTED")]
+    assert "2 audit entries" in " ".join(sh.episodes[0].reasons)
+    con = sqlite3.connect(db)
+    try:
+        assert con.execute("SELECT phone FROM patient WHERE id=1").fetchone() == ("1",)
+        assert con.execute(
+            "SELECT COUNT(*) FROM audit WHERE user='bot'"
+        ).fetchone() == (2,)
+    finally:
+        con.close()
+
+
 def test_another_users_change_between_actions_is_uncertain(tmp_path: Path) -> None:
     db = _db(tmp_path)
     sh = _shadow(tmp_path, db)
@@ -403,6 +454,305 @@ def test_the_guard_returns_the_verdict_and_halts_after_a_refutation(
     assert status == 409 and "is REFUTED" in refused["refused"]
     sh.stop()
     assert len(sh.results()["refusals"]) == 1
+
+
+def test_the_guard_rechecks_a_refutation_completed_while_begin_waits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = _db(tmp_path)
+    sh = _shadow(tmp_path, db, guard=True, check_timeout_s=10)
+    client = Client(db)
+    status, first = sh.begin({"action": "create_patient", "values": VALUES})
+    assert status == 200
+    client.save(VALUES, fault="mutate")
+
+    checking = threading.Event()
+    finish_check = threading.Event()
+    contender_waiting = threading.Event()
+    original_check = sh._check
+    original_wait = sh._wait_checked
+    check_errors: list[BaseException] = []
+
+    def held_check(ep: Any) -> None:
+        try:
+            checking.set()
+            assert finish_check.wait(5), "test did not release the verification"
+            original_check(ep)
+        except BaseException as exc:
+            check_errors.append(exc)
+
+    def observed_wait(wait_s: float) -> None:
+        if threading.current_thread().name == "contender":
+            contender_waiting.set()
+        original_wait(wait_s)
+
+    monkeypatch.setattr(sh, "_check", held_check)
+    monkeypatch.setattr(sh, "_wait_checked", observed_wait)
+    end_reply: dict[str, Any] = {}
+    begin_reply: dict[str, Any] = {}
+    worker_errors: list[BaseException] = []
+
+    def finish_first() -> None:
+        try:
+            end_reply["result"] = sh.end({"action_id": first["action_id"]})
+        except BaseException as exc:
+            worker_errors.append(exc)
+
+    def begin_second() -> None:
+        try:
+            begin_reply["result"] = sh.begin(
+                {
+                    "action": "create_patient",
+                    "values": {
+                        "first": "Bo",
+                        "last": "Reed",
+                        "email": "bo@example.test",
+                    },
+                }
+            )
+        except BaseException as exc:
+            worker_errors.append(exc)
+
+    end_thread = threading.Thread(target=finish_first, name="finish-first")
+    begin_thread = threading.Thread(target=begin_second, name="contender")
+    try:
+        end_thread.start()
+        assert checking.wait(5), "the first verification did not start"
+        begin_thread.start()
+        assert contender_waiting.wait(5), "the second begin did not wait for the check"
+        finish_check.set()
+        join_timeout = sh.check_timeout_s + 2
+        end_thread.join(join_timeout)
+        begin_thread.join(join_timeout)
+        assert not end_thread.is_alive() and not begin_thread.is_alive()
+        assert not worker_errors and not check_errors
+        end_status, ended = end_reply["result"]
+        assert end_status == 200 and ended["verdict"] == "REFUTED"
+        status, refused = begin_reply["result"]
+        assert status == 409 and "is REFUTED" in refused["refused"]
+        assert len(sh.writes) == 1
+        assert sh._seq == 1
+    finally:
+        finish_check.set()
+        end_thread.join(sh.check_timeout_s + 2)
+        begin_thread.join(sh.check_timeout_s + 2)
+        sh.stop()
+
+
+def test_concurrent_guard_begins_are_serialized_at_admission(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = _db(tmp_path)
+    sh = _shadow(tmp_path, db, guard=True)
+    both_passed_initial_guard = threading.Barrier(2)
+    seen: dict[str, int] = {}
+    seen_lock = threading.Lock()
+    original_guard = sh._guard_refusal
+    replies: dict[str, tuple[int, dict[str, Any]]] = {}
+    errors: list[BaseException] = []
+
+    def synchronized_guard(action: str, values: Any) -> str:
+        why = original_guard(action, values)
+        name = threading.current_thread().name
+        if name in {"first-begin", "second-begin"}:
+            with seen_lock:
+                count = seen.get(name, 0)
+                seen[name] = count + 1
+            if count == 0:
+                both_passed_initial_guard.wait(5)
+        return why
+
+    monkeypatch.setattr(sh, "_guard_refusal", synchronized_guard)
+
+    def begin(name: str, values: dict[str, str]) -> None:
+        try:
+            replies[name] = sh.begin({"action": "create_patient", "values": values})
+        except BaseException as exc:
+            errors.append(exc)
+
+    threads = [
+        threading.Thread(
+            target=begin,
+            args=("first", VALUES),
+            name="first-begin",
+        ),
+        threading.Thread(
+            target=begin,
+            args=(
+                "second",
+                {"first": "Bo", "last": "Reed", "email": "bo@example.test"},
+            ),
+            name="second-begin",
+        ),
+    ]
+    try:
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(5)
+        assert all(not thread.is_alive() for thread in threads)
+        assert not errors
+        assert sorted(status for status, _ in replies.values()) == [200, 409]
+        # The older implementation may report a 409 after admitting the
+        # overlapping write; assert the safety invariant before checking the
+        # refusal's wording.
+        assert len(sh.writes) == 1
+        assert sh._seq == 1
+        refused = next(reply for status, reply in replies.values() if status == 409)
+        assert "another announced action is still open" in refused["refused"]
+    finally:
+        sh.stop()
+
+
+def test_stopping_shadow_cancels_queued_baseline_without_admitting_action(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = _db(tmp_path)
+    sh = _shadow(
+        tmp_path,
+        db,
+        guard=True,
+        check_timeout_s=0.1,
+        hold_ms=10_000,
+    )
+    release_workers = threading.Event()
+    all_workers_started = threading.Event()
+    workers_lock = threading.Lock()
+    worker_count = 0
+    blockers = []
+    queued_baseline = threading.Event()
+    replies: dict[str, tuple[int, dict[str, Any]]] = {}
+    errors: list[BaseException] = []
+    original_action_episode = sh._action_episode
+
+    def occupy_worker() -> None:
+        nonlocal worker_count
+        with workers_lock:
+            worker_count += 1
+            if worker_count == 8:
+                all_workers_started.set()
+        if not release_workers.wait(5):
+            raise AssertionError("test did not release a pool worker")
+
+    def observed_action_episode(action: str, values: Any) -> Any:
+        ep = original_action_episode(action, values)
+        queued_baseline.set()
+        return ep
+
+    def begin_action() -> None:
+        try:
+            replies["begin"] = sh.begin({"action": "create_patient", "values": VALUES})
+        except BaseException as exc:
+            errors.append(exc)
+
+    monkeypatch.setattr(sh, "_action_episode", observed_action_episode)
+    for _ in range(8):
+        blockers.append(sh._pool.submit(occupy_worker))
+    begin_thread = threading.Thread(
+        target=begin_action, name="begin-with-queued-baseline"
+    )
+
+    def stop_shadow() -> None:
+        try:
+            sh.stop()
+        except BaseException as exc:
+            errors.append(exc)
+
+    stop_thread = threading.Thread(target=stop_shadow, name="stop-shadow")
+    try:
+        assert all_workers_started.wait(5), "the executor workers did not start"
+        begin_thread.start()
+        assert queued_baseline.wait(5), "the baseline was not submitted"
+        episode = next(ep for ep in sh.episodes if ep.kind == "sql")
+        assert episode.baseline is not None and not episode.baseline.done()
+
+        stop_thread.start()
+        stop_thread.join(5)
+        begin_thread.join(5)
+        assert not stop_thread.is_alive() and not begin_thread.is_alive()
+        assert not errors
+        assert episode.baseline is not None and episode.baseline.cancelled()
+        status, reply = replies["begin"]
+        assert status == 409 and "stopped" in reply["refused"]
+        assert reply.get("checked") is not True
+        assert episode.baseline_note
+        assert len(sh.writes) == 1 and sh.writes[0].status == 409
+    finally:
+        release_workers.set()
+        begin_thread.join(5)
+        stop_thread.join(5)
+        for future in blockers:
+            future.result(timeout=5)
+        if not stop_thread.is_alive():
+            # stop() has already shut the executor down.
+            pass
+        else:
+            sh.stop()
+
+
+def test_guard_refuses_a_begin_already_waiting_when_stop_starts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = _db(tmp_path)
+    sh = _shadow(tmp_path, db, guard=True, check_timeout_s=2)
+    waiting = threading.Event()
+    release_begin = threading.Event()
+    stop_entered_shutdown = threading.Event()
+    original_wait = sh._wait_checked
+    original_shutdown = sh.server.shutdown
+    replies: dict[str, tuple[int, dict[str, Any]]] = {}
+    errors: list[BaseException] = []
+
+    def paused_wait(wait_s: float) -> None:
+        waiting.set()
+        if not release_begin.wait(5):
+            raise AssertionError("test did not release the begin request")
+        original_wait(wait_s)
+
+    def observed_shutdown() -> None:
+        stop_entered_shutdown.set()
+        original_shutdown()
+
+    def send_begin() -> None:
+        try:
+            replies["begin"] = _call(
+                sh.url,
+                "/begin",
+                {"action": "create_patient", "values": VALUES},
+            )
+        except BaseException as exc:
+            errors.append(exc)
+
+    def stop_shadow() -> None:
+        try:
+            sh.stop()
+        except BaseException as exc:
+            errors.append(exc)
+
+    monkeypatch.setattr(sh, "_wait_checked", paused_wait)
+    monkeypatch.setattr(sh.server, "shutdown", observed_shutdown)
+    begin_thread = threading.Thread(target=send_begin, name="begin-before-stop")
+    stop_thread = threading.Thread(target=stop_shadow, name="stop-during-begin")
+    try:
+        begin_thread.start()
+        assert waiting.wait(5), "begin did not reach the controlled wait boundary"
+        stop_thread.start()
+        assert stop_entered_shutdown.wait(5), "stop did not reach server shutdown"
+        assert sh._stop.is_set()
+        release_begin.set()
+        begin_thread.join(5)
+        stop_thread.join(5)
+        assert not begin_thread.is_alive() and not stop_thread.is_alive()
+        assert not errors
+        status, reply = replies["begin"]
+        assert status == 409 and "stopping" in reply["refused"]
+        assert not sh.writes and sh._seq == 0
+    finally:
+        release_begin.set()
+        begin_thread.join(5)
+        stop_thread.join(5)
+        if stop_thread.is_alive():
+            sh.stop()
 
 
 def test_the_guard_refuses_an_unknown_action_and_a_second_open_one(

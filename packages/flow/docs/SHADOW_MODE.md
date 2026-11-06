@@ -162,7 +162,7 @@ nothing of the action landed, the verdict is `UNCERTAIN`, not `REFUTED`.
 schema_version: openadapt.shadow/v1
 mode: db
 actor: "7"                  # the agent's own user id in the app
-audit_sql: "SELECT SecurityLogNum FROM securitylog WHERE UserNum = %(actor)s"
+audit_sql: "SELECT id FROM audit_log WHERE user_id = %(actor)s"
 actions:
   - name: create_patient
     contract: patient.verify.yaml
@@ -173,14 +173,16 @@ actions:
 `{literal: value}`.
 
 **Between actions.** The shadow reads the whole database at the start, at
-each `end`, after each `begin`'s baseline, and at the stop. It compares each
-read with the one before it, so every moment from the start to the stop is
-inside an announced action or a gap between actions. A change in a gap is
-one no announced action covers:
+each `end`, after each `begin`'s baseline, and at the stop. When `audit_sql`
+is configured, it reads the audit separately before and after each watch
+snapshot. A gap compares the audit at the start boundary with the audit after
+the ending snapshot, so writes around either separate read aren't silently
+treated as clean. The snapshot and audit reads are not one atomic database
+transaction. A change in a gap is one no announced action covers:
 
-- `REFUTED` when `audit_sql`, run on the same read-only connection, returns
-  an entry for the agent's own user that wasn't there at the gap's start
-  (the agent wrote without announcing it);
+- `REFUTED` when `audit_sql`, run through a separate read-only connection,
+  returns an entry for the agent's own user that wasn't there at the gap's
+  start (the agent wrote without announcing it);
 - `UNCERTAIN` when the database changed but the audit names no write by the
   agent, when there is no `audit_sql`, or when the audit can't be read;
 - nothing, when the database didn't change.
@@ -215,7 +217,7 @@ between actions.
 - Database mode sees changes in the database only: a client's write to
   a file, a message queue or another service doesn't show. The whole
   database is read at each `begin`, `end` and gap, so on a large schema
-  each read takes longer (in SQL mode, Dolibarr's baseline read added 292 ms median).
+  each read takes longer.
 - Only writes that pass through the proxy are seen as the agent's. A write
   the agent makes another way shows only as a change the frame or the change
   feed sees, inside another write's check.
