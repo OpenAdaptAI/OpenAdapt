@@ -64,6 +64,9 @@ from openadapt_flow.qualify.environment import (
 )
 from openadapt_flow.qualify.faults import WebFaultDriver, WindowsPixelFaultDriver
 from openadapt_flow.qualify.keys import LocalTestKey, new_local_test_key
+from openadapt_flow.qualify.windows_pixel_fault_controller import (
+    WindowsQualificationPixelFaultController,
+)
 from openadapt_flow.qualification_environment import (
     QualificationEnvironmentObservation,
     QualificationEnvironmentObserver,
@@ -328,6 +331,11 @@ def check_ready(
     if config.app.target == "web" and not config.app.url:
         problems.append("app.url is required for a web qualification campaign")
     if config.app.target != "web":
+        if config.app.target != "windows":
+            problems.append(
+                f"app.target {config.app.target!r} has no implemented "
+                "session-owned pixel fault controller"
+            )
         if not config.app.session:
             problems.append(
                 f"app.target {config.app.target!r}: needs an environment-owned app.session"
@@ -381,7 +389,7 @@ def check_ready(
             f"save step {save.id} has an unconfirmed placeholder record check"
         )
     structural = save.anchor.structural if save.anchor is not None else None
-    if save.anchor is not None and (
+    if config.app.target == "web" and save.anchor is not None and (
         structural is None
         or not (structural.selector or (structural.role and structural.name))
     ):
@@ -476,10 +484,11 @@ def _campaign_session_components(
     )
     controller = getattr(backend, "qualification_pixel_fault_controller", None)
     if (
-        getattr(controller, "qualification_target_kind", None) != app.target
-        or not callable(getattr(controller, "apply_screen_fault", None))
+        type(controller) is not WindowsQualificationPixelFaultController
+        or getattr(controller, "qualification_target_kind", None) != app.target
         or getattr(controller, "session_identity_sha256", None)
         != observation.session_identity_sha256
+        or not controller.matches_observation(backend, observation)
     ):
         raise QualifyConfigError(
             "native session has no matching environment-owned pixel fault controller"

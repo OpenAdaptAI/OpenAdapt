@@ -123,6 +123,14 @@ def campaign_environment_observer(
             application_version=application_version,
             headless=headless,
         )
+    if target_kind == "windows":
+        # A protocol-shaped object can fabricate the four-field observer
+        # tuple. Native campaign authority is limited to the existing concrete
+        # backend, whose identity/capabilities are derived from its live agent.
+        from openadapt_flow.backends.windows_backend import WindowsBackend
+
+        if type(backend) is not WindowsBackend:
+            raise ValueError("Windows qualification requires the concrete WindowsBackend")
     if not callable(getattr(backend, "qualification_environment_identity", None)):
         raise ValueError("native qualification backend has no atomic environment observer")
     return CampaignBackendEnvironmentObserver(backend, target_kind=target_kind)

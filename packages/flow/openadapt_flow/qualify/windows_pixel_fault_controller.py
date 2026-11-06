@@ -75,16 +75,24 @@ class WindowsQualificationPixelFaultController:
         backend: Any,
         lab: Any,
         *,
-        session_identity_sha256: str,
+        environment_identity: tuple[str, str, str, str],
         guest_dir: str,
         helper_path: Path | None = None,
     ) -> None:
+        if (
+            not isinstance(environment_identity, tuple)
+            or len(environment_identity) != 4
+            or any(not isinstance(value, str) or not value for value in environment_identity)
+        ):
+            raise ValueError("Windows controller needs a complete atomic environment identity")
+        session_identity_sha256 = environment_identity[2]
         if not _SHA256.fullmatch(session_identity_sha256):
             raise ValueError("Windows controller needs an opaque session digest")
         if not _SAFE_GUEST_PATH.fullmatch(guest_dir) or ".." in guest_dir:
             raise ValueError("Windows controller guest path is unsafe")
         self._backend = backend
         self._lab = lab
+        self._environment_identity = environment_identity
         self.session_identity_sha256 = session_identity_sha256
         self._guest_dir = guest_dir.rstrip("\\/")
         self._helper_path = helper_path or (
@@ -92,6 +100,20 @@ class WindowsQualificationPixelFaultController:
             / "scripts"
             / "desktop"
             / "qualification_pixel_fault_overlay.ps1"
+        )
+
+    def matches_observation(self, backend: Any, observation: Any) -> bool:
+        """Check the full observed session against this controller instance."""
+
+        return (
+            backend is self._backend
+            and (
+                observation.application_identity,
+                observation.application_version,
+                observation.session_identity_sha256,
+                observation.environment_digest,
+            )
+            == self._environment_identity
         )
 
     def apply_screen_fault(self, context: Any, step: Any) -> bool:
@@ -108,7 +130,7 @@ class WindowsQualificationPixelFaultController:
         if (
             not isinstance(identity, tuple)
             or len(identity) != 4
-            or identity[2] != self.session_identity_sha256
+            or identity != self._environment_identity
         ):
             return False
         nonce = uuid.uuid4().hex
@@ -170,7 +192,9 @@ def attach_windows_qualification_pixel_fault_controller(
     choose a session identity. Existing controller attachments are rejected.
     """
 
-    if getattr(backend, "qualification_target_kind", None) != "windows":
+    from openadapt_flow.backends.windows_backend import WindowsBackend
+
+    if type(backend) is not WindowsBackend:
         raise ValueError("pixel fault controller requires a Windows backend")
     if getattr(backend, "qualification_pixel_fault_controller", None) is not None:
         raise ValueError("Windows backend already has a pixel fault controller")
@@ -181,7 +205,7 @@ def attach_windows_qualification_pixel_fault_controller(
     controller = WindowsQualificationPixelFaultController(
         backend,
         lab,
-        session_identity_sha256=identity[2],
+        environment_identity=identity,
         guest_dir=guest_dir,
         helper_path=helper_path,
     )
