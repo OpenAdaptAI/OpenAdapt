@@ -376,10 +376,11 @@ class OwnedPixelTasks:
             result = self._lab.run_ps(
                 f"if (Test-Path -LiteralPath {_ps_quote(remote_path)}) "
                 "{ throw 'qualification helper path already exists' }",
+                check=False,
                 timeout_s=2.0,
                 operation="qualification helper path preflight",
             )
-            if result.returncode not in (None, 0):
+            if result.status != 0:
                 raise RuntimeError("qualification helper path preflight failed")
         with tempfile.TemporaryDirectory(prefix="oa-qualify-fault-") as temp_dir:
             request_path = Path(temp_dir) / "request.json"
