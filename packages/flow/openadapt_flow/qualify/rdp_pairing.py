@@ -59,9 +59,9 @@ def witness_digest(nonce: str, connection_digest: str, guest_digest: str) -> byt
     ):
         raise ValueError("pairing nonce or identity digest is invalid")
     return hashlib.sha256(
-        (_SCHEMA + "\0" + nonce + "\0" + connection_digest + "\0" + guest_digest).encode(
-            "ascii"
-        )
+        (
+            _SCHEMA + "\0" + nonce + "\0" + connection_digest + "\0" + guest_digest
+        ).encode("ascii")
     ).digest()
 
 
@@ -141,9 +141,12 @@ class RdpPairing:
         self._region = region
         self._environment_probe = environment_probe
         self._digest = digest
-        self.environment_marker = "rdp-pairing-v1:" + hashlib.sha256(
-            environment_marker.encode("utf-8") + b"\0" + digest
-        ).hexdigest()
+        self.environment_marker = (
+            "rdp-pairing-v1:"
+            + hashlib.sha256(
+                environment_marker.encode("utf-8") + b"\0" + digest
+            ).hexdigest()
+        )
         if not self.matches_transport(transport):
             raise ValueError("pairing connection is unavailable or changed")
 
@@ -168,9 +171,9 @@ class RdpPairing:
             with Image.open(io.BytesIO(png)) as frame:
                 if frame.size != self._viewport:
                     return False
-                frame = frame.convert("RGB")
+                rgb = frame.convert("RGB")
                 x, y, width, height = self._region
-                pixels = frame.crop((x, y, x + width, y + height))
+                pixels = rgb.crop((x, y, x + width, y + height))
                 for row in range(height):
                     for col in range(width):
                         value = 0
@@ -182,7 +185,9 @@ class RdpPairing:
                                 col - _BORDER
                             ) // _CELL
                             value = (
-                                255 if self._digest[bit // 8] & (128 >> (bit % 8)) else 0
+                                255
+                                if self._digest[bit // 8] & (128 >> (bit % 8))
+                                else 0
                             )
                         if pixels.getpixel((col, row)) != (value, value, value):
                             return False

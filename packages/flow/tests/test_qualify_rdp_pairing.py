@@ -88,9 +88,11 @@ def test_original_environment_refusal_cannot_be_replaced_by_valid_witness():
 
 def test_one_pixel_change_and_border_change_refuse():
     for point in ((0, 0), (2, 2)):
+
         def alter(image):
             old = image.getpixel(point)[0]
             image.putpixel(point, (255 - old,) * 3)
+
         assert not pairing().environment_probe(frame(mutate=alter))
 
 
@@ -115,7 +117,9 @@ def test_unavailable_connection_or_different_transport_refuses():
 def test_configuration_and_readiness_alone_are_not_frame_proof():
     witness = pairing()
     assert not witness.environment_probe(b"ready:" + NONCE.encode())
-    assert not witness.environment_probe(frame(mutate=lambda img: img.paste(0, (0, 0, *img.size))))
+    assert not witness.environment_probe(
+        frame(mutate=lambda img: img.paste(0, (0, 0, *img.size)))
+    )
 
 
 @pytest.mark.parametrize(
