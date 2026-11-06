@@ -30,11 +30,12 @@ paths in identity checks, and Chrome Web Store packaging.
 
 1. Open `chrome://extensions`, enable Developer mode, Load unpacked → this
    directory.
-2. Note the extension id. Edit `native_host/com.openadapt.extension.json`:
-   set `path` to the absolute path of `native_host/openadapt_extension_host.py`
-   (or a small wrapper script) and `allowed_origins` to
-   `chrome-extension://<id>/`.
-3. Install the host manifest where Chrome expects it for your OS.
+2. Note the extension id.
+3. Register the host on macOS or Linux:
+   `python native_host/install_host.py --browser chrome --extension-id <id>`.
+   See [CHROME_EXTENSION_NATIVE_HOST.md](../docs/CHROME_EXTENSION_NATIVE_HOST.md).
+   On Windows, register `native_host/com.openadapt.extension.json` in the
+   registry by hand.
 4. Set `OPENADAPT_EXTENSION_RECORDING` to the recording directory before the
    host starts.
 
@@ -51,6 +52,6 @@ pytest tests/test_extension_evidence.py tests/test_extension_shadow_evidence.py
 ```
 
 The shadow tests run the content and background scripts in Node against a fake
-DOM. Real Chromium coverage for native messaging and multi-frame pages needs a
-headed or headless Chrome later (office lab was unreachable at first
-implementation).
+DOM. `tests/test_extension_native_host.py` installs the host into a throwaway
+Chromium profile and drives the real extension → native messaging → host path
+in headless Chromium.
