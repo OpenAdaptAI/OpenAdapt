@@ -1091,3 +1091,47 @@ def test_guarded_pending_end_has_a_halt_reason(
         release_check.set()
         thread.join(5)
         sh.stop()
+
+
+@pytest.mark.parametrize(
+    ("max_rows", "start_above", "crosses"),
+    [(100, False, False), (1, False, True), (1, True, True)],
+    ids=["insert-below-cap-control", "insert-crosses-up", "update-delete-crosses-down"],
+)
+def test_gap_reads_with_different_row_representations_are_never_clean(
+    tmp_path: Path, max_rows: int, start_above: bool, crosses: bool
+) -> None:
+    db = _db(tmp_path)
+    inserted = (
+        "INSERT INTO patient (fname, lname, email) VALUES ('X', 'Y', 'z@example.test')"
+    )
+    if start_above:
+        with sqlite3.connect(db) as connection:
+            connection.execute(inserted)
+    document = _contract(db).config.model_dump(mode="json")
+    document["frame"]["database"]["max_rows"] = max_rows
+    route = Route(
+        None,  # type: ignore[arg-type] - actions are named, not matched
+        Contract.from_dict(document),
+        {"fname": "first", "lname": "last", "email": "email"},
+        "create_patient",
+    )
+    sh = DatabaseShadow(
+        routes=[route], actor_id="bot", out=tmp_path / "out", quiet_s=60
+    ).start()
+    try:
+        with sqlite3.connect(db) as connection:
+            if start_above:
+                connection.execute("UPDATE patient SET phone = '666' WHERE id = 1")
+                connection.execute("DELETE FROM patient WHERE id = 2")
+            else:
+                connection.execute(inserted)
+    finally:
+        sh.stop()
+    assert sh.gaps_watched == 1 and sh.gaps_clean == 0
+    assert _verdicts(sh) == [("gap", "UNCERTAIN")]
+    patient = sh.episodes[0].evidence["tables"]["patient"]
+    if crosses:
+        assert "compared differently" in patient["unread"]
+    else:
+        assert patient["added"] == 1 and not patient["unread"]
