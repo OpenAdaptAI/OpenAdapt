@@ -354,6 +354,28 @@ def test_authored_bundle_round_trips_through_save_load(dirs):
     assert len(reloaded.data_sources["worklist"].rows) == 2
 
 
+def test_verified_loaded_body_can_be_saved_as_loop_derivative(tmp_path):
+    from openadapt_flow import bundle_validation
+
+    source = tmp_path / "source"
+    original = _typed_note_body()
+    original.save(source)
+    body = Workflow.load(source)
+    assert body.manifest is not None and body.manifest.content_digest
+
+    looped = author_data_driven_loop(body, [{"note": "a"}])
+    destination = tmp_path / "loop"
+    looped.save(destination)
+
+    saved = Workflow.load(destination)
+    assert saved.manifest is not None
+    assert saved.manifest.content_digest != body.manifest.content_digest
+    assert saved.program is not None
+    assert len(saved.data_sources["worklist"].rows) == 1
+    bundle_validation.verify_integrity(saved, destination, saved.manifest)
+    assert Workflow.load(source).program is None
+
+
 # ===========================================================================
 # 2. real-Replayer evidence: healthy multi-record run + poisoned-record HALT
 # ===========================================================================
