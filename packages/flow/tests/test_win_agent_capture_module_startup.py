@@ -15,7 +15,6 @@ import pytest
 
 from tests.e2e.win_agent_capture_telemetry import safe_projection
 
-
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="owned Linux /proc socket startup proof"
 )
