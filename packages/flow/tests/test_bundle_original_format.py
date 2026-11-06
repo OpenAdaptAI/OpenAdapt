@@ -9,6 +9,8 @@ import pytest
 from PIL import Image
 
 from openadapt_flow import bundle_validation as bundles
+from openadapt_flow import crypto, sealed_set
+from openadapt_flow.bundle_sealing import seal_bundle
 from openadapt_flow.ir import ActionKind, Anchor, Step, Workflow
 
 
@@ -209,6 +211,113 @@ def test_loaded_asset_tamper_refuses(tmp_path):
         bundles.verify_integrity(loaded, bundle, loaded.manifest)
 
 
+def _bundle_files(bundle):
+    return {
+        path.relative_to(bundle): path.read_bytes()
+        for path in bundle.rglob("*")
+        if path.is_file()
+    }
+
+
+def test_verified_template_replacement_saves_plaintext_derivative(tmp_path):
+    source = saved_bundle(tmp_path)
+    original_asset = (source / "templates/button.png").read_bytes()
+    replacement = b"replacement crop bytes"
+    loaded = Workflow.load(source)
+    derivative = loaded.model_copy()
+    derivative.stage_verified_template_replacement("templates/button.png", replacement)
+
+    assert (source / "templates/button.png").read_bytes() == original_asset
+    assert "_pending_template_replacements" not in derivative.model_dump()
+    derivative.save(tmp_path / "derivative")
+    loaded.save(tmp_path / "unchanged")
+
+    assert (source / "templates/button.png").read_bytes() == original_asset
+    assert (tmp_path / "derivative/templates/button.png").read_bytes() == replacement
+    assert (tmp_path / "unchanged/templates/button.png").read_bytes() == original_asset
+    assert Workflow.load(tmp_path / "derivative").manifest.content_digest
+
+
+def test_verified_template_replacement_saves_encrypted_derivative(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv(crypto.ENV_KEY, "correct horse battery staple")
+    source = saved_bundle(tmp_path)
+    encrypted_source = tmp_path / "encrypted-source"
+    seal_bundle(source, encrypted_source)
+    source_snapshot = _bundle_files(encrypted_source)
+    replacement = b"encrypted replacement crop bytes"
+    loaded = Workflow.load(encrypted_source)
+    loaded.stage_verified_template_replacement("templates/button.png", replacement)
+
+    destination = tmp_path / "encrypted-derivative"
+    with sealed_set.writing(destination, "bundle", "correct horse battery staple"):
+        loaded.save(destination, key="correct horse battery staple")
+
+    assert _bundle_files(encrypted_source) == source_snapshot
+    assert not (destination / "templates/button.png").exists()
+    sealed_set.open_set(destination, "correct horse battery staple").verify_all()
+    reopened = Workflow.load(destination, key="correct horse battery staple")
+    assert reopened.decrypted_template("templates/button.png") == replacement
+    assert reopened.manifest.content_digest
+
+
+def test_staged_template_replacement_refuses_changed_source(tmp_path):
+    source = saved_bundle(tmp_path)
+    loaded = Workflow.load(source)
+    loaded.stage_verified_template_replacement("templates/button.png", b"replacement")
+    (source / "templates/button.png").write_bytes(b"tampered after staging")
+
+    destination = tmp_path / "must-not-be-created"
+    with pytest.raises(bundles.BundleIntegrityError):
+        loaded.save(destination)
+    assert not destination.exists()
+
+
+@pytest.mark.parametrize("data", [7, "replacement", bytearray(b"replacement")])
+def test_template_replacement_requires_bytes(tmp_path, data):
+    source = saved_bundle(tmp_path)
+    loaded = Workflow.load(source)
+    with pytest.raises(bundles.BundleIntegrityError, match="data must be bytes"):
+        loaded.stage_verified_template_replacement("templates/button.png", data)
+
+
+def test_template_replacement_refuses_save_without_new_seal(tmp_path):
+    source = saved_bundle(tmp_path)
+    loaded = Workflow.load(source)
+    loaded.stage_verified_template_replacement("templates/button.png", b"replacement")
+    destination = tmp_path / "must-not-be-created"
+
+    with pytest.raises(
+        bundles.BundleIntegrityError, match="require a newly sealed manifest"
+    ):
+        loaded.save(destination, seal_manifest=False)
+    assert not destination.exists()
+
+
+@pytest.mark.parametrize(
+    "rel", ["workflow.json", "templates/missing.png", "templates/../workflow.json"]
+)
+def test_template_replacement_requires_existing_safe_template(tmp_path, rel):
+    source = saved_bundle(tmp_path)
+    loaded = Workflow.load(source)
+    with pytest.raises(bundles.BundleIntegrityError):
+        loaded.stage_verified_template_replacement(rel, b"replacement")
+
+
+def test_template_replacement_refuses_new_and_unchecked_workflows(tmp_path):
+    source = saved_bundle(tmp_path)
+    with pytest.raises(bundles.BundleIntegrityError):
+        Workflow(name="new", steps=[]).stage_verified_template_replacement(
+            "templates/button.png", b"replacement"
+        )
+    unchecked = Workflow.load(source, verify_integrity=False)
+    with pytest.raises(bundles.BundleIntegrityError):
+        unchecked.stage_verified_template_replacement(
+            "templates/button.png", b"replacement"
+        )
+
+
 def test_loaded_serialization_requires_explicit_reseal(tmp_path):
     bundle = saved_bundle(tmp_path)
     loaded = Workflow.load(bundle)
@@ -248,6 +357,8 @@ def test_unverified_load_cannot_launder_a_broken_original_seal(tmp_path):
     loaded = Workflow.load(bundle, verify_integrity=False)
     with pytest.raises(bundles.BundleIntegrityError):
         bundles.verify_integrity(loaded, bundle, loaded.manifest)
+    with pytest.raises(bundles.BundleIntegrityError, match="unchecked bundle load"):
+        loaded.save(bundle)
     with pytest.raises(bundles.BundleIntegrityError):
         bundles.content_identity_digest(loaded, loaded.manifest.file_hashes)
 
@@ -296,7 +407,7 @@ def test_authorization_summary_refuses_manifestless_bundle(tmp_path):
         bundle_digest(bundle)
 
 
-def test_missing_seal_requires_explicit_legacy_migration_opt_in(tmp_path):
+def test_missing_seal_cannot_be_migrated_by_loading_and_resaving(tmp_path):
     bundle = saved_bundle(tmp_path)
     raw = json.loads((bundle / "workflow.json").read_bytes())
     raw.pop("manifest")
@@ -307,14 +418,6 @@ def test_missing_seal_requires_explicit_legacy_migration_opt_in(tmp_path):
         bundles.BundleIntegrityError, match="no persisted integrity seal"
     ):
         Workflow.load(bundle)
-
-    loaded = Workflow.load(bundle, allow_unsealed_legacy=True)
-    assert loaded.manifest is not None
-    assert loaded.manifest.content_digest
-    target = tmp_path / "migrated"
-    loaded.save(target)
-    reloaded = Workflow.load(target)
-    bundles.verify_integrity(reloaded, target, reloaded.manifest)
 
 
 def test_model_validate_dump_does_not_recover_verified_load_capability(tmp_path):

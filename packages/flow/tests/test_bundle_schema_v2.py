@@ -317,8 +317,8 @@ def test_fresh_workflow_defaults_to_v2():
     assert Workflow(name="x").schema_version == 2
 
 
-def test_v1_bundle_loads_and_migrates(tmp_path):
-    """Legacy bundles require explicit migration before they can be resealed."""
+def test_v1_bundle_without_a_seal_is_refused(tmp_path):
+    """Legacy bundles without a persisted seal are refused closed."""
     b = _write_bundle_dir(tmp_path)
     (b / "workflow.json").write_text(
         json.dumps(
@@ -342,15 +342,6 @@ def test_v1_bundle_loads_and_migrates(tmp_path):
     )
     with pytest.raises(bv.BundleIntegrityError, match="no persisted integrity seal"):
         Workflow.load(b)
-
-    wf = Workflow.load(b, allow_unsealed_legacy=True)
-    assert wf.schema_version == 2  # migrated on read
-    assert wf.name == "legacy"
-    assert wf.manifest is not None  # computed because absent
-    assert wf.manifest.content_digest  # non-empty
-    assert "templates/btn.png" in wf.manifest.file_hashes
-    wf.save(b)
-    assert Workflow.load(b).manifest.content_digest == wf.manifest.content_digest
 
 
 def test_migrate_bundle_dict_is_additive_noop_on_fields():

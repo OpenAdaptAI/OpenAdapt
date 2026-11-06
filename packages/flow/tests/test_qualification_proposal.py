@@ -222,7 +222,7 @@ def test_local_dev_admission_requires_a_verified_persisted_seal(
         (bundle / "manifest.json").unlink()
         with pytest.raises(BundleIntegrityError, match="no persisted integrity seal"):
             Workflow.load(bundle)
-        workflow = Workflow.load(bundle, allow_unsealed_legacy=True)
+        workflow = Workflow.load(bundle, verify_integrity=False)
 
     proposal = propose_qualification(workflow, recording_dir=recording)
     accepted = accept_proposal(workflow, proposal)

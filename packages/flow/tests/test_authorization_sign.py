@@ -89,7 +89,10 @@ def _bundle(root: Path) -> Path:
         ),
     ]
     wf = Workflow(name="clinic-intake-referral", steps=steps)
-    (bundle / "workflow.json").write_text(wf.model_dump_json(), encoding="utf-8")
+    wf.save(bundle)
+    verified = Workflow.load(bundle)
+    assert verified._loaded_seal is not None
+    assert verified.manifest is not None and verified.manifest.content_digest
     (bundle.parent / "QUALIFICATION.md").write_text(QUALIFICATION, encoding="utf-8")
     return bundle
 

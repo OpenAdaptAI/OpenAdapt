@@ -3404,6 +3404,9 @@ class Workflow(BaseModel):
     # from ``model_dump`` / the content digest (a private attribute). The
     # resolver consumes a decrypted crop via :meth:`decrypted_template`.
     _decrypted_templates: dict[str, bytes] = PrivateAttr(default_factory=dict)
+    # Authorized in-memory edits to existing template assets. The verified
+    # source crop cache above remains unchanged until the destination is saved.
+    _pending_template_replacements: dict[str, bytes] = PrivateAttr(default_factory=dict)
     # Immutable source seal + upgraded-model fingerprint; never serialized.
     _loaded_seal: Any = PrivateAttr(default=None)
     # Process-local authority granted only after integrity verification or by
@@ -3412,7 +3415,6 @@ class Workflow(BaseModel):
     # Explicitly unchecked loads remain un-saveable even if a caller attaches a
     # fresh, empty manifest by hand.
     _unverified_load: bool = PrivateAttr(default=False)
-    _legacy_migration: bool = PrivateAttr(default=False)
 
     def model_copy(self, *, update: Any = None, deep: bool = False) -> "Workflow":
         clone = super().model_copy(update=update, deep=deep)
@@ -3487,6 +3489,91 @@ class Workflow(BaseModel):
         -> PNG bytes); empty for a plaintext bundle."""
         return dict(self._decrypted_templates)
 
+    def stage_verified_template_replacement(self, rel: str, data: bytes) -> None:
+        """Stage bytes for an existing template on a verified loaded bundle.
+
+        The original bundle and its in-memory decrypted asset cache are never
+        changed here. ``save`` verifies the source again before applying the
+        staged bytes to the destination and sealing the new content.
+        """
+        from openadapt_flow import bundle_validation as _bv
+
+        if not isinstance(data, bytes):
+            raise _bv.BundleIntegrityError("template replacement data must be bytes")
+        if (
+            self._unverified_load
+            or self.manifest is None
+            or not self.manifest.content_digest
+            or self._loaded_seal is None
+            or not _bv.has_verified_load_capability(self)
+        ):
+            raise _bv.BundleIntegrityError(
+                "template replacement requires a verified loaded bundle"
+            )
+        if not isinstance(rel, str) or not rel.startswith("templates/"):
+            raise _bv.BundleIntegrityError(
+                "template replacement must name a manifest-listed template asset"
+            )
+        source = self._loaded_seal.source_bundle_dir
+        source_asset = _bv.bundle_asset_path(source, rel)
+        source_has_asset = (
+            rel in self._decrypted_templates
+            if self._loaded_seal.encrypted
+            else source_asset.is_file()
+        )
+        if rel not in self.manifest.file_hashes or not source_has_asset:
+            raise _bv.BundleIntegrityError(
+                "template replacement must name an existing manifest-listed asset"
+            )
+        _bv.verify_loaded_source_integrity(
+            self,
+            source,
+            self.manifest,
+            decrypted_assets=(
+                self._decrypted_templates if self._loaded_seal.encrypted else None
+            ),
+        )
+        self._pending_template_replacements = {
+            **self._pending_template_replacements,
+            rel: bytes(data),
+        }
+
+    def _checked_template_replacements(self) -> dict[str, bytes]:
+        """Return staged replacements only while their loaded source is valid."""
+        from openadapt_flow import bundle_validation as _bv
+
+        replacements = dict(self._pending_template_replacements)
+        if not replacements:
+            return {}
+        if (
+            self._unverified_load
+            or self.manifest is None
+            or not self.manifest.content_digest
+            or self._loaded_seal is None
+            or not _bv.has_verified_load_capability(self)
+        ):
+            raise _bv.BundleIntegrityError(
+                "staged template replacements require a verified loaded bundle"
+            )
+        for rel in replacements:
+            if not isinstance(rel, str) or not rel.startswith("templates/"):
+                raise _bv.BundleIntegrityError(
+                    "template replacement must name a manifest-listed template asset"
+                )
+            source_asset = _bv.bundle_asset_path(
+                self._loaded_seal.source_bundle_dir, rel
+            )
+            source_has_asset = (
+                rel in self._decrypted_templates
+                if self._loaded_seal.encrypted
+                else source_asset.is_file()
+            )
+            if rel not in self.manifest.file_hashes or not source_has_asset:
+                raise _bv.BundleIntegrityError(
+                    "template replacement must name an existing manifest-listed asset"
+                )
+        return replacements
+
     def _sync_disk_templates(self, bundle: Path) -> None:
         """Materialize any in-memory plaintext crops to disk (removing a stale
         ``.enc`` sibling) BEFORE the manifest is (re)sealed, so a re-save hashes
@@ -3547,6 +3634,11 @@ class Workflow(BaseModel):
         from openadapt_flow import bundle_validation as _bv
 
         _bv.bundle_schema_version({"schema_version": self.schema_version})
+        template_replacements = self._checked_template_replacements()
+        if template_replacements and not seal_manifest:
+            raise _bv.BundleIntegrityError(
+                "template replacements require a newly sealed manifest"
+            )
         if self._unverified_load:
             raise _bv.BundleIntegrityError(
                 "an unchecked bundle load cannot be saved or resealed"
@@ -3568,24 +3660,24 @@ class Workflow(BaseModel):
         bundle = Path(bundle_dir)
         from openadapt_flow import sealed_set as _sealed
 
+        source_assets: dict[str, bytes] = {}
         if self._loaded_seal is not None:
             if self.manifest is None:
                 raise _bv.BundleIntegrityError(
                     "loaded bundle lost its original integrity manifest"
                 )
+            source = self._loaded_seal.source_bundle_dir
             _bv.verify_loaded_source_integrity(
                 self,
-                bundle,
+                source,
                 self.manifest,
                 decrypted_assets=(
                     self._decrypted_templates if self.encrypted else None
                 ),
             )
-            source = self._loaded_seal.source_bundle_dir
             if source != bundle.resolve() and not self._loaded_seal.encrypted:
                 for rel, expected in self._loaded_seal.file_hashes:
                     source_asset = _bv.bundle_asset_path(source, rel)
-                    target_asset = _bv.bundle_asset_path(bundle, rel)
                     if (
                         not source_asset.is_file()
                         or _bv._sha256_file(source_asset) != expected
@@ -3593,21 +3685,36 @@ class Workflow(BaseModel):
                         raise _bv.BundleIntegrityError(
                             f"verified source asset {rel!r} changed before save-as"
                         )
-                    if not target_asset.exists():
-                        target_asset.parent.mkdir(parents=True, exist_ok=True)
-                        target_asset.write_bytes(source_asset.read_bytes())
+                    source_assets[rel] = source_asset.read_bytes()
 
         if _sealed.active_writer(bundle) is not None or _sealed.is_sealed(bundle):
             # A sealed bundle stays sealed whatever ``encrypt`` says: many
             # commands re-save a bundle with a bare ``save(bundle)``, and that
             # must never turn a sealed bundle back into plaintext.
-            return self._save_sealed_set(bundle, key, seal_manifest=seal_manifest)
+            path = self._save_sealed_set(
+                bundle,
+                key,
+                seal_manifest=seal_manifest,
+                source_assets=source_assets,
+                template_replacements=template_replacements,
+            )
+            self._pending_template_replacements = {}
+            return path
         bundle.mkdir(parents=True, exist_ok=True)
         (bundle / "templates").mkdir(exist_ok=True)
+        for rel, data in source_assets.items():
+            target_asset = _bv.bundle_asset_path(bundle, rel)
+            if not target_asset.exists():
+                target_asset.parent.mkdir(parents=True, exist_ok=True)
+                target_asset.write_bytes(data)
         # Restore any in-memory crops (from a prior encrypted load/save) to disk
         # as plaintext BEFORE the manifest hashes them; harmless no-op for a
         # freshly-compiled bundle whose crops are already on disk.
         self._sync_disk_templates(bundle)
+        for rel, data in template_replacements.items():
+            target_asset = _bv.bundle_asset_path(bundle, rel)
+            target_asset.parent.mkdir(parents=True, exist_ok=True)
+            target_asset.write_bytes(data)
         if self.schema_version < SCHEMA_VERSION:
             self.schema_version = SCHEMA_VERSION
         # Reflect the at-rest state in the workflow BEFORE the manifest is sealed,
@@ -3661,10 +3768,17 @@ class Workflow(BaseModel):
                 self.manifest,
                 source_bundle_dir=bundle,
             )
+        self._pending_template_replacements = {}
         return path
 
     def _save_sealed_set(
-        self, bundle: Path, key: Optional[str], *, seal_manifest: bool
+        self,
+        bundle: Path,
+        key: Optional[str],
+        *,
+        seal_manifest: bool,
+        source_assets: Optional[dict[str, bytes]] = None,
+        template_replacements: Optional[dict[str, bytes]] = None,
     ) -> Path:
         """Save into a sealed bundle (see :mod:`openadapt_flow.sealed_set`).
 
@@ -3684,7 +3798,15 @@ class Workflow(BaseModel):
                 )
             writer = _sealed.SealedSetWriter(bundle, "bundle", passphrase, resume=True)
         assets = {rel: writer.read_bytes(rel) for rel in writer.files("templates/")}
+        for rel, data in (source_assets or {}).items():
+            if assets.get(rel) != data:
+                writer.write(rel, data)
+            assets[rel] = data
         for rel, data in self._decrypted_templates.items():
+            if assets.get(rel) != data:
+                writer.write(rel, data)
+            assets[rel] = data
+        for rel, data in (template_replacements or {}).items():
             if assets.get(rel) != data:
                 writer.write(rel, data)
             assets[rel] = data
@@ -3727,7 +3849,6 @@ class Workflow(BaseModel):
         *,
         validate: bool = True,
         verify_integrity: bool = True,
-        allow_unsealed_legacy: bool = False,
         key: Optional[str] = None,
     ) -> "Workflow":
         """Load a bundle, migrating v1 -> v2, validating structure, and (for a
@@ -3742,8 +3863,8 @@ class Workflow(BaseModel):
           uncertified-but-well-formed bundle still loads.
         - ``verify_integrity`` (default True): recompute a persisted sealed
           digest and reject tampered content. Bundles without a persisted
-          digest are refused unless ``allow_unsealed_legacy=True`` is supplied
-          by a caller intentionally migrating a legacy artifact.
+          digest are refused by default. ``verify_integrity=False`` permits
+          read-only inspection without granting verified-source capability.
         - ``key`` (default None): decryption passphrase for an ENCRYPTED bundle
           (one saved with ``save(encrypt=True)``, present on disk as
           ``workflow.json.enc`` + ``templates/*.png.enc``). Resolved from ``key``
@@ -3803,11 +3924,7 @@ class Workflow(BaseModel):
                     else _bv.source_canonical_payload(raw, stored.file_hashes)
                 )
         if verify_integrity and (stored is None or not stored.content_digest):
-            if not allow_unsealed_legacy:
-                raise _bv.BundleIntegrityError(
-                    "bundle has no persisted integrity seal; pass "
-                    "allow_unsealed_legacy=True only for intentional legacy migration"
-                )
+            raise _bv.BundleIntegrityError("bundle has no persisted integrity seal")
         wf = cls.model_validate(_bv.migrate_bundle_dict(raw))
         wf._unverified_load = not verify_integrity
         if stored is not None:
@@ -3823,21 +3940,6 @@ class Workflow(BaseModel):
             # tamper, exactly as the workflow.json above). The resolver reads
             # them via ``decrypted_template``; nothing cleartext lands on disk.
             wf._decrypted_templates = _decrypt_template_assets(bundle, key)
-
-        if original_payload is None and verify_integrity and allow_unsealed_legacy:
-            # Explicit legacy migration creates a new seal only after the
-            # caller accepted that the source had no integrity claim. For an
-            # encrypted bundle, hash the decrypted plaintext assets under
-            # their original names rather than the on-disk ciphertext files.
-            migration_assets = wf._decrypted_templates if bundle_encrypted else None
-            wf.manifest = _bv.build_manifest(wf, bundle, assets=migration_assets)
-            wf._legacy_migration = True
-            original_payload = _bv.source_canonical_payload(
-                wf.model_dump(mode="json"), wf.manifest.file_hashes
-            )
-            _bv.remember_original_content(
-                wf, original_payload, wf.manifest, source_bundle_dir=bundle
-            )
 
         if verify_integrity and persisted is not None and wf.manifest is not None:
             if bundle_encrypted:
