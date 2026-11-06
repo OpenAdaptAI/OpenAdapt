@@ -40,6 +40,24 @@ pytestmark = [
 _SESSIONS: dict[str, Any] = {}
 
 
+def _safe_environment_identity(value: Any) -> dict[str, str] | None:
+    """Keep only the four bounded fields in an atomic live identity tuple."""
+
+    if (
+        not isinstance(value, tuple)
+        or len(value) != 4
+        or any(not isinstance(item, str) or not item for item in value)
+    ):
+        return None
+    application, version, session_sha256, environment_sha256 = value
+    return {
+        "application_identity": application,
+        "application_version": version,
+        "session_sha256": session_sha256,
+        "environment_sha256": environment_sha256,
+    }
+
+
 @dataclass(frozen=True)
 class _Result:
     status: int
@@ -156,7 +174,13 @@ class _CampaignHost:
             raise RuntimeError("owned agent connection binding unavailable")
         client = requests.Session()
         controller = None
-        evidence: dict[str, Any] = {"opened": False, "closed": False, "tasks": []}
+        evidence: dict[str, Any] = {
+            "opened": False,
+            "closed": False,
+            "tasks": [],
+            "controller_bound_identity": None,
+            "identity_before_open_return": None,
+        }
         self.sessions.append(evidence)
         try:
             backend = WindowsBackend(
@@ -176,6 +200,21 @@ class _CampaignHost:
             _points(backend)
             controller = attach_windows_qualification_pixel_fault_controller(
                 backend, self.guest, guest_dir=str(self.guest.root)
+            )
+            evidence["controller_bound_identity"] = _safe_environment_identity(
+                controller._environment_identity
+            )
+            observe_identity = getattr(
+                backend, "qualification_environment_identity", None
+            )
+            try:
+                live_identity = (
+                    observe_identity() if callable(observe_identity) else None
+                )
+            except Exception:  # noqa: BLE001 - diagnostics never change admission
+                live_identity = None
+            evidence["identity_before_open_return"] = _safe_environment_identity(
+                live_identity
             )
             assert all(controller is not prior for prior in self._controllers)
             self._backends.append(backend)
@@ -334,6 +373,10 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
             "application_version": observed[1],
             "session_sha256": observed[2],
             "environment_sha256": observed[3],
+        }
+        evidence["initial_pinned_expected"] = {
+            "application_identity": observed[0],
+            "application_version": observed[1],
         }
         before_demo = {row["id"]: row for row in host.rows()}
 
