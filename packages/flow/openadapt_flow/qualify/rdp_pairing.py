@@ -10,6 +10,8 @@ from __future__ import annotations
 import hashlib
 import io
 import re
+import secrets
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -116,52 +118,81 @@ class RdpPairing:
         self,
         transport: Any,
         *,
-        nonce: str,
-        connection_digest: str,
-        guest_digest: str,
         viewport: tuple[int, int],
         region: Rect,
         excluded_regions: tuple[Rect, ...],
         environment_marker: str,
         environment_probe: Callable[[bytes], bool],
+        lifetime_seconds: int = 60,
     ) -> None:
-        pairing_request(
+        # Freeze the local deadline before the owner can obtain a launch request.
+        started = time.monotonic()
+        nonce = secrets.token_hex(16)
+        connection_digest = transport.session_identity()
+        self._request = pairing_request(
             nonce=nonce,
             connection_digest=connection_digest,
             viewport=viewport,
             region=region,
             excluded_regions=excluded_regions,
+            lifetime_seconds=lifetime_seconds,
         )
         if not environment_marker or not callable(environment_probe):
             raise ValueError("pairing must retain the existing environment probe")
-        digest = witness_digest(nonce, connection_digest, guest_digest)
         self._transport = transport
         self._connection_digest = connection_digest
+        self._nonce = nonce
         self._viewport = viewport
         self._region = region
         self._environment_probe = environment_probe
-        self._digest = digest
-        self.environment_marker = (
-            "rdp-pairing-v1:"
-            + hashlib.sha256(
-                environment_marker.encode("utf-8") + b"\0" + digest
-            ).hexdigest()
-        )
+        self._digest: bytes | None = None
+        self._deadline = started + lifetime_seconds
+        # Environment identity must remain stable across fresh case/session
+        # witnesses. The probe binds freshness without changing this identity.
+        self.environment_marker = environment_marker
         if not self.matches_transport(transport):
             raise ValueError("pairing connection is unavailable or changed")
 
     def matches_transport(self, transport: Any) -> bool:
-        """An expected connection identity is checked live, never configured in."""
-        if transport is not self._transport:
+        """Check the same live connection within the original local deadline."""
+        if transport is not self._transport or time.monotonic() >= self._deadline:
             return False
         try:
-            return transport.session_identity() == self._connection_digest
+            return (
+                transport.session_identity() == self._connection_digest
+                and time.monotonic() < self._deadline
+            )
         except Exception:
             return False
 
+    def guest_request(self) -> dict[str, Any]:
+        """Get a request before launch; this never extends the local deadline."""
+        if not self.matches_transport(self._transport):
+            raise ValueError("pairing connection is unavailable or expired")
+        return {
+            **self._request,
+            "viewport": list(self._viewport),
+            "region": list(self._region),
+        }
+
+    def accept_guest_ready(self, status: str) -> bool:
+        """Bind one guest readiness digest; only the PNG probe proves visibility."""
+        if self._digest is not None or not self.matches_transport(self._transport):
+            return False
+        fields = status.split(":")
+        if (
+            len(fields) != 3
+            or fields[0] != "ready"
+            or fields[1] != self._nonce
+            or not _HEX64.fullmatch(fields[2])
+        ):
+            return False
+        self._digest = witness_digest(self._nonce, self._connection_digest, fields[2])
+        return True
+
     def environment_probe(self, png: bytes) -> bool:
         """Verify both original environment and witness on the supplied PNG."""
-        if not self.matches_transport(self._transport):
+        if self._digest is None or not self.matches_transport(self._transport):
             return False
         try:
             if self._environment_probe(png) is not True:

@@ -8,6 +8,7 @@ import io
 import pytest
 from PIL import Image
 
+from openadapt_flow.qualify import rdp_pairing
 from openadapt_flow.qualify.rdp_pairing import RdpPairing, pairing_request
 
 NONCE = "1" * 32
@@ -38,13 +39,19 @@ def args(**changes):
 
 
 def pairing(transport=None, probe=lambda png: True, **changes):
-    return RdpPairing(
-        transport or Transport(),
-        guest_digest=GUEST,
-        environment_marker="synthetic-environment",
-        environment_probe=probe,
-        **args(**changes),
-    )
+    values = args(**changes)
+    nonce = values.pop("nonce")
+    values.pop("connection_digest")
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(rdp_pairing.secrets, "token_hex", lambda count: nonce)
+        witness = RdpPairing(
+            transport or Transport(),
+            environment_marker="synthetic-environment",
+            environment_probe=probe,
+            **values,
+        )
+    assert witness.accept_guest_ready(f"ready:{nonce}:{GUEST}")
+    return witness
 
 
 def frame(nonce=NONCE, guest=GUEST, connection=CONNECTION, mutate=None):
@@ -152,3 +159,91 @@ def test_request_contains_only_bounded_witness_parameters():
         "region": [0, 0, 52, 52],
         "lifetime_seconds": 60,
     }
+
+
+def test_fresh_sessions_share_stable_environment_but_not_witnesses():
+    first = pairing()
+    second_transport = Transport()
+    second_transport.digest = "4" * 64
+    second_nonce = "5" * 32
+    second = pairing(second_transport, nonce=second_nonce)
+    assert first.environment_marker == second.environment_marker == "synthetic-environment"
+    first_frame = frame()
+    second_frame = frame(nonce=second_nonce, connection=second_transport.digest)
+    assert first.environment_probe(first_frame)
+    assert second.environment_probe(second_frame)
+    assert not first.environment_probe(second_frame)
+    assert not second.environment_probe(first_frame)
+    assert not second.matches_transport(Transport())
+
+
+def test_deadline_starts_before_guest_launch_and_cannot_reset(monkeypatch):
+    now = [10.0]
+    monkeypatch.setattr(rdp_pairing.time, "monotonic", lambda: now[0])
+    witness = RdpPairing(
+        Transport(),
+        viewport=VIEWPORT,
+        region=REGION,
+        excluded_regions=EXCLUDED,
+        environment_marker="synthetic-environment",
+        environment_probe=lambda png: True,
+        lifetime_seconds=5,
+    )
+    request = witness.guest_request()
+    assert not witness.environment_probe(frame(nonce=request["nonce"]))
+    now[0] = 14.0
+    assert witness.accept_guest_ready(f"ready:{request['nonce']}:{GUEST}")
+    assert witness.environment_probe(frame(nonce=request["nonce"]))
+    now[0] = 15.0
+    assert not witness.environment_probe(frame(nonce=request["nonce"]))
+    assert not witness.accept_guest_ready(f"ready:{request['nonce']}:{GUEST}")
+    with pytest.raises(ValueError, match="expired"):
+        witness.guest_request()
+
+
+def test_deadline_is_checked_after_original_probe(monkeypatch):
+    now = [10.0]
+    monkeypatch.setattr(rdp_pairing.time, "monotonic", lambda: now[0])
+
+    def slow_original(png):
+        now[0] = 70.0
+        return True
+
+    witness = pairing(probe=slow_original)
+    assert not witness.environment_probe(frame())
+
+
+def test_late_ready_cannot_start_a_new_lifetime(monkeypatch):
+    now = [10.0]
+    monkeypatch.setattr(rdp_pairing.time, "monotonic", lambda: now[0])
+    witness = RdpPairing(
+        Transport(),
+        viewport=VIEWPORT,
+        region=REGION,
+        excluded_regions=EXCLUDED,
+        environment_marker="synthetic-environment",
+        environment_probe=lambda png: True,
+    )
+    request = witness.guest_request()
+    now[0] = 70.0
+    assert not witness.accept_guest_ready(f"ready:{request['nonce']}:{GUEST}")
+    assert not witness.environment_probe(frame(nonce=request["nonce"]))
+
+
+def test_new_pairing_has_new_nonce_and_status_cannot_rebind():
+    def prepare():
+        return RdpPairing(
+            Transport(),
+            viewport=VIEWPORT,
+            region=REGION,
+            excluded_regions=EXCLUDED,
+            environment_marker="synthetic-environment",
+            environment_probe=lambda png: True,
+        )
+
+    first, second = prepare(), prepare()
+    a, b = first.guest_request(), second.guest_request()
+    assert a["nonce"] != b["nonce"]
+    assert not second.accept_guest_ready(f"ready:{a['nonce']}:{GUEST}")
+    assert second.accept_guest_ready(f"ready:{b['nonce']}:{GUEST}")
+    assert not second.accept_guest_ready(f"ready:{b['nonce']}:{'4' * 64}")
