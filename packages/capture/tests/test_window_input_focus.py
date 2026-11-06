@@ -860,6 +860,68 @@ def test_macos_probe_window_at_passes_through_transparent_system_chrome(fake_mac
     assert probe.window_at(2200.0, 170.0) == FocusOwner(window_id=42, pid=1234)
 
 
+def test_macos_probe_window_at_refuses_ax_owner_absent_from_quartz(fake_macos):
+    """AX naming a process Quartz never listed must not pick the target.
+
+    Codex BLOCK on #1984: after full-screen chrome is skipped, returning the
+    first normal window without reconciling its PID with the hit test can
+    attribute another process's click to the target.
+    """
+    from openadapt_capture.window_input_focus import MacOSInputFocusProbe
+
+    probe = MacOSInputFocusProbe()
+    fake_macos.windows = [
+        _quartz_window(5, 50, (0, 0, 2000, 1200), layer=20),  # Dock chrome
+        _quartz_window(42, 1234, (300, 150, 800, 600)),
+    ]
+    fake_macos.hit_pid = 9999  # process absent from the Quartz candidates
+    assert probe.window_at(310.0, 170.0) is None
+
+
+def test_macos_probe_window_at_refuses_ax_owner_only_at_status_level(fake_macos):
+    """AX naming a status-bar PID (filtered from candidates) must refuse.
+
+    The menu-bar extra is layer 25 and never enters ``_onscreen_app_windows``.
+    Skipping chrome then accepting the target behind it would admit the click.
+    """
+    from openadapt_capture.window_input_focus import MacOSInputFocusProbe
+
+    probe = MacOSInputFocusProbe()
+    fake_macos.windows = [
+        _quartz_window(1, 99, (0, 0, 2000, 25), layer=25),  # status; filtered
+        _quartz_window(5, 50, (0, 0, 2000, 1200), layer=20),  # Dock chrome
+        _quartz_window(42, 1234, (300, 150, 800, 600)),
+    ]
+    fake_macos.hit_pid = 99  # status-window owner, not a normal candidate
+    assert probe.window_at(310.0, 170.0) is None
+
+
+def test_macos_ownership_disagreement_refuses_assert_input_on_target(fake_macos):
+    """Admission must refuse when window_at reports unknown after disagreement."""
+    from openadapt_capture.window_capture import TargetWindow
+    from openadapt_capture.window_input_focus import MacOSInputFocusProbe
+
+    probe = MacOSInputFocusProbe()
+    fake_macos.windows = [
+        _quartz_window(5, 50, (0, 0, 2000, 1200), layer=20),
+        _quartz_window(42, 1234, (300, 150, 800, 600)),
+    ]
+    fake_macos.hit_pid = 9999
+    target = TargetWindow(
+        window_id=42,
+        owner="FakeApp",
+        title="Target",
+        pid=1234,
+        bounds=(300, 150, 800, 600),
+        on_screen=True,
+    )
+    scope = WindowCaptureScope.__new__(WindowCaptureScope)
+    scope._focus_probe = probe
+    with pytest.raises(WindowInputNotOnTarget) as excinfo:
+        scope.assert_input_on_target(target, point=(310.0, 170.0))
+    assert excinfo.value.reason == INPUT_POINTER_TARGET_UNKNOWN
+
+
 def test_macos_chrome_does_not_change_keyboard_focus(fake_macos):
     from openadapt_capture.window_input_focus import MacOSInputFocusProbe
 

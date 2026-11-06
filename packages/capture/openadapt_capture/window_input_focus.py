@@ -305,9 +305,7 @@ class MacOSInputFocusProbe:
             success = ax.kAXErrorSuccess
             system = ax.AXUIElementCreateSystemWide()
             ax.AXUIElementSetMessagingTimeout(system, _MACOS_AX_FOCUS_TIMEOUT_SECONDS)
-            error, element = ax.AXUIElementCopyElementAtPosition(
-                system, float(x), float(y), None
-            )
+            error, element = ax.AXUIElementCopyElementAtPosition(system, float(x), float(y), None)
             if error != success or element is None:
                 return None
             error, pid = ax.AXUIElementGetPid(element, None)
@@ -340,6 +338,15 @@ class MacOSInputFocusProbe:
                     return None
                 if hit_pid != info["pid"]:
                     continue  # click-through system chrome
+                return FocusOwner(window_id=info["window_id"], pid=info["pid"])
+            # Normal window. Accessibility already named an owner while we
+            # skipped chrome: only accept this candidate when that owner
+            # agrees. An unresolved or contradictory owner (AX names a
+            # process absent from the Quartz candidates, or one present only
+            # at the filtered status-window level) must not attribute the
+            # click to the target behind the chrome.
+            if hit_tested and hit_pid != info["pid"]:
+                return None
             return FocusOwner(window_id=info["window_id"], pid=info["pid"])
         return None
 
