@@ -50,9 +50,18 @@ from openadapt_flow.ensure_record import (
     EnsureContract,
     FieldRule,
     extra_elements,
+    extract_all,
     is_person,
     normalize,
+    reference_display,
+    reference_field,
     wrong_fields,
+)
+from openadapt_flow.fhir_reference import (
+    ReferenceReader,
+    ReferenceSchema,
+    ReferenceUnreadable,
+    definition_digest,
 )
 from openadapt_flow.generate import fhir_tables as tables
 
@@ -96,6 +105,8 @@ class Teach:
     facts: Mapping[str, Any]
     deployment: Mapping[str, Any]
     confirmed: set[str] = field(default_factory=set)
+    structure_definition: Optional[Mapping[str, Any]] = None
+    reference_targets: Sequence[Mapping[str, Any]] = ()
 
 
 def _resources(doc: Any) -> list[dict[str, Any]]:
@@ -163,6 +174,12 @@ def load_teach(root: str | Path, confirmed: Sequence[str] = ()) -> Teach:
         # A confirmation is a person's, given to the command, never read
         # from the teach data.
         confirmed=set(confirmed),
+        structure_definition=_load(base / "structure_definition.json")
+        if (base / "structure_definition.json").exists()
+        else None,
+        reference_targets=_resources(_load(base / "reference_targets.json"))
+        if (base / "reference_targets.json").exists()
+        else [],
     )
 
 
@@ -486,11 +503,60 @@ def _change_feed(
     }
 
 
+def _reference_reader(teach: Teach) -> ReferenceReader:
+    """Captured targets admit the demonstrations only; runtime reads anew."""
+
+    def fetch(path: str) -> Mapping[str, Any]:
+        parts = path.split("/")
+        found = [
+            r
+            for r in teach.reference_targets
+            if r.get("resourceType") == parts[0]
+            and r.get("id") == parts[1]
+            and (len(parts) == 2 or (r.get("meta") or {}).get("versionId") == parts[3])
+        ]
+        if len(found) != 1:
+            raise ReferenceUnreadable(
+                "demonstration target was not captured exactly once"
+            )
+        return found[0]
+
+    def search(kind: str, query: Mapping[str, str]) -> Sequence[Mapping[str, Any]]:
+        system, value = query["identifier"].split("|", 1)
+        return [
+            r
+            for r in teach.reference_targets
+            if r.get("resourceType") == kind
+            and any(
+                isinstance(i, Mapping)
+                and i.get("system") == system
+                and i.get("value") == value
+                for i in r.get("identifier", [])
+            )
+        ]
+
+    return ReferenceReader(str(teach.deployment.get("base_url") or ""), fetch, search)
+
+
 def generate(teach: Teach) -> Generated:
     rtype = teach.resource_type
     refusals: list[str] = []
     to_confirm: list[str] = []
     prov: dict[str, str] = {}
+    schema = None
+    if teach.structure_definition is not None:
+        try:
+            schema = ReferenceSchema(
+                definition=dict(teach.structure_definition),
+                sha256=definition_digest(teach.structure_definition),
+            )
+            if schema.definition["type"] != rtype:
+                raise ValueError("the schema describes another resource type")
+            schema.paths()
+        except ValueError as exc:
+            return Generated(None, [f"Reference schema: {exc}"], [], {}, [])
+    typed = schema.paths() if schema else {}
+    references = _reference_reader(teach)
 
     made: list[tuple[Demo, dict[str, Any]]] = []
     for demo in teach.demos:
@@ -541,7 +607,17 @@ def generate(teach: Teach) -> Generated:
                     compare=kind,  # type: ignore[arg-type]
                     map=map_for(s.plain, values_at[s.path]) or {},
                 )
-                if _matches(s.value, wanted, rule):
+                parent = s.plain.removesuffix(".reference")
+                if parent in typed:
+                    try:
+                        matched = references.resolve(
+                            s.value, typed[parent]
+                        ) == references.resolve(wanted, typed[parent])
+                    except ReferenceUnreadable:
+                        matched = False
+                else:
+                    matched = _matches(s.value, wanted, rule)
+                if matched:
                     if s.ambiguous:
                         ambiguous_hit = True
                     elif s.group is None:
@@ -586,6 +662,16 @@ def generate(teach: Teach) -> Generated:
         if path in bound or (
             sample.group and any(b.startswith(sample.group + ".") for b in bound)
         ):
+            continue
+        parent = path.removesuffix(".display")
+        if (
+            path.endswith(".display")
+            and sample.plain.removesuffix(".display") in typed
+            and parent + ".reference" in bound
+        ):
+            prov[f"presentation.{path}"] = (
+                "FHIR Reference.display; the same Reference has a bound target identity"
+            )
             continue
         vals = values_at[path]
         present_in = sum(1 for ss in per_demo if any(s.path == path for s in ss))
@@ -680,6 +766,9 @@ def generate(teach: Teach) -> Generated:
         "resource_type": rtype,
         "base_url": teach.deployment.get("base_url"),
     }
+    if schema is not None:
+        contract["reference_schema"] = schema.model_dump()
+        prov["reference_schema"] = "the hash-pinned StructureDefinition snapshot"
     if teach.deployment.get("access_token_env"):
         contract["access_token_env"] = teach.deployment["access_token_env"]
     contract["self"] = list(teach.deployment.get("self") or [])
@@ -698,7 +787,7 @@ def generate(teach: Teach) -> Generated:
         except Exception as exc:  # pragma: no cover - a generator bug
             refusals.append(f"the generated contract does not load: {exc}")
         else:
-            refusals += self_check(model, made, checks)
+            refusals += self_check(model, made, checks, references)
     return Generated(contract, refusals, to_confirm, prov, checks)
 
 
@@ -756,28 +845,47 @@ def self_check(
     contract: EnsureContract,
     made: Sequence[tuple[Demo, dict[str, Any]]],
     checks: list[str],
+    references: Optional[ReferenceReader] = None,
 ) -> list[str]:
     """The contract passes every demonstration and catches every perturbation."""
 
     problems: list[str] = []
     for demo, resource in made:
         params = {k: v for k, v in demo.params.items() if k in contract.fields}
-        wrong = wrong_fields(contract, resource, params)
+        if references is not None:
+            for name, field in contract.fields.items():
+                ref = reference_field(contract, field.path)
+                if ref is not None:
+                    if name in params:
+                        references.collect(params[name], ref[1])
+                    for value in extract_all(resource, ref[0]):
+                        references.collect(value, ref[1])
+        evidence = references.snapshot() if references else None
+        try:
+            wrong = wrong_fields(contract, resource, params, evidence)
+        except ReferenceUnreadable as exc:
+            problems.append(f"{demo.name}: {exc}")
+            continue
         if wrong:
             problems.append(f"{demo.name} reads as wrong: {wrong}")
-        if not is_person(contract, resource, params):
+        if not is_person(contract, resource, params, evidence):
             problems.append(f"{demo.name} is not the one its identity rules name")
         extra = extra_elements(contract, resource, params)
         if extra:
             problems.append(f"{demo.name} holds elements the contract doesn't: {extra}")
         for name, rule in contract.fields.items():
-            if params.get(name) in (None, ""):
+            if params.get(name) in (None, "") or reference_display(contract, rule.path):
                 continue
             bent = copy.deepcopy(resource)
             if not _set_first(bent, rule.path, lambda v, r=rule: _perturb(v, r)):
                 problems.append(f"{demo.name}: can't perturb {name}")
-            elif name not in wrong_fields(contract, bent, params):
-                problems.append(f"{demo.name}: a changed {name} reads as right")
+            else:
+                try:
+                    missed = name not in wrong_fields(contract, bent, params, evidence)
+                except ReferenceUnreadable:
+                    missed = False  # an unresolved changed target cannot confirm
+                if missed:
+                    problems.append(f"{demo.name}: a changed {name} reads as right")
         bent = copy.deepcopy(resource)
         bent["extension"] = [{"url": "urn:openadapt:probe", "valueString": "x"}]
         if not extra_elements(contract, bent, params):
@@ -785,7 +893,7 @@ def self_check(
     if not problems:
         checks.append(
             f"{len(made)} demonstrations read back right and closed; "
-            f"{len(contract.fields)} field perturbations and one extra element "
+            f"{sum(not reference_display(contract, f.path) for f in contract.fields.values())} field perturbations and one extra element "
             "caught in each"
         )
     return problems
