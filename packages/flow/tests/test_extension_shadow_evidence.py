@@ -236,3 +236,107 @@ def test_declared_secret_name_detected():
     assert results[0]["secret"] is True
     assert results[1]["secret"] is True
     assert results[2]["secret"] is False
+
+
+def _shadow_form(*children: dict, mode: str = "open") -> dict:
+    return {
+        "host": {"tag": "my-form", "attrs": {"id": "wrap"}},
+        "shadow": {"mode": mode, "children": list(children)},
+    }
+
+
+def test_benign_name_does_not_hide_secret_id():
+    # Review #1977 P1: `name || id` let a benign name mask id="password".
+    results = _run(
+        "content",
+        CONTENT,
+        [
+            {"isSecret": {"tag": "input", "attrs": {"name": "note", "id": "password"}}},
+            {"isSecret": {"tag": "input", "attrs": {"name": "password", "id": "note"}}},
+            {
+                "isSecret": {
+                    "tag": "input",
+                    "attrs": {"autocomplete": "current-password"},
+                }
+            },
+            {"isSecret": {"tag": "input", "attrs": {"autocomplete": "one-time-code"}}},
+            {"isSecret": {"tag": "input", "attrs": {"name": "note", "id": "memo"}}},
+        ],
+    )
+    assert [r["secret"] for r in results] == [True, True, True, True, False]
+
+
+def test_dispatched_input_withholds_secret_id_value_before_send():
+    live = "hunter2-live-value-must-not-be-sent"
+    results = _run(
+        "content",
+        CONTENT,
+        [
+            {"mode": "record"},
+            {
+                "build": _shadow_form(
+                    {
+                        "tag": "input",
+                        "attrs": {"name": "note", "id": "password"},
+                        "value": live,
+                    }
+                ),
+                "action": "dispatch",
+                "event": "input",
+            },
+        ],
+    )
+    sent = results[1]["sent"]
+    assert len(sent) == 1
+    evidence = sent[0]["msg"]["evidence"]
+    assert evidence["secret_field"] is True
+    assert evidence["value"] == "<secret>"
+    assert live not in json.dumps(sent)
+
+
+def test_dispatched_click_in_open_shadow_reports_inner_target():
+    # Review #1977 P2: document listeners see ev.target retargeted to the host.
+    results = _run(
+        "content",
+        CONTENT,
+        [
+            {"mode": "record"},
+            {
+                "build": _shadow_form({"tag": "button", "attrs": {"id": "go"}}),
+                "action": "dispatch",
+                "event": "click",
+            },
+        ],
+    )
+    step = results[1]
+    # The harness really retargeted ev.target, so the old code would lose the leaf.
+    assert step["dispatched"]["retargeted_id"] == "wrap"
+    evidence = step["sent"][0]["msg"]["evidence"]
+    assert evidence["tag"] == "button"
+    assert evidence["id"] == "go"
+    assert evidence["in_shadow"] is True
+    assert evidence["path"].endswith(">>> button#go")
+
+
+def test_dispatched_click_in_closed_shadow_stays_at_host():
+    # Closed roots are opaque to page/content JS: evidence stops at the host.
+    results = _run(
+        "content",
+        CONTENT,
+        [
+            {"mode": "record"},
+            {
+                "build": _shadow_form(
+                    {"tag": "input", "attrs": {"name": "ssn"}, "value": "123-45-6789"},
+                    mode="closed",
+                ),
+                "action": "dispatch",
+                "event": "input",
+            },
+        ],
+    )
+    sent = results[1]["sent"]
+    evidence = sent[0]["msg"]["evidence"]
+    assert evidence["tag"] == "my-form"
+    assert evidence["in_shadow"] is False
+    assert "123-45-6789" not in json.dumps(sent)

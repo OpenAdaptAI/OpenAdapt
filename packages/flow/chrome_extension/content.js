@@ -7,6 +7,7 @@
   const SCHEMA = 'openadapt.extension-evidence/1';
   const REDACTED_VALUE = '<secret>';
   const SECRET_NAME = /pass(word|wd|phrase)?\b|passwd|pwd|secret|private[_-]?key|^pin$|^otp$/i;
+  const SECRET_AUTOCOMPLETE = /(^|\s)(current-password|new-password|one-time-code)(\s|$)/;
 
   let recording = false;
   let seq = 0;
@@ -17,8 +18,29 @@
     const type = (el.getAttribute && el.getAttribute('type')) || el.type || '';
     if (String(type).toLowerCase() === 'password') return true;
     if (el.getAttribute && el.getAttribute('data-openadapt-secret') != null) return true;
-    const name = (el.getAttribute && (el.getAttribute('name') || el.getAttribute('id'))) || '';
-    return Boolean(name && SECRET_NAME.test(String(name)));
+    if (!el.getAttribute) return false;
+    // Check name and id independently: a benign name must not hide a secret id.
+    for (const attr of ['name', 'id']) {
+      const candidate = el.getAttribute(attr);
+      if (candidate && SECRET_NAME.test(String(candidate))) return true;
+    }
+    const autocomplete = String(el.getAttribute('autocomplete') || '').toLowerCase();
+    if (SECRET_AUTOCOMPLETE.test(autocomplete)) return true;
+    return false;
+  }
+
+  // The element the user actually acted on. A document-level listener sees
+  // ev.target retargeted to the outermost shadow host; composedPath() still
+  // exposes nodes inside open shadow roots (closed roots stay opaque).
+  function eventTarget(ev) {
+    if (!ev) return null;
+    if (typeof ev.composedPath === 'function') {
+      const path = ev.composedPath();
+      for (const node of path || []) {
+        if (node && node.nodeType === 1) return node;
+      }
+    }
+    return ev.target || null;
   }
 
   function cssEscapeIdent(value) {
@@ -126,15 +148,15 @@
   }
 
   function onClick(ev) {
-    emit(targetEvidence(ev.target, 'click'));
+    emit(targetEvidence(eventTarget(ev), 'click'));
   }
 
   function onFocusIn(ev) {
-    emit(targetEvidence(ev.target, 'focus'));
+    emit(targetEvidence(eventTarget(ev), 'focus'));
   }
 
   function onInput(ev) {
-    emit(targetEvidence(ev.target, 'input'));
+    emit(targetEvidence(eventTarget(ev), 'input'));
   }
 
   function attach() {
@@ -180,6 +202,7 @@
       shadowPiercingPath,
       targetEvidence,
       isSecretField,
+      eventTarget,
       get attached() {
         return { ...attached };
       },

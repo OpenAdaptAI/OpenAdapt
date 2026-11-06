@@ -149,3 +149,15 @@ def test_native_host_validate_and_write_via_buffer(tmp_path: Path):
     loaded = load_extension_evidence(tmp_path)
     assert loaded[0]["value"] == REDACTED_VALUE
     assert loaded[0]["in_shadow"] is True
+
+
+def test_declared_secret_names_match_id_even_with_benign_name():
+    line = {
+        "kind": "target",
+        "name": "note",
+        "id": "member_ssn",
+        "value": "123-45-6789",
+    }
+    out = redact_evidence(line, secret_names=["member_ssn"])
+    assert out["secret_field"] is True
+    assert out["value"] == "<secret>"

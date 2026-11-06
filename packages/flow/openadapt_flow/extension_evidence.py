@@ -66,10 +66,11 @@ def redact_evidence(
     """
 
     names = {n.lower() for n in secret_names}
-    name = line.get("name") or line.get("id")
     declared = bool(line.get("secret_field"))
-    if name and str(name).lower() in names:
-        declared = True
+    # Check name and id independently: a benign name must not hide a secret id.
+    for candidate in (line.get("name"), line.get("id")):
+        if candidate and str(candidate).lower() in names:
+            declared = True
     secret = is_secret_field(
         tag=line.get("tag"),
         name=line.get("name"),

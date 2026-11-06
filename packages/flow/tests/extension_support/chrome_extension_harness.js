@@ -206,6 +206,48 @@ function buildDom(spec) {
   return { host, leaf };
 }
 
+// Dispatch a real-shaped event to the document's capture listeners, as a
+// browser would: listeners outside a shadow root see ev.target retargeted to
+// the outermost host, and composedPath() hides nodes inside closed roots.
+function dispatchToDocument(leaf, type) {
+  const full = [];
+  let n = leaf;
+  while (n) {
+    full.push(n);
+    if (n._isShadowRoot) n = n.host;
+    else n = n.parentNode;
+  }
+  full.push(document);
+  // Drop everything inside a closed shadow root (and the root itself).
+  let visible = full;
+  for (let i = full.length - 1; i >= 0; i--) {
+    if (full[i]._isShadowRoot && full[i].mode === 'closed') {
+      visible = full.slice(i + 1);
+      break;
+    }
+  }
+  // Retarget: the outermost element not inside any shadow root.
+  let target = leaf;
+  for (const node of full) {
+    if (node.nodeType === 1 && node.getRootNode() === document) {
+      target = node;
+      break;
+    }
+  }
+  const ev = {
+    type,
+    target,
+    composed: true,
+    composedPath() {
+      return visible.slice();
+    },
+  };
+  for (const l of document._listeners.slice()) {
+    if (l.type === type && l.capture) l.callback(ev);
+  }
+  return { retargeted_tag: target.tagName.toLowerCase(), retargeted_id: target.id || null };
+}
+
 const results = [];
 
 for (const step of steps) {
@@ -226,6 +268,15 @@ for (const step of steps) {
       if (step.action === 'evidence') {
         results.push({
           evidence: api.targetEvidence(leaf, step.event || 'click'),
+          sent: sent.slice(),
+          recording: api.recording,
+        });
+        continue;
+      }
+      if (step.action === 'dispatch') {
+        const dispatched = dispatchToDocument(leaf, step.event || 'click');
+        results.push({
+          dispatched,
           sent: sent.slice(),
           recording: api.recording,
         });

@@ -27,11 +27,23 @@ Schema: `openadapt.extension-evidence/1`. Engine API:
 the extension is absent, and prefers the extension path when it carried shadow
 detail. Callers stay backend-agnostic.
 
+## Event targets
+
+Listeners run at the document in the capture phase, where `ev.target` is
+retargeted to the outermost shadow host. The content script takes the first
+element of `ev.composedPath()` instead, so a click or input inside an open
+shadow root reports the inner element (`host >>> inner`). Closed shadow roots
+are opaque to page and content-script JS: evidence stops at their host, and no
+value from inside them is sent.
+
 ## Safety
 
 - Capture only while recording is active (visible `REC` badge).
 - Redact password and declared-secret values in the content script and again
-  on ingest.
+  on ingest. A field is secret when its `type` is `password`, it carries
+  `data-openadapt-secret`, its `autocomplete` is `current-password`,
+  `new-password` or `one-time-code`, or its `name` **or** `id` (each checked on
+  its own) matches the secret pattern.
 - Local native messaging only; no remote endpoints.
 - Missing evidence file → empty capture (degrade cleanly).
 
