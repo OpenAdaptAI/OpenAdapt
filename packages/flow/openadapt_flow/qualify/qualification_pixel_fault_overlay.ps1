@@ -240,7 +240,7 @@ public sealed class OAFlowQualificationOverlay : Form {
         $forms += $form
         $bitmaps += $bitmap
         [System.Windows.Forms.Application]::DoEvents()
-        [System.IO.File]::WriteAllText($StatusPath, "ready:$nonce:$guestDigest")
+        [System.IO.File]::WriteAllText($StatusPath, "ready:${nonce}:$guestDigest")
         Start-Sleep -Seconds ([int]$request.lifetime_seconds)
     }
     elseif ($request.kind -eq 'ambiguity') {
@@ -306,7 +306,7 @@ public sealed class OAFlowQualificationOverlay : Form {
 
     [System.Windows.Forms.Application]::DoEvents()
     if (-not $isPairing) {
-        [System.IO.File]::WriteAllText($StatusPath, "ready:$nonce")
+        [System.IO.File]::WriteAllText($StatusPath, "ready:${nonce}:$guestDigest")
         Start-Sleep -Seconds 8
     }
 }
