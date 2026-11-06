@@ -183,3 +183,18 @@ def test_cases_fixture_file_lists_every_preregistered_id() -> None:
         "wrong_amount_in_banner",
         "wrong_patient_in_note",
     ]
+
+
+def test_typed_proven_value_uses_the_comparison_numeric_semantics() -> None:
+    from openadapt_flow.intake.param_gate import typed_proven_value
+    from openadapt_flow.ir import ParamKind, ParamSpec
+
+    spec = ParamSpec(name="amount", type=ParamKind.NUMBER, intake_field="amount")
+    assert typed_proven_value(spec, "12,50") == 12.5
+    assert typed_proven_value(spec, "1,250") == 1250
+    assert typed_proven_value(spec, "$1,250.75") == 1250.75
+    assert typed_proven_value(spec, "42") == 42
+    # Unparseable or not exactly representable: left as text, so the schema
+    # check refuses instead of running a different number.
+    assert typed_proven_value(spec, "twelve") == "twelve"
+    assert typed_proven_value(spec, "12345678901234567.89") == "12345678901234567.89"

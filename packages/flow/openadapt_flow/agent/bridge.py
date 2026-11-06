@@ -1076,6 +1076,7 @@ class AgentBridge:
             bundle_dir=info.bundle_dir,
             params=params,
             url_override=url_override,
+            admitted_bundle_sha256=intake.bundle_sha256,
         )
         attention = (
             attention_for(self.attended, outcome.run_dir)

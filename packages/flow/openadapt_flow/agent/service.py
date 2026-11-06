@@ -166,6 +166,9 @@ class FlowCliEngine:
             bundle_dir=bundle_dir,
             params=inputs,
             run_id=run_id,
+            # The CLI runs a digest-checked private snapshot and is told the
+            # admitted digest, so a later edit can't reach consumption.
+            admitted_bundle_sha256=admitted_bundle_sha256,
         )
         attention = None
         if outcome.status == "halt":

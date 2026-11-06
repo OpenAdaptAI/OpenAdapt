@@ -527,3 +527,80 @@ def test_mismatched_numeric_caller_still_refused(
     )
     assert _refused(result), result
     assert stub.params == []
+
+
+# -- decimal-comma amounts keep their value (#1978 Codex BLOCK) ---------------
+
+
+def _amount_bridge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, proven: str):
+    bundle = tmp_path / "bundles" / "amount-note"
+    _save_typed_bundle(
+        bundle, kind=ParamKind.NUMBER, param="amount", intake="amount_due"
+    )
+    stub = _Stub()
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
+    bridge = AgentBridge(
+        bundle.parent,
+        RunnerConfig(
+            flow_cli=("openadapt-flow-stub",), runs_dir=tmp_path / "runs", timeout_s=5
+        ),
+        allow_run=True,
+    )
+    name = _name(bridge)
+    bridge.register_intake_provenance(
+        name, _provenance_field(tmp_path / "a.json", "amount_due", proven)
+    )
+    return bridge, stub, name
+
+
+def _run_amount(bridge: AgentBridge, name: str, amount: Any, request_id: str):
+    return bridge.dispatch(
+        "run_workflow",
+        {
+            "workflow": name,
+            "inputs": {"amount": amount},
+            "request_id": request_id,
+            "wait_seconds": 10,
+        },
+    )
+
+
+def test_decimal_comma_proven_amount_is_not_inflated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fails on 900f52669: trusted ``12,50`` reached the CLI as ``1250``.
+
+    The gate already judged caller 12.5 the same amount as ``12,50``; the
+    value the run sends must be that same amount.
+    """
+
+    bridge, stub, name = _amount_bridge(tmp_path, monkeypatch, "12,50")
+    result = _run_amount(bridge, name, 12.5, "req-comma-001")
+    assert result["outcome"] == "done", result
+    assert stub.params == [{"amount": "12.5"}]
+
+
+def test_decimal_comma_proven_amount_on_the_legacy_tool(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bridge, stub, _ = _amount_bridge(tmp_path, monkeypatch, "12,50")
+    legacy = next(iter(bridge.workflows))
+    bridge.dispatch(f"run_{legacy}", {"amount": "12.5"})
+    assert stub.params == [{"amount": "12.5"}]
+
+
+def test_inflated_caller_amount_is_still_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bridge, stub, name = _amount_bridge(tmp_path, monkeypatch, "12,50")
+    assert _refused(_run_amount(bridge, name, 1250, "req-comma-bad"))
+    assert stub.params == []
+
+
+def test_thousands_comma_proven_amount_keeps_its_value(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bridge, stub, name = _amount_bridge(tmp_path, monkeypatch, "1,250")
+    result = _run_amount(bridge, name, 1250, "req-thousands-001")
+    assert result["outcome"] == "done", result
+    assert stub.params == [{"amount": "1250"}]

@@ -233,29 +233,42 @@ def _param_kind(spec: Any) -> str:
     return str(value)
 
 
-def typed_proven_value(spec: Any, proven_text: str) -> Any:
+def typed_proven_value(spec: Any, proven_text: str, kind: Optional[str] = None) -> Any:
     """Declared-type form of a trusted provenance string.
 
     Provenance stores strings. A number or boolean workflow input must keep its
     declared type after the proven value replaces the caller's, or the card
     schema check refuses a run that already matched the document. Unparseable
     text is left as a string so the schema check still fails closed.
+
+    Numbers are read with the same semantics the gate compared them with
+    (``kind``, default ``currency``): ``12,50`` is twelve and a half, as the
+    comparison judged it, never 1250. A number a float can't carry exactly
+    stays text, so the run is refused rather than rounded.
     """
 
-    kind = _param_kind(spec)
+    declared = _param_kind(spec)
     text = "" if proven_text is None else str(proven_text)
-    if kind == "number":
+    if declared == "number":
         from decimal import Decimal, InvalidOperation
 
-        raw = text.strip().replace(",", "")
+        from openadapt_flow.runtime.effects.readback_values import normalize_value
+
+        numeric_kind = kind if kind in ("currency", "number") else "currency"
+        canonical = normalize_value(text, numeric_kind)  # type: ignore[arg-type]
+        if canonical is None:
+            return text
         try:
-            amount = Decimal(raw)
+            amount = Decimal(canonical)
         except InvalidOperation:
             return text
         if amount == amount.to_integral_value():
             return int(amount)
-        return float(amount)
-    if kind == "boolean":
+        as_float = float(amount)
+        if Decimal(repr(as_float)) != amount:
+            return text
+        return as_float
+    if declared == "boolean":
         key = text.strip().lower()
         if key in {"true", "yes", "y", "1", "x", "checked"}:
             return True
@@ -263,6 +276,15 @@ def typed_proven_value(spec: Any, proven_text: str) -> Any:
             return False
         return text
     return text
+
+
+def _rendered(value: Any) -> str:
+    """The string the CLI params file will carry for ``value``."""
+
+    from openadapt_flow.agent.cards import coerce_inputs
+
+    # Same rendering the run uses (RunService) for the values it sends.
+    return coerce_inputs(None, {"v": value})["v"]  # type: ignore[arg-type]
 
 
 def _declares_intake(param_types: Optional[Mapping[str, Any]]) -> bool:
@@ -444,11 +466,26 @@ class IntakeGrantRegistry:
             result = check_tool_params(proposed, grant.provenance, specs)
             if not result.ok:
                 return IntakeGateDecision(ok=False, reason=result.reason)
+            changed: list[str] = []
             for name in bound_param_names(specs):
                 intake_name = _intake_field(specs[name])
                 assert intake_name is not None
-                proven_text = grant.provenance.params[intake_name].value
-                values[name] = typed_proven_value(specs[name], proven_text)
+                proven = grant.provenance.params[intake_name]
+                kind = _kind_for(specs[name], proven)
+                typed = typed_proven_value(specs[name], proven.value, kind)
+                # What the run sends must still be the proven value under the
+                # comparison's own semantics, or nothing runs.
+                if _param_kind(specs[name]) == "number" and not same_value(
+                    _rendered(typed), proven.value, kind
+                ):
+                    changed.append(name)
+                values[name] = typed
+            if changed:
+                return IntakeGateDecision(
+                    ok=False,
+                    reason="the proven intake value could not be carried "
+                    "unchanged for " + ", ".join(changed),
+                )
             grant.consumed_by = token
             admitted_dir = str(Path(bundle_dir).resolve())
             return IntakeGateDecision(
