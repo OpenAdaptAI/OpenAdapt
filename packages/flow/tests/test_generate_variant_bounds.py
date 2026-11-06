@@ -110,12 +110,9 @@ def test_create_variants_keep_demonstrated_set_first() -> None:
         mode="create",
         optional=["optional"],
         locations={
-            name: Location((), (name,), "exact")
-            for name in ("required", "optional")
+            name: Location((), (name,), "exact") for name in ("required", "optional")
         },
-        demos=[
-            Demo("create_record", {"required": "a", "optional": "b"}, Diff([]), {})
-        ],
+        demos=[Demo("create_record", {"required": "a", "optional": "b"}, Diff([]), {})],
     )
 
     actual = gen.variants(
