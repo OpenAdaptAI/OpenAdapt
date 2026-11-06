@@ -17,7 +17,7 @@ import stat
 import sys
 import tempfile
 import threading
-from collections import deque
+from collections import OrderedDict, deque
 from pathlib import Path
 from typing import Any, Callable
 
@@ -26,6 +26,243 @@ _RING_LIMIT = 32
 _MAX_BODY_BYTES = 1_048_576
 _MAX_SIDECAR_BYTES = 65_536
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_RASTER_CACHE_IMAGE_LIMIT = 2
+_MAX_RASTER_PIXELS = 8_294_400
+_MAX_RASTER_IMAGE_BYTES = 24_883_200
+_MAX_RASTER_CACHE_BYTES = 49_766_400
+_MAX_RASTER_DIMENSION = 16_384
+
+
+def _unavailable_pixel_diff(
+    code: str,
+    expected_dimensions: list[int] | None = None,
+    current_dimensions: list[int] | None = None,
+) -> dict[str, Any]:
+    return {
+        "status": "unavailable",
+        "code": code,
+        "expected_dimensions": expected_dimensions,
+        "current_dimensions": current_dimensions,
+        "changed_pixel_count": None,
+        "changed_bbox": None,
+    }
+
+
+def _valid_rgb_raster(raster: Any) -> bool:
+    if (
+        not isinstance(raster, tuple)
+        or len(raster) != 3
+        or not isinstance(raster[0], bytes)
+        or type(raster[1]) is not int
+        or type(raster[2]) is not int
+    ):
+        return False
+    rgb, width, height = raster
+    pixel_count = width * height
+    return (
+        width > 0
+        and height > 0
+        and width <= _MAX_RASTER_DIMENSION
+        and height <= _MAX_RASTER_DIMENSION
+        and pixel_count <= _MAX_RASTER_PIXELS
+        and len(rgb) == pixel_count * 3
+        and len(rgb) <= _MAX_RASTER_IMAGE_BYTES
+    )
+
+
+def compare_captured_rasters(
+    expected: tuple[bytes, int, int] | None,
+    current: tuple[bytes, int, int] | None,
+) -> dict[str, Any]:
+    """Compare two bounded RGB buffers using Pillow's C-backed operations."""
+
+    expected_dimensions: list[int] | None = None
+    current_dimensions: list[int] | None = None
+    for raster, label in ((expected, "expected"), (current, "current")):
+        if raster is None:
+            return _unavailable_pixel_diff("raster_missing")
+        if (
+            not isinstance(raster, tuple)
+            or len(raster) != 3
+            or not isinstance(raster[0], bytes)
+            or type(raster[1]) is not int
+            or type(raster[2]) is not int
+            or raster[1] <= 0
+            or raster[2] <= 0
+        ):
+            return _unavailable_pixel_diff("raster_invalid")
+        rgb, width, height = raster
+        pixel_count = width * height
+        if width > _MAX_RASTER_DIMENSION or height > _MAX_RASTER_DIMENSION:
+            return _unavailable_pixel_diff("raster_size_limit")
+        if pixel_count > _MAX_RASTER_PIXELS or len(rgb) > _MAX_RASTER_IMAGE_BYTES:
+            return _unavailable_pixel_diff("raster_size_limit")
+        if len(rgb) != pixel_count * 3:
+            return _unavailable_pixel_diff("raster_invalid")
+        if label == "expected":
+            expected_dimensions = [width, height]
+        else:
+            current_dimensions = [width, height]
+    assert expected is not None and current is not None
+    assert expected_dimensions is not None and current_dimensions is not None
+    if expected_dimensions != current_dimensions:
+        return _unavailable_pixel_diff(
+            "dimension_mismatch", expected_dimensions, current_dimensions
+        )
+    try:
+        from PIL import Image, ImageChops  # noqa: PLC0415
+
+        width, height = expected_dimensions
+        expected_image = Image.frombytes("RGB", (width, height), expected[0])
+        current_image = Image.frombytes("RGB", (width, height), current[0])
+        difference = ImageChops.difference(expected_image, current_image)
+        channels = difference.split()
+        changed_mask = channels[0].point([0] + [255] * 255)
+        for channel in channels[1:]:
+            changed_mask = ImageChops.lighter(
+                changed_mask, channel.point([0] + [255] * 255)
+            )
+        changed_pixel_count = changed_mask.histogram()[255]
+        changed_bbox = changed_mask.getbbox()
+        return {
+            "status": "available",
+            "code": "raster_compared",
+            "expected_dimensions": expected_dimensions,
+            "current_dimensions": current_dimensions,
+            "changed_pixel_count": changed_pixel_count,
+            "changed_bbox": list(changed_bbox) if changed_bbox else None,
+        }
+    except Exception:  # noqa: BLE001 - diagnostics never change refusal/admission
+        return _unavailable_pixel_diff(
+            "raster_invalid", expected_dimensions, current_dimensions
+        )
+
+
+class _RasterCache:
+    """Small LRU holding only decoded RGB bytes for exact PNG hashes."""
+
+    def __init__(self) -> None:
+        self._items: OrderedDict[str, tuple[bytes, int, int]] = OrderedDict()
+        self.byte_count = 0
+
+    def put(
+        self,
+        png_sha256: str,
+        raster: tuple[bytes, int, int],
+        preserve_sha256: str | None = None,
+    ) -> bool:
+        if not _valid_sha256(png_sha256):
+            return False
+        if not _valid_rgb_raster(raster):
+            return False
+        existing = self._items.get(png_sha256)
+        if existing is not None:
+            self._items.move_to_end(png_sha256)
+            return existing == raster
+        rgb, _, _ = raster
+        if len(rgb) > _MAX_RASTER_CACHE_BYTES:
+            return False
+        while self._items and (
+            len(self._items) >= _RASTER_CACHE_IMAGE_LIMIT
+            or self.byte_count + len(rgb) > _MAX_RASTER_CACHE_BYTES
+        ):
+            victim = next(
+                (key for key in self._items if key != preserve_sha256), None
+            )
+            if victim is None:
+                return False
+            old_rgb, _, _ = self._items.pop(victim)
+            self.byte_count -= len(old_rgb)
+        if self.byte_count + len(rgb) > _MAX_RASTER_CACHE_BYTES:
+            return False
+        self._items[png_sha256] = raster
+        self.byte_count += len(rgb)
+        return True
+
+    def get(self, png_sha256: str) -> tuple[bytes, int, int] | None:
+        if not _valid_sha256(png_sha256):
+            return None
+        raster = self._items.get(png_sha256)
+        if raster is not None:
+            self._items.move_to_end(png_sha256)
+        return raster
+
+
+def _validated_pixel_diff(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict) or set(value) != {
+        "status",
+        "code",
+        "expected_dimensions",
+        "current_dimensions",
+        "changed_pixel_count",
+        "changed_bbox",
+    }:
+        return None
+
+    def dimensions(candidate: Any) -> list[int] | None:
+        if candidate is None:
+            return None
+        if (
+            not isinstance(candidate, list)
+            or len(candidate) != 2
+            or any(type(item) is not int for item in candidate)
+            or not (1 <= candidate[0] <= _MAX_RASTER_DIMENSION)
+            or not (1 <= candidate[1] <= _MAX_RASTER_DIMENSION)
+            or candidate[0] * candidate[1] > _MAX_RASTER_PIXELS
+        ):
+            return None
+        return candidate
+
+    expected_dimensions = dimensions(value.get("expected_dimensions"))
+    current_dimensions = dimensions(value.get("current_dimensions"))
+    if value.get("expected_dimensions") is not None and expected_dimensions is None:
+        return None
+    if value.get("current_dimensions") is not None and current_dimensions is None:
+        return None
+    if value.get("status") == "unavailable":
+        if (
+            value.get("code")
+            not in {
+                "raster_missing",
+                "raster_invalid",
+                "dimension_mismatch",
+                "raster_size_limit",
+            }
+            or value.get("changed_pixel_count") is not None
+            or value.get("changed_bbox") is not None
+        ):
+            return None
+    elif value.get("status") == "available":
+        if (
+            value.get("code") != "raster_compared"
+            or expected_dimensions is None
+            or current_dimensions is None
+            or expected_dimensions != current_dimensions
+            or type(value.get("changed_pixel_count")) is not int
+            or not (0 <= value["changed_pixel_count"] <= expected_dimensions[0] * expected_dimensions[1])
+        ):
+            return None
+        bbox = value.get("changed_bbox")
+        count = value["changed_pixel_count"]
+        if count == 0:
+            if bbox is not None:
+                return None
+        elif (
+            not isinstance(bbox, list)
+            or len(bbox) != 4
+            or any(type(item) is not int for item in bbox)
+            or bbox[0] < 0
+            or bbox[1] < 0
+            or bbox[2] > expected_dimensions[0]
+            or bbox[3] > expected_dimensions[1]
+            or bbox[0] >= bbox[2]
+            or bbox[1] >= bbox[3]
+            or (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]) < count
+        ):
+            return None
+    else:
+        return None
+    return value
 
 
 def _valid_sha256(value: Any) -> bool:
@@ -44,6 +281,7 @@ class CaptureTelemetry:
         self._lock = threading.Lock()
         self._captures: deque[dict[str, Any]] = deque(maxlen=_RING_LIMIT)
         self._refusals: deque[dict[str, Any]] = deque(maxlen=_RING_LIMIT)
+        self._raster_cache = _RasterCache()
         self._sequence = 0
         self._enabled = False
         self._owned_identity: tuple[int, int] | None = None
@@ -153,7 +391,9 @@ class CaptureTelemetry:
                 except OSError:
                     pass
 
-    def capture(self, png: bytes) -> int | None:
+    def capture(
+        self, png: bytes, preserve_sha256: str | None = None
+    ) -> int | None:
         """Record metadata and return its sequence without changing ``png``."""
 
         if not self._enabled:
@@ -191,6 +431,11 @@ class CaptureTelemetry:
             sequence = self._sequence
             record["sequence"] = sequence
             self._captures.append(record)
+            self._raster_cache.put(
+                record["png_sha256"],
+                (rgb, width, height),
+                preserve_sha256=preserve_sha256,
+            )
             if not self._write_snapshot_locked():
                 self._enabled = False
                 return None
@@ -209,11 +454,35 @@ class CaptureTelemetry:
             ]
             if len(current) != 1:
                 return
+            current_record = current[0]
+            expected_before = [
+                row
+                for row in self._captures
+                if row["png_sha256"] == expected_sha256
+                and row["sequence"] < current_sequence
+            ]
+            expected_raster_keys = {
+                (row["rgb_sha256"], row["width"], row["height"])
+                for row in expected_before
+            }
+            if not expected_before:
+                pixel_diff = _unavailable_pixel_diff("raster_missing")
+            elif len(expected_raster_keys) != 1:
+                pixel_diff = _unavailable_pixel_diff("raster_invalid")
+            else:
+                try:
+                    pixel_diff = compare_captured_rasters(
+                        self._raster_cache.get(expected_sha256),
+                        self._raster_cache.get(current_record["png_sha256"]),
+                    )
+                except Exception:  # noqa: BLE001 - preserve the original refusal event
+                    pixel_diff = _unavailable_pixel_diff("raster_invalid")
             self._refusals.append(
                 {
                     "phase": "input_guard_frame_compare",
                     "expected_png_sha256": expected_sha256,
                     "current_sequence": current_sequence,
+                    "pixel_diff": pixel_diff,
                 }
             )
             if not self._write_snapshot_locked():
@@ -283,7 +552,12 @@ def instrument_make_handler_class(
                 sequences: list[int] = []
                 try:
                     for png in state["captures"]:
-                        sequence = telemetry.capture(png)
+                        sequence = telemetry.capture(
+                            png,
+                            preserve_sha256=state["expected_sha256"]
+                            if state["stale_frame"]
+                            else None,
+                        )
                         if sequence is not None:
                             sequences.append(sequence)
                     if (
@@ -431,12 +705,28 @@ def safe_projection(path: Path) -> dict[str, Any]:
         for event in payload["guarded_refusals"]:
             if (
                 not isinstance(event, dict)
-                or set(event) != {"phase", "expected_png_sha256", "current_sequence"}
+                or set(event)
+                not in (
+                    {"phase", "expected_png_sha256", "current_sequence"},
+                    {
+                        "phase",
+                        "expected_png_sha256",
+                        "current_sequence",
+                        "pixel_diff",
+                    },
+                )
                 or event.get("phase") != "input_guard_frame_compare"
                 or not _valid_sha256(event.get("expected_png_sha256"))
                 or type(event.get("current_sequence")) is not int
                 or event["current_sequence"] <= 0
             ):
+                return unavailable
+            pixel_diff = (
+                _validated_pixel_diff(event["pixel_diff"])
+                if "pixel_diff" in event
+                else _unavailable_pixel_diff("raster_missing")
+            )
+            if pixel_diff is None:
                 return unavailable
             expected_matches = [
                 row
@@ -492,7 +782,8 @@ def safe_projection(path: Path) -> dict[str, Any]:
                 elif expected_raster_consensus == "inconsistent":
                     guard_capture_relation = "ambiguous_expected_raster"
                 elif (
-                    expected_before_current[0]["rgb_sha256"] == current["rgb_sha256"]
+                    expected_before_current[0]["rgb_sha256"]
+                    == current["rgb_sha256"]
                     and expected_before_current[0]["width"] == current["width"]
                     and expected_before_current[0]["height"] == current["height"]
                 ):
@@ -505,7 +796,9 @@ def safe_projection(path: Path) -> dict[str, Any]:
                 "code": "ambiguous_or_missing_provenance",
                 "provenance": {
                     "expected_match_count": len(expected_matches),
-                    "expected_match_before_current_count": len(expected_before_current),
+                    "expected_match_before_current_count": len(
+                        expected_before_current
+                    ),
                     "expected_match_at_current_count": len(expected_at_current),
                     "expected_match_after_current_count": len(expected_after_current),
                     "current_sequence_match_count": len(current_matches),
@@ -514,6 +807,8 @@ def safe_projection(path: Path) -> dict[str, Any]:
                     "guard_capture_relation": guard_capture_relation,
                 },
             }
+            if "pixel_diff" in event:
+                diagnosis["pixel_diff"] = pixel_diff
             if len(expected_matches) == 1 and len(current_matches) == 1:
                 expected = expected_matches[0]
                 assert current is not None
