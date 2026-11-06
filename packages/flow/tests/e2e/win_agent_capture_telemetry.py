@@ -166,9 +166,7 @@ class _RasterCache:
             len(self._items) >= _RASTER_CACHE_IMAGE_LIMIT
             or self.byte_count + len(rgb) > _MAX_RASTER_CACHE_BYTES
         ):
-            victim = next(
-                (key for key in self._items if key != preserve_sha256), None
-            )
+            victim = next((key for key in self._items if key != preserve_sha256), None)
             if victim is None:
                 return False
             old_rgb, _, _ = self._items.pop(victim)
@@ -239,7 +237,11 @@ def _validated_pixel_diff(value: Any) -> dict[str, Any] | None:
             or current_dimensions is None
             or expected_dimensions != current_dimensions
             or type(value.get("changed_pixel_count")) is not int
-            or not (0 <= value["changed_pixel_count"] <= expected_dimensions[0] * expected_dimensions[1])
+            or not (
+                0
+                <= value["changed_pixel_count"]
+                <= expected_dimensions[0] * expected_dimensions[1]
+            )
         ):
             return None
         bbox = value.get("changed_bbox")
@@ -391,9 +393,7 @@ class CaptureTelemetry:
                 except OSError:
                     pass
 
-    def capture(
-        self, png: bytes, preserve_sha256: str | None = None
-    ) -> int | None:
+    def capture(self, png: bytes, preserve_sha256: str | None = None) -> int | None:
         """Record metadata and return its sequence without changing ``png``."""
 
         if not self._enabled:
@@ -782,8 +782,7 @@ def safe_projection(path: Path) -> dict[str, Any]:
                 elif expected_raster_consensus == "inconsistent":
                     guard_capture_relation = "ambiguous_expected_raster"
                 elif (
-                    expected_before_current[0]["rgb_sha256"]
-                    == current["rgb_sha256"]
+                    expected_before_current[0]["rgb_sha256"] == current["rgb_sha256"]
                     and expected_before_current[0]["width"] == current["width"]
                     and expected_before_current[0]["height"] == current["height"]
                 ):
@@ -796,9 +795,7 @@ def safe_projection(path: Path) -> dict[str, Any]:
                 "code": "ambiguous_or_missing_provenance",
                 "provenance": {
                     "expected_match_count": len(expected_matches),
-                    "expected_match_before_current_count": len(
-                        expected_before_current
-                    ),
+                    "expected_match_before_current_count": len(expected_before_current),
                     "expected_match_at_current_count": len(expected_at_current),
                     "expected_match_after_current_count": len(expected_after_current),
                     "current_sequence_match_count": len(current_matches),

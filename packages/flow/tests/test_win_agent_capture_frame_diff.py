@@ -47,7 +47,10 @@ def assert_unavailable(value):
     assert set(value) == FIELDS
     assert value["status"] == "unavailable"
     assert value["code"] in {
-        "raster_missing", "raster_invalid", "dimension_mismatch", "raster_size_limit"
+        "raster_missing",
+        "raster_invalid",
+        "dimension_mismatch",
+        "raster_size_limit",
     }
     assert value["changed_pixel_count"] is None
     assert value["changed_bbox"] is None
@@ -61,9 +64,12 @@ def test_one_unit_in_each_channel_counts_one_pixel_without_grayscale_loss(channe
     assert telemetry_module.compare_captured_rasters(
         (before, 4, 3), (bytes(after), 4, 3)
     ) == {
-        "status": "available", "code": "raster_compared",
-        "expected_dimensions": [4, 3], "current_dimensions": [4, 3],
-        "changed_pixel_count": 1, "changed_bbox": [2, 1, 3, 2],
+        "status": "available",
+        "code": "raster_compared",
+        "expected_dimensions": [4, 3],
+        "current_dimensions": [4, 3],
+        "changed_pixel_count": 1,
+        "changed_bbox": [2, 1, 3, 2],
     }
 
 
@@ -75,9 +81,12 @@ def test_changed_pixel_count_is_channel_union_and_bbox_is_half_open():
     assert result["changed_bbox"] == [1, 0, 4, 3]
     all_channels = bytearray(before)
     all_channels[0:3] = b"\xff\xff\xff"
-    assert telemetry_module.compare_captured_rasters(
-        (before, 4, 3), (bytes(all_channels), 4, 3)
-    )["changed_pixel_count"] == 1
+    assert (
+        telemetry_module.compare_captured_rasters(
+            (before, 4, 3), (bytes(all_channels), 4, 3)
+        )["changed_pixel_count"]
+        == 1
+    )
 
 
 def test_equal_rasters_have_zero_changed_pixels_and_no_bbox():
@@ -90,22 +99,35 @@ def test_equal_rasters_have_zero_changed_pixels_and_no_bbox():
 
 @pytest.mark.parametrize(
     "invalid",
-    [None, (), (b"", 4), (b"", 4, 3), (b"123", True, 1),
-     (b"123", 1, False), (b"123", 1.0, 1), ("123", 1, 1),
-     (b"123", -1, 1), (b"123", 1, 0), (b"123", 4096, 2160)],
+    [
+        None,
+        (),
+        (b"", 4),
+        (b"", 4, 3),
+        (b"123", True, 1),
+        (b"123", 1, False),
+        (b"123", 1.0, 1),
+        ("123", 1, 1),
+        (b"123", -1, 1),
+        (b"123", 1, 0),
+        (b"123", 4096, 2160),
+    ],
 )
 def test_missing_malformed_or_oversized_never_decodes_or_returns_measurement(
     monkeypatch, invalid
 ):
     def forbidden(*args, **kwargs):
         pytest.fail("invalid raster reached decoder")
+
     monkeypatch.setattr(Image, "frombytes", forbidden)
     result = telemetry_module.compare_captured_rasters(invalid, (b"123", 1, 1))
     assert_unavailable(result)
 
 
 def test_dimension_mismatch_never_compares_even_with_equal_byte_length():
-    result = telemetry_module.compare_captured_rasters((b"123456", 2, 1), (b"123456", 1, 2))
+    result = telemetry_module.compare_captured_rasters(
+        (b"123456", 2, 1), (b"123456", 1, 2)
+    )
     assert_unavailable(result)
     assert result["code"] == "dimension_mismatch"
 
@@ -129,7 +151,9 @@ def test_real_cache_deduplicates_and_evicts_without_unbounded_storage(tmp_path):
     assert_unavailable(result)
 
 
-def test_duplicate_expected_provenance_stays_unknown_with_bounded_spatial_fact(tmp_path):
+def test_duplicate_expected_provenance_stays_unknown_with_bounded_spatial_fact(
+    tmp_path,
+):
     owner = telemetry_module.CaptureTelemetry(tmp_path / "duplicates.json")
     before, after = pair()
     first, changed = png(before), png(after)
@@ -191,12 +215,14 @@ def test_actual_http_refusal_compares_only_after_decision_and_never_changes_it(
     running = _RunningServer(monkeypatch, tmp_path, [first, changed])
     original = telemetry_module.compare_captured_rasters
     calls = []
+
     def compare(*args, **kwargs):
         running.processing_events.append("pixel_diff")
         calls.append(True)
         if failure:
             raise RuntimeError("PRIVATE_DIAGNOSTIC_FAILURE")
         return original(*args, **kwargs)
+
     monkeypatch.setattr(telemetry_module, "compare_captured_rasters", compare)
     try:
         response = running.session.get(f"{running.url}/screenshot", timeout=5)
@@ -221,28 +247,44 @@ def test_actual_http_refusal_compares_only_after_decision_and_never_changes_it(
         running.close()
 
 
-def test_successful_guard_never_runs_comparison_or_changes_original_outcome(tmp_path, monkeypatch):
+def test_successful_guard_never_runs_comparison_or_changes_original_outcome(
+    tmp_path, monkeypatch
+):
     before, _ = pair()
     frame = png(before)
     running = _RunningServer(monkeypatch, tmp_path, [frame, frame])
-    monkeypatch.setattr(telemetry_module, "compare_captured_rasters", lambda *a, **k: pytest.fail("success must not compare"))
+    monkeypatch.setattr(
+        telemetry_module,
+        "compare_captured_rasters",
+        lambda *a, **k: pytest.fail("success must not compare"),
+    )
     try:
-        assert running.session.get(f"{running.url}/screenshot", timeout=5).content == frame
+        assert (
+            running.session.get(f"{running.url}/screenshot", timeout=5).content == frame
+        )
         response = _guard(running.session, running.url, frame)
         assert response.status_code == 200
         assert running.cursor == 2 and running.context_calls == 1
         assert len(running.input_calls) == 1
-        assert telemetry_module.safe_projection(running.sidecar) == {"status": "available", "diagnoses": []}
+        assert telemetry_module.safe_projection(running.sidecar) == {
+            "status": "available",
+            "diagnoses": [],
+        }
     finally:
         running.close()
 
 
-@pytest.mark.parametrize("limit,value", [
-    ("_MAX_RASTER_PIXELS", 11),
-    ("_MAX_RASTER_IMAGE_BYTES", 35),
-    ("_MAX_RASTER_CACHE_BYTES", 35),
-])
-def test_cache_refuses_image_exceeding_each_byte_or_pixel_bound(tmp_path, monkeypatch, limit, value):
+@pytest.mark.parametrize(
+    "limit,value",
+    [
+        ("_MAX_RASTER_PIXELS", 11),
+        ("_MAX_RASTER_IMAGE_BYTES", 35),
+        ("_MAX_RASTER_CACHE_BYTES", 35),
+    ],
+)
+def test_cache_refuses_image_exceeding_each_byte_or_pixel_bound(
+    tmp_path, monkeypatch, limit, value
+):
     monkeypatch.setattr(telemetry_module, limit, value)
     owner = telemetry_module.CaptureTelemetry(tmp_path / "bounded.json")
     before, _ = pair()
@@ -251,20 +293,25 @@ def test_cache_refuses_image_exceeding_each_byte_or_pixel_bound(tmp_path, monkey
     assert owner._raster_cache.byte_count == 0
 
 
-@pytest.mark.parametrize("field,value", [
-    ("changed_pixel_count", -1),
-    ("changed_pixel_count", True),
-    ("changed_pixel_count", 13),
-    ("changed_bbox", [-1, 0, 4, 3]),
-    ("changed_bbox", [1, 0, 5, 3]),
-    ("changed_bbox", [2, 0, 1, 3]),
-    ("changed_bbox", [1, 0, 1, 3]),
-    ("changed_bbox", [True, 0, 4, 3]),
-    ("expected_dimensions", [4, 4]),
-    ("code", "PRIVATE_ARBITRARY_REASON"),
-    ("unknown", "PRIVATE_ARBITRARY_PAYLOAD"),
-])
-def test_projection_rejects_malformed_spatial_values_without_export(tmp_path, field, value):
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("changed_pixel_count", -1),
+        ("changed_pixel_count", True),
+        ("changed_pixel_count", 13),
+        ("changed_bbox", [-1, 0, 4, 3]),
+        ("changed_bbox", [1, 0, 5, 3]),
+        ("changed_bbox", [2, 0, 1, 3]),
+        ("changed_bbox", [1, 0, 1, 3]),
+        ("changed_bbox", [True, 0, 4, 3]),
+        ("expected_dimensions", [4, 4]),
+        ("code", "PRIVATE_ARBITRARY_REASON"),
+        ("unknown", "PRIVATE_ARBITRARY_PAYLOAD"),
+    ],
+)
+def test_projection_rejects_malformed_spatial_values_without_export(
+    tmp_path, field, value
+):
     owner = telemetry_module.CaptureTelemetry(tmp_path / "malformed.json")
     before, after = pair()
     first = png(before)
@@ -275,5 +322,6 @@ def test_projection_rejects_malformed_spatial_values_without_export(tmp_path, fi
     payload["guarded_refusals"][0]["pixel_diff"][field] = value
     owner.sidecar.write_text(json.dumps(payload))
     assert telemetry_module.safe_projection(owner.sidecar) == {
-        "status": "unavailable", "code": "invalid_capture_telemetry"
+        "status": "unavailable",
+        "code": "invalid_capture_telemetry",
     }
