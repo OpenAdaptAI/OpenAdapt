@@ -355,7 +355,7 @@ export function Settings({
             Share anonymous usage stats
             <span className="hint" style={{ display: "block" }}>
               {privacy?.usage_stats_managed_by_env
-                ? "Set on this computer by DO_NOT_TRACK or OPENADAPT_TELEMETRY_ENABLED."
+                ? "Set on this computer by DO_NOT_TRACK, OPENADAPT_TELEMETRY=0, or OPENADAPT_TELEMETRY_ENABLED."
                 : "Each event carries a random install id, the app version, and the operating system. Nothing is sent while this is off."}
             </span>
           </span>

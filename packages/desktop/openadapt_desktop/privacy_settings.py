@@ -12,8 +12,9 @@ config file (``~/.openadapt/config.toml``, overridable with
 
 Environment variables always win over the file:
 
-* ``DO_NOT_TRACK=1`` or ``OPENADAPT_TELEMETRY_ENABLED=false`` turns usage
-  stats off and suppresses the first-launch question.
+* ``DO_NOT_TRACK=1``, ``OPENADAPT_TELEMETRY=0`` (or other falsy values), or
+  ``OPENADAPT_TELEMETRY_ENABLED=false`` turns usage stats off and suppresses
+  the first-launch question.
 * ``OPENADAPT_TELEMETRY_ENABLED=true`` turns usage stats on without asking
   (for managed installs that decide centrally).
 * ``OPENADAPT_UPDATE_CHECK=false`` turns the update check off.
@@ -87,6 +88,9 @@ def _write_privacy_key(key: str, value: Any) -> None:
 def usage_stats_env_override() -> UsageStats | None:
     """What the environment decides for usage stats, if anything."""
     if _env("DO_NOT_TRACK") in _TRUTHY:
+        return "off"
+    # Established Flow/subprocess opt-out; falsy disables even with saved Share.
+    if _env("OPENADAPT_TELEMETRY") in _FALSY:
         return "off"
     enabled = _env("OPENADAPT_TELEMETRY_ENABLED")
     if enabled in _FALSY:

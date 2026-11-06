@@ -115,3 +115,25 @@ it("stays quiet when up to date or turned off, and follows the check event", asy
   act(() => events.handlers.get(EVT.UPDATE_STATUS)?.(update()));
   expect(await screen.findByText(/OpenAdapt 0.26.0 is available/)).toBeTruthy();
 });
+
+it("keeps a newer available-release event when an older initial GET resolves later", async () => {
+  let resolveInitial!: (status: UpdateStatus) => void;
+  vi.mocked(engineTry).mockReturnValue(
+    new Promise<UpdateStatus>((resolve) => {
+      resolveInitial = resolve;
+    }) as ReturnType<typeof engineTry>,
+  );
+  render(<UpdateNotice engineUp />);
+
+  const handler = events.handlers.get(EVT.UPDATE_STATUS);
+  expect(handler).toBeDefined();
+  act(() => handler?.(update({ latest_version: "0.26.0", available: true, checked_at: 200 })));
+  expect(await screen.findByText(/OpenAdapt 0.26.0 is available/)).toBeTruthy();
+
+  await act(async () => {
+    resolveInitial(update({ latest_version: null, available: false, checked_at: 100 }));
+  });
+
+  // A stale initial GET must not hide the newer event-driven notice.
+  expect(screen.getByText(/OpenAdapt 0.26.0 is available/)).toBeTruthy();
+});

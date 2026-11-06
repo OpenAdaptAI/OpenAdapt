@@ -315,6 +315,7 @@ Environment variables win over the file:
 | Variable | Effect |
 | --- | --- |
 | `DO_NOT_TRACK=1` | Usage stats off; the first-launch question isn't asked |
+| `OPENADAPT_TELEMETRY=0` | Same as above (established Flow/subprocess opt-out) |
 | `OPENADAPT_TELEMETRY_ENABLED=false` | Same as above |
 | `OPENADAPT_TELEMETRY_ENABLED=true` | Usage stats on without asking (managed installs) |
 | `OPENADAPT_UPDATE_CHECK=false` | Update check off |

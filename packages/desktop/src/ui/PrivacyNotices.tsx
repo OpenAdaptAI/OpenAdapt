@@ -7,7 +7,7 @@
 // Updates: the engine checks the Desktop releases at most once a day with an
 // anonymous request and reports through UPDATE_STATUS. Installing stays a
 // person's step: the notice links to the release page.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CMD, EVT, engineInvoke, engineTry, onEngineEvent, openExternal } from "../lib/engine";
 import type { PrivacySettings, UpdateStatus } from "../lib/types";
 import { Button, Callout } from "./primitives";
@@ -77,18 +77,25 @@ export function UsageStatsPrompt({ engineUp }: { engineUp: boolean }) {
 export function UpdateNotice({ engineUp }: { engineUp: boolean }) {
   const [status, setStatus] = useState<UpdateStatus | null>(null);
   const [dismissed, setDismissed] = useState<string | null>(null);
+  // Bumped on every live UPDATE_STATUS event so a late initial GET cannot
+  // clobber a newer available-release notice.
+  const statusEpoch = useRef(0);
 
   useEffect(() => {
     // Outside the Tauri shell there is no event bus; the listener just stays off.
-    const unlisten = onEngineEvent(EVT.UPDATE_STATUS, (next: UpdateStatus) =>
-      setStatus(next),
-    ).catch(() => null);
+    const unlisten = onEngineEvent(EVT.UPDATE_STATUS, (next: UpdateStatus) => {
+      statusEpoch.current += 1;
+      setStatus(next);
+    }).catch(() => null);
     return () => void unlisten.then((fn) => fn?.());
   }, []);
 
   useEffect(() => {
+    const epochAtRequest = statusEpoch.current;
     void engineTry<UpdateStatus | null>(CMD.GET_UPDATE_STATUS, {}, null).then((first) => {
-      if (first) setStatus(first);
+      if (!first) return;
+      if (statusEpoch.current !== epochAtRequest) return;
+      setStatus(first);
     });
   }, [engineUp]);
 

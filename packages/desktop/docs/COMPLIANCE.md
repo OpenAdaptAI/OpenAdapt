@@ -94,7 +94,7 @@ deployment HIPAA-compliant.
   The key is in the OS keychain, never in the database. A closed item's values
   are deleted. Without the keychain key, Desktop doesn't run new items.
 - Usage stats are off until a person picks Share in the first-launch question
-  or in Settings. `DO_NOT_TRACK=1` or `OPENADAPT_TELEMETRY_ENABLED=false`
+  or in Settings. `DO_NOT_TRACK=1`, `OPENADAPT_TELEMETRY=0`, or `OPENADAPT_TELEMETRY_ENABLED=false`
   turns them off and skips the question. Events carry a random install id,
   the app version, OS, architecture, and short fixed values, never screen
   content, keystrokes, file paths, task text, or item values. See

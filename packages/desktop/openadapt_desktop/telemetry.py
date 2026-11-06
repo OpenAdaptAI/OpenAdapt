@@ -3,7 +3,8 @@
 Nothing is sent until the person answers "Share" in the first-launch question
 (or in Settings). The answer is stored in ``[privacy].usage_stats`` of
 ``~/.openadapt/config.toml`` (see :mod:`openadapt_desktop.privacy_settings`).
-``DO_NOT_TRACK=1`` or ``OPENADAPT_TELEMETRY_ENABLED=false`` always turns it off.
+``DO_NOT_TRACK=1``, ``OPENADAPT_TELEMETRY=0`` (or other falsy values), or
+``OPENADAPT_TELEMETRY_ENABLED=false`` always turns it off.
 
 What an event carries is closed: an event name from :data:`ALLOWED_EVENTS`,
 a random install id (a UUID made on this computer, not derived from the

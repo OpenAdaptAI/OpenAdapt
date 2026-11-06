@@ -17,6 +17,7 @@ from openadapt_desktop.dispatch import EngineDispatcher
 def clean_env(monkeypatch, tmp_path: Path) -> Path:
     for var in (
         "DO_NOT_TRACK",
+        "OPENADAPT_TELEMETRY",
         "OPENADAPT_TELEMETRY_ENABLED",
         "OPENADAPT_UPDATE_CHECK",
         "OPENADAPT_POSTHOG_KEY",
@@ -68,7 +69,11 @@ def test_consent_is_persisted_in_the_config_file(clean_env, sent) -> None:
 
 @pytest.mark.parametrize(
     ("var", "value"),
-    [("DO_NOT_TRACK", "1"), ("OPENADAPT_TELEMETRY_ENABLED", "false")],
+    [
+        ("DO_NOT_TRACK", "1"),
+        ("OPENADAPT_TELEMETRY_ENABLED", "false"),
+        ("OPENADAPT_TELEMETRY", "0"),
+    ],
 )
 def test_environment_opt_out_wins_and_suppresses_the_question(
     clean_env, sent, monkeypatch, var, value
@@ -337,3 +342,12 @@ def test_privacy_commands_stay_off_the_local_socket() -> None:
         | socket_server._SETUP_AGENT_COMMANDS
     )
     assert not exposed & {"set_usage_stats", "set_update_check"}
+
+
+def test_openadapt_telemetry_zero_overrides_saved_share(clean_env, sent, monkeypatch) -> None:
+    """OPENADAPT_TELEMETRY=0 must force disabled/zero send even with saved Share."""
+    privacy_settings.set_usage_stats(True)
+    monkeypatch.setenv("OPENADAPT_TELEMETRY", "0")
+    enabled = telemetry.telemetry_enabled()
+    queued = telemetry.capture("app_opened")
+    assert (enabled, queued, len(sent)) == (False, False, 0)
