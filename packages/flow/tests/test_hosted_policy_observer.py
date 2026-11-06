@@ -15,7 +15,14 @@ from tests.e2e import hosted_policy_observer as observer
 def _inputs():
     workflow = Workflow(
         name="synthetic private workflow text",
-        steps=[Step(id="step_002", intent="Submit synthetic query", action=ActionKind.KEY, key="Enter")],
+        steps=[
+            Step(
+                id="step_002",
+                intent="Submit synthetic query",
+                action=ActionKind.KEY,
+                key="Enter",
+            )
+        ],
     )
     policy = Policy(
         name="clinical-write",
@@ -56,17 +63,19 @@ def test_original_args_once_same_real_refusal_report(monkeypatch, risk_flag):
     assert workflow.model_dump() == before_workflow
     assert policy.model_dump() == before_policy
     assert not result.passed
-    assert evidence["policy_checks"] == [{
-        "policy_name": policy.name,
-        "policy_contract_sha256": observer.policy_contract_sha256(policy),
-        "require_current_risk_certification": risk_flag,
-        "n_steps": 1,
-        "passed": False,
-        "violations": [
-            {"rule": "prohibit_vacuous_postconditions", "step_id": "step_002"},
-            {"rule": "max_unverified_steps", "step_id": None},
-        ],
-    }]
+    assert evidence["policy_checks"] == [
+        {
+            "policy_name": policy.name,
+            "policy_contract_sha256": observer.policy_contract_sha256(policy),
+            "require_current_risk_certification": risk_flag,
+            "n_steps": 1,
+            "passed": False,
+            "violations": [
+                {"rule": "prohibit_vacuous_postconditions", "step_id": "step_002"},
+                {"rule": "max_unverified_steps", "step_id": None},
+            ],
+        }
+    ]
     serialized = json.dumps(evidence)
     assert "DO_NOT_EXPORT" not in serialized
     assert workflow.name not in serialized
@@ -111,10 +120,13 @@ def test_original_exception_identity_and_context_restoration(monkeypatch):
     assert evidence == {}
 
 
-@pytest.mark.parametrize("field,value", [
-    ("rule", "private reason\nnot_a_rule"),
-    ("step_id", "private/path/record"),
-])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("rule", "private reason\nnot_a_rule"),
+        ("step_id", "private/path/record"),
+    ],
+)
 def test_unsafe_violation_projection_preserves_actual_report(monkeypatch, field, value):
     workflow, policy = _inputs()
     report = policy_module.evaluate_policy(workflow, policy)
@@ -133,7 +145,8 @@ def test_unsafe_violation_projection_preserves_actual_report(monkeypatch, field,
     assert result is report and result.model_dump() == before
     assert len(calls) == 1 and result.passed is False
     assert evidence == {
-        "policy_checks": [], "policy_diagnostic_failed": True,
+        "policy_checks": [],
+        "policy_diagnostic_failed": True,
         "policy_diagnostic_failure_code": "projection_failed",
     }
     assert value not in json.dumps(evidence)
