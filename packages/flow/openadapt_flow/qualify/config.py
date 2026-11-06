@@ -155,7 +155,9 @@ class AppConfig(BaseModel):
     version: str = Field(min_length=1, max_length=128)
     #: Optional exact live identity expectation for native targets. It is
     #: compared with the environment observer and never used as evidence.
-    application_identity: Optional[str] = Field(default=None, min_length=1, max_length=320)
+    application_identity: Optional[str] = Field(
+        default=None, min_length=1, max_length=320
+    )
     #: Native campaigns may require capabilities reported by the opened
     #: backend. Configured names are expectations, not proof that they exist.
     required_capabilities: list[str] = Field(default_factory=list)

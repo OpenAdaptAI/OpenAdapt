@@ -478,7 +478,7 @@ def test_native_driver_declines_failure_or_an_unchanged_captured_input(
         fault_kind=kind,
         gate=gate,
         before_input_sha256=sha256_bytes(b"unchanged-synthetic-frame"),
-        backend=object(),
+        backend=SimpleNamespace(qualification_target_kind="windows"),
         vision=None,
         effect_verifier=None,
         capture_frame=capture,
