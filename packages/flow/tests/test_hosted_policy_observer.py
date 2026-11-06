@@ -15,7 +15,7 @@ from tests.e2e import hosted_policy_observer as observer
 def _inputs():
     workflow = Workflow(
         name="synthetic private workflow text",
-        steps=[Step(id="step_002", action=ActionKind.KEY, key="Enter")],
+        steps=[Step(id="step_002", intent="Submit synthetic query", action=ActionKind.KEY, key="Enter")],
     )
     policy = Policy(
         name="clinical-write",
