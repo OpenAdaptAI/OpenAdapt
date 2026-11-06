@@ -167,7 +167,9 @@ def test_fresh_sessions_share_stable_environment_but_not_witnesses():
     second_transport.digest = "4" * 64
     second_nonce = "5" * 32
     second = pairing(second_transport, nonce=second_nonce)
-    assert first.environment_marker == second.environment_marker == "synthetic-environment"
+    assert (
+        first.environment_marker == second.environment_marker == "synthetic-environment"
+    )
     first_frame = frame()
     second_frame = frame(nonce=second_nonce, connection=second_transport.digest)
     assert first.environment_probe(first_frame)

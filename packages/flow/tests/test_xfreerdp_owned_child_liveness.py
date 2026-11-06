@@ -67,7 +67,7 @@ class _OwnedPythonChild:
             stderr=subprocess.DEVNULL,
             pass_fds=(self._stop_read, self._ready_write),
             cwd=self._cwd,
-            env={"PATH": os.defpath},
+            env={"PATH": os.defpath, "OPENADAPT_NO_OUTBOUND": "1"},
         )
         self._close(self._stop_read)
         self._close(self._ready_write)
