@@ -4,6 +4,8 @@ import hashlib
 import json
 import os
 import stat
+import subprocess
+import sys
 import threading
 from pathlib import Path
 from typing import Any
@@ -536,3 +538,33 @@ def test_wrapper_main_strips_only_its_option_and_delegates_cli_unchanged(
             "synthetic-key.pem",
         ]
     ]
+
+
+def test_module_entrypoint_delegates_original_cli_in_subprocess(
+    tmp_path: Path,
+) -> None:
+    sidecar = tmp_path / "capture-telemetry.json"
+    flow_root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tests.e2e.win_agent_capture_telemetry",
+            "--capture-telemetry-sidecar",
+            str(sidecar),
+            "--help",
+        ],
+        cwd=flow_root,
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=15,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "OpenAdapt-flow in-guest Windows agent" in result.stdout
+    assert "--certfile" in result.stdout
+    assert capture_telemetry.safe_projection(sidecar) == {
+        "status": "available",
+        "diagnoses": [],
+    }

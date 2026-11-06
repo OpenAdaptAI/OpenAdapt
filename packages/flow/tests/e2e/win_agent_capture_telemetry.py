@@ -479,3 +479,7 @@ def safe_projection(path: Path) -> dict[str, Any]:
         return {"status": "available", "diagnoses": diagnoses}
     except Exception:  # noqa: BLE001 - diagnostics never alter admission
         return unavailable
+
+
+if __name__ == "__main__":  # pragma: no cover - exercised in subprocess test
+    main()
