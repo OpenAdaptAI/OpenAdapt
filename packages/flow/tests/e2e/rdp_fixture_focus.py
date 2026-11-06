@@ -15,8 +15,8 @@ import sys
 from pathlib import Path
 
 _PARENT_SHA256 = "661676e561c3080631d4be507d9423b175caa0cd5669a42ae38927c51f64575d"
-_ANCHOR = b'    root = tk.Tk()\n'
-_OVERRIDE = b'    root.overrideredirect(True)\n'
+_ANCHOR = b"    root = tk.Tk()\n"
+_OVERRIDE = b"    root.overrideredirect(True)\n"
 _ROWS = [("AC200001", "Alex Archer", ""), ("AC200002", "Brook Brooks", "")]
 
 
@@ -73,8 +73,10 @@ def _child(source: Path, digest: str, database: Path) -> None:
                         "wrapper": int(root.frame(), 0),
                         "mapped": bool(root.winfo_ismapped()),
                         "geometry": [
-                            root.winfo_rootx(), root.winfo_rooty(),
-                            root.winfo_width(), root.winfo_height(),
+                            root.winfo_rootx(),
+                            root.winfo_rooty(),
+                            root.winfo_width(),
+                            root.winfo_height(),
                         ],
                         "tk_version": str(root.tk.call("package", "require", "Tk")),
                     }
@@ -96,7 +98,9 @@ def _condition(tmp_path: Path, *, literal_parent: bool) -> None:
     result = {
         "schema": "openadapt.fixture-focus/v1",
         "condition": "literal_parent" if literal_parent else "candidate",
-        "status": "UNRUN", "stage": "source", "cleanup": {},
+        "status": "UNRUN",
+        "stage": "source",
+        "cleanup": {},
     }
     server = child = None
     read_fd = write_fd = None
@@ -117,16 +121,29 @@ def _condition(tmp_path: Path, *, literal_parent: bool) -> None:
         home.mkdir()
         database = out / "fixture.db"
         with sqlite3.connect(database) as db:
-            db.execute("CREATE TABLE accounts(id TEXT PRIMARY KEY, holder TEXT, note TEXT)")
+            db.execute(
+                "CREATE TABLE accounts(id TEXT PRIMARY KEY, holder TEXT, note TEXT)"
+            )
             db.executemany("INSERT INTO accounts VALUES(?,?,?)", _ROWS)
         env = {"PATH": "/usr/bin:/bin", "HOME": str(home), "LANG": "C.UTF-8"}
         read_fd, write_fd = os.pipe()
         result["stage"] = "xserver"
         server = subprocess.Popen(
-            ["/usr/bin/Xvfb", "-displayfd", str(write_fd), "-screen", "0",
-             "1280x800x24", "-nolisten", "tcp"],
-            env=env, pass_fds=(write_fd,), stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            [
+                "/usr/bin/Xvfb",
+                "-displayfd",
+                str(write_fd),
+                "-screen",
+                "0",
+                "1280x800x24",
+                "-nolisten",
+                "tcp",
+            ],
+            env=env,
+            pass_fds=(write_fd,),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
         os.close(write_fd)
         write_fd = None
@@ -138,9 +155,19 @@ def _condition(tmp_path: Path, *, literal_parent: bool) -> None:
         env["DISPLAY"] = ":" + number.decode("ascii")
         result["stage"] = "app_startup"
         child = subprocess.Popen(
-            ["/usr/bin/python3", "-I", "-S", str(Path(__file__).resolve()),
-             "--child", str(source), digest, str(database)],
-            env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            [
+                "/usr/bin/python3",
+                "-I",
+                "-S",
+                str(Path(__file__).resolve()),
+                "--child",
+                str(source),
+                digest,
+                str(database),
+            ],
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
         )
         if child.stdout is None:
@@ -149,7 +176,8 @@ def _condition(tmp_path: Path, *, literal_parent: bool) -> None:
         if (
             not isinstance(ready, dict)
             or set(ready) != {"wrapper", "mapped", "geometry", "tk_version"}
-            or type(ready["wrapper"]) is not int or ready["wrapper"] <= 1
+            or type(ready["wrapper"]) is not int
+            or ready["wrapper"] <= 1
             or type(ready["mapped"]) is not bool
             or not isinstance(ready["tk_version"], str)
             or len(ready["tk_version"]) > 32
@@ -159,34 +187,64 @@ def _condition(tmp_path: Path, *, literal_parent: bool) -> None:
         result["stage"] = "raw_focus"
         # -f returns XGetInputFocus itself, without ancestor/WM_CLASS traversal.
         observed = subprocess.run(
-            ["/usr/bin/xdotool", "getwindowfocus", "-f"], env=env,
-            capture_output=True, timeout=3, check=True,
+            ["/usr/bin/xdotool", "getwindowfocus", "-f"],
+            env=env,
+            capture_output=True,
+            timeout=3,
+            check=True,
         )
         value = observed.stdout.strip()
         if not value.isdigit() or len(value) > 20:
             raise ValueError("raw focus shape")
         window = int(value)
         result.update(
-            raw_focus_kind="none" if window == 0 else "pointer_root" if window == 1 else "window",
+            raw_focus_kind="none"
+            if window == 0
+            else "pointer_root"
+            if window == 1
+            else "window",
             raw_focus_matches_owned_wrapper=window == ready["wrapper"],
-            mapped=ready["mapped"], geometry_exact=ready["geometry"] == [0, 0, 1280, 800],
-            tk_version=ready["tk_version"], app_alive=child.poll() is None,
-            server_owned=_owned(server, number), source_unchanged=hashlib.sha256(source.read_bytes()).hexdigest() == digest,
+            mapped=ready["mapped"],
+            geometry_exact=ready["geometry"] == [0, 0, 1280, 800],
+            tk_version=ready["tk_version"],
+            app_alive=child.poll() is None,
+            server_owned=_owned(server, number),
+            source_unchanged=hashlib.sha256(source.read_bytes()).hexdigest() == digest,
         )
         with sqlite3.connect(database) as db:
-            result["full_database_unchanged"] = db.execute(
-                "SELECT id,holder,note FROM accounts ORDER BY id"
-            ).fetchall() == _ROWS
+            result["full_database_unchanged"] = (
+                db.execute("SELECT id,holder,note FROM accounts ORDER BY id").fetchall()
+                == _ROWS
+            )
         expected = window == 1 if literal_parent else window == ready["wrapper"]
-        checks = ("mapped", "geometry_exact", "app_alive", "server_owned",
-                  "source_unchanged", "full_database_unchanged")
-        result["status"] = "PASSED" if expected and all(result[k] is True for k in checks) else "FAILED"
+        checks = (
+            "mapped",
+            "geometry_exact",
+            "app_alive",
+            "server_owned",
+            "source_unchanged",
+            "full_database_unchanged",
+        )
+        result["status"] = (
+            "PASSED"
+            if expected and all(result[k] is True for k in checks)
+            else "FAILED"
+        )
     except Exception as exc:
         result["status"] = "ERROR"
-        result["exception_type"] = type(exc).__name__ if type(exc) in (
-            ValueError, TimeoutError, OSError, subprocess.CalledProcessError,
-            subprocess.TimeoutExpired, json.JSONDecodeError,
-        ) else "Exception"
+        result["exception_type"] = (
+            type(exc).__name__
+            if type(exc)
+            in (
+                ValueError,
+                TimeoutError,
+                OSError,
+                subprocess.CalledProcessError,
+                subprocess.TimeoutExpired,
+                json.JSONDecodeError,
+            )
+            else "Exception"
+        )
     finally:
         result["cleanup"] = {"app": _close(child), "server": _close(server)}
         result["pipe_cleanup_complete"] = True

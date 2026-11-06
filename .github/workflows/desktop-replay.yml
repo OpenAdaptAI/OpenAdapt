@@ -28,7 +28,7 @@ on:
       - packages/flow/tests/e2e/test_linux_rdp_campaign.py
       - packages/flow/tests/e2e/rdp_campaign_fixture.py
       - packages/flow/tests/fixtures/rdp_write_app.py
-      - packages/flow/tests/e2e/test_rdp_fixture_focus.py
+      - packages/flow/tests/e2e/rdp_fixture_focus.py
       - packages/flow/tests/test_windows_attempt_ledger.py
       - packages/flow/benchmark/rdp_pool/**
       - packages/flow/pyproject.toml
@@ -206,7 +206,7 @@ jobs:
         run: |
           mkdir -p runs
           pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/rf" \
-            tests/e2e/test_rdp_fixture_focus.py --junitxml=runs/rdp-focus-junit.xml
+            tests/e2e/rdp_fixture_focus.py --junitxml=runs/rdp-focus-junit.xml
       - name: Both focus conditions ran (no skips)
         run: |
           python - <<'PY'
