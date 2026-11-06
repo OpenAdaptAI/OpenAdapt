@@ -113,7 +113,7 @@ class RdpQualificationPixelFaultController:
     def apply_screen_fault(self, context: Any, step: Any) -> bool:
         if (
             self._attempted
-            or context.backend is not self._backend
+            or getattr(context, "backend", None) is not self._backend
             or getattr(context, "actuation_path", None) != "gui"
             or getattr(context, "step_id", None) != getattr(step, "id", None)
             or not callable(getattr(context, "capture_frame", None))

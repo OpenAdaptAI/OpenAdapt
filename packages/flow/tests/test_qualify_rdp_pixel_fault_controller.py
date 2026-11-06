@@ -86,7 +86,7 @@ def rig(monkeypatch):
             if pairing:
                 nonce = request["nonce"]
                 guest = OTHER if state.mode == "wrong_grid_guest" else GUEST
-                connection = OTHER if state.mode == "wrong_grid_connection" else CONNECTION
+                connection = OTHER if state.mode == "wrong_grid_connection" else request["connection_digest"]
                 if state.mode == "wrong_grid_nonce":
                     nonce = "d" * 32
                 material = "\0".join(("openadapt.rdp-pairing/v1", nonce, connection, guest))
@@ -250,7 +250,7 @@ def test_changed_session_cannot_stage_fault(rig, change):
     close()
 
 
-@pytest.mark.parametrize("change", ["hash", "step", "backend", "path", "witness_overlap", "unknown_fault"])
+@pytest.mark.parametrize("change", ["hash", "step", "backend", "missing_backend", "path", "witness_overlap", "unknown_fault"])
 def test_fault_request_must_match_engine_frame_step_and_regions(rig, change):
     backend, close = rig.open()
     context, step = context_for(backend)
@@ -260,6 +260,8 @@ def test_fault_request_must_match_engine_frame_step_and_regions(rig, change):
         step.id = "another-step"
     elif change == "backend":
         context.backend = object()
+    elif change == "missing_backend":
+        del context.backend
     elif change == "path":
         context.actuation_path = "api"
     elif change == "witness_overlap":
@@ -271,7 +273,7 @@ def test_fault_request_must_match_engine_frame_step_and_regions(rig, change):
     close()
 
 
-@pytest.mark.parametrize("mode", ["launch_failure", "wait_failure", "wrong_fault_guest", "unchanged", "witness_lost"])
+@pytest.mark.parametrize("mode", ["launch_failure", "wait_failure", "wrong_fault_guest", "unchanged", "witness_lost", "expired_wait"])
 def test_uncertain_or_unproved_mutation_permanently_refuses_input_without_retry(rig, mode):
     backend, close = rig.open()
     controller = backend.qualification_pixel_fault_controller
@@ -350,3 +352,20 @@ def test_existing_native_driver_signs_exact_rdp_frame_and_detector_binding(rig, 
     assert not mutation.replace_effect_verifier
     assert len(rig.requests) == 2
     close()
+
+
+def test_fresh_session_hook_pairing_preserves_stable_environment_identity(rig):
+    first, close_first = rig.open()
+    first_identity = first.qualification_environment_identity()
+    first_nonce = rig.requests[0]["nonce"]
+    close_first()
+    rig.transport._session_digest = OTHER
+    second, close_second = rig.open()
+    second_identity = second.qualification_environment_identity()
+    assert first_identity[:2] == second_identity[:2]
+    assert first_identity[3] == second_identity[3]
+    assert first_identity[2] != second_identity[2]
+    assert rig.requests[1]["nonce"] != first_nonce
+    assert first.qualification_environment_identity() is None
+    assert second.qualification_pixel_fault_controller.matches_observation(second, observation(second))
+    close_second()
