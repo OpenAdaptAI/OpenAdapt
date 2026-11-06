@@ -3,6 +3,7 @@
 The primary cases retain UIA. The existing additional pixels-only pass remains
 informational. One trial per case does not request or weaken certification.
 """
+
 from __future__ import annotations
 
 import base64
@@ -19,9 +20,13 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from tests.e2e.test_windows_hosted_replay import (
-    CONTROLS, DEMO_NOTE, DEMO_SEARCH, TARGET_ID, _Host, _points,
+    CONTROLS,
+    DEMO_NOTE,
+    DEMO_SEARCH,
+    TARGET_ID,
+    _Host,
+    _points,
 )
 
 pytestmark = [
@@ -56,17 +61,33 @@ class _LocalGuest:
         self.user = principal
         self.principal_sha256 = hashlib.sha256(principal.encode()).hexdigest()
 
-    def run_ps(self, script: str, *, check: bool = True,
-               timeout_s: float = 60.0, operation: str = "hosted metadata") -> _Result:
+    def run_ps(
+        self,
+        script: str,
+        *,
+        check: bool = True,
+        timeout_s: float = 60.0,
+        operation: str = "hosted metadata",
+    ) -> _Result:
         assert 0 < timeout_s <= 60 and len(script) <= 65536
         encoded = base64.b64encode(
             ("$ErrorActionPreference = 'Stop'\n" + script).encode("utf-16-le")
         ).decode("ascii")
         try:
             done = subprocess.run(
-                ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy",
-                 "Bypass", "-EncodedCommand", encoded],
-                capture_output=True, text=True, timeout=timeout_s, check=False,
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-EncodedCommand",
+                    encoded,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=timeout_s,
+                check=False,
             )
         except subprocess.TimeoutExpired:
             self.operations.append({"operation": operation, "status": "TIMEOUT"})
@@ -85,9 +106,11 @@ class _LocalGuest:
         destination = Path(remote)
         assert destination.parent.resolve(strict=True) == self.root
         assert not destination.exists() and not destination.is_symlink()
-        helper = Path(qualification_pixel_fault_task.__file__).with_name(
-            "qualification_pixel_fault_overlay.ps1"
-        ).resolve(strict=True)
+        helper = (
+            Path(qualification_pixel_fault_task.__file__)
+            .with_name("qualification_pixel_fault_overlay.ps1")
+            .resolve(strict=True)
+        )
         assert source == helper or source.name == "request.json"
         payload = source.read_bytes()
         if source == helper:
@@ -97,7 +120,9 @@ class _LocalGuest:
             assert source.name == "request.json" and len(payload) <= 4096
             request = json.loads(payload)
             assert request["schema"] == "openadapt.qualification-pixel-fault/v1"
-            assert destination.name == f"qualification_pixel_fault_{request['nonce']}.json"
+            assert (
+                destination.name == f"qualification_pixel_fault_{request['nonce']}.json"
+            )
         with destination.open("xb") as stream:
             stream.write(payload)
 
@@ -131,12 +156,16 @@ class _CampaignHost:
             assert not closed, "session close must not be retried"
             closed = True
             handles = tuple(controller._pixel_tasks._tasks)
-            evidence["tasks"] = [{
-                "nonce": h.nonce,
-                "ready": h.ready_status == f"ready:{h.nonce}:{controller.session_identity_sha256}",
-                "request_sha256": h.request_sha256,
-                "session_identity_sha256": h.session_binding_sha256,
-            } for h in handles]
+            evidence["tasks"] = [
+                {
+                    "nonce": h.nonce,
+                    "ready": h.ready_status
+                    == f"ready:{h.nonce}:{controller.session_identity_sha256}",
+                    "request_sha256": h.request_sha256,
+                    "session_identity_sha256": h.session_binding_sha256,
+                }
+                for h in handles
+            ]
             try:
                 controller.close()
                 for handle in handles:
@@ -147,12 +176,20 @@ class _CampaignHost:
                         "-ErrorAction SilentlyContinue) { throw 'owned task remains' }",
                         operation="verify owned task disposal",
                     )
-                    assert all(not Path(path).exists() for path in (
-                        handle.helper_path, handle.request_path, handle.status_path,
-                    ))
+                    assert all(
+                        not Path(path).exists()
+                        for path in (
+                            handle.helper_path,
+                            handle.request_path,
+                            handle.status_path,
+                        )
+                    )
                 evidence["closed"] = True
             finally:
-                if getattr(self.backend, "qualification_pixel_fault_controller", None) is controller:
+                if (
+                    getattr(self.backend, "qualification_pixel_fault_controller", None)
+                    is controller
+                ):
                     delattr(self.backend, "qualification_pixel_fault_controller")
 
         return self.backend, close
@@ -174,28 +211,37 @@ class _CampaignHost:
             "schema_version": "openadapt.qualify-readback/v1",
             "oracle_kind": context.oracle_kind,
             "read_path": "independent SQLite CLI, complete row comparison",
-            "independent": True, "passed": passed,
+            "independent": True,
+            "passed": passed,
             "observed": ("exact_record" if exact else "record_mismatch")
             if context.oracle_kind == "exact_record"
             else ("no_mutation" if untouched else "unexpected_mutation"),
             "effect_verdict": "CONFIRMED" if exact else "REFUTED",
             "landed": "exact" if exact else ("none" if untouched else "some"),
             "silent_incorrect_success": bool(report.success and not exact),
-            "changed_ids": sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k)),
-            "records_before": len(before), "records_after": len(after),
+            "changed_ids": sorted(
+                k for k in set(before) | set(after) if before.get(k) != after.get(k)
+            ),
+            "records_before": len(before),
+            "records_after": len(after),
         }
         mutations = report.qualification_fault_mutations
         result["fault_receipt_count"] = len(mutations)
         result["fault_detector_error"] = (
             fault_detector_contract_error(report, mutations[0])
-            if len(mutations) == 1 else None
+            if len(mutations) == 1
+            else None
         )
         result["execution_outcome"] = report.execution_outcome
         result["model_calls"] = report.model_calls
-        self.oracles.append({
-            "case_id": context.case_id, "trial": context.trial,
-            "informational": bool(context.state.get("pixels_only")), **result,
-        })
+        self.oracles.append(
+            {
+                "case_id": context.case_id,
+                "trial": context.trial,
+                "informational": bool(context.state.get("pixels_only")),
+                **result,
+            }
+        )
         return result
 
 
@@ -206,7 +252,8 @@ def open_hosted_session(config):
 
 def test_windows_hosted_six_case_campaign(tmp_path) -> None:
     from openadapt_flow.adapters.desktop_recorder import (
-        record_desktop_demo, structural_armed_coverage,
+        record_desktop_demo,
+        structural_armed_coverage,
     )
     from openadapt_flow.compiler import compile_recording
     from openadapt_flow.qualify.campaign import QualifyHooks, qualify
@@ -220,8 +267,10 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
     owner = None
     name = f"hosted-campaign-{uuid.uuid4().hex}"
     evidence: dict[str, Any] = {
-        "primary_planned": 6, "informational_planned": 6,
-        "certification_requested": False, "status": "UNRUN",
+        "primary_planned": 6,
+        "informational_planned": 6,
+        "certification_requested": False,
+        "status": "UNRUN",
     }
     try:
         try:
@@ -237,10 +286,15 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
         executable = shutil.which("powershell.exe")
         assert executable is not None
         assert observed[0] == "powershell"
-        assert observed[1] == "sha256:" + hashlib.sha256(Path(executable).read_bytes()).hexdigest()
+        assert (
+            observed[1]
+            == "sha256:" + hashlib.sha256(Path(executable).read_bytes()).hexdigest()
+        )
         evidence["environment"] = {
-            "application_identity": observed[0], "application_version": observed[1],
-            "session_sha256": observed[2], "environment_sha256": observed[3],
+            "application_identity": observed[0],
+            "application_version": observed[1],
+            "session_sha256": observed[2],
+            "environment_sha256": observed[3],
         }
         before_demo = {row["id"]: row for row in host.rows()}
 
@@ -265,48 +319,78 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
         coverage = structural_armed_coverage(workflow)
         assert coverage["armed_coverage"] == 1.0
         assert coverage["click_steps"] == len(CONTROLS)
-        saves = [step for step in workflow.steps if step.anchor is not None
-                 and step.anchor.structural is not None
-                 and step.anchor.structural.automation_id == "saveButton"]
+        saves = [
+            step
+            for step in workflow.steps
+            if step.anchor is not None
+            and step.anchor.structural is not None
+            and step.anchor.structural.automation_id == "saveButton"
+        ]
         assert len(saves) == 1 and saves[0].identity_armed
         guest = _LocalGuest(guest_root)
         owner = _CampaignHost(host, backend, guest)
         _SESSIONS[name] = owner
-        config = parse_verify_config({
-            "schema_version": "openadapt.verify/v1",
-            "app": {
-                "name": name, "target": "windows", "surface": "local",
-                "application_identity": "powershell", "version": observed[1],
-                "session": f"{__name__}:open_hosted_session",
-                "required_capabilities": ["pixel_frame_capture", "pixel_input", "uia_v1"],
+        config = parse_verify_config(
+            {
+                "schema_version": "openadapt.verify/v1",
+                "app": {
+                    "name": name,
+                    "target": "windows",
+                    "surface": "local",
+                    "application_identity": "powershell",
+                    "version": observed[1],
+                    "session": f"{__name__}:open_hosted_session",
+                    "required_capabilities": [
+                        "pixel_frame_capture",
+                        "pixel_input",
+                        "uia_v1",
+                    ],
+                },
+                "minimum_readback": "system_of_record",
+                "save_step": saves[0].id,
+                "verifier": {
+                    "kind": "sql",
+                    "sqlite_database": str(root / "patients.db"),
+                    "sql_query": "SELECT id, first, last, dob, note FROM patients ORDER BY id",
+                },
+                "record": {
+                    "name": "patient note",
+                    "match": ["id"],
+                    "duplicate_key": "id",
+                    "fields": {"id": {"literal": str(TARGET_ID)}, "note": "note"},
+                },
+                "inputs": {"params": {"search": DEMO_SEARCH, "note": DEMO_NOTE}},
+                "campaign": {"trials": 1, "cases": list(CASE_IDS)},
             },
-            "minimum_readback": "system_of_record", "save_step": saves[0].id,
-            "verifier": {
-                "kind": "sql", "sqlite_database": str(root / "patients.db"),
-                "sql_query": "SELECT id, first, last, dob, note FROM patients ORDER BY id",
-            },
-            "record": {
-                "name": "patient note", "match": ["id"], "duplicate_key": "id",
-                "fields": {"id": {"literal": str(TARGET_ID)}, "note": "note"},
-            },
-            "inputs": {"params": {"search": DEMO_SEARCH, "note": DEMO_NOTE}},
-            "campaign": {"trials": 1, "cases": list(CASE_IDS)},
-        }, env={})
+            env={},
+        )
         owner.reset()
         evidence["status"] = "RUNNING"
         result = qualify(
-            bundle, config, out=root / "campaign", trials=1, certify=None,
-            hooks=QualifyHooks(reset=owner.reset, before_trial=owner.before_trial, oracle=owner.oracle),
+            bundle,
+            config,
+            out=root / "campaign",
+            trials=1,
+            certify=None,
+            hooks=QualifyHooks(
+                reset=owner.reset, before_trial=owner.before_trial, oracle=owner.oracle
+            ),
             log=lambda _message: None,
         )
-        evidence.update(status="RETURNED", qualification_passed=result.passed, certified=result.certified)
+        evidence.update(
+            status="RETURNED",
+            qualification_passed=result.passed,
+            certified=result.certified,
+        )
         evidence["refusal_codes"] = [item.code.value for item in result.report.refusals]
         assert not result.certified
         assert {row["case_id"] for row in result.rows} == set(CASE_IDS)
         assert len(result.rows) == 6
         assert all(row["model_calls"] == 0 for row in result.rows)
         assert all(not row["fault_declined"] for row in result.rows)
-        assert result.reports["representative"][0].rung_counts.get("structural", 0) >= len(CONTROLS)
+        assert result.reports["representative"][0].rung_counts.get(
+            "structural", 0
+        ) >= len(CONTROLS)
         for case_id in CASE_IDS[1:]:
             report = result.reports[case_id][0]
             assert report.execution_outcome == "HALTED"
@@ -315,7 +399,9 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
         assert len(primary) == 6 and all(item["passed"] for item in primary)
         assert all(item["fault_detector_error"] is None for item in primary)
         assert all(session["closed"] for session in owner.sessions)
-        assert result.passed, "one-trial campaign did not qualify; gates remain unchanged"
+        assert result.passed, (
+            "one-trial campaign did not qualify; gates remain unchanged"
+        )
         evidence["status"] = "PASSED"
     except BaseException as exc:
         evidence.update(status="FAILED", exception_type=type(exc).__name__)
@@ -326,9 +412,12 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
             host.close()
         finally:
             if owner is not None:
-                evidence.update(oracles=owner.oracles, sessions=owner.sessions,
-                                operations=owner.guest.operations,
-                                principal_sha256=owner.guest.principal_sha256)
+                evidence.update(
+                    oracles=owner.oracles,
+                    sessions=owner.sessions,
+                    operations=owner.guest.operations,
+                    principal_sha256=owner.guest.principal_sha256,
+                )
             evidence["primary_completed"] = sum(
                 not item["informational"] for item in evidence.get("oracles", [])
             )
