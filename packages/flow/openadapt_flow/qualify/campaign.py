@@ -402,14 +402,15 @@ def check_ready(
     return problems
 
 
-_NATIVE_CAMPAIGN_CAPABILITIES = frozenset(
+_NATIVE_BASE_CAPABILITIES = frozenset(
     {
         "pixel_frame_capture",
         "pixel_input",
         "qualification_environment_identity",
-        "qualification_fault_driver",
-        "qualification_pixel_fault_controller",
     }
+)
+_NATIVE_FAULT_CAPABILITIES = frozenset(
+    {"qualification_fault_driver", "qualification_pixel_fault_controller"}
 )
 
 
@@ -437,10 +438,11 @@ def _campaign_session_components(
     *,
     campaign_id: str,
     fault_key: Optional[LocalTestKey] = None,
+    require_fault_driver: bool = True,
 ) -> tuple[
     QualificationEnvironmentObserver,
     QualificationEnvironmentObservation,
-    QualificationFaultDriver,
+    Optional[QualificationFaultDriver],
     list[str],
 ]:
     """Bind one live session to its observer and actual backend capabilities."""
@@ -483,23 +485,25 @@ def _campaign_session_components(
         application_identity=app.application_identity,
     )
     controller = getattr(backend, "qualification_pixel_fault_controller", None)
-    if (
-        type(controller) is not WindowsQualificationPixelFaultController
-        or getattr(controller, "qualification_target_kind", None) != app.target
-        or getattr(controller, "session_identity_sha256", None)
-        != observation.session_identity_sha256
-        or not controller.matches_observation(backend, observation)
-    ):
-        raise QualifyConfigError(
-            "native session has no matching environment-owned pixel fault controller"
+    driver: Optional[QualificationFaultDriver] = None
+    if require_fault_driver:
+        if (
+            type(controller) is not WindowsQualificationPixelFaultController
+            or getattr(controller, "qualification_target_kind", None) != app.target
+            or getattr(controller, "session_identity_sha256", None)
+            != observation.session_identity_sha256
+            or not controller.matches_observation(backend, observation)
+        ):
+            raise QualifyConfigError(
+                "native session has no matching environment-owned pixel fault controller"
+            )
+        driver = WindowsPixelFaultDriver(
+            workflow,
+            controller,
+            key=fault_key,
+            key_id=f"{campaign_id}-fault-driver",
         )
-    driver = WindowsPixelFaultDriver(
-        workflow,
-        controller,
-        key=fault_key,
-        key_id=f"{campaign_id}-fault-driver",
-    )
-    driver_binding = _driver_binding(driver)
+        driver_binding = _driver_binding(driver)
     provider = getattr(backend, "qualification_capabilities", None)
     if not callable(provider):
         raise QualifyConfigError("native session does not report live capabilities")
@@ -510,10 +514,14 @@ def _campaign_session_components(
         raise QualifyConfigError("native session capability evidence is invalid")
     capabilities = set(reported)
     capabilities.add("qualification_environment_identity")
-    capabilities.update(
-        {"qualification_fault_driver", "qualification_pixel_fault_controller"}
+    if driver is not None:
+        capabilities.update(
+            {"qualification_fault_driver", "qualification_pixel_fault_controller"}
+        )
+    required = _NATIVE_BASE_CAPABILITIES | (
+        _NATIVE_FAULT_CAPABILITIES if driver is not None else frozenset()
     )
-    missing = sorted(_NATIVE_CAMPAIGN_CAPABILITIES - capabilities)
+    missing = sorted(required - capabilities)
     if missing:
         raise QualifyConfigError(
             "native session lacks required live capabilities: " + ", ".join(missing)
@@ -526,10 +534,10 @@ def _campaign_session_components(
         )
     # The trusted driver is obtained from the same opened backend/session as
     # the observer. No config string or separate import hook can mint it.
-    if _driver_binding(driver) != driver_binding:
+    if driver is not None and _driver_binding(driver) != driver_binding:
         raise QualifyConfigError("native session fault-driver binding changed")
-    required = sorted(_NATIVE_CAMPAIGN_CAPABILITIES | set(app.required_capabilities))
-    return observer, observation, driver, required
+    required_capabilities = sorted(required | set(app.required_capabilities))
+    return observer, observation, driver, required_capabilities
 
 
 # ---------------------------------------------------------------------------
@@ -923,7 +931,6 @@ def _run(
     marks["browser_ready"] = time.time()
     try:
         observer = setup.observer
-        fault_driver = setup.driver
         if config.app.target != "web":
             active_observer, _observation, active_driver, _capabilities = (
                 _campaign_session_components(
@@ -932,18 +939,24 @@ def _run(
                     workflow,
                     campaign_id=ctx.case_id,
                     fault_key=setup.fault_key,
+                    require_fault_driver=fault_driver is not None,
                 )
             )
             if (
                 active_observer.observer_id != setup.observer.observer_id
                 or active_observer.contract_sha256 != setup.observer.contract_sha256
-                or _driver_binding(active_driver) != _driver_binding(setup.driver)
+                or (
+                    fault_driver is not None
+                    and active_driver is not None
+                    and _driver_binding(active_driver) != _driver_binding(setup.driver)
+                )
             ):
                 raise QualifyError(
                     "native trial session does not match the campaign observer/driver"
                 )
             observer = active_observer
-            fault_driver = active_driver
+            if fault_driver is not None:
+                fault_driver = active_driver
         verifier = hooks.make_verifier(ctx.params)
         gate_kwargs = dict(
             bundle_dir=bundle_dir,

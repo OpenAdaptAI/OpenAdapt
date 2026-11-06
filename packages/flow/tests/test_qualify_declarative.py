@@ -302,13 +302,19 @@ def test_windows_pixel_fault_request_contains_only_bounded_geometry():
         fault_kind="wrong_identity",
         backend=SimpleNamespace(viewport=(800, 600)),
     )
-    step = SimpleNamespace(anchor=SimpleNamespace(region=(12, 30, 80, 24)))
+    step = SimpleNamespace(
+        anchor=SimpleNamespace(
+            region=(12, 30, 80, 24),
+            identifier_region=(20, 28, 40, 10),
+        )
+    )
     request = _request_for(context, step, "a" * 32)
     assert request == {
         "schema": "openadapt.qualification-pixel-fault/v1",
         "nonce": "a" * 32,
         "kind": "wrong_identity",
         "target": {"x": 12, "y": 30, "width": 80, "height": 24},
+        "identity": {"x": 20, "y": 28, "width": 40, "height": 10},
         "screen": {"width": 800, "height": 600},
     }
     assert not {"text", "identity", "screenshot", "workflow"} & set(request)
@@ -325,6 +331,30 @@ def test_windows_pixel_fault_request_declines_unbounded_geometry():
     )
     step = SimpleNamespace(anchor=SimpleNamespace(region=(790, 30, 80, 24)))
     assert _request_for(context, step, "b" * 32) is None
+
+
+def test_windows_ambiguity_request_places_exact_pixel_clone_in_search_region():
+    from types import SimpleNamespace
+
+    from openadapt_flow.qualify.windows_pixel_fault_controller import _request_for
+
+    context = SimpleNamespace(
+        fault_kind="ambiguity",
+        backend=SimpleNamespace(viewport=(800, 600)),
+    )
+    step = SimpleNamespace(
+        anchor=SimpleNamespace(region=(100, 100, 40, 20), search_pad=80)
+    )
+    request = _request_for(context, step, "c" * 32)
+    assert request is not None
+    target = request["target"]
+    duplicate = request["duplicate"]
+    assert request["search_pad"] == 80
+    assert duplicate["width"] == target["width"]
+    assert duplicate["height"] == target["height"]
+    assert target["x"] + target["width"] <= duplicate["x"]
+    assert duplicate["x"] + duplicate["width"] <= target["x"] + target["width"] + 80
+    assert duplicate["y"] == target["y"]
 
 
 def test_a_qualified_bundle_can_be_qualified_again():
