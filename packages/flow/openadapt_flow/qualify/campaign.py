@@ -507,15 +507,19 @@ def _campaign_session_components(
     driver: Optional[_CampaignFaultDriver] = None
     if require_fault_driver:
         if app.target == "windows":
-            controller_type = WindowsQualificationPixelFaultController
+            controller_matches = (
+                type(controller) is WindowsQualificationPixelFaultController
+            )
         else:
             from openadapt_flow.qualify.rdp_pixel_fault_controller import (
                 RdpQualificationPixelFaultController,
             )
 
-            controller_type = RdpQualificationPixelFaultController
+            controller_matches = (
+                type(controller) is RdpQualificationPixelFaultController
+            )
         if (
-            type(controller) is not controller_type
+            not controller_matches
             or getattr(controller, "qualification_target_kind", None) != app.target
             or getattr(controller, "session_identity_sha256", None)
             != observation.session_identity_sha256
