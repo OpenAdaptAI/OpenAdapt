@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 import json
 import subprocess
-from copy import deepcopy
 
 import pytest
 
@@ -154,3 +153,42 @@ def test_query_crash_timeout_still_closes_owned_processes(monkeypatch, tmp_path,
     assert all(p["started"] and p["waited"] for p in summary["cleanup"].values())
     assert "private X failure" not in json.dumps(summary)
     assert "toplevel" not in summary and "wrapper" not in summary
+
+
+@pytest.mark.parametrize("changed_before_query", [True, False])
+def test_changed_owned_server_refuses_and_cleans_up(monkeypatch, tmp_path, changed_before_query):
+    processes = []
+    class Pipe(io.BytesIO):
+        def fileno(self):
+            return 99
+    def popen(*args, **kwargs):
+        proc = _Process()
+        if processes:
+            proc.stdout = Pipe()
+        processes.append(proc)
+        return proc
+    ready = {"toplevel": 20, "wm_frame": 20, "mapped": True,
+             "geometry": [0, 0, 1280, 800], "tk_version": "8.6.14"}
+    lines = iter([b"123", json.dumps(ready).encode()])
+    owned = iter([True, False] if changed_before_query else [True, True, False])
+    calls = []
+    def run(argv, **kwargs):
+        calls.append(argv)
+        if "--tree" in argv:
+            return subprocess.CompletedProcess(argv, 0, json.dumps(_proof()).encode(), b"")
+        assert argv == ["/usr/bin/xdotool", "getwindowfocus", "-f"]
+        return subprocess.CompletedProcess(argv, 0, b"30\n", b"")
+    monkeypatch.setattr(focus.subprocess, "Popen", popen)
+    monkeypatch.setattr(focus, "_line", lambda *args: next(lines))
+    monkeypatch.setattr(focus, "_owned", lambda *args: next(owned))
+    monkeypatch.setattr(focus.subprocess, "run", run)
+    with pytest.raises(AssertionError, match="fixed safe evidence"):
+        focus._condition(tmp_path, literal_parent=False)
+    assert len(calls) == (0 if changed_before_query else 2)
+    assert all(p.terminated and p.waited for p in processes)
+    summary = json.loads((tmp_path / "fixture-focus/focus-evidence.json").read_text())
+    assert summary["status"] == ("ERROR" if changed_before_query else "FAILED")
+    if not changed_before_query:
+        assert summary["server_owned"] is False
+        assert summary["raw_focus_matches_verified_wrapper"] is True
+    assert summary["pipe_cleanup_complete"] is True
