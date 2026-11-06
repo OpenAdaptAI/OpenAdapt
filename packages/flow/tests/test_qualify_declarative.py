@@ -154,6 +154,20 @@ def test_auto_save_step_and_ready_campaign():
     assert problems == []
 
 
+def test_web_session_refuses_missing_url_before_browser_setup():
+    workflow = _workflow()
+    config = _config(app={**APP, "url": None, "reset": {"command": "true"}})
+    save, _notes = apply_verify_config(workflow, config)
+
+    assert "app.url is required for a web qualification campaign" in check_ready(
+        workflow, config, save, dict(workflow.params)
+    )
+    from openadapt_flow.qualify.session import playwright_session
+
+    with pytest.raises(QualifyConfigError, match="app.url or app.entry_url"):
+        playwright_session(config)
+
+
 def test_check_ready_lists_every_problem():
     workflow = _workflow(armed=False)
     config = _config(app=APP)  # no reset
