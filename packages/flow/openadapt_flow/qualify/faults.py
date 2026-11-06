@@ -84,6 +84,16 @@ NATIVE_PIXEL_FAULT_DRIVER_CONTRACT_SHA256 = hashlib.sha256(
 #: The label a wrong-identity save control is given.
 WRONG_ACTION_LABEL = "Merge Into Existing Record"
 SCREEN_FAULTS = frozenset({"ambiguity", "wrong_identity", "stale_identity"})
+_SAFE_PIXEL_CONTROLLER_DECLINES = frozenset(
+    {
+        "session_binding_unavailable",
+        "session_identity_changed",
+        "fault_request_unavailable",
+        "task_creation_failed",
+        "task_readiness_failed",
+        "task_readiness_unconfirmed",
+    }
+)
 
 _CLONE_JS = (
     """(el) => { el.parentNode.insertBefore(el.cloneNode(true), el); return 1; }"""
@@ -403,7 +413,15 @@ class NativePixelFaultDriver:
             try:
                 changed = apply_fault(context, step)
                 if changed is not True:
-                    self.declined = "screen_fault_controller_declined"
+                    controller_decline = getattr(
+                        self._controller, "last_decline_code", None
+                    )
+                    self.declined = (
+                        controller_decline
+                        if isinstance(controller_decline, str)
+                        and controller_decline in _SAFE_PIXEL_CONTROLLER_DECLINES
+                        else "screen_fault_controller_declined"
+                    )
                     return None
                 after_frame = context.capture_frame()
             except Exception:  # noqa: BLE001 - unsupported/failed controller declines
