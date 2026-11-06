@@ -299,7 +299,7 @@ def test_without_an_audit_a_change_between_actions_is_uncertain(tmp_path: Path) 
     _wait(sh)
     client.sql("UPDATE patient SET phone = '7' WHERE id = 1")
     sh.stop()
-    assert _verdicts(sh) == [("sql", "CONFIRMED"), ("gap", "UNCERTAIN")]
+    assert _verdicts(sh) == [("sql", "CONFIRMED"), ("gap", "UNCERTAIN")], sh.results()
     assert "who changed it wasn't checked" in " ".join(sh.episodes[1].reasons)
 
 
