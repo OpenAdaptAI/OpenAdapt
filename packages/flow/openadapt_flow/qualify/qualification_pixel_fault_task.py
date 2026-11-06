@@ -26,6 +26,79 @@ _SAFE_GUEST_PATH = re.compile(r"^[A-Za-z0-9_ .:\\-]+$")
 _HELPER_NAME = "qualification_pixel_fault_overlay.ps1"
 _STATUS_TIMEOUT_S = 15.0
 _DIAGNOSTIC_PREFIX = "OPENADAPT_TASK_DIAGNOSTIC:"
+_PS_PRINCIPAL_SID_FUNCTIONS = r"""
+function Get-PrincipalSidObservation {
+    param([Parameter(Mandatory=$true)][string]$PrincipalUserId)
+    $sid = $null
+    if ($PrincipalUserId -match '^S-1-[0-9]+(-[0-9]+)+$') {
+        $sid = [System.Security.Principal.SecurityIdentifier]::new($PrincipalUserId)
+    } else {
+        $account = [System.Security.Principal.NTAccount]::new($PrincipalUserId)
+        $sid = $account.Translate([System.Security.Principal.SecurityIdentifier])
+    }
+    $canonicalSid = $sid.Value
+    $rows = @(Get-CimInstance -ClassName Win32_UserAccount `
+        -Filter ("SID = '{0}'" -f $canonicalSid) -OperationTimeoutSec 5 -ErrorAction Stop)
+    $sidType = $null
+    $resolved = $false
+    if ($rows.Count -eq 1) {
+        $rowSid = [System.Security.Principal.SecurityIdentifier]::new([string]$rows[0].SID)
+        $sidType = $rows[0].SIDType
+        $resolved = $rowSid.Value -ceq $canonicalSid
+    }
+    [pscustomobject]@{
+        resolved = [bool]$resolved
+        count = [int]$rows.Count
+        sid_type = $sidType
+        canonical_sid = [string]$canonicalSid
+    }
+}
+
+function Test-ExactInteger {
+    param($Value, [Parameter(Mandatory=$true)][long]$Expected)
+    if ($null -eq $Value) { return $false }
+    $integerTypeNames = @(
+        'System.Byte', 'System.SByte', 'System.Int16', 'System.UInt16',
+        'System.Int32', 'System.UInt32', 'System.Int64', 'System.UInt64'
+    )
+    if ($Value.GetType().FullName -notin $integerTypeNames) { return $false }
+    return ($Value -eq $Expected)
+}
+
+function Resolve-CanonicalUserSid {
+    param([Parameter(Mandatory=$true)][string]$PrincipalUserId)
+    $observation = Get-PrincipalSidObservation -PrincipalUserId $PrincipalUserId
+    if ($null -eq $observation) { return $null }
+    $propertyNames = @($observation.PSObject.Properties | ForEach-Object { $_.Name })
+    $expectedNames = @('resolved', 'count', 'sid_type', 'canonical_sid')
+    if ($propertyNames.Count -ne $expectedNames.Count -or
+        @($propertyNames | Where-Object { $_ -cnotin $expectedNames }).Count -ne 0 -or
+        @($expectedNames | Where-Object { $_ -cnotin $propertyNames }).Count -ne 0) {
+        return $null
+    }
+    if ($observation.resolved -isnot [bool] -or -not $observation.resolved -or
+        -not (Test-ExactInteger $observation.count 1) -or
+        -not (Test-ExactInteger $observation.sid_type 1) -or
+        $observation.canonical_sid -isnot [string] -or
+        $observation.canonical_sid -notmatch '^S-1-[0-9]+(-[0-9]+)+$') {
+        return $null
+    }
+    try {
+        $canonicalSid = [System.Security.Principal.SecurityIdentifier]::new(
+            $observation.canonical_sid
+        )
+    } catch {
+        return $null
+    }
+    if ($canonicalSid.Value -cne $observation.canonical_sid) { return $null }
+    return $canonicalSid.Value
+}
+
+function Test-EmptyPrincipalGroupId {
+    param($Value)
+    return ($null -eq $Value -or ($Value -is [string] -and $Value.Length -eq 0))
+}
+"""
 _LAUNCH_PHASES = frozenset(
     {
         "preflight",
@@ -121,7 +194,7 @@ class OwnedInteractiveTask:
     session_binding_sha256: str
     helper_sha256: str
     action_sha256: str
-    user_sha256: str
+    principal_sid_sha256: str
     instance_guid: str
 
 
@@ -237,13 +310,14 @@ def launch_owned_interactive_task(
     action_sha256 = hashlib.sha256(
         (executable + "\0" + arguments).encode("utf-8")
     ).hexdigest()
-    user_sha256 = hashlib.sha256(user.encode("utf-8")).hexdigest()
     script = f"""
+{_PS_PRINCIPAL_SID_FUNCTIONS}
 $taskName = {_ps_quote(task_name)}
 $description = {_ps_quote(description)}
 $expectedExe = {_ps_quote(executable)}
 $expectedArgs = {_ps_quote(arguments)}
 $expectedUser = {_ps_quote(user)}
+$expectedPrincipalSid = $null
 $phase = 'preflight'
 $registration = 'not_attempted'
 $cleanup = 'not_attempted'
@@ -260,6 +334,9 @@ $phase = 'build_principal'
 $principal = New-ScheduledTaskPrincipal -UserId $expectedUser -LogonType Interactive -RunLevel Limited
 $phase = 'build_settings'
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+$phase = 'verify_principal_user'
+$expectedPrincipalSid = Resolve-CanonicalUserSid -PrincipalUserId $expectedUser
+if ($null -eq $expectedPrincipalSid) {{ throw 'expected task principal is not a uniquely resolved user' }}
 $phase = 'register_definition'
 $registration = 'unknown'
 $registrationAttempted = $true
@@ -278,7 +355,11 @@ if ($created.Actions[0].Execute -cne $expectedExe) {{ throw 'created task execut
 $phase = 'verify_action_arguments'
 if ($created.Actions[0].Arguments -cne $expectedArgs) {{ throw 'created task arguments do not match request' }}
 $phase = 'verify_principal_user'
-if ($created.Principal.UserId -cne $expectedUser) {{ throw 'created task principal does not match request' }}
+if (-not (Test-EmptyPrincipalGroupId $created.Principal.GroupId)) {{ throw 'created task principal is a group' }}
+$createdPrincipalSid = Resolve-CanonicalUserSid -PrincipalUserId ([string]$created.Principal.UserId)
+if ($null -eq $createdPrincipalSid -or $createdPrincipalSid -cne $expectedPrincipalSid) {{
+    throw 'created task principal does not match request'
+}}
 $phase = 'verify_principal_logon'
 if ($created.Principal.LogonType.ToString() -cne 'Interactive') {{ throw 'created task logon type does not match request' }}
 $phase = 'verify_principal_runlevel'
@@ -303,10 +384,16 @@ while ([DateTime]::UtcNow -lt $deadline -and $null -eq $instance) {{
 if ($null -eq $instance -or [string]::IsNullOrEmpty($instance.InstanceGuid)) {{
     throw 'created task has no exact running instance'
 }}
+$sha = [System.Security.Cryptography.SHA256]::Create()
+try {{
+    $principalSidBytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($createdPrincipalSid))
+    $principalSidSha = [BitConverter]::ToString($principalSidBytes).Replace('-', '').ToLowerInvariant()
+}} finally {{ $sha.Dispose() }}
 [pscustomobject]@{{
     task_name = $taskName
     description = $description
     instance_guid = [string]$instance.InstanceGuid
+    principal_sid_sha256 = $principalSidSha
 }} | ConvertTo-Json -Compress
 }} catch {{
     $creationError = $_
@@ -329,11 +416,13 @@ if ($null -eq $instance -or [string]::IsNullOrEmpty($instance.InstanceGuid)) {{
                 $cleanup = 'not_attempted'
             }} else {{
                 $partial = $partialSet[0]
-                if ($partial.Description -ceq $description -and
+                if ($null -ne $expectedPrincipalSid -and
+                    $partial.Description -ceq $description -and
                     @($partial.Actions).Count -eq 1 -and
                     $partial.Actions[0].Execute -ceq $expectedExe -and
                     $partial.Actions[0].Arguments -ceq $expectedArgs -and
-                    $partial.Principal.UserId -ceq $expectedUser -and
+                    (Test-EmptyPrincipalGroupId $partial.Principal.GroupId) -and
+                    (Resolve-CanonicalUserSid -PrincipalUserId ([string]$partial.Principal.UserId)) -ceq $expectedPrincipalSid -and
                     $partial.Principal.LogonType.ToString() -ceq 'Interactive' -and
                     $partial.Principal.RunLevel.ToString() -ceq 'Limited') {{
                     $registration = 'verified_owned'
@@ -396,7 +485,12 @@ if ($null -eq $instance -or [string]::IsNullOrEmpty($instance.InstanceGuid)) {{
         instance_guid = str(uuid.UUID(receipt["instance_guid"]))
     except (ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
         raise RuntimeError("owned task creation receipt is invalid") from exc
+    principal_sid_sha256 = receipt.get("principal_sid_sha256")
     if (
+        set(receipt) != {"task_name", "description", "instance_guid", "principal_sid_sha256"}
+        or not isinstance(principal_sid_sha256, str)
+        or not _HEX64.fullmatch(principal_sid_sha256)
+        or
         receipt.get("task_name") != task_name
         or receipt.get("description") != description
     ):
@@ -408,7 +502,7 @@ if ($null -eq $instance -or [string]::IsNullOrEmpty($instance.InstanceGuid)) {{
         session_binding_sha256=session_binding_sha256,
         helper_sha256=helper_sha256,
         action_sha256=action_sha256,
-        user_sha256=user_sha256,
+        principal_sid_sha256=principal_sid_sha256,
         instance_guid=instance_guid,
     )
 
@@ -418,6 +512,8 @@ def close_owned_interactive_task(lab: Any, task: OwnedInteractiveTask) -> None:
 
     if not isinstance(task, OwnedInteractiveTask):
         raise TypeError("owned task identity is required")
+    if not _HEX64.fullmatch(task.principal_sid_sha256):
+        raise ValueError("owned task principal identity is invalid")
     description = (
         f"openadapt.qualification-owned-task/v1:{task.nonce}:"
         f"{task.request_sha256}:{task.helper_sha256}:{task.session_binding_sha256}"
@@ -427,12 +523,14 @@ $taskName = {_ps_quote(task.task_name)}
 $description = {_ps_quote(description)}
 $expectedInstance = {_ps_quote(task.instance_guid)}
 $expectedActionSha = {_ps_quote(task.action_sha256)}
-$expectedUserSha = {_ps_quote(task.user_sha256)}
+{_PS_PRINCIPAL_SID_FUNCTIONS}
+$expectedPrincipalSidSha = {_ps_quote(task.principal_sid_sha256)}
 $definitionSet = @(Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)
 if ($definitionSet.Count -gt 1) {{ throw 'owned task name is ambiguous' }}
 $definition = if ($definitionSet.Count -eq 1) {{ $definitionSet[0] }} else {{ $null }}
 if ($null -eq $definition) {{ 'missing'; exit 0 }}
 if ($definition.Description -cne $description -or @($definition.Actions).Count -ne 1 -or
+    -not (Test-EmptyPrincipalGroupId $definition.Principal.GroupId) -or
     $definition.Principal.LogonType.ToString() -cne 'Interactive' -or
     $definition.Principal.RunLevel.ToString() -cne 'Limited') {{
     throw 'task definition no longer matches owned receipt'
@@ -442,10 +540,12 @@ try {{
     $actionText = [string]$definition.Actions[0].Execute + [char]0 + [string]$definition.Actions[0].Arguments
     $actionBytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($actionText))
     $actionSha = [BitConverter]::ToString($actionBytes).Replace('-', '').ToLowerInvariant()
-    $userBytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes([string]$definition.Principal.UserId))
-    $userSha = [BitConverter]::ToString($userBytes).Replace('-', '').ToLowerInvariant()
+    $principalSid = Resolve-CanonicalUserSid -PrincipalUserId ([string]$definition.Principal.UserId)
+    if ($null -eq $principalSid) {{ throw 'task principal is not a uniquely resolved user' }}
+    $principalSidBytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($principalSid))
+    $principalSidSha = [BitConverter]::ToString($principalSidBytes).Replace('-', '').ToLowerInvariant()
 }} finally {{ $sha.Dispose() }}
-if ($actionSha -cne $expectedActionSha -or $userSha -cne $expectedUserSha) {{
+if ($actionSha -cne $expectedActionSha -or $principalSidSha -cne $expectedPrincipalSidSha) {{
     throw 'task command or principal changed before disposal'
 }}
 $service = New-Object -ComObject 'Schedule.Service'
@@ -475,6 +575,7 @@ if ($againSet.Count -gt 1) {{ throw 'task name became ambiguous before unregiste
 $again = if ($againSet.Count -eq 1) {{ $againSet[0] }} else {{ $null }}
 if ($null -ne $again) {{
     if ($again.Description -cne $description -or @($again.Actions).Count -ne 1 -or
+        -not (Test-EmptyPrincipalGroupId $again.Principal.GroupId) -or
         $again.Principal.LogonType.ToString() -cne 'Interactive' -or
         $again.Principal.RunLevel.ToString() -cne 'Limited') {{
         throw 'task definition changed before disposal'
@@ -484,10 +585,12 @@ if ($null -ne $again) {{
         $actionText = [string]$again.Actions[0].Execute + [char]0 + [string]$again.Actions[0].Arguments
         $actionBytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($actionText))
         $againActionSha = [BitConverter]::ToString($actionBytes).Replace('-', '').ToLowerInvariant()
-        $userBytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes([string]$again.Principal.UserId))
-        $againUserSha = [BitConverter]::ToString($userBytes).Replace('-', '').ToLowerInvariant()
+        $againPrincipalSid = Resolve-CanonicalUserSid -PrincipalUserId ([string]$again.Principal.UserId)
+        if ($null -eq $againPrincipalSid) {{ throw 'task principal is not a uniquely resolved user' }}
+        $againPrincipalSidBytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($againPrincipalSid))
+        $againPrincipalSidSha = [BitConverter]::ToString($againPrincipalSidBytes).Replace('-', '').ToLowerInvariant()
     }} finally {{ $sha.Dispose() }}
-    if ($againActionSha -cne $expectedActionSha -or $againUserSha -cne $expectedUserSha) {{
+    if ($againActionSha -cne $expectedActionSha -or $againPrincipalSidSha -cne $expectedPrincipalSidSha) {{
         throw 'task command or principal changed before unregister'
     }}
     $finalRunning = @($folder.GetTask($taskPath).GetInstances(0))
