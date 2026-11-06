@@ -129,26 +129,66 @@ class _LocalGuest:
 
 class _CampaignHost:
     def __init__(self, host: _Host, backend: Any, guest: _LocalGuest) -> None:
-        self.host, self.backend, self.guest = host, backend, guest
+        self.host, self.prototype, self.guest = host, backend, guest
+        self._backends: list[Any] = []
+        self._controllers: list[Any] = []
         self.sessions: list[dict[str, Any]] = []
         self.oracles: list[dict[str, Any]] = []
 
     def reset(self) -> None:
         self.host.launch_app()
-        _points(self.backend)
+        _points(self.prototype)
         assert all(row["note"] == "" for row in self.host.rows())
 
     def open(self):
+        import requests
+
+        from openadapt_flow.backends.windows_backend import WindowsBackend
         from openadapt_flow.qualify.windows_pixel_fault_controller import (
             attach_windows_qualification_pixel_fault_controller,
         )
 
-        _points(self.backend)
-        controller = attach_windows_qualification_pixel_fault_controller(
-            self.backend, self.guest, guest_dir=str(self.guest.root)
-        )
-        evidence: dict[str, Any] = {"closed": False, "tasks": []}
+        # These are this fixture's ephemeral in-memory connection settings.
+        # No lab environment, token file or certificate file is read here.
+        prototype = self.prototype
+        if not prototype._auth_token or not prototype._pin_fingerprint:
+            raise RuntimeError("owned agent connection binding unavailable")
+        client = requests.Session()
+        controller = None
+        evidence: dict[str, Any] = {"opened": False, "closed": False, "tasks": []}
         self.sessions.append(evidence)
+        try:
+            backend = WindowsBackend(
+                prototype.server_url,
+                auth_token=prototype._auth_token,
+                pin_fingerprint=prototype._pin_fingerprint,
+                require_tls=prototype._require_tls,
+                type_interval_s=prototype._type_interval_s,
+                timeout_s=prototype._timeout_s,
+                screenshot_max_retries=prototype._screenshot_max_retries,
+                screenshot_retry_delay_s=prototype._screenshot_retry_delay_s,
+                session=client,
+            )
+            assert backend is not prototype
+            assert all(backend is not prior for prior in self._backends)
+            assert all(client is not prior._session for prior in self._backends)
+            _points(backend)
+            controller = attach_windows_qualification_pixel_fault_controller(
+                backend, self.guest, guest_dir=str(self.guest.root)
+            )
+            assert all(controller is not prior for prior in self._controllers)
+            self._backends.append(backend)
+            self._controllers.append(controller)
+            evidence["opened"] = True
+        except BaseException:
+            try:
+                if controller is not None:
+                    controller.close()
+                evidence["closed"] = True
+            finally:
+                client.close()
+                evidence["http_closed"] = True
+            raise
         closed = False
 
         def close() -> None:
@@ -186,13 +226,10 @@ class _CampaignHost:
                     )
                 evidence["closed"] = True
             finally:
-                if (
-                    getattr(self.backend, "qualification_pixel_fault_controller", None)
-                    is controller
-                ):
-                    delattr(self.backend, "qualification_pixel_fault_controller")
+                client.close()
+                evidence["http_closed"] = True
 
-        return self.backend, close
+        return backend, close
 
     def before_trial(self, context: Any) -> None:
         context.state["sqlite_before"] = self.host.rows()
@@ -265,6 +302,7 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
     guest_root.mkdir()
     host = _Host(root)
     owner = None
+    backend = None
     name = f"hosted-campaign-{uuid.uuid4().hex}"
     evidence: dict[str, Any] = {
         "primary_planned": 6,
@@ -398,7 +436,7 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
         primary = [item for item in owner.oracles if not item["informational"]]
         assert len(primary) == 6 and all(item["passed"] for item in primary)
         assert all(item["fault_detector_error"] is None for item in primary)
-        assert all(session["closed"] for session in owner.sessions)
+        assert all(session["closed"] and session["http_closed"] for session in owner.sessions)
         assert result.passed, (
             "one-trial campaign did not qualify; gates remain unchanged"
         )
@@ -409,7 +447,11 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
     finally:
         _SESSIONS.pop(name, None)
         try:
-            host.close()
+            try:
+                host.close()
+            finally:
+                if backend is not None:
+                    backend._session.close()
         finally:
             if owner is not None:
                 evidence.update(
