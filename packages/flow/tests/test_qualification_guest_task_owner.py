@@ -11,11 +11,15 @@ import hashlib
 import json
 import subprocess
 from pathlib import Path
-from types import SimpleNamespace
+from runpy import run_path
 
 import pytest
 
 from openadapt_flow.qualify import qualification_pixel_fault_task as owner
+
+LabResult = run_path(
+    str(Path(__file__).resolve().parents[1] / "scripts/desktop/winrm_lab.py")
+)["Result"]
 
 POWERSHELL = Path("/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe")
 NONCE = "a" * 32
@@ -210,9 +214,15 @@ class SyntheticLab:
         result = json.loads(lines[-1])
         self.records.append(result)
         self.state = result["state"]
-        if result["error"]:
+        if result["error"] and kwargs.get("check", True):
             raise RuntimeError(result["error"])
-        return SimpleNamespace(stdout=result["output"], returncode=0)
+        response = LabResult(
+            status=1 if result["error"] else 0,
+            stdout=result["output"],
+            stderr=result["error"] or "",
+        )
+        assert not hasattr(response, "returncode")
+        return response
 
 
 def launch(lab: SyntheticLab):
@@ -337,7 +347,7 @@ def test_malformed_creation_receipt_refused():
     class MalformedLab(SyntheticLab):
         def run_ps(self, script, **kwargs):
             super().run_ps(script, **kwargs)
-            return SimpleNamespace(stdout="{", returncode=0)
+            return LabResult(status=0, stdout="{", stderr="")
 
     with pytest.raises(RuntimeError, match="receipt is invalid"):
         launch(MalformedLab())
@@ -405,7 +415,35 @@ def test_preexisting_request_path_refused_before_push_or_task(kind):
     tasks = owner.OwnedPixelTasks(
         lab, guest_dir=r"C:\Synthetic", session_binding_sha256=SESSION
     )
-    with pytest.raises(RuntimeError, match="path already exists"):
+    with pytest.raises(
+        RuntimeError, match="qualification helper path preflight failed"
+    ):
+        tasks.launch(
+            {
+                "schema": "openadapt.qualification-pixel-fault/v1",
+                "nonce": NONCE,
+                "session_identity_sha256": SESSION,
+            }
+        )
+    assert lab.pushed == {}
+    assert all(not row["trace"] for row in lab.records)
+
+
+def test_actual_lab_status_nonzero_refuses_before_push_or_task():
+    class FailedPreflightLab(SyntheticLab):
+        def run_ps(self, script, **kwargs):
+            result = super().run_ps(script, **kwargs)
+            if kwargs.get("operation") == "qualification helper path preflight":
+                return LabResult(
+                    status=7, stdout=result.stdout, stderr="synthetic failure"
+                )
+            return result
+
+    lab = FailedPreflightLab()
+    tasks = owner.OwnedPixelTasks(
+        lab, guest_dir=r"C:\Synthetic", session_binding_sha256=SESSION
+    )
+    with pytest.raises(RuntimeError, match="preflight failed"):
         tasks.launch(
             {
                 "schema": "openadapt.qualification-pixel-fault/v1",
