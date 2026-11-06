@@ -1101,6 +1101,10 @@ class Shadow:
             subject = {"contract_sha256": None, "verify_run_receipt_sha256": None}
             checked = {}
             verdict = UNCERTAIN
+        if self.mode == "fhir":
+            for gap in wr.FHIR_NOT_COVERED:
+                if gap not in scope["not_covered"]:
+                    scope["not_covered"].append(gap)
         outside_history = "outside_receipt_intermediate_history: UNKNOWN"
         if outside_history not in scope["not_covered"]:
             scope["not_covered"].append(outside_history)

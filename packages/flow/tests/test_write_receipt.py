@@ -558,3 +558,145 @@ def test_a_recheck_of_another_write_gets_no_receipt(tmp_path: Path) -> None:
     )
     state, path = issue_recheck_receipt(result, other)
     assert state.startswith("not issued: recheck_mismatch") and path is None
+
+
+def _shadow_receipt_scope_control(
+    *,
+    mode: str = "fhir",
+    verdict: str = "CONFIRMED",
+    late: bool = False,
+    existing_gaps: tuple[str, ...] = (),
+    canonical: bool = True,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Format closed receipt inputs; this does not create verifier authority."""
+    import copy
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    from openadapt_flow.shadow import Episode, Shadow
+
+    scope = copy.deepcopy(SCOPE)
+    if mode == "fhir":
+        scope.update(read_paths=["fhir"], stores=["fhir"])
+    scope["not_covered"].extend(existing_gaps)
+    original = copy.deepcopy(scope)
+    checked = {
+        **HELD,
+        "frame": "refuted"
+        if verdict == "REFUTED"
+        else "not_checked"
+        if verdict == "UNCERTAIN"
+        else "held",
+    }
+    result = SimpleNamespace(
+        scope=SimpleNamespace(to_dict=lambda: copy.deepcopy(scope)),
+        write_id="receipt-scope-control",
+        receipt_sha256=None,
+        receipt={},
+        checked=checked,
+    )
+    episode = Episode(
+        1,
+        mode if canonical else "none",
+        "receipt-scope-control",
+        verdict=verdict,
+        late_verdict=verdict if late else "",
+        late_read_at="2026-11-02T10:00:10Z" if late else "",
+        recheck_at=datetime(2026, 11, 2, 10, 0, 6, tzinfo=timezone.utc).timestamp(),
+    )
+    formatter = SimpleNamespace(
+        mode=mode,
+        session="receipt-scope-control",
+        _canonical_result=lambda episode: result if canonical else None,
+    )
+    fields = Shadow._receipt_fields(formatter, episode, late)
+    assert scope == original  # Formatting never edits the verifier's scope.
+    return fields, original, checked
+
+
+def _scope_control_payload(fields: dict[str, Any]) -> wr.ReceiptPayload:
+    return wr.build_payload(
+        **fields,
+        evidence_commitment="0" * 64,
+        issuer="receipt-scope-control",
+        issued_at="2026-11-02T10:01:00Z",
+    )
+
+
+@pytest.mark.parametrize("verdict", ["CONFIRMED", "UNCERTAIN", "REFUTED"])
+@pytest.mark.parametrize("late", [False, True])
+def test_canonical_shadow_fhir_receipt_scope_discloses_fixed_read_path_gaps(
+    verdict: str,
+    late: bool,
+) -> None:
+    # The formatter's closed inputs are not a native FHIR qualification.
+    fields, original, checked = _shadow_receipt_scope_control(
+        verdict=verdict, late=late
+    )
+    assert fields["verdict"] == verdict and fields["checked"] == checked
+    assert fields["scope"]["window"] == original["window"]
+    assert fields["scope"]["strength"] == original["strength"]
+    assert fields["scope"]["stores"] == original["stores"]
+    payload = _scope_control_payload(fields)
+    assert payload.verdict == verdict
+    assert payload.provisional is (verdict == "CONFIRMED" and not late)
+    for gap in wr.FHIR_NOT_COVERED:
+        assert fields["scope"]["not_covered"].count(gap) == 1
+        assert gap in payload.not_checked
+
+
+@pytest.mark.parametrize(
+    "existing_gaps", [wr.FHIR_NOT_COVERED[:1], wr.FHIR_NOT_COVERED]
+)
+def test_shadow_fhir_scope_keeps_existing_disclosures_without_duplicates(
+    existing_gaps: tuple[str, ...],
+) -> None:
+    fields, original, _ = _shadow_receipt_scope_control(existing_gaps=existing_gaps)
+    payload = _scope_control_payload(fields)
+    assert all(gap in original["not_covered"] for gap in existing_gaps)
+    for gap in wr.FHIR_NOT_COVERED:
+        assert fields["scope"]["not_covered"].count(gap) == 1
+        assert payload.not_checked.count(gap) == 1
+
+
+def test_unchecked_shadow_fhir_scope_discloses_gaps_without_claiming_a_read() -> None:
+    fields, _, _ = _shadow_receipt_scope_control(verdict="UNCERTAIN", canonical=False)
+    payload = _scope_control_payload(fields)
+    assert payload.verdict == "UNCERTAIN" and payload.scope.strength == "unchecked"
+    assert payload.scope.stores == [] and payload.scope.read_paths == []
+    assert payload.checked == {} and not payload.provisional
+    assert all(gap in payload.not_checked for gap in wr.FHIR_NOT_COVERED)
+
+
+@pytest.mark.parametrize("late", [False, True])
+def test_shadow_sql_scope_does_not_acquire_fhir_read_path_disclosures(
+    late: bool,
+) -> None:
+    fields, original, _ = _shadow_receipt_scope_control(mode="sql", late=late)
+    payload = _scope_control_payload(fields)
+    assert payload.source == "shadow.sql"
+    assert payload.scope.stores == original["stores"]
+    assert not any(gap in payload.not_checked for gap in wr.FHIR_NOT_COVERED)
+
+
+@pytest.mark.parametrize("omitted", wr.FHIR_NOT_COVERED)
+def test_fhir_receipt_claim_guard_still_requires_each_fixed_read_path_gap(
+    omitted: str,
+) -> None:
+    scope = wr.fhir_scope(
+        unreadable=True,
+        started=None,
+        read_at=None,
+        audit=False,
+    )
+    scope["not_covered"].remove(omitted)
+    with pytest.raises(wr.ReceiptError, match="overclaim: a FHIR receipt lacks"):
+        _scope_control_payload(
+            {
+                "source": "shadow.fhir",
+                "verdict": "UNCERTAIN",
+                "scope": scope,
+                "checked": {},
+                "write_id": "receipt-scope-control",
+            }
+        )
