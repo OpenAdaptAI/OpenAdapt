@@ -210,8 +210,12 @@ def test_actual_http_refusal_compares_only_after_decision_and_never_changes_it(
         assert events.index("stale_decision") < events.index("pixel_diff")
         assert events.index("pixel_diff") < events.index("guard_response_started")
         assert "PRIVATE_DIAGNOSTIC_FAILURE" not in running.sidecar.read_text()
-        if not failure:
-            diagnosis = telemetry_module.safe_projection(running.sidecar)["diagnoses"][0]
+        diagnosis = telemetry_module.safe_projection(running.sidecar)["diagnoses"][0]
+        assert diagnosis["status"] == "classified"
+        assert diagnosis["code"] == "decoded_raster_changed"
+        if failure:
+            assert_unavailable(diagnosis["pixel_diff"])
+        else:
             assert diagnosis["pixel_diff"]["changed_pixel_count"] == 3
     finally:
         running.close()
