@@ -491,6 +491,10 @@ def test_extension_drops_a_record_that_repeats_a_withheld_token():
 ALPHA = "".join(["synthetic", "Credential", "Omega"])
 ENCODED = ALPHA + "+92!"
 BASIC_PASSWORD = "".join(["synthetic", "Basic", "Passphrase"])
+# Synthetic short known secrets (PIN / OTP / short credential), shorter than
+# the length below which values of unknown sensitivity are not remembered.
+SHORT_PIN = "".join(str(n) for n in (4, 7, 2, 9))
+SHORT_TOKEN = "".join(["Zq", "9"])
 
 
 def _identity_case(scenario: str) -> tuple[str, str, list[dict], dict]:
@@ -521,6 +525,34 @@ def _identity_case(scenario: str) -> tuple[str, str, list[dict], dict]:
     elif scenario == "encoded_body":
         secret = ENCODED
         body = {"password": ENCODED, "note": quote(ENCODED, safe="")}
+    elif scenario == "short_pin":
+        secret = SHORT_PIN
+        body = {"pin": SHORT_PIN, "note": SHORT_PIN}
+    elif scenario == "short_numeric_pin":
+        secret = SHORT_PIN
+        body = {"pin": int(SHORT_PIN), "note": f"ref {SHORT_PIN}"}
+    elif scenario == "short_otp_query":
+        secret = SHORT_PIN
+        url += f"?otp={SHORT_PIN}&step={SHORT_PIN}"
+    elif scenario == "short_otp_encoded":
+        secret = SHORT_PIN
+        body = {"otp": SHORT_PIN, "note": quote("#" + SHORT_PIN, safe="")}
+    elif scenario == "short_pin_header":
+        secret = SHORT_PIN
+        url += f"?ref={SHORT_PIN}"
+        headers.append({"name": "Cookie", "value": f"pin={SHORT_PIN}; theme=dark"})
+    elif scenario == "short_bearer":
+        secret = SHORT_TOKEN
+        headers.append({"name": "Authorization", "value": "Bearer " + SHORT_TOKEN})
+        body = {"note": "id-" + SHORT_TOKEN}
+    elif scenario == "short_basic_password":
+        secret = SHORT_TOKEN
+        raw = base64.b64encode(f"dana:{SHORT_TOKEN}".encode()).decode()
+        headers.append({"name": "Authorization", "value": "Basic " + raw})
+        body = {"note": SHORT_TOKEN}
+    elif scenario == "short_subtree_leaf":
+        secret = SHORT_PIN
+        body = {"credentials": {"pin": [SHORT_PIN]}, "items": [{"label": SHORT_PIN}]}
     return secret, url, headers, body
 
 
@@ -549,6 +581,14 @@ IDENTITY_SCENARIOS = [
     "secret_numeric_leaf",
     "encoded_url",
     "encoded_body",
+    "short_pin",
+    "short_numeric_pin",
+    "short_otp_query",
+    "short_otp_encoded",
+    "short_pin_header",
+    "short_bearer",
+    "short_basic_password",
+    "short_subtree_leaf",
 ]
 
 
@@ -633,3 +673,63 @@ def test_extension_drops_record_when_identity_tracking_overflows():
     )
     state = _run([{"mode": "record"}, {"request": request}, {"state": True}])[-1]
     assert state["queued"] == []
+
+
+# --- short known secrets keep ordinary saves ---------------------------------
+# A short PIN that does not recur, and short values that are not known secrets
+# (an ordinary cookie, a quantity), must not drop the save.
+
+
+def _short_ordinary_case() -> tuple[str, list[dict], dict]:
+    headers = [
+        {"name": "Content-Type", "value": "application/json"},
+        {"name": "Cookie", "value": "theme=dark; lang=en"},
+    ]
+    body = {"pin": SHORT_PIN, "note": "ordinary note", "qty": 2, "unit": "ea"}
+    return "https://forms.example/save?page=2", headers, body
+
+
+@pytest.mark.parametrize("pipeline", ["engine", "extension"])
+def test_short_known_secret_alone_keeps_the_save(tmp_path, pipeline):
+    url, headers, body = _short_ordinary_case()
+    if pipeline == "extension":
+        request = _request(
+            url=url,
+            requestHeaders=headers,
+            responseHeaders=[],
+            body_text=json.dumps(body),
+        )
+        records = _run([{"mode": "record"}, {"request": request}, {"state": True}])[-1][
+            "queued"
+        ]
+    else:
+        records = [
+            _save(
+                url=url,
+                request_headers=headers,
+                response_headers=[],
+                request_body=body,
+            )
+        ]
+    assert len(records) == 1
+    stored = _persist(tmp_path, records)
+    lines = [json.loads(line) for line in stored.splitlines() if line.strip()]
+    saves = [
+        line.get("evidence", line)
+        for line in lines
+        if "network_save" in json.dumps(line)
+    ]
+    assert len(saves) == 1, stored
+    text = json.dumps(saves[0]["request_body"])
+    assert "ordinary note" in text and SHORT_PIN not in text
+    assert saves[0]["url"] == url
+
+
+def test_engine_drops_short_pin_repeated_only_in_a_header_name():
+    line = _save(
+        url="https://forms.example/save",
+        request_headers=[{"name": "X-Ref-" + SHORT_PIN, "value": "1"}],
+        response_headers=[],
+        request_body={"pin": SHORT_PIN, "note": "ordinary note"},
+    )
+    assert redact_network_save(line) is None

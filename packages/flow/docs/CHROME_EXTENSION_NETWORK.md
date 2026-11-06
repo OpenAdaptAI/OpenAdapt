@@ -56,7 +56,12 @@ and in the engine on ingest, on write and on load.
   header (the token after `Bearer` even when it is all letters, cookie
   values, the decoded `Basic` user and password), and each scalar leaf of a
   withheld JSON or form subtree. If any of them still appears in the record,
-  in its JSON text or in its percent-decoded form, the record is dropped. The
+  in its JSON text or in its percent-decoded form, the record is dropped.
+  Values withheld only because they are unrecognised are remembered from six
+  characters up; a known secret (a `pin`, `otp`, `code` or password field,
+  the token after an auth scheme, a URL or `Basic` password) is remembered at
+  any length and checked against every URL, header and body scalar, so a
+  four-digit PIN copied into another field also drops the record. The
   extension does this itself; the engine's second pass cannot recover a value
   the extension already replaced. If the bookkeeping exceeds its limit, the
   record is dropped.

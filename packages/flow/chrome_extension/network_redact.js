@@ -24,6 +24,9 @@
   // Upper bound on remembered withheld identities per record; past it the
   // record is dropped rather than checked partially.
   const MAX_WITHHELD = 4096;
+  // Values of unknown sensitivity shorter than this are not remembered (they
+  // would match ordinary text). A known secret (PIN / OTP / password field,
+  // credential header token, URL password) is remembered at any length.
   const MIN_WITHHELD_LEN = 6;
   const HEADER_PARTS = /[\s;,]+/;
   // Credential-header words that are syntax, not secret.
@@ -109,30 +112,37 @@
 
   function makeWithheld() {
     const values = [];
+    const short = [];
     const seen = new Set();
     return {
       values,
-      push(candidate) {
-        if (candidate === PLACEHOLDER || candidate.length < MIN_WITHHELD_LEN || seen.has(candidate)) return;
-        if (values.length >= MAX_WITHHELD) throw new Error('too_many_withheld');
+      short,
+      push(candidate, known) {
+        if (candidate === PLACEHOLDER || !candidate.trim() || seen.has(candidate)) return;
+        let target;
+        if (candidate.length >= MIN_WITHHELD_LEN) target = values;
+        else if (known) target = short;
+        else return;
+        if (values.length + short.length >= MAX_WITHHELD) throw new Error('too_many_withheld');
         seen.add(candidate);
-        values.push(candidate);
+        target.push(candidate);
       },
     };
   }
 
-  // Remember a withheld scalar for the final leak check. Short values and the
-  // placeholder are skipped so the check cannot match ordinary output.
-  function withhold(list, value) {
+  // Remember a withheld scalar for the final leak check. The placeholder is
+  // skipped, and so are short values unless known to be secret, so the check
+  // cannot match ordinary output.
+  function withhold(list, value, known) {
     if (typeof value === 'number' && Number.isFinite(value)) value = String(value);
     if (typeof value !== 'string') return;
-    list.push(value);
-    list.push(value.trim().replace(/^["']+|["']+$/g, ''));
+    list.push(value, !!known);
+    list.push(value.trim().replace(/^["']+|["']+$/g, ''), !!known);
   }
 
-  function withholdDecoded(list, value) {
-    withhold(list, value);
-    withhold(list, pctDecode(value));
+  function withholdDecoded(list, value, known) {
+    withhold(list, value, known);
+    withhold(list, pctDecode(value), known);
   }
 
   // A non-allowlisted header that is not known to be a credential: the whole
@@ -151,17 +161,26 @@
   // also keeps the decoded user:password and each half.
   function withholdCredentialHeader(list, value) {
     const text = String(value);
-    withhold(list, text);
+    withhold(list, text, true);
     const parts = text.split(HEADER_PARTS).filter((p) => p);
-    for (const part of parts) {
+    const scheme = parts.length ? parts[0].toLowerCase() : '';
+    parts.forEach((part, index) => {
       const eq = part.indexOf('=');
       const name = eq >= 0 ? part.slice(0, eq) : part;
-      if (eq >= 0 && DESCRIPTIVE_ATTRS.indexOf(name.trim().toLowerCase()) >= 0) continue;
-      if (eq < 0 && HEADER_SYNTAX.indexOf(part.toLowerCase()) >= 0) continue;
-      withholdDecoded(list, part);
-      withhold(list, part.replace(/=+$/, ''));
-      if (eq >= 0) withholdDecoded(list, part.slice(eq + 1).replace(/^["']+|["']+$/g, ''));
-    }
+      if (eq >= 0 && DESCRIPTIVE_ATTRS.indexOf(name.trim().toLowerCase()) >= 0) return;
+      if (eq < 0 && HEADER_SYNTAX.indexOf(part.toLowerCase()) >= 0) return;
+      // The credential after an auth scheme is known at any length.
+      const known = index === 1 && HEADER_SYNTAX.indexOf(scheme) >= 0;
+      withholdDecoded(list, part, known);
+      withhold(list, part.replace(/=+$/, ''), known);
+      if (eq >= 0) {
+        withholdDecoded(
+          list,
+          part.slice(eq + 1).replace(/^["']+|["']+$/g, ''),
+          known || isSecretKey(name.trim())
+        );
+      }
+    });
     if (parts.length >= 2 && parts[0].toLowerCase() === 'basic') {
       let decoded = '';
       try {
@@ -173,13 +192,11 @@
         decoded = '';
       }
       if (decoded) {
-        withhold(list, decoded);
+        withhold(list, decoded, true);
         const colon = decoded.indexOf(':');
         if (colon >= 0) {
           withhold(list, decoded.slice(0, colon));
-          withhold(list, decoded.slice(colon + 1));
-        } else {
-          withhold(list, decoded);
+          withhold(list, decoded.slice(colon + 1), true); // the password half
         }
       }
     }
@@ -194,7 +211,7 @@
     } else if (value && typeof value === 'object') {
       for (const k of Object.keys(value)) withholdLeaves(list, value[k], budget, depth + 1);
     } else {
-      withhold(list, value);
+      withhold(list, value, true);
     }
   }
 
@@ -249,7 +266,7 @@
 
   function redactString(key, value, withheld) {
     if (isSecretKey(key) || isSecretValue(value)) {
-      withhold(withheld, value);
+      withhold(withheld, value, true);
       return PLACEHOLDER;
     }
     return value;
@@ -276,7 +293,7 @@
     }
     if (typeof value === 'string') return redactString(key, value, withheld);
     if (key != null && isSecretKey(key) && value != null) {
-      withhold(withheld, value);
+      withhold(withheld, value, true);
       return PLACEHOLDER;
     }
     return value;
@@ -291,11 +308,11 @@
     }
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
     withholdDecoded(withheld, u.username);
-    withholdDecoded(withheld, u.password);
+    withholdDecoded(withheld, u.password, true);
     const segments = u.pathname.split('/').map((seg) => {
       const decoded = pctDecode(seg);
       if (isSecretValue(decoded)) {
-        withhold(withheld, decoded);
+        withhold(withheld, decoded, true);
         return PLACEHOLDER;
       }
       return seg;
@@ -307,7 +324,7 @@
     }
     const fragment = u.hash.slice(1);
     withholdDecoded(withheld, fragment);
-    for (const [, v] of new URLSearchParams(fragment).entries()) withhold(withheld, v);
+    for (const [k, v] of new URLSearchParams(fragment).entries()) withhold(withheld, v, isSecretKey(k));
     const query = params.length ? '?' + params.join('&') : '';
     return { url: u.protocol + '//' + u.host + segments.join('/') + query, origin: u.origin };
   }
@@ -400,7 +417,49 @@
         }
       }
     }
+    if (withheld.short.length) {
+      // Short known secrets are compared against each page-derived scalar
+      // (not the JSON syntax or the fixed record vocabulary), so a copy in
+      // the URL, a header or the body still counts.
+      for (const scalar of userScalars(record)) {
+        const t = scalar.split(PLACEHOLDER).join('\u0000');
+        const forms = [t, pctDecode(t), pctDecode(t.replace(/\+/g, ' '))];
+        for (const value of withheld.short) {
+          if (forms.some((f) => f.indexOf(value) >= 0)) return true;
+        }
+      }
+    }
     return false;
+  }
+
+  // Every scalar of a record that came from the page, as text.
+  function userScalars(record) {
+    const out = [];
+    for (const key of ['url', 'url_origin']) {
+      if (typeof record[key] === 'string') out.push(record[key]);
+    }
+    for (const key of ['request_headers', 'response_headers']) {
+      for (const h of record[key] || []) {
+        if (h && typeof h === 'object') out.push(String(h.name || ''), String(h.value || ''));
+      }
+    }
+    const stack = [record.request_body];
+    while (stack.length) {
+      const node = stack.pop();
+      if (Array.isArray(node)) {
+        for (const v of node) stack.push(v);
+      } else if (node && typeof node === 'object') {
+        for (const k of Object.keys(node)) {
+          out.push(k);
+          stack.push(node[k]);
+        }
+      } else if (typeof node === 'string') {
+        out.push(node);
+      } else if (typeof node === 'number' && Number.isFinite(node)) {
+        out.push(String(node));
+      }
+    }
+    return out;
   }
 
   // details: {method, url, type, tabId, frameId, timeStamp, statusCode,
