@@ -90,15 +90,20 @@ def owned_app(tmp_path, owned_window_manager, request):
             [
                 sys.executable,
                 str(FIXTURE),
-                "--title", title,
-                "--effect-path", str(effect),
-                "--control-path", str(control),
-                "--mode", mode,
+                "--title",
+                title,
+                "--effect-path",
+                str(effect),
+                "--control-path",
+                str(control),
+                "--mode",
+                mode,
             ],
             stdout=log,
             stderr=subprocess.STDOUT,
         )
         try:
+
             def ready():
                 assert owned_window_manager.poll() is None
                 windows = client.find_windows(APP, title)
@@ -113,8 +118,13 @@ def owned_app(tmp_path, owned_window_manager, request):
             backend = LinuxBackend(client, app=APP, window_title=title)
             assert backend._allow_physical_input is False
             yield SimpleNamespace(
-                backend=backend, process=process, root=root, effect=effect,
-                control=control, title=title, report=report,
+                backend=backend,
+                process=process,
+                root=root,
+                effect=effect,
+                control=control,
+                title=title,
+                report=report,
             )
         finally:
             report["cleanup"] = _stop_owned(process)
@@ -127,7 +137,8 @@ def _node(observation, *, role: str, name: str) -> str:
     assert observation["agent_drive"] is True
     assert observation["truncated"] is False
     matches = [
-        item for item in observation["tree"]
+        item
+        for item in observation["tree"]
         if item["role"] == role and item.get("name") == name
     ]
     assert len(matches) == 1
@@ -139,7 +150,9 @@ def test_default_linux_authoring_writes_independent_effect(owned_app):
 
     app = owned_app
     expected = b"synthetic authoring effect"
-    session = AuthoringSession(app.backend, app.root / "recording", backend_kind="linux")
+    session = AuthoringSession(
+        app.backend, app.root / "recording", backend_kind="linux"
+    )
     try:
         session.start_record()
         entry = _node(session.observe(), role="text_input", name="Effect value")
@@ -149,14 +162,22 @@ def test_default_linux_authoring_writes_independent_effect(owned_app):
         session.click(node_id=button)
         recording = session.stop_record()
         assert app.effect.read_bytes() == expected
-        events = [json.loads(line) for line in (recording / "events.jsonl").read_text().splitlines()]
+        events = [
+            json.loads(line)
+            for line in (recording / "events.jsonl").read_text().splitlines()
+        ]
         assert [event["kind"] for event in events] == ["click", "type", "click"]
         assert all(event["actor"] == "agent" for event in events)
         for index in (0, 2):
-            assert events[index]["structural"]["name"] in {"Effect value", "Write effect"}
+            assert events[index]["structural"]["name"] in {
+                "Effect value",
+                "Write effect",
+            }
         for index in range(3):
             for phase in ("before", "after"):
-                assert (recording / "frames" / f"{index:04d}_{phase}.png").stat().st_size > 0
+                assert (
+                    recording / "frames" / f"{index:04d}_{phase}.png"
+                ).stat().st_size > 0
         app.report.update(outcome="PASS", effect_confirmed=True, recorded_actions=3)
     finally:
         session.halt()
@@ -167,26 +188,38 @@ def test_default_linux_authoring_refuses_replaced_stale_control(owned_app):
     from openadapt_flow.ir import StructuralLocator
 
     app = owned_app
-    session = AuthoringSession(app.backend, app.root / "recording", backend_kind="linux")
+    session = AuthoringSession(
+        app.backend, app.root / "recording", backend_kind="linux"
+    )
     try:
         session.start_record()
         button = _node(session.observe(), role="button", name="Write effect")
-        locator = StructuralLocator(role="button", name="Write effect", window_name=app.title)
+        locator = StructuralLocator(
+            role="button", name="Write effect", window_name=app.title
+        )
         initial = app.backend.locate_structural(locator)
         assert initial is not None and initial.target_fingerprint
         app.control.write_text("replace")
 
         def replaced():
             current = app.backend.locate_structural(locator)
-            return current if current and current.target_fingerprint != initial.target_fingerprint else None
+            return (
+                current
+                if current and current.target_fingerprint != initial.target_fingerprint
+                else None
+            )
 
-        _wait(replaced, process=app.process, description="genuinely replaced GTK control")
+        _wait(
+            replaced, process=app.process, description="genuinely replaced GTK control"
+        )
         with pytest.raises(AuthoringError) as refused:
             session.click(node_id=button)
         assert refused.value.code == "stale_node"
         recording = session.stop_record()
         assert not app.effect.exists()
         assert (recording / "events.jsonl").read_text() == ""
-        app.report.update(outcome="PASS", refusal="stale_node", effect_absent=True, recorded_actions=0)
+        app.report.update(
+            outcome="PASS", refusal="stale_node", effect_absent=True, recorded_actions=0
+        )
     finally:
         session.halt()
