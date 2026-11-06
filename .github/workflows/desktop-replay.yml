@@ -21,6 +21,7 @@ on:
       - packages/flow/scripts/desktop/pn_db.py
       - packages/flow/scripts/desktop/patient_notes.ps1
       - packages/flow/tests/e2e/test_windows_hosted_replay.py
+      - packages/flow/tests/e2e/test_windows_hosted_authoring.py
       - packages/flow/tests/test_xfreerdp.py
       - packages/flow/tests/test_windows_attempt_ledger.py
       - packages/flow/benchmark/rdp_pool/**
@@ -98,6 +99,55 @@ jobs:
           if not cases or skipped:
               sys.exit(f"windows replay did not run: {len(cases)} cases, {len(skipped)} skipped")
           PY
+      - name: Native authoring and configuration boundaries
+        env:
+          OAFLOW_WINDOWS_HOSTED_E2E: "1"
+          OAFLOW_WINDOWS_AUTHORING_EVIDENCE_DIR: ${{ runner.temp }}/wa-safe
+        run: |
+          mkdir -p runs
+          pytest -v -rs --tb=short --show-capture=no -o junit_logging=no -p no:cacheprovider --basetemp="$RUNNER_TEMP/wa" \
+            tests/e2e/test_windows_hosted_authoring.py --junitxml=runs/windows-authoring-junit.xml
+      - name: All four authoring boundary cases ran
+        env:
+          OAFLOW_WINDOWS_AUTHORING_EVIDENCE_DIR: ${{ runner.temp }}/wa-safe
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          expected = {
+              "test_windows_authoring_observed_controls_write_only_target",
+              "test_windows_authoring_replaced_window_refuses_old_node",
+              "test_windows_compile_agent_config_reaches_native_hold_refusal",
+              "test_windows_execute_config_requires_real_qualification",
+          }
+          cases = list(ET.parse("runs/windows-authoring-junit.xml").getroot().iter("testcase"))
+          assert len(cases) == 4 and {c.get("name") for c in cases} == expected
+          assert all(not any(c.find(t) is not None for t in ("skipped", "failure", "error")) for c in cases)
+          root = Path(os.environ["OAFLOW_WINDOWS_AUTHORING_EVIDENCE_DIR"]).resolve(strict=True)
+          assert {p.name for p in root.iterdir()} == {f"{name}.json" for name in expected}
+          for name in expected:
+              path = root / f"{name}.json"
+              assert not path.is_symlink() and path.resolve(strict=True).parent == root
+              summary = json.loads(path.read_text(encoding="utf-8"))
+              assert summary["schema"] == "openadapt.hosted-authoring-proof/v1"
+              assert summary["case"] == name and summary["status"] == "PASS"
+              assert summary["cleanup"] is True and summary["admitted"] is False
+          PY
+      - name: Keep only safe authoring summaries and JUnit
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-authoring-evidence
+          path: |
+            ${{ runner.temp }}/wa-safe/test_windows_authoring_observed_controls_write_only_target.json
+            ${{ runner.temp }}/wa-safe/test_windows_authoring_replaced_window_refuses_old_node.json
+            ${{ runner.temp }}/wa-safe/test_windows_compile_agent_config_reaches_native_hold_refusal.json
+            ${{ runner.temp }}/wa-safe/test_windows_execute_config_requires_real_qualification.json
+            packages/flow/runs/windows-authoring-junit.xml
+          if-no-files-found: warn
+          retention-days: 14
       - name: Keep the evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
