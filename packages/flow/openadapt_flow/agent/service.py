@@ -250,7 +250,7 @@ class RunService:
         allow_run: bool,
         require_all_inputs: bool = True,
         repair_desk: Any = None,
-        intake_provenance: Optional[dict[str, Any]] = None,
+        intake_grants: Any = None,
     ) -> None:
         self.repair_desk = repair_desk
         self.store = store
@@ -258,10 +258,13 @@ class RunService:
         self.mode = mode
         self.allow_run = allow_run
         self.require_all_inputs = require_all_inputs
-        #: Shared with AgentBridge: catalog/legacy name -> ProvenanceFile.
-        self.intake_provenance: dict[str, Any] = (
-            intake_provenance if intake_provenance is not None else {}
-        )
+        #: Shared with AgentBridge: operator-registered, single-use intake
+        #: grants (#1890). Never filled from tool arguments.
+        if intake_grants is None:
+            from openadapt_flow.intake.param_gate import IntakeGrantRegistry
+
+            intake_grants = IntakeGrantRegistry()
+        self.intake_grants = intake_grants
         self._active: dict[str, threading.Event] = {}
         self._lock = threading.Lock()
         # Reserving a request and marking its run active happen together, so a
@@ -307,52 +310,39 @@ class RunService:
     # -- intake provenance gate (#1890) ----------------------------------------
 
     def _intake_param_gate(
-        self, entry: CatalogEntry, inputs: Mapping[str, Any]
-    ) -> Optional[str]:
-        """Return a refusal reason when intake-bound params disagree.
+        self, entry: CatalogEntry, inputs: Mapping[str, Any], request_id: str
+    ) -> Any:
+        """Check intake-bound params against this workflow's grant (#1890).
 
-        Uses operator-registered provenance only. Never reads provenance from
-        the caller's inputs.
+        Gates the bundle that will actually run (an activated repair
+        included). Returns an ``IntakeGateDecision``; its ``values`` are what
+        the run must use. Uses operator-registered grants only, never the
+        caller's inputs.
         """
 
+        from openadapt_flow.intake.param_gate import IntakeGateDecision
+
+        names = [entry.name, entry.legacy_id or ""]
         info = entry.info
         if info is None:
-            return None
-        from openadapt_flow.intake.param_gate import (
-            check_tool_params,
-            requires_intake_provenance,
-        )
-        from openadapt_flow.ir import ParamKind, ParamSpec
-
-        # Prefer live param_specs from the bundle; fall back to param_types.
-        specs: dict[str, Any] = {}
-        try:
-            from openadapt_flow.ir import Workflow
-
-            wf = Workflow.load(info.bundle_dir)
-            specs = dict(wf.param_specs or {})
-        except Exception:  # noqa: BLE001 - use discovered types
-            for name, meta in (getattr(info, "param_types", None) or {}).items():
-                kind = str(meta.get("type") or "string")
-                try:
-                    param_kind = ParamKind(kind)
-                except ValueError:
-                    param_kind = ParamKind.STRING
-                specs[name] = ParamSpec(
-                    name=name,
-                    type=param_kind,
-                    choices=list(meta.get("choices") or []),
-                    intake_field=meta.get("intake_field"),
+            # A taught-over-MCP entry has no bundle the gate can read, and a
+            # grant can't be registered for one, so there is nothing to check.
+            if self.intake_grants.get(names) is not None:
+                return IntakeGateDecision(
+                    ok=False,
+                    reason="intake provenance can't be checked for this workflow",
                 )
-        if not requires_intake_provenance(specs):
-            return None
-        provenance = self.intake_provenance.get(entry.name)
-        if provenance is None and entry.legacy_id:
-            provenance = self.intake_provenance.get(entry.legacy_id)
-        result = check_tool_params(inputs, provenance, specs)
-        if result.ok:
-            return None
-        return result.reason
+            return IntakeGateDecision(ok=True, values=dict(inputs))
+        bundle_dir = Path(info.bundle_dir)
+        if self.repair_desk is not None:
+            bundle_dir = self.repair_desk.active_bundle(entry.name, bundle_dir)
+        return self.intake_grants.gate(
+            names,
+            bundle_dir,
+            inputs,
+            param_types=getattr(info, "param_types", None),
+            request_id=request_id,
+        )
 
     # -- run_workflow ----------------------------------------------------------
 
@@ -403,13 +393,28 @@ class RunService:
                 workflow=entry.name,
                 invalid_inputs=problems,
             )
-        intake_refusal = self._intake_param_gate(entry, inputs)
-        if intake_refusal is not None:
+        intake = self._intake_param_gate(entry, inputs, request_id)
+        if not intake.ok:
             return self._refuse(
                 "invalid_input",
                 request_id=request_id,
                 workflow=entry.name,
-                invalid_inputs=[{"input": "(intake)", "problem": intake_refusal}],
+                invalid_inputs=[{"input": "(intake)", "problem": intake.reason}],
+            )
+        # Run with the proven intake values, not the caller's spelling of them.
+        inputs = intake.values
+        if input_problems(entry.card, inputs, require_all=self.require_all_inputs):
+            return self._refuse(
+                "invalid_input",
+                request_id=request_id,
+                workflow=entry.name,
+                invalid_inputs=[
+                    {
+                        "input": "(intake)",
+                        "problem": "the proven intake values don't fit the "
+                        "workflow's declared inputs",
+                    }
+                ],
             )
         event = threading.Event()
         with self._begin_lock:
