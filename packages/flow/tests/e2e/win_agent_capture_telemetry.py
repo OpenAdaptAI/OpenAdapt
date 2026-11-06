@@ -443,38 +443,111 @@ def safe_projection(path: Path) -> dict[str, Any]:
                 for row in captures
                 if row["png_sha256"] == event["expected_png_sha256"]
             ]
+            expected_before_current = [
+                row
+                for row in expected_matches
+                if row["sequence"] < event["current_sequence"]
+            ]
+            expected_after_current = [
+                row
+                for row in expected_matches
+                if row["sequence"] > event["current_sequence"]
+            ]
+            expected_at_current = [
+                row
+                for row in expected_matches
+                if row["sequence"] == event["current_sequence"]
+            ]
             current_matches = [
                 row for row in captures if row["sequence"] == event["current_sequence"]
             ]
+            current = current_matches[0] if len(current_matches) == 1 else None
+            expected_rasters = {
+                (row["rgb_sha256"], row["width"], row["height"])
+                for row in expected_before_current
+            }
+            if not expected_before_current:
+                expected_raster_consensus = "none"
+            elif len(expected_before_current) == 1:
+                expected_raster_consensus = "single"
+            elif len(expected_rasters) == 1:
+                expected_raster_consensus = "consistent"
+            else:
+                expected_raster_consensus = "inconsistent"
+            if current is None:
+                guard_capture_relation = "unavailable"
+                current_guard_capture_is_latest = None
+            else:
+                current_guard_capture_is_latest = (
+                    current["sequence"] == captures[-1]["sequence"]
+                )
+                if current["png_sha256"] == event["expected_png_sha256"]:
+                    guard_capture_relation = "same_png"
+                elif not expected_before_current:
+                    guard_capture_relation = (
+                        "future_expected_only"
+                        if expected_after_current
+                        else "no_prior_expected_capture"
+                    )
+                elif expected_raster_consensus == "inconsistent":
+                    guard_capture_relation = "ambiguous_expected_raster"
+                elif (
+                    expected_before_current[0]["rgb_sha256"]
+                    == current["rgb_sha256"]
+                    and expected_before_current[0]["width"] == current["width"]
+                    and expected_before_current[0]["height"] == current["height"]
+                ):
+                    guard_capture_relation = "encoding_only"
+                else:
+                    guard_capture_relation = "raster_changed"
             diagnosis: dict[str, Any] = {
                 "phase": event["phase"],
                 "status": "unknown",
                 "code": "ambiguous_or_missing_provenance",
+                "provenance": {
+                    "expected_match_count": len(expected_matches),
+                    "expected_match_before_current_count": len(
+                        expected_before_current
+                    ),
+                    "expected_match_at_current_count": len(expected_at_current),
+                    "expected_match_after_current_count": len(expected_after_current),
+                    "current_sequence_match_count": len(current_matches),
+                    "current_guard_capture_is_latest": current_guard_capture_is_latest,
+                    "expected_raster_consensus": expected_raster_consensus,
+                    "guard_capture_relation": guard_capture_relation,
+                },
             }
             if len(expected_matches) == 1 and len(current_matches) == 1:
                 expected = expected_matches[0]
-                current = current_matches[0]
+                assert current is not None
                 if (
                     expected["sequence"] < current["sequence"]
                     and expected["png_sha256"] != current["png_sha256"]
                 ):
-                    diagnosis = {
-                        "phase": event["phase"],
-                        "status": "classified",
-                        "code": (
-                            "encoding_only_change"
-                            if expected["rgb_sha256"] == current["rgb_sha256"]
-                            and expected["width"] == current["width"]
-                            and expected["height"] == current["height"]
-                            else "decoded_raster_changed"
-                        ),
-                        "expected_png_sha256": expected["png_sha256"],
-                        "current_png_sha256": current["png_sha256"],
-                        "expected_rgb_sha256": expected["rgb_sha256"],
-                        "current_rgb_sha256": current["rgb_sha256"],
-                        "expected_dimensions": [expected["width"], expected["height"]],
-                        "current_dimensions": [current["width"], current["height"]],
-                    }
+                    diagnosis.update(
+                        {
+                            "status": "classified",
+                            "code": (
+                                "encoding_only_change"
+                                if expected["rgb_sha256"] == current["rgb_sha256"]
+                                and expected["width"] == current["width"]
+                                and expected["height"] == current["height"]
+                                else "decoded_raster_changed"
+                            ),
+                            "expected_png_sha256": expected["png_sha256"],
+                            "current_png_sha256": current["png_sha256"],
+                            "expected_rgb_sha256": expected["rgb_sha256"],
+                            "current_rgb_sha256": current["rgb_sha256"],
+                            "expected_dimensions": [
+                                expected["width"],
+                                expected["height"],
+                            ],
+                            "current_dimensions": [
+                                current["width"],
+                                current["height"],
+                            ],
+                        }
+                    )
             diagnoses.append(diagnosis)
         return {"status": "available", "diagnoses": diagnoses}
     except Exception:  # noqa: BLE001 - diagnostics never alter admission

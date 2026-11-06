@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import stat
@@ -20,12 +21,57 @@ from tests.e2e import win_agent_capture_telemetry as capture_telemetry
 
 
 def _png(rgb: tuple[int, int, int], *, compression: int) -> bytes:
-    import io
-
     image = Image.new("RGB", (3, 2), rgb)
     output = io.BytesIO()
     image.save(output, format="PNG", compress_level=compression)
     return output.getvalue()
+
+
+def _capture_row(
+    sequence: int,
+    png: bytes,
+    *,
+    rgb_sha256: str | None = None,
+) -> dict[str, Any]:
+    with Image.open(io.BytesIO(png)) as image:
+        width, height = image.size
+        rgb = image.convert("RGB").tobytes()
+    return {
+        "sequence": sequence,
+        "png_sha256": hashlib.sha256(png).hexdigest(),
+        "rgb_sha256": rgb_sha256 or hashlib.sha256(rgb).hexdigest(),
+        "width": width,
+        "height": height,
+    }
+
+
+def _project_event(
+    tmp_path: Path,
+    captures: list[dict[str, Any]],
+    expected_png: bytes,
+    current_sequence: int,
+) -> dict[str, Any]:
+    sidecar = tmp_path / "projection-input.json"
+    sidecar.write_text(
+        json.dumps(
+            {
+                "schema": capture_telemetry._SCHEMA,
+                "captures": captures,
+                "guarded_refusals": [
+                    {
+                        "phase": "input_guard_frame_compare",
+                        "expected_png_sha256": hashlib.sha256(
+                            expected_png
+                        ).hexdigest(),
+                        "current_sequence": current_sequence,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (diagnosis,) = capture_telemetry.safe_projection(sidecar)["diagnoses"]
+    return diagnosis
 
 
 class _RunningServer:
@@ -146,14 +192,18 @@ def _guard(session: requests.Session, url: str, expected_png: bytes):
 
 
 @pytest.mark.parametrize(
-    ("current", "expected_code"),
+    ("current", "expected_code", "expected_relation"),
     [
         pytest.param(
-            _png((10, 20, 30), compression=9), "encoding_only_change", id="same-rgb"
+            _png((10, 20, 30), compression=9),
+            "encoding_only_change",
+            "encoding_only",
+            id="same-rgb",
         ),
         pytest.param(
             _png((90, 20, 30), compression=9),
             "decoded_raster_changed",
+            "raster_changed",
             id="changed-rgb",
         ),
     ],
@@ -163,6 +213,7 @@ def test_guard_refusal_correlates_expected_and_exact_request_capture(
     tmp_path: Path,
     current: bytes,
     expected_code: str,
+    expected_relation: str,
 ) -> None:
     expected = _png((10, 20, 30), compression=0)
     assert expected != current
@@ -202,6 +253,16 @@ def test_guard_refusal_correlates_expected_and_exact_request_capture(
         assert diagnosis["code"] == expected_code
         assert diagnosis["expected_dimensions"] == [3, 2]
         assert diagnosis["current_dimensions"] == [3, 2]
+        assert diagnosis["provenance"] == {
+            "expected_match_count": 1,
+            "expected_match_before_current_count": 1,
+            "expected_match_at_current_count": 0,
+            "expected_match_after_current_count": 0,
+            "current_sequence_match_count": 1,
+            "current_guard_capture_is_latest": True,
+            "expected_raster_consensus": "single",
+            "guard_capture_relation": expected_relation,
+        }
     finally:
         running.close()
 
@@ -264,9 +325,125 @@ def test_projection_refuses_unproven_capture_correlation(
             "phase": "input_guard_frame_compare",
             "status": "unknown",
             "code": "ambiguous_or_missing_provenance",
+            "provenance": {
+                "expected_match_count": 0 if scenario == "missing" else 2,
+                "expected_match_before_current_count": 0 if scenario == "missing" else 2,
+                "expected_match_at_current_count": 0,
+                "expected_match_after_current_count": 0,
+                "current_sequence_match_count": 1,
+                "current_guard_capture_is_latest": True,
+                "expected_raster_consensus": "none"
+                if scenario == "missing"
+                else "consistent",
+                "guard_capture_relation": "no_prior_expected_capture"
+                if scenario == "missing"
+                else "raster_changed",
+            },
         }
     finally:
         running.close()
+
+
+def test_projection_reports_inconsistent_duplicate_expected_raster(
+    tmp_path: Path,
+) -> None:
+    expected = _png((10, 20, 30), compression=6)
+    current = _png((90, 20, 30), compression=6)
+    inconsistent_raster = hashlib.sha256(b"synthetic conflicting raster").hexdigest()
+    diagnosis = _project_event(
+        tmp_path,
+        [
+            _capture_row(1, expected),
+            _capture_row(2, expected, rgb_sha256=inconsistent_raster),
+            _capture_row(3, current),
+        ],
+        expected,
+        3,
+    )
+
+    assert diagnosis["status"] == "unknown"
+    assert diagnosis["code"] == "ambiguous_or_missing_provenance"
+    assert diagnosis["provenance"] == {
+        "expected_match_count": 2,
+        "expected_match_before_current_count": 2,
+        "expected_match_at_current_count": 0,
+        "expected_match_after_current_count": 0,
+        "current_sequence_match_count": 1,
+        "current_guard_capture_is_latest": True,
+        "expected_raster_consensus": "inconsistent",
+        "guard_capture_relation": "ambiguous_expected_raster",
+    }
+
+
+def test_projection_does_not_use_future_expected_capture_as_provenance(
+    tmp_path: Path,
+) -> None:
+    expected = _png((10, 20, 30), compression=6)
+    current = _png((90, 20, 30), compression=6)
+    diagnosis = _project_event(
+        tmp_path,
+        [_capture_row(1, current), _capture_row(2, expected)],
+        expected,
+        1,
+    )
+
+    assert diagnosis["status"] == "unknown"
+    assert diagnosis["provenance"] == {
+        "expected_match_count": 1,
+        "expected_match_before_current_count": 0,
+        "expected_match_at_current_count": 0,
+        "expected_match_after_current_count": 1,
+        "current_sequence_match_count": 1,
+        "current_guard_capture_is_latest": False,
+        "expected_raster_consensus": "none",
+        "guard_capture_relation": "future_expected_only",
+    }
+
+
+def test_projection_reports_evicted_exact_guard_capture_as_unavailable(
+    tmp_path: Path,
+) -> None:
+    expected = _png((10, 20, 30), compression=6)
+    captures = [
+        _capture_row(
+            sequence,
+            expected if sequence == 2 else _png((sequence, 1, 2), compression=6),
+        )
+        for sequence in range(2, 34)
+    ]
+    diagnosis = _project_event(tmp_path, captures, expected, 1)
+
+    assert diagnosis["status"] == "unknown"
+    assert diagnosis["provenance"] == {
+        "expected_match_count": 1,
+        "expected_match_before_current_count": 0,
+        "expected_match_at_current_count": 0,
+        "expected_match_after_current_count": 1,
+        "current_sequence_match_count": 0,
+        "current_guard_capture_is_latest": None,
+        "expected_raster_consensus": "none",
+        "guard_capture_relation": "unavailable",
+    }
+
+
+def test_projection_reports_same_png_guard_comparison_as_unknown(
+    tmp_path: Path,
+) -> None:
+    expected = _png((10, 20, 30), compression=6)
+    diagnosis = _project_event(tmp_path, [_capture_row(1, expected)], expected, 1)
+
+    assert diagnosis["status"] == "unknown"
+    assert diagnosis["code"] == "ambiguous_or_missing_provenance"
+    assert diagnosis["provenance"] == {
+        "expected_match_count": 1,
+        "expected_match_before_current_count": 0,
+        "expected_match_at_current_count": 1,
+        "expected_match_after_current_count": 0,
+        "current_sequence_match_count": 1,
+        "current_guard_capture_is_latest": True,
+        "expected_raster_consensus": "none",
+        "guard_capture_relation": "same_png",
+    }
 
 
 def test_sidecar_failure_does_not_change_capture_or_guard_refusal(
