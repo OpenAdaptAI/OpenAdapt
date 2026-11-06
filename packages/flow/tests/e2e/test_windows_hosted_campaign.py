@@ -243,6 +243,99 @@ class _Result:
     stderr: str
 
 
+def _safe_case_evidence(bundle: Path, context: Any, report: Any) -> dict[str, Any]:
+    """Project one returned linear report; never change its admission or outcome."""
+    try:
+        from typing import get_args
+
+        from openadapt_flow.execution_profiles import (
+            ExecutionProfile,
+            classify_execution_outcome,
+        )
+        from openadapt_flow.ir import SafetyRefusalEvidence, Workflow
+        from openadapt_flow.qualification import (
+            QualificationCaseKind,
+            qualification_run_id_sha256,
+        )
+        from openadapt_flow.qualify.config import CASE_IDS
+
+        if (
+            context.case_id not in CASE_IDS
+            or type(context.trial) is not int
+            or not 1 <= context.trial <= 100
+            or report.governed_qualification_case_id_sha256
+            != hashlib.sha256(context.case_id.encode()).hexdigest()
+            or report.run_id_sha256 != qualification_run_id_sha256(context.run_id)
+            or report.governed_qualification_run_id_sha256 != report.run_id_sha256
+        ):
+            raise ValueError("case binding unavailable")
+        workflow = Workflow.load(bundle)
+        if (
+            workflow.program is not None
+            or not 1 <= len(workflow.steps) <= 64
+            or len(report.results) > 64
+            or workflow.qualification is None
+        ):
+            raise ValueError("linear evidence unavailable")
+        cases = [c for c in workflow.qualification.cases if c.id == context.case_id]
+        if len(cases) != 1:
+            raise ValueError("case unavailable")
+        case = cases[0]
+        representative = case.kind is QualificationCaseKind.REPRESENTATIVE
+        if representative:
+            if len(case.action_targets) != 1:
+                raise ValueError("target unavailable")
+            target = case.action_targets[0]
+        else:
+            target = case.resolved_fault_target()
+            if target is None:
+                raise ValueError("target unavailable")
+        ordinals = {step.id: index for index, step in enumerate(workflow.steps, 1)}
+        if len(ordinals) != len(workflow.steps) or target.step_id not in ordinals:
+            raise ValueError("target unavailable")
+        target_ordinal = ordinals[target.step_id]
+        expected = workflow.steps if representative else workflow.steps[:target_ordinal]
+        failed = next((r for r in report.results if not r.ok), None)
+        refusal = failed.safety_refusal_evidence if failed is not None else None
+        stage = code = None
+        if refusal is not None:
+            stage, code = refusal.stage, refusal.code
+            if stage not in get_args(
+                SafetyRefusalEvidence.model_fields["stage"].annotation
+            ):
+                raise ValueError("refusal unavailable")
+            if code not in get_args(
+                SafetyRefusalEvidence.model_fields["code"].annotation
+            ):
+                raise ValueError("refusal unavailable")
+        outcome = classify_execution_outcome(
+            report,
+            workflow,
+            ExecutionProfile.STANDARD,
+            transition_evidence_root=context.run_dir,
+            _qualification_fault_target_step_id=None
+            if representative
+            else target.step_id,
+        )
+        return {
+            "status": "available",
+            "case_ordinal": CASE_IDS.index(context.case_id) + 1,
+            "trial": context.trial,
+            "target_ordinal": target_ordinal,
+            "failed_ordinal": ordinals.get(failed.step_id)
+            if failed is not None
+            else None,
+            "executed_count": len(report.results),
+            "exact_ordered_prefix": [r.step_id for r in report.results]
+            == [step.id for step in expected],
+            "refusal_stage": stage,
+            "refusal_code": code,
+            "standard_prefix_outcome": outcome.value,
+        }
+    except Exception:  # noqa: BLE001 - diagnostics never change the original result
+        return {"status": "unavailable", "code": "case_evidence_unavailable"}
+
+
 class _LocalGuest:
     """Existing guest-channel API restricted to this test's owned directory."""
 
@@ -573,6 +666,9 @@ class _CampaignHost:
                 "trial": context.trial,
                 "informational": bool(context.state.get("pixels_only")),
                 **result,
+                "production_evidence": _safe_case_evidence(
+                    self.host.root / "campaign" / "bundle", context, report
+                ),
             }
         )
         return result
