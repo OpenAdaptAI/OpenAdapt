@@ -79,7 +79,11 @@ text or recorded values.
   `admit_workflow()`. Every refusal above still applies; each becomes a
   `subroutine_not_admitted` qualification refusal whose
   `details.subroutine_code` is the code from the table. The CLI writes the
-  library back atomically when registration changed it.
+  library back atomically when registration changed it, and before the new
+  certificate is saved (`flow qualify certify` and the campaign alike). If
+  that write fails, the certificate is withdrawn, the bundle is saved
+  uncertified and the error is raised: no bundle is certified while the
+  library does not list it.
 
 Registration happens even when certification fails, so a later version of
 the subroutine still lists the workflow for re-qualification. On a pass the

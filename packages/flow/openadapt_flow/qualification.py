@@ -5743,6 +5743,31 @@ def current_certification_matches(
     )
 
 
+def persist_registration_before_certificate(
+    workflow: "Workflow",
+    bundle_dir: Path | str,
+    persist: Optional[Callable[[], None]],
+) -> None:
+    """Write certification's subroutine registration before any certificate.
+
+    ``certify_project`` registers the workflow with the subroutine library in
+    memory; ``persist`` writes that library. It must succeed before a new
+    certificate becomes durable, or a later version of a subroutine could not
+    list this workflow for re-qualification. When it raises, the certificate
+    is withdrawn in memory, ``bundle_dir`` is saved uncertified and the error
+    is re-raised, so no valid new certificate is left behind.
+    """
+
+    if persist is None:
+        return
+    try:
+        persist()
+    except BaseException:
+        _invalidate_certification(workflow)
+        save_qualified_workflow(workflow, bundle_dir)
+        raise
+
+
 def save_qualified_workflow(
     workflow: "Workflow",
     bundle_dir: Path | str,

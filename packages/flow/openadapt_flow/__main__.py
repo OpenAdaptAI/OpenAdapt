@@ -7097,8 +7097,19 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
             subroutine_library=library,
             subroutine_workflow_id=getattr(args, "subroutine_workflow_id", None),
         )
+        from openadapt_flow.qualification import (
+            persist_registration_before_certificate,
+        )
+
+        # The registration is written before the certificate is saved: a
+        # library write failure leaves the bundle uncertified, not certified
+        # with no dependent recorded for a later subroutine version.
+        persist_registration_before_certificate(
+            workflow,
+            args.bundle,
+            lambda: _save_subroutine_library(library, library_path, library_before),
+        )
         save_qualified_workflow(workflow, args.bundle)
-        _save_subroutine_library(library, library_path, library_before)
         print(report.model_dump_json(indent=2) if args.json else report.render())
         return 0 if report.passed else 2
 
@@ -9019,7 +9030,13 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
     )
     library_path = getattr(args, "subroutine_library", None)
     library = _load_subroutine_library(library_path)
-    library_before = library.to_json() if library is not None else ""
+    library_state = {"before": library.to_json() if library is not None else ""}
+
+    def persist_library() -> None:
+        _save_subroutine_library(library, library_path, library_state["before"])
+        if library is not None:
+            library_state["before"] = library.to_json()
+
     try:
         result = qualify(
             bundle,
@@ -9031,15 +9048,16 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
             run_params=run_params,
             campaign_id=args.campaign_id,
             subroutine_library=library,
+            persist_subroutine_registration=persist_library,
         )
     except QualifyConfigError as exc:
         print(str(exc), file=sys.stderr)
         return 2
     except QualifyError as exc:
-        _save_subroutine_library(library, library_path, library_before)
+        persist_library()
         print(f"qualify REFUSED: {exc}\nEvidence so far: {out}", file=sys.stderr)
         return 1
-    _save_subroutine_library(library, library_path, library_before)
+    persist_library()
     if not result.passed and result.partial:
         print(
             f"\nqualify PARTIAL: {len(result.rows)} trial(s) behaved as required in "

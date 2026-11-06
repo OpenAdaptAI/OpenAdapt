@@ -380,3 +380,232 @@ def test_campaign_certify_refuses_before_running_without_a_library(tmp_path: Pat
             bundle, _config(), out=out, certify="clinical-write", log=lambda _l: None
         )
     assert not out.exists()
+
+
+# -- the registration is durable before the certificate ---------------------------
+#
+# A certificate saved before its registration is written leaves, on a library
+# write failure, a certified bundle the library does not list: publishing a new
+# version of the subroutine could not put it back into re-qualification.
+
+
+@pytest.fixture
+def read_only_dir(tmp_path: Path):
+    import os
+    import stat
+
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        pytest.skip("root ignores directory permissions")
+    directory = tmp_path / "library"
+    directory.mkdir()
+    yield directory
+    directory.chmod(stat.S_IRWXU)
+
+
+def _qualified_library_file(directory: Path, *, read_only: bool = False) -> Path:
+    import stat
+
+    sub = _note_subroutine()
+    library = SubroutineLibrary()
+    library.publish(sub)
+    library.qualify(sub.sha256, policy_name="clinical-write", evidence_sha256=EVIDENCE)
+    path = directory / "subroutines.json"
+    save_library(library, path)
+    if read_only:
+        directory.chmod(stat.S_IRUSR | stat.S_IXUSR)
+    return path
+
+
+def test_cli_certify_leaves_no_certificate_when_the_registration_cannot_be_written(
+    tmp_path: Path, read_only_dir: Path
+):
+    bundle, evidence_root = _cli_bundle(tmp_path)
+    path = _qualified_library_file(read_only_dir, read_only=True)
+    before = path.read_text()
+
+    with pytest.raises(PermissionError):
+        _certify_cli(
+            bundle,
+            evidence_root,
+            "--subroutine-library",
+            str(path),
+            "--subroutine-workflow-id",
+            "qualified-write@1",
+        )
+
+    assert path.read_text() == before
+    assert load_library(path).dependents("enter_note") == ()
+    saved = Workflow.load(bundle)
+    assert not current_certification_matches(
+        saved, policy=load_policy("clinical-write")
+    )
+    assert saved.qualification is not None
+    assert saved.qualification.last_certification is None
+
+
+def test_cli_certify_writes_the_registration_before_the_certificate(
+    tmp_path: Path, monkeypatch, capsys
+):
+    import openadapt_flow.qualification as qualification_mod
+    import openadapt_flow.subroutines as subroutines_mod
+
+    bundle, evidence_root = _cli_bundle(tmp_path)
+    path = _qualified_library_file(tmp_path)
+    events: list[str] = []
+    real_save, real_library = (
+        qualification_mod.save_qualified_workflow,
+        subroutines_mod.save_library,
+    )
+
+    def save_workflow(workflow, bundle_dir, **kw):
+        cert = workflow.qualification and workflow.qualification.last_certification
+        events.append("certificate" if cert is not None and cert.passed else "bundle")
+        return real_save(workflow, bundle_dir, **kw)
+
+    def save_lib(library, target):
+        events.append("library")
+        return real_library(library, target)
+
+    monkeypatch.setattr(qualification_mod, "save_qualified_workflow", save_workflow)
+    monkeypatch.setattr(subroutines_mod, "save_library", save_lib)
+
+    code = _certify_cli(
+        bundle,
+        evidence_root,
+        "--subroutine-library",
+        str(path),
+        "--subroutine-workflow-id",
+        "qualified-write@1",
+    )
+
+    assert code == 0, capsys.readouterr()
+    assert events == ["library", "certificate"]
+    assert load_library(path).dependents("enter_note") == ("qualified-write@1",)
+    assert current_certification_matches(
+        Workflow.load(bundle), policy=load_policy("clinical-write")
+    )
+
+
+def _campaign_with_registration(monkeypatch, events: list[str], state: dict):
+    """The campaign's fakes, with certification that registers in the library.
+
+    ``state["valid"]`` is whether the in-memory workflow holds a passing new
+    certificate; every bundle save records it.
+    """
+
+    from types import SimpleNamespace
+
+    import openadapt_flow.qualification as qualification_mod
+    import openadapt_flow.subroutines as subroutines_mod
+    from tests.test_lookup_capabilities import _Campaign
+
+    fake = _Campaign(monkeypatch)
+    real_save = qualification_mod.save_qualified_workflow
+    real_invalidate = qualification_mod._invalidate_certification
+    real_library = subroutines_mod.save_library
+
+    def certify(workflow, *, subroutine_library=None, **_kw):
+        assert subroutine_library is not None
+        subroutine_library.register(
+            "campaign@1", embed(workflow, _note_subroutine())[0]
+        )
+        state["valid"] = True
+        events.append("certify")
+        return SimpleNamespace(
+            passed=True, render=lambda: "PASS", model_dump=lambda **_k: {}
+        )
+
+    def save_workflow(workflow, bundle_dir, **kw):
+        events.append("certificate" if state.get("valid") else "bundle")
+        return real_save(workflow, bundle_dir, **kw)
+
+    def invalidate(workflow):
+        state["valid"] = False
+        events.append("withdrawn")
+        return real_invalidate(workflow)
+
+    def save_lib(library, target):
+        events.append("library")
+        return real_library(library, target)
+
+    monkeypatch.setattr(qualification_mod, "certify_project", certify)
+    monkeypatch.setattr(qualification_mod, "save_qualified_workflow", save_workflow)
+    monkeypatch.setattr(qualification_mod, "_invalidate_certification", invalidate)
+    monkeypatch.setattr(subroutines_mod, "save_library", save_lib)
+    return fake
+
+
+def _campaign_cli(monkeypatch, tmp_path: Path, fake, library: Path) -> int:
+    import openadapt_flow.qualify as qualify_pkg
+    from openadapt_flow.__main__ import main
+    from tests.test_lookup_capabilities import _config as _campaign_config
+    from tests.test_lookup_capabilities import _source_bundle
+
+    monkeypatch.setattr(
+        qualify_pkg, "load_verify_config", lambda _p: _campaign_config()
+    )
+    monkeypatch.setattr(
+        "openadapt_flow.qualify.campaign._default_hooks",
+        lambda _config, _hooks: fake.hooks(),
+    )
+    return main(
+        [
+            "qualify",
+            str(_source_bundle(tmp_path)),
+            "--verify",
+            str(tmp_path / "verify.yaml"),
+            "--certify",
+            "clinical-write",
+            "--out",
+            str(tmp_path / "out"),
+            "--subroutine-library",
+            str(library),
+        ]
+    )
+
+
+def test_campaign_certify_leaves_no_certificate_when_the_registration_cannot_be_written(
+    tmp_path: Path, read_only_dir: Path, monkeypatch
+):
+    events: list[str] = []
+    state: dict = {}
+    fake = _campaign_with_registration(monkeypatch, events, state)
+    path = _qualified_library_file(read_only_dir, read_only=True)
+    before = path.read_text()
+
+    with pytest.raises(PermissionError):
+        _campaign_cli(monkeypatch, tmp_path, fake, path)
+
+    after = events[events.index("certify") :]
+    assert after == ["certify", "library", "withdrawn", "bundle"]
+    assert path.read_text() == before
+    saved = Workflow.load(tmp_path / "out" / "bundle")
+    assert saved.qualification is not None
+    assert saved.qualification.last_certification is None
+    assert not current_certification_matches(
+        saved, policy=load_policy("clinical-write")
+    )
+    assert not (tmp_path / "out" / "qualification" / "admission.local.json").exists()
+
+
+def test_campaign_certify_writes_the_registration_before_the_certificate(
+    tmp_path: Path, monkeypatch
+):
+    events: list[str] = []
+    state: dict = {}
+    fake = _campaign_with_registration(monkeypatch, events, state)
+    path = _qualified_library_file(tmp_path)
+
+    def no_envelope(**_kw):
+        raise ValueError("no admission envelope in this test")
+
+    monkeypatch.setattr("openadapt_flow.qualify.result.local_admission", no_envelope)
+
+    _campaign_cli(monkeypatch, tmp_path, fake, path)
+
+    after = events[events.index("certify") :]
+    assert after[:2] == ["certify", "library"]
+    assert "certificate" in after
+    # Written once: the closing write-back finds nothing new.
+    assert events.count("library") == 1
+    assert load_library(path).dependents("enter_note") == ("campaign@1",)
