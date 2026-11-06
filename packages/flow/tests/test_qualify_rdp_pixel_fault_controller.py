@@ -115,6 +115,8 @@ def rig(monkeypatch):
             pairing = handle.request["schema"] == "openadapt.rdp-pairing/v1"
             if state.mode == "wait_failure" and not pairing:
                 return None
+            if state.mode == "wrong_fault_guest" and not pairing:
+                return f"ready:{handle.request['nonce']}:{OTHER}"
             return handle.ready_status if pairing else f"ready:{handle.request['nonce']}:{GUEST}"
 
         def close(self):
@@ -269,7 +271,7 @@ def test_fault_request_must_match_engine_frame_step_and_regions(rig, change):
     close()
 
 
-@pytest.mark.parametrize("mode", ["launch_failure", "wait_failure", "unchanged", "witness_lost"])
+@pytest.mark.parametrize("mode", ["launch_failure", "wait_failure", "wrong_fault_guest", "unchanged", "witness_lost"])
 def test_uncertain_or_unproved_mutation_permanently_refuses_input_without_retry(rig, mode):
     backend, close = rig.open()
     controller = backend.qualification_pixel_fault_controller

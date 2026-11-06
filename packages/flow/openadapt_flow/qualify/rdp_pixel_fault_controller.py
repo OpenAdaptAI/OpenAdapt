@@ -133,7 +133,8 @@ class RdpQualificationPixelFaultController:
             request["session_identity_sha256"] = self._guest_digest
             self._attempted = True
             task = self._tasks.launch(request)
-            if not self._tasks.wait_ready(task):
+            status = self._tasks.wait_ready(task)
+            if status != f"ready:{request['nonce']}:{self._guest_digest}":
                 return self._refuse()
             after = context.capture_frame()
             if (
