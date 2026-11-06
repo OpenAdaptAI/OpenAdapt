@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from tests.e2e.test_windows_hosted_replay import (
     CONTROLS,
     DEMO_NOTE,
@@ -436,7 +437,9 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
         primary = [item for item in owner.oracles if not item["informational"]]
         assert len(primary) == 6 and all(item["passed"] for item in primary)
         assert all(item["fault_detector_error"] is None for item in primary)
-        assert all(session["closed"] and session["http_closed"] for session in owner.sessions)
+        assert all(
+            session["closed"] and session["http_closed"] for session in owner.sessions
+        )
         assert result.passed, (
             "one-trial campaign did not qualify; gates remain unchanged"
         )
