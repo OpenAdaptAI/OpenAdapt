@@ -23,6 +23,9 @@ on:
       - packages/flow/scripts/desktop/patient_notes.ps1
       - packages/flow/tests/e2e/test_windows_hosted_replay.py
       - packages/flow/tests/e2e/test_windows_hosted_campaign.py
+      - packages/flow/tests/e2e/test_windows_hosted_caret.py
+      - packages/flow/tests/e2e/windows_caret_diagnostic.py
+      - packages/flow/tests/test_windows_caret_diagnostics.py
       - packages/flow/tests/e2e/win_agent_capture_telemetry.py
       - packages/flow/tests/test_xfreerdp.py
       - packages/flow/tests/e2e/test_linux_rdp_campaign.py
@@ -91,6 +94,34 @@ jobs:
           mkdir -p runs
           pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/wr" \
             tests/e2e/test_windows_hosted_replay.py --junitxml=runs/windows-replay-junit.xml
+      - name: Owned caret and frame correlation (read-only calibration)
+        env:
+          OAFLOW_WINDOWS_HOSTED_E2E: "1"
+        run: |
+          mkdir -p runs
+          pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/wd" \
+            tests/e2e/test_windows_hosted_caret.py::test_owned_caret_frame_correlation \
+            --junitxml=runs/windows-caret-junit.xml
+      - name: The owned caret measurement ran (no skips)
+        run: |
+          python - <<'PYTHON'
+          import json
+          import os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          cases = list(ET.parse("runs/windows-caret-junit.xml").getroot().iter("testcase"))
+          assert len(cases) == 1 and cases[0].get("name") == "test_owned_caret_frame_correlation"
+          assert all(cases[0].find(k) is None for k in ("skipped", "failure", "error"))
+          root = (Path(os.environ["RUNNER_TEMP"]) / "wd").resolve(strict=True)
+          paths = {p.resolve(strict=True) for p in root.glob("**/owned-caret/caret-evidence.json")}
+          assert len(paths) == 1 and all(p.is_relative_to(root) for p in paths)
+          summary = json.loads(paths.pop().read_text())
+          assert summary["schema"] == "openadapt.test-owned-caret/v1" and summary["status"] == "PASSED"
+          assert summary["capture_count"] == 8 and summary["database_unchanged"] is True
+          assert summary["static_fixture_handle_checks"] is True and summary["process_creation_bound"] is True
+          assert all(value is True for value in summary["cleanup"].values())
+          assert summary["diagnostic"]["status"] in {"UNKNOWN", "CARET_CORRELATED"}
+          PYTHON
       - name: Native Windows campaign, judged from the record
         env:
           OAFLOW_WINDOWS_HOSTED_E2E: "1"
@@ -152,6 +183,17 @@ jobs:
           path: |
             ${{ runner.temp }}/wc/**/hosted-campaign/campaign-evidence.json
             packages/flow/runs/windows-campaign-junit.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Keep only safe caret measurement evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-caret-evidence
+          path: |
+            ${{ runner.temp }}/wd/**/owned-caret/caret-evidence.json
+            packages/flow/runs/windows-caret-junit.xml
           if-no-files-found: ignore
           retention-days: 14
 
