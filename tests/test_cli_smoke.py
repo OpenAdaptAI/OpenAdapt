@@ -503,6 +503,15 @@ def test_doctor_native_backend_ok_when_its_platform_extra_is_installed(
     monkeypatch, backend, host, modules, install
 ):
     _host(monkeypatch, host, CORE_PACKAGES | modules)
+    if backend == "macos":
+        from types import SimpleNamespace
+
+        monkeypatch.setattr(
+            "openadapt_flow.backends.remote_display.MacWindowClient",
+            lambda: SimpleNamespace(
+                input_trusted=lambda: True, capture_trusted=lambda: True
+            ),
+        )
 
     result = CliRunner().invoke(cli_main, ["doctor", "--backend", backend])
 
