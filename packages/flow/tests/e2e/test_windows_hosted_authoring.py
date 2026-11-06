@@ -340,10 +340,12 @@ def test_windows_compile_agent_config_reaches_native_hold_refusal(owned):
     assert run["agent_error"].startswith("GateRefused:")
     assert run["harness"]["actions"] >= 2
     assert _rows(owned.host) == before
-    owned.summary.update(refusal="refused_no_hold",
+    owned.summary.update(
+        refusal="refused_no_hold",
         factory_opened=True,
         changed_rows=0,
-        scripted_driver="local_step_file",)
+        scripted_driver="local_step_file",
+    )
 
 
 @_safe_case
