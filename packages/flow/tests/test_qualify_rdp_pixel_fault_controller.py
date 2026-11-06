@@ -86,11 +86,19 @@ def rig(monkeypatch):
             if pairing:
                 nonce = request["nonce"]
                 guest = OTHER if state.mode == "wrong_grid_guest" else GUEST
-                connection = OTHER if state.mode == "wrong_grid_connection" else request["connection_digest"]
+                connection = (
+                    OTHER
+                    if state.mode == "wrong_grid_connection"
+                    else request["connection_digest"]
+                )
                 if state.mode == "wrong_grid_nonce":
                     nonce = "d" * 32
-                material = "\0".join(("openadapt.rdp-pairing/v1", nonce, connection, guest))
-                bits = "".join(f"{byte:08b}" for byte in hashlib.sha256(material.encode()).digest())
+                material = "\0".join(
+                    ("openadapt.rdp-pairing/v1", nonce, connection, guest)
+                )
+                bits = "".join(
+                    f"{byte:08b}" for byte in hashlib.sha256(material.encode()).digest()
+                )
                 image.paste((0, 0, 0), (0, 0, 52, 52))
                 for index, bit in enumerate(bits):
                     if bit == "1":
@@ -117,7 +125,11 @@ def rig(monkeypatch):
                 return None
             if state.mode == "wrong_fault_guest" and not pairing:
                 return f"ready:{handle.request['nonce']}:{OTHER}"
-            return handle.ready_status if pairing else f"ready:{handle.request['nonce']}:{GUEST}"
+            return (
+                handle.ready_status
+                if pairing
+                else f"ready:{handle.request['nonce']}:{GUEST}"
+            )
 
         def close(self):
             state.closed.append(self)
@@ -130,6 +142,7 @@ def rig(monkeypatch):
         def check(png):
             with Image.open(io.BytesIO(png)) as actual:
                 return actual.getpixel(point) == (1, 2, 3)
+
         return check
 
     def open_session(**changes):
@@ -165,14 +178,18 @@ def context_for(backend, kind="ambiguity"):
     step = SimpleNamespace(
         id=context.step_id,
         anchor=SimpleNamespace(
-            region=(120, 80, 12, 12), search_pad=40, identifier_region=(170, 100, 12, 12)
+            region=(120, 80, 12, 12),
+            search_pad=40,
+            identifier_region=(170, 100, 12, 12),
         ),
     )
     return context, step
 
 
 def observation(backend):
-    return SimpleNamespace(**dict(zip(FIELDS, backend.qualification_environment_identity())))
+    return SimpleNamespace(
+        **dict(zip(FIELDS, backend.qualification_environment_identity()))
+    )
 
 
 @pytest.mark.parametrize("kind", ["ambiguity", "wrong_identity", "stale_identity"])
@@ -208,7 +225,17 @@ def test_configured_labels_cannot_launch_a_witness_without_positive_frame(rig, i
     assert rig.session_closes == [True]
 
 
-@pytest.mark.parametrize("mode", ["no_grid", "wrong_grid_guest", "wrong_grid_connection", "wrong_grid_nonce", "wrong_status_nonce", "expired_wait"])
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "no_grid",
+        "wrong_grid_guest",
+        "wrong_grid_connection",
+        "wrong_grid_nonce",
+        "wrong_status_nonce",
+        "expired_wait",
+    ],
+)
 def test_readiness_status_or_configuration_cannot_replace_exact_live_pairing(rig, mode):
     rig.mode = mode
     with pytest.raises(ValueError):
@@ -230,7 +257,9 @@ def test_observation_swap_is_refused(rig, field):
     close()
 
 
-@pytest.mark.parametrize("change", ["expired", "dead", "connection", "transport", "environment"])
+@pytest.mark.parametrize(
+    "change", ["expired", "dead", "connection", "transport", "environment"]
+)
 def test_changed_session_cannot_stage_fault(rig, change):
     backend, close = rig.open()
     controller = backend.qualification_pixel_fault_controller
@@ -250,7 +279,18 @@ def test_changed_session_cannot_stage_fault(rig, change):
     close()
 
 
-@pytest.mark.parametrize("change", ["hash", "step", "backend", "missing_backend", "path", "witness_overlap", "unknown_fault"])
+@pytest.mark.parametrize(
+    "change",
+    [
+        "hash",
+        "step",
+        "backend",
+        "missing_backend",
+        "path",
+        "witness_overlap",
+        "unknown_fault",
+    ],
+)
 def test_fault_request_must_match_engine_frame_step_and_regions(rig, change):
     backend, close = rig.open()
     context, step = context_for(backend)
@@ -268,13 +308,27 @@ def test_fault_request_must_match_engine_frame_step_and_regions(rig, change):
         step.anchor.region = (10, 10, 12, 12)
     else:
         context.fault_kind = "unsupported"
-    assert not backend.qualification_pixel_fault_controller.apply_screen_fault(context, step)
+    assert not backend.qualification_pixel_fault_controller.apply_screen_fault(
+        context, step
+    )
     assert len(rig.requests) == 1
     close()
 
 
-@pytest.mark.parametrize("mode", ["launch_failure", "wait_failure", "wrong_fault_guest", "unchanged", "witness_lost", "expired_wait"])
-def test_uncertain_or_unproved_mutation_permanently_refuses_input_without_retry(rig, mode):
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "launch_failure",
+        "wait_failure",
+        "wrong_fault_guest",
+        "unchanged",
+        "witness_lost",
+        "expired_wait",
+    ],
+)
+def test_uncertain_or_unproved_mutation_permanently_refuses_input_without_retry(
+    rig, mode
+):
     backend, close = rig.open()
     controller = backend.qualification_pixel_fault_controller
     context, step = context_for(backend)
@@ -344,11 +398,15 @@ def test_existing_native_driver_signs_exact_rdp_frame_and_detector_binding(rig, 
     mutation = driver.mutate(context)
     assert mutation is not None
     receipt = mutation.receipt
-    assert verify_fault_mutation_receipt(receipt, trusted_public_key_base64=driver.public_key_base64)
+    assert verify_fault_mutation_receipt(
+        receipt, trusted_public_key_base64=driver.public_key_base64
+    )
     assert receipt.fault_kind == kind
     assert receipt.gate == expected_fault_detector(kind)[0]
     assert receipt.before_input_sha256 == basic.before_input_sha256
-    assert receipt.after_input_sha256 == hashlib.sha256(backend.screenshot()).hexdigest()
+    assert (
+        receipt.after_input_sha256 == hashlib.sha256(backend.screenshot()).hexdigest()
+    )
     assert not mutation.replace_effect_verifier
     assert len(rig.requests) == 2
     close()
@@ -367,5 +425,7 @@ def test_fresh_session_hook_pairing_preserves_stable_environment_identity(rig):
     assert first_identity[2] != second_identity[2]
     assert rig.requests[1]["nonce"] != first_nonce
     assert first.qualification_environment_identity() is None
-    assert second.qualification_pixel_fault_controller.matches_observation(second, observation(second))
+    assert second.qualification_pixel_fault_controller.matches_observation(
+        second, observation(second)
+    )
     close_second()

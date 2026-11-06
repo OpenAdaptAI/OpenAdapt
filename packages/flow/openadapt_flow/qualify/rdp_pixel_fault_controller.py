@@ -178,7 +178,9 @@ def open_rdp_qualification_session(
     if not all(callable(probe) for probe in probes) or not all(
         (application_marker, application_version_marker, environment_marker)
     ):
-        raise ValueError("RDP qualification needs positive application/environment probes")
+        raise ValueError(
+            "RDP qualification needs positive application/environment probes"
+        )
     state = _SessionState()
     task_owners: list[OwnedPixelTasks] = []
     backend: FreeRDPBackend | None = None
@@ -207,7 +209,9 @@ def open_rdp_qualification_session(
             errors.append(exc)
         if errors:
             state.cleanup_failed = True
-            raise RuntimeError("RDP qualification cleanup was not established") from errors[0]
+            raise RuntimeError(
+                "RDP qualification cleanup was not established"
+            ) from errors[0]
 
     try:
         _, width, height = transport.framebuffer()
@@ -248,7 +252,9 @@ def open_rdp_qualification_session(
             or (readiness_probe is not None and readiness_probe(prelaunch) is not True)
             or not pairing.matches_transport(transport)
         ):
-            raise ValueError("RDP application environment is unavailable before pairing")
+            raise ValueError(
+                "RDP application environment is unavailable before pairing"
+            )
         request = pairing.guest_request()
         witness_tasks = OwnedPixelTasks(
             lab,
