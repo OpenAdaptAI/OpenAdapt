@@ -3,6 +3,14 @@
 // Shows a visible REC badge. No remote endpoints.
 'use strict';
 
+// Network-save redaction (Part of #1872). Without it, no network evidence is
+// captured at all: the listeners below fail closed.
+if (typeof importScripts === 'function') {
+  try {
+    importScripts('network_redact.js');
+  } catch (e) {}
+}
+
 const NATIVE_HOST = 'com.openadapt.extension';
 const SCHEMA = 'openadapt.extension-evidence/1';
 
@@ -67,7 +75,10 @@ function setRecording(active) {
   recording = Boolean(active);
   setBadge(recording);
   broadcastRecording(recording);
-  if (!recording) queued = [];
+  if (!recording) {
+    queued = [];
+    pendingSaves.clear();
+  }
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -92,6 +103,81 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 });
 
+// --- Network saves (chrome.webRequest, observe only) -----------------------
+// Only state-changing requests from tabs, only while recording. Cookies are
+// not requested (no 'extraHeaders'), and every record passes the fail-closed
+// redactor before it is queued or sent. A record it cannot redact is dropped.
+const SAVE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const MAX_PENDING_SAVES = 200;
+const pendingSaves = new Map();
+
+function networkRedactor() {
+  const r = globalThis.OpenAdaptNetworkRedact;
+  return r && typeof r.redactNetworkSave === 'function' ? r : null;
+}
+
+function isTrackedSave(details) {
+  if (!recording || !details) return false;
+  if (!SAVE_METHODS.has(String(details.method || '').toUpperCase())) return false;
+  // tabId -1: the extension's own or browser-internal traffic.
+  return Number.isInteger(details.tabId) && details.tabId >= 0;
+}
+
+function onSaveRequest(details) {
+  if (!isTrackedSave(details) || !networkRedactor()) return;
+  if (pendingSaves.size >= MAX_PENDING_SAVES) return;
+  pendingSaves.set(details.requestId, {
+    method: details.method,
+    url: details.url,
+    type: details.type,
+    tabId: details.tabId,
+    frameId: details.frameId,
+    timeStamp: details.timeStamp,
+    requestBody: details.requestBody || null,
+  });
+}
+
+function onSaveHeaders(details) {
+  const pending = pendingSaves.get(details && details.requestId);
+  if (pending) pending.requestHeaders = details.requestHeaders || [];
+}
+
+function onSaveCompleted(details) {
+  const pending = pendingSaves.get(details && details.requestId);
+  if (!pending) return;
+  pendingSaves.delete(details.requestId);
+  const redactor = networkRedactor();
+  if (!recording || !redactor) return;
+  const record = redactor.redactNetworkSave(
+    Object.assign({}, pending, {
+      statusCode: details.statusCode,
+      responseHeaders: details.responseHeaders || [],
+    })
+  );
+  if (record) deliver(record);
+}
+
+function onSaveFailed(details) {
+  pendingSaves.delete(details && details.requestId);
+}
+
+function installNetworkListeners() {
+  const wr = chrome.webRequest;
+  if (!wr) return false;
+  const filter = { urls: ['http://*/*', 'https://*/*'] };
+  try {
+    wr.onBeforeRequest.addListener(onSaveRequest, filter, ['requestBody']);
+    wr.onBeforeSendHeaders.addListener(onSaveHeaders, filter, ['requestHeaders']);
+    wr.onCompleted.addListener(onSaveCompleted, filter, ['responseHeaders']);
+    wr.onErrorOccurred.addListener(onSaveFailed, filter);
+  } catch (e) {
+    return false;
+  }
+  return true;
+}
+
+const networkListening = installNetworkListeners();
+
 // Expose for the Node harness.
 if (typeof globalThis !== 'undefined') {
   globalThis.__openadaptExtensionBackground = {
@@ -103,9 +189,16 @@ if (typeof globalThis !== 'undefined') {
     get queued() {
       return queued.slice();
     },
+    get networkListening() {
+      return networkListening;
+    },
+    get pendingSaves() {
+      return pendingSaves.size;
+    },
     _reset() {
       recording = false;
       queued = [];
+      pendingSaves.clear();
       port = null;
       setBadge(false);
     },

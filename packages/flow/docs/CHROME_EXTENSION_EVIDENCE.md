@@ -49,5 +49,5 @@ value from inside them is sent.
 
 ## Deferred
 
-Network save capture, cross-origin iframe traversal, compiler identity use,
+Cross-origin iframe traversal, compiler identity use,
 and store listing.
