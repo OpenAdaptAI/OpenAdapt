@@ -333,12 +333,35 @@ def _step_problems(step: Step, where: str) -> list[str]:
         or step.closes_surface
     ):
         problems.append(f"{where}: changes or names a surface")
-    for anchor in (step.anchor, step.drag_end_anchor):
-        if anchor is not None and (
-            anchor.context_text is not None or anchor.structured_identity is not None
-        ):
-            problems.append(f"{where}: keeps a plaintext identity band")
     return problems
+
+
+#: Anchor fields that hold a plaintext identity band (screen text near the
+#: target, or a record-row identity). A reusable unit may not carry either.
+_IDENTITY_BAND_FIELDS = ("context_text", "structured_identity")
+
+
+def _identity_band_paths(value: Any, path: str = "") -> list[str]:
+    """JSON paths of every non-empty identity band anywhere in ``value``.
+
+    Walked generically, so an anchor inside a step, a step guard, a wait,
+    a transition guard, a boundary check or any nested predicate operand is
+    found the same way. Paths name fields only, never the band's text.
+    """
+
+    found: list[str] = []
+    if isinstance(value, dict):
+        for key in sorted(value):
+            item = value[key]
+            here = f"{path}.{key}" if path else key
+            if key in _IDENTITY_BAND_FIELDS and item not in (None, ""):
+                found.append(here)
+                continue
+            found.extend(_identity_band_paths(item, here))
+    elif isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            found.extend(_identity_band_paths(item, f"{path}[{index}]"))
+    return found
 
 
 def body_problems(subroutine: Subroutine) -> list[str]:
@@ -354,8 +377,14 @@ def body_problems(subroutine: Subroutine) -> list[str]:
     if body.entry not in states:
         problems.append("the body's entry state is not defined")
     refs: set[str] = set()
-    for check in (*sig.entry_checks, *sig.exit_checks):
-        refs |= _param_refs(check.model_dump(mode="json"), problems, "boundary check")
+    for label, checks in (("entry", sig.entry_checks), ("exit", sig.exit_checks)):
+        for index, check in enumerate(checks):
+            dumped = check.model_dump(mode="json")
+            refs |= _param_refs(dumped, problems, "boundary check")
+            for band in _identity_band_paths(dumped):
+                problems.append(
+                    f"{label} check {index}: keeps a plaintext identity band ({band})"
+                )
     has_success = False
     for state_id, state in states.items():
         where = f"state {state_id!r}"
@@ -381,7 +410,10 @@ def body_problems(subroutine: Subroutine) -> list[str]:
                 problems.extend(_step_problems(state.step, where))
         if state.kind is StateKind.TERMINAL and state.outcome in (None, "success"):
             has_success = True
-        refs |= _param_refs(state.model_dump(mode="json"), problems, where)
+        dumped_state = state.model_dump(mode="json")
+        refs |= _param_refs(dumped_state, problems, where)
+        for band in _identity_band_paths(dumped_state):
+            problems.append(f"{where}: keeps a plaintext identity band ({band})")
     if not has_success:
         problems.append("the body has no success terminal to return through")
     declared = {item.name for item in sig.inputs}
@@ -1066,6 +1098,12 @@ def subroutine_from_steps(
     items = [step.model_copy(deep=True) for step in steps]
     if not items:
         raise SubroutineError("a subroutine needs at least one step")
+    ids = [step.id for step in items]
+    repeated = sorted({sid for sid in ids if ids.count(sid) > 1})
+    if repeated:
+        # A repeated id would make a later step silently replace an earlier
+        # one, so the body would no longer be the steps it was built from.
+        raise SubroutineError(f"step ids must be unique; repeated {repeated}")
     states: dict[str, State] = {}
     end = "end"
     for index, step in enumerate(items):

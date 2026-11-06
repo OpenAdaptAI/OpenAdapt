@@ -12,6 +12,7 @@ Backend and vision are faked (reused from test_replayer). No model calls.
 from __future__ import annotations
 
 import json
+from functools import partial
 
 import pytest
 from pydantic import ValidationError
@@ -252,6 +253,127 @@ def test_body_refuses_a_plaintext_identity_band():
     click.anchor.context_text = "row text"
     with pytest.raises(ValidationError, match="plaintext identity band"):
         find_record(steps=[type_step("enter", "query"), click])
+
+
+def _banded_anchor(field: str) -> Anchor:
+    anchor = anchored_click("x", "Open").anchor
+    assert anchor is not None
+    setattr(anchor, field, "Jane Roe 1970-01-01")
+    return anchor
+
+
+def _resolves(anchor: Anchor) -> Predicate:
+    return Predicate(kind=PredicateKind.ANCHOR_RESOLVES, anchor=anchor)
+
+
+@pytest.mark.parametrize("field", ["context_text", "structured_identity"])
+@pytest.mark.parametrize(
+    "where",
+    [
+        "entry_check",
+        "entry_check_nested",
+        "exit_check",
+        "exit_check_nested_not",
+        "step_guard",
+        "step_wait_until",
+        "transition_guard",
+    ],
+)
+def test_identity_band_is_refused_in_every_predicate_anchor(where, field):
+    """Codex review of #1987: anchors inside predicates were not checked."""
+
+    from openadapt_flow.ir import Guard
+
+    banded = _resolves(_banded_anchor(field))
+    steps = [
+        key_step("focus", "F"),
+        type_step("enter", "query"),
+        key_step("go", "Enter"),
+    ]
+    if where == "entry_check":
+        build = partial(find_record, entry_checks=(text("Find record"), banded))
+    elif where == "entry_check_nested":
+        nested = Predicate(
+            kind=PredicateKind.AND,
+            operands=[
+                text("Find record"),
+                Predicate(kind=PredicateKind.NOT, operands=[banded]),
+            ],
+        )
+        build = partial(find_record, entry_checks=(nested,))
+    elif where == "exit_check":
+        build = partial(find_record, exit_checks=(banded,))
+    elif where == "exit_check_nested_not":
+        build = partial(
+            find_record,
+            exit_checks=(
+                text("Record"),
+                Predicate(
+                    kind=PredicateKind.OR,
+                    operands=[Predicate(kind=PredicateKind.NOT, operands=[banded])],
+                ),
+            ),
+        )
+    elif where == "step_guard":
+        steps[2].guard = Guard(predicate=banded)
+        build = partial(find_record, steps=steps)
+    elif where == "step_wait_until":
+        steps[2].wait_until = banded
+        build = partial(find_record, steps=steps)
+    else:
+        body = ProgramGraph(
+            entry="enter",
+            states={
+                "enter": State(
+                    id="enter",
+                    kind=StateKind.ACTION,
+                    step=type_step("enter", "query"),
+                    transitions=[Transition(target="b")],
+                ),
+                "b": State(
+                    id="b",
+                    kind=StateKind.BRANCH,
+                    transitions=[
+                        Transition(guard=banded, target="end"),
+                        Transition(target="end"),
+                    ],
+                ),
+                "end": State(id="end", kind=StateKind.TERMINAL, outcome="success"),
+            },
+        )
+        build = partial(Subroutine, signature=signature(), body=body)
+    with pytest.raises(ValidationError, match="plaintext identity band") as exc:
+        build()
+    # The refusal names the field, never the band's text.
+    assert field in str(exc.value)
+    assert "Jane Roe" not in str(exc.value)
+
+
+def test_duplicate_step_ids_are_refused_not_dropped():
+    """Codex review of #1987: a repeated id silently replaced an earlier step."""
+
+    with pytest.raises(SubroutineError, match="step ids must be unique"):
+        find_record(
+            steps=[
+                type_step("enter", "query"),
+                key_step("duplicate", "F"),
+                key_step("duplicate", "Enter"),
+            ]
+        )
+    # Unique ids keep every action, in order.
+    sub = find_record(
+        steps=[type_step("enter", "query"), key_step("a", "F"), key_step("b", "Enter")]
+    )
+    order, cursor = [], sub.body.entry
+    while sub.body.states[cursor].kind is StateKind.ACTION:
+        state = sub.body.states[cursor]
+        order.append((state.step.action, state.step.key or state.step.param))
+        cursor = state.transitions[0].target
+    assert order == [
+        (ActionKind.TYPE, "query"),
+        (ActionKind.KEY, "F"),
+        (ActionKind.KEY, "Enter"),
+    ]
 
 
 def test_body_reads_exactly_its_declared_inputs():
