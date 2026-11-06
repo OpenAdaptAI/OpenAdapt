@@ -502,6 +502,7 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
     from openadapt_flow.compiler import compile_recording
     from openadapt_flow.qualify.campaign import QualifyHooks, qualify
     from openadapt_flow.qualify.config import CASE_IDS, parse_verify_config
+    from tests.e2e.hosted_policy_observer import observe_policy
 
     root = tmp_path / "hosted-campaign"
     root.mkdir()
@@ -553,7 +554,6 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
         def driver(rec) -> None:
             rec.click(*points["searchBox"])
             rec.type_text(DEMO_SEARCH, param="search")
-            rec.press("Enter")
             time.sleep(0.4)
             rec.click(*points["searchButton"])
             time.sleep(0.4)
@@ -641,17 +641,20 @@ def test_windows_hosted_six_case_campaign(tmp_path) -> None:
         )
         owner.reset()
         evidence["status"] = "RUNNING"
-        result = qualify(
-            bundle,
-            config,
-            out=root / "campaign",
-            trials=1,
-            certify=None,
-            hooks=QualifyHooks(
-                reset=owner.reset, before_trial=owner.before_trial, oracle=owner.oracle
-            ),
-            log=lambda _message: None,
-        )
+        with observe_policy(evidence):
+            result = qualify(
+                bundle,
+                config,
+                out=root / "campaign",
+                trials=1,
+                certify=None,
+                hooks=QualifyHooks(
+                    reset=owner.reset,
+                    before_trial=owner.before_trial,
+                    oracle=owner.oracle,
+                ),
+                log=lambda _message: None,
+            )
         evidence.update(
             status="RETURNED",
             qualification_passed=result.passed,
