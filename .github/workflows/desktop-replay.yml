@@ -111,14 +111,17 @@ jobs:
           skipped = [c for c in cases if c.find("skipped") is not None]
           if not cases or skipped:
               sys.exit(f"windows replay did not run: {len(cases)} cases, {len(skipped)} skipped")
-          summaries = list(
-              (Path(os.environ["RUNNER_TEMP"]) / "wc").glob(
-                  "**/hosted-campaign/campaign-evidence.json"
-              )
-          )
+          summary_root = (Path(os.environ["RUNNER_TEMP"]) / "wc").resolve(strict=True)
+          summaries = set()
+          for candidate in summary_root.glob("**/hosted-campaign/campaign-evidence.json"):
+              resolved = candidate.resolve(strict=True)
+              if not resolved.is_relative_to(summary_root):
+                  sys.exit("windows campaign outcome summary is outside its owned directory")
+              summaries.add(resolved)
           if len(summaries) != 1:
               sys.exit("windows campaign did not produce exactly one safe outcome summary")
-          summary = json.loads(summaries[0].read_text(encoding="utf-8"))
+          (summary_path,) = summaries
+          summary = json.loads(summary_path.read_text(encoding="utf-8"))
           if not isinstance(summary, dict) or not summary:
               sys.exit("windows campaign outcome summary is empty")
           PY
