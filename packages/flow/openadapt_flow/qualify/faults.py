@@ -28,10 +28,11 @@ missing_effect      effect_verifier        the record check is removed
 ==================  =====================  ===================================
 
 ``weak_effect`` and ``missing_effect`` change only the verifier, so they work
-on every surface. The three screen faults need a browser page. A pixel-surface
-driver for Windows, RDP and Citrix (changing what the remote frame shows at
-the save) is not built yet; on those surfaces the driver declines the screen
-faults and the case does not pass. See ``docs/QUALIFY_A_WORKFLOW.md``.
+on every surface. Browser screen faults use the page. Windows and RDP screen
+faults use the concrete backend's session-owned pixel controller and bind the
+engine's exact before/after frames. A missing or mismatched controller declines
+the mutation; Citrix has no admitted controller. See
+``docs/QUALIFY_A_WORKFLOW.md`` for the session ownership contract.
 """
 
 from __future__ import annotations

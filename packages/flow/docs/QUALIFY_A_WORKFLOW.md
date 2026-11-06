@@ -339,6 +339,25 @@ calls `close_owner` on setup failure or close. Supply an idempotent callback
 for your owned session; argument-validation failures leave that ownership
 with the caller. Keep the returned session open for its trial.
 
+For a Linux X11 guest owned by the same Python session, pass a callable
+`task_owner_factory(binding)` to `open_rdp_qualification_session`. It creates
+`LinuxPixelTasks` with the actual X-server `Popen`, its owned application and
+shadow-server children, display, viewport, owned runtime directory, and the
+supplied `session_binding_sha256`. Pass `None` for the unused guest channel
+and an empty `guest_dir`. This factory is a Python session integration; it is
+not a YAML command or import setting. Omitting it retains the Windows guest
+channel implementation above.
+
+`LinuxPixelTasks` and `linux_pixel_fault_renderer` ship in the Flow wheel.
+The Linux guest needs system Python with Tk, xdotool and ImageMagick. The
+renderer observes the X-server's Unix-socket peer and process/socket generation
+independently. That identity describes the owned display, not a login session.
+It renders a finite witness or fault without changing input focus. The
+existing application/version/environment probes, exact frame witness and
+cleanup callback still apply; supplying a display name does not establish
+those observations. Keep application setup, visible markers and independent
+record checks in your session integration, then qualify on the actual route.
+
 ### What the installation supplies
 
 The Flow wheel includes both backends, the qualification controller/factory
