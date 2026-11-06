@@ -16,7 +16,9 @@ from typing import Any, Literal
 
 from openadapt_flow import __version__ as FLOW_VERSION
 from openadapt_flow.qualification_environment import (
+    BackendQualificationEnvironmentObserver,
     QualificationEnvironmentObservation,
+    QualificationEnvironmentObserver,
 )
 
 WEB_OBSERVER_ID = "openadapt.qualify.web-environment"
@@ -100,6 +102,94 @@ class WebEnvironmentObserver:
         )
 
 
+def campaign_environment_observer(
+    backend: Any,
+    *,
+    target_kind: Literal["web", "windows", "macos", "linux", "rdp", "citrix"],
+    application_version: str,
+    headless: bool = True,
+) -> QualificationEnvironmentObserver:
+    """Select an observer whose live evidence matches the requested surface.
+
+    The web observer reads the page itself. Other surfaces must expose the
+    existing atomic backend identity method; target labels and values in
+    ``verify.yaml`` are expectations only and never become observed evidence.
+    """
+
+    if target_kind == "web":
+        if getattr(backend, "page", None) is None:
+            raise ValueError("web qualification session has no browser page")
+        return WebEnvironmentObserver(
+            application_version=application_version,
+            headless=headless,
+        )
+    if not callable(getattr(backend, "qualification_environment_identity", None)):
+        raise ValueError("native qualification backend has no atomic environment observer")
+    return CampaignBackendEnvironmentObserver(backend, target_kind=target_kind)
+
+
+class CampaignBackendEnvironmentObserver:
+    """Bind the generic backend observer to a concrete backend target token."""
+
+    def __init__(
+        self,
+        backend: Any,
+        *,
+        target_kind: Literal["web", "windows", "macos", "linux", "rdp", "citrix"],
+    ) -> None:
+        self._backend = backend
+        self._target_kind = target_kind
+        self._observer = BackendQualificationEnvironmentObserver(backend)
+        self.observer_id = self._observer.observer_id
+        self.contract_sha256 = hashlib.sha256(
+            (
+                "openadapt.campaign-backend-environment/v1\0"
+                f"{target_kind}\0{self._observer.contract_sha256}"
+            ).encode("utf-8")
+        ).hexdigest()
+
+    def observe(
+        self,
+        backend: Any,
+        target_kind: Literal["web", "windows", "macos", "linux", "rdp", "citrix"],
+    ) -> QualificationEnvironmentObservation:
+        if backend is not self._backend:
+            raise ValueError("campaign environment backend changed")
+        if target_kind != self._target_kind:
+            raise ValueError("campaign environment target kind changed")
+        if getattr(backend, "qualification_target_kind", None) != target_kind:
+            raise ValueError("backend target kind does not match campaign target")
+        return self._observer.observe(backend, target_kind)
+
+
+def observe_campaign_environment(
+    backend: Any,
+    *,
+    target_kind: Literal["web", "windows", "macos", "linux", "rdp", "citrix"],
+    application_version: str,
+    headless: bool = True,
+    application_identity: str | None = None,
+) -> tuple[QualificationEnvironmentObserver, QualificationEnvironmentObservation]:
+    """Return a live observer and reject declared identity mismatches."""
+
+    observer = campaign_environment_observer(
+        backend,
+        target_kind=target_kind,
+        application_version=application_version,
+        headless=headless,
+    )
+    observed = observer.observe(backend, target_kind)
+    if observed.target_kind != target_kind:
+        raise ValueError("qualification observer returned a different target kind")
+    if observed.application_version != application_version:
+        raise ValueError("declared application version does not match live observation")
+    if application_identity is not None and (
+        observed.application_identity != application_identity
+    ):
+        raise ValueError("declared application identity does not match live observation")
+    return observer, observed
+
+
 def observe_web_environment(
     url: str, *, application_version: str, headless: bool = True
 ) -> dict[str, str]:
@@ -132,6 +222,9 @@ __all__ = [
     "WEB_OBSERVER_CONTRACT_SHA256",
     "WEB_OBSERVER_ID",
     "WebEnvironmentObserver",
+    "CampaignBackendEnvironmentObserver",
+    "campaign_environment_observer",
+    "observe_campaign_environment",
     "observe_web_environment",
     "web_environment_digest",
     "web_environment_payload",

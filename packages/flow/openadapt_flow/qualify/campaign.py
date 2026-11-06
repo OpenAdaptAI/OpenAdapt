@@ -60,14 +60,15 @@ from openadapt_flow.qualify.config import (
     VerifyConfig,
 )
 from openadapt_flow.qualify.environment import (
-    WEB_OBSERVER_CONTRACT_SHA256,
-    WEB_OBSERVER_ID,
-    WebEnvironmentObserver,
-    web_environment_digest,
-    web_environment_payload,
+    observe_campaign_environment,
 )
-from openadapt_flow.qualify.faults import WebFaultDriver
+from openadapt_flow.qualify.faults import WebFaultDriver, WindowsPixelFaultDriver
 from openadapt_flow.qualify.keys import LocalTestKey, new_local_test_key
+from openadapt_flow.qualification_environment import (
+    QualificationEnvironmentObservation,
+    QualificationEnvironmentObserver,
+)
+from openadapt_flow.qualification_faults import QualificationFaultDriver
 from openadapt_flow.verification import VerificationTier
 
 #: (case id, expected outcome, oracle kind), in run order.
@@ -324,11 +325,18 @@ def check_ready(
     """Every problem that would stop the campaign, found before it runs."""
 
     problems: list[str] = []
+    if config.app.target == "web" and not config.app.url:
+        problems.append("app.url is required for a web qualification campaign")
     if config.app.target != "web":
-        problems.append(
-            f"app.target {config.app.target!r}: qualify runs web campaigns today; "
-            "the pixel-surface fault driver for Windows, RDP and Citrix is not built"
-        )
+        if not config.app.session:
+            problems.append(
+                f"app.target {config.app.target!r}: needs an environment-owned app.session"
+            )
+        if not config.app.application_identity:
+            problems.append(
+                f"app.target {config.app.target!r}: needs an exact expected "
+                "app.application_identity"
+            )
     if (
         config.app.reset is None
         and config.campaign.trials * len(config.campaign.cases) > 1
@@ -386,6 +394,135 @@ def check_ready(
     return problems
 
 
+_NATIVE_CAMPAIGN_CAPABILITIES = frozenset(
+    {
+        "pixel_frame_capture",
+        "pixel_input",
+        "qualification_environment_identity",
+        "qualification_fault_driver",
+        "qualification_pixel_fault_controller",
+    }
+)
+
+
+def _driver_binding(driver: Any) -> tuple[str, str, str, str]:
+    """Read the identity the existing runtime fault-driver protocol binds."""
+
+    names = (
+        "driver_id",
+        "contract_sha256",
+        "attestation_key_id",
+        "public_key_base64",
+    )
+    values = tuple(getattr(driver, name, None) for name in names)
+    if any(not isinstance(value, str) or not value for value in values):
+        raise QualifyConfigError("session-owned qualification fault driver is incomplete")
+    if not callable(getattr(driver, "mutate", None)):
+        raise QualifyConfigError("session-owned qualification fault driver is invalid")
+    return values  # type: ignore[return-value]
+
+
+def _campaign_session_components(
+    backend: Any,
+    config: VerifyConfig,
+    workflow: Workflow,
+    *,
+    campaign_id: str,
+    fault_key: Optional[LocalTestKey] = None,
+) -> tuple[
+    QualificationEnvironmentObserver,
+    QualificationEnvironmentObservation,
+    QualificationFaultDriver,
+    list[str],
+]:
+    """Bind one live session to its observer and actual backend capabilities."""
+
+    app = config.app
+    if app.target == "web":
+        observer, observation = observe_campaign_environment(
+            backend,
+            target_kind="web",
+            application_version=app.version,
+            headless=app.headless,
+            application_identity=app.origin,
+        )
+        return (
+            observer,
+            observation,
+            WebFaultDriver(workflow, key_id=f"{campaign_id}-fault-driver"),
+            sorted(
+                {
+                    "headless_chromium" if app.headless else "headed_chromium",
+                    "independent_system_of_record",
+                    "playwright_dom",
+                }
+            ),
+        )
+
+    if getattr(backend, "qualification_target_kind", None) != app.target:
+        raise QualifyConfigError(
+            "opened session backend does not identify the configured native target"
+        )
+    if app.target != "windows":
+        raise QualifyConfigError(
+            f"native qualification target {app.target!r} has no implemented "
+            "session-owned pixel fault controller"
+        )
+    observer, observation = observe_campaign_environment(
+        backend,
+        target_kind=app.target,
+        application_version=app.version,
+        application_identity=app.application_identity,
+    )
+    controller = getattr(backend, "qualification_pixel_fault_controller", None)
+    if (
+        getattr(controller, "qualification_target_kind", None) != app.target
+        or not callable(getattr(controller, "apply_screen_fault", None))
+        or getattr(controller, "session_identity_sha256", None)
+        != observation.session_identity_sha256
+    ):
+        raise QualifyConfigError(
+            "native session has no matching environment-owned pixel fault controller"
+        )
+    driver = WindowsPixelFaultDriver(
+        workflow,
+        controller,
+        key=fault_key,
+        key_id=f"{campaign_id}-fault-driver",
+    )
+    driver_binding = _driver_binding(driver)
+    provider = getattr(backend, "qualification_capabilities", None)
+    if not callable(provider):
+        raise QualifyConfigError("native session does not report live capabilities")
+    reported = provider()
+    if not isinstance(reported, (set, frozenset, list, tuple)) or any(
+        not isinstance(item, str) or not item for item in reported
+    ):
+        raise QualifyConfigError("native session capability evidence is invalid")
+    capabilities = set(reported)
+    capabilities.add("qualification_environment_identity")
+    capabilities.update(
+        {"qualification_fault_driver", "qualification_pixel_fault_controller"}
+    )
+    missing = sorted(_NATIVE_CAMPAIGN_CAPABILITIES - capabilities)
+    if missing:
+        raise QualifyConfigError(
+            "native session lacks required live capabilities: " + ", ".join(missing)
+        )
+    absent = sorted(set(app.required_capabilities) - capabilities)
+    if absent:
+        raise QualifyConfigError(
+            "native session lacks configured required capabilities: "
+            + ", ".join(absent)
+        )
+    # The trusted driver is obtained from the same opened backend/session as
+    # the observer. No config string or separate import hook can mint it.
+    if _driver_binding(driver) != driver_binding:
+        raise QualifyConfigError("native session fault-driver binding changed")
+    required = sorted(_NATIVE_CAMPAIGN_CAPABILITIES | set(app.required_capabilities))
+    return observer, observation, driver, required
+
+
 # ---------------------------------------------------------------------------
 # the qualification project
 # ---------------------------------------------------------------------------
@@ -394,9 +531,11 @@ def check_ready(
 @dataclass
 class CampaignSetup:
     runner_key: LocalTestKey
-    driver: WebFaultDriver
-    observer: WebEnvironmentObserver
-    environment: dict[str, Any]
+    fault_key: LocalTestKey
+    driver: QualificationFaultDriver
+    observer: QualificationEnvironmentObserver
+    environment: QualificationEnvironmentObservation
+    required_capabilities: list[str]
 
 
 def configure_project(
@@ -405,7 +544,10 @@ def configure_project(
     *,
     save: Any,
     params: Mapping[str, str],
-    environment: dict[str, Any],
+    environment: QualificationEnvironmentObservation,
+    observer: QualificationEnvironmentObserver,
+    driver: QualificationFaultDriver,
+    required_capabilities: list[str],
     campaign_id: str,
     minimum_effect_tier: Any,
 ) -> CampaignSetup:
@@ -433,23 +575,16 @@ def configure_project(
     from openadapt_flow.runtime.authorization import runtime_inputs_digest
 
     app = config.app
-    capabilities = sorted(
-        {
-            "headless_chromium" if app.headless else "headed_chromium",
-            "independent_system_of_record",
-            "playwright_dom",
-        }
-    )
     boundary = EnvironmentBoundary(
-        target_kind="web",
+        target_kind=app.target,
         application=app.name,
-        application_identity=app.origin,
-        application_version=app.version,
-        environment_observer_id=WEB_OBSERVER_ID,
-        environment_observer_contract_sha256=WEB_OBSERVER_CONTRACT_SHA256,
-        environment_digest=web_environment_digest(environment),
+        application_identity=environment.application_identity,
+        application_version=environment.application_version,
+        environment_observer_id=observer.observer_id,
+        environment_observer_contract_sha256=observer.contract_sha256,
+        environment_digest=environment.environment_digest,
         runtime_version=FLOW_VERSION,
-        required_capabilities=capabilities,
+        required_capabilities=required_capabilities,
     )
     # Re-qualifying a bundle that already has a project (a sealed copy, a
     # repaired copy, or one certified before) replaces the project with a new
@@ -513,7 +648,6 @@ def configure_project(
         key_id=runner_key.key_id,
         public_key_base64=runner_key.public_key_base64,
     )
-    driver = WebFaultDriver(workflow, key_id=f"{campaign_id}-fault-driver")
     set_trusted_fault_driver_key(
         workflow,
         key_id=driver.attestation_key_id,
@@ -533,11 +667,11 @@ def configure_project(
         )
     return CampaignSetup(
         runner_key=runner_key,
+        fault_key=getattr(driver, "_key"),
         driver=driver,
-        observer=WebEnvironmentObserver(
-            application_version=app.version, headless=app.headless
-        ),
+        observer=observer,
         environment=environment,
+        required_capabilities=required_capabilities,
     )
 
 
@@ -779,6 +913,28 @@ def _run(
     backend, close = opener()
     marks["browser_ready"] = time.time()
     try:
+        observer = setup.observer
+        fault_driver = setup.driver
+        if config.app.target != "web":
+            active_observer, _observation, active_driver, _capabilities = (
+                _campaign_session_components(
+                    backend,
+                    config,
+                    workflow,
+                    campaign_id=ctx.case_id,
+                    fault_key=setup.fault_key,
+                )
+            )
+            if (
+                active_observer.observer_id != setup.observer.observer_id
+                or active_observer.contract_sha256 != setup.observer.contract_sha256
+                or _driver_binding(active_driver) != _driver_binding(setup.driver)
+            ):
+                raise QualifyError(
+                    "native trial session does not match the campaign observer/driver"
+                )
+            observer = active_observer
+            fault_driver = active_driver
         verifier = hooks.make_verifier(ctx.params)
         gate_kwargs = dict(
             bundle_dir=bundle_dir,
@@ -798,7 +954,7 @@ def _run(
             effect_verifier=verifier,
             governed_authorization=authorization,
             qualification_fault_driver=fault_driver,
-            qualification_environment_observer=setup.observer,
+            qualification_environment_observer=observer,
             durable=True,
             require_settled=True,
             pixel_verify_enabled=any(
@@ -827,9 +983,11 @@ def _run(
             params=dict(ctx.params),
             bundle_dir=bundle_dir,
             run_dir=ctx.run_dir,
-            execution_target_kind="web",
-            execution_origin=config.app.origin,
-            execution_entry_url=backend.page.url,
+            execution_target_kind=config.app.target,
+            execution_origin=(config.app.origin if config.app.target == "web" else None),
+            execution_entry_url=(
+                backend.page.url if config.app.target == "web" else None
+            ),
             run_id=ctx.run_id,
         )
         marks["task_end"] = time.time()
@@ -1318,6 +1476,30 @@ def qualify(
         problems = [p for p in problems if not p.startswith("app.reset")]
     if problems:
         raise QualifyConfigError(problems)
+    native_preflight = None
+    native_fault_key = (
+        new_local_test_key(f"{campaign_id}-fault-driver")
+        if config.app.target != "web"
+        else None
+    )
+    if config.app.target != "web":
+        probe_context = TrialContext(
+            "environment", "", "", 0, out, out, "environment", dict(params)
+        )
+        opener = hooks.open_session or (
+            lambda: hooks.open_session_for(probe_context)  # type: ignore[misc]
+        )
+        backend, close = opener()
+        try:
+            native_preflight = _campaign_session_components(
+                backend,
+                config,
+                workflow,
+                campaign_id=campaign_id,
+                fault_key=native_fault_key,
+            )
+        finally:
+            close()
     surface, structure_offered = lookup_plan(config)
     lookup_kwargs: dict[str, Any] = {
         "use_structural": structure_offered,
@@ -1388,11 +1570,40 @@ def qualify(
     )
     backend, close = opener()
     try:
-        environment = web_environment_payload(
-            backend,
-            application_version=config.app.version,
-            headless=config.app.headless,
+        observer, environment, driver, required_capabilities = (
+            _campaign_session_components(
+                backend,
+                config,
+                workflow,
+                campaign_id=campaign_id,
+                fault_key=native_fault_key,
+            )
         )
+        if native_preflight is not None:
+            preflight_observer, preflight_environment, preflight_driver, _caps = (
+                native_preflight
+            )
+            if (
+                observer.observer_id != preflight_observer.observer_id
+                or observer.contract_sha256 != preflight_observer.contract_sha256
+                or environment.target_kind != preflight_environment.target_kind
+                or environment.application_identity
+                != preflight_environment.application_identity
+                or environment.application_version
+                != preflight_environment.application_version
+                or environment.environment_digest
+                != preflight_environment.environment_digest
+                or _driver_binding(driver) != _driver_binding(preflight_driver)
+            ):
+                raise QualifyConfigError(
+                    "native session changed between preflight and project binding"
+                )
+        if config.app.target == "web":
+            environment = observer.observe(backend, "web")
+        elif environment.target_kind != config.app.target:
+            raise QualifyConfigError(
+                "native environment observation does not match app.target"
+            )
     finally:
         close()
     setup = configure_project(
@@ -1401,6 +1612,9 @@ def qualify(
         save=save,
         params=params,
         environment=environment,
+        observer=observer,
+        driver=driver,
+        required_capabilities=required_capabilities,
         campaign_id=campaign_id,
         minimum_effect_tier=tier,
     )

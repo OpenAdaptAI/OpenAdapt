@@ -293,18 +293,71 @@ def test_check_ready_refuses_a_record_selecting_click():
     assert "fault driver" in problems
 
 
+def test_windows_pixel_fault_request_contains_only_bounded_geometry():
+    from types import SimpleNamespace
+
+    from openadapt_flow.qualify.windows_pixel_fault_controller import _request_for
+
+    context = SimpleNamespace(
+        fault_kind="wrong_identity",
+        backend=SimpleNamespace(viewport=(800, 600)),
+    )
+    step = SimpleNamespace(anchor=SimpleNamespace(region=(12, 30, 80, 24)))
+    request = _request_for(context, step, "a" * 32)
+    assert request == {
+        "schema": "openadapt.qualification-pixel-fault/v1",
+        "nonce": "a" * 32,
+        "kind": "wrong_identity",
+        "target": {"x": 12, "y": 30, "width": 80, "height": 24},
+        "screen": {"width": 800, "height": 600},
+    }
+    assert not {"text", "identity", "screenshot", "workflow"} & set(request)
+
+
+def test_windows_pixel_fault_request_declines_unbounded_geometry():
+    from types import SimpleNamespace
+
+    from openadapt_flow.qualify.windows_pixel_fault_controller import _request_for
+
+    context = SimpleNamespace(
+        fault_kind="ambiguity",
+        backend=SimpleNamespace(viewport=(800, 600)),
+    )
+    step = SimpleNamespace(anchor=SimpleNamespace(region=(790, 30, 80, 24)))
+    assert _request_for(context, step, "b" * 32) is None
+
+
 def test_a_qualified_bundle_can_be_qualified_again():
     # A sealed or repaired copy of a qualified bundle carries its project.
     # Qualifying it again replaces the project with its next revision.
     from openadapt_flow.qualify.campaign import configure_project
+    from openadapt_flow.qualify.environment import WebEnvironmentObserver
+    from openadapt_flow.qualify.faults import WebFaultDriver
+    from openadapt_flow.qualification_environment import (
+        QualificationEnvironmentObservation,
+    )
 
     workflow = _workflow()
     config = _config()
     save, _notes = apply_verify_config(workflow, config)
+    observer = WebEnvironmentObserver(
+        application_version=config.app.version,
+        headless=config.app.headless,
+    )
+    environment = QualificationEnvironmentObservation(
+        target_kind="web",
+        application_identity=config.app.origin,
+        application_version=config.app.version,
+        session_identity_sha256="0" * 64,
+        environment_digest="1" * 64,
+    )
     kwargs = dict(
         save=save,
         params=dict(workflow.params),
-        environment={"app": "demo"},
+        environment=environment,
+        observer=observer,
+        driver=WebFaultDriver(workflow, key_id="test-fault-driver"),
+        required_capabilities=["independent_system_of_record", "playwright_dom"],
         campaign_id="first",
         minimum_effect_tier=VerificationTier.INDEPENDENT_SYSTEM,
     )

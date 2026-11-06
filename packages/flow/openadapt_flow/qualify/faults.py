@@ -63,6 +63,15 @@ _CONTRACT = (
     b"missing_effect@effect_verifier: no record check\n"
 )
 WEB_FAULT_DRIVER_CONTRACT_SHA256 = hashlib.sha256(_CONTRACT).hexdigest()
+WINDOWS_PIXEL_FAULT_DRIVER_ID = "openadapt.qualify.windows-pixel-faults"
+WINDOWS_PIXEL_FAULT_DRIVER_CONTRACT_SHA256 = hashlib.sha256(
+    (
+        "openadapt.qualify.windows-pixel-faults/v1\n"
+        "screen faults are delegated to the session-owned Windows pixel controller\n"
+        "receipts bind the exact engine capture before and after mutation\n"
+        "effect faults replace only the verifier input\n"
+    ).encode("utf-8")
+).hexdigest()
 #: The label a wrong-identity save control is given.
 WRONG_ACTION_LABEL = "Merge Into Existing Record"
 SCREEN_FAULTS = frozenset({"ambiguity", "wrong_identity", "stale_identity"})
@@ -314,11 +323,111 @@ class WebFaultDriver:
         )
 
 
+class WindowsPixelFaultDriver:
+    """Bind generic campaign faults to one session-owned Windows controller.
+
+    The controller is supplied by the existing ``app.session`` owner and is
+    never imported from config. It receives the real backend and workflow
+    step, changes the live Windows pixels, and must return only after the
+    overlay is visible. Replayer independently captures and validates the
+    exact before/after frame bytes before accepting the signed receipt.
+    """
+
+    driver_id = WINDOWS_PIXEL_FAULT_DRIVER_ID
+    contract_sha256 = WINDOWS_PIXEL_FAULT_DRIVER_CONTRACT_SHA256
+
+    def __init__(
+        self,
+        workflow: Any,
+        controller: Any,
+        *,
+        key: Optional[LocalTestKey] = None,
+        key_id: str = "qualify-windows-pixel-fault-driver",
+    ) -> None:
+        from openadapt_flow.traversal import iter_workflow_steps
+
+        self._steps = {step.id: step for step in iter_workflow_steps(workflow)}
+        self._controller = controller
+        self._key = key or new_local_test_key(key_id)
+        self.attestation_key_id = self._key.key_id
+        self.public_key_base64 = self._key.public_key_base64
+
+    @staticmethod
+    def mutation_bytes(kind: str) -> bytes:
+        return f"{WINDOWS_PIXEL_FAULT_DRIVER_ID}/{kind}/v1\n".encode("ascii")
+
+    def mutate(
+        self, context: QualificationFaultContext
+    ) -> Optional[QualificationFaultMutation]:
+        kind = context.fault_kind
+        replacement: Any = context.effect_verifier
+        replace_effect_verifier = False
+        if kind in {"weak_effect", "missing_effect"}:
+            replace_effect_verifier = True
+            replacement = ScreenOnlyRecordCheck() if kind == "weak_effect" else None
+            after = effect_verifier_input_sha256(replacement, context.effects)
+        elif kind in SCREEN_FAULTS:
+            step = self._steps.get(context.step_id)
+            if (
+                step is None
+                or context.actuation_path != "gui"
+                or context.backend is None
+                or context.capture_frame is None
+                or getattr(self._controller, "qualification_target_kind", None)
+                != "windows"
+            ):
+                return None
+            apply_fault = getattr(self._controller, "apply_screen_fault", None)
+            if not callable(apply_fault):
+                return None
+            try:
+                changed = apply_fault(context, step)
+                if changed is not True:
+                    return None
+                after_frame = context.capture_frame()
+            except Exception:  # noqa: BLE001 - unsupported/failed controller declines
+                return None
+            after = sha256_bytes(after_frame)
+            if after == context.before_input_sha256:
+                return None
+        else:
+            return None
+        receipt = FaultMutationReceipt(
+            project_id=context.project_id,
+            project_revision=context.project_revision,
+            project_contract_sha256=context.project_contract_sha256,
+            campaign_id_sha256=context.campaign_id_sha256,
+            case_id_sha256=context.case_id_sha256,
+            case_input_sha256=context.case_input_sha256,
+            run_id_sha256=context.run_id_sha256,
+            step_id_sha256=sha256_bytes(context.step_id.encode("utf-8")),
+            actuation_path=context.actuation_path,
+            fault_kind=kind,
+            gate=context.gate,
+            driver_id=self.driver_id,
+            driver_contract_sha256=self.contract_sha256,
+            before_input_sha256=context.before_input_sha256,
+            after_input_sha256=after,
+            mutation_artifact_sha256=sha256_bytes(self.mutation_bytes(kind)),
+            attestation_key_id=self.attestation_key_id,
+        )
+        return QualificationFaultMutation(
+            receipt=sign_fault_mutation_receipt(
+                receipt, private_key=self._key.private_key
+            ),
+            replace_effect_verifier=replace_effect_verifier,
+            effect_verifier=replacement,
+        )
+
+
 __all__ = [
     "SCREEN_FAULTS",
     "WEB_FAULT_DRIVER_CONTRACT_SHA256",
     "WEB_FAULT_DRIVER_ID",
+    "WINDOWS_PIXEL_FAULT_DRIVER_CONTRACT_SHA256",
+    "WINDOWS_PIXEL_FAULT_DRIVER_ID",
     "WRONG_ACTION_LABEL",
     "ScreenOnlyRecordCheck",
     "WebFaultDriver",
+    "WindowsPixelFaultDriver",
 ]
