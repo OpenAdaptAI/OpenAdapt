@@ -47,6 +47,10 @@ from openadapt_capture.events import (
     WindowCaptureStateV2,
 )
 from openadapt_capture.processing import process_events
+from openadapt_capture.source_skips import (
+    SourceOrdinalSkipError,
+    load_source_ordinal_skips,
+)
 from openadapt_capture.structural import StructuralObservation
 
 if TYPE_CHECKING:
@@ -631,7 +635,14 @@ def _validate_database_contract(
         ordinals_by_kind[kind] = set(typed_ordinals)
         all_ordinals.extend(typed_ordinals)
 
-    calculated_last = max(all_ordinals, default=None)
+    # Ordinals that window-scoped recording dropped by policy hold no event.
+    # Only the sealed skip record can account for them.
+    try:
+        skipped_ordinals = load_source_ordinal_skips(capture.capture_dir)
+    except SourceOrdinalSkipError as exc:
+        raise InvalidCaptureEvent(str(exc)) from exc
+
+    calculated_last = max([*all_ordinals, *skipped_ordinals], default=None)
     if calculated_last != last_source_ordinal:
         raise InvalidCaptureEvent("sealed last source ordinal differs from the immutable database")
 
@@ -716,6 +727,10 @@ def _validate_database_contract(
         and desktop_metadata.get("coordinate_space") == "virtual_desktop_pixels"
     )
     is_native_scoped = is_v2 or is_desktop_v1
+    if skipped_ordinals and not is_v2:
+        raise InvalidCaptureEvent(
+            "sealed source-ordinal skips are only valid for a window-scoped capture"
+        )
     if is_native_scoped and not rows_by_kind["screen"]:
         raise InvalidCaptureEvent("sealed native capture has no retained frames")
     if is_desktop_v1:
@@ -846,7 +861,9 @@ def _validate_database_contract(
             ordinal in allowed_pair_ordinals and kinds == {"screen", "window"}
         ):
             raise InvalidCaptureEvent("sealed journal reuses a source ordinal across events")
-    if is_native_scoped and sorted(owners) != list(
+    if not owners.keys().isdisjoint(skipped_ordinals):
+        raise InvalidCaptureEvent("sealed journal has an event at a skipped source ordinal")
+    if is_native_scoped and sorted(set(owners) | set(skipped_ordinals)) != list(
         range(1, (last_source_ordinal or 0) + 1)
     ):
         raise InvalidCaptureEvent("sealed native source journal has a missing ordinal")
