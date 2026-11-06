@@ -161,3 +161,142 @@ def test_declared_secret_names_match_id_even_with_benign_name():
     out = redact_evidence(line, secret_names=["member_ssn"])
     assert out["secret_field"] is True
     assert out["value"] == "<secret>"
+
+
+def test_strip_url_drops_tokens_and_non_web_payloads():
+    from openadapt_flow.extension_evidence import strip_url
+
+    assert strip_url("https://u:p@a.example:8443/x/y?token=1#f") == (
+        "https://a.example:8443/x/y"
+    )
+    assert strip_url("HTTP://A.example/p?q") == "http://a.example/p"
+    assert strip_url("about:srcdoc") == "about:srcdoc"
+    assert strip_url("data:text/html,<b>secret</b>") == "data:"
+    assert strip_url("javascript:alert(1)") == "javascript:"
+    assert strip_url("") is None
+    assert strip_url(None) is None
+    assert strip_url(42) is None
+
+
+def test_redact_strips_frame_urls_and_untyped_frame_keys():
+    out = redact_evidence(
+        {
+            "kind": "frame_focus",
+            "frame_url": "https://p.example/app?session=S#x",
+            "frame_src": "https://c.example/f?token=T",
+            "frame": {
+                "tab_id": 1,
+                "frame_id": 2,
+                "document_id": "D",
+                "origin": "https://c.example",
+                "url": "https://c.example/f?token=T",
+                "frame_id_bogus": True,
+            },
+        }
+    )
+    assert out["frame_url"] == "https://p.example/app"
+    assert out["frame_src"] == "https://c.example/f"
+    assert out["frame"] == {
+        "tab_id": 1,
+        "frame_id": 2,
+        "document_id": "D",
+        "origin": "https://c.example",
+    }
+    assert "token" not in json.dumps(out) and "session" not in json.dumps(out)
+    junk = redact_evidence({"kind": "target", "frame": {"tab_id": "1", "x": 1}})
+    assert "frame" not in junk
+
+
+def test_native_message_accepts_frame_focus_and_refuses_unknown_kind():
+    ok = validate_native_message(
+        {
+            "type": "EXTENSION_EVIDENCE",
+            "evidence": {"kind": "frame_focus", "frame_src": "https://c.example/f?t=1"},
+        }
+    )
+    assert ok["frame_src"] == "https://c.example/f"
+    with pytest.raises(ValueError):
+        validate_native_message(
+            {"type": "EXTENSION_EVIDENCE", "evidence": {"kind": "network"}}
+        )
+
+
+def test_frame_grouping_and_linking():
+    from openadapt_flow.extension_evidence import (
+        cross_origin_frame_targets,
+        frame_key,
+        group_by_frame,
+        link_frame_targets,
+    )
+
+    focus = {
+        "kind": "frame_focus",
+        "path": "app-shell#s >>> iframe#pay",
+        "frame_src": "https://c.example/f",
+        "frame_url": "https://p.example/app",
+    }
+    child = {
+        "kind": "target",
+        "path": "input#card",
+        "is_iframe": True,
+        "cross_origin_parent": True,
+        "frame_url": "https://c.example/f?x=1",
+        "frame": {"tab_id": 7, "frame_id": 3, "document_id": "D"},
+    }
+    other = {
+        "kind": "target",
+        "path": "button#go",
+        "frame_url": "https://p.example/app",
+    }
+    lines = [focus, child, other]
+    assert frame_key(child) == ("frame", 7, 3, "D")
+    assert frame_key(other) == ("url", "https://p.example/app")
+    groups = group_by_frame(lines)
+    assert [len(v) for v in groups.values()] == [2, 1]
+    assert cross_origin_frame_targets(lines) == [child]
+    linked = link_frame_targets(lines)
+    assert linked[1]["parent_frame_path"] == "app-shell#s >>> iframe#pay"
+    assert linked[1]["parent_frame_url"] == "https://p.example/app"
+    assert "parent_frame_path" not in linked[2]
+    # A child target with no matching frame_focus is returned unchanged.
+    assert link_frame_targets([child]) == [child]
+
+
+@pytest.mark.parametrize(
+    "url,want",
+    [
+        ("http://[::1]:8443/child?token=T#f", "http://[::1]:8443/child"),
+        ("https://u:p@[2001:db8::1]/x?q=1", "https://[2001:db8::1]/x"),
+        ("http://[::1]/", "http://[::1]/"),
+        ("http://127.0.0.1:9000/a?b", "http://127.0.0.1:9000/a"),
+    ],
+)
+def test_strip_url_keeps_ipv6_brackets_and_is_idempotent(url, want):
+    from openadapt_flow.extension_evidence import strip_url
+
+    assert strip_url(url) == want
+    assert strip_url(want) == want
+
+
+def test_strip_url_refuses_an_invalid_port():
+    from openadapt_flow.extension_evidence import strip_url
+
+    assert strip_url("http://a.example:99999/x") is None
+
+
+def test_ipv6_frame_evidence_round_trips_through_write_and_load(tmp_path):
+    buf = ExtensionEvidenceBuffer()
+    buf.append(
+        {
+            "kind": "frame_focus",
+            "frame_url": "http://[::1]:8443/child?token=T#f",
+            "frame_src": "http://[::1]:8443/child?token=T",
+            "frame": {"tab_id": 1, "frame_id": 2, "origin": "http://[::1]:8443"},
+        }
+    )
+    buf.write(tmp_path)
+    (line,) = load_extension_evidence(tmp_path)
+    assert line["frame_url"] == "http://[::1]:8443/child"
+    assert line["frame_src"] == "http://[::1]:8443/child"
+    assert line["frame"]["origin"] == "http://[::1]:8443"
+    assert "token" not in json.dumps(line)
