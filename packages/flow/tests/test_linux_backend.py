@@ -972,3 +972,72 @@ def test_linux_hidden_control_whose_identity_cant_be_read_cuts_the_tree_short() 
     ).authoring_tree()
     assert tree is not None and tree["truncated"] is True
     assert not any(node.get("offscreen") for node in tree["tree"])
+
+
+class _UniqueAuthoringLinuxClient(_TreeLinuxClient):
+    """One real-backend target without the earlier fixture's deliberate twin."""
+
+    def walk_elements(self, window):
+        entries, truncated = super().walk_elements(window)
+        return [entry for entry in entries if entry[3]], truncated
+
+
+def _linux_authoring_session(tmp_path, client):
+    from openadapt_flow.authoring import AuthoringSession
+
+    target = backend(client)  # The default coordinate-input refusal stays on.
+    session = AuthoringSession(
+        target,
+        tmp_path / "recording",
+        backend_kind="linux",
+        settle_interval_s=0.001,
+        settle_stable_frames=1,
+        settle_timeout_s=0.1,
+    )
+    node = next(n for n in session.observe()["tree"] if n.get("name") == "Save")
+    session.start_record()
+    return session, node
+
+
+def test_linux_authoring_uses_the_observed_native_control_without_coordinates(tmp_path):
+    client = _UniqueAuthoringLinuxClient()
+    session, node = _linux_authoring_session(tmp_path, client)
+
+    session.click(node_id=node["node_id"])
+
+    assert ("native", TARGET_ELEMENT.native_id, "invoke") in client.calls
+    assert not [call for call in client.calls if call[0] == "physical-click"]
+    assert session._recorder.event_count == 1
+
+
+@pytest.mark.parametrize("missing", [False, True], ids=["different", "missing"])
+def test_linux_authoring_refuses_a_changed_control(tmp_path, missing):
+    from openadapt_flow.authoring import AuthoringError
+
+    client = _UniqueAuthoringLinuxClient()
+    session, node = _linux_authoring_session(tmp_path, client)
+    client.text_at_point = None if missing else TEXT_ELEMENT
+
+    with pytest.raises(AuthoringError) as error:
+        session.click(node_id=node["node_id"])
+
+    assert error.value.code == "stale_node"
+    assert not [c for c in client.calls if c[0] in {"native", "physical-click"}]
+    assert session._recorder.event_count == 0
+
+
+def test_linux_authoring_refuses_replaced_window_binding(tmp_path):
+    from dataclasses import replace
+
+    from openadapt_flow.authoring import AuthoringError
+
+    client = _UniqueAuthoringLinuxClient()
+    session, node = _linux_authoring_session(tmp_path, client)
+    client.windows = [replace(TARGET_WINDOW, native_id="different-window")]
+
+    with pytest.raises(AuthoringError) as error:
+        session.click(node_id=node["node_id"])
+
+    assert error.value.code == "stale_node"
+    assert not [c for c in client.calls if c[0] in {"native", "physical-click"}]
+    assert session._recorder.event_count == 0

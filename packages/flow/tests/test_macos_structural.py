@@ -902,3 +902,63 @@ def test_a_control_whose_identity_cant_be_read_cuts_the_tree_short() -> None:
 
 def test_authoring_tree_without_a_walking_client_is_none() -> None:
     assert backend().authoring_tree() is None
+
+
+# Authoring uses the real backend; only the native AX/window boundary is fake.
+def _mac_authoring_session(tmp_path, client, ax):
+    from openadapt_flow.authoring import AuthoringSession
+
+    target = backend(client, ax)
+    session = AuthoringSession(
+        target,
+        tmp_path / "recording",
+        backend_kind="macos",
+        settle_interval_s=0.001,
+        settle_stable_frames=1,
+        settle_timeout_s=0.1,
+    )
+    node = next(n for n in session.observe()["tree"] if n.get("name") == "Save")
+    session.start_record()
+    return session, node
+
+
+def test_mac_authoring_clicks_an_observed_control(tmp_path):
+    client, ax = FakeMacClient(), _TreeAXClient()
+    session, node = _mac_authoring_session(tmp_path, client, ax)
+
+    session.click(node_id=node["node_id"])
+
+    assert len(_clicks(client)) == 1
+    assert session._recorder.event_count == 1
+
+
+@pytest.mark.parametrize("missing", [False, True], ids=["different", "missing"])
+def test_mac_authoring_refuses_a_changed_control(tmp_path, missing):
+    from dataclasses import replace
+
+    from openadapt_flow.authoring import AuthoringError
+
+    client, ax = FakeMacClient(), _TreeAXClient()
+    session, node = _mac_authoring_session(tmp_path, client, ax)
+    ax.at_point = None if missing else replace(SAVE_ELEMENT, name="Delete")
+
+    with pytest.raises(AuthoringError) as error:
+        session.click(node_id=node["node_id"])
+
+    assert error.value.code == "stale_node"
+    assert not _clicks(client)
+    assert session._recorder.event_count == 0
+
+
+def test_mac_authoring_refuses_a_different_window_at_the_input_point(tmp_path):
+    from openadapt_flow.backends.macos_backend import MacOSBackendError
+
+    client, ax = FakeMacClient(), _TreeAXClient()
+    session, node = _mac_authoring_session(tmp_path, client, ax)
+    client._point_window_id = 99
+
+    with pytest.raises(MacOSBackendError):
+        session.click(node_id=node["node_id"])
+
+    assert not _clicks(client)
+    assert session._recorder.event_count == 0
