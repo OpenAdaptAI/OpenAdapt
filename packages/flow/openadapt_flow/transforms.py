@@ -57,6 +57,7 @@ import difflib
 import hashlib
 import json
 import re
+import time
 import unicodedata
 from dataclasses import dataclass, field
 from enum import Enum
@@ -85,6 +86,18 @@ MAX_UNBOUNDED_QUANTIFIERS = 2
 MAX_VARIABLE_QUANTIFIERS = 4
 MAX_FUZZY_CHARS = 256
 MAX_FUZZY_OPTIONS = 500
+MAX_REPEAT_COUNT = 100
+#: Upper bound on fuzzy_match() work: the sum over options of
+#: len(normalized query) * len(normalized option), the cost of difflib's
+#: quadratic match.
+MAX_FUZZY_WORK = 2_000_000
+#: Deterministic evaluation budget: one unit per node evaluated, plus the
+#: estimated cost of each regex and fuzzy call. Running out is a refusal.
+MAX_EVAL_WORK = 4_000_000
+#: Wall-clock backstop, checked between nodes. It never decides a pass: a
+#: slow evaluation is refused, so the worst case is "unknown", not a hang
+#: that a caller treats as success.
+MAX_EVAL_SECONDS = 2.0
 
 _IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _PARAM_NAME = r"^[A-Za-z_][A-Za-z0-9_]{0,127}$"
@@ -449,6 +462,7 @@ def parse(source: str) -> Node:
         raise _refuse(RefusalCode.TYPE, "expression must be a string")
     if len(source) > MAX_SOURCE_CHARS:
         raise _refuse(RefusalCode.BOUNDS, f"longer than {MAX_SOURCE_CHARS} chars")
+    _check_text(source, "expression")
     if not source.strip():
         raise _refuse(RefusalCode.SYNTAX, "empty expression")
     return _Parser(_tokenize(source)).parse()
@@ -462,6 +476,19 @@ def parse(source: str) -> Node:
 def _check_str(s: str) -> str:
     if len(s) > MAX_STRING_CHARS:
         raise _refuse(RefusalCode.BOUNDS, f"string longer than {MAX_STRING_CHARS}")
+    return s
+
+
+def _check_text(s: str, what: str) -> str:
+    """Refuse text that is not valid Unicode (a lone surrogate, say), so it
+    can't crash hashing or encoding later with an untyped exception."""
+
+    try:
+        s.encode("utf-8")
+    except UnicodeEncodeError:
+        raise _refuse(
+            RefusalCode.INVALID_VALUE, f"{what} is not valid Unicode"
+        ) from None
     return s
 
 
@@ -574,6 +601,9 @@ def _add_months(d: _dt.date, n: int) -> _dt.date:
 # --------------------------------------------------------------------------
 
 
+_REPEAT = re.compile(r"\{(\d*)(,(\d*))?\}[?+]?")
+
+
 def _quantifier_at(p: str, i: int) -> tuple[int, bool, bool]:
     """Return (length, variable, unbounded) of a quantifier at ``p[i]``, or
     (0, False, False) when there is none."""
@@ -588,18 +618,27 @@ def _quantifier_at(p: str, i: int) -> tuple[int, bool, bool]:
         n = 2 if p[i + 1 : i + 2] in ("?", "+") else 1
         return n, True, False
     if c == "{":
-        m = re.match(r"\{(\d{0,3})(,(\d{0,3}))?\}[?+]?", p[i:])
-        if not m:
+        # Match every brace form ``re`` reads as a repeat, with no digit cap:
+        # ``{1000}``, ``{0100}``, ``{,5}`` and ``{,}`` all repeat. ``{}`` is a
+        # literal in ``re``.
+        m = _REPEAT.match(p, i)
+        if not m or (m.group(1) == "" and m.group(2) is None):
             return 0, False, False
         lo = int(m.group(1) or 0)
+        if lo > MAX_REPEAT_COUNT:
+            raise _refuse(
+                RefusalCode.UNSAFE_PATTERN, f"repeat count above {MAX_REPEAT_COUNT}"
+            )
         if m.group(2) is None:
-            return m.end(), False, False
+            return m.end() - i, False, False
         if m.group(3) in (None, ""):
-            return m.end(), True, True
+            return m.end() - i, True, True
         hi = int(m.group(3))
-        if hi > 100:
-            raise _refuse(RefusalCode.UNSAFE_PATTERN, "repeat bound above 100")
-        return m.end(), hi > lo, False
+        if hi > MAX_REPEAT_COUNT:
+            raise _refuse(
+                RefusalCode.UNSAFE_PATTERN, f"repeat bound above {MAX_REPEAT_COUNT}"
+            )
+        return m.end() - i, hi > lo, False
     return 0, False, False
 
 
@@ -696,7 +735,9 @@ def _check_pattern(p: str) -> re.Pattern[str]:
             f"more than {MAX_VARIABLE_QUANTIFIERS} variable quantifiers",
         )
     try:
-        return re.compile(p)
+        # ASCII: \d, \w and \s mean the same thing on every interpreter, so
+        # a receipt doesn't depend on the Unicode database version.
+        return re.compile(p, re.ASCII)
     except re.error:
         raise _refuse(RefusalCode.SYNTAX, "invalid regular expression") from None
 
@@ -706,7 +747,7 @@ def _repeats_more_than_once(q: str) -> bool:
         return True
     if q[:1] == "?":
         return False
-    m = re.match(r"\{(\d{0,3})(,(\d{0,3}))?\}", q)
+    m = _REPEAT.match(q)
     if not m:
         return False
     if m.group(2) is None:
@@ -831,7 +872,7 @@ def _extract(s: str, pattern: str, group: int) -> str:
 
 
 _STDLIB: dict[str, _Fn] = {
-    "lower": _Fn((S,), S, lambda s: s.lower()),
+    "lower": _Fn((S,), S, lambda s: _check_str(s.lower())),
     "upper": _Fn((S,), S, lambda s: _check_str(s.upper())),
     "trim": _Fn((S,), S, lambda s: s.strip()),
     "collapse_spaces": _Fn((S,), S, lambda s: " ".join(s.split())),
@@ -1041,6 +1082,15 @@ def refs(node: Node) -> list[str]:
 class _Ctx:
     params: Mapping[str, str]
     matches: list[dict[str, Any]] = field(default_factory=list)
+    work: int = 0
+    deadline: float = field(default_factory=lambda: time.monotonic() + MAX_EVAL_SECONDS)
+
+    def spend(self, units: int) -> None:
+        self.work += units
+        if self.work > MAX_EVAL_WORK:
+            raise _refuse(RefusalCode.BOUNDS, "evaluation work budget exceeded")
+        if time.monotonic() > self.deadline:
+            raise _refuse(RefusalCode.BOUNDS, "evaluation time budget exceeded")
 
 
 def _as_bool(v: Value) -> bool:
@@ -1071,13 +1121,14 @@ def _compare(op: str, left: Value, right: Value) -> bool:
 
 
 def _eval(node: Node, ctx: _Ctx) -> Value:
+    ctx.spend(1)
     if isinstance(node, Lit):
         return node.value
     if isinstance(node, Ref):
         v = ctx.params[node.name]
         if not isinstance(v, str):
             raise _refuse(RefusalCode.TYPE, f"parameter {node.name!r} is not text")
-        return _check_str(v)
+        return _check_str(_check_text(v, f"parameter {node.name!r}"))
     if isinstance(node, ListLit):
         return _check_list(tuple(_eval(x, ctx) for x in node.items))
     if isinstance(node, Unary):
@@ -1117,9 +1168,11 @@ def _eval(node: Node, ctx: _Ctx) -> Value:
         if node.fn == "text":
             return _text(args[0])
         if node.fn == "if_else":
-            return args[1] if args[0] else args[2]
+            return args[1] if _as_bool(args[0]) else args[2]
         if node.fn == "fuzzy_match":
             return _fuzzy(args[0], args[1], float(args[2]), ctx)  # type: ignore[arg-type]
+        if node.fn in ("matches", "extract"):
+            ctx.spend(len(str(args[0])) * len(str(args[1])))
         return _STDLIB[node.fn].impl(*args)
     raise _refuse(RefusalCode.SYNTAX, "unknown node")  # pragma: no cover
 
@@ -1135,6 +1188,17 @@ def _fuzzy(value: str, options: tuple, threshold: float, ctx: _Ctx) -> str:
         )
     q = _normalize(value)
     norms = [_normalize(o) for o in options]
+    # NFKC can expand one code point to many (U+FDFA becomes 18), so the
+    # bounds that limit difflib's quadratic work apply to normalized text.
+    if len(q) > MAX_FUZZY_CHARS or any(len(o) > MAX_FUZZY_CHARS for o in norms):
+        raise _refuse(
+            RefusalCode.BOUNDS,
+            f"fuzzy_match() normalized text longer than {MAX_FUZZY_CHARS}",
+        )
+    work = sum(max(1, len(q)) * max(1, len(o)) for o in norms)
+    if work > MAX_FUZZY_WORK:
+        raise _refuse(RefusalCode.BOUNDS, "fuzzy_match() work bound exceeded")
+    ctx.spend(work)
     scored = [(_similarity(q, o), idx) for idx, o in enumerate(norms)]
     best = max(s for s, _ in scored)
     # An exact match (after case and space folding) wins outright; otherwise
@@ -1276,7 +1340,15 @@ def operator_set() -> dict[str, Any]:
             "max_variable_quantifiers": MAX_VARIABLE_QUANTIFIERS,
             "max_fuzzy_chars": MAX_FUZZY_CHARS,
             "max_fuzzy_options": MAX_FUZZY_OPTIONS,
+            "max_repeat_count": MAX_REPEAT_COUNT,
+            "max_fuzzy_work": MAX_FUZZY_WORK,
+            "max_eval_work": MAX_EVAL_WORK,
+            "max_eval_seconds": MAX_EVAL_SECONDS,
         },
+        # casefold, lower/upper and NFKC depend on the Unicode database, so
+        # the same receipt is only reproducible against the same version.
+        "unicode_version": unicodedata.unidata_version,
+        "regex_flags": ["ASCII"],
         "refusal_codes": [c.value for c in RefusalCode],
     }
 
@@ -1288,6 +1360,24 @@ def operator_set_sha256() -> str:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
+class Outcome(str, Enum):
+    """``true``, ``false`` or ``unknown``. Compare it; never test its truth.
+
+    A plain non-empty string is truthy, so ``if result.outcome:`` would pass
+    on ``"false"`` and ``"unknown"``. Truth-testing an Outcome raises instead.
+    """
+
+    TRUE = "true"
+    FALSE = "false"
+    UNKNOWN = "unknown"
+
+    def __bool__(self) -> bool:
+        raise TypeError(
+            "an Outcome has no truth value; compare it to Outcome.TRUE or "
+            "use PredicateResult.passed"
+        )
+
+
 @dataclass(frozen=True)
 class PredicateResult:
     """A three-valued predicate outcome.
@@ -1297,11 +1387,22 @@ class PredicateResult:
     reason, while ``"false"`` is an observed contradiction.
     """
 
-    outcome: Literal["true", "false", "unknown"]
+    outcome: Outcome
     refusal: Optional[RefusalCode] = None
     reason: str = ""
     inputs: tuple[str, ...] = ()
     matches: tuple[dict[str, Any], ...] = ()
+
+    @property
+    def passed(self) -> bool:
+        """True only for an observed ``true``; ``false`` and ``unknown`` fail."""
+
+        return self.outcome is Outcome.TRUE
+
+    def __bool__(self) -> bool:
+        raise TypeError(
+            "a PredicateResult has no truth value; use .passed or compare .outcome"
+        )
 
 
 def evaluate_predicate(source: str, params: Mapping[str, str]) -> PredicateResult:
@@ -1312,17 +1413,20 @@ def evaluate_predicate(source: str, params: Mapping[str, str]) -> PredicateResul
     ``"true"``. An expression whose type is not bool is ``"unknown"`` too.
     """
 
+    inputs: tuple[str, ...] = ()
     try:
         node = parse(source)
+        inputs = tuple(refs(node))
         typ = check(node, set(params))
         if typ != B:
             raise _refuse(RefusalCode.TYPE, "a predicate must be a bool expression")
         ctx = _Ctx(params=params)
         value = _as_bool(_eval(node, ctx))
     except ExpressionRefused as exc:
-        return PredicateResult("unknown", exc.code, exc.reason)
+        # Keep which parameters it read: the receipt's evidence for "unknown".
+        return PredicateResult(Outcome.UNKNOWN, exc.code, exc.reason, inputs=inputs)
     return PredicateResult(
-        "true" if value else "false",
+        Outcome.TRUE if value else Outcome.FALSE,
         inputs=tuple(refs(node)),
         matches=tuple(ctx.matches),
     )
@@ -1416,6 +1520,7 @@ def apply_transforms(
     for name, value in working.items():
         if not isinstance(value, str):
             raise _refuse(RefusalCode.TYPE, f"parameter {name!r} is not text")
+        _check_text(value, f"parameter {name!r}")
     records: list[TransformRecord] = []
     ops_digest = operator_set_sha256()
     for t in transforms:
@@ -1448,6 +1553,7 @@ def apply_transforms(
 __all__ = [
     "LANGUAGE_VERSION",
     "Evaluation",
+    "Outcome",
     "PredicateResult",
     "ExprType",
     "ExpressionRefused",
