@@ -237,7 +237,9 @@ class RecordingController:
             try:
                 from openadapt_desktop.telemetry import capture as telemetry_capture
 
-                telemetry_capture("recording_failed", {"surface": "controller", "error_code": "start_failed"})
+                telemetry_capture(
+                    "recording_failed", {"surface": "controller", "error_code": "start_failed"}
+                )
             except Exception:
                 logger.debug("Telemetry recording_failed skipped")
             raise RuntimeError(f"Could not start native recording: {exc}") from exc
@@ -322,7 +324,9 @@ class RecordingController:
             try:
                 from openadapt_desktop.telemetry import capture as telemetry_capture
 
-                telemetry_capture("recording_failed", {"surface": "controller", "error_code": "stop_failed"})
+                telemetry_capture(
+                    "recording_failed", {"surface": "controller", "error_code": "stop_failed"}
+                )
             except Exception:
                 logger.debug("Telemetry recording_failed skipped")
             raise RuntimeError(f"Could not stop native recording cleanly: {exc}") from exc
@@ -392,7 +396,9 @@ class RecordingController:
             try:
                 from openadapt_desktop.telemetry import capture as telemetry_capture
 
-                telemetry_capture("recording_stopped", {"surface": "controller", "outcome": "completed"})
+                telemetry_capture(
+                    "recording_stopped", {"surface": "controller", "outcome": "completed"}
+                )
             except Exception:
                 logger.debug("Telemetry recording_stopped skipped")
 
@@ -413,7 +419,9 @@ class RecordingController:
             try:
                 from openadapt_desktop.telemetry import capture as telemetry_capture
 
-                telemetry_capture("recording_failed", {"surface": "controller", "error_code": "finalize_failed"})
+                telemetry_capture(
+                    "recording_failed", {"surface": "controller", "error_code": "finalize_failed"}
+                )
             except Exception:
                 logger.debug("Telemetry recording_failed skipped")
             raise RuntimeError(f"Could not finalize native recording: {exc}") from exc

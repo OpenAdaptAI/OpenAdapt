@@ -383,6 +383,11 @@ class EngineDispatcher:
             # config / settings
             "get_config": self.get_config,
             "set_config": self.set_config,
+            # usage stats consent and the update check (window wire only)
+            "get_privacy_settings": self.get_privacy_settings,
+            "set_usage_stats": self.set_usage_stats,
+            "set_update_check": self.set_update_check,
+            "get_update_status": self.get_update_status,
             # effective policy (fail-closed; Tier-1 user / Tier-2 org / Tier-3 safety)
             "get_effective_policy": self.get_effective_policy,
             "refresh_policy": self.refresh_policy,
@@ -2437,7 +2442,11 @@ class EngineDispatcher:
 
             telemetry_capture(
                 "teach_completed",
-                {"surface": "dispatch", "mode": "fix", "outcome": "promoted" if result.ok else "not_promoted"},
+                {
+                    "surface": "dispatch",
+                    "mode": "fix",
+                    "outcome": "promoted" if result.ok else "not_promoted",
+                },
             )
         except Exception:
             pass
@@ -6069,6 +6078,60 @@ class EngineDispatcher:
             return {"ok": False, "error": str(exc)}
         self._persist_config_key(key, value)
         return {"ok": True, **self.get_config()}
+
+    # ------------------------------------------- usage stats and updates
+
+    def get_privacy_settings(self, **params: Any) -> dict:
+        """Usage-stats consent and the update-check switch (privacy_settings.py)."""
+        from openadapt_desktop import privacy_settings
+
+        return privacy_settings.status()
+
+    def set_usage_stats(self, **params: Any) -> dict:
+        """Save the person's usage-stats answer. Nothing is sent before ``share``."""
+        from openadapt_desktop import privacy_settings, telemetry
+
+        share = params.get("share")
+        if not isinstance(share, bool):
+            return {"ok": False, "error": "share must be true or false"}
+        was_enabled = telemetry.telemetry_enabled()
+        try:
+            privacy_settings.set_usage_stats(share)
+        except Exception as exc:
+            return {"ok": False, "error": f"The choice was not saved: {exc}"}
+        if share and not was_enabled:
+            # The launch event was skipped before consent; count this session.
+            telemetry.capture("app_opened", {"surface": "consent"})
+        return {"ok": True, **privacy_settings.status()}
+
+    def set_update_check(self, **params: Any) -> dict:
+        """Turn the daily update check on or off."""
+        from openadapt_desktop import privacy_settings, updates
+
+        enabled = params.get("enabled")
+        if not isinstance(enabled, bool):
+            return {"ok": False, "error": "enabled must be true or false"}
+        try:
+            privacy_settings.set_update_check(enabled)
+        except Exception as exc:
+            return {"ok": False, "error": f"The setting was not saved: {exc}"}
+        if enabled:
+            updates.check_in_background(on_result=lambda result: self.emit("update_status", result))
+        return {"ok": True, **privacy_settings.status()}
+
+    def get_update_status(self, **params: Any) -> dict:
+        """The last update-check result; starts a background check when due.
+
+        ``force=true`` checks now (the Settings button). The result arrives as
+        an ``update_status`` event; this call never waits on the network.
+        """
+        from openadapt_desktop import updates
+
+        updates.check_in_background(
+            force=params.get("force") is True,
+            on_result=lambda result: self.emit("update_status", result),
+        )
+        return updates.status()
 
     def _persist_config_key(self, key: str, value: Any) -> None:
         """Write a single ``[hosted]`` key into ``~/.openadapt/config.toml``."""

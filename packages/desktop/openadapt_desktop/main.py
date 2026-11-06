@@ -210,7 +210,7 @@ def main() -> None:
     try:
         from openadapt_desktop.telemetry import capture as telemetry_capture
 
-        telemetry_capture("app_opened", {"app_version": ENGINE_VERSION, "surface": "engine"})
+        telemetry_capture("app_opened", {"surface": "engine"})
     except Exception:
         logger.debug("Telemetry app_opened skipped")
 

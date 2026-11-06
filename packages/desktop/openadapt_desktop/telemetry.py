@@ -1,31 +1,34 @@
-"""Opt-in product analytics for OpenAdapt Desktop.
+"""Anonymous usage stats for OpenAdapt Desktop, sent only after consent.
 
-Aligned with docs/design/telemetry-design.md and packages/desktop/DESIGN.md:
-telemetry stays **off** unless explicitly enabled. No screenshots, paths with
-usernames, free-text task descriptions, secrets, or PHI are ever sent.
+Nothing is sent until the person answers "Share" in the first-launch question
+(or in Settings). The answer is stored in ``[privacy].usage_stats`` of
+``~/.openadapt/config.toml`` (see :mod:`openadapt_desktop.privacy_settings`).
+``DO_NOT_TRACK=1`` or ``OPENADAPT_TELEMETRY_ENABLED=false`` always turns it off.
 
-Enable with one of:
-  OPENADAPT_TELEMETRY_ENABLED=true
-  ~/.openadapt/telemetry.json  {"enabled": true}
+What an event carries is closed: an event name from :data:`ALLOWED_EVENTS`,
+a random install id (a UUID made on this computer, not derived from the
+hostname, username, or hardware), ``app_version``, ``os``, ``arch``, an
+``internal`` flag for CI and developer machines, and a few short enum
+properties from :data:`ALLOWED_PROPERTIES`. Screen content, keystrokes, file
+paths, task text, workflow names, and errors' text are never sent. PostHog is
+asked not to build a person profile or look up a location from the IP.
 
-Disable always wins:
-  DO_NOT_TRACK=1
-  OPENADAPT_TELEMETRY_ENABLED=false
-
-Events use the shared PostHog project when OPENADAPT_POSTHOG_KEY is set
-(same publishable key family as the marketing site). Without a key the
-helper is a silent no-op even when enabled.
+The PostHog project key below is a public, write-only ingestion key (the same
+one the openadapt.ai website ships to every browser). It can send events but
+cannot read any data. ``OPENADAPT_POSTHOG_KEY`` and ``OPENADAPT_POSTHOG_HOST``
+override it for self-hosted or test projects.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import platform
+import re
 import threading
 import uuid
-from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+from openadapt_desktop import __version__, privacy_settings
 
 try:
     from loguru import logger
@@ -34,7 +37,13 @@ except ImportError:  # pragma: no cover - desktop runtime always has loguru
 
     logger = logging.getLogger("openadapt_desktop.telemetry")
 
-_ALLOWED_EVENTS = frozenset(
+#: Public, write-only PostHog project key. The single place to change it.
+POSTHOG_PROJECT_KEY = "phc_935iWKc6O7u6DCp2eFAmK5WmCwv35QXMa6LulTJ3uqh"
+POSTHOG_HOST = "https://us.i.posthog.com"
+#: Seconds before a capture request is abandoned.
+TIMEOUT_S = 3.0
+
+ALLOWED_EVENTS = frozenset(
     {
         "app_opened",
         "recording_started",
@@ -45,87 +54,53 @@ _ALLOWED_EVENTS = frozenset(
         "replay_failed",
         "teach_started",
         "teach_completed",
-        "install_wizard_step",
-        "error_shown",
+        "update_check",
     }
 )
 
-# Closed property keys only. Values must be scalars or short closed enums.
-_ALLOWED_PROP_KEYS = frozenset(
-    {
-        "os",
-        "os_release",
-        "python_version",
-        "app_version",
-        "package",
-        "internal",
-        "outcome",
-        "step",
-        "mode",
-        "error_code",
-        "surface",
-    }
-)
+#: Per-event properties a caller may add. Strings must be short enum tokens.
+ALLOWED_PROPERTIES = frozenset({"surface", "mode", "outcome", "error_code", "update_available"})
+
+_TOKEN = re.compile(r"^[A-Za-z0-9_.-]{1,32}$")
+
+_ARCH_ALIASES = {"amd64": "x86_64", "x64": "x86_64", "aarch64": "arm64", "arm64": "arm64"}
 
 
-def _truthy(value: str | None) -> bool:
-    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
+def os_name() -> str:
+    return {"Darwin": "macos", "Windows": "windows", "Linux": "linux"}.get(
+        platform.system(), "other"
+    )
 
 
-def _falsy(value: str | None) -> bool:
-    return (value or "").strip().lower() in {"0", "false", "no", "off"}
-
-
-def _config_path() -> Path:
-    override = os.environ.get("OPENADAPT_TELEMETRY_CONFIG", "").strip()
-    if override:
-        return Path(override)
-    return Path.home() / ".openadapt" / "telemetry.json"
-
-
-def _read_file_config() -> dict[str, Any]:
-    path = _config_path()
-    if not path.exists():
-        return {}
-    try:
-        data = json.loads(path.read_text())
-    except (OSError, ValueError):
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def telemetry_enabled() -> bool:
-    """Return True only when the operator has opted in and not opted out."""
-    if _truthy(os.environ.get("DO_NOT_TRACK")):
-        return False
-    if _falsy(os.environ.get("OPENADAPT_TELEMETRY_ENABLED")):
-        return False
-    if _truthy(os.environ.get("OPENADAPT_TELEMETRY_ENABLED")):
-        return True
-    file_cfg = _read_file_config()
-    enabled = file_cfg.get("enabled")
-    if isinstance(enabled, bool):
-        return enabled
-    return False
+def arch_name() -> str:
+    machine = platform.machine().lower()
+    return _ARCH_ALIASES.get(machine, machine if _TOKEN.match(machine or "") else "other")
 
 
 def is_internal_usage() -> bool:
-    if _truthy(os.environ.get("OPENADAPT_INTERNAL")) or _truthy(os.environ.get("OPENADAPT_DEV")):
-        return True
-    if any(os.environ.get(var) for var in ("CI", "GITHUB_ACTIONS", "GITLAB_CI", "JENKINS_URL")):
-        return True
-    return False
+    for var in ("OPENADAPT_INTERNAL", "OPENADAPT_DEV"):
+        if (os.environ.get(var) or "").strip().lower() in {"1", "true", "yes", "on"}:
+            return True
+    return any(os.environ.get(var) for var in ("CI", "GITHUB_ACTIONS", "GITLAB_CI", "JENKINS_URL"))
 
 
-def _distinct_id() -> str:
-    """Stable anonymous machine id under ~/.openadapt (not a person profile)."""
-    path = Path.home() / ".openadapt" / "telemetry_id"
+def telemetry_enabled() -> bool:
+    """True only after consent and when nothing in the environment says no."""
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        return privacy_settings.usage_stats_enabled()
+    except Exception:
+        return False
+
+
+def install_id() -> str:
+    """A random id for this install, made once and kept on this computer."""
+    path = privacy_settings.state_dir() / "telemetry_id"
+    try:
         if path.exists():
             value = path.read_text().strip()
-            if value:
+            if re.fullmatch(r"[0-9a-f]{32}", value):
                 return value
+        path.parent.mkdir(parents=True, exist_ok=True)
         value = uuid.uuid4().hex
         path.write_text(value)
         try:
@@ -137,72 +112,87 @@ def _distinct_id() -> str:
         return uuid.uuid4().hex
 
 
-def _sanitize(properties: dict[str, Any] | None) -> dict[str, Any]:
-    out: dict[str, Any] = {
-        "os": platform.system(),
-        "os_release": platform.release(),
-        "python_version": platform.python_version(),
-        "package": "openadapt-desktop",
+def base_properties() -> dict[str, Any]:
+    return {
+        "app_version": __version__,
+        "os": os_name(),
+        "arch": arch_name(),
         "internal": is_internal_usage(),
+        "package": "openadapt-desktop",
     }
-    if not properties:
-        return out
-    for key, value in properties.items():
-        if key not in _ALLOWED_PROP_KEYS:
-            continue
-        if value is None:
+
+
+def sanitize(properties: dict[str, Any] | None) -> dict[str, Any]:
+    """Base properties plus only the allowed, closed caller properties."""
+    out = base_properties()
+    for key, value in (properties or {}).items():
+        if key not in ALLOWED_PROPERTIES or value is None:
             continue
         if isinstance(value, bool | int | float):
             out[key] = value
-        elif isinstance(value, str) and len(value) <= 64:
+        elif isinstance(value, str) and _TOKEN.match(value):
             out[key] = value
     return out
 
 
-def _posthog_endpoint() -> tuple[str, str] | None:
-    key = (
-        os.environ.get("OPENADAPT_POSTHOG_KEY", "").strip()
-        or _read_file_config().get("posthog_key")
-        or ""
-    )
-    if not isinstance(key, str) or not key.startswith("phc_"):
-        return None
-    host = (
-        os.environ.get("OPENADAPT_POSTHOG_HOST", "").strip()
-        or _read_file_config().get("posthog_host")
-        or "https://us.i.posthog.com"
-    )
-    if not isinstance(host, str) or not host.startswith("https://"):
+def endpoint() -> tuple[str, str] | None:
+    key = (os.environ.get("OPENADAPT_POSTHOG_KEY") or "").strip() or POSTHOG_PROJECT_KEY
+    host = (os.environ.get("OPENADAPT_POSTHOG_HOST") or "").strip() or POSTHOG_HOST
+    if not key.startswith("phc_") or not host.startswith("https://"):
         return None
     return key, host.rstrip("/")
 
 
-def capture(event: str, properties: dict[str, Any] | None = None) -> None:
-    """Fire one closed funnel event when opt-in telemetry is enabled."""
-    if event not in _ALLOWED_EVENTS:
-        return
-    if not telemetry_enabled():
-        return
-    endpoint = _posthog_endpoint()
-    if endpoint is None:
-        return
-    key, host = endpoint
-    payload = {
+def build_payload(event: str, properties: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    resolved = endpoint()
+    if resolved is None:
+        return None
+    key, _host = resolved
+    return {
         "api_key": key,
         "event": event,
-        "distinct_id": _distinct_id(),
+        "distinct_id": install_id(),
         "properties": {
-            **_sanitize(properties),
+            **sanitize(properties),
             "$lib": "openadapt-desktop",
+            "$process_person_profile": False,
+            "$geoip_disable": True,
         },
     }
 
-    def _send() -> None:
-        try:
-            import httpx
 
-            httpx.post(f"{host}/capture/", json=payload, timeout=3.0)
-        except Exception:
-            logger.debug("Telemetry capture skipped for {}", event)
+def _post(url: str, payload: dict[str, Any]) -> None:
+    import httpx
 
-    threading.Thread(target=_send, name="oa-telemetry", daemon=True).start()
+    httpx.post(url, json=payload, timeout=TIMEOUT_S)
+
+
+def _start(target: Callable[[], None]) -> None:
+    threading.Thread(target=target, name="oa-telemetry", daemon=True).start()
+
+
+def capture(event: str, properties: dict[str, Any] | None = None) -> bool:
+    """Queue one event in the background. Returns whether it was queued.
+
+    Never raises and never blocks the caller on the network.
+    """
+    try:
+        if event not in ALLOWED_EVENTS or not telemetry_enabled():
+            return False
+        payload = build_payload(event, properties)
+        resolved = endpoint()
+        if payload is None or resolved is None:
+            return False
+        url = f"{resolved[1]}/capture/"
+
+        def _send() -> None:
+            try:
+                _post(url, payload)
+            except Exception:
+                logger.debug("Usage stats event {} not sent", event)
+
+        _start(_send)
+        return True
+    except Exception:
+        logger.debug("Usage stats event {} skipped", event)
+        return False

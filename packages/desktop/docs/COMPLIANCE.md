@@ -93,6 +93,14 @@ deployment HIPAA-compliant.
   and observed text of a right-record check are stored encrypted (AES-256-GCM).
   The key is in the OS keychain, never in the database. A closed item's values
   are deleted. Without the keychain key, Desktop doesn't run new items.
+- Usage stats are off until a person picks Share in the first-launch question
+  or in Settings. `DO_NOT_TRACK=1` or `OPENADAPT_TELEMETRY_ENABLED=false`
+  turns them off and skips the question. Events carry a random install id,
+  the app version, OS, architecture, and short fixed values, never screen
+  content, keystrokes, file paths, task text, or item values. See
+  [the README](../README.md#usage-stats-and-update-checks).
+- A daily update check reads GitHub's public release list with no
+  identifiers. `OPENADAPT_UPDATE_CHECK=false` turns it off.
 - Desktop starts without downloading a browser. The first browser workflow
   pulls the Chromium revision pinned by the bundled Playwright runtime into
   `~/.openadapt/browser-runtime`. Air-gapped packages point

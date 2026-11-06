@@ -279,6 +279,47 @@ Release status, signing, CI evidence, and data handling for security and IT
 reviewers are in
 [docs/COMPLIANCE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/docs/COMPLIANCE.md).
 
+## Usage stats and update checks
+
+**Usage stats are off until you say yes.** On first launch Desktop asks
+once whether to share anonymous usage stats. Nothing is sent before you pick
+**Share**, and **No thanks** is saved the same way. Change it any time in
+**Settings → Usage stats**.
+
+When it's on, Desktop sends these events to PostHog: `app_opened`,
+`recording_started`, `recording_stopped`, `recording_failed`,
+`replay_started`, `replay_stopped`, `replay_failed`, `teach_started`,
+`teach_completed`, and `update_check`. Each one carries only:
+
+- a random install id, made on this computer (not your hostname, username,
+  or hardware)
+- `app_version`, `os`, and `arch`
+- `internal`, true on CI and developer machines
+- short fixed values such as `surface`, `mode`, `outcome`, `error_code`, and
+  `update_available`
+
+It never sends screen content, keystrokes, file paths, task text, workflow
+names, item values, or error messages. PostHog is asked not to create a person
+profile or look up a location. The full list is in
+[`openadapt_desktop/telemetry.py`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/openadapt_desktop/telemetry.py).
+
+**Update checks are on by default.** Once a day Desktop asks GitHub's public
+release list whether a newer `openadapt-desktop-vX.Y.Z` release exists, and
+shows a notice with a download link when one does. The request carries no
+install id, version, or account. Installing stays manual. Turn it off in
+**Settings → Version and updates**.
+
+Both choices are saved in the `[privacy]` table of `~/.openadapt/config.toml`.
+Environment variables win over the file:
+
+| Variable | Effect |
+| --- | --- |
+| `DO_NOT_TRACK=1` | Usage stats off; the first-launch question isn't asked |
+| `OPENADAPT_TELEMETRY_ENABLED=false` | Same as above |
+| `OPENADAPT_TELEMETRY_ENABLED=true` | Usage stats on without asking (managed installs) |
+| `OPENADAPT_UPDATE_CHECK=false` | Update check off |
+| `OPENADAPT_POSTHOG_KEY`, `OPENADAPT_POSTHOG_HOST` | Send usage stats to another PostHog project |
+
 ## More documentation
 
 - [The operator screens](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/docs/OPERATOR_SCREENS.md):

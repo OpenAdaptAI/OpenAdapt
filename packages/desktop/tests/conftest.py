@@ -110,3 +110,15 @@ def sample_capture_dir(tmp_data_dir: Path) -> Path:
     (capture_dir / "meta.json").write_text(json.dumps(meta))
 
     return capture_dir
+
+
+@pytest.fixture(autouse=True)
+def no_usage_stats_or_update_check(monkeypatch):
+    """Keep the suite from sending usage stats or asking GitHub for releases.
+
+    A developer machine may have said Share; tests that exercise either path
+    clear these and point ``OPENADAPT_CONFIG_TOML`` at a temporary file.
+    """
+
+    monkeypatch.setenv("DO_NOT_TRACK", "1")
+    monkeypatch.setenv("OPENADAPT_UPDATE_CHECK", "false")
