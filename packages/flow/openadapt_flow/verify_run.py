@@ -1237,6 +1237,9 @@ def _collateral_record(verdict: FrameVerdict, db: Any, salt: bytes) -> dict[str,
         else:
             unmapped = True  # a change a recheck can't match by key
     return {
+        # This native window was judged before receipt-target hard grading.
+        # The enclosing post-state digest and issuance record bind the grade.
+        "frame_status": verdict.status,
         "rows": sorted(rows),
         "entries": sorted(_audit_ids_each(entries, salt)),
         "unmapped": unmapped or bool(verdict.collateral and not db.slices),
@@ -3137,16 +3140,19 @@ def _entry_id(entry: Mapping[str, Any], key: bytes) -> str:
 
 
 def _later_window(state: Mapping[str, Any]) -> Optional[Any]:
-    """A later write's own window, when its frame judged it (held or
-    refuted); None when its frame wasn't checked, so nothing in its window
-    was reported and nothing there is excused."""
+    """A later write's independently judged physical window.
+
+    Only its issued, digest-bound native window grade admits it. A missing,
+    legacy or unknown grade excuses nothing, even if the whole receipt's
+    frame held. Receipt-target hard grading never supplies this grade.
+    """
 
     evidence = state["evidence"]
-    frame = (evidence.get("frame") or {}).get("status")
-    if frame not in ("held", "refuted"):
-        return None
     record = state["post_state"].get("collateral")
     if not isinstance(record, Mapping):
+        return None
+    frame = record.get("frame_status")
+    if type(frame) is not str or frame not in ("held", "refuted"):
         return None
     detail = (state["baseline"].get("state") or {}).get("detail") or {}
     snapshot = detail.get(FRAME_DB_DETAIL)

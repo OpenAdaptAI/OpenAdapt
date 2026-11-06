@@ -1149,3 +1149,161 @@ def test_a_removal_a_verified_later_window_explained_is_excused_before_any_refut
     assert second.verified, second.reasons  # the nurse's delete, attributed
     late = _recheck(contract, first, excused_by=[second])
     assert late.outcome == "CONFIRMED", late.reasons
+
+
+# -- independently bound physical windows -------------------------------------
+
+
+def test_empty_physical_window_does_not_borrow_unknown_receipt_target_grade(
+    tmp_path: Path, due_now: None
+) -> None:
+    from openadapt_flow import verify_run
+
+    contract, db, first = _first(tmp_path)
+    second = verify_write(begin_write(contract, _params(3), actor=BOT))
+    assert second.status == "unconfirmed" and not second.verified
+    assert second.recheck is not None
+    assert second.checked["frame"] == "not_checked"
+    assert "receipt_records" not in second.recheck.payload["post_state"]
+    assert second.recheck.payload["post_state"]["collateral"] == {
+        "frame_status": "held",
+        "rows": [],
+        "entries": [],
+        "unmapped": False,
+    }
+    window = verify_run._later_window(second.recheck.payload)
+    assert window is not None and not window.verified and not window.delta_held
+    _sql(db, *_save_sql(3))
+    assert _recheck(contract, first, excused_by=[second]).outcome == "REFUTED"
+    assert second.status == "unconfirmed" and not second.verified
+
+
+def test_refuted_physical_window_keeps_its_refutation_and_disputes_overlap(
+    tmp_path: Path, due_now: None
+) -> None:
+    from openadapt_flow import verify_run
+
+    contract, db, first = _first(tmp_path)
+    second = _save(
+        contract,
+        db,
+        3,
+        "UPDATE history_data SET tobacco = 'Current' WHERE pid = 2",
+    )
+    assert second.status == "refuted" and not second.verified
+    assert second.recheck is not None
+    assert (
+        second.recheck.payload["post_state"]["collateral"]["frame_status"] == "refuted"
+    )
+    assert second.recheck.payload["post_state"]["collateral"]["rows"]
+    window = verify_run._later_window(second.recheck.payload)
+    assert window is not None and not window.verified
+    assert _recheck(contract, first, excused_by=[second]).outcome == "UNCERTAIN"
+    assert second.status == "refuted" and not second.verified
+
+
+def test_failed_delta_physical_window_still_disputes_a_native_changed_row(
+    tmp_path: Path, due_now: None
+) -> None:
+    from openadapt_flow import verify_run
+
+    contract, db, _first_write = _first(tmp_path)
+    pending = begin_write(contract, _params(3), actor=BOT)
+    _sql(
+        db,
+        "UPDATE patient_data SET phone_cell = '555-0131' WHERE id = 1",
+        "INSERT INTO log (user, patient_id, event, tbl) "
+        "VALUES ('nurse', 1, 'update', 'patient_data')",
+    )
+    second = verify_write(pending)
+    assert second.status == "unconfirmed" and not second.verified
+    assert second.checked["delta"] == "refuted"
+    assert second.recheck is not None
+    assert second.recheck.payload["post_state"]["collateral"]["frame_status"] == "held"
+    window = verify_run._later_window(second.recheck.payload)
+    assert window is not None and not window.verified and not window.delta_held
+    with sqlite3.connect(db.as_uri() + "?mode=ro", uri=True) as con:
+        con.row_factory = sqlite3.Row
+        row = dict(con.execute("SELECT * FROM patient_data WHERE id = 1").fetchone())
+    assert window.row("patient_data", None, row, [], {}) == "disputed"
+
+
+@pytest.mark.parametrize("grade", ["missing", None, True, "not_checked", "unknown"])
+def test_missing_legacy_or_unknown_physical_grade_never_admits_a_window(
+    tmp_path: Path, grade: Any
+) -> None:
+    from openadapt_flow import verify_run
+
+    contract, db, _first_write = _first(tmp_path)
+    second = _save(contract, db, 3)
+    assert second.verified and second.recheck is not None
+    payload = json.loads(json.dumps(second.recheck.payload))
+    assert payload["evidence"]["frame"]["status"] == "held"
+    record = payload["post_state"]["collateral"]
+    if grade == "missing":
+        record.pop("frame_status")
+    else:
+        record["frame_status"] = grade
+    # Parser-only negative: this changed copy is not treated as issued.
+    # A legacy whole-frame grade never substitutes for the absent new field.
+    assert verify_run._later_window(payload) is None
+
+
+def test_physical_grade_is_part_of_the_post_save_state_digest(tmp_path: Path) -> None:
+    from openadapt_flow import verify_run
+
+    contract, _db_path, first = _first(tmp_path)
+    assert first.recheck is not None
+    payload = json.loads(json.dumps(first.recheck.payload))
+    assert payload["post_state"]["collateral"]["frame_status"] == "held"
+    payload["post_state"]["collateral"]["frame_status"] = "refuted"
+    problem = verify_run.recheck_problem(
+        contract.config, payload, params=_params(2), run_record=BOT.run_record()
+    )
+    assert problem == "the recheck state is not the post-save state its receipt names"
+
+
+@pytest.mark.parametrize("forgery", ["held", "missing"])
+def test_rehashed_physical_grade_cannot_create_issuance_or_trigger_native_reads(
+    tmp_path: Path, due_now: None, monkeypatch: pytest.MonkeyPatch, forgery: str
+) -> None:
+    from openadapt_flow import verify_run
+    from openadapt_flow.runtime.effects import late_write
+
+    contract, db, first = _first(tmp_path)
+    second = _save(
+        contract,
+        db,
+        3,
+        "UPDATE history_data SET tobacco = 'Current' WHERE pid = 2",
+    )
+    assert second.status == "refuted" and second.recheck is not None
+    payload = json.loads(json.dumps(second.recheck.payload))
+    assert payload["post_state"]["collateral"]["frame_status"] == "refuted"
+    if forgery == "missing":
+        payload["post_state"]["collateral"].pop("frame_status")
+    else:
+        payload["post_state"]["collateral"]["frame_status"] = forgery
+    payload["evidence"]["frame"]["recheck"]["post_state_sha256"] = (
+        verify_run.salted_digest(
+            bytes.fromhex(payload["salt"]),
+            late_write.POST_STATE_LABEL,
+            payload["post_state"],
+        )
+    )
+    payload["receipt"]["evidence_digest"] = verify_run.sha256_tagged(
+        payload["evidence"]
+    )
+    calls = 0
+
+    def unread(*args: Any, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        raise AssertionError("unissued later state reached a native read")
+
+    monkeypatch.setattr(verify_run, "_read_database", unread)
+    forged = RecheckState(payload, params=_params(3))
+    with pytest.raises(VerifierError, match="not issued"):
+        _recheck(contract, first, excused_by=[forged])
+    assert calls == 0
+    assert second.status == "refuted" and not second.verified
