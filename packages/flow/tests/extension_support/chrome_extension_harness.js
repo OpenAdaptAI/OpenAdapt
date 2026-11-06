@@ -128,7 +128,7 @@ class Document extends FakeEventTarget {
 }
 
 const document = new Document();
-const location = { href: 'https://app.example/form' };
+const location = { href: 'https://app.example/form?token=abc#frag', origin: 'https://app.example' };
 const window = { top: null, document, location };
 window.top = window;
 
@@ -144,10 +144,10 @@ const chrome = {
       addListener(fn) {
         this._listeners.push(fn);
       },
-      _deliver(msg) {
+      _deliver(msg, sender) {
         const replies = [];
         for (const fn of this._listeners) {
-          fn(msg, {}, (r) => replies.push(r));
+          fn(msg, sender || {}, (r) => replies.push(r));
         }
         return replies;
       },
@@ -182,6 +182,9 @@ const context = {
   String,
   Boolean,
   Map,
+  URL,
+  Object,
+  Number,
   globalThis: {},
 };
 
@@ -296,6 +299,9 @@ for (const step of steps) {
         });
         continue;
       }
+    } else if (Object.prototype.hasOwnProperty.call(step, 'safeUrl')) {
+      results.push({ url: api.safeUrl(step.safeUrl) });
+      continue;
     } else if (step.isSecret) {
       const el = new Element(step.isSecret.tag || 'input', step.isSecret.attrs || {});
       results.push({ secret: api.isSecretField(el), sent: sent.slice() });
@@ -310,7 +316,7 @@ for (const step of steps) {
       chrome.runtime.onMessage._deliver({
         type: 'EXTENSION_EVIDENCE',
         evidence: step.evidence,
-      });
+      }, step.sender);
     } else if (step.state) {
       results.push({
         recording: api.recording,
