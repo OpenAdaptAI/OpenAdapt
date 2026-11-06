@@ -159,10 +159,7 @@ class LinuxPixelTasks:
         with selectors.DefaultSelector() as selector:
             selector.register(stream, selectors.EVENT_READ)
             data = bytearray()
-            while (
-                time.monotonic() < deadline
-                and self._current()
-            ):
+            while time.monotonic() < deadline and self._current():
                 if not selector.select(min(0.1, max(0, deadline - time.monotonic()))):
                     if handle.process.poll() is not None:
                         return None

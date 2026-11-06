@@ -251,7 +251,12 @@ def test_loopback_six_primary_pixel_cases(tmp_path):
                     "cleanup_failed": s.cleanup_failed,
                     "child_exits": [p.poll() for p in s.processes],
                     "task_count": sum(len(o._handles) for o in s.owners),
-                    "task_refusal_stages": [h.refusal_stage for o in s.owners for h in o._handles if h.refusal_stage is not None],
+                    "task_refusal_stages": [
+                        h.refusal_stage
+                        for o in s.owners
+                        for h in o._handles
+                        if h.refusal_stage is not None
+                    ],
                 }
                 for s in owner.sessions
             ]

@@ -23,7 +23,9 @@ from typing import Any
 
 PAIRING = "openadapt.rdp-pairing/v1"
 FAULT = "openadapt.qualification-pixel-fault/v1"
-REFUSAL_STAGES = frozenset({"request", "identity", "geometry", "capture", "render", "map", "liveness"})
+REFUSAL_STAGES = frozenset(
+    {"request", "identity", "geometry", "capture", "render", "map", "liveness"}
+)
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 NONCE = re.compile(r"[0-9a-f]{32}\Z")
 DISPLAY = re.compile(r":([0-9]{1,5})\Z")
@@ -351,7 +353,10 @@ def main() -> int:
         return 0
     except Exception:
         # No request contents, guest metadata, pixels or exception text escape.
-        print("refused:" + (stage[0] if stage[0] in REFUSAL_STAGES else "request"), flush=True)
+        print(
+            "refused:" + (stage[0] if stage[0] in REFUSAL_STAGES else "request"),
+            flush=True,
+        )
         return 1
 
 

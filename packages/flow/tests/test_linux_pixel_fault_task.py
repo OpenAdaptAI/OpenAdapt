@@ -393,32 +393,69 @@ def test_renderer_failure_exports_only_fixed_stage(monkeypatch, capsys, stage):
         raise RuntimeError("arbitrary guest payload must not escape")
 
     selected = stage
-    monkeypatch.setattr(renderer.sys, "stdin", SimpleNamespace(buffer=io.BytesIO(b"{}")))
+    monkeypatch.setattr(
+        renderer.sys, "stdin", SimpleNamespace(buffer=io.BytesIO(b"{}"))
+    )
     monkeypatch.setattr(renderer, "render", failed)
     assert renderer.main() == 1
     output = capsys.readouterr()
     assert output.out == f"refused:{stage}\n" and output.err == ""
 
 
-@pytest.mark.parametrize("change", ["none", "physical_alias", "skip", "missing", "escape", "duplicate", "partial", "informational", "certified", "unknown_case", "oracle_failed", "cleanup_failed"])
-def test_hosted_gate_preserves_exact_denominator_and_safe_summary_root(tmp_path, monkeypatch, change):
+@pytest.mark.parametrize(
+    "change",
+    [
+        "none",
+        "physical_alias",
+        "skip",
+        "missing",
+        "escape",
+        "duplicate",
+        "partial",
+        "informational",
+        "certified",
+        "unknown_case",
+        "oracle_failed",
+        "cleanup_failed",
+    ],
+)
+def test_hosted_gate_preserves_exact_denominator_and_safe_summary_root(
+    tmp_path, monkeypatch, change
+):
     import xml.etree.ElementTree as ET
 
     import yaml
 
     from openadapt_flow.qualify.config import CASE_IDS
 
-    workflow_path = Path(__file__).resolve().parents[3] / ".github/workflows/desktop-replay.yml"
+    workflow_path = (
+        Path(__file__).resolve().parents[3] / ".github/workflows/desktop-replay.yml"
+    )
     workflow = yaml.load(workflow_path.read_text(), Loader=yaml.BaseLoader)
-    run = next(step["run"] for step in workflow["jobs"]["freerdp"]["steps"] if step.get("name") == "The six primary RDP cases qualified (no skips)")
+    run = next(
+        step["run"]
+        for step in workflow["jobs"]["freerdp"]["steps"]
+        if step.get("name") == "The six primary RDP cases qualified (no skips)"
+    )
     code = run.split("python - <<'PYTHON'\n", 1)[1].rsplit("PYTHON", 1)[0]
     root = tmp_path / "rc"
     summary_dir = root / "one/rdp-campaign"
     summary_dir.mkdir(parents=True)
-    summary = {"status": "PASSED", "qualification_passed": True, "certified": False, "certification_requested": False,
-               "primary_planned": 6, "primary_completed": 6, "informational_planned": 0, "informational_completed": 0,
-               "oracles": [{"case_id": case, "passed": True, "fault_detector_error": None} for case in CASE_IDS],
-               "sessions": [{"closed": True, "cleanup_failed": False}]}
+    summary = {
+        "status": "PASSED",
+        "qualification_passed": True,
+        "certified": False,
+        "certification_requested": False,
+        "primary_planned": 6,
+        "primary_completed": 6,
+        "informational_planned": 0,
+        "informational_completed": 0,
+        "oracles": [
+            {"case_id": case, "passed": True, "fault_detector_error": None}
+            for case in CASE_IDS
+        ],
+        "sessions": [{"closed": True, "cleanup_failed": False}],
+    }
     if change == "partial":
         summary["primary_completed"] = 5
     elif change == "informational":
@@ -450,7 +487,9 @@ def test_hosted_gate_preserves_exact_denominator_and_safe_summary_root(tmp_path,
     runs = tmp_path / "runs"
     runs.mkdir()
     suite = ET.Element("testsuite")
-    case = ET.SubElement(suite, "testcase", name="test_loopback_six_primary_pixel_cases")
+    case = ET.SubElement(
+        suite, "testcase", name="test_loopback_six_primary_pixel_cases"
+    )
     if change == "skip":
         ET.SubElement(case, "skipped")
     ET.ElementTree(suite).write(runs / "rdp-campaign-junit.xml")
