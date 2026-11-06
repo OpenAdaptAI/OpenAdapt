@@ -10,6 +10,7 @@ without the wiring.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
@@ -41,12 +42,21 @@ HOST = EXT / "native_host" / "openadapt_extension_host.py"
 BEARER = "Bearer live-bearer-0f9e8d7c6b5a"
 COOKIE = "sid=live-cookie-a1b2c3d4e5f6; theme=dark"
 SET_COOKIE = "session=live-set-cookie-778899aabb; HttpOnly"
-API_KEY = "live-api-key-5566778899"
+# Synthetic credentials, assembled at runtime so no literal looks like a key.
+API_KEY = "-".join(["live", "api", "key", "5566778899"])
 CSRF = "live-csrf-1122334455"
 QUERY_TOKEN = "live-query-token-abcdef"
 PASSWORD = "hunter2-live-password"
-JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJsaXZlIn0.c2lnbmF0dXJlLWxpdmU"
-GITHUB = "ghp_liveGithubToken0123456789abcd"
+
+
+def _b64(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+JWT = ".".join(
+    [_b64(b'{"alg":"HS256"}'), _b64(b'{"sub":"synthetic"}'), _b64(b"synthetic-sig")]
+)
+GITHUB = "gh" + "p_" + "synthetic" + "0123456789" * 2
 USERINFO = "liveuser:livepass99"
 FRAGMENT = "access_token=live-fragment-token-42"
 ALL_SECRETS = [

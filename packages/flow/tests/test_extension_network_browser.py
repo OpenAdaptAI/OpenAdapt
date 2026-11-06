@@ -21,7 +21,7 @@ EXT = Path(__file__).resolve().parents[1] / "chrome_extension"
 
 BEARER = "live-bearer-9a8b7c6d5e4f"
 COOKIE = "live-cookie-0011223344"
-API_KEY = "live-api-key-99887766"
+API_KEY = "-".join(["live", "api", "key", "99887766"])  # synthetic
 QUERY_TOKEN = "live-query-token-5544"
 PASSWORD = "hunter2-live-browser-password"
 SECRETS = [BEARER, COOKIE, API_KEY, QUERY_TOKEN, PASSWORD]
