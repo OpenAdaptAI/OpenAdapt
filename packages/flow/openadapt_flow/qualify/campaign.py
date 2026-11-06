@@ -68,6 +68,7 @@ from openadapt_flow.qualify.environment import (
 )
 from openadapt_flow.qualify.faults import WebFaultDriver
 from openadapt_flow.qualify.keys import LocalTestKey, new_local_test_key
+from openadapt_flow.subroutines import SubroutineLibrary, uses_subroutines
 from openadapt_flow.verification import VerificationTier
 
 #: (case id, expected outcome, oracle kind), in run order.
@@ -1248,6 +1249,8 @@ def qualify(
     in_place: bool = False,
     write_campaign_files: bool = True,
     log: Callable[[str], None] = print,
+    subroutine_library: Optional[SubroutineLibrary] = None,
+    persist_subroutine_registration: Optional[Callable[[], None]] = None,
 ) -> QualifyResult:
     """Run the campaign; certify under ``certify`` (a policy name) if given.
 
@@ -1260,6 +1263,12 @@ def qualify(
     ``evidence_root`` (default ``out``) is the root case evidence is relative
     to. ``write_campaign_files=False`` leaves out the campaign summary,
     timing, notes and ``QUALIFICATION.md`` (for packs that list every file).
+    ``subroutine_library`` is the library certification admits embedded
+    subroutines against (and registers this workflow with); a bundle that
+    embeds one is refused before any run when certifying without it.
+    ``persist_subroutine_registration`` writes that library; it runs right
+    after certification, before the certified bundle is saved, and when it
+    raises the certification is withdrawn and the bundle saved uncertified.
     """
 
     from openadapt_flow.policy import load_policy
@@ -1267,6 +1276,7 @@ def qualify(
         QualificationCaseKind,
         certify_project,
         evaluate_qualification,
+        persist_registration_before_certificate,
         record_case_results,
         save_qualified_workflow,
     )
@@ -1310,6 +1320,15 @@ def qualify(
     )
 
     workflow = Workflow.load(bundle_src)
+    if (
+        certify is not None
+        and subroutine_library is None
+        and uses_subroutines(workflow)
+    ):
+        raise QualifyConfigError(
+            "the bundle embeds subroutines; --certify needs --subroutine-library "
+            "to admit them"
+        )
     save, notes = apply_verify_config(workflow, config)
     params = resolve_inputs(workflow, config, campaign_id=campaign_id)
     problems = check_ready(workflow, config, save, params)
@@ -1651,7 +1670,15 @@ def qualify(
     )
     if certify is not None:
         qreport = certify_project(
-            workflow, policy=load_policy(certify), evidence_root=root
+            workflow,
+            policy=load_policy(certify),
+            evidence_root=root,
+            subroutine_library=subroutine_library,
+        )
+        # The registration is durable before any certified save below
+        # (business rules, the admission envelope, the final bundle).
+        persist_registration_before_certificate(
+            workflow, bundle_dir, persist_subroutine_registration
         )
     else:
         qreport = evaluate_qualification(workflow, evidence_root=root)
