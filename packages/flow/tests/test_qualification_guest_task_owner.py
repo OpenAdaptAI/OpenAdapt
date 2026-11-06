@@ -30,6 +30,7 @@ HELPER = "d" * 64
 GUID = "12345678-1234-1234-1234-123456789012"
 FOREIGN = "87654321-4321-4321-4321-210987654321"
 COMMAND = '"C:\\Synthetic\\helper.exe" --synthetic'
+USER_SID = "S-1-5-21-111-222-333-1001"
 
 HARNESS = r"""
 $ErrorActionPreference = 'Stop'
@@ -45,10 +46,57 @@ $tokens = $null
 $errors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseInput([string]$payload.script, [ref]$tokens, [ref]$errors)
 if (@($errors).Count -ne 0) { throw 'boundary: invalid PowerShell syntax' }
+# Replace only the native observation try-body. The real catch, SID policy,
+# creation and disposal code are preserved and executed unchanged.
+$scriptText = [string]$payload.script
+$lookup = @($ast.FindAll({param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -ceq 'Get-PrincipalSidObservation'
+}, $true))
+$lookupStubbed = $false
+if ($lookup.Count -gt 1) { throw 'boundary: ambiguous native lookup function' }
+if ($lookup.Count -eq 1) {
+    if ($null -eq $lookup[0].Body.EndBlock) { throw 'boundary: missing lookup end block' }
+    $trySet = @($lookup[0].Body.EndBlock.Statements | Where-Object {
+        $_ -is [System.Management.Automation.Language.TryStatementAst]
+    })
+    if ($trySet.Count -ne 1 -or $trySet[0].CatchClauses.Count -ne 1 -or
+        $lookup[0].Body.EndBlock.Statements.Count -ne 1) {
+        throw 'boundary: native lookup catch shape changed'
+    }
+    $nativeBody = $trySet[0].Body.Extent
+    $originalCatch = $trySet[0].CatchClauses[0].Extent.Text
+    $stub = @'
+{
+    $script:state.lookup_calls++
+    if ($script:state.lookup_throws) { throw 'synthetic sensitive lookup sentinel' }
+    $entry = $script:state.sid_observations.PSObject.Properties[$PrincipalUserId]
+    if ($null -eq $entry) {
+        return [pscustomobject]@{resolved=$false;count=0;sid_type=$null;canonical_sid=''}
+    }
+    return ,$entry.Value
+}
+'@
+    $scriptText = $scriptText.Substring(0, $nativeBody.StartOffset) + $stub +
+        $scriptText.Substring($nativeBody.EndOffset)
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput($scriptText, [ref]$tokens, [ref]$errors)
+    if (@($errors).Count -ne 0) { throw 'boundary: invalid substituted syntax' }
+    $afterLookup = @($ast.FindAll({param($node)
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -ceq 'Get-PrincipalSidObservation'
+    }, $true))
+    if ($afterLookup.Count -ne 1 -or
+        $afterLookup[0].Body.EndBlock.Statements[0].CatchClauses[0].Extent.Text -cne $originalCatch) {
+        throw 'boundary: native lookup catch was changed'
+    }
+    $lookupStubbed = $true
+}
 $allowed = @('Get-ScheduledTask','New-ScheduledTaskAction','New-ScheduledTaskPrincipal',
 'New-ScheduledTaskSettingsSet','New-TimeSpan','Register-ScheduledTask','Out-Null',
 'Start-ScheduledTask','New-Object','Start-Sleep','ConvertTo-Json','Unregister-ScheduledTask',
-'Test-Path','Get-Content','Write-Output')
+'Test-Path','Get-Content','Write-Output','Get-PrincipalSidObservation',
+'Resolve-CanonicalUserSid','Test-ExactInteger','Test-EmptyPrincipalGroupId',
+'ForEach-Object','Where-Object')
 $commands = $ast.FindAll({param($node) $node -is [System.Management.Automation.Language.CommandAst]}, $true)
 foreach ($command in $commands) {
     if ($command.InvocationOperator -ne [System.Management.Automation.Language.TokenKind]::Unknown -or
@@ -59,7 +107,8 @@ foreach ($command in $commands) {
 $types = $ast.FindAll({param($node) $node -is [System.Management.Automation.Language.TypeExpressionAst]}, $true)
 foreach ($type in $types) {
     if ($type.TypeName.FullName -cnotin @('string','char','DateTime','pscustomobject',
-      'System.Security.Cryptography.SHA256','System.Text.Encoding','BitConverter')) {
+      'System.Security.Cryptography.SHA256','System.Text.Encoding','BitConverter',
+      'bool','long','System.Security.Principal.SecurityIdentifier')) {
         throw 'boundary: unrecognized type expression'
     }
 }
@@ -68,7 +117,7 @@ foreach ($member in $members) {
     if ($member.Member -isnot [System.Management.Automation.Language.StringConstantExpressionAst] -or
         $member.Member.Value -cnotin @('ToString','Connect','GetFolder','Concat','AddSeconds',
           'GetTask','GetInstances','IsNullOrEmpty','Create','ComputeHash','GetBytes','Replace',
-          'ToLowerInvariant','Dispose','Stop')) {
+          'ToLowerInvariant','Dispose','Stop','GetType','new')) {
         throw 'boundary: unrecognized member invocation'
     }
 }
@@ -82,6 +131,10 @@ function Get-ScheduledTask {
     }
     if ($null -eq $script:state.name) { $script:state.name = $TaskName }
     if ($TaskName -cne $script:state.name) { throw 'synthetic: wrong task name' }
+    if ($script:state.mode -eq 'late_matching_partial' -and
+        $script:state.definition_reads -ge 2 -and $null -eq $script:state.definition) {
+        $script:state.definition = $script:state.late_definition
+    }
     if ($script:state.definition) { $script:state.definition }
 }
 function New-ScheduledTaskAction {
@@ -113,6 +166,12 @@ function Register-ScheduledTask {
         'created_user_swap' { $script:state.definition.Principal.UserId = 'foreign' }
         'created_logon_swap' { $script:state.definition.Principal.LogonType = 'ServiceAccount' }
         'created_runlevel_swap' { $script:state.definition.Principal.RunLevel = 'Highest' }
+    }
+    if ($null -ne $script:state.registered_user_id) {
+        $script:state.definition.Principal.UserId = $script:state.registered_user_id
+    }
+    if ($null -ne $script:state.registered_group_id) {
+        $script:state.definition.Principal | Add-Member NoteProperty GroupId $script:state.registered_group_id -Force
     }
     if ($script:state.mode -eq 'register_fail_after_create') { throw 'synthetic register failure' }
 }
@@ -171,6 +230,9 @@ function New-Object {
                         if ($flags -ne 0) { throw 'synthetic: wrong stop flags' }
                         Record ('stop:' + $this.InstanceGuid)
                         $script:state.instances = @()
+                        if ($null -ne $script:state.after_stop_user_id) {
+                            $script:state.definition.Principal.UserId = $script:state.after_stop_user_id
+                        }
                         if ($script:state.mode -eq 'restart_foreign') {
                             $script:state.instances = @('87654321-4321-4321-4321-210987654321')
                         }
@@ -185,14 +247,14 @@ function New-Object {
     $service
 }
 try {
-    & ([scriptblock]::Create([string]$payload.script)) | ForEach-Object {
+    & ([scriptblock]::Create($scriptText)) | ForEach-Object {
         $script:outputLines.Add([string]$_)
     }
 } catch {
     $script:failure = $_.Exception.Message
 } finally {
     $script:output = $script:outputLines -join "`n"
-    [pscustomobject]@{state=$script:state;trace=@($script:trace.ToArray());output=$script:output;error=$script:failure} | ConvertTo-Json -Depth 12 -Compress
+    [pscustomobject]@{state=$script:state;trace=@($script:trace.ToArray());output=$script:output;error=$script:failure;lookup_body_stubbed=$lookupStubbed} | ConvertTo-Json -Depth 12 -Compress
 }
 """
 
@@ -209,6 +271,21 @@ class SyntheticLab:
             "mode": mode,
             "status": None,
             "existing": [],
+            "lookup_calls": 0,
+            "lookup_throws": False,
+            "sid_observations": {
+                value: {
+                    "resolved": True,
+                    "count": 1,
+                    "sid_type": 1,
+                    "canonical_sid": USER_SID,
+                }
+                for value in (self.user, USER_SID)
+            },
+            "registered_user_id": None,
+            "registered_group_id": None,
+            "after_stop_user_id": None,
+            "late_definition": None,
         }
         self.records: list[dict] = []
         self.scripts: list[str] = []
