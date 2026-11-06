@@ -29,28 +29,37 @@ _DIAGNOSTIC_PREFIX = "OPENADAPT_TASK_DIAGNOSTIC:"
 _PS_PRINCIPAL_SID_FUNCTIONS = r"""
 function Get-PrincipalSidObservation {
     param([Parameter(Mandatory=$true)][string]$PrincipalUserId)
-    $sid = $null
-    if ($PrincipalUserId -match '^S-1-[0-9]+(-[0-9]+)+$') {
-        $sid = [System.Security.Principal.SecurityIdentifier]::new($PrincipalUserId)
-    } else {
-        $account = [System.Security.Principal.NTAccount]::new($PrincipalUserId)
-        $sid = $account.Translate([System.Security.Principal.SecurityIdentifier])
-    }
-    $canonicalSid = $sid.Value
-    $rows = @(Get-CimInstance -ClassName Win32_UserAccount `
-        -Filter ("SID = '{0}'" -f $canonicalSid) -OperationTimeoutSec 5 -ErrorAction Stop)
-    $sidType = $null
-    $resolved = $false
-    if ($rows.Count -eq 1) {
-        $rowSid = [System.Security.Principal.SecurityIdentifier]::new([string]$rows[0].SID)
-        $sidType = $rows[0].SIDType
-        $resolved = $rowSid.Value -ceq $canonicalSid
-    }
-    [pscustomobject]@{
-        resolved = [bool]$resolved
-        count = [int]$rows.Count
-        sid_type = $sidType
-        canonical_sid = [string]$canonicalSid
+    try {
+        $sid = $null
+        if ($PrincipalUserId -match '^S-1-[0-9]+(-[0-9]+)+$') {
+            $sid = [System.Security.Principal.SecurityIdentifier]::new($PrincipalUserId)
+        } else {
+            $account = [System.Security.Principal.NTAccount]::new($PrincipalUserId)
+            $sid = $account.Translate([System.Security.Principal.SecurityIdentifier])
+        }
+        $canonicalSid = $sid.Value
+        $rows = @(Get-CimInstance -ClassName Win32_UserAccount `
+            -Filter ("SID = '{0}'" -f $canonicalSid) -OperationTimeoutSec 5 -ErrorAction Stop)
+        $sidType = $null
+        $resolved = $false
+        if ($rows.Count -eq 1) {
+            $rowSid = [System.Security.Principal.SecurityIdentifier]::new([string]$rows[0].SID)
+            $sidType = $rows[0].SIDType
+            $resolved = $rowSid.Value -ceq $canonicalSid
+        }
+        [pscustomobject]@{
+            resolved = [bool]$resolved
+            count = [int]$rows.Count
+            sid_type = $sidType
+            canonical_sid = [string]$canonicalSid
+        }
+    } catch {
+        [pscustomobject]@{
+            resolved = $false
+            count = 0
+            sid_type = $null
+            canonical_sid = ''
+        }
     }
 }
 
