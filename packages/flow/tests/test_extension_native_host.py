@@ -51,12 +51,35 @@ install_host = _load_installer()
 
 @pytest.mark.parametrize(
     "bad",
-    ["", "*", "abc", "A" * 32, "q" * 32, "a" * 31, "a" * 33, f"{'a' * 32}/"],
+    [
+        "",
+        "*",
+        "abc",
+        "A" * 32,
+        "q" * 32,
+        "a" * 31,
+        "a" * 33,
+        f"{'a' * 32}/",
+        f"{'a' * 32}\n",
+        f"\n{'a' * 32}",
+        f"{'a' * 32}\nb",
+        None,
+    ],
 )
 def test_installer_refuses_anything_but_one_real_extension_id(tmp_path, bad):
     with pytest.raises(ValueError):
         install_host.install(tmp_path / "hosts", bad, platform="linux")
     assert not (tmp_path / "hosts").exists()
+
+
+def test_cli_refuses_a_malformed_extension_id_without_writing(tmp_path, capsys):
+    profile = tmp_path / "profile"
+    bad = f"{'a' * 32}\n"
+    assert (
+        install_host.main(["--user-data-dir", str(profile), "--extension-id", bad]) == 2
+    )
+    assert "extension id" in capsys.readouterr().err
+    assert not profile.exists()
 
 
 def test_installer_manifest_allows_exactly_one_origin(tmp_path):
@@ -176,10 +199,12 @@ def chrome(tmp_path):
                 else context.wait_for_event("serviceworker", timeout=15000)
             )
         except Exception as exc:  # noqa: BLE001
+            # Chromium itself started, so a missing service worker is an
+            # extension regression, not a missing prerequisite: fail, never skip.
             context.close()
-            pytest.skip(f"extension service worker did not start: {exc}")
+            pytest.fail(f"extension service worker did not start: {exc}")
         extension_id = worker.url.split("/")[2]
-        assert install_host.EXTENSION_ID.match(extension_id), worker.url
+        assert install_host.EXTENSION_ID.fullmatch(extension_id), worker.url
         yield context, worker, profile, extension_id
         context.close()
 

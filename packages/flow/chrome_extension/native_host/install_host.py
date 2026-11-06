@@ -38,7 +38,8 @@ HOST_NAME = "com.openadapt.extension"
 MANIFEST_FILE = f"{HOST_NAME}.json"
 LAUNCHER_FILE = f"{HOST_NAME}-host.sh"
 HOST_SCRIPT = Path(__file__).resolve().parent / "openadapt_extension_host.py"
-EXTENSION_ID = re.compile(r"^[a-p]{32}$")
+# Matched with ``fullmatch``: ``$`` alone would also accept a trailing newline.
+EXTENSION_ID = re.compile(r"[a-p]{32}")
 
 _USER_DIRS = {
     ("darwin", "chrome"): ("Library", "Application Support", "Google", "Chrome"),
@@ -83,7 +84,7 @@ def profile_manifest_dir(user_data_dir: Path | str) -> Path:
 def build_manifest(extension_id: str, launcher: Path) -> dict[str, Any]:
     """The host manifest allowing exactly one extension origin."""
 
-    if not isinstance(extension_id, str) or not EXTENSION_ID.match(extension_id):
+    if not isinstance(extension_id, str) or not EXTENSION_ID.fullmatch(extension_id):
         raise ValueError("extension id must be 32 letters a-p")
     launcher = Path(launcher)
     if not launcher.is_absolute():
