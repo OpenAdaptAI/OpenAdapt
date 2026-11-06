@@ -65,6 +65,9 @@ class LoopbackSession:
             "sha256:" + hashlib.sha256(Path(app.__file__).read_bytes()).hexdigest()
         )
         self.phase = "NEW"
+        self.readiness_first: dict[str, Any] | None = None
+        self.readiness_last: dict[str, Any] | None = None
+        self._readiness_current: dict[str, Any] | None = None
 
     def _spawn(self, argv: list[str], env: dict[str, str]) -> subprocess.Popen[bytes]:
         child = subprocess.Popen(
@@ -90,6 +93,126 @@ class LoopbackSession:
                 pass
             time.sleep(0.05)
         raise TimeoutError("owned loopback setup did not become ready")
+
+    def _readiness_check(self, marker: str, check: str, read: Any) -> bool:
+        observation = self._readiness_current
+        if observation is not None:
+            observation["stage"] = f"{marker}.{check}"
+        value = read()
+        if observation is not None:
+            observation["checks"][marker][check] = value
+        return value
+
+    def _marker_probe(self, index: int, value: str, display: str, port: int):
+        expected = Image.open(io.BytesIO(app.marker_bytes(value))).convert("RGB")
+        x, y = app.MARKERS[index]
+        marker = ("application", "version", "environment")[index]
+
+        def observed(png: bytes) -> bool:
+            if (
+                not self._readiness_check(
+                    marker,
+                    "children_alive",
+                    lambda: not any(p.poll() is not None for p in self.processes),
+                )
+                or not self._readiness_check(
+                    marker,
+                    "display_matches",
+                    lambda: display_identity(display) == self.identity,
+                )
+                or not self._readiness_check(
+                    marker,
+                    "listener_owned",
+                    lambda: owned_listener(self.shadow, port),
+                )
+            ):
+                return False
+            with Image.open(io.BytesIO(png)) as image:
+                return self._readiness_check(
+                    marker,
+                    "pixels_match",
+                    lambda: (
+                        image.size == (1280, 800)
+                        and image.convert("RGB").crop((x, y, x + 52, y + 52)).tobytes()
+                        == expected.tobytes()
+                    ),
+                )
+
+        return observed
+
+    def _project_readiness_frame(self, image: Image.Image, observation: dict) -> None:
+        # Only the already captured frame and three predetermined synthetic crops.
+        width, height = image.size
+        if any(type(v) is not int or not 0 < v <= 8192 for v in (width, height)):
+            raise ValueError("invalid diagnostic geometry")
+        observation["frame_size"] = [width, height]
+        for name, (x, y), value in zip(
+            ("application", "version", "environment"),
+            app.MARKERS,
+            (app.APP, self.version, app.ENVIRONMENT),
+        ):
+            expected = Image.open(io.BytesIO(app.marker_bytes(value))).convert("RGB")
+            actual = image.convert("RGB").crop((x, y, x + 52, y + 52))
+            observation["markers"][name] = {
+                "region": [x, y, 52, 52],
+                "expected_rgb_sha256": hashlib.sha256(expected.tobytes()).hexdigest(),
+                "observed_rgb_sha256": hashlib.sha256(actual.tobytes()).hexdigest(),
+                "matches": actual.tobytes() == expected.tobytes(),
+            }
+
+    def _initial_frame_ready(self, probes: Any) -> bool:
+        observation: dict[str, Any] = {
+            "schema": "openadapt.rdp-frame-readiness/v1",
+            "stage": "framebuffer",
+            "exception_category": None,
+            "frame_size": None,
+            "diagnostic_error": False,
+            "markers": {
+                name: None for name in ("application", "version", "environment")
+            },
+            "checks": {
+                name: dict.fromkeys(
+                    (
+                        "children_alive",
+                        "display_matches",
+                        "listener_owned",
+                        "pixels_match",
+                    )
+                )
+                for name in ("application", "version", "environment")
+            },
+        }
+        self._readiness_current = observation
+        image = None
+        try:
+            image, _, _ = self.transport.framebuffer()
+            observation["stage"] = "encode"
+            out = io.BytesIO()
+            image.save(out, format="PNG")
+            return all(p(out.getvalue()) for p in probes)
+        except BaseException as exc:
+            observation["exception_category"] = (
+                "file_unavailable"
+                if isinstance(exc, FileNotFoundError)
+                else "connection_refused"
+                if isinstance(exc, ConnectionRefusedError)
+                else "other"
+            )
+            raise
+        finally:
+            self._readiness_current = None
+            try:
+                if image is not None:
+                    self._project_readiness_frame(image, observation)
+            except Exception:
+                observation["diagnostic_error"] = True
+                observation["frame_size"] = None
+                observation["markers"] = dict.fromkeys(
+                    ("application", "version", "environment")
+                )
+            self.readiness_last = observation
+            if self.readiness_first is None:
+                self.readiness_first = observation
 
     def start(self):
         try:
@@ -154,44 +277,12 @@ class LoopbackSession:
             )
             self.transport.connect()
 
-            def probe(index: int, value: str):
-                expected = Image.open(io.BytesIO(app.marker_bytes(value))).convert(
-                    "RGB"
-                )
-                x, y = app.MARKERS[index]
-
-                def observed(png: bytes) -> bool:
-                    if (
-                        any(p.poll() is not None for p in self.processes)
-                        or display_identity(env["DISPLAY"]) != self.identity
-                        or not owned_listener(self.shadow, port)
-                    ):
-                        return False
-                    with Image.open(io.BytesIO(png)) as image:
-                        return (
-                            image.size == (1280, 800)
-                            and image.convert("RGB")
-                            .crop((x, y, x + 52, y + 52))
-                            .tobytes()
-                            == expected.tobytes()
-                        )
-
-                return observed
-
-            app_probe, version_probe, env_probe = (
-                probe(i, value)
+            probes = tuple(
+                self._marker_probe(i, value, env["DISPLAY"], port)
                 for i, value in enumerate((app.APP, self.version, app.ENVIRONMENT))
             )
-
-            def initial_frame_ready():
-                image, _, _ = self.transport.framebuffer()
-                out = io.BytesIO()
-                image.save(out, format="PNG")
-                return all(
-                    p(out.getvalue()) for p in (app_probe, version_probe, env_probe)
-                )
-
-            self._wait(initial_frame_ready)
+            app_probe, version_probe, env_probe = probes
+            self._wait(lambda: self._initial_frame_ready(probes))
 
             def factory(binding: str):
                 owner = LinuxPixelTasks(
