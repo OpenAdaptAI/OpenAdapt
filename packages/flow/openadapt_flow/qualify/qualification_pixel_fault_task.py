@@ -29,8 +29,18 @@ _DIAGNOSTIC_PREFIX = "OPENADAPT_TASK_DIAGNOSTIC:"
 _LAUNCH_PHASES = frozenset(
     {
         "preflight",
+        "build_action",
+        "build_principal",
+        "build_settings",
         "register_definition",
-        "verify_definition",
+        "verify_definition_count",
+        "verify_description",
+        "verify_action_count",
+        "verify_action_executable",
+        "verify_action_arguments",
+        "verify_principal_user",
+        "verify_principal_logon",
+        "verify_principal_runlevel",
         "start_instance",
         "observe_instance",
         "readiness_poll",
@@ -46,7 +56,7 @@ _REGISTRATION_STATES = frozenset(
         "absent",
         "ambiguous",
         "mismatch",
-        "exact_owned",
+        "registered_unverified",
         "verified_owned",
         "started_owned",
         "owned_handle",
@@ -58,7 +68,7 @@ _CLEANUP_STATES = frozenset(
         "not_needed",
         "unknown",
         "removed_exact_owned_definition",
-        "left_running_exact_owned_instance",
+        "left_running_instance_unproven",
         "left_ambiguous_instances",
         "left_mismatched_definition",
         "failed_or_unknown",
@@ -170,9 +180,12 @@ def _task_launch_diagnostic(stdout: str, status: int) -> TaskLaunchDiagnostic:
             isinstance(value, dict)
             and set(value) == {"schema", "phase", "registration", "cleanup"}
             and value.get("schema") == "openadapt.owned-task-diagnostic/v1"
-            and value.get("phase") in _LAUNCH_PHASES
-            and value.get("registration") in _REGISTRATION_STATES
-            and value.get("cleanup") in _CLEANUP_STATES
+            and isinstance(value.get("phase"), str)
+            and value["phase"] in _LAUNCH_PHASES
+            and isinstance(value.get("registration"), str)
+            and value["registration"] in _REGISTRATION_STATES
+            and isinstance(value.get("cleanup"), str)
+            and value["cleanup"] in _CLEANUP_STATES
         ):
             return TaskLaunchDiagnostic(
                 phase=value["phase"],
@@ -234,30 +247,42 @@ $expectedUser = {_ps_quote(user)}
 $phase = 'preflight'
 $registration = 'not_attempted'
 $cleanup = 'not_attempted'
+$registrationAttempted = $false
 try {{
 $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
 if ($null -ne $existing) {{
     $registration = 'preexisting'
     throw 'owned task name already exists'
 }}
-$phase = 'register_definition'
+$phase = 'build_action'
 $action = New-ScheduledTaskAction -Execute $expectedExe -Argument $expectedArgs
+$phase = 'build_principal'
 $principal = New-ScheduledTaskPrincipal -UserId $expectedUser -LogonType Interactive -RunLevel Limited
+$phase = 'build_settings'
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+$phase = 'register_definition'
+$registration = 'unknown'
+$registrationAttempted = $true
 Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Settings $settings -Description $description | Out-Null
-$registration = 'exact_owned'
-$phase = 'verify_definition'
+$registration = 'registered_unverified'
+$phase = 'verify_definition_count'
 $createdSet = @(Get-ScheduledTask -TaskName $taskName -ErrorAction Stop)
 if ($createdSet.Count -ne 1) {{ throw 'created task name is ambiguous' }}
 $created = $createdSet[0]
-if ($created.Description -cne $description -or @($created.Actions).Count -ne 1 -or
-    $created.Actions[0].Execute -cne $expectedExe -or
-    $created.Actions[0].Arguments -cne $expectedArgs -or
-    $created.Principal.UserId -cne $expectedUser -or
-    $created.Principal.LogonType.ToString() -cne 'Interactive' -or
-    $created.Principal.RunLevel.ToString() -cne 'Limited') {{
-    throw 'created task identity does not match request'
-}}
+$phase = 'verify_description'
+if ($created.Description -cne $description) {{ throw 'created task description does not match request' }}
+$phase = 'verify_action_count'
+if (@($created.Actions).Count -ne 1) {{ throw 'created task action count does not match request' }}
+$phase = 'verify_action_executable'
+if ($created.Actions[0].Execute -cne $expectedExe) {{ throw 'created task executable does not match request' }}
+$phase = 'verify_action_arguments'
+if ($created.Actions[0].Arguments -cne $expectedArgs) {{ throw 'created task arguments do not match request' }}
+$phase = 'verify_principal_user'
+if ($created.Principal.UserId -cne $expectedUser) {{ throw 'created task principal does not match request' }}
+$phase = 'verify_principal_logon'
+if ($created.Principal.LogonType.ToString() -cne 'Interactive') {{ throw 'created task logon type does not match request' }}
+$phase = 'verify_principal_runlevel'
+if ($created.Principal.RunLevel.ToString() -cne 'Limited') {{ throw 'created task run level does not match request' }}
 $registration = 'verified_owned'
 $phase = 'start_instance'
 Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
@@ -289,13 +314,14 @@ if ($null -eq $instance -or [string]::IsNullOrEmpty($instance.InstanceGuid)) {{
         if ($registration -eq 'preexisting') {{
             $cleanup = 'not_attempted'
         }} else {{
+            if ($registrationAttempted) {{ $registration = 'unknown' }}
             $partialSet = @(Get-ScheduledTask -TaskName $taskName -ErrorAction Stop)
             if ($partialSet.Count -eq 0) {{
-                if ($phase -eq 'register_definition') {{
+                if ($registrationAttempted) {{
                     $registration = 'unknown'
                     $cleanup = 'unknown'
                 }} else {{
-                    $registration = 'absent'
+                    $registration = 'not_attempted'
                     $cleanup = 'not_needed'
                 }}
             }} elseif ($partialSet.Count -gt 1) {{
@@ -310,7 +336,7 @@ if ($null -eq $instance -or [string]::IsNullOrEmpty($instance.InstanceGuid)) {{
                     $partial.Principal.UserId -ceq $expectedUser -and
                     $partial.Principal.LogonType.ToString() -ceq 'Interactive' -and
                     $partial.Principal.RunLevel.ToString() -ceq 'Limited') {{
-                    $registration = 'exact_owned'
+                    $registration = 'verified_owned'
                     $partialService = New-Object -ComObject 'Schedule.Service'
                     $partialService.Connect()
                     $partialFolder = $partialService.GetFolder([string]::Concat([char]92))
@@ -321,7 +347,7 @@ if ($null -eq $instance -or [string]::IsNullOrEmpty($instance.InstanceGuid)) {{
                         $registration = 'absent'
                         $cleanup = 'removed_exact_owned_definition'
                     }} elseif ($partialInstances.Count -eq 1) {{
-                        $cleanup = 'left_running_exact_owned_instance'
+                        $cleanup = 'left_running_instance_unproven'
                     }} else {{
                         $cleanup = 'left_ambiguous_instances'
                     }}
@@ -332,6 +358,10 @@ if ($null -eq $instance -or [string]::IsNullOrEmpty($instance.InstanceGuid)) {{
             }}
         }}
     }} catch {{
+        if ($registrationAttempted -and $registration -ne 'verified_owned' -and
+            $registration -ne 'started_owned') {{
+            $registration = 'unknown'
+        }}
         $cleanup = 'failed_or_unknown'
     }}
     $diagnostic = @{{

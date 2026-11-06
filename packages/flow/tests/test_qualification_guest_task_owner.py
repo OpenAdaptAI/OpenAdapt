@@ -76,20 +76,27 @@ function Record([string]$value) { $script:trace.Add($value) }
 function Get-ScheduledTask {
     [CmdletBinding()]param([string]$TaskName)
     Record ('get-definition:' + $TaskName)
+    $script:state.definition_reads++
+    if ($script:state.mode -eq 'readback_fail' -and $script:state.definition_reads -ge 2) {
+        throw 'synthetic definition readback failure'
+    }
     if ($null -eq $script:state.name) { $script:state.name = $TaskName }
     if ($TaskName -cne $script:state.name) { throw 'synthetic: wrong task name' }
     if ($script:state.definition) { $script:state.definition }
 }
 function New-ScheduledTaskAction {
     param([string]$Execute,[string]$Argument)
+    if ($script:state.mode -eq 'action_factory_fail') { throw 'synthetic action factory failure' }
     [pscustomobject]@{Execute=$Execute;Arguments=$Argument}
 }
 function New-ScheduledTaskPrincipal {
     param([string]$UserId,[string]$LogonType,[string]$RunLevel)
+    if ($script:state.mode -eq 'principal_factory_fail') { throw 'synthetic principal factory failure' }
     [pscustomobject]@{UserId=$UserId;LogonType=$LogonType;RunLevel=$RunLevel}
 }
 function New-ScheduledTaskSettingsSet {
     param([switch]$AllowStartIfOnBatteries,[switch]$DontStopIfGoingOnBatteries,$ExecutionTimeLimit)
+    if ($script:state.mode -eq 'settings_factory_fail') { throw 'synthetic settings factory failure' }
     [pscustomobject]@{ExecutionTimeLimit=$ExecutionTimeLimit}
 }
 function Register-ScheduledTask {
@@ -98,7 +105,15 @@ function Register-ScheduledTask {
     if ($script:state.definition) { throw 'synthetic: register cannot replace' }
     if ($script:state.mode -eq 'register_fail_no_effect') { throw 'synthetic register failure' }
     $script:state.definition = [pscustomobject]@{TaskName=$TaskName;Description=$Description;Actions=@($Action);Principal=$Principal}
-    if ($script:state.mode -eq 'created_action_swap') { $script:state.definition.Actions[0].Arguments = 'foreign' }
+    switch ($script:state.mode) {
+        'created_description_swap' { $script:state.definition.Description = 'foreign' }
+        'created_action_count_swap' { $script:state.definition.Actions += $Action }
+        'created_executable_swap' { $script:state.definition.Actions[0].Execute = 'foreign' }
+        'created_action_swap' { $script:state.definition.Actions[0].Arguments = 'foreign' }
+        'created_user_swap' { $script:state.definition.Principal.UserId = 'foreign' }
+        'created_logon_swap' { $script:state.definition.Principal.LogonType = 'ServiceAccount' }
+        'created_runlevel_swap' { $script:state.definition.Principal.RunLevel = 'Highest' }
+    }
     if ($script:state.mode -eq 'register_fail_after_create') { throw 'synthetic register failure' }
 }
 function Start-ScheduledTask {
@@ -190,6 +205,7 @@ class SyntheticLab:
             "name": None,
             "definition": None,
             "instances": [],
+            "definition_reads": 0,
             "mode": mode,
             "status": None,
             "existing": [],
@@ -250,14 +266,14 @@ def test_task_diagnostic_parser_accepts_only_the_fixed_schema():
         {
             "schema": "openadapt.owned-task-diagnostic/v1",
             "phase": "start_instance",
-            "registration": "exact_owned",
-            "cleanup": "left_running_exact_owned_instance",
+            "registration": "verified_owned",
+            "cleanup": "left_running_instance_unproven",
         }
     )
     assert owner._task_launch_diagnostic(valid, 1) == owner.TaskLaunchDiagnostic(
         phase="start_instance",
-        registration="exact_owned",
-        cleanup="left_running_exact_owned_instance",
+        registration="verified_owned",
+        cleanup="left_running_instance_unproven",
         exit_status=1,
     )
 
@@ -267,8 +283,8 @@ def test_task_diagnostic_parser_accepts_only_the_fixed_schema():
             {
                 "schema": "openadapt.owned-task-diagnostic/v1",
                 "phase": "start_instance",
-                "registration": "exact_owned",
-                "cleanup": "left_running_exact_owned_instance",
+                "registration": "verified_owned",
+                "cleanup": "left_running_instance_unproven",
                 "stderr": "do not retain",
             }
         ),
@@ -276,9 +292,36 @@ def test_task_diagnostic_parser_accepts_only_the_fixed_schema():
         + json.dumps(
             {
                 "schema": "openadapt.owned-task-diagnostic/v1",
+                "phase": [],
+                "registration": "verified_owned",
+                "cleanup": "left_running_instance_unproven",
+            }
+        ),
+        prefix
+        + json.dumps(
+            {
+                "schema": "openadapt.owned-task-diagnostic/v1",
+                "phase": "start_instance",
+                "registration": {},
+                "cleanup": "left_running_instance_unproven",
+            }
+        ),
+        prefix
+        + json.dumps(
+            {
+                "schema": "openadapt.owned-task-diagnostic/v1",
+                "phase": "start_instance",
+                "registration": "verified_owned",
+                "cleanup": [],
+            }
+        ),
+        prefix
+        + json.dumps(
+            {
+                "schema": "openadapt.owned-task-diagnostic/v1",
                 "phase": "untrusted command content",
-                "registration": "exact_owned",
-                "cleanup": "left_running_exact_owned_instance",
+                "registration": "verified_owned",
+                "cleanup": "left_running_instance_unproven",
             }
         ),
         valid + "\n" + valid,
@@ -299,7 +342,7 @@ def test_hosted_summary_accepts_only_bounded_task_diagnostic_fields():
     valid = {
         "phase": "observe_instance",
         "registration": "started_owned",
-        "cleanup": "left_running_exact_owned_instance",
+        "cleanup": "left_running_instance_unproven",
         "exit_status": 1,
     }
     assert _safe_task_diagnostic(valid) == valid
@@ -359,7 +402,13 @@ def test_preexisting_name_is_not_replaced():
     [
         ("start_fail_empty", True),
         ("start_fail_live", False),
+        ("created_description_swap", False),
+        ("created_action_count_swap", False),
+        ("created_executable_swap", False),
         ("created_action_swap", False),
+        ("created_user_swap", False),
+        ("created_logon_swap", False),
+        ("created_runlevel_swap", False),
         ("multiple_created", False),
     ],
 )
@@ -392,13 +441,6 @@ def test_failed_create_cleanup_requires_exact_empty_definition(
             [],
         ),
         (
-            "created_action_swap",
-            "verify_definition",
-            "mismatch",
-            "left_mismatched_definition",
-            [],
-        ),
-        (
             "start_fail_empty",
             "start_instance",
             "absent",
@@ -408,22 +450,50 @@ def test_failed_create_cleanup_requires_exact_empty_definition(
         (
             "start_fail_live",
             "start_instance",
-            "exact_owned",
-            "left_running_exact_owned_instance",
+            "verified_owned",
+            "left_running_instance_unproven",
             [],
         ),
         (
             "multiple_created",
             "observe_instance",
-            "exact_owned",
+            "verified_owned",
             "left_ambiguous_instances",
             [],
         ),
         (
             "service_fail",
             "observe_instance",
-            "exact_owned",
+            "verified_owned",
             "failed_or_unknown",
+            [],
+        ),
+        (
+            "readback_fail",
+            "verify_definition_count",
+            "unknown",
+            "failed_or_unknown",
+            [],
+        ),
+        (
+            "action_factory_fail",
+            "build_action",
+            "not_attempted",
+            "not_needed",
+            [],
+        ),
+        (
+            "principal_factory_fail",
+            "build_principal",
+            "not_attempted",
+            "not_needed",
+            [],
+        ),
+        (
+            "settings_factory_fail",
+            "build_settings",
+            "not_attempted",
+            "not_needed",
             [],
         ),
     ],
@@ -447,6 +517,33 @@ def test_failed_creation_emits_only_fixed_phase_and_cleanup_metadata(
         "command" not in row and "stdout" not in row and "stderr" not in row
         for row in lab.records
     )
+
+
+@pytest.mark.parametrize(
+    "mode,expected_phase",
+    [
+        ("created_description_swap", "verify_description"),
+        ("created_action_count_swap", "verify_action_count"),
+        ("created_executable_swap", "verify_action_executable"),
+        ("created_action_swap", "verify_action_arguments"),
+        ("created_user_swap", "verify_principal_user"),
+        ("created_logon_swap", "verify_principal_logon"),
+        ("created_runlevel_swap", "verify_principal_runlevel"),
+    ],
+)
+def test_definition_mismatch_phases_are_bounded_and_never_cleanup_foreign_task(
+    mode, expected_phase
+):
+    lab = SyntheticLab(mode)
+    with pytest.raises(owner.TaskLaunchError) as failure:
+        launch(lab)
+    assert failure.value.diagnostic == owner.TaskLaunchDiagnostic(
+        phase=expected_phase,
+        registration="mismatch",
+        cleanup="left_mismatched_definition",
+        exit_status=1,
+    )
+    assert destructive_calls(lab) == []
 
 
 def test_preexisting_task_diagnostic_does_not_cleanup_foreign_definition():
@@ -551,7 +648,7 @@ def test_owned_handle_readiness_requires_available_nonce_and_session(status):
 @pytest.mark.parametrize("schema", ["fault", "pairing"])
 @pytest.mark.parametrize(
     "reported_status,expected_status",
-    [(7, 7), (True, None), (None, None), ("missing", None)],
+    [(7, 7), (True, None), (False, None), (None, None), ("missing", None)],
 )
 def test_matching_ready_stdout_with_invalid_status_is_refused(
     schema, reported_status, expected_status
