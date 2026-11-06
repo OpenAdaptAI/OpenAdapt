@@ -642,6 +642,12 @@ class WriteResult:
         return self.verified and bool(self.recheck_due_at)
 
     @property
+    def final(self) -> bool:
+        """Whether this result is free of an owed final recheck."""
+
+        return not self.provisional
+
+    @property
     def verdict(self) -> str:
         """The outcome under its old name (``VERIFIED``, ``REFUTED``,
         ``RECONCILIATION_REQUIRED``)."""
@@ -686,6 +692,7 @@ class WriteResult:
             "review": self.review,
             "recheck_due_at": self.recheck_due_at,
             "provisional": self.provisional,
+            "final": self.final,
             "write_receipt": self.write_receipt,
             "write_receipt_path": self.write_receipt_path,
         }
@@ -779,6 +786,12 @@ class RecheckResult:
         """True only when the earlier verdict still stands."""
 
         return self.outcome == "CONFIRMED"
+
+    @property
+    def final(self) -> bool:
+        """A completed proof through read_at, with no unread history gap."""
+
+        return bool(self.read_at) and self.frame in ("held", "refuted")
 
     @property
     def late(self) -> bool:
@@ -1033,6 +1046,13 @@ def _capture(
     database = contract.config.frame.database if contract.config.frame else None
     if database is not None and FRAME_DB_DETAIL not in (state.get("detail") or {}):
         raise BaselineUnreadable(_frame_db_unread(state))
+    if contract.config.frame is not None and contract.config.frame.history is not None:
+        from openadapt_flow.runtime.effects.history import DETAIL, checkpoint_problem
+
+        if checkpoint_problem((state.get("detail") or {}).get(DETAIL)) is not None:
+            raise BaselineUnreadable(
+                "complete change history could not be read before the write"
+            )
     return pending
 
 
@@ -1062,6 +1082,7 @@ def _settle(
             # A recheck confirmed it since: no longer provisional, and no
             # recheck is due.
             result["provisional"] = False
+            result["final"] = True
             result["recheck_due_at"] = None
             result["rechecked_at"] = attempt.rechecked.get("at")
         if not attempt.delivered:
@@ -2468,7 +2489,7 @@ def _judge_recheck(
     ):
         raise VerifierError(
             "this write scheduled no recheck: it was not verified, or the "
-            "contract doesn't set frame.database.recheck_after_s"
+            "contract schedules no history or database recheck"
         )
     run_record = actor.run_record()
     cfg = contract.config
