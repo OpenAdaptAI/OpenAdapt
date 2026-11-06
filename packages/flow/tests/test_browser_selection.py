@@ -776,6 +776,8 @@ def test_recorder_refuses_real_native_default_as_a_demonstrated_choice(
     from openadapt_flow.compiler import compile_recording
 
     bundle = tmp_path / "refused-bundle"
-    with pytest.raises(ValueError, match="recording refused an unproved native selection"):
+    with pytest.raises(
+        ValueError, match="recording refused an unproved native selection"
+    ):
         compile_recording(recording, bundle, name="unproved-native-choice")
     assert not (bundle / "workflow.json").exists()
