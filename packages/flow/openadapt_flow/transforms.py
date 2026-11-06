@@ -1393,6 +1393,12 @@ class PredicateResult:
     inputs: tuple[str, ...] = ()
     matches: tuple[dict[str, Any], ...] = ()
 
+    def __post_init__(self) -> None:
+        # Accept "true"/"false"/"unknown" from callers that build results
+        # themselves, but always store the enum, so .passed and the
+        # truth-test refusal hold for every result.
+        object.__setattr__(self, "outcome", Outcome(self.outcome))
+
     @property
     def passed(self) -> bool:
         """True only for an observed ``true``; ``false`` and ``unknown`` fail."""

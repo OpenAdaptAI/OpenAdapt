@@ -620,3 +620,14 @@ def test_evaluation_time_budget_refuses(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(tr, "MAX_EVAL_SECONDS", -1.0)
     result = tr.evaluate_predicate("x == 'a'", {"x": "a"})
     assert result.outcome == "unknown" and result.refusal == RefusalCode.BOUNDS
+
+
+def test_results_built_from_strings_store_the_enum() -> None:
+    from openadapt_flow.transforms import Outcome, PredicateResult
+
+    built = PredicateResult("true")  # type: ignore[arg-type]
+    assert built.outcome is Outcome.TRUE and built.passed is True
+    with pytest.raises(TypeError):
+        bool(PredicateResult("false").outcome)  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        PredicateResult("maybe")  # type: ignore[arg-type]
