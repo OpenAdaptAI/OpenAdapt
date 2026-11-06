@@ -47,6 +47,13 @@ from __future__ import annotations
 import time
 from typing import Any, Optional, Protocol
 
+from openadapt_flow.fhir_read import (
+    check_search_coverage,
+    check_search_outcome,
+    fhir_read_headers,
+    next_page_url,
+    search_total,
+)
 from openadapt_flow.runtime.effects._common import drop_record_fields, judge_records
 from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
@@ -71,19 +78,6 @@ DEFAULT_OBSERVATION_PATHS: dict[str, str] = {
 #: A search result longer than this many pages reads as unreadable, never as
 #: the first pages.
 MAX_PAGES = 50
-
-
-def _next_link(bundle: dict[str, Any]) -> Optional[str]:
-    """The Bundle's ``next`` page URL, if any."""
-
-    links = bundle.get("link")
-    if not isinstance(links, list):
-        return None
-    for link in links:
-        if isinstance(link, dict) and link.get("relation") == "next":
-            url = link.get("url")
-            return url if isinstance(url, str) and url else None
-    return None
 
 
 def _origin(url: str) -> str:
@@ -285,7 +279,7 @@ class FhirEffectVerifier(VerifierAdapterBase):
 
     def _headers(self) -> Optional[dict[str, str]]:
         """Request headers, or None when the token source has no token."""
-        headers = {"Accept": "application/fhir+json"}
+        headers = fhir_read_headers()
         token = self.access_token
         if self.token_source is not None:
             token = self.token_source.access_token()
@@ -367,9 +361,15 @@ class FhirEffectVerifier(VerifierAdapterBase):
         if bundle is None:
             return None
         out: list[dict[str, Any]] = []
+        outcomes: list[dict[str, Any]] = []
         matches = 0
-        total: Any = bundle.get("total")
+        total: Optional[int] = None
         for _page in range(MAX_PAGES):
+            try:
+                total = search_total(bundle, total)
+            except ValueError as exc:
+                self.read_problem = str(exc)
+                return None
             entries = bundle.get("entry", [])
             if not isinstance(entries, list):
                 self.read_problem = "a Bundle's entry is not a list"
@@ -383,25 +383,26 @@ class FhirEffectVerifier(VerifierAdapterBase):
                     self.read_problem = "a Bundle entry has no resource"
                     return None
                 mode = (entry.get("search") or {}).get("mode")
-                if mode == "outcome" or (
-                    mode is None and resource.get("resourceType") == "OperationOutcome"
+                if (
+                    mode == "outcome"
+                    or resource.get("resourceType") == "OperationOutcome"
                 ):
-                    # A message about the search, not a record (Epic sends a
-                    # warning "returns no results" on an empty search). An
-                    # error in it means the set may be partial.
-                    issues = resource.get("issue") or []
-                    if not isinstance(issues, list) or any(
-                        not isinstance(i, dict)
-                        or i.get("severity") not in ("warning", "information")
-                        for i in issues
-                    ):
-                        self.read_problem = "the search returned an error outcome"
-                        return None
+                    outcomes.append(resource)
                     continue
                 if mode != "include":
                     matches += 1
                 out.append(self._flatten(resource))
-            next_url = _next_link(bundle)
+            try:
+                for outcome in outcomes:
+                    check_search_outcome(outcome, has_matches=matches > 0)
+            except ValueError as exc:
+                self.read_problem = str(exc)
+                return None
+            try:
+                next_url = next_page_url(bundle)
+            except ValueError as exc:
+                self.read_problem = str(exc)
+                return None
             if next_url is None:
                 break
             if not _same_origin(next_url, self.base_url):
@@ -417,11 +418,10 @@ class FhirEffectVerifier(VerifierAdapterBase):
         else:
             self.read_problem = f"more than {MAX_PAGES} pages"
             return None  # never a truncated read
-        if isinstance(total, int) and not isinstance(total, bool) and total != matches:
-            # The server counts a different number of matches than it returned.
-            self.read_problem = (
-                f"the Bundle's total is {total}, the read returned {matches} matches"
-            )
+        try:
+            check_search_coverage(total, matches)
+        except ValueError as exc:
+            self.read_problem = str(exc)
             return None
         return drop_record_fields(out, self.drop_fields)
 

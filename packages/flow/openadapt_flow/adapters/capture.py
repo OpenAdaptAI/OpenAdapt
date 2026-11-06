@@ -1030,6 +1030,14 @@ def _convert_key_type(
             f"flow equivalent (t={ts:.3f})"
         )
     name = non_mods[0]
+    if name.lower() == "space" and not mods:
+        # The macOS and X11 observers report the space bar as the named key
+        # ``space`` with no text, so a recording made by an openadapt-capture
+        # that does not merge it into the typed text still types a space.
+        if not text_run["chars"]:
+            text_run["ts"] = ts
+        text_run["chars"].append(" ")
+        return
     mapped = _KEY_NAME_MAP.get(name.lower())
     if mapped is None:
         raise ValueError(f"unmapped key {name!r} at t={ts:.3f}; extend _KEY_NAME_MAP")
