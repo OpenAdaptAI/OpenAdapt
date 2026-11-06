@@ -17,7 +17,6 @@ import stat
 import sys
 import tempfile
 import threading
-import uuid
 from collections import deque
 from pathlib import Path
 from typing import Any, Callable
