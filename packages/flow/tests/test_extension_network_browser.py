@@ -158,3 +158,63 @@ def test_real_chrome_nothing_is_captured_while_idle(extension, server):
     page.wait_for_timeout(500)
     assert worker.evaluate("() => globalThis.__posted") == []
     assert worker.evaluate("() => __openadaptExtensionBackground.queued") == []
+
+
+def test_real_chrome_withheld_subtree_leaf_never_reaches_native_disk(
+    tmp_path, extension, server
+):
+    """Real Chrome -> extension redactor -> native host write.
+
+    A credential inside a withheld JSON subtree that is also copied into an
+    ordinary field must not be written to disk: the extension drops the save.
+    An ordinary save in the same session is still stored.
+    """
+
+    import struct
+    import subprocess
+    import sys
+
+    from openadapt_flow.extension_evidence import EVIDENCE_FILE, SCHEMA
+
+    leaf = "".join(["synthetic", "Leaf", "Credential"])
+    context, worker = extension
+    page = context.new_page()
+    page.goto(server + "/form")
+    worker.evaluate("() => __openadaptExtensionBackground.setRecording(true)")
+    page.evaluate(
+        """async ([base, leaf]) => {
+          const post = (body) => fetch(base + '/save', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body),
+          });
+          await post({auth: {value: leaf}, note: leaf});
+          await post({note: 'ordinary browser note'});
+        }""",
+        [server, leaf],
+    )
+    posted = _posted(worker, 1, page)
+    page.wait_for_timeout(300)
+    posted = worker.evaluate("() => globalThis.__posted")
+    records = [
+        m["evidence"] for m in posted if m["evidence"].get("kind") == "network_save"
+    ]
+    payload = b""
+    for record in records:
+        data = json.dumps(
+            {"type": "EXTENSION_EVIDENCE", "schema": SCHEMA, "evidence": record}
+        ).encode("utf-8")
+        payload += struct.pack("<I", len(data)) + data
+    host = EXT / "native_host" / "openadapt_extension_host.py"
+    done = subprocess.run(
+        [sys.executable, str(host), "--recording", str(tmp_path / "rec")],
+        input=payload,
+        capture_output=True,
+        timeout=60,
+        check=False,
+    )
+    assert done.returncode == 0, done.stderr.decode()
+    stored = (tmp_path / "rec" / EVIDENCE_FILE).read_text(encoding="utf-8")
+    assert "ordinary browser note" in stored
+    assert leaf not in stored
+    assert leaf not in json.dumps(posted)

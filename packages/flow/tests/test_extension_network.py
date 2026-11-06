@@ -18,6 +18,7 @@ import struct
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import quote, unquote, unquote_plus
 
 import pytest
 
@@ -474,5 +475,161 @@ def test_extension_and_engine_redaction_agree():
 
 def test_extension_drops_a_record_that_repeats_a_withheld_token():
     request = _request(body_text=json.dumps({"note": "live-bearer-0f9e8d7c6b5a"}))
+    state = _run([{"mode": "record"}, {"request": request}, {"state": True}])[-1]
+    assert state["queued"] == []
+
+
+# --- known withheld identity reaching disk -----------------------------------
+# A value withheld in one place must not survive anywhere else in the record:
+# not as an alphabetic Bearer token, not as a scalar leaf of a withheld
+# subtree, not percent-encoded in a retained URL. Each case is persisted
+# through the real native host, both straight from the engine-side ingest and
+# after the extension's own redactor ran first (the engine's second pass cannot
+# recover an identity the extension already replaced with <secret>).
+
+# Synthetic, assembled at runtime; alphabetic so token-shape heuristics miss it.
+ALPHA = "".join(["synthetic", "Credential", "Omega"])
+ENCODED = ALPHA + "+92!"
+BASIC_PASSWORD = "".join(["synthetic", "Basic", "Passphrase"])
+
+
+def _identity_case(scenario: str) -> tuple[str, str, list[dict], dict]:
+    headers = [{"name": "Content-Type", "value": "application/json"}]
+    url = "https://forms.example/save"
+    body: dict = {"note": "ordinary note"}
+    secret = ALPHA
+    if scenario == "alphabetic_bearer":
+        headers.append({"name": "Authorization", "value": "Bearer " + ALPHA})
+        body = {"note": ALPHA}
+    elif scenario == "alphabetic_cookie":
+        headers.append({"name": "Cookie", "value": f"sid={ALPHA}; theme=dark"})
+        body = {"note": ALPHA}
+    elif scenario == "basic_decoded":
+        secret = BASIC_PASSWORD
+        raw = base64.b64encode(f"dana:{BASIC_PASSWORD}".encode()).decode()
+        headers.append({"name": "Authorization", "value": "Basic " + raw})
+        body = {"note": BASIC_PASSWORD}
+    elif scenario == "secret_subtree_leaf":
+        body = {"auth": {"value": ALPHA, "nested": [ALPHA]}, "note": ALPHA}
+    elif scenario == "secret_numeric_leaf":
+        secret = "73914682"
+        body = {"pin": 73914682, "note": "ref 73914682"}
+    elif scenario == "encoded_url":
+        secret = ENCODED
+        quoted = quote(ENCODED, safe="")
+        url += f"?access_token={quoted}&note={quoted}"
+    elif scenario == "encoded_body":
+        secret = ENCODED
+        body = {"password": ENCODED, "note": quote(ENCODED, safe="")}
+    return secret, url, headers, body
+
+
+def _persist(tmp_path: Path, records: list[dict]) -> str:
+    payload = b"".join(
+        _frame({"type": "EXTENSION_EVIDENCE", "schema": SCHEMA, "evidence": r})
+        for r in records
+    )
+    done = subprocess.run(
+        [sys.executable, str(HOST), "--recording", str(tmp_path)],
+        input=payload,
+        capture_output=True,
+        timeout=60,
+        check=False,
+    )
+    assert done.returncode == 0, done.stderr.decode()
+    path = tmp_path / EVIDENCE_FILE
+    return path.read_text(encoding="utf-8") if path.exists() else ""
+
+
+IDENTITY_SCENARIOS = [
+    "alphabetic_bearer",
+    "alphabetic_cookie",
+    "basic_decoded",
+    "secret_subtree_leaf",
+    "secret_numeric_leaf",
+    "encoded_url",
+    "encoded_body",
+]
+
+
+@pytest.mark.parametrize("pipeline", ["engine", "extension"])
+@pytest.mark.parametrize("scenario", ["ordinary", *IDENTITY_SCENARIOS])
+def test_known_withheld_identity_never_reaches_disk(tmp_path, pipeline, scenario):
+    secret, url, headers, body = _identity_case(scenario)
+    if pipeline == "extension":
+        request = _request(
+            url=url,
+            requestHeaders=headers,
+            responseHeaders=[],
+            body_text=json.dumps(body),
+        )
+        records = _run([{"mode": "record"}, {"request": request}, {"state": True}])[-1][
+            "queued"
+        ]
+    else:
+        records = [
+            _save(
+                url=url,
+                request_headers=headers,
+                response_headers=[],
+                request_body=body,
+            )
+        ]
+    stored = _persist(tmp_path, records)
+    if scenario == "ordinary":
+        assert "ordinary note" in stored and "network_save" in stored
+        return
+    for text in (stored, unquote(stored), unquote_plus(stored)):
+        assert secret not in text, (pipeline, scenario, stored)
+
+
+@pytest.mark.parametrize("scenario", IDENTITY_SCENARIOS)
+def test_engine_drops_records_repeating_a_withheld_identity(scenario):
+    _, url, headers, body = _identity_case(scenario)
+    line = _save(
+        url=url, request_headers=headers, response_headers=[], request_body=body
+    )
+    assert redact_network_save(line) is None
+
+
+def test_descriptive_cookie_attributes_do_not_drop_ordinary_saves():
+    line = _save(
+        url="https://forms.example/save",
+        request_headers=[{"name": "Content-Type", "value": "application/json"}],
+        response_headers=[
+            {
+                "name": "Set-Cookie",
+                "value": f"sid={ALPHA}; Domain=forms.example; Path=/save; Secure",
+            }
+        ],
+        request_body={"note": "ordinary note"},
+    )
+    record = redact_network_save(line)
+    assert record is not None
+    assert record["url"] == "https://forms.example/save"
+    assert ALPHA not in json.dumps(record)
+
+
+def _many_secret_leaves() -> dict:
+    return {"secrets": [f"s{i:05d}" for i in range(4500)], "note": "ok"}
+
+
+def test_engine_drops_record_when_identity_tracking_overflows():
+    line = _save(
+        url="https://forms.example/save",
+        request_headers=[],
+        response_headers=[],
+        request_body=_many_secret_leaves(),
+    )
+    assert redact_network_save(line) is None
+
+
+def test_extension_drops_record_when_identity_tracking_overflows():
+    request = _request(
+        url="https://forms.example/save",
+        requestHeaders=[{"name": "Content-Type", "value": "application/json"}],
+        responseHeaders=[],
+        body_text=json.dumps(_many_secret_leaves()),
+    )
     state = _run([{"mode": "record"}, {"request": request}, {"state": True}])[-1]
     assert state["queued"] == []

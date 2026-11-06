@@ -51,9 +51,15 @@ and in the engine on ingest, on write and on load.
   long opaque tokens) become `<secret>`. Any other body (multipart, file
   uploads, text, binary, oversized) is dropped; only
   `request_body_status: "omitted:<reason>"` remains.
-- **Leak check.** If any withheld value, or a credential-looking part of a
-  withheld header such as the token after `Bearer`, still appears anywhere in
-  the record, the record is dropped.
+- **Leak check.** Each redactor remembers every withheld value by its
+  complete scalar identity: the whole value, every part of a credential
+  header (the token after `Bearer` even when it is all letters, cookie
+  values, the decoded `Basic` user and password), and each scalar leaf of a
+  withheld JSON or form subtree. If any of them still appears in the record,
+  in its JSON text or in its percent-decoded form, the record is dropped. The
+  extension does this itself; the engine's second pass cannot recover a value
+  the extension already replaced. If the bookkeeping exceeds its limit, the
+  record is dropped.
 - **Errors.** Unknown top-level keys are dropped. A record that cannot be
   redacted is dropped in the extension, refused by the native host and by
   `ExtensionEvidenceBuffer.append`, and skipped on load.

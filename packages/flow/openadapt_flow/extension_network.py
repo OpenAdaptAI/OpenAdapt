@@ -21,17 +21,25 @@ Fail closed:
   and depth limits. Anything else is dropped and only its status is kept.
 - Unknown top-level keys are dropped. Non-http(s) URLs, non-save methods and
   any redaction error drop the whole record (``None``).
-- A final check drops the record if any withheld value still appears in it.
+- Every withheld value is remembered by its complete scalar identity: the
+  whole credential, each part of a credential header (alphabetic ``Bearer``
+  tokens included), cookie and ``key=value`` parameter values, decoded
+  ``Basic`` credentials, and the scalar leaves of a withheld JSON or form
+  subtree. A final check drops the record if any of them still appears in
+  the record, in its JSON text or in its percent-decoded (canonical) form.
+  If that bookkeeping exceeds its limit the record is dropped.
 
 No remote endpoints. The extension and this ingest stay optional.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import re
 from typing import Any, Iterable, Mapping, Optional
-from urllib.parse import parse_qsl, quote, unquote, urlsplit
+from urllib.parse import parse_qsl, quote, unquote, unquote_plus, urlsplit
 
 NETWORK_SAVE_KIND = "network_save"
 PLACEHOLDER = "<secret>"
@@ -39,6 +47,10 @@ SAVE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 MAX_BODY_BYTES = 64 * 1024
 MAX_DEPTH = 32
 MAX_NODES = 5000
+# Upper bound on remembered withheld identities per record. Past it the
+# record is dropped rather than checked partially.
+MAX_WITHHELD = 4096
+MIN_WITHHELD_LEN = 6
 
 ALLOWED_HEADERS = frozenset(
     {
@@ -97,7 +109,41 @@ SECRET_VALUE = (
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
 )
 
-_HEADER_PARTS = re.compile(r"[\s;,=]+")
+_HEADER_PARTS = re.compile(r"[\s;,]+")
+# Words inside a credential header that are syntax, not secret: auth schemes
+# and cookie / challenge attribute names. Their values are still withheld
+# unless the attribute is purely descriptive (``Domain``, ``Path`` ...).
+_HEADER_SYNTAX = frozenset(
+    {
+        "bearer",
+        "basic",
+        "digest",
+        "token",
+        "negotiate",
+        "httponly",
+        "secure",
+        "partitioned",
+    }
+)
+_DESCRIPTIVE_ATTRS = frozenset(
+    {
+        "path",
+        "domain",
+        "expires",
+        "max-age",
+        "samesite",
+        "priority",
+        "realm",
+        "charset",
+        "scope",
+        "algorithm",
+        "qop",
+        "stale",
+        "version",
+        "error",
+        "error_description",
+    }
+)
 _TOKEN_CHARS = re.compile(r"^[A-Za-z0-9+/=_.-]+$")
 
 # Top-level keys a stored network_save line may carry. Others are dropped.
@@ -122,6 +168,10 @@ _RECORD_KEYS = (
 
 
 class _TooComplex(Exception):
+    pass
+
+
+class _TooManyWithheld(Exception):
     pass
 
 
@@ -154,32 +204,120 @@ def is_secret_header(name: object) -> bool:
 
 
 class _Withheld:
-    """Values withheld during one redaction, for the final leak check."""
+    """Values withheld during one redaction, for the final leak check.
+
+    Each entry is a complete scalar identity (never a JSON encoding of a
+    removed subtree), so the check matches wherever that scalar resurfaces.
+    """
 
     def __init__(self) -> None:
         self.values: list[str] = []
+        self._seen: set[str] = set()
 
     def add(self, value: object) -> None:
-        if isinstance(value, str) and value != PLACEHOLDER and len(value) >= 6:
-            self.values.append(value)
+        if isinstance(value, bool) or value is None:
+            return
+        if isinstance(value, (int, float)):
+            value = json.dumps(value)
+        if not isinstance(value, str):
+            return
+        for candidate in (value, value.strip().strip("\"'")):
+            if (
+                candidate != PLACEHOLDER
+                and len(candidate) >= MIN_WITHHELD_LEN
+                and candidate not in self._seen
+            ):
+                if len(self.values) >= MAX_WITHHELD:
+                    raise _TooManyWithheld()
+                self._seen.add(candidate)
+                self.values.append(candidate)
+
+    def add_decoded(self, value: str) -> None:
+        """Withhold a value and its percent-decoded form."""
+
+        self.add(value)
+        self.add(unquote(value))
 
     def add_header(self, value: str) -> None:
-        """Withhold a header value and its credential-looking parts.
+        """Withhold a non-allowlisted header value.
 
-        ``Bearer <token>`` or ``sid=<token>; Path=/`` must not reappear
-        elsewhere either, even without the scheme or cookie name.
+        ``value`` is not known to be a credential, so only the whole value and
+        its opaque parts are remembered (alphabetic words would match
+        ordinary text).
         """
 
         self.add(value)
         for part in _HEADER_PARTS.split(value):
-            if len(part) >= 8 and not part.isalpha():
-                self.add(part)
+            for piece in part.split("="):
+                if len(piece) >= 8 and not piece.isalpha():
+                    self.add(piece)
+
+    def add_credential_header(self, value: str) -> None:
+        """Withhold a credential header value by every scalar it carries.
+
+        ``Bearer <token>`` keeps its token even when it is purely alphabetic;
+        ``sid=<v>; Path=/`` keeps ``<v>``; ``Basic <b64>`` also keeps the
+        decoded ``user:password`` and each half.
+        """
+
+        self.add(value)
+        parts = [p for p in _HEADER_PARTS.split(value) if p]
+        scheme = parts[0].lower() if parts else ""
+        for part in parts:
+            name, sep, rest = part.partition("=")
+            if sep and name.strip().lower() in _DESCRIPTIVE_ATTRS:
+                continue
+            if not sep and part.lower() in _HEADER_SYNTAX:
+                continue
+            self.add_decoded(part)
+            self.add(part.rstrip("="))  # base64 padding
+            if sep:
+                self.add_decoded(rest.strip("\"'"))
+        if scheme == "basic" and len(parts) >= 2:
+            try:
+                decoded = base64.b64decode(parts[1], validate=True).decode("utf-8")
+            except (binascii.Error, ValueError, UnicodeDecodeError):
+                decoded = ""
+            if decoded:
+                self.add(decoded)
+                for half in decoded.split(":", 1):
+                    self.add(half)
+
+    def add_leaves(self, value: Any, budget: list[int], depth: int) -> None:
+        """Withhold every scalar leaf of a removed subtree, within limits."""
+
+        budget[0] += 1
+        if budget[0] > MAX_NODES or depth > MAX_DEPTH:
+            raise _TooComplex()
+        if isinstance(value, Mapping):
+            for child in value.values():
+                self.add_leaves(child, budget, depth + 1)
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                self.add_leaves(child, budget, depth + 1)
+        else:
+            self.add(value)
 
     def leaked_into(self, record: Mapping[str, Any]) -> bool:
-        text = json.dumps(record, sort_keys=True)
+        """True when a withheld identity survives in the record.
+
+        Compared against the JSON text (ASCII-escaped and raw) and its
+        percent-decoded canonical forms, so an encoded copy of a withheld
+        value in a retained URL or field also counts.
+        """
+
+        escaped = json.dumps(record, sort_keys=True)
+        raw = json.dumps(record, sort_keys=True, ensure_ascii=False)
+        texts = (escaped, raw, unquote(raw), unquote_plus(raw))
         for value in self.values:
-            if value in text or json.dumps(value)[1:-1] in text:
-                return True
+            forms = {
+                value,
+                json.dumps(value)[1:-1],
+                json.dumps(value, ensure_ascii=False)[1:-1],
+            }
+            for form in forms:
+                if any(form in text for text in texts):
+                    return True
         return False
 
 
@@ -220,6 +358,9 @@ def redact_headers(
         )
         if keep:
             out.append({"name": name, "value": value})
+        elif is_secret_header(name) or is_secret_value(value):
+            withheld.add_credential_header(value)
+            out.append({"name": name, "value": PLACEHOLDER})
         else:
             withheld.add_header(value)
             out.append({"name": name, "value": PLACEHOLDER})
@@ -236,15 +377,15 @@ def _redact_tree(
     budget[0] += 1
     if budget[0] > MAX_NODES or depth > MAX_DEPTH:
         raise _TooComplex()
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, (list, tuple, Mapping)):
         if key is not None and is_secret_key(key):
-            withheld.add(json.dumps(value))
+            # Remember the scalar leaves, not the subtree's JSON encoding:
+            # a leaf copied elsewhere must still match.
+            withheld.add_leaves(value, budget, depth)
             return PLACEHOLDER
+    if isinstance(value, (list, tuple)):
         return [_redact_tree(v, key, withheld, budget, depth + 1) for v in value]
     if isinstance(value, Mapping):
-        if key is not None and is_secret_key(key):
-            withheld.add(json.dumps(value, sort_keys=True))
-            return PLACEHOLDER
         return {
             str(k): _redact_tree(v, str(k), withheld, budget, depth + 1)
             for k, v in value.items()
@@ -255,6 +396,7 @@ def _redact_tree(
             return PLACEHOLDER
         return value
     if key is not None and is_secret_key(key) and value is not None:
+        withheld.add(value)
         return PLACEHOLDER
     if value is None or isinstance(value, (bool, int, float)):
         return value
@@ -291,7 +433,9 @@ def redact_url(raw: object, withheld: _Withheld) -> Optional[tuple[str, str]]:
         if parts.password:
             withheld.add(unquote(parts.password))
         if parts.fragment:
-            withheld.add(parts.fragment)
+            withheld.add_decoded(parts.fragment)
+            for _, frag_value in parse_qsl(parts.fragment, keep_blank_values=True):
+                withheld.add(frag_value)
         host = parts.hostname
         if ":" in host:  # IPv6 literal keeps its brackets
             host = f"[{host}]"

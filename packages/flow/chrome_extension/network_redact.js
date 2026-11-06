@@ -7,6 +7,12 @@
 // Fail closed: header values are kept only for a small allowlist; anything
 // that looks like a credential is withheld; bodies are kept only when they
 // parse as JSON or form data within size limits; any error drops the record.
+// Every withheld value is remembered by its complete scalar identity (the
+// whole credential, each credential-header part including alphabetic Bearer
+// tokens, cookie/parameter values, decoded Basic credentials, and the scalar
+// leaves of a withheld subtree). The final check drops the record if any of
+// them appears in its JSON text or its percent-decoded canonical form, and
+// drops it if that bookkeeping exceeds its limit.
 'use strict';
 
 (function (root) {
@@ -15,6 +21,31 @@
   const MAX_BODY_BYTES = 64 * 1024;
   const MAX_DEPTH = 32;
   const MAX_NODES = 5000;
+  // Upper bound on remembered withheld identities per record; past it the
+  // record is dropped rather than checked partially.
+  const MAX_WITHHELD = 4096;
+  const MIN_WITHHELD_LEN = 6;
+  const HEADER_PARTS = /[\s;,]+/;
+  // Credential-header words that are syntax, not secret.
+  const HEADER_SYNTAX = ['bearer', 'basic', 'digest', 'token', 'negotiate', 'httponly', 'secure', 'partitioned'];
+  // Attribute pairs that are descriptive and never carry the credential.
+  const DESCRIPTIVE_ATTRS = [
+    'path',
+    'domain',
+    'expires',
+    'max-age',
+    'samesite',
+    'priority',
+    'realm',
+    'charset',
+    'scope',
+    'algorithm',
+    'qop',
+    'stale',
+    'version',
+    'error',
+    'error_description',
+  ];
   // Header values kept as-is. Everything else keeps its name only.
   const ALLOWED_HEADERS = [
     'accept',
@@ -64,20 +95,106 @@
     /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
   ];
 
-  // Remember a withheld value for the final leak check. Short values and the
-  // placeholder are skipped so the check cannot match ordinary output.
-  function withhold(list, value) {
-    if (typeof value !== 'string') return;
-    if (value === PLACEHOLDER || value.length < 6) return;
-    list.push(value);
+  // Lenient percent-decoding: each run of %XX bytes is decoded as UTF-8 with
+  // replacement characters, like Python's urllib.parse.unquote. Never throws.
+  function pctDecode(text) {
+    return String(text).replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => {
+      const bytes = new Uint8Array(run.length / 3);
+      for (let i = 0; i < bytes.length; i += 1) {
+        bytes[i] = parseInt(run.slice(i * 3 + 1, i * 3 + 3), 16);
+      }
+      return new TextDecoder('utf-8').decode(bytes);
+    });
   }
 
-  // A header value and its credential-looking parts ("Bearer <token>",
-  // "sid=<token>; Path=/") must not reappear elsewhere in the record.
+  function makeWithheld() {
+    const values = [];
+    const seen = new Set();
+    return {
+      values,
+      push(candidate) {
+        if (candidate === PLACEHOLDER || candidate.length < MIN_WITHHELD_LEN || seen.has(candidate)) return;
+        if (values.length >= MAX_WITHHELD) throw new Error('too_many_withheld');
+        seen.add(candidate);
+        values.push(candidate);
+      },
+    };
+  }
+
+  // Remember a withheld scalar for the final leak check. Short values and the
+  // placeholder are skipped so the check cannot match ordinary output.
+  function withhold(list, value) {
+    if (typeof value === 'number' && Number.isFinite(value)) value = String(value);
+    if (typeof value !== 'string') return;
+    list.push(value);
+    list.push(value.trim().replace(/^["']+|["']+$/g, ''));
+  }
+
+  function withholdDecoded(list, value) {
+    withhold(list, value);
+    withhold(list, pctDecode(value));
+  }
+
+  // A non-allowlisted header that is not known to be a credential: the whole
+  // value and its opaque parts (alphabetic words would match ordinary text).
   function withholdHeader(list, value) {
     withhold(list, value);
-    for (const part of String(value).split(/[\s;,=]+/)) {
-      if (part.length >= 8 && !/^[A-Za-z]+$/.test(part)) withhold(list, part);
+    for (const part of String(value).split(HEADER_PARTS)) {
+      for (const piece of part.split('=')) {
+        if (piece.length >= 8 && !/^[A-Za-z]+$/.test(piece)) withhold(list, piece);
+      }
+    }
+  }
+
+  // A credential header: every scalar it carries. "Bearer <token>" keeps its
+  // token even when alphabetic; "sid=<v>; Path=/" keeps <v>; "Basic <b64>"
+  // also keeps the decoded user:password and each half.
+  function withholdCredentialHeader(list, value) {
+    const text = String(value);
+    withhold(list, text);
+    const parts = text.split(HEADER_PARTS).filter((p) => p);
+    for (const part of parts) {
+      const eq = part.indexOf('=');
+      const name = eq >= 0 ? part.slice(0, eq) : part;
+      if (eq >= 0 && DESCRIPTIVE_ATTRS.indexOf(name.trim().toLowerCase()) >= 0) continue;
+      if (eq < 0 && HEADER_SYNTAX.indexOf(part.toLowerCase()) >= 0) continue;
+      withholdDecoded(list, part);
+      withhold(list, part.replace(/=+$/, ''));
+      if (eq >= 0) withholdDecoded(list, part.slice(eq + 1).replace(/^["']+|["']+$/g, ''));
+    }
+    if (parts.length >= 2 && parts[0].toLowerCase() === 'basic') {
+      let decoded = '';
+      try {
+        const bin = atob(parts[1]);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+        decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      } catch (e) {
+        decoded = '';
+      }
+      if (decoded) {
+        withhold(list, decoded);
+        const colon = decoded.indexOf(':');
+        if (colon >= 0) {
+          withhold(list, decoded.slice(0, colon));
+          withhold(list, decoded.slice(colon + 1));
+        } else {
+          withhold(list, decoded);
+        }
+      }
+    }
+  }
+
+  // Every scalar leaf of a removed subtree, within the body limits.
+  function withholdLeaves(list, value, budget, depth) {
+    budget.nodes += 1;
+    if (budget.nodes > MAX_NODES || depth > MAX_DEPTH) throw new Error('body_too_complex');
+    if (Array.isArray(value)) {
+      for (const v of value) withholdLeaves(list, v, budget, depth + 1);
+    } else if (value && typeof value === 'object') {
+      for (const k of Object.keys(value)) withholdLeaves(list, value[k], budget, depth + 1);
+    } else {
+      withhold(list, value);
     }
   }
 
@@ -119,6 +236,9 @@
         !isSecretValue(value);
       if (keep) {
         out.push({ name, value });
+      } else if (SECRET_HEADER.test(name) || isSecretValue(value)) {
+        withholdCredentialHeader(withheld, value);
+        out.push({ name, value: PLACEHOLDER });
       } else {
         withholdHeader(withheld, value);
         out.push({ name, value: PLACEHOLDER });
@@ -138,18 +258,16 @@
   function redactTree(value, key, withheld, budget, depth) {
     budget.nodes += 1;
     if (budget.nodes > MAX_NODES || depth > MAX_DEPTH) throw new Error('body_too_complex');
+    if (value && typeof value === 'object' && key != null && isSecretKey(key)) {
+      // Remember the scalar leaves, not the subtree's JSON encoding: a leaf
+      // copied elsewhere must still match.
+      withholdLeaves(withheld, value, budget, depth);
+      return PLACEHOLDER;
+    }
     if (Array.isArray(value)) {
-      if (key != null && isSecretKey(key)) {
-        withhold(withheld, JSON.stringify(value));
-        return PLACEHOLDER;
-      }
       return value.map((v) => redactTree(v, key, withheld, budget, depth + 1));
     }
     if (value && typeof value === 'object') {
-      if (key != null && isSecretKey(key)) {
-        withhold(withheld, JSON.stringify(value));
-        return PLACEHOLDER;
-      }
       const out = {};
       for (const k of Object.keys(value)) {
         out[k] = redactTree(value[k], k, withheld, budget, depth + 1);
@@ -158,6 +276,7 @@
     }
     if (typeof value === 'string') return redactString(key, value, withheld);
     if (key != null && isSecretKey(key) && value != null) {
+      withhold(withheld, value);
       return PLACEHOLDER;
     }
     return value;
@@ -171,13 +290,10 @@
       return null;
     }
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
-    withhold(withheld, decodeURIComponent(u.username));
-    withhold(withheld, decodeURIComponent(u.password));
+    withholdDecoded(withheld, u.username);
+    withholdDecoded(withheld, u.password);
     const segments = u.pathname.split('/').map((seg) => {
-      let decoded = seg;
-      try {
-        decoded = decodeURIComponent(seg);
-      } catch (e) {}
+      const decoded = pctDecode(seg);
       if (isSecretValue(decoded)) {
         withhold(withheld, decoded);
         return PLACEHOLDER;
@@ -189,7 +305,9 @@
       const value = redactString(k, v, withheld);
       params.push(encodeURIComponent(k) + '=' + (value === PLACEHOLDER ? PLACEHOLDER : encodeURIComponent(value)));
     }
-    withhold(withheld, u.hash.slice(1));
+    const fragment = u.hash.slice(1);
+    withholdDecoded(withheld, fragment);
+    for (const [, v] of new URLSearchParams(fragment).entries()) withhold(withheld, v);
     const query = params.length ? '?' + params.join('&') : '';
     return { url: u.protocol + '//' + u.host + segments.join('/') + query, origin: u.origin };
   }
@@ -243,6 +361,7 @@
       try {
         return { status: 'form', body: redactTree(form, null, withheld, budget, 0) };
       } catch (e) {
+        if (e && e.message === 'too_many_withheld') throw e;
         return { status: 'omitted:too_complex', body: null };
       }
     }
@@ -260,17 +379,25 @@
       try {
         return { status: 'json', body: redactTree(parsed, null, withheld, budget, 0) };
       } catch (e) {
+        if (e && e.message === 'too_many_withheld') throw e;
         return { status: 'omitted:too_complex', body: null };
       }
     }
     return { status: 'omitted:unsupported_type', body: null };
   }
 
+  // True when a withheld identity survives in the record's JSON text or its
+  // percent-decoded canonical forms (an encoded copy in a retained URL or
+  // field counts too).
   function leaks(record, withheld) {
     const text = JSON.stringify(record);
-    for (const value of withheld) {
-      if (text.indexOf(value) >= 0 || text.indexOf(JSON.stringify(value).slice(1, -1)) >= 0) {
-        return true;
+    const texts = [text, pctDecode(text), pctDecode(text.replace(/\+/g, ' '))];
+    for (const value of withheld.values) {
+      const forms = [value, JSON.stringify(value).slice(1, -1)];
+      for (const form of forms) {
+        for (const t of texts) {
+          if (t.indexOf(form) >= 0) return true;
+        }
       }
     }
     return false;
@@ -284,7 +411,7 @@
       if (!details || typeof details !== 'object') return null;
       const method = String(details.method || '').toUpperCase();
       if (SAVE_METHODS.indexOf(method) < 0) return null;
-      const withheld = [];
+      const withheld = makeWithheld();
       const url = redactUrl(details.url, withheld);
       if (!url) return null;
       const requestHeaders = redactHeaders(details.requestHeaders, withheld);

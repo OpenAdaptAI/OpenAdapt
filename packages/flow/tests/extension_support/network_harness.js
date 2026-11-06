@@ -59,6 +59,8 @@ const context = {
   chrome,
   Date,
   URL,
+  URLSearchParams,
+  atob,
   TextEncoder,
   TextDecoder,
   Uint8Array,
