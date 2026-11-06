@@ -320,6 +320,48 @@ def test_telemetry_exception_does_not_mask_guard_refusal(
         running.close()
 
 
+def test_fsync_failure_is_diagnostic_only_and_closes_temp_descriptor_once(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    frame = _png((10, 20, 30), compression=6)
+    running = _RunningServer(monkeypatch, tmp_path, [frame, frame])
+    created_fds: set[int] = set()
+    explicit_closes: list[int] = []
+    original_mkstemp = capture_telemetry.tempfile.mkstemp
+    original_close = os.close
+    original_fsync = os.fsync
+
+    def tracked_mkstemp(*args, **kwargs):
+        fd, name = original_mkstemp(*args, **kwargs)
+        if kwargs.get("prefix", "").startswith(".capture-sidecar.json."):
+            created_fds.add(fd)
+        return fd, name
+
+    def tracked_close(fd: int) -> None:
+        if fd in created_fds:
+            explicit_closes.append(fd)
+        original_close(fd)
+
+    def fail_target_fsync(fd: int) -> None:
+        if fd in created_fds:
+            raise OSError("synthetic fsync failure")
+        original_fsync(fd)
+
+    monkeypatch.setattr(capture_telemetry.tempfile, "mkstemp", tracked_mkstemp)
+    monkeypatch.setattr(capture_telemetry.os, "close", tracked_close)
+    monkeypatch.setattr(capture_telemetry.os, "fsync", fail_target_fsync)
+    try:
+        screenshot = running.session.get(f"{running.url}/screenshot", timeout=5)
+        assert screenshot.status_code == 200 and screenshot.content == frame
+        accepted = _guard(running.session, running.url, screenshot.content)
+        assert accepted.status_code == 200
+        assert running.context_calls == 1 and len(running.input_calls) == 1
+        assert created_fds
+        assert explicit_closes == []
+    finally:
+        running.close()
+
+
 @pytest.mark.parametrize(
     "document",
     [

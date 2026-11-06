@@ -106,15 +106,19 @@ class CaptureTelemetry:
                 dir=self.sidecar.parent,
             )
             temporary = Path(name)
+            owned_fd: int | None = fd
             try:
                 if hasattr(os, "fchmod"):
                     os.fchmod(fd, 0o600)
-                with os.fdopen(fd, "wb") as stream:
+                stream = os.fdopen(fd, "wb")
+                owned_fd = None
+                with stream:
                     stream.write(payload)
                     stream.flush()
                     os.fsync(stream.fileno())
             except BaseException:
-                os.close(fd)
+                if owned_fd is not None:
+                    os.close(owned_fd)
                 raise
             if is_initial:
                 # Hard-link publication is create-only: never replace a file
