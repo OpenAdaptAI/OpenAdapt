@@ -20,6 +20,7 @@ labeled as test doubles — not a live WebAuthn ceremony.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
@@ -242,6 +243,27 @@ class FederatedAssertionMaterial:
 
     __str__ = __repr__
 
+    def evidence_digests(
+        self, *, approval_payload_sha256: str
+    ) -> Union[OidcEvidenceV1, SamlEvidenceV1]:
+        """Recompute Seal-safe digests from the in-memory assertion."""
+
+        if self.method == "oidc":
+            return OidcEvidenceV1(
+                issuer=self.issuer,
+                subject_sha256=_sha256_text(self.subject),
+                audience_sha256=_sha256_text(self.audience),
+                token_sha256=_sha256_bytes(self.raw),
+                nonce_sha256=approval_payload_sha256,
+            )
+        return SamlEvidenceV1(
+            issuer=self.issuer,
+            subject_sha256=_sha256_text(self.subject),
+            audience_sha256=_sha256_text(self.audience),
+            assertion_sha256=_sha256_bytes(self.raw),
+            in_response_to_sha256=approval_payload_sha256,
+        )
+
 
 AssertionMaterial = Union[WebAuthnAssertionMaterial, FederatedAssertionMaterial]
 
@@ -330,6 +352,30 @@ class MemoryPersonRegistry:
         return None
 
 
+def _normalize_challenge_digest(challenge: str) -> str | None:
+    """Return the 64-char lowercase hex of a 32-byte WebAuthn challenge.
+
+    Browsers put the challenge in ``clientDataJSON`` as base64url of the raw
+    bytes (WebAuthn). Our deterministic test double also accepts the hex form
+    of those same 32 bytes. Anything else is refused.
+    """
+
+    if not challenge:
+        return None
+    lowered = challenge.lower()
+    if len(lowered) == 64 and all(c in "0123456789abcdef" for c in lowered):
+        return lowered
+    # WebAuthn CollectedClientData.challenge is base64url without padding.
+    try:
+        padded = challenge + ("=" * ((4 - len(challenge) % 4) % 4))
+        raw = base64.urlsafe_b64decode(padded.encode("ascii"))
+    except (ValueError, UnicodeEncodeError):
+        return None
+    if len(raw) != 32:
+        return None
+    return raw.hex()
+
+
 def _client_data_challenge(client_data_json: bytes) -> str | None:
     try:
         data = json.loads(client_data_json.decode("utf-8"))
@@ -340,9 +386,7 @@ def _client_data_challenge(client_data_json: bytes) -> str | None:
     challenge = data.get("challenge")
     if not isinstance(challenge, str) or not challenge:
         return None
-    # Challenge is the approval payload digest *without* the ``sha256:`` prefix,
-    # urlsafe-base64 or hex. We accept the hex of the 32-byte digest.
-    return challenge
+    return _normalize_challenge_digest(challenge)
 
 
 def _challenge_hex(challenge_sha256: str) -> str:
@@ -568,27 +612,19 @@ def build_binding(
                 "WebAuthn challenge does not match approval payload hash",
             )
     else:
-        if method is BindingMethod.OIDC:
-            evidence = OidcEvidenceV1(
-                issuer=assertion.issuer,
-                subject_sha256=_sha256_text(assertion.subject),
-                audience_sha256=_sha256_text(assertion.audience),
-                token_sha256=_sha256_bytes(assertion.raw),
-                nonce_sha256=approval_payload_sha256,
-            )
-        elif method is BindingMethod.SAML:
-            evidence = SamlEvidenceV1(
-                issuer=assertion.issuer,
-                subject_sha256=_sha256_text(assertion.subject),
-                audience_sha256=_sha256_text(assertion.audience),
-                assertion_sha256=_sha256_bytes(assertion.raw),
-                in_response_to_sha256=approval_payload_sha256,
-            )
-        else:
+        if method not in {BindingMethod.OIDC, BindingMethod.SAML}:
             raise NamedPersonBindingError(
                 NamedPersonRefusal.METHOD_UNSUPPORTED,
                 "federated material needs method=oidc or saml",
             )
+        if assertion.method != ("oidc" if method is BindingMethod.OIDC else "saml"):
+            raise NamedPersonBindingError(
+                NamedPersonRefusal.METHOD_UNSUPPORTED,
+                "federated material method does not match binding method",
+            )
+        evidence = assertion.evidence_digests(
+            approval_payload_sha256=approval_payload_sha256,
+        )
     return NamedPersonBindingV1(
         person_id=person_id,
         method=method,
@@ -668,6 +704,16 @@ def require_named_person_binding(
             method: Literal["oidc", "saml"] = (
                 "oidc" if binding.method is BindingMethod.OIDC else "saml"
             )
+            expected_type = OidcEvidenceV1 if method == "oidc" else SamlEvidenceV1
+            if not isinstance(binding.evidence, expected_type):
+                return NamedPersonRefusal.METHOD_UNSUPPORTED.value
+            if assertion.method != method:
+                return NamedPersonRefusal.METHOD_UNSUPPORTED.value
+            recomputed = assertion.evidence_digests(
+                approval_payload_sha256=approval_payload_sha256,
+            )
+            if recomputed != binding.evidence:
+                return NamedPersonRefusal.EVIDENCE_DIGEST_MISMATCH.value
             registered_f = registry.federated(
                 method=method, issuer=assertion.issuer, subject=assertion.subject
             )
@@ -684,9 +730,14 @@ def require_named_person_binding(
             return NamedPersonRefusal.METHOD_UNSUPPORTED.value
     except NamedPersonBindingError as exc:
         return exc.code.value
-    except Exception:
-        # Never turn an unexpected verifier crash into a pass.
-        logger.exception("named-person verifier failed closed")
+    except Exception as exc:
+        # Never turn an unexpected verifier crash into a pass, and never copy
+        # assertion-bearing exception text into logs (material repr is redacted;
+        # str(exc) is not).
+        logger.error(
+            "named-person verifier failed closed; type=%s",
+            type(exc).__name__,
+        )
         return NamedPersonRefusal.ASSERTION_INVALID.value
     return None
 

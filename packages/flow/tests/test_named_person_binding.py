@@ -8,7 +8,9 @@ DeterministicPasskeyDouble fixtures — not a live WebAuthn ceremony.
 
 from __future__ import annotations
 
+import base64
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -27,8 +29,10 @@ from openadapt_flow.approval_mode.named_person_binding import (
     NamedPersonBindingError,
     NamedPersonBindingV1,
     NamedPersonRefusal,
+    OidcEvidenceV1,
     RegisteredFederatedSubject,
     RegisteredPasskey,
+    SamlEvidenceV1,
     WebAuthnAssertionMaterial,
     approval_payload_digest,
     build_binding,
@@ -431,3 +435,208 @@ def test_answer_refusal_demo_skips_named_person(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(mod, "attestation_refusal", lambda *a, **k: None)
     ctx = ApproverContext(execution_profile="demo", key_dir=tmp_path / "keys")
     assert answer_refusal(request, answer, policy=ctx) is None
+
+
+def _federated_pair(double: DeterministicPasskeyDouble, method: str):
+    digest = approval_payload_digest(_payload())
+    fed = RegisteredFederatedSubject(
+        person_id="person:bob",
+        method=method,  # type: ignore[arg-type]
+        issuer="https://idp.example.test",
+        subject="sub-bob",
+        audience="openadapt-regulated",
+    )
+    registry = MemoryPersonRegistry(federated_subjects=[fed])
+    assertion = double.sign_federated(challenge_sha256=digest, registered=fed)
+    enum = BindingMethod.OIDC if method == "oidc" else BindingMethod.SAML
+    binding = build_binding(
+        person_id="person:bob",
+        method=enum,
+        approval_payload_sha256=digest,
+        assertion=assertion,
+        verified_at="2026-11-05T17:00:00Z",
+    )
+    return digest, fed, registry, assertion, binding, enum
+
+
+@pytest.mark.parametrize("method", ["oidc", "saml"])
+@pytest.mark.parametrize(
+    "field",
+    ["issuer", "subject_sha256", "token_or_assertion_sha256"],
+)
+def test_federated_binding_evidence_mismatch_refuses(
+    double: DeterministicPasskeyDouble, method: str, field: str
+) -> None:
+    """Seal evidence must match the assertion just verified (Codex BLOCK #1981).
+
+    A normally validated OIDC/SAML binding whose issuer, subject digest or
+    raw-token/assertion digest was rewritten used to pass while the original
+    assertion stayed valid. Recompute and compare every evidence field.
+    """
+
+    digest, _fed, registry, assertion, binding, enum = _federated_pair(double, method)
+    assert (
+        require_named_person_binding(
+            profile="regulated",
+            approval_payload_sha256=digest,
+            expected_person_id="person:bob",
+            binding=binding,
+            assertion=assertion,
+            registry=registry,
+            verifier=double,
+        )
+        is None
+    )
+
+    evidence = binding.evidence
+    if field == "issuer":
+        mutated = evidence.model_copy(update={"issuer": "https://evil.example.test"})
+    elif field == "subject_sha256":
+        mutated = evidence.model_copy(update={"subject_sha256": "sha256:" + "a" * 64})
+    else:
+        digest_field = "token_sha256" if method == "oidc" else "assertion_sha256"
+        mutated = evidence.model_copy(update={digest_field: "sha256:" + "b" * 64})
+
+    tampered = binding.model_copy(update={"evidence": mutated})
+    # Model validator must still accept the method/evidence pairing and the
+    # nonce/InResponseTo == approval payload constraint.
+    assert isinstance(
+        tampered.evidence, OidcEvidenceV1 if method == "oidc" else SamlEvidenceV1
+    )
+    code = require_named_person_binding(
+        profile="regulated",
+        approval_payload_sha256=digest,
+        expected_person_id="person:bob",
+        binding=tampered,
+        assertion=assertion,
+        registry=registry,
+        verifier=double,
+    )
+    assert code == NamedPersonRefusal.EVIDENCE_DIGEST_MISMATCH.value
+
+
+def test_webauthn_browser_base64url_challenge_builds_binding(
+    passkey: RegisteredPasskey, double: DeterministicPasskeyDouble, registry
+) -> None:
+    """Chromium encodes the 32-byte challenge as base64url (Codex BLOCK #1981).
+
+    Prefixing the browser string with ``sha256:`` without decoding rejects a
+    real virtual-authenticator assertion against the hex-digest schema.
+    """
+
+    digest = approval_payload_digest(_payload())
+    hex_digest = digest.removeprefix("sha256:")
+    raw_challenge = bytes.fromhex(hex_digest)
+    b64url = base64.urlsafe_b64encode(raw_challenge).decode("ascii").rstrip("=")
+
+    # Start from a double-signed assertion, then rewrite clientDataJSON to the
+    # browser wire format and re-sign so the verifier still accepts it.
+    base = double.sign_webauthn(challenge_sha256=digest, registered=passkey)
+    client_data = json.dumps(
+        {
+            "type": "webauthn.get",
+            "origin": f"https://{passkey.rp_id}",
+            "challenge": b64url,
+            "fixture": "openadapt.named-person.webauthn-browser-format/v1",
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    import hashlib
+    import hmac
+
+    signature = hmac.new(
+        passkey.public_key,
+        double.DOMAIN_WEBAUTHN
+        + hex_digest.encode("ascii")
+        + base.authenticator_data
+        + hashlib.sha256(client_data).digest(),
+        hashlib.sha256,
+    ).digest()
+    assertion = WebAuthnAssertionMaterial(
+        credential_id=base.credential_id,
+        authenticator_data=base.authenticator_data,
+        client_data_json=client_data,
+        signature=signature,
+        user_handle=base.user_handle,
+    )
+    binding = build_binding(
+        person_id=PERSON,
+        method=BindingMethod.WEBAUTHN_PASSKEY,
+        approval_payload_sha256=digest,
+        assertion=assertion,
+        rp_id=RP_ID,
+        verified_at="2026-11-05T17:00:00Z",
+    )
+    assert binding.evidence.challenge_sha256 == digest
+    assert (
+        require_named_person_binding(
+            profile="regulated",
+            approval_payload_sha256=digest,
+            expected_person_id=PERSON,
+            binding=binding,
+            assertion=assertion,
+            registry=registry,
+            verifier=double,
+        )
+        is None
+    )
+
+
+def test_unexpected_verifier_exception_log_omits_assertion_text(
+    passkey, registry, caplog
+) -> None:
+    """Unexpected verifier errors must not copy assertion-bearing text into logs."""
+
+    class BoomVerifier:
+        def verify_webauthn(self, **kwargs):  # noqa: ANN003
+            # Synthetic control: exception text carries assertion material.
+            raise RuntimeError(
+                "provider blew up with assertion=" + kwargs["assertion"].signature.hex()
+            )
+
+        def verify_federated(self, **kwargs):  # noqa: ANN003
+            raise AssertionError("federated path unused")
+
+    digest = approval_payload_digest(_payload())
+    double = DeterministicPasskeyDouble()
+    assertion = double.sign_webauthn(challenge_sha256=digest, registered=passkey)
+    binding = build_binding(
+        person_id=PERSON,
+        method=BindingMethod.WEBAUTHN_PASSKEY,
+        approval_payload_sha256=digest,
+        assertion=assertion,
+        rp_id=RP_ID,
+        verified_at="2026-11-05T17:00:00Z",
+    )
+    secret_hex = assertion.signature.hex()
+    with caplog.at_level(
+        logging.ERROR, logger="openadapt_flow.approval_mode.named_person_binding"
+    ):
+        code = require_named_person_binding(
+            profile="regulated",
+            approval_payload_sha256=digest,
+            expected_person_id=PERSON,
+            binding=binding,
+            assertion=assertion,
+            registry=registry,
+            verifier=BoomVerifier(),  # type: ignore[arg-type]
+        )
+    assert code == NamedPersonRefusal.ASSERTION_INVALID.value
+    messages = [r.getMessage() for r in caplog.records]
+    joined = "\n".join(messages)
+    assert any("type=RuntimeError" in m for m in messages)
+    # caplog.text includes traceback text when logger.exception is used; that
+    # path must not survive either.
+    full = caplog.text
+    for hay in (joined, full):
+        assert secret_hex not in hay
+        assert "provider blew up" not in hay
+    for record in caplog.records:
+        assert secret_hex not in record.getMessage()
+        assert secret_hex not in str(record.msg)
+        if record.args:
+            assert secret_hex not in str(record.args)
+        if record.exc_text:
+            assert secret_hex not in record.exc_text
+            assert "provider blew up" not in record.exc_text
