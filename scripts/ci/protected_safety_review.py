@@ -549,8 +549,6 @@ def _merge_group_entries(api: Any, group: dict[str, Any]) -> list[dict[str, Any]
             raise EvidenceError("merge queue entry has a malformed base commit")
         if not isinstance(head, str) or not SHA.fullmatch(head):
             raise EvidenceError("merge queue entry has a malformed head commit")
-        if entry.get("state") not in {"AWAITING_CHECKS", "MERGEABLE", "QUEUED"}:
-            raise EvidenceError("merge queue contains an inactive or blocked entry")
         by_head.setdefault(head, []).append(entry)
 
     chain: list[dict[str, Any]] = []
@@ -573,6 +571,8 @@ def _merge_group_entries(api: Any, group: dict[str, Any]) -> list[dict[str, Any]
 
     selected: list[dict[str, Any]] = []
     for entry in reversed(chain):
+        if entry.get("state") not in {"AWAITING_CHECKS", "MERGEABLE", "LOCKED"}:
+            raise EvidenceError("merge group contains an inactive or blocked entry")
         pull_request = entry.get("pullRequest")
         number = pull_request.get("number") if isinstance(pull_request, dict) else None
         if type(number) is not int or number <= 0:
@@ -677,6 +677,86 @@ def _fetch_pr_evidence(
     return pull_request, comments, errors
 
 
+def _passed_pr_head_verdict(
+    api: Any,
+    pull_request: dict[str, Any],
+    *,
+    head_sha: str,
+    main_sha: str,
+) -> list[str]:
+    """Require a current trusted workflow success for one exact PR head."""
+    number = pull_request.get("number")
+    base = pull_request.get("base", {})
+    if type(number) is not int or number <= 0:
+        return ["pull request number is missing or malformed"]
+    if not isinstance(head_sha, str) or not SHA.fullmatch(head_sha):
+        return [f"PR #{number} head SHA is missing or malformed"]
+    if base.get("repo", {}).get("full_name") != REPOSITORY or base.get("ref") != "main":
+        return [f"PR #{number} is not based on this repository's main branch"]
+    if pull_request.get("state") != "open":
+        return [f"PR #{number} is not open"]
+
+    result = api.request(
+        f"/commits/{head_sha}/check-runs?check_name={CHECK_NAME}&per_page=100&page=1"
+    )
+    runs = result.get("check_runs") if isinstance(result, dict) else None
+    total = result.get("total_count") if isinstance(result, dict) else None
+    if (
+        not isinstance(runs, list)
+        or type(total) is not int
+        or total != len(runs)
+        or total > 100
+    ):
+        return [f"PR #{number} safety check results are incomplete"]
+    named = [
+        run for run in runs if isinstance(run, dict) and run.get("name") == CHECK_NAME
+    ]
+    if not named:
+        return [f"PR #{number} has no completed {CHECK_NAME} head verdict"]
+    latest = max(
+        named,
+        key=lambda run: str(run.get("started_at") or run.get("created_at") or ""),
+    )
+    if (
+        latest.get("head_sha") != head_sha
+        or latest.get("status") != "completed"
+        or latest.get("conclusion") != "success"
+        or latest.get("app", {}).get("slug") != "github-actions"
+    ):
+        return [f"PR #{number} latest {CHECK_NAME} head verdict is not trusted success"]
+
+    external_id = latest.get("external_id")
+    match = (
+        re.fullmatch(r"([0-9]+):([0-9]+)", external_id)
+        if isinstance(external_id, str)
+        else None
+    )
+    if match is None:
+        return [f"PR #{number} safety check lacks a workflow run binding"]
+    run_id, attempt = match.groups()
+    workflow_run = api.request(f"/actions/runs/{run_id}")
+    event_name = workflow_run.get("event") if isinstance(workflow_run, dict) else None
+    if event_name not in {"pull_request_target", "issue_comment"}:
+        return [f"PR #{number} safety verdict came from an unsupported event"]
+    expected_workflow_sha = (
+        base.get("sha") if event_name == "pull_request_target" else main_sha
+    )
+    errors = _workflow_provenance_errors(
+        workflow_run,
+        event_name=event_name,
+        workflow_attempt=attempt,
+        workflow_sha=expected_workflow_sha,
+    )
+    if latest.get("details_url") != workflow_run.get("html_url"):
+        errors.append("safety check details do not match its trusted workflow run")
+    if errors:
+        return [
+            f"PR #{number} safety verdict provenance is invalid: {error}"
+            for error in errors
+        ]
+    return []
+
+
 def run(
     event: dict[str, Any],
     trusted_base_sha: str,
@@ -731,10 +811,8 @@ def run(
         if event_name == "merge_group":
             if not isinstance(group, dict):
                 raise EvidenceError("merge-group payload is missing")
-            if group.get("base_sha") != trusted_base_sha:
-                errors.append("workflow did not run from the merge-group base SHA")
             if main_sha != trusted_base_sha:
-                errors.append("merge-group base changed from the trusted main commit")
+                errors.append("trusted workflow source is not the current main commit")
             group_entries = _merge_group_entries(api, group)
             numbers = [entry["pullRequest"]["number"] for entry in group_entries]
         else:
@@ -774,6 +852,14 @@ def run(
                     errors.append(
                         f"pull request {number} head changed from its queue entry"
                     )
+                errors.extend(
+                    _passed_pr_head_verdict(
+                        api,
+                        pull_request,
+                        head_sha=pr_head,
+                        main_sha=main_sha,
+                    )
+                )
             comments_by_pr[number] = _comment_snapshot(comments)
             errors.extend(f"PR #{number}: {error}" for error in pr_errors)
 
@@ -787,7 +873,7 @@ def run(
             event_name == "merge_group"
             and latest_main.get("object", {}).get("sha") != trusted_base_sha
         ):
-            errors.append("merge-group base changed before status publication")
+            errors.append("trusted workflow source changed before status publication")
         for number in numbers:
             latest_pull_request = api.request(f"/pulls/{number}")
             if latest_pull_request.get("head", {}).get("sha") != initial_heads.get(
@@ -815,12 +901,30 @@ def run(
                 "workflow was not checked out from its trusted default-branch SHA"
             )
         if event_name == "merge_group":
+            for number in numbers:
+                latest_pull_request = api.request(f"/pulls/{number}")
+                latest_head = latest_pull_request.get("head", {}).get("sha")
+                if isinstance(latest_head, str) and SHA.fullmatch(latest_head):
+                    if latest_head != initial_heads.get(number):
+                        errors.append(
+                            f"PR #{number} head changed before merge-group publication"
+                        )
+                    errors.extend(
+                        _passed_pr_head_verdict(
+                            api,
+                            latest_pull_request,
+                            head_sha=latest_head,
+                            main_sha=main_sha,
+                        )
+                    )
             latest_entries = _merge_group_entries(api, group)
             if [
                 (
                     entry["baseCommit"]["oid"],
                     entry["headCommit"]["oid"],
                     entry["pullRequest"]["number"],
+                    entry["pullRequest"].get("headRefOid"),
+                    entry.get("state"),
                 )
                 for entry in latest_entries
             ] != [
@@ -828,6 +932,8 @@ def run(
                     entry["baseCommit"]["oid"],
                     entry["headCommit"]["oid"],
                     entry["pullRequest"]["number"],
+                    entry["pullRequest"].get("headRefOid"),
+                    entry.get("state"),
                 )
                 for entry in group_entries
             ]:

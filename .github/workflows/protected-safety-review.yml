@@ -29,15 +29,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check out the exact trusted base commit
+      - name: Check out trusted PR base or default branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
+          ref: ${{ github.event.pull_request.base.sha || 'refs/heads/main' }}
           persist-credentials: false
+      - name: Record the checked-out trusted commit
+        id: trusted_base
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Evaluate current PR metadata and publish exact-head status
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TRUSTED_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
+          TRUSTED_BASE_SHA: ${{ steps.trusted_base.outputs.sha }}
           GITHUB_EVENT_PATH: ${{ github.event_path }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}

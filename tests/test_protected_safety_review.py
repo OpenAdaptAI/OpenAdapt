@@ -32,6 +32,7 @@ def _manifest() -> dict[str, Any]:
 
 def _pull_request() -> dict[str, Any]:
     return {
+        "number": 42,
         "state": "open",
         "base": {
             "ref": "main",
@@ -238,7 +239,7 @@ class FakeApi:
                         "totalCount": len(self.queue_entries),
                         "pageInfo": {"hasNextPage": False},
                         "nodes": self.queue_entries,
-                    }
+                    },
                 }
             }
         }
@@ -366,7 +367,7 @@ def _queue_entry(
 ) -> dict[str, Any]:
     return {
         "position": position,
-        "state": "BUILDING",
+        "state": "AWAITING_CHECKS",
         "baseCommit": {"oid": base},
         "headCommit": {"oid": head},
         "pullRequest": {
@@ -381,16 +382,31 @@ def _queue_entry(
 def test_merge_group_maps_multi_pr_chain_and_publishes_group_sha() -> None:
     group_head = "f" * 40
     first_head = "d" * 40
+    prior_group_base = "9" * 40
     queue = [
         _queue_entry(
-            position=1, base=BASE, head=first_head, number=41, pr_head="4" * 40
+            position=3,
+            base="8" * 40,
+            head="7" * 40,
+            number=40,
+            pr_head="6" * 40,
+        ),
+        _queue_entry(
+            position=1,
+            base=prior_group_base,
+            head=first_head,
+            number=41,
+            pr_head="4" * 40,
         ),
         _queue_entry(
             position=2, base=first_head, head=group_head, number=42, pr_head=HEAD
         ),
     ]
+    queue[0]["state"] = "LOCKED"
 
     class GroupApi(FakeApi):
+        missing_head_verdict = False
+
         def request(self, path: str, *, method: str = "GET", data: Any = None) -> Any:
             if method == "POST" and path == "/check-runs":
                 self.check_run = data
@@ -399,9 +415,40 @@ def test_merge_group_maps_multi_pr_chain_and_publishes_group_sha() -> None:
                 return {"full_name": "OpenAdaptAI/OpenAdapt", "default_branch": "main"}
             if path == "/git/ref/heads/main":
                 return {"object": {"sha": BASE}}
+            if path.startswith("/commits/") and "/check-runs?" in path:
+                if self.missing_head_verdict:
+                    return {"total_count": 0, "check_runs": []}
+                pr_head = path.split("/", 3)[2]
+                run_id = "81" if pr_head == "4" * 40 else "82"
+                return {
+                    "total_count": 1,
+                    "check_runs": [
+                        {
+                            "name": CHECK_NAME,
+                            "head_sha": pr_head,
+                            "status": "completed",
+                            "conclusion": "success",
+                            "started_at": "2026-11-05T18:00:00Z",
+                            "app": {"slug": "github-actions"},
+                            "external_id": f"{run_id}:1",
+                            "details_url": f"https://github.com/OpenAdaptAI/OpenAdapt/actions/runs/{run_id}",
+                        }
+                    ],
+                }
+            if path in {"/actions/runs/81", "/actions/runs/82"}:
+                run_id = path.rsplit("/", 1)[1]
+                return {
+                    "path": ".github/workflows/protected-safety-review.yml",
+                    "event": "issue_comment",
+                    "head_sha": BASE,
+                    "run_attempt": 1,
+                    "repository": {"full_name": "OpenAdaptAI/OpenAdapt"},
+                    "html_url": f"https://github.com/OpenAdaptAI/OpenAdapt/actions/runs/{run_id}",
+                }
             if path in {"/pulls/41", "/pulls/42"}:
                 number = int(path.rsplit("/", 1)[1])
                 pr = _pull_request()
+                pr["number"] = number
                 pr["user"] = {"login": f"author-{number}"}
                 pr["head"]["sha"] = "4" * 40 if number == 41 else HEAD
                 pr["changed_files"] = 1
@@ -423,7 +470,7 @@ def test_merge_group_maps_multi_pr_chain_and_publishes_group_sha() -> None:
         "repository": {"full_name": "OpenAdaptAI/OpenAdapt"},
         "merge_group": {
             "base_ref": "refs/heads/main",
-            "base_sha": BASE,
+            "base_sha": prior_group_base,
             "head_sha": group_head,
         },
     }
@@ -436,6 +483,18 @@ def test_merge_group_maps_multi_pr_chain_and_publishes_group_sha() -> None:
     )
     assert conclusion == "success", errors
     assert api.check_run is not None
+    assert api.check_run["head_sha"] == group_head
+
+    api.missing_head_verdict = True
+    conclusion, errors = run(
+        event,
+        BASE,
+        api,
+        event_name="merge_group",
+        workflow_sha=group_head,
+    )
+    assert conclusion == "failure"
+    assert any("no completed protected-safety-review head verdict" in e for e in errors)
     assert api.check_run["head_sha"] == group_head
 
 
@@ -493,18 +552,17 @@ def test_merge_group_rejects_rewrite_queue_methods() -> None:
     assert api.check_run["head_sha"] == group_head
 
 
-def test_workflow_uses_trusted_merge_group_base_not_group_head() -> None:
+def test_workflow_uses_trusted_main_for_merge_group_not_group_content() -> None:
     workflow = (
         Path(__file__).parents[1] / ".github/workflows/protected-safety-review.yml"
     )
     text = workflow.read_text(encoding="utf-8")
     assert "merge_group:" in text
     assert "github.event_name == 'merge_group'" in text
-    assert "github.event.merge_group.base_sha" in text
-    assert (
-        "ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}"
-        in text
-    )
+    assert "ref: ${{ github.event.pull_request.base.sha || 'refs/heads/main' }}" in text
+    assert 'run: echo "sha=$(git rev-parse HEAD)"' in text
+    assert "TRUSTED_BASE_SHA: ${{ steps.trusted_base.outputs.sha }}" in text
+    assert "github.event.merge_group.base_sha" not in text
     assert "ref: ${{ github.event.merge_group.head_sha }}" not in text
 
 

@@ -64,13 +64,18 @@ commands ran, that they ran before the commit, or whether a hook was bypassed.
 
 The workflow reads PR and comment metadata through the GitHub API. The verifier
 and manifest come from a trusted base SHA; it does not check out or execute PR
-head code with the token. For merge-group events, it checks out the event's
-validated base SHA and publishes status on the separate merge-group head SHA.
-It maps the group head to queue entries through GitHub's `baseCommit` and
-`headCommit` chain for queues configured to use merge commits, re-evaluates
-each mapped PR at its current head, and fails closed if the chain or queue
-response is incomplete or ambiguous. Rebase and squash queue methods are
-unsupported because they can rewrite commit history. The stable
+head code with the token. For merge-group events, it checks out the current
+default-branch commit, never the speculative group base or group head, and
+publishes status on the separate merge-group head SHA. It maps the group head
+to queue entries through GitHub's `baseCommit` and `headCommit` chain for queues
+configured to use merge commits, then requires each mapped PR's exact current
+head to have an already-passed, provenance-checked `protected-safety-review`
+workflow verdict. It also re-evaluates current PR metadata and evidence, and
+fails closed if the chain, verdict, or queue response is incomplete or
+ambiguous. A speculative group base may be an earlier merge-group commit; it is
+used only as a queue-mapping boundary and is never trusted code. Rebase and
+squash queue methods are unsupported because they can rewrite commit history.
+The stable
 `protected-safety-review` check is linked to the running workflow record. This
 is an accidental-misuse control; the shared GitHub Actions app and self-reported
 comments do not prove command execution or defend against malicious actors.
