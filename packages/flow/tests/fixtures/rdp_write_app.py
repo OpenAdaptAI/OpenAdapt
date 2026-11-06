@@ -30,7 +30,6 @@ def main(database: Path) -> None:
     import tkinter as tk
 
     root = tk.Tk()
-    root.overrideredirect(True)
     root.geometry("1280x800+0+0")
     root.configure(background="white")
     version = "sha256:" + hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
