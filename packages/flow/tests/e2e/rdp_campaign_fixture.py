@@ -32,6 +32,59 @@ PROFILE = SessionProfile(
 )
 
 
+MARKER_RADIUS = 32
+MARKER_SIZE = 52
+MARKER_NAMES = ("application", "version", "environment")
+
+
+def marker_raster_diagnostic(
+    patch: Image.Image, origin: tuple[int, int], expected: Image.Image
+) -> dict[str, Any]:
+    """Describe one bounded cached patch; never choose an admission crop."""
+    maximum = MARKER_SIZE + 2 * MARKER_RADIUS
+    if (
+        patch.mode != "RGB"
+        or not all(MARKER_SIZE <= side <= maximum for side in patch.size)
+        or expected.mode != "RGB"
+        or expected.size != (MARKER_SIZE, MARKER_SIZE)
+        or len(origin) != 2
+        or any(type(v) is not int or not 0 <= v <= MARKER_RADIUS for v in origin)
+        or origin[0] + MARKER_SIZE > patch.width
+        or origin[1] + MARKER_SIZE > patch.height
+    ):
+        raise ValueError("invalid bounded marker patch")
+    raw = expected.tobytes()
+    matches = []
+    black = white = other = 0
+    for dy in range(-MARKER_RADIUS, MARKER_RADIUS + 1):
+        for dx in range(-MARKER_RADIUS, MARKER_RADIUS + 1):
+            x, y = origin[0] + dx, origin[1] + dy
+            if (
+                x < 0
+                or y < 0
+                or x + MARKER_SIZE > patch.width
+                or y + MARKER_SIZE > patch.height
+            ):
+                continue
+            candidate = patch.crop((x, y, x + MARKER_SIZE, y + MARKER_SIZE))
+            if candidate.tobytes() == raw:
+                matches.append([dx, dy])
+            if dx == dy == 0:
+                palette = candidate.getcolors(MARKER_SIZE * MARKER_SIZE)
+                if palette is None:
+                    raise ValueError("marker palette unavailable")
+                black = sum(n for n, color in palette if color == (0, 0, 0))
+                white = sum(n for n, color in palette if color == (255, 255, 255))
+                other = MARKER_SIZE * MARKER_SIZE - black - white
+    return {
+        "black_pixels": black,
+        "white_pixels": white,
+        "other_pixels": other,
+        "match_count": len(matches),
+        "unique_offset": matches[0] if len(matches) == 1 else None,
+    }
+
+
 def owned_listener(process: subprocess.Popen[bytes], port: int) -> bool:
     if process.poll() is not None:
         return False
@@ -68,6 +121,17 @@ class LoopbackSession:
         self.readiness_first: dict[str, Any] | None = None
         self.readiness_last: dict[str, Any] | None = None
         self._readiness_current: dict[str, Any] | None = None
+        self._first_marker_patches: (
+            tuple[tuple[Image.Image, tuple[int, int]], ...] | None
+        ) = None
+        self._last_marker_patches: (
+            tuple[tuple[Image.Image, tuple[int, int]], ...] | None
+        ) = None
+        self.marker_diagnostics: dict[str, Any] = {
+            "first": None,
+            "last": None,
+            "diagnostic_error": False,
+        }
 
     def _spawn(self, argv: list[str], env: dict[str, str]) -> subprocess.Popen[bytes]:
         child = subprocess.Popen(
@@ -160,6 +224,58 @@ class LoopbackSession:
                 "matches": actual.tobytes() == expected.tobytes(),
             }
 
+    def _cache_marker_patches(
+        self, image: Image.Image
+    ) -> tuple[tuple[Image.Image, tuple[int, int]], ...]:
+        width, height = image.size
+        if any(type(v) is not int or not 0 < v <= 8192 for v in (width, height)):
+            raise ValueError("invalid diagnostic geometry")
+        rgb = image if image.mode == "RGB" else image.convert("RGB")
+        patches = []
+        for x, y in app.MARKERS:
+            if x + MARKER_SIZE > width or y + MARKER_SIZE > height:
+                raise ValueError("marker outside captured frame")
+            left, top = max(0, x - MARKER_RADIUS), max(0, y - MARKER_RADIUS)
+            right = min(width, x + MARKER_SIZE + MARKER_RADIUS)
+            bottom = min(height, y + MARKER_SIZE + MARKER_RADIUS)
+            patches.append((rgb.crop((left, top, right, bottom)), (x - left, y - top)))
+        return tuple(patches)
+
+    def _finish_marker_diagnostics(self) -> None:
+        # At most two samples, three markers and 65**2 comparisons:25,350.
+        values = (app.APP, self.version, app.ENVIRONMENT)
+        for name, patches in (
+            ("first", self._first_marker_patches),
+            ("last", self._last_marker_patches),
+        ):
+            if patches is None:
+                continue
+            self.marker_diagnostics[name] = {
+                marker: marker_raster_diagnostic(
+                    patch,
+                    origin,
+                    Image.open(io.BytesIO(app.marker_bytes(value))).convert("RGB"),
+                )
+                for marker, (patch, origin), value in zip(MARKER_NAMES, patches, values)
+            }
+
+    def _wait_for_initial_frame(self, probes: Any) -> Any:
+        try:
+            return self._wait(lambda: self._initial_frame_ready(probes))
+        finally:
+            # Localization happens only after the original wait has completed.
+            # Its result or original exception must survive a diagnostic error.
+            try:
+                self._finish_marker_diagnostics()
+            except Exception:
+                self.marker_diagnostics = {
+                    "first": None,
+                    "last": None,
+                    "diagnostic_error": True,
+                }
+            finally:
+                self._first_marker_patches = self._last_marker_patches = None
+
     def _initial_frame_ready(self, probes: Any) -> bool:
         observation: dict[str, Any] = {
             "schema": "openadapt.rdp-frame-readiness/v1",
@@ -210,6 +326,15 @@ class LoopbackSession:
                 observation["markers"] = dict.fromkeys(
                     ("application", "version", "environment")
                 )
+            patches = None
+            try:
+                if image is not None:
+                    patches = self._cache_marker_patches(image)
+            except Exception:
+                self.marker_diagnostics["diagnostic_error"] = True
+            if self.readiness_first is None:
+                self._first_marker_patches = patches
+            self._last_marker_patches = patches
             self.readiness_last = observation
             if self.readiness_first is None:
                 self.readiness_first = observation
@@ -282,7 +407,7 @@ class LoopbackSession:
                 for i, value in enumerate((app.APP, self.version, app.ENVIRONMENT))
             )
             app_probe, version_probe, env_probe = probes
-            self._wait(lambda: self._initial_frame_ready(probes))
+            self._wait_for_initial_frame(probes)
 
             def factory(binding: str):
                 owner = LinuxPixelTasks(
