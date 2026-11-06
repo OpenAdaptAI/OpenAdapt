@@ -492,8 +492,7 @@ def safe_projection(path: Path) -> dict[str, Any]:
                 elif expected_raster_consensus == "inconsistent":
                     guard_capture_relation = "ambiguous_expected_raster"
                 elif (
-                    expected_before_current[0]["rgb_sha256"]
-                    == current["rgb_sha256"]
+                    expected_before_current[0]["rgb_sha256"] == current["rgb_sha256"]
                     and expected_before_current[0]["width"] == current["width"]
                     and expected_before_current[0]["height"] == current["height"]
                 ):
@@ -506,9 +505,7 @@ def safe_projection(path: Path) -> dict[str, Any]:
                 "code": "ambiguous_or_missing_provenance",
                 "provenance": {
                     "expected_match_count": len(expected_matches),
-                    "expected_match_before_current_count": len(
-                        expected_before_current
-                    ),
+                    "expected_match_before_current_count": len(expected_before_current),
                     "expected_match_at_current_count": len(expected_at_current),
                     "expected_match_after_current_count": len(expected_after_current),
                     "current_sequence_match_count": len(current_matches),

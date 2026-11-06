@@ -60,9 +60,7 @@ def _project_event(
                 "guarded_refusals": [
                     {
                         "phase": "input_guard_frame_compare",
-                        "expected_png_sha256": hashlib.sha256(
-                            expected_png
-                        ).hexdigest(),
+                        "expected_png_sha256": hashlib.sha256(expected_png).hexdigest(),
                         "current_sequence": current_sequence,
                     }
                 ],
@@ -327,7 +325,9 @@ def test_projection_refuses_unproven_capture_correlation(
             "code": "ambiguous_or_missing_provenance",
             "provenance": {
                 "expected_match_count": 0 if scenario == "missing" else 2,
-                "expected_match_before_current_count": 0 if scenario == "missing" else 2,
+                "expected_match_before_current_count": 0
+                if scenario == "missing"
+                else 2,
                 "expected_match_at_current_count": 0,
                 "expected_match_after_current_count": 0,
                 "current_sequence_match_count": 1,
