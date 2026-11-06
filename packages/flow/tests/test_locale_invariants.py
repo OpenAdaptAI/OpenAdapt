@@ -197,7 +197,7 @@ def test_layout_change_under_the_same_locale_is_caught() -> None:
         return None
 
     current = observe_locale_invariants(
-        platform="linux", run=run, env={"DISPLAY": ":0"}
+        platform="linux", run=run, env={"DISPLAY": ":0"}, xkb_group=lambda d: None
     )
     assert current.keyboard_layout == "fr"
     recorded = LocaleInvariants(
@@ -207,14 +207,17 @@ def test_layout_change_under_the_same_locale_is_caught() -> None:
     assert "keyboard_layout" in result.mismatched
 
 
-def test_xkb_variant_and_localectl_fallback() -> None:
+def test_configured_layouts_without_an_x_server_are_unknown() -> None:
+    # localectl and XKB_DEFAULT_LAYOUT name configuration, not the layout
+    # the input target is using, so they no longer stand in for it.
     def run(cmd: list[str]):
         if cmd[:2] == ["localectl", "status"]:
             return "   X11 Layout: ca\n  X11 Variant: multix\n"
         return None
 
-    seen = observe_locale_invariants(platform="linux", run=run, env={})
-    assert seen.keyboard_layout == "ca+multix"
+    env = {"XKB_DEFAULT_LAYOUT": "ca", "XKB_DEFAULT_VARIANT": "multix"}
+    seen = observe_locale_invariants(platform="linux", run=run, env=env)
+    assert seen.keyboard_layout is None
 
 
 def test_macos_reader_uses_os_region_and_input_source() -> None:
@@ -292,7 +295,222 @@ def test_compile_carries_the_recording_invariants(tmp_path) -> None:
         _locale_invariants_from_meta({"locale_invariants": "de_DE"})
 
 
-def test_a_fact_the_recording_could_not_read_is_not_compared() -> None:
+# ------------------------------- re-review fixes: unknown recording facts
+
+
+def test_a_layout_the_recording_could_not_read_refuses_keystrokes() -> None:
+    # Used to be skipped, so keystrokes replayed on any layout.
     recorded = LocaleInvariants(locale="de_DE", date_order="dmy")
     current = LocaleInvariants(locale="de_DE", date_order="dmy", keyboard_layout="us")
-    assert check_locale_invariants(recorded, current).ok
+    result = check_locale_invariants(recorded, current)
+    assert not result.ok
+    assert result.unrecorded == ("keyboard_layout",)
+    assert "when recording" in result.reason
+    # No keystroke step: the layout isn't needed.
+    assert check_locale_invariants(recorded, current, keystroke_steps=False).ok
+
+
+def _typing_workflow(invariants) -> Workflow:
+    return Workflow(
+        name="demo",
+        locale_invariants=invariants,
+        steps=[Step(id="s1", action=ActionKind.TYPE, intent="type a date")],
+    )
+
+
+def test_a_bound_recording_with_every_fact_unknown_refuses() -> None:
+    here = LocaleInvariants(locale="en_US", date_order="mdy", keyboard_layout="us")
+    with pytest.raises(LocaleInvariantMismatch) as excinfo:
+        enforce_workflow_locale_invariants(
+            _typing_workflow(LocaleInvariants()), current=here
+        )
+    assert set(excinfo.value.mismatched) == {"locale", "date_order", "keyboard_layout"}
+    # It survives the bundle round trip as a binding, not as "unbound".
+    loaded = Workflow.model_validate_json(
+        _typing_workflow(LocaleInvariants()).model_dump_json()
+    )
+    assert loaded.locale_invariants is not None
+    with pytest.raises(LocaleInvariantMismatch):
+        enforce_workflow_locale_invariants(loaded, current=here)
+
+
+def test_a_recording_from_before_the_binding_is_not_checked() -> None:
+    enforce_workflow_locale_invariants(
+        _typing_workflow(None), current=LocaleInvariants()
+    )
+
+
+def test_compile_keeps_an_all_unknown_binding() -> None:
+    from openadapt_flow.compiler.compile import _locale_invariants_from_meta
+
+    unknown = {"locale": None, "date_order": None, "keyboard_layout": None}
+    bound = _locale_invariants_from_meta({"locale_invariants": unknown})
+    assert bound is not None and bound.unknown() == list(unknown)
+
+
+# ----------------------------- re-review fixes: the active input target
+
+
+def _xkb_query(layouts: str, variants: str = "") -> str:
+    return f"rules:      evdev\nlayout:     {layouts}\nvariant:    {variants}\n"
+
+
+def test_the_x_server_wins_over_xkb_default_layout() -> None:
+    def run(cmd: list[str]):
+        return _xkb_query("fr") if cmd[:2] == ["setxkbmap", "-query"] else None
+
+    seen = observe_locale_invariants(
+        platform="linux",
+        run=run,
+        env={"DISPLAY": ":0", "XKB_DEFAULT_LAYOUT": "us"},
+        xkb_group=lambda d: 0,
+    )
+    assert seen.keyboard_layout == "fr"
+
+
+def test_the_active_xkb_group_picks_the_layout() -> None:
+    def run(cmd: list[str]):
+        return _xkb_query("us,de", ",nodeadkeys")
+
+    def at(group):
+        return observe_locale_invariants(
+            platform="linux", run=run, env={"DISPLAY": ":0"}, xkb_group=lambda d: group
+        ).keyboard_layout
+
+    # Switching groups changes the observed layout; it used to read "us,de"
+    # both times and compare equal.
+    assert at(0) == "us"
+    assert at(1) == "de+nodeadkeys"
+    # Several layouts and no readable group: unknown, not the list.
+    assert at(None) is None
+    assert at(5) is None
+
+
+def test_wayland_layout_is_unknown() -> None:
+    def run(cmd: list[str]):
+        return _xkb_query("us")
+
+    seen = observe_locale_invariants(
+        platform="linux",
+        run=run,
+        env={"DISPLAY": ":0", "WAYLAND_DISPLAY": "wayland-0"},
+        xkb_group=lambda d: 0,
+    )
+    assert seen.keyboard_layout is None
+
+
+def test_macos_reads_text_input_sources_first() -> None:
+    def run(cmd: list[str]):
+        if "-c" in cmd:
+            return "com.apple.keylayout.German\ncom.apple.keylayout.German\n"
+        if cmd[-1] == "AppleCurrentKeyboardLayoutInputSourceID":
+            return "com.apple.keylayout.US\n"  # stale saved value
+        return None
+
+    seen = observe_locale_invariants(platform="darwin", run=run)
+    assert seen.keyboard_layout == "german"
+
+
+def test_macos_input_method_is_part_of_the_layout() -> None:
+    def run(cmd: list[str]):
+        if "-c" in cmd:
+            return (
+                "com.apple.keylayout.ABC\n"
+                "com.apple.inputmethod.Kotoeri.RomajiTyping.Japanese\n"
+            )
+        return None
+
+    seen = observe_locale_invariants(platform="darwin", run=run)
+    assert seen.keyboard_layout == (
+        "abc+com.apple.inputmethod.kotoeri.romajityping.japanese"
+    )
+
+
+@pytest.mark.parametrize(
+    "hkl,klid",
+    [
+        (0x04090409, "00000409"),  # US
+        (0x04070407, "00000407"),  # German
+        (0x08090409, "00000809"),  # UK layout, English (US) language
+        (0xF0020409, "00010409"),  # US-Dvorak, via its Layout Id
+        (0xE0010411, "E0010411"),  # Japanese IME
+        (0xFFFFFFFFF0020409, "00010409"),  # sign-extended 64-bit handle
+        (0, None),
+        (0xF0090409, None),  # Layout Id the registry doesn't know
+    ],
+)
+def test_windows_klid_from_the_foreground_threads_hkl(hkl: int, klid) -> None:
+    from openadapt_flow.locale_invariants import klid_from_hkl
+
+    def layout_id(value: int):
+        return {0x002: "00010409"}.get(value)
+
+    assert klid_from_hkl(hkl, layout_id) == klid
+
+
+def test_windows_reader_reads_the_foreground_thread() -> None:
+    import inspect
+
+    from openadapt_flow import locale_invariants
+
+    source = inspect.getsource(locale_invariants._windows)
+    assert "GetForegroundWindow" in source
+    assert "GetWindowThreadProcessId" in source
+    assert "GetKeyboardLayoutNameW" not in source
+
+
+@pytest.mark.parametrize(
+    "platform,run,env",
+    [
+        ("linux", lambda cmd: _xkb_query("us,de", ",nodeadkeys"), {"DISPLAY": ":0"}),
+        ("linux", lambda cmd: _xkb_query("fr"), {"DISPLAY": ":1"}),
+        ("linux", lambda cmd: None, {}),
+        (
+            "darwin",
+            lambda cmd: {
+                "AppleLocale": "de_DE@rg=chzzzz\n",
+                "AppleICUDateFormatStrings": '{\n    1 = "dd.MM.yy";\n}\n',
+            }.get(cmd[-1], "com.apple.keylayout.German\ncom.apple.keylayout.German\n"),
+            None,
+        ),
+    ],
+)
+def test_capture_producer_reads_the_same_facts(platform, run, env) -> None:
+    # Capture records the facts and Flow checks them; the two readers must
+    # agree or every replay would refuse (or worse, match by accident).
+    facts = pytest.importorskip("openadapt_capture.locale_facts")
+    kwargs = dict(platform=platform, run=run, env=env, xkb_group=lambda d: 1)
+    produced = facts.read_os_locale_facts(**kwargs)
+    observed = observe_locale_invariants(**kwargs)
+    assert LocaleInvariants.model_validate(produced) == observed
+    assert produced == observed.model_dump()
+
+
+def test_capture_producer_readers_are_the_same_code() -> None:
+    import inspect
+
+    from openadapt_flow import locale_invariants
+
+    facts = pytest.importorskip("openadapt_capture.locale_facts")
+    shared = [
+        "_norm",
+        "_locale_family",
+        "date_order_from_format",
+        "_run",
+        "_posix_user_time_locale",
+        "_posix_date_order_for",
+        "_macos_layout",
+        "_macos",
+        "klid_from_hkl",
+        "_windows_klid_for_layout_id",
+        "_windows",
+        "_xkb_active_group",
+        "_xkb_layout",
+        "_posix",
+        "read_os_locale_facts",
+    ]
+    for name in shared:
+        assert inspect.getsource(getattr(facts, name)) == inspect.getsource(
+            getattr(locale_invariants, name)
+        ), name
+    assert facts._TIS_SCRIPT == locale_invariants._TIS_SCRIPT
