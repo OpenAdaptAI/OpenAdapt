@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from openadapt_flow.shadow import Route
+from openadapt_flow.shadow import Route, ShadowConfigError
 from openadapt_flow.shadow_db import DatabaseShadow
 from openadapt_flow.shadow_report import render_html, write_report
 from openadapt_flow.verifier import Contract
@@ -788,7 +788,11 @@ def test_the_guard_refuses_after_an_unannounced_write(tmp_path: Path) -> None:
     db = _db(tmp_path)
     sh = _shadow(tmp_path, db, guard=True)
     client = Client(db)
-    _act(sh, client)
+    first_status, first = _act(sh, client)
+    assert first_status == 200 and first["verdict"] == "CONFIRMED", {
+        "end": first,
+        "shadow": sh.results(),
+    }
     client.sql("UPDATE patient SET phone = '42' WHERE id = 1")
     other = {"first": "Bo", "last": "Reed", "email": "bo@example.test"}
     status, refused = _call(
@@ -953,3 +957,181 @@ def test_a_begin_after_stop_is_refused(tmp_path: Path) -> None:
     sh._stop.clear()
     sh.stop()
     assert status == 409 and "stopping" in reply["refused"]
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("allow_tables", ["audit", "gap_bookkeeping"]),
+        (
+            "allow_tables",
+            [{"table": "audit", "mode": "skip", "reason": "synthetic control"}],
+        ),
+        ("ignore_columns", {"patient": ["phone"]}),
+        ("schemas", ["main"]),
+        ("max_rows", 1),
+        ("read_row_budget", 10),
+        ("settle_s", 0),
+        ("recheck_after_s", 1),
+    ],
+    ids=["append", "skip", "ignore", "schema", "rows", "budget", "settle", "recheck"],
+)
+def test_differing_database_watch_configs_refuse_before_startup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    value: Any,
+    reverse: bool,
+) -> None:
+    from openadapt_flow import verify_run
+
+    db = _db(tmp_path)
+    first = _contract(db)
+    document = first.config.model_dump(mode="json")
+    document["frame"]["database"][field] = value
+    other = Contract.from_dict(document)
+    params = {"fname": "first", "lname": "last", "email": "email"}
+    routes = [
+        Route(None, first, params, "first"),  # type: ignore[arg-type]
+        Route(None, other, params, "second"),  # type: ignore[arg-type]
+    ]
+    if reverse:
+        routes.reverse()
+    reads: list[bool] = []
+
+    def unexpected_read(*_args: Any, **_kwargs: Any) -> None:
+        reads.append(True)
+        raise AssertionError("mismatched watch must refuse before database reads")
+
+    monkeypatch.setattr(verify_run, "_read_database", unexpected_read)
+    shadow = None
+    try:
+        with pytest.raises(
+            ShadowConfigError, match="same frame.database configuration"
+        ):
+            shadow = DatabaseShadow(routes=routes, out=tmp_path / "out")
+    finally:
+        # The literal parent constructs a bound but unstarted server. Close
+        # only this test's resources even when the refusal assertion fails.
+        if shadow is not None:
+            shadow.server.server_close()
+            shadow._pool.shutdown(wait=True, cancel_futures=True)
+    assert reads == []
+
+
+def test_matching_database_watch_configs_allow_different_action_windows(
+    tmp_path: Path,
+) -> None:
+    db = _db(tmp_path)
+    first = _contract(db)
+    document = first.config.model_dump(mode="json")
+    document["max_execution_window_s"] = 600
+    other = Contract.from_dict(document)
+    params = {"fname": "first", "lname": "last", "email": "email"}
+    original = [first.config.model_dump(), other.config.model_dump()]
+    sh = DatabaseShadow(
+        routes=[
+            Route(None, first, params, "first"),  # type: ignore[arg-type]
+            Route(None, other, params, "second"),  # type: ignore[arg-type]
+        ],
+        actor_id="bot",
+        out=tmp_path / "out",
+        quiet_s=60,
+    ).start()
+    sh.stop()
+    assert sh.episodes == [] and sh.gaps_clean == 1
+    assert first.config.max_execution_window_s != other.config.max_execution_window_s
+    assert [first.config.model_dump(), other.config.model_dump()] == original
+
+
+def test_guarded_pending_end_has_a_halt_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = _db(tmp_path)
+    sh = _shadow(tmp_path, db, guard=True, check_timeout_s=0.1)
+    entered_check = threading.Event()
+    release_check = threading.Event()
+    original_check = sh._check
+    replies: list[tuple[int, dict[str, Any]]] = []
+    errors: list[BaseException] = []
+
+    def held_check(episode: Any) -> None:
+        entered_check.set()
+        if not release_check.wait(5):
+            raise AssertionError("test did not release the checker")
+        original_check(episode)
+
+    monkeypatch.setattr(sh, "_check", held_check)
+    status, begun = _call(
+        sh.url, "/begin", {"action": "create_patient", "values": VALUES}
+    )
+    assert status == 200, begun
+    Client(db).save(VALUES)
+
+    def end_action() -> None:
+        try:
+            replies.append(_call(sh.url, "/end", {"action_id": begun["action_id"]}))
+        except BaseException as exc:
+            errors.append(exc)
+
+    thread = threading.Thread(target=end_action, name="pending-shadow-end")
+    try:
+        thread.start()
+        assert entered_check.wait(5), "the real checker did not start"
+        thread.join(5)
+        assert not thread.is_alive()
+        assert errors == []
+        status, reply = replies[0]
+        assert status == 200 and reply["verdict"] == "PENDING"
+        assert isinstance(reply["halted"], str) and reply["halted"].strip()
+        assert "PENDING" in reply["halted"]
+        assert len(sh.writes) == 1
+    finally:
+        release_check.set()
+        thread.join(5)
+        sh.stop()
+
+
+@pytest.mark.parametrize(
+    ("max_rows", "start_above", "crosses"),
+    [(100, False, False), (1, False, True), (1, True, True)],
+    ids=["insert-below-cap-control", "insert-crosses-up", "update-delete-crosses-down"],
+)
+def test_gap_reads_with_different_row_representations_are_never_clean(
+    tmp_path: Path, max_rows: int, start_above: bool, crosses: bool
+) -> None:
+    db = _db(tmp_path)
+    inserted = (
+        "INSERT INTO patient (fname, lname, email) VALUES ('X', 'Y', 'z@example.test')"
+    )
+    if start_above:
+        with sqlite3.connect(db) as connection:
+            connection.execute(inserted)
+    document = _contract(db).config.model_dump(mode="json")
+    document["frame"]["database"]["max_rows"] = max_rows
+    route = Route(
+        None,  # type: ignore[arg-type] - actions are named, not matched
+        Contract.from_dict(document),
+        {"fname": "first", "lname": "last", "email": "email"},
+        "create_patient",
+    )
+    sh = DatabaseShadow(
+        routes=[route], actor_id="bot", out=tmp_path / "out", quiet_s=60
+    ).start()
+    try:
+        with sqlite3.connect(db) as connection:
+            if start_above:
+                connection.execute("UPDATE patient SET phone = '666' WHERE id = 1")
+                connection.execute("DELETE FROM patient WHERE id = 2")
+            else:
+                connection.execute(inserted)
+    finally:
+        sh.stop()
+    assert sh.gaps_watched == 1 and sh.gaps_clean == 0
+    assert _verdicts(sh) == [("gap", "UNCERTAIN")]
+    patient = sh.episodes[0].evidence["tables"]["patient"]
+    if crosses:
+        assert "compared differently" in patient["unread"]
+    else:
+        assert patient["added"] == 1 and not patient["unread"]
