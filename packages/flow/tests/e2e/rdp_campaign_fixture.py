@@ -111,24 +111,31 @@ class LoopbackSession:
         def observed(png: bytes) -> bool:
             if (
                 not self._readiness_check(
-                    marker, "children_alive",
+                    marker,
+                    "children_alive",
                     lambda: not any(p.poll() is not None for p in self.processes),
                 )
                 or not self._readiness_check(
-                    marker, "display_matches",
+                    marker,
+                    "display_matches",
                     lambda: display_identity(display) == self.identity,
                 )
                 or not self._readiness_check(
-                    marker, "listener_owned", lambda: owned_listener(self.shadow, port),
+                    marker,
+                    "listener_owned",
+                    lambda: owned_listener(self.shadow, port),
                 )
             ):
                 return False
             with Image.open(io.BytesIO(png)) as image:
                 return self._readiness_check(
-                    marker, "pixels_match",
-                    lambda: image.size == (1280, 800)
-                    and image.convert("RGB").crop((x, y, x + 52, y + 52)).tobytes()
-                    == expected.tobytes(),
+                    marker,
+                    "pixels_match",
+                    lambda: (
+                        image.size == (1280, 800)
+                        and image.convert("RGB").crop((x, y, x + 52, y + 52)).tobytes()
+                        == expected.tobytes()
+                    ),
                 )
 
         return observed
@@ -140,7 +147,8 @@ class LoopbackSession:
             raise ValueError("invalid diagnostic geometry")
         observation["frame_size"] = [width, height]
         for name, (x, y), value in zip(
-            ("application", "version", "environment"), app.MARKERS,
+            ("application", "version", "environment"),
+            app.MARKERS,
             (app.APP, self.version, app.ENVIRONMENT),
         ):
             expected = Image.open(io.BytesIO(app.marker_bytes(value))).convert("RGB")
@@ -155,11 +163,22 @@ class LoopbackSession:
     def _initial_frame_ready(self, probes: Any) -> bool:
         observation: dict[str, Any] = {
             "schema": "openadapt.rdp-frame-readiness/v1",
-            "stage": "framebuffer", "exception_category": None,
-            "frame_size": None, "diagnostic_error": False,
-            "markers": {name: None for name in ("application", "version", "environment")},
+            "stage": "framebuffer",
+            "exception_category": None,
+            "frame_size": None,
+            "diagnostic_error": False,
+            "markers": {
+                name: None for name in ("application", "version", "environment")
+            },
             "checks": {
-                name: dict.fromkeys(("children_alive", "display_matches", "listener_owned", "pixels_match"))
+                name: dict.fromkeys(
+                    (
+                        "children_alive",
+                        "display_matches",
+                        "listener_owned",
+                        "pixels_match",
+                    )
+                )
                 for name in ("application", "version", "environment")
             },
         }
@@ -173,8 +192,10 @@ class LoopbackSession:
             return all(p(out.getvalue()) for p in probes)
         except BaseException as exc:
             observation["exception_category"] = (
-                "file_unavailable" if isinstance(exc, FileNotFoundError)
-                else "connection_refused" if isinstance(exc, ConnectionRefusedError)
+                "file_unavailable"
+                if isinstance(exc, FileNotFoundError)
+                else "connection_refused"
+                if isinstance(exc, ConnectionRefusedError)
                 else "other"
             )
             raise
@@ -186,7 +207,9 @@ class LoopbackSession:
             except Exception:
                 observation["diagnostic_error"] = True
                 observation["frame_size"] = None
-                observation["markers"] = dict.fromkeys(("application", "version", "environment"))
+                observation["markers"] = dict.fromkeys(
+                    ("application", "version", "environment")
+                )
             self.readiness_last = observation
             if self.readiness_first is None:
                 self.readiness_first = observation

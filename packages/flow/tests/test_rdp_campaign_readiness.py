@@ -47,14 +47,18 @@ def rig(tmp_path, monkeypatch):
     monkeypatch.setattr(fixture, "display_identity", identity)
     monkeypatch.setattr(fixture, "owned_listener", listener)
     image = Image.new("RGB", (1280, 800), "white")
-    for position, value in zip(app.MARKERS, (app.APP, session.version, app.ENVIRONMENT)):
+    for position, value in zip(
+        app.MARKERS, (app.APP, session.version, app.ENVIRONMENT)
+    ):
         image.paste(Image.open(io.BytesIO(app.marker_bytes(value))), position)
     session.transport = SimpleNamespace(framebuffer=lambda: (image, *image.size))
     probes = tuple(
         session._marker_probe(i, value, ":777", 12345)
         for i, value in enumerate((app.APP, session.version, app.ENVIRONMENT))
     )
-    return SimpleNamespace(session=session, image=image, probes=probes, state=state, calls=calls)
+    return SimpleNamespace(
+        session=session, image=image, probes=probes, state=state, calls=calls
+    )
 
 
 def test_actual_predicate_accepts_exact_pixels_and_records_only_fixed_fields(rig):
@@ -63,20 +67,42 @@ def test_actual_predicate_accepts_exact_pixels_and_records_only_fixed_fields(rig
     record = rig.session.readiness_last
     assert record["frame_size"] == [1280, 800]
     assert record["exception_category"] is None and record["diagnostic_error"] is False
-    assert set(record) == {"schema", "stage", "exception_category", "frame_size", "diagnostic_error", "markers", "checks"}
+    assert set(record) == {
+        "schema",
+        "stage",
+        "exception_category",
+        "frame_size",
+        "diagnostic_error",
+        "markers",
+        "checks",
+    }
     for name in NAMES:
-        assert record["checks"][name] == dict.fromkeys(("children_alive", "display_matches", "listener_owned", "pixels_match"), True)
+        assert record["checks"][name] == dict.fromkeys(
+            ("children_alive", "display_matches", "listener_owned", "pixels_match"),
+            True,
+        )
         marker = record["markers"][name]
-        assert set(marker) == {"region", "expected_rgb_sha256", "observed_rgb_sha256", "matches"}
+        assert set(marker) == {
+            "region",
+            "expected_rgb_sha256",
+            "observed_rgb_sha256",
+            "matches",
+        }
         assert marker["matches"] is True
         assert marker["expected_rgb_sha256"] == marker["observed_rgb_sha256"]
     text = json.dumps(record)
-    assert "private" not in text and app.APP not in text and rig.session.version not in text
-    assert "PNG" not in text and "identity\"" not in text
+    assert (
+        "private" not in text
+        and app.APP not in text
+        and rig.session.version not in text
+    )
+    assert "PNG" not in text and 'identity"' not in text
 
 
 @pytest.mark.parametrize("index", range(3))
-def test_one_changed_pixel_in_each_marker_refuses_with_unchanged_short_circuit(rig, index):
+def test_one_changed_pixel_in_each_marker_refuses_with_unchanged_short_circuit(
+    rig, index
+):
     x, y = app.MARKERS[index]
     rig.image.putpixel((x, y), (17, 29, 41))
     assert rig.session._initial_frame_ready(rig.probes) is False
@@ -89,13 +115,31 @@ def test_one_changed_pixel_in_each_marker_refuses_with_unchanged_short_circuit(r
         assert record["markers"][name]["matches"] is True
 
 
-@pytest.mark.parametrize("field,expected", [("alive", ["child"]), ("identity", ["child", "identity"]), ("listener", ["child", "identity", "listener"])])
-def test_ownership_refusal_preserves_reader_order_and_does_not_admit_matching_pixels(rig, field, expected):
+@pytest.mark.parametrize(
+    "field,expected",
+    [
+        ("alive", ["child"]),
+        ("identity", ["child", "identity"]),
+        ("listener", ["child", "identity", "listener"]),
+    ],
+)
+def test_ownership_refusal_preserves_reader_order_and_does_not_admit_matching_pixels(
+    rig, field, expected
+):
     rig.state[field] = False
     assert rig.session._initial_frame_ready(rig.probes) is False
     assert rig.calls == expected
     record = rig.session.readiness_last
-    assert record["checks"]["application"][{"alive": "children_alive", "identity": "display_matches", "listener": "listener_owned"}[field]] is False
+    assert (
+        record["checks"]["application"][
+            {
+                "alive": "children_alive",
+                "identity": "display_matches",
+                "listener": "listener_owned",
+            }[field]
+        ]
+        is False
+    )
     assert all(marker["matches"] for marker in record["markers"].values())
     assert all(value is None for value in record["checks"]["version"].values())
 
@@ -109,7 +153,14 @@ def test_wrong_frame_geometry_refuses_even_when_all_marker_pixels_match(rig):
     assert rig.calls == ["child", "identity", "listener"]
 
 
-@pytest.mark.parametrize("kind,category", [(FileNotFoundError, "file_unavailable"), (ConnectionRefusedError, "connection_refused"), (ValueError, "other")])
+@pytest.mark.parametrize(
+    "kind,category",
+    [
+        (FileNotFoundError, "file_unavailable"),
+        (ConnectionRefusedError, "connection_refused"),
+        (ValueError, "other"),
+    ],
+)
 def test_original_exception_identity_and_fixed_category_preserved(rig, kind, category):
     error = kind("must-never-export-this-reason")
     rig.state["exception"] = error
@@ -126,7 +177,9 @@ def test_original_exception_identity_and_fixed_category_preserved(rig, kind, cat
 
 
 @pytest.mark.parametrize("outcome", ["valid", "refuse", "exception"])
-def test_projection_failure_neither_changes_admission_nor_masks_original_exception(rig, monkeypatch, outcome):
+def test_projection_failure_neither_changes_admission_nor_masks_original_exception(
+    rig, monkeypatch, outcome
+):
     error = ConnectionRefusedError("original-secret-like-reason")
     if outcome == "refuse":
         rig.state["listener"] = False
@@ -158,9 +211,15 @@ def test_first_last_are_bounded_and_short_circuited_fields_reset(rig):
     for _ in range(3):
         assert rig.session._initial_frame_ready(rig.probes) is False
     assert json.dumps(rig.session.readiness_first, sort_keys=True) == first
-    assert rig.session.readiness_last["checks"]["application"]["children_alive"] is False
-    assert rig.session.readiness_last["checks"]["application"]["display_matches"] is None
-    assert all(v is None for v in rig.session.readiness_last["checks"]["version"].values())
+    assert (
+        rig.session.readiness_last["checks"]["application"]["children_alive"] is False
+    )
+    assert (
+        rig.session.readiness_last["checks"]["application"]["display_matches"] is None
+    )
+    assert all(
+        v is None for v in rig.session.readiness_last["checks"]["version"].values()
+    )
     assert rig.session.readiness_first is not rig.session.readiness_last
 
 
@@ -185,5 +244,7 @@ def test_framebuffer_exception_remains_original_without_extra_capture(rig):
 def test_malformed_diagnostic_geometry_is_not_exported(rig):
     observation = {"frame_size": None, "markers": dict.fromkeys(NAMES)}
     with pytest.raises(ValueError, match="diagnostic geometry"):
-        rig.session._project_readiness_frame(SimpleNamespace(size=(9000, 800)), observation)
+        rig.session._project_readiness_frame(
+            SimpleNamespace(size=(9000, 800)), observation
+        )
     assert observation == {"frame_size": None, "markers": dict.fromkeys(NAMES)}
