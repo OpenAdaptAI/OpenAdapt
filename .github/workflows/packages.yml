@@ -605,23 +605,27 @@ jobs:
             tests/test_agent_guard.py \
             --basetemp=runs/ci-critical --junitxml=runs/critical-junit.xml
       - name: Golden free path with egress blocked (loopback-only network namespace)
-        # The on-prem proof: the free path still reaches VERIFIED when the
-        # kernel refuses every packet bound off the machine, and strict
-        # no-outbound mode logs no attempt to leave. The script refuses to run
-        # unless the namespace holds only loopback; the first test then shows
-        # public hosts are unreachable, so it cannot pass with a network.
+        # Direct IP sockets stay in a loopback-only namespace. The tutorial
+        # must still reach VERIFIED with no Python-hook refusal recorded.
+        # A native-child control measures the hook observation boundary.
         run: |
-          sudo -E env "PATH=$PATH" "HOME=$HOME" \
+          sudo -n env "PATH=$PATH" "HOME=$HOME" \
             deploy/on-prem/bin/run-egress-blocked.sh \
             python -m pytest -v tests/e2e/test_egress_blocked_e2e.py \
             --basetemp=runs/ci-onprem-egress --junitxml=runs/onprem-egress-junit.xml
+      - name: Network namespace setup and owned Unix broker boundary
+        env:
+          OPENADAPT_TEST_NETNS: "1"
+        run: |
+          python -m pytest -v tests/e2e/test_egress_namespace_e2e.py \
+            --basetemp=runs/ci-onprem-boundary --junitxml=runs/onprem-boundary-junit.xml
       - name: Fail if any critical test was skipped or none ran
         run: |
           python - <<'PY'
           import sys
           import xml.etree.ElementTree as ET
           bad = False
-          for name in ("critical-e2e", "critical", "onprem-egress"):
+          for name in ("critical-e2e", "critical", "onprem-egress", "onprem-boundary"):
               root = ET.parse(f"runs/{name}-junit.xml").getroot()
               suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
               tests = sum(int(s.get("tests", 0)) for s in suites)

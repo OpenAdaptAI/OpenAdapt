@@ -344,12 +344,25 @@ rel_validate_release_dir() {
     && -x "$release_dir/venv/bin/openadapt-flow" ]]
 }
 
-# Create $1 holding this process's pid; fails if $1 already exists. The shell
-# opens it with noclobber (O_CREAT|O_EXCL), so exclusion does not depend on
-# mkdir(1): the uutils mkdir that Ubuntu 26.04 ships reports success to both
-# callers when two processes race to create one directory.
+# Create $1 holding this process's pid; fails if $1 already exists as any
+# kind of file. Exclusion does not depend on mkdir(1): the uutils mkdir that
+# Ubuntu 26.04 ships reports success to both callers when two processes race to
+# create one directory. Nor does it rest on noclobber alone, which opens an
+# existing FIFO or device without O_EXCL. The pid goes into a fresh staged name
+# and is hard-linked into place; link(2) refuses an existing path of every
+# type. Ownership is then read back from the file, not from ln(1)'s status.
 _rel_create_exclusive() {
-  ( set -C; printf '%s\n' "$$" > "$1" ) 2>/dev/null
+  local target="$1" staged="" owner="" linked=1
+  # Refuse any existing path up front, whatever its type.
+  [[ -e "$target" || -L "$target" ]] && return 1
+  staged="$target.$$.$RANDOM$RANDOM"
+  ( set -C; printf '%s\n' "$$" > "$staged" ) 2>/dev/null || return 1
+  [[ -f "$staged" && ! -L "$staged" ]] || return 1
+  ln "$staged" "$target" 2>/dev/null && linked=0
+  rm -f "$staged" 2>/dev/null || true
+  [[ "$linked" -eq 0 && -f "$target" && ! -L "$target" ]] || return 1
+  owner="$(< "$target")" 2>/dev/null || return 1
+  [[ "$owner" == "$$" ]]
 }
 
 _rel_lock_acquire() {
@@ -365,6 +378,10 @@ _rel_lock_acquire() {
   if [[ -d "$lock" && ! -L "$lock" ]] && _rel_create_exclusive "$lock/pid"; then
     REL_LOCK_DIR="$lock"
     return 0
+  fi
+  if [[ -L "$lock/pid" ]] || [[ -e "$lock/pid" && ! -f "$lock/pid" ]]; then
+    _rel_err "release lock pid is not a regular file; refusing: $lock/pid"
+    return 1
   fi
   if [[ -d "$lock" && ! -L "$lock" && -f "$lock/pid" && ! -L "$lock/pid" ]]; then
     owner="$(cat "$lock/pid" 2>/dev/null || true)"

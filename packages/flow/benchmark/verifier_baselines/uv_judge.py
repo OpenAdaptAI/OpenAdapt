@@ -6,8 +6,9 @@ a675d6d61c41c47ae87bacefeab22caad18e3e84, MIT license (see the license text at
 the top of ``uv_prompts.py``). This module re-implements the control flow of
 ``webeval/src/webeval/rubric_agent/mm_rubric_agent.py`` (``MMRubricAgent``)
 and the helpers it uses from ``formatting.py`` and ``utils.py``. It does not
-import or execute the fara package; the prompts in ``uv_prompts.py`` are
-verbatim copies.
+import or execute the fara package; the prompts in ``uv_prompts.py`` retain
+the upstream license and provenance.
+This adaptation omits agent self-reports from every scoring stage.
 
 Pipeline, in UV's order (UV step numbers in brackets):
 
@@ -225,12 +226,13 @@ def truncate_observation(text: str, max_chars: int = 1000) -> str:
 
 
 def format_action_history(steps: List[Dict[str, Any]], max_url_chars: int = 150) -> str:
-    """UV's ``format_action_history`` over plain step dicts.
+    """Render structured actions and observations supplied by the harness.
 
-    Step keys: ``url``, ``state_description``, ``action_name``,
-    ``action_args``, optional ``error`` (UV ``previous_error``), optional
-    ``tool_output`` (shown for ``run_command`` as in UV). Steps are numbered
-    from 1, as UV's ``get_step_summaries`` does.
+    ``observations`` entries have a ``source`` (application, system_of_record,
+    http or tool) and ``content``. Adapters must establish that provenance;
+    agent-authored or ambiguous text is never promoted to an observation.
+    Legacy ``state_description``, ``error`` and ``tool_output`` have no
+    provenance and are omitted. Action arguments remain verbatim task data.
     """
     lines: List[str] = []
     for idx, s in enumerate(steps, start=1):
@@ -238,17 +240,15 @@ def format_action_history(steps: List[Dict[str, Any]], max_url_chars: int = 150)
         url_shortened = url.split("?")[0].split("#")[0]
         if len(url_shortened) > max_url_chars:
             url_shortened = url_shortened[:max_url_chars] + "..."
-        state_str = (
-            f"{url_shortened}, state_description: {s.get('state_description', '')}"
-        )
         action_str = f"{s.get('action_name', '')}({json.dumps(s.get('action_args') or {}, indent=4)})"
-        entry = f"State {idx}: {state_str}\nAction {idx}: {action_str}"
-        if s.get("error"):
-            entry += (
-                f"\nError! The above Action {idx} encountered an Error: {s['error']}"
-            )
-        if s.get("action_name") == "run_command" and s.get("tool_output"):
-            entry += f"\nCommand Output: {truncate_observation(s['tool_output'])}"
+        entry = f"State {idx}: {url_shortened}\nAction {idx}: {action_str}"
+        for observation in s.get("observations") or []:
+            if observation.get("source") not in {
+                "application", "system_of_record", "http", "tool"
+            }:
+                continue
+            content = json.dumps(observation.get("content"), ensure_ascii=False)
+            entry += f"\nObserved {observation['source']}: {content}"
         lines.append(entry)
     return "\n".join(lines)
 
@@ -710,7 +710,6 @@ async def _action_only_scoring(
     rubric_dict,
     task,
     action_history,
-    predicted_output,
     init_url_context,
     blocks,
     max_iters,
@@ -721,7 +720,6 @@ async def _action_only_scoring(
         task_definition=task,
         rubric=rubric_dict,
         action_history=action_history,
-        predicted_target=predicted_output,
         init_url_context=init_url_context,
         critical_point_context=blocks["critical_point_context"],
         user_simulator_policy=blocks["user_simulator_policy"],
@@ -846,7 +844,6 @@ async def _analyze_screenshot_evidence_batched(
     task,
     init_url_context,
     action_history,
-    predicted_output,
     max_iters,
 ) -> Dict[int, List[Dict]]:
     num_criteria = len(rubric["items"])
@@ -874,7 +871,6 @@ async def _analyze_screenshot_evidence_batched(
             task_definition=task,
             init_url_context=init_url_context,
             action_history=action_history,
-            agent_predicted_output=predicted_output,
             criterion_info=criterion_info,
             conditional_check=conditional_check,
             conditional_output=conditional_output,
@@ -938,7 +934,6 @@ async def _analyze_screenshot_evidence_batched(
             task_definition=task,
             init_url_context=init_url_context,
             action_history=action_history,
-            agent_predicted_output=predicted_output,
             criteria_info_block=criteria_info_block,
         )
         messages = _image_message(images_b64[screenshot_idx], prompt)
@@ -1020,7 +1015,6 @@ async def _rescore_rubric_with_screenshots(
     task,
     init_url_context,
     action_history,
-    predicted_output,
     total_screenshots,
     max_iters,
 ) -> dict:
@@ -1041,7 +1035,6 @@ async def _rescore_rubric_with_screenshots(
         task_definition=task,
         init_url_context=init_url_context,
         action_history=action_history,
-        agent_predicted_output=predicted_output,
         full_rubric_with_baselines=build_full_rubric_with_baselines(rubric),
         all_screenshot_evidence=build_all_screenshot_evidence_text(
             rubric, evidence_by_criterion, total_screenshots
@@ -1275,7 +1268,6 @@ async def _outcome_verification(
     task,
     init_url_context,
     action_history,
-    predicted_output,
     total_screenshots,
     blocks,
     max_iters,
@@ -1288,7 +1280,6 @@ async def _outcome_verification(
             rubric, evidence_by_criterion, total_screenshots
         ),
         action_history=action_history,
-        predicted_output=predicted_output or "N/A",
         critical_point_context=blocks["critical_point_context"],
         user_simulator_policy=blocks["user_simulator_policy_outcome"],
         cp_decision_rules=blocks["cp_decision_rules"],
@@ -1341,7 +1332,6 @@ async def judge(
     task: str,
     init_url: str,
     steps: List[Dict[str, Any]],
-    predicted_output: str,
     screenshots: List[bytes],
     client: Any,
     *,
@@ -1350,7 +1340,7 @@ async def judge(
     cp_profile: Optional[Dict[str, Any]] = None,
     max_iters: int = MAX_ITERS,
 ) -> Dict[str, Any]:
-    """Run the UV pipeline on one trajectory.
+    """Run the UV pipeline on observed evidence, without agent self-reports.
 
     ``client`` plays UV's ``gpt5_client`` role; ``action_only_client`` plays
     the ``o4mini_client`` role (defaults to ``client``). ``rubric`` is an
@@ -1392,7 +1382,6 @@ async def judge(
         rubric_dict,
         task,
         action_history,
-        predicted_output,
         init_url_context,
         blocks,
         max_iters,
@@ -1413,7 +1402,6 @@ async def judge(
         task,
         init_url_context,
         action_history,
-        predicted_output,
         max_iters,
     )
     conditional_indices = [
@@ -1439,7 +1427,6 @@ async def judge(
         task,
         init_url_context,
         action_history,
-        predicted_output,
         len(screenshots),
         max_iters,
     )
@@ -1473,7 +1460,6 @@ async def judge(
         task,
         init_url_context,
         action_history,
-        predicted_output,
         len(screenshots),
         blocks,
         max_iters,

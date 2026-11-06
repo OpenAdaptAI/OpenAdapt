@@ -2,20 +2,24 @@
 #
 # run-egress-blocked.sh — run a command with no route off this machine.
 #
-# Linux only. Starts the command in a new network namespace that holds only
-# the loopback interface, so the kernel refuses every connection and DNS query
-# that would leave the machine, from Python, from native code, and from child
-# processes alike (a browser included). Loopback still works, so a local
-# system of record on 127.0.0.1 stays reachable.
+# Linux only. Starts the command in a new network namespace containing only
+# loopback. Direct IP connections from the command and its children cannot
+# reach networks outside that namespace. Services started inside it can use
+# loopback to communicate with each other.
 #
-# Before running the command it checks that the namespace really has no
-# interface besides loopback and no route, and refuses to run otherwise. The
-# command runs as the user who invoked sudo, with OPENADAPT_EGRESS_BLOCKED=netns
-# in its environment. That variable only tells a test where it is running; the
-# test still has to show for itself that nothing leaves the machine.
+# Filesystem access is unchanged: pathname Unix sockets can reach processes
+# outside the namespace, including brokers that forward network traffic. This
+# is a direct-IP restriction, not a filesystem or untrusted-code sandbox.
 #
-# Usage (as root, normally through sudo -E so PATH and HOME are kept):
-#   sudo -E env "PATH=$PATH" deploy/on-prem/bin/run-egress-blocked.sh CMD [ARGS...]
+# Before running the command, all interface and route inspections must succeed
+# and confirm only loopback and no routes. The command runs as the invoking
+# sudo user, with OPENADAPT_EGRESS_BLOCKED=netns as a test-location hint. Tests
+# independently check the restriction rather than trusting that variable.
+#
+# Usage (as root). Pass every needed variable on the env command line; do not
+# rely on sudo -E (GitHub-hosted runners ignore it):
+#   sudo -n env "PATH=$PATH" "HOME=$HOME" KEY=VAL \
+#     deploy/on-prem/bin/run-egress-blocked.sh CMD [ARGS...]
 #
 # Exit code: the command's, or 2 when the namespace cannot be set up.
 
@@ -45,14 +49,25 @@ export RUN_UID RUN_GID
 # shellcheck disable=SC2016
 exec unshare --net -- bash -euo pipefail -c '
   ip link set lo up
-  others="$(ip -o link show | awk -F": " "{print \$2}" | grep -v "^lo$" || true)"
-  if [[ -n "$others" ]]; then
-    echo "run-egress-blocked.sh: interfaces besides loopback: $others" >&2
+  if ! links="$(ip -o link show)"; then
+    echo "run-egress-blocked.sh: cannot inspect interfaces" >&2
     exit 2
   fi
-  routes="$(ip route show; ip -6 route show | grep -v "^::1 " | grep -v "^fe80::" || true)"
-  if [[ -n "$routes" ]]; then
-    echo "run-egress-blocked.sh: unexpected routes: $routes" >&2
+  interfaces="$(awk -F": " "{print \$2}" <<< "$links")"
+  if [[ "$interfaces" != lo ]]; then
+    echo "run-egress-blocked.sh: expected only loopback, found: $interfaces" >&2
+    exit 2
+  fi
+  if ! routes4="$(ip route show)"; then
+    echo "run-egress-blocked.sh: cannot inspect IPv4 routes" >&2
+    exit 2
+  fi
+  if ! routes6="$(ip -6 route show)"; then
+    echo "run-egress-blocked.sh: cannot inspect IPv6 routes" >&2
+    exit 2
+  fi
+  if [[ -n "$routes4" || -n "$routes6" ]]; then
+    echo "run-egress-blocked.sh: unexpected routes: $routes4 $routes6" >&2
     exit 2
   fi
   export OPENADAPT_EGRESS_BLOCKED=netns

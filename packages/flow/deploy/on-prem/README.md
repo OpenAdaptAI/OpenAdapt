@@ -19,7 +19,7 @@ install story) and **[COMPLIANCE.md](COMPLIANCE.md)** (posture + data-flow).
 | `bin/run-queue.sh` | Local, directory-based run queue. Claims jobs, runs `openadapt-flow run`, records outcomes, files done/failed. Fail-closed on `SCRUB!=on`. | REAL (thin wrapper over the shipped CLI) |
 | `bin/audit-log.sh` | Append-only, hash-chained, PHI-free audit writer (run + release-lifecycle events). | REAL |
 | `bin/verify-airgap.sh` | Asserts no outbound path: config/env/deployment URL scan, optional active egress probe, optional audit-chain walk. | REAL (best-effort; firewall is primary) |
-| `bin/run-egress-blocked.sh` | Runs a command in a loopback-only Linux network namespace, refusing to start unless no other interface or route exists. CI runs the golden free path through it (`tests/e2e/test_egress_blocked_e2e.py`): VERIFIED, zero model calls, and no outbound attempt in strict no-outbound mode. | REAL (Linux, root) |
+| `bin/run-egress-blocked.sh` | Runs a command in a loopback-only Linux network namespace, refusing to start unless no other interface or route exists. CI runs the golden free path through it (`tests/e2e/test_egress_blocked_e2e.py`): VERIFIED, zero model calls, and no refusal recorded by the strict Python audit hook. | REAL (Linux, root) |
 | `bin/test-update.sh` | Hermetic offline proof of signed update, refusal paths, legacy migration, data preservation, rollback/recovery, locks, and audit-chain serialization. | REAL (43 baseline assertions; 45 when local GPG key generation is available) |
 | `bin/build-release.sh` | Builds a release archive on a connected host from `uv.lock`: the exact pinned wheels, hash-checked, plus the `openadapt-flow` wheel, a `.sha256`, and an openssl `.sig` when given the key. | REAL |
 | `bin/test-offline-install.sh` | Builds two signed releases, then as root with egress blocked installs the real engine from the first, refuses a tampered second, updates to the signed second, rolls back, and runs the air-gap attestation. CI runs it with `bin/test-update.sh` (job `flow-onprem-offline`). | REAL (Linux, root) |
@@ -50,18 +50,28 @@ PHI-free record to `audit/audit.log`, and files the job under `jobs/done` (exit
 OPENADAPT_FLOW_SCRUB=on ./bin/verify-airgap.sh --config onprem.yaml --probe --audit
 ```
 
-## Proof that a run needs no network
+## Golden run with direct IP networking restricted
 
-On any Linux host with the engine installed, run the free path with every
-packet bound off the machine refused by the kernel:
+On Linux with the engine installed, run the free path in a new network
+namespace containing only loopback:
 
 ```bash
 sudo -E env "PATH=$PATH" "HOME=$HOME" deploy/on-prem/bin/run-egress-blocked.sh \
   python -m pytest -v tests/e2e/test_egress_blocked_e2e.py
 ```
 
-The first test shows public hosts are unreachable inside the namespace, so the
-proof cannot pass on a connected machine. CI runs this on every flow change.
+The wrapper starts only after all interface and route inspections succeed
+and confirm exactly loopback with no routes. The tests check
+direct IP refusal independently, then require the tutorial to reach VERIFIED
+with zero model calls and a receipt. CI runs this on every flow change.
+
+The restriction covers direct IP sockets in the command and its children.
+Filesystem access stays shared: pathname Unix sockets can reach a process
+outside the namespace that forwards traffic. Isolate such brokers separately
+when enforcing a deployment boundary. An empty strict-mode refusal log means
+the Python hook recorded no refusals; it does not observe native sockets or
+children that never install the hook. Native-child and owned Unix-relay
+controls exercise these boundaries in CI.
 
 ## Update & rollback
 

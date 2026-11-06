@@ -662,6 +662,19 @@ def test_unknown_named_key_rejected(tmp_path: Path) -> None:
         convert_capture(capture_dir, tmp_path / "recording")
 
 
+def test_named_space_key_joins_the_typed_text(tmp_path: Path) -> None:
+    # macOS and X11 capture report the space bar as the named key "space".
+    rows = _type_rows(T0 + 1.0, "synthetic")
+    rows += _named_key_rows(T0 + 1.2, "space")
+    rows += _type_rows(T0 + 1.3, "note")
+    capture_dir = make_capture(tmp_path, rows, screens=app_screens()[:1])
+    recording_dir = tmp_path / "recording"
+    convert_capture(capture_dir, recording_dir)
+    events = events_of(recording_dir)
+    assert [e["kind"] for e in events] == ["type"]
+    assert events[0]["text"] == "synthetic note"
+
+
 def test_ambiguous_params_rejected(tmp_path: Path) -> None:
     capture_dir = make_capture(tmp_path, demo_rows())
     with pytest.raises(ValueError, match="same value"):

@@ -78,9 +78,24 @@ lock_file="$lock_dir/pid"
 break_file="${AUDIT_LOG}.lock-breaker"
 lock_acquired=0
 
-# Create $1 holding this process's pid; fails if $1 already exists.
+# Create $1 holding this process's pid; fails if $1 already exists as any
+# kind of file. noclobber alone is not enough: bash opens an existing FIFO or
+# device without O_EXCL, so two writers could both "create" the same FIFO. The
+# pid goes into a fresh staged name and is hard-linked into place; link(2)
+# refuses an existing path of every type. Ownership is then read back from the
+# file itself, not from the exit status of ln(1).
 create_exclusive() {
-  ( set -C; printf '%s\n' "$$" > "$1" ) 2>/dev/null
+  local target="$1" staged="" owner="" linked=1
+  # Refuse any existing path up front, whatever its type.
+  [[ -e "$target" || -L "$target" ]] && return 1
+  staged="$target.$$.$RANDOM$RANDOM"
+  ( set -C; printf '%s\n' "$$" > "$staged" ) 2>/dev/null || return 1
+  [[ -f "$staged" && ! -L "$staged" ]] || return 1
+  ln "$staged" "$target" 2>/dev/null && linked=0
+  rm -f "$staged" 2>/dev/null || true
+  [[ "$linked" -eq 0 && -f "$target" && ! -L "$target" ]] || return 1
+  owner="$(< "$target")" 2>/dev/null || return 1
+  [[ "$owner" == "$$" ]]
 }
 
 # Remove a lock whose owner has exited. Between reading the owner and removing
@@ -107,6 +122,10 @@ for ((attempt = 0; attempt < 200; attempt++)); do
     fi
   fi
   owner=""
+  if [[ -L "$lock_file" ]] || [[ -e "$lock_file" && ! -f "$lock_file" ]]; then
+    echo "audit-log.sh: audit lock $lock_file is not a regular file; refusing" >&2
+    exit 1
+  fi
   if [[ -d "$lock_dir" && ! -L "$lock_dir" && -f "$lock_file" && ! -L "$lock_file" ]]; then
     owner="$(cat "$lock_file" 2>/dev/null || true)"
   fi
