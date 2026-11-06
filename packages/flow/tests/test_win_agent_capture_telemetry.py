@@ -319,6 +319,15 @@ def test_projection_refuses_unproven_capture_correlation(
         assert running.context_calls == 0 and running.input_calls == []
         projection = capture_telemetry.safe_projection(running.sidecar)
         (diagnosis,) = projection["diagnoses"]
+        pixel_diff = diagnosis.pop("pixel_diff")
+        assert pixel_diff == {
+            "status": "unavailable" if scenario == "missing" else "available",
+            "code": "raster_missing" if scenario == "missing" else "raster_compared",
+            "expected_dimensions": None if scenario == "missing" else [3, 2],
+            "current_dimensions": None if scenario == "missing" else [3, 2],
+            "changed_pixel_count": None if scenario == "missing" else 6,
+            "changed_bbox": None if scenario == "missing" else [0, 0, 3, 2],
+        }
         assert diagnosis == {
             "phase": "input_guard_frame_compare",
             "status": "unknown",
