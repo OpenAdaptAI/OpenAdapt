@@ -401,8 +401,8 @@ def live_bundle_content_digest(workflow: Workflow, bundle_dir: Path | str) -> st
     """SHA-256 of the live admitted bundle, independent of the envelope."""
 
     from openadapt_flow.bundle_validation import (
-        compute_content_digest,
         compute_file_hashes,
+        content_identity_digest,
     )
 
     bundle = Path(bundle_dir)
@@ -410,7 +410,7 @@ def live_bundle_content_digest(workflow: Workflow, bundle_dir: Path | str) -> st
         file_hashes = dict(workflow.manifest.file_hashes)
     else:
         file_hashes = compute_file_hashes(workflow, bundle)
-    return compute_content_digest(workflow, file_hashes)
+    return content_identity_digest(workflow, file_hashes)
 
 
 def load_child_envelope(

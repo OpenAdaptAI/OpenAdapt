@@ -39,6 +39,7 @@ OCR / cv2 / model dependencies, so it is safe to call on every load.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from dataclasses import dataclass
@@ -375,6 +376,147 @@ def _apply_sealed_canonical_omissions(
             )
 
 
+# Schema-2 ownership is a format rule, not a recursive key-name filter. Only
+# these typed IR positions can own a compatibility omission; arbitrary mapping
+# values (for example an API request body) remain byte-semantically sealed.
+_SOURCE_V2_CHILDREN = {
+    "Workflow": {
+        "steps": ("Step", "list"),
+        "program": ("ProgramGraph", "one"),
+        "subflows": ("ProgramGraph", "map"),
+        "undo_steps": ("UndoStep", "list"),
+        "interstitials": ("Interstitial", "list"),
+        "halt_cleanup": ("HaltCleanup", "one"),
+    },
+    "ProgramGraph": {"states": ("State", "map")},
+    "State": {
+        "step": ("Step", "one"),
+        "transitions": ("Transition", "list"),
+        "decision": ("BusinessDecisionSpec", "one"),
+    },
+    "BusinessDecisionSpec": {"revalidation": ("Predicate", "list")},
+    "Transition": {"guard": ("Predicate", "one")},
+    "UndoStep": {"steps": ("Step", "list")},
+    "HaltCleanup": {"steps": ("Step", "list"), "start_state": ("Predicate", "one")},
+    "Interstitial": {
+        "detect": ("Predicate", "one"),
+        "clearance": ("Predicate", "one"),
+        "dismiss_anchor": ("Anchor", "one"),
+    },
+    "Step": {
+        "anchor": ("Anchor", "one"),
+        "drag_end_anchor": ("Anchor", "one"),
+        "effects": ("Effect", "list"),
+        "api_binding": ("ApiBinding", "one"),
+        "wait_until": ("Predicate", "one"),
+        "guard": ("Guard", "one"),
+    },
+    "Guard": {"predicate": ("Predicate", "one")},
+    "Predicate": {"anchor": ("Anchor", "one"), "operands": ("Predicate", "list")},
+    "Anchor": {"structural": ("StructuralLocator", "one")},
+    "ApiBinding": {"effects": ("Effect", "list")},
+}
+
+
+def _source_v2_omissions(content: object, owner: str = "Workflow") -> None:
+    if not isinstance(content, dict):
+        return
+    for rule in _SEALED_CANONICAL_OMISSIONS_BY_VERSION[2]:
+        if (
+            rule.owner.__name__ == owner
+            and rule.field_name in content
+            and any(content[rule.field_name] == value for value in rule.omitted_values)
+        ):
+            content.pop(rule.field_name)
+    for field_name, (child_owner, shape) in _SOURCE_V2_CHILDREN.get(owner, {}).items():
+        child = content.get(field_name)
+        if shape == "one":
+            _source_v2_omissions(child, child_owner)
+        elif shape == "list" and isinstance(child, list):
+            for value in child:
+                _source_v2_omissions(value, child_owner)
+        elif shape == "map" and isinstance(child, dict):
+            for value in child.values():
+                _source_v2_omissions(value, child_owner)
+
+
+def source_canonical_payload(raw: dict, file_hashes: dict[str, str]) -> bytes:
+    """The original format's canonical payload, before parsing or migration.
+
+    No current Workflow is constructed or serialized here. Every format has
+    exactly one canonical projection; a mismatch never tries another digest.
+    """
+    version = bundle_schema_version(raw)
+    content = copy.deepcopy(raw)
+    content.pop("manifest", None)
+    if version == 2:
+        _source_v2_omissions(content)
+    elif version != 1:
+        raise BundleSchemaError(f"no canonical format rule for schema {version}")
+    return json.dumps(
+        {"workflow": content, "files": dict(sorted(file_hashes.items()))},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+
+@dataclass(frozen=True)
+class _LoadedSeal:
+    original_payload: bytes
+    runtime_digest: str
+    content_digest: str
+    file_hashes: tuple[tuple[str, str], ...]
+    schema_version: int
+    encrypted: bool
+
+
+def verify_original_content(raw: dict, stored: BundleManifest) -> bytes:
+    payload = source_canonical_payload(raw, stored.file_hashes)
+    if stored.content_digest and _sha256_bytes(payload) != stored.content_digest:
+        raise BundleIntegrityError(
+            "bundle original content digest mismatch before migration"
+        )
+    return payload
+
+
+def remember_original_content(
+    workflow: "Workflow", payload: bytes, stored: BundleManifest
+) -> None:
+    # The original payload is immutable; this second fingerprint detects later
+    # mutation of the upgraded runtime object without reserializing the source.
+    workflow._loaded_seal = _LoadedSeal(
+        payload,
+        compute_content_digest(workflow, stored.file_hashes),
+        stored.content_digest,
+        tuple(sorted(stored.file_hashes.items())),
+        stored.schema_version,
+        stored.encrypted,
+    )
+
+
+def _verify_workflow_content(workflow: "Workflow", stored: BundleManifest) -> None:
+    loaded = workflow._loaded_seal
+    expected = stored.content_digest
+    if loaded is not None:
+        if (
+            stored.content_digest != loaded.content_digest
+            or tuple(sorted(stored.file_hashes.items())) != loaded.file_hashes
+            or stored.schema_version != loaded.schema_version
+            or stored.encrypted != loaded.encrypted
+            or _sha256_bytes(loaded.original_payload) != stored.content_digest
+        ):
+            raise BundleIntegrityError(
+                "bundle original manifest integrity changed after loading"
+            )
+        expected = loaded.runtime_digest
+    recomputed = compute_content_digest(workflow, stored.file_hashes)
+    if recomputed != expected:
+        raise BundleIntegrityError(
+            "bundle content digest mismatch: the workflow was modified after the manifest was sealed"
+        )
+
+
 def _referenced_asset_paths(workflow: "Workflow") -> set[str]:
     """Every bundle-relative image path the IR references (templates, identifier
     crops, postcondition template crops), across the linear steps AND every
@@ -504,6 +646,28 @@ def compute_content_digest(workflow: "Workflow", file_hashes: dict[str, str]) ->
     return _sha256_bytes(canonical.encode("utf-8"))
 
 
+def content_identity_digest(workflow: "Workflow", file_hashes: dict[str, str]) -> str:
+    """Return current content identity or an unchanged loaded seal's identity.
+
+    A loaded original seal is reusable only while its original payload, upgraded
+    model, integrity manifest and supplied asset hashes still verify. This does
+    not read assets: callers that need a disk check supply freshly hashed files
+    or separately call verify_integrity. New serialization/build_manifest always
+    uses compute_content_digest instead, so a new seal covers its new format.
+    """
+    loaded = workflow._loaded_seal
+    if loaded is None:
+        return compute_content_digest(workflow, file_hashes)
+    if workflow.manifest is None:
+        raise BundleIntegrityError("loaded bundle lost its original manifest")
+    _verify_workflow_content(workflow, workflow.manifest)
+    if tuple(sorted(file_hashes.items())) != loaded.file_hashes:
+        raise BundleIntegrityError(
+            "bundle asset hashes changed since the original seal"
+        )
+    return loaded.content_digest
+
+
 def build_runtime_parameter_schema(workflow: "Workflow") -> list[dict]:
     """Return the canonical hosted parameter contract without runtime values.
 
@@ -604,23 +768,44 @@ def build_manifest(
 from openadapt_flow.ir import SCHEMA_VERSION  # noqa: E402
 
 
-def migrate_bundle_dict(data: dict) -> dict:
-    """Migrate a raw ``workflow.json`` dict to the current schema version.
+class BundleSchemaError(ValueError):
+    """The bundle format is unsupported or lacks a deterministic upgrade step."""
 
-    v2 is a strict, ADDITIVE superset of v1 (typed params, program graph,
-    manifest, ... all default-empty), so migrating a v1 bundle needs no field
-    transforms -- it only stamps the current ``schema_version`` so downstream
-    code can rely on it. A bundle with no ``schema_version`` key is treated as
-    the original v1 shape. Returns the SAME dict, mutated in place, for
-    convenience. Forward-compatible: a bundle already at (or above) the current
-    version is left untouched."""
+
+def bundle_schema_version(data: dict) -> int:
+    if not isinstance(data, dict):
+        raise BundleSchemaError("workflow.json must contain an object")
     version = data.get("schema_version", 1)
-    if not isinstance(version, int):
-        version = 1
-    if version < SCHEMA_VERSION:
-        # --- future field transforms would live here, gated on `version` ---
-        data["schema_version"] = SCHEMA_VERSION
+    if type(version) is not int or not 1 <= version <= SCHEMA_VERSION:
+        raise BundleSchemaError(f"unsupported bundle schema version: {version!r}")
+    return version
+
+
+def _upgrade_v1_to_v2(data: dict) -> dict:
+    # Schema 1 has no integrity manifest. Schema 2 is additive, so the only
+    # representation change is the explicit version stamp, on a copy.
+    data["schema_version"] = 2
     return data
+
+
+_BUNDLE_UPGRADERS = {1: _upgrade_v1_to_v2}
+
+
+def migrate_bundle_dict(data: dict) -> dict:
+    """Upgrade one explicit format step at a time without changing the source."""
+    version = bundle_schema_version(data)
+    upgraded = copy.deepcopy(data)
+    while version < SCHEMA_VERSION:
+        upgrader = _BUNDLE_UPGRADERS.get(version)
+        if upgrader is None:
+            raise BundleSchemaError(f"no upgrader from bundle schema {version}")
+        upgraded = upgrader(upgraded)
+        if bundle_schema_version(upgraded) != version + 1:
+            raise BundleSchemaError(
+                f"upgrader from schema {version} did not advance one step"
+            )
+        version += 1
+    return upgraded
 
 
 # ---------------------------------------------------------------------------
@@ -660,19 +845,13 @@ def verify_integrity(
     Only meaningful for a bundle that carries a persisted manifest with a
     non-empty digest; legacy (pre-v2) bundles have no sealed digest to compare
     against, and the caller skips this check for them."""
-    if not stored.content_digest:
+    if not stored.content_digest and workflow._loaded_seal is None:
         return
     # 1. Recompute the digest over the loaded workflow content using the SEALED
     #    file-hash list (NOT re-hashed from disk), so post-seal template
     #    additions do not move it -- only a workflow.json edit (or a change to
     #    the sealed asset set) breaks this.
-    recomputed = compute_content_digest(workflow, stored.file_hashes)
-    if recomputed != stored.content_digest:
-        raise BundleIntegrityError(
-            "bundle content digest mismatch: expected "
-            f"{stored.content_digest[:16]}..., recomputed {recomputed[:16]}... "
-            "-- the workflow.json was modified after the manifest was sealed"
-        )
+    _verify_workflow_content(workflow, stored)
     # 2. Each sealed asset must still hash to its recorded value.
     bundle = Path(bundle_dir)
     for rel, expected in stored.file_hashes.items():
