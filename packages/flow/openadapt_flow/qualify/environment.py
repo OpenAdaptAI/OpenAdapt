@@ -130,9 +130,21 @@ def campaign_environment_observer(
         from openadapt_flow.backends.windows_backend import WindowsBackend
 
         if type(backend) is not WindowsBackend:
-            raise ValueError("Windows qualification requires the concrete WindowsBackend")
+            raise ValueError(
+                "Windows qualification requires the concrete WindowsBackend"
+            )
+    if target_kind == "rdp":
+        # A caller-supplied identity tuple is not a transport observation.
+        # Keep RDP qualification tied to the concrete backend that reads
+        # frames and identity from its live FreeRDP transport.
+        from openadapt_flow.backends.rdp_backend import FreeRDPBackend
+
+        if type(backend) is not FreeRDPBackend:
+            raise ValueError("RDP qualification requires the concrete FreeRDPBackend")
     if not callable(getattr(backend, "qualification_environment_identity", None)):
-        raise ValueError("native qualification backend has no atomic environment observer")
+        raise ValueError(
+            "native qualification backend has no atomic environment observer"
+        )
     return CampaignBackendEnvironmentObserver(backend, target_kind=target_kind)
 
 
@@ -194,7 +206,9 @@ def observe_campaign_environment(
     if application_identity is not None and (
         observed.application_identity != application_identity
     ):
-        raise ValueError("declared application identity does not match live observation")
+        raise ValueError(
+            "declared application identity does not match live observation"
+        )
     return observer, observed
 
 

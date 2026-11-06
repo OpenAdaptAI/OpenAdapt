@@ -14,18 +14,12 @@ controller on a real Windows session, native qualification remains refused.
 
 from __future__ import annotations
 
-import json
 import re
-import tempfile
-import time
 import uuid
-from pathlib import Path
 from typing import Any
 
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
-_SAFE_GUEST_PATH = re.compile(r"^[A-Za-z0-9_ .:\\-]+$")
 _FAULTS = frozenset({"ambiguity", "wrong_identity", "stale_identity"})
-_STATUS_TIMEOUT_S = 15.0
 
 
 def _request_for(context: Any, step: Any, nonce: str) -> dict[str, Any] | None:
@@ -144,7 +138,6 @@ class WindowsQualificationPixelFaultController:
         *,
         environment_identity: tuple[str, str, str, str],
         guest_dir: str,
-        helper_path: Path | None = None,
     ) -> None:
         if (
             not isinstance(environment_identity, tuple)
@@ -160,15 +153,19 @@ class WindowsQualificationPixelFaultController:
         session_identity_sha256 = environment_identity[2]
         if not _SHA256.fullmatch(session_identity_sha256):
             raise ValueError("Windows controller needs an opaque session digest")
-        if not _SAFE_GUEST_PATH.fullmatch(guest_dir) or ".." in guest_dir:
-            raise ValueError("Windows controller guest path is unsafe")
         self._backend = backend
         self._lab = lab
         self._environment_identity = environment_identity
         self.session_identity_sha256 = session_identity_sha256
         self._guest_dir = guest_dir.rstrip("\\/")
-        self._helper_path = helper_path or Path(__file__).with_name(
-            "qualification_pixel_fault_overlay.ps1"
+        from openadapt_flow.qualify.qualification_pixel_fault_task import (
+            OwnedPixelTasks,
+        )
+
+        self._pixel_tasks = OwnedPixelTasks(
+            lab,
+            guest_dir=self._guest_dir,
+            session_binding_sha256=session_identity_sha256,
         )
 
     def matches_observation(self, backend: Any, observation: Any) -> bool:
@@ -204,46 +201,21 @@ class WindowsQualificationPixelFaultController:
             return False
         nonce = uuid.uuid4().hex
         request = _request_for(context, step, nonce)
-        if request is None or not self._helper_path.is_file():
+        if request is None:
             return False
         request["session_identity_sha256"] = self.session_identity_sha256
 
-        remote_helper = f"{self._guest_dir}\\qualification_pixel_fault_overlay.ps1"
-        remote_request = f"{self._guest_dir}\\qualification_pixel_fault_{nonce}.json"
-        remote_status = f"{self._guest_dir}\\qualification_pixel_fault_{nonce}.status"
-        with tempfile.TemporaryDirectory(prefix="oa-qualify-fault-") as temp_dir:
-            local_request = Path(temp_dir) / "request.json"
-            local_request.write_text(
-                json.dumps(request, sort_keys=True, separators=(",", ":")),
-                encoding="utf-8",
-            )
-            self._lab.push_file(self._helper_path, remote_helper)
-            self._lab.push_file(local_request, remote_request)
-        command = (
-            '"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" '
-            "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "
-            f'"{remote_helper}" -RequestPath "{remote_request}" '
-            f'-StatusPath "{remote_status}"'
-        )
         try:
-            self._lab.launch_interactive(command, name="OAFlowQualificationPixelFault")
-            deadline = time.monotonic() + _STATUS_TIMEOUT_S
-            while time.monotonic() < deadline:
-                status = self._lab.run_ps(
-                    f"if (Test-Path '{remote_status}') "
-                    f"{{ Get-Content -Raw '{remote_status}' }}",
-                    check=False,
-                    timeout_s=2.0,
-                    operation="qualification pixel fault status",
-                ).stdout.strip()
-                if status == f"ready:{nonce}":
-                    return True
-                if status == f"refused:{nonce}":
-                    return False
-                time.sleep(0.2)
+            handle = self._pixel_tasks.launch(request)
+            status = self._pixel_tasks.wait_ready(handle)
+            return status == f"ready:{nonce}:{self.session_identity_sha256}"
         except Exception:  # noqa: BLE001 - unsupported transport declines safely
             return False
-        return False
+
+    def close(self) -> None:
+        """Dispose only this controller's exact guest task instances."""
+
+        self._pixel_tasks.close()
 
 
 def attach_windows_qualification_pixel_fault_controller(
@@ -251,7 +223,6 @@ def attach_windows_qualification_pixel_fault_controller(
     lab: Any,
     *,
     guest_dir: str,
-    helper_path: Path | None = None,
 ) -> WindowsQualificationPixelFaultController:
     """Attach the controller from an existing environment-owned session hook.
 
@@ -275,7 +246,6 @@ def attach_windows_qualification_pixel_fault_controller(
         lab,
         environment_identity=identity,
         guest_dir=guest_dir,
-        helper_path=helper_path,
     )
     setattr(backend, "qualification_pixel_fault_controller", controller)
     return controller
