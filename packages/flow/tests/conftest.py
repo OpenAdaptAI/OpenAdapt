@@ -55,6 +55,18 @@ def _teach_authorization_env(monkeypatch: pytest.MonkeyPatch):
     support._AUTHORIZERS.clear()
 
 
+@pytest.fixture(scope="module")
+def module_durable_authority(tmp_path_factory: pytest.TempPathFactory):
+    """Isolate opted-in module setup before function-scoped fixtures run."""
+
+    database = tmp_path_factory.mktemp("module-authority") / "authority.sqlite3"
+    # A dependency's teardown also runs when the consuming fixture fails
+    # before yield. Function-scoped authority isolation remains independent.
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("OPENADAPT_DURABLE_AUTHORITY_DB", str(database))
+        yield database
+
+
 @pytest.fixture(autouse=True)
 def _isolate_durable_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep each test's monotonic run authority independent and disposable."""
