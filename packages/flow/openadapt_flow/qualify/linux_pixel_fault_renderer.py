@@ -24,7 +24,21 @@ from typing import Any
 PAIRING = "openadapt.rdp-pairing/v1"
 FAULT = "openadapt.qualification-pixel-fault/v1"
 REFUSAL_STAGES = frozenset(
-    {"request", "identity", "geometry", "capture", "render", "map", "liveness"}
+    {
+        "request",
+        "identity",
+        "geometry",
+        "capture",
+        "render",
+        "map",
+        "liveness",
+        "focus_missing_tool",
+        "focus_nonzero",
+        "focus_timeout",
+        "focus_malformed",
+        "focus_none",
+        "focus_pointer_root",
+    }
 )
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 NONCE = re.compile(r"[0-9a-f]{32}\Z")
@@ -190,17 +204,39 @@ def witness_ppm(nonce: str, connection: str, guest: str) -> bytes:
     return b"P6\n52 52\n255\n" + pixels
 
 
-def focus(env: dict[str, str]) -> int:
-    result = subprocess.run(
-        ["/usr/bin/xdotool", "getwindowfocus"],
-        env=env,
-        capture_output=True,
-        timeout=3,
-        check=True,
-    )
+def focus(env: dict[str, str], *, stage: list[str] | None = None) -> int:
+    outer_stage = stage[0] if stage is not None else None
+    try:
+        result = subprocess.run(
+            ["/usr/bin/xdotool", "getwindowfocus"],
+            env=env,
+            capture_output=True,
+            timeout=3,
+            check=True,
+        )
+    except FileNotFoundError:
+        if stage is not None:
+            stage[0] = "focus_missing_tool"
+        raise
+    except subprocess.CalledProcessError:
+        if stage is not None:
+            stage[0] = "focus_nonzero"
+        raise
+    except subprocess.TimeoutExpired:
+        if stage is not None:
+            stage[0] = "focus_timeout"
+        raise
     value = result.stdout.strip()
     if not value.isdigit() or int(value) <= 1:
+        if stage is not None:
+            stage[0] = (
+                "focus_malformed"
+                if not value.isdigit()
+                else "focus_none" if int(value) == 0 else "focus_pointer_root"
+            )
         raise ValueError("display focus unavailable")
+    if stage is not None and outer_stage is not None:
+        stage[0] = outer_stage
     return int(value)
 
 
@@ -227,7 +263,7 @@ def render(envelope: dict[str, Any], *, stage: list[str]) -> None:
     if env["DISPLAY"] != display:
         raise ValueError("display mismatch")
     stage[0] = "capture"
-    focused = focus(env)
+    focused = focus(env, stage=stage)
     expires = time.monotonic() + (request["lifetime_seconds"] if pairing else 8)
     if pairing:
         pixels = witness_ppm(request["nonce"], binding, guest)
@@ -292,7 +328,7 @@ def render(envelope: dict[str, Any], *, stage: list[str]) -> None:
             )
         if (
             display_identity(display) != expected
-            or focus(env) != focused
+            or focus(env, stage=stage) != focused
             or time.monotonic() >= expires
         ):
             raise ValueError("display changed before mapping")
@@ -301,7 +337,7 @@ def render(envelope: dict[str, Any], *, stage: list[str]) -> None:
         root.update()
         if (
             display_identity(display) != expected
-            or focus(env) != focused
+            or focus(env, stage=stage) != focused
             or time.monotonic() >= expires
             or (
                 root.winfo_rootx(),
@@ -324,7 +360,7 @@ def render(envelope: dict[str, Any], *, stage: list[str]) -> None:
                 current = (
                     time.monotonic() < expires
                     and display_identity(display) == expected
-                    and focus(env) == focused
+                    and focus(env, stage=stage) == focused
                 )
             except Exception:
                 current = False
