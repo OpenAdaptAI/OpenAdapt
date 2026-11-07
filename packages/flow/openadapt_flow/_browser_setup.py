@@ -39,6 +39,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from openadapt_flow._browser_readiness import require_rendering_ready
+
 #: Environment variable that disables the auto-install (air-gapped / CI that
 #: pre-provisions the browser itself). Any non-empty value opts out.
 NO_AUTO_INSTALL_ENV = "OPENADAPT_FLOW_NO_AUTO_INSTALL"
@@ -435,17 +437,21 @@ def launch_chromium(chromium: Any, *, headless: bool) -> Any:
     """
     options = chromium_launch_options(headless=headless)
     if not options:
-        return chromium.launch(headless=headless)
-    try:
-        return chromium.launch(headless=headless, **options)
-    except Exception as exc:
-        if (os.environ.get(BROWSER_ENV) or "auto").strip().lower() != "auto":
-            raise
-        print(
-            f"openadapt-flow: {options['channel']} did not start ({exc}); "
-            "using Playwright's own Chromium instead.",
-            file=sys.stderr,
-            flush=True,
-        )
-        ensure_bundled_chromium(headless=headless)
-        return chromium.launch(headless=headless)
+        browser = chromium.launch(headless=headless)
+    else:
+        try:
+            browser = chromium.launch(headless=headless, **options)
+        except Exception as exc:
+            if (os.environ.get(BROWSER_ENV) or "auto").strip().lower() != "auto":
+                raise
+            print(
+                f"openadapt-flow: {options['channel']} did not start ({exc}); "
+                "using Playwright's own Chromium instead.",
+                file=sys.stderr,
+                flush=True,
+            )
+            ensure_bundled_chromium(headless=headless)
+            browser = chromium.launch(headless=headless)
+    # Readiness failure is not a launch error and never triggers a fallback.
+    require_rendering_ready(browser)
+    return browser

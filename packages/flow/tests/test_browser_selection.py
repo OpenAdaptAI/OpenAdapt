@@ -12,6 +12,9 @@ from openadapt_flow import _browser_setup as bs
 @pytest.fixture(autouse=True)
 def _driver_present(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(bs, "require_browser_support", lambda: None)
+    # Selection tests isolate channel/install policy; readiness has its own
+    # acquisition model and real-browser tests.
+    monkeypatch.setattr(bs, "require_rendering_ready", lambda browser: None)
     monkeypatch.delenv(bs.BROWSER_ENV, raising=False)
     monkeypatch.delenv(bs.NO_AUTO_INSTALL_ENV, raising=False)
     bs._bundled_ready.clear()

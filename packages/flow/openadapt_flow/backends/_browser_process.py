@@ -23,7 +23,7 @@ def _start_browser(headless: bool) -> tuple[Any, Any]:
     pw = sync_playwright().start()
     try:
         browser = launch_chromium(pw.chromium, headless=headless)
-    except Exception:
+    except BaseException:
         pw.stop()
         raise
     return pw, browser
