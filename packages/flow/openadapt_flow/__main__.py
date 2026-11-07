@@ -1305,7 +1305,8 @@ def _finish_replay(
     )
     plain = plain_result(getattr(report, "transaction_outcome", None), outcome)
     print(f"Result: {plain.label}. {plain.meaning}")
-    print(f"Replay {outcome}: {report_md}")
+    print(f"Next: {plain.next_step}")
+    print(f"Report: {report_md}")
     if report.screenshots_may_leave_box:
         print(
             "NOTE: a model-grounding component was wired for this run — "
@@ -2865,6 +2866,16 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     refuse_unadmitted_draft(bundle)
     run_dir = Path(args.run_dir) if args.run_dir else _default_run_dir()
     workflow = Workflow.load(bundle)
+    # Replay reloads the bundle: it must still be the intake-admitted bytes,
+    # and the authorization `run` built must name them (#1890).
+    refused_admission = _admitted_bundle_refusal(
+        args,
+        bundle,
+        workflow,
+        getattr(args, "_governed_run_authorization", None),
+    )
+    if refused_admission is not None:
+        return refused_admission
     # `undo run` only: the person-approved undo steps of this same bundle
     # (openadapt_flow.cli_undo), run through the normal replay path.
     workflow = getattr(args, "_undo_workflow", None) or workflow
@@ -3974,6 +3985,51 @@ def _cmd_verify_run(args: argparse.Namespace) -> int:
     return 0 if receipt["outcome"] == "verified" else 1
 
 
+def _admitted_bundle_refusal(
+    args: argparse.Namespace,
+    bundle: Path,
+    workflow: Any = None,
+    authorization: Any = None,
+) -> Optional[int]:
+    """Refuse unless the bundle is the exact one an intake grant admitted.
+
+    ``--admitted-bundle-sha256`` carries the intake grant's digest (#1890)
+    from the agent runner into this process. The digest is recomputed from
+    the files and, when given, from the in-memory workflow and compared with
+    the run authorization's bundle digest, so an edit after the intake gate
+    can neither be admitted nor authorized. Returns an exit code to stop
+    with, or None to continue.
+    """
+
+    admitted = getattr(args, "admitted_bundle_sha256", None)
+    if not admitted:
+        return None
+    from openadapt_flow.bundle_validation import (
+        compute_content_digest,
+        compute_file_hashes,
+    )
+    from openadapt_flow.intake.param_gate import bundle_sha256
+
+    try:
+        matches = bundle_sha256(bundle) == admitted
+        if matches and workflow is not None:
+            matches = (
+                compute_content_digest(workflow, compute_file_hashes(workflow, bundle))
+                == admitted
+            )
+    except Exception:  # noqa: BLE001 - unreadable bundle is not the admitted one
+        matches = False
+    if matches and authorization is not None:
+        matches = getattr(authorization, "bundle_content_digest", None) == admitted
+    if matches:
+        return None
+    print(
+        "run REFUSED: the workflow bundle is not the bundle the intake grant "
+        "admitted. Nothing was executed."
+    )
+    return 2
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     """Execute a bundle under a named deployment profile -- FAIL-CLOSED.
 
@@ -4016,18 +4072,28 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from openadapt_flow.skills import refuse_unqualified_skill
 
     refuse_unqualified_skill(bundle)
+    from openadapt_flow.admitted_composition import is_process_contract_artifact
+    from openadapt_flow.variants import is_variant_set_artifact
+
+    if getattr(args, "admitted_bundle_sha256", None) and (
+        is_composition_artifact(bundle)
+        or is_process_contract_artifact(bundle)
+        or is_variant_set_artifact(bundle)
+    ):
+        # An intake grant admits one workflow bundle, never a parent artifact.
+        print(
+            "run REFUSED: the workflow bundle is not the bundle the intake "
+            "grant admitted. Nothing was executed."
+        )
+        return 2
     if is_composition_artifact(bundle):
         from openadapt_flow.cli_compose import cmd_run_composition
 
         return cmd_run_composition(args, run_child=_cmd_run)
-    from openadapt_flow.admitted_composition import is_process_contract_artifact
-
     if is_process_contract_artifact(bundle):
         from openadapt_flow.cli_process import cmd_run_process
 
         return cmd_run_process(args, run_child=_cmd_run)
-    from openadapt_flow.variants import is_variant_set_artifact
-
     if is_variant_set_artifact(bundle):
         from openadapt_flow.cli_variants import cmd_run_variants
 
@@ -4045,6 +4111,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
             f"{_SAFE_BUNDLE_LOAD_GUIDANCE} Nothing was executed."
         )
         return 2
+    refused_admission = _admitted_bundle_refusal(args, bundle, workflow)
+    if refused_admission is not None:
+        return refused_admission
 
     qualification_case = getattr(args, "_qualification_case_execution", None)
     gate_params = (
@@ -4358,6 +4427,17 @@ def _cmd_run(args: argparse.Namespace) -> int:
         )
         args._delivery_authority_kind = "customer_local"
         args._remote_delivery_run_id = None
+
+    # The authorization this run hands to replay must name the admitted
+    # digest, and the bundle must still be those bytes (#1890).
+    refused_admission = _admitted_bundle_refusal(
+        args,
+        bundle,
+        workflow,
+        getattr(args, "_governed_run_authorization", None),
+    )
+    if refused_admission is not None:
+        return refused_admission
 
     refused = _bind_approval_mode(args)
     if refused is not None:
@@ -7086,17 +7166,71 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
 
     if verb == "certify":
         policy = _qualification_policy(args)
+        library_path = getattr(args, "subroutine_library", None)
+        library = _load_subroutine_library(library_path)
+        library_before = library.to_json() if library is not None else ""
         report = certify_project(
             workflow,
             policy=policy,
             evidence_root=args.evidence_root,
             execution_profile=args.profile,
+            subroutine_library=library,
+            subroutine_workflow_id=getattr(args, "subroutine_workflow_id", None),
+        )
+        from openadapt_flow.qualification import (
+            persist_registration_before_certificate,
+        )
+
+        # The registration is written before the certificate is saved: a
+        # library write failure leaves the bundle uncertified, not certified
+        # with no dependent recorded for a later subroutine version.
+        persist_registration_before_certificate(
+            workflow,
+            args.bundle,
+            lambda: _save_subroutine_library(library, library_path, library_before),
         )
         save_qualified_workflow(workflow, args.bundle)
         print(report.model_dump_json(indent=2) if args.json else report.render())
         return 0 if report.passed else 2
 
     raise SystemExit(f"unknown qualify command {verb!r}")
+
+
+def _load_subroutine_library(path: Optional[str]) -> Any:
+    """Load ``--subroutine-library`` (None when not given); refuse a bad file."""
+
+    if not path:
+        return None
+    from openadapt_flow.subroutines import SubroutineError, load_library
+
+    try:
+        return load_library(path)
+    except SubroutineError as exc:
+        raise SystemExit(f"subroutine library REFUSED: {exc}") from None
+
+
+def _save_subroutine_library(library: Any, path: Optional[str], before: str) -> None:
+    """Write back the library when certification registered a workflow in it."""
+
+    if library is None or not path or library.to_json() == before:
+        return
+    from openadapt_flow.subroutines import save_library
+
+    save_library(library, path)
+
+
+def _add_subroutine_library_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--subroutine-library",
+        default=None,
+        metavar="JSON",
+        help=(
+            "Subroutine library to admit embedded subroutines against. "
+            "Certifying registers this workflow in it, so a new version of a "
+            "subroutine it uses re-qualifies it. Required when the bundle "
+            "embeds a subroutine."
+        ),
+    )
 
 
 def _cmd_qualify_proposal(args: argparse.Namespace) -> int:
@@ -8974,6 +9108,15 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
         else Path("runs")
         / f"qualify-{bundle.resolve().name}-{time.strftime('%Y%m%d-%H%M%S')}"
     )
+    library_path = getattr(args, "subroutine_library", None)
+    library = _load_subroutine_library(library_path)
+    library_state = {"before": library.to_json() if library is not None else ""}
+
+    def persist_library() -> None:
+        _save_subroutine_library(library, library_path, library_state["before"])
+        if library is not None:
+            library_state["before"] = library.to_json()
+
     try:
         result = qualify(
             bundle,
@@ -8984,13 +9127,17 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
             certify=certify,
             run_params=run_params,
             campaign_id=args.campaign_id,
+            subroutine_library=library,
+            persist_subroutine_registration=persist_library,
         )
     except QualifyConfigError as exc:
         print(str(exc), file=sys.stderr)
         return 2
     except QualifyError as exc:
+        persist_library()
         print(f"qualify REFUSED: {exc}\nEvidence so far: {out}", file=sys.stderr)
         return 1
+    persist_library()
     if not result.passed and result.partial:
         print(
             f"\nqualify PARTIAL: {len(result.rows)} trial(s) behaved as required in "
@@ -10054,6 +10201,9 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="VERSION",
         help="Refuse unless the bundle's compiler version equals this",
     )
+    # Set by the agent runner for an intake-granted run (#1890): the exact
+    # bundle digest the grant admitted. Not an operator knob.
+    p.add_argument("--admitted-bundle-sha256", default=None, help=argparse.SUPPRESS)
     p.add_argument("--managed-dispatch-file", default=None, help=argparse.SUPPRESS)
     p.add_argument(
         "--qualification-trust",
@@ -10991,6 +11141,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Campaign id (default: verify.yaml or generated)",
     )
+    _add_subroutine_library_flags(q)
     q.set_defaults(func=_cmd_qualify_campaign)
 
     q = qsub.add_parser("schema", help="Print the qualification-project JSON Schema")
@@ -11451,6 +11602,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     q.add_argument("--evidence-root", required=True)
     q.add_argument("--json", action="store_true")
+    _add_subroutine_library_flags(q)
+    q.add_argument(
+        "--subroutine-workflow-id",
+        default=None,
+        metavar="ID",
+        help="Id to register this workflow under (default: the workflow name)",
+    )
     q.set_defaults(func=_cmd_qualify)
 
     p = sub.add_parser(

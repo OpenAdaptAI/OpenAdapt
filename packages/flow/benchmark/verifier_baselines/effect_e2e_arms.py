@@ -149,45 +149,29 @@ def steps(status: Optional[int]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = [
         {
             "url": url,
-            "state_description": f"The new-encounter form for patient {TARGET_PATIENT} is open.",
             "action_name": "input_text",
             "action_args": {"field": "Type", "text_value": TARGET_TYPE},
         },
         {
             "url": url,
-            "state_description": "Type is filled in; the note is empty.",
             "action_name": "input_text",
             "action_args": {"field": "Note", "text_value": NOTE},
         },
         {
             "url": url,
-            "state_description": "Type and note are filled in.",
             "action_name": "click",
             "action_args": {"target": "Save button"},
         },
     ]
-    if status is None:
-        out[-1]["error"] = f"no reply from the server within {ACTUATOR_TIMEOUT_S} s"
-    elif not 200 <= status < 300:
-        out[-1]["error"] = f"the server replied HTTP {status}"
-    out.append(
+    # The response status is measured by the HTTP harness. It is transport
+    # evidence, not a claim that the intended record was durably saved.
+    out[-1]["observations"] = [
         {
-            "url": url,
-            "state_description": "The page after Save (see the last screenshot).",
-            "action_name": "terminate",
-            "action_args": {
-                "status": "success" if status and 200 <= status < 300 else "failure"
-            },
+            "source": "http",
+            "content": {"status_code": status, "timeout_s": ACTUATOR_TIMEOUT_S},
         }
-    )
+    ]
     return out
-
-
-def predicted(status: Optional[int]) -> str:
-    if status is not None and 200 <= status < 300:
-        return f"Saved the {TARGET_TYPE} encounter for patient {TARGET_PATIENT} with the requested note."
-    why = "no reply from the server" if status is None else f"HTTP {status}"
-    return f"The save did not complete ({why})."
 
 
 def chart_html(base: str) -> str:
@@ -284,7 +268,6 @@ def run_one(scenario: Any, rep: int, views: Path) -> dict[str, Any]:
                 "task": TASK,
                 "init_url": "",
                 "steps": steps(status),
-                "predicted_output": predicted(status),
             }
             after_page = after_save_page(status, banner)
             j1 = _save_view(views, view, [after_page])
@@ -294,7 +277,6 @@ def run_one(scenario: Any, rep: int, views: Path) -> dict[str, Any]:
                 + [
                     {
                         "url": f"http://clinic.example/chart/patient/{TARGET_PATIENT}",
-                        "state_description": "Opened the patient's chart to look at the saved encounter.",
                         "action_name": "visit_url",
                         "action_args": {"url": f"/chart/patient/{TARGET_PATIENT}"},
                     }

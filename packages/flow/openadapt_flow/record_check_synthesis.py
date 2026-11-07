@@ -1142,11 +1142,28 @@ def check_reads(
             if name not in configs:
                 continue
             try:
-                verifier = build_effect_verifier(
-                    EffectsConfig.model_validate(configs[name]), params
-                )
+                cfg = EffectsConfig.model_validate(configs[name])
+                verifier = build_effect_verifier(cfg, params)
             except Exception as exc:  # noqa: BLE001 - any build failure is a problem
                 problems.append(f"{name}: the generated read does not build ({exc})")
+                continue
+            if (cfg.kind or "none").strip().lower() == "rest":
+                has_paging_or_complete_contract = (
+                    bool(cfg.records_next_path and cfg.records_next_path.strip())
+                    or bool(cfg.records_total_path and cfg.records_total_path.strip())
+                    or cfg.records_complete is True
+                )
+                if not has_paging_or_complete_contract:
+                    problems.append(
+                        f"{name}: REST read completeness is not declared; configure "
+                        "records_next_path, records_total_path, or validated "
+                        "records_complete semantics"
+                    )
+                if cfg.records_next_path and not cfg.records_snapshot_path:
+                    problems.append(
+                        f"{name}: a paged REST read needs reviewed immutable "
+                        "snapshot semantics in records_snapshot_path"
+                    )
                 continue
             if configs[name].get("kind") != "sql" or verifier is None:
                 continue

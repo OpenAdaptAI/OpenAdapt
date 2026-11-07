@@ -372,7 +372,9 @@ def test_the_public_api_is_stable() -> None:
         "read_at",
         "excused",
         "evidence",
+        "recheck_owed",
     ]
+    assert RecheckResult.__dataclass_fields__["recheck_owed"].default is False
     assert list(inspect.signature(RecheckState.load).parameters) == [
         "path",
         "params",
@@ -467,11 +469,11 @@ def test_contract_hashes_do_not_change() -> None:
             },
         },
     }
-    for kind, verifier in verifiers.items():
+    for kind, verifier_config in verifiers.items():
         contract = Contract.from_dict(
             {
                 "schema_version": "openadapt.verify/v1",
-                "verifier": verifier,
+                "verifier": verifier_config,
                 "record": record,
                 "frame": {"identity_field": "id"},
             }

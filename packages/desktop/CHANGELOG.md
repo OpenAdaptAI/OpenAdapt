@@ -1,6 +1,25 @@
 # CHANGELOG
 
 
+## v0.28.0 (2026-11-06)
+
+### Features
+
+- **desktop**: optional release-notes email in the first-launch question
+
+
+
+## v0.27.0 (2026-11-05)
+
+### Features
+
+- Ask before sending Desktop usage stats; add a daily update check
+
+### Bug Fixes
+
+- **desktop**: honor TELEMETRY=0 and stop stale update GET clobber
+
+
 ## v0.26.0 (2026-11-03)
 
 ### Features
