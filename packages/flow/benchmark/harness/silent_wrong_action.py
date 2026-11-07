@@ -62,6 +62,7 @@ from typing import Any, Callable, Optional
 
 import requests
 
+from openadapt_flow.mockmed.fault_server import mockmed_rest_read_kwargs
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.runtime.effects import (
     Effect,
@@ -322,7 +323,7 @@ def run_one(base: str, db: Any, scenario: Scenario) -> dict[str, Any]:
     db.reset(seed_concurrent=scenario.seed_concurrent)
     before_snapshot = db.snapshot()["records"]
 
-    verifier = RestRecordVerifier(base, records_path="/api/db", records_key="records")
+    verifier = RestRecordVerifier(base, **mockmed_rest_read_kwargs())
     before_state = verifier.capture_pre_state()
 
     statuses = _drive(base, scenario)

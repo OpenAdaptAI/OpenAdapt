@@ -17,7 +17,10 @@ NEXT = BASE + "/Patient?page=2"
 
 class Session:
     def __init__(self, pages):
-        self.pages = list(pages)
+        # This transport serves an immutable, private copy of a finite page program.
+        self.pages = deepcopy(pages)
+        for page in self.pages:
+            page["fixture_snapshot"] = "fixed-response-program-v1"
         self.calls = []
 
     def get(self, url, **kwargs):
@@ -43,7 +46,7 @@ def bundle(ids, *, total=101, links=None):
 def read(kind, pages):
     session = Session(pages)
     if kind == "ensure":
-        reader = FhirReader(contract())
+        reader = FhirReader(contract(records_snapshot_path="fixture_snapshot"))
         reader._client = session
         try:
             records = reader.resources("Patient")
@@ -54,6 +57,7 @@ def read(kind, pages):
             BASE,
             resource_type="Patient",
             field_paths={"id": "id"},
+            snapshot_path="fixture_snapshot",
             session=session,
             access_token="synthetic-test-token",
         )

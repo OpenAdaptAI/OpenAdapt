@@ -54,7 +54,11 @@ from openadapt_flow.fhir_read import (
     next_page_url,
     search_total,
 )
-from openadapt_flow.runtime.effects._common import drop_record_fields, judge_records
+from openadapt_flow.runtime.effects._common import (
+    drop_record_fields,
+    judge_records,
+    page_snapshot_token,
+)
 from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
     Effect,
@@ -204,6 +208,8 @@ class FhirEffectVerifier(VerifierAdapterBase):
         poll_interval_s: Gap between polls while waiting for the write.
         drop_fields: Record fields removed before judging (``["id"]`` judges
             records by their whole content); see :class:`RestRecordVerifier`.
+        snapshot_path: Dotted body path to a reviewed immutable result-set
+            token. Multi-page reads require its exact type and value to match.
     """
 
     substrate = "fhir"
@@ -223,9 +229,11 @@ class FhirEffectVerifier(VerifierAdapterBase):
         verify_tls: bool = True,
         poll_interval_s: float = 0.3,
         drop_fields: tuple[str, ...] = (),
+        snapshot_path: Optional[str] = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.drop_fields = tuple(drop_fields)
+        self.snapshot_path = snapshot_path
         self.resource_type = resource_type
         self.search_params = dict(search_params or {})
         if not resource_type or not field_paths:
@@ -337,7 +345,7 @@ class FhirEffectVerifier(VerifierAdapterBase):
                 return None
             if resp.status_code == 401 and self.token_source is not None:
                 self.token_source.invalidate()
-            if resp.status_code // 100 != 2:
+            if resp.status_code // 100 != 2 or resp.status_code == 206:
                 self.read_problem = f"GET {target} returned HTTP {resp.status_code}"
                 return None
             landed = getattr(resp, "url", None)
@@ -363,8 +371,23 @@ class FhirEffectVerifier(VerifierAdapterBase):
         out: list[dict[str, Any]] = []
         outcomes: list[dict[str, Any]] = []
         matches = 0
+        match_identities: set[tuple[str, str]] = set()
         total: Optional[int] = None
+        snapshot: str | int | None = None
         for _page in range(MAX_PAGES):
+            if self.snapshot_path is not None:
+                try:
+                    current_snapshot = page_snapshot_token(bundle, self.snapshot_path)
+                except ValueError as error:
+                    self.read_problem = str(error)
+                    return None
+                if snapshot is not None and (
+                    type(current_snapshot) is not type(snapshot)
+                    or current_snapshot != snapshot
+                ):
+                    self.read_problem = "the declared snapshot changed across pages"
+                    return None
+                snapshot = current_snapshot
             try:
                 total = search_total(bundle, total)
             except ValueError as exc:
@@ -390,6 +413,25 @@ class FhirEffectVerifier(VerifierAdapterBase):
                     outcomes.append(resource)
                     continue
                 if mode != "include":
+                    resource_type, resource_id = (
+                        resource.get("resourceType"),
+                        resource.get("id"),
+                    )
+                    if (
+                        not isinstance(resource_type, str)
+                        or not resource_type
+                        or not isinstance(resource_id, str)
+                        or not resource_id
+                    ):
+                        self.read_problem = (
+                            "a matching search resource has no stable identity"
+                        )
+                        return None
+                    identity = (resource_type, resource_id)
+                    if identity in match_identities:
+                        self.read_problem = "a matching search resource identity was repeated; coverage is ambiguous"
+                        return None
+                    match_identities.add(identity)
                     matches += 1
                 out.append(self._flatten(resource))
             try:
@@ -410,6 +452,11 @@ class FhirEffectVerifier(VerifierAdapterBase):
                 self.read_problem = (
                     f"next link origin {_origin(next_url)} != base_url "
                     f"{_origin(self.base_url)}"
+                )
+                return None
+            if self.snapshot_path is None:
+                self.read_problem = (
+                    "multi-page reads require declared immutable snapshot semantics"
                 )
                 return None
             bundle = get(next_url, None)
