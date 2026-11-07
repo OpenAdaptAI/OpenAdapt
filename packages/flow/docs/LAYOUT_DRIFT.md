@@ -56,8 +56,8 @@ fingerprints and the manifest hashes them.
 
 `tests/test_layout_drift.py` covers each reason on synthetic OCR lines and
 on a synthetic form rendered in a browser and read with the repository OCR.
-The rendered cases are: unchanged, window moved (passes), font size 16 to 20
-and 16 to 13 px, Arial to Courier, one row shifted 240 px, and viewport
+The rendered cases are: unchanged, window moved (passes), font size 16 to 20,
+13, and 11 px, Arial to Courier, one row shifted 240 px, and viewport
 1280x800 to 1440x900.
 
 ## In the replayer
