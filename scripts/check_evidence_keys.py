@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Reject tracked key material before opening any denied artifact.
 
-Exact source-defined public verification registries and CA certificates also
-need a closed schema. No other key-shaped filename receives that exception.
+Exact source-defined public verification registries, CA certificates and one
+synthetic assertion fixture need separate closed schemas. These CI-only
+exceptions never authorize generic publication or transfer of those inputs.
 Diagnostics contain paths only, never candidate contents or parser errors.
 """
 
@@ -39,7 +40,11 @@ PUBLIC_CERTIFICATES = frozenset(
         "packages/flow/tests/fixtures/countersign/digicert-trusted-root-g4.pem",
     }
 )
+SYNTHETIC_ASSERTION_FIXTURES = frozenset(
+    {"packages/flow/tests/fixtures/named_person_binding/webauthn_passkey_double.json"}
+)
 _REVOCATION_TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+_SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -108,6 +113,100 @@ def is_public_certificate(payload: str) -> bool:
         return False
 
 
+def is_synthetic_assertion_fixture(payload: str) -> bool:
+    """Closed test-double data shape, never a live authentication admission.
+
+    The existing vector is neither regenerated nor used as signing material.
+    This checks structure and synthetic RP/origin binding, not authentication.
+    """
+    try:
+        data = json.loads(payload, object_pairs_hook=_unique_object)
+        if not isinstance(data, dict) or set(data) != {
+            "note", "approval_payload_sha256", "registered_passkey", "assertion_hex", "binding"
+        }:
+            return False
+        note = data["note"]
+        if not isinstance(note, str) or len(note) > 1000 or not (
+            "synthetic" in note.casefold() or "not a live" in note.casefold()
+        ):
+            return False
+        digest = data["approval_payload_sha256"]
+        if not isinstance(digest, str) or _SHA256.fullmatch(digest) is None:
+            return False
+        registered = data["registered_passkey"]
+        if not isinstance(registered, dict) or set(registered) != {
+            "person_id", "credential_id_hex", "public_key_hex", "rp_id"
+        }:
+            return False
+        person = registered["person_id"]
+        rp = registered["rp_id"]
+        if not isinstance(person, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}", person) is None:
+            return False
+        if not isinstance(rp, str) or re.fullmatch(r"[a-z0-9][a-z0-9.-]{0,247}\.test", rp) is None:
+            return False
+
+        def is_hex(value: Any, size: int | None = None) -> bool:
+            return (
+                isinstance(value, str) and 0 < len(value) <= 2048
+                and len(value) % 2 == 0
+                and re.fullmatch(r"[0-9a-fA-F]+", value) is not None
+                and (size is None or len(value) == size * 2)
+            )
+
+        if not is_hex(registered["credential_id_hex"]) or not is_hex(registered["public_key_hex"], 32):
+            return False
+        assertion = data["assertion_hex"]
+        if not isinstance(assertion, dict) or set(assertion) != {
+            "credential_id", "authenticator_data", "client_data_json", "signature"
+        }:
+            return False
+        if not is_hex(assertion["credential_id"]) or assertion["credential_id"].casefold() != registered["credential_id_hex"].casefold():
+            return False
+        if not is_hex(assertion["authenticator_data"], 37) or not is_hex(assertion["signature"], 32):
+            return False
+        if not isinstance(assertion["client_data_json"], str):
+            return False
+        client = json.loads(assertion["client_data_json"], object_pairs_hook=_unique_object)
+        if not isinstance(client, dict) or set(client) != {"type", "origin", "challenge", "fixture"}:
+            return False
+        if client != {
+            "type": "webauthn.get", "origin": "https://" + rp,
+            "challenge": digest.removeprefix("sha256:"),
+            "fixture": "openadapt.named-person.webauthn-double/v1",
+        }:
+            return False
+        binding = data["binding"]
+        if not isinstance(binding, dict) or set(binding) != {
+            "schema_version", "person_id", "method", "approval_payload_sha256", "evidence", "verified_at"
+        }:
+            return False
+        if (
+            binding["schema_version"] != "openadapt.named-person-binding/v1"
+            or binding["person_id"] != person or binding["method"] != "webauthn_passkey"
+            or binding["approval_payload_sha256"] != digest
+            or not isinstance(binding["verified_at"], str)
+            or _REVOCATION_TIME.fullmatch(binding["verified_at"]) is None
+        ):
+            return False
+        evidence = binding["evidence"]
+        required = {
+            "credential_id_sha256", "rp_id", "authenticator_data_sha256",
+            "client_data_sha256", "signature_sha256", "challenge_sha256"
+        }
+        if not isinstance(evidence, dict) or not required <= evidence.keys() or evidence.keys() - required - {"user_handle_sha256"}:
+            return False
+        if evidence["rp_id"] != rp or evidence["challenge_sha256"] != digest:
+            return False
+        for name, value in evidence.items():
+            if name == "rp_id" or (name == "user_handle_sha256" and value is None):
+                continue
+            if not isinstance(value, str) or _SHA256.fullmatch(value) is None:
+                return False
+        return True
+    except (ValueError, TypeError, UnicodeError):
+        return False
+
+
 def _is_evidence_path(name: str) -> bool:
     return bool(
         {part.casefold() for part in Path(name).parts}
@@ -129,6 +228,8 @@ def tracked_key_path_kind(name: str) -> str | None:
         return "public_registry_candidate"
     if name in PUBLIC_CERTIFICATES:
         return "public_certificate_candidate"
+    if name in SYNTHETIC_ASSERTION_FIXTURES:
+        return "synthetic_assertion_candidate"
     return "excluded"
 
 
@@ -140,7 +241,8 @@ def violations(root: Path, names: Iterable[str]) -> list[str]:
             continue
         validator = (
             is_public_registry if kind == "public_registry_candidate" else
-            is_public_certificate if kind == "public_certificate_candidate" else None
+            is_public_certificate if kind == "public_certificate_candidate" else
+            is_synthetic_assertion_fixture if kind == "synthetic_assertion_candidate" else None
         )
         if validator is None:
             denied.append(name)  # Never open or hash a denied candidate.

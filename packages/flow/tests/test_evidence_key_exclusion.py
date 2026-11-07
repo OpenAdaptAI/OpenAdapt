@@ -302,3 +302,117 @@ def test_actual_ci_command_rejects_force_added_synthetic_key_without_values(tmp_
     assert abbreviated.returncode == 2
     assert "unrecognized arguments: --roo" in abbreviated.stderr
     assert marker not in abbreviated.stdout + abbreviated.stderr
+
+
+ASSERTION_PATH = "packages/flow/tests/fixtures/named_person_binding/webauthn_passkey_double.json"
+
+
+def _synthetic_assertion_data():
+    """Independent shape samples, not a recomputation of the recorded vector."""
+    digest = "sha256:" + "a" * 64
+    rp = "approve.synthetic.test"
+    return {
+        "note": "Synthetic structural sample; not a live authentication assertion",
+        "approval_payload_sha256": digest,
+        "registered_passkey": {
+            "person_id": "person:synthetic", "credential_id_hex": "01",
+            "public_key_hex": "02" * 32, "rp_id": rp,
+        },
+        "assertion_hex": {
+            "credential_id": "01", "authenticator_data": "03" * 37,
+            "signature": "04" * 32,
+            "client_data_json": json.dumps({
+                "type": "webauthn.get", "origin": "https://" + rp,
+                "challenge": "a" * 64,
+                "fixture": "openadapt.named-person.webauthn-double/v1",
+            }),
+        },
+        "binding": {
+            "schema_version": "openadapt.named-person-binding/v1",
+            "person_id": "person:synthetic", "method": "webauthn_passkey",
+            "approval_payload_sha256": digest, "verified_at": "2026-11-07T00:00:00Z",
+            "evidence": {
+                "rp_id": rp, "credential_id_sha256": digest,
+                "authenticator_data_sha256": digest, "client_data_sha256": digest,
+                "signature_sha256": digest, "challenge_sha256": digest,
+                "user_handle_sha256": None,
+            },
+        },
+    }
+
+
+def _assertion_object(data, level):
+    if level == "outer":
+        return data
+    if level == "evidence":
+        return data["binding"]["evidence"]
+    return data[level]
+
+
+def test_closed_synthetic_assertion_is_ci_only_and_exact_path(tmp_path, guard):
+    payload = json.dumps(_synthetic_assertion_data())
+    assert guard["is_synthetic_assertion_fixture"](payload)
+    candidate = tmp_path / ASSERTION_PATH
+    candidate.parent.mkdir(parents=True)
+    candidate.write_text(payload)
+    assert guard["violations"](tmp_path, [ASSERTION_PATH]) == []
+    assert guard["tracked_key_path_kind"](ASSERTION_PATH) == "synthetic_assertion_candidate"
+    other = "evidence/webauthn_passkey_double.json"
+    assert guard["violations"](tmp_path, [other]) == [other]
+    assert is_publication_input_path_excluded(ASSERTION_PATH)
+
+
+@given(
+    level=st.sampled_from(("outer", "registered_passkey", "assertion_hex", "binding", "evidence", "client")),
+    extra=st.sampled_from(("private_key", "seed", "password", "unknown")),
+    value=st.one_of(st.text(max_size=30), st.just({"nested": "unclassified"})),
+)
+@settings(max_examples=40, deadline=None)
+def test_synthetic_assertion_schema_refuses_extra_fields_at_every_level(guard, level, extra, value):
+    data = _synthetic_assertion_data()
+    if level == "client":
+        client = json.loads(data["assertion_hex"]["client_data_json"])
+        client[extra] = value
+        data["assertion_hex"]["client_data_json"] = json.dumps(client)
+    else:
+        _assertion_object(data, level)[extra] = value
+    assert not guard["is_synthetic_assertion_fixture"](json.dumps(data))
+
+
+@pytest.mark.parametrize("mutation", (
+    "live_rp", "live_origin", "other_origin", "challenge", "public_key_size",
+    "signature_size", "credential", "method", "binding_person", "nested_known",
+    "duplicate_outer", "duplicate_client",
+))
+def test_synthetic_assertion_schema_refuses_live_or_ambiguous_shapes(guard, mutation):
+    data = _synthetic_assertion_data()
+    client = json.loads(data["assertion_hex"]["client_data_json"])
+    if mutation == "live_rp":
+        data["registered_passkey"]["rp_id"] = "approve.example.com"
+        data["binding"]["evidence"]["rp_id"] = "approve.example.com"
+        client["origin"] = "https://approve.example.com"
+    elif mutation == "live_origin":
+        client["origin"] = "https://approve.example.com"
+    elif mutation == "other_origin":
+        client["origin"] = "https://other.synthetic.test"
+    elif mutation == "challenge":
+        client["challenge"] = "b" * 64
+    elif mutation == "public_key_size":
+        data["registered_passkey"]["public_key_hex"] = "02" * 31
+    elif mutation == "signature_size":
+        data["assertion_hex"]["signature"] = "04" * 31
+    elif mutation == "credential":
+        data["assertion_hex"]["credential_id"] = "ff"
+    elif mutation == "method":
+        data["binding"]["method"] = "oidc"
+    elif mutation == "binding_person":
+        data["binding"]["person_id"] = "person:other"
+    elif mutation == "nested_known":
+        data["binding"]["evidence"]["signature_sha256"] = {"private_key": "not a digest"}
+    data["assertion_hex"]["client_data_json"] = json.dumps(client)
+    if mutation == "duplicate_client":
+        data["assertion_hex"]["client_data_json"] = json.dumps(client)[:-1] + ',"origin":"https://approve.synthetic.test"}'
+    payload = json.dumps(data)
+    if mutation == "duplicate_outer":
+        payload = payload[:-1] + ',"note":"Synthetic duplicate"}'
+    assert not guard["is_synthetic_assertion_fixture"](payload)
