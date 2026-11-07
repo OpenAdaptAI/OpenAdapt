@@ -413,7 +413,9 @@ def test_the_recheck_tool_says_another_agent_id_is_not_excused(sqlite_bridge) ->
     assert "another agent_id" in spec.description
 
 
-def test_recheck_reply_identifies_its_validated_receipt_context(sqlite_bridge, monkeypatch) -> None:
+def test_recheck_reply_identifies_its_validated_receipt_context(
+    sqlite_bridge, monkeypatch
+) -> None:
     bridge, db = sqlite_bridge
     first = _provisional(bridge, db)
     second = _second(bridge, db)

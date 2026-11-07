@@ -2404,7 +2404,8 @@ def _mark_rechecked(
             receipt_sha256=late.receipt_sha256 or None,
             recheck_claim_sha256=late.recheck_claim_sha256 or None,
             excuse_receipt_sha256s=list(late.excuse_receipt_sha256s)
-            if late.excuse_receipt_sha256s is not None else None,
+            if late.excuse_receipt_sha256s is not None
+            else None,
             expected_revision=expected_revision,
         )
         if (
@@ -2438,12 +2439,14 @@ def _mark_rechecked(
 def _recheck_claim_id(receipt: str, excuses: Sequence[str]) -> str:
     """One data identity, insensitive to excuse order or duplication."""
 
-    return _state_digest({"receipt_sha256": receipt,
-                          "excuse_receipt_sha256s": sorted(set(excuses))})
+    return _state_digest(
+        {"receipt_sha256": receipt, "excuse_receipt_sha256s": sorted(set(excuses))}
+    )
 
 
 def _recheck_claim_problem(
-    events: Sequence[Mapping[str, Any]], late: RecheckResult,
+    events: Sequence[Mapping[str, Any]],
+    late: RecheckResult,
 ) -> Optional[str]:
     """A historical refutation is not erased by restoring current rows.
 
@@ -2452,17 +2455,27 @@ def _recheck_claim_problem(
     this comparison never releases a workflow hold or permits a resend.
     """
 
-    negative = [e for e in events if e.get("event") == "resolved"
-                and e.get("outcome") == "REFUTED" and e.get("applied") is not False]
+    negative = [
+        e
+        for e in events
+        if e.get("event") == "resolved"
+        and e.get("outcome") == "REFUTED"
+        and e.get("applied") is not False
+    ]
     if not negative:
         return None
 
     def digest(value: Any) -> bool:
-        return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+        return (
+            isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+        )
 
     current = late.excuse_receipt_sha256s
-    if (not digest(late.receipt_sha256) or current is None
-        or late.recheck_claim_sha256 != _recheck_claim_id(late.receipt_sha256, current)):
+    if (
+        not digest(late.receipt_sha256)
+        or current is None
+        or late.recheck_claim_sha256 != _recheck_claim_id(late.receipt_sha256, current)
+    ):
         return "the recheck has no validated receipt-bound claim context; the earlier hold remains"
     claims: set[str] = set()
     seen_receipts: set[str] = set()
@@ -2477,9 +2490,12 @@ def _recheck_claim_problem(
         claims.add(receipt)
         seen_receipts.add(receipt)
         refs = result.get("excuse_receipt_sha256s")
-        if (not isinstance(refs, (list, tuple)) or not all(digest(ref) for ref in refs)
+        if (
+            not isinstance(refs, (list, tuple))
+            or not all(digest(ref) for ref in refs)
             or list(refs) != sorted(set(refs))
-            or result.get("recheck_claim_sha256") != _recheck_claim_id(receipt, refs)):
+            or result.get("recheck_claim_sha256") != _recheck_claim_id(receipt, refs)
+        ):
             unknown_context = True
             continue
         if late.recheck_claim_sha256 == result["recheck_claim_sha256"]:
@@ -2583,7 +2599,8 @@ def _hold_after_recheck(
                 "receipt_sha256": digest,
                 "recheck_claim_sha256": late.recheck_claim_sha256 or None,
                 "excuse_receipt_sha256s": list(late.excuse_receipt_sha256s)
-                if late.excuse_receipt_sha256s is not None else None,
+                if late.excuse_receipt_sha256s is not None
+                else None,
             },
             expected_revision=expected_revision,
         )
@@ -2738,7 +2755,9 @@ def _judge_recheck(
     # recheck_run has now validated every later receipt, its params and
     # read contract, and its temporal window. A count or caller label is
     # insufficient; bind the exact issued receipt identities instead.
-    excuse_refs = tuple(sorted({receipt_sha256(other["receipt"]) for other, _ in excused}))
+    excuse_refs = tuple(
+        sorted({receipt_sha256(other["receipt"]) for other, _ in excused})
+    )
     evidence = verdict.evidence(spec) if spec is not None else {}
     reasons: list[str] = []
     status = verdict.status

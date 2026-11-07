@@ -681,9 +681,11 @@ def issue_for_recheck(
                 "read_at": late.read_at,
                 "excused": late.excused,
                 "evidence": late.evidence,
-                "recheck_claim_sha256": getattr(late, "recheck_claim_sha256", "") or None,
+                "recheck_claim_sha256": getattr(late, "recheck_claim_sha256", "")
+                or None,
                 "excuse_receipt_sha256s": list(late.excuse_receipt_sha256s)
-                if getattr(late, "excuse_receipt_sha256s", None) is not None else None,
+                if getattr(late, "excuse_receipt_sha256s", None) is not None
+                else None,
             }
         },
         source="verifier",

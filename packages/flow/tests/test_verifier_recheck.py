@@ -20,7 +20,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from openadapt_flow import verifier
 from openadapt_flow.runtime.effects.frame import FrameSpec
@@ -1322,14 +1323,18 @@ def test_fresh_excused_recheck_does_not_release_hold_or_retry(
 
 
 def test_historical_claim_cannot_be_revived_by_recycled_excuses(
-    tmp_path: Path, due_now: None,
+    tmp_path: Path,
+    due_now: None,
 ) -> None:
     contract, db, first = _first(tmp_path)
     second = _save(contract, db, 3)
     plain = _recheck(contract, first)
     assert plain.outcome == "REFUTED" and plain.excuse_receipt_sha256s == ()
     explained = _recheck(contract, first, excused_by=[second])
-    assert explained.verified and explained.recheck_claim_sha256 != plain.recheck_claim_sha256
+    assert (
+        explained.verified
+        and explained.recheck_claim_sha256 != plain.recheck_claim_sha256
+    )
     _sql(db, "UPDATE patient_data SET phone_cell='unexpected' WHERE id=1")
     disputed = _recheck(contract, first, excused_by=[second])
     assert disputed.outcome == "REFUTED"
@@ -1340,7 +1345,9 @@ def test_historical_claim_cannot_be_revived_by_recycled_excuses(
     third = _save(contract, db, 4)
     new_claim = _recheck(contract, first, excused_by=[second, third])
     assert new_claim.verified, new_claim.reasons
-    assert new_claim.excuse_receipt_sha256s == tuple(sorted({second.receipt_sha256, third.receipt_sha256}))
+    assert new_claim.excuse_receipt_sha256s == tuple(
+        sorted({second.receipt_sha256, third.receipt_sha256})
+    )
     _sql(db, "UPDATE patient_data SET phone_cell='unexpected' WHERE id=1")
     assert _recheck(contract, first, excused_by=[second, third]).outcome == "REFUTED"
     _sql(db, "UPDATE patient_data SET phone_cell='' WHERE id=1")
@@ -1356,7 +1363,8 @@ def test_historical_claim_cannot_be_revived_by_recycled_excuses(
 
 
 def test_legacy_missing_context_does_not_admit_a_fresh_confirmation(
-    tmp_path: Path, due_now: None,
+    tmp_path: Path,
+    due_now: None,
 ) -> None:
     contract, db, first = _first(tmp_path)
     second = _save(contract, db, 3)
@@ -1381,13 +1389,20 @@ def test_legacy_missing_context_does_not_admit_a_fresh_confirmation(
 
 
 def test_receipt_bound_revision_model_on_generated_sqlite_histories(
-    tmp_path: Path, due_now: None, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    due_now: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     case = 0
 
     @settings(max_examples=8, deadline=None)
-    @given(st.lists(st.tuples(st.lists(st.sampled_from([0, 1]), max_size=4), st.booleans()),
-                    min_size=1, max_size=6))
+    @given(
+        st.lists(
+            st.tuples(st.lists(st.sampled_from([0, 1]), max_size=4), st.booleans()),
+            min_size=1,
+            max_size=6,
+        )
+    )
     def histories(operations: list[tuple[list[int], bool]]) -> None:
         nonlocal case
         folder = tmp_path / str(case)
@@ -1407,7 +1422,9 @@ def test_receipt_bound_revision_model_on_generated_sqlite_histories(
                 _sql(db, f"UPDATE patient_data SET phone_cell='{value}' WHERE id=1")
                 context = tuple(sorted({later[i].receipt_sha256 for i in indexes}))
                 prefix = first.ledger.backend.events(first.write_key)
-                result = _recheck(contract, first, excused_by=[later[i] for i in indexes])
+                result = _recheck(
+                    contract, first, excused_by=[later[i] for i in indexes]
+                )
                 assert result.excuse_receipt_sha256s == context
                 if harm or set(indexes) != {0, 1}:
                     assert result.outcome == "REFUTED", result.reasons
@@ -1415,13 +1432,16 @@ def test_receipt_bound_revision_model_on_generated_sqlite_histories(
                     negative_receipts.update(context)
                 else:
                     permitted = not negative_contexts or (
-                        context not in negative_contexts and bool(set(context) - negative_receipts)
+                        context not in negative_contexts
+                        and bool(set(context) - negative_receipts)
                     )
                     assert result.verified is permitted, result.reasons
                     if not permitted:
                         assert result.outcome == "UNCERTAIN"
                 events = first.ledger.backend.events(first.write_key)
-                assert events[:len(prefix)] == prefix and len(events) == len(prefix) + 1
+                assert (
+                    events[: len(prefix)] == prefix and len(events) == len(prefix) + 1
+                )
                 if negative_contexts:
                     held = first.ledger.latest(first.write_key)
                     assert held is not None and held.state == "held"
