@@ -1988,6 +1988,8 @@ def diff(
         a, b = before.tables.get(name), after.tables.get(name)
         moved = TableDiff(unread=unread_reasons(a, b, after.dialect))
         if a is not None and b is not None and a.mode == "compare" == b.mode:
+            if a.cell_columns != b.cell_columns:
+                moved.unread.append("compared differently")
             if a.columns == b.columns and a.cell_columns == b.cell_columns:
                 moved.added = len(b.rows.keys() - a.rows.keys())
                 moved.removed = len(a.rows.keys() - b.rows.keys())

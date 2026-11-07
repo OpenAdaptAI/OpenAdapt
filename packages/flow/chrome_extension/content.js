@@ -1,5 +1,6 @@
 // OpenAdapt optional extension evidence (content script).
-// Captures open-shadow-DOM target paths while a recording is active.
+// Captures open-shadow-DOM target paths and frame context (including
+// cross-origin iframes, which run their own copy) while a recording is active.
 // Never sends password / declared-secret values. No remote endpoints.
 'use strict';
 
@@ -41,6 +42,60 @@
       }
     }
     return ev.target || null;
+  }
+
+  // A URL without query, fragment or credentials: those often carry tokens.
+  // Non-web schemes (data:, blob:, javascript:) keep only the scheme.
+  function safeUrl(href) {
+    if (!href) return null;
+    let u;
+    try {
+      u = new URL(String(href));
+    } catch (e) {
+      return null;
+    }
+    if (u.protocol === 'http:' || u.protocol === 'https:') {
+      return `${u.protocol}//${u.host}${u.pathname}`;
+    }
+    if (u.protocol === 'about:') return `about:${u.pathname}`;
+    return u.protocol;
+  }
+
+  function frameOrigin() {
+    try {
+      return (typeof location !== 'undefined' && location.origin) || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function isIframe() {
+    try {
+      return typeof window !== 'undefined' && window.top !== window;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  // True when the parent frame is a different origin (its location is
+  // unreadable). The parent links its <iframe> element via frame_focus.
+  function crossOriginParent() {
+    if (!isIframe()) return false;
+    try {
+      void window.parent.location.href;
+      return false;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  function frameContext() {
+    return {
+      frame_url: safeUrl(typeof location !== 'undefined' && location.href),
+      frame_origin: frameOrigin(),
+      is_iframe: isIframe(),
+      cross_origin_parent: crossOriginParent(),
+    };
   }
 
   function cssEscapeIdent(value) {
@@ -123,8 +178,7 @@
       path: walk.path,
       in_shadow: walk.in_shadow,
       closed_shadow: walk.closed_shadow,
-      frame_url: (typeof location !== 'undefined' && location.href) || null,
-      is_iframe: (typeof window !== 'undefined' && window.top !== window) || false,
+      ...frameContext(),
       secret_field: secret,
       value: secret ? REDACTED_VALUE : null,
       seq: seq++,
@@ -136,6 +190,65 @@
       evidence.value = el.value;
     }
     return evidence;
+  }
+
+  // Deepest focused element, through open shadow roots.
+  function deepActiveElement() {
+    let el = document.activeElement;
+    while (el && el.shadowRoot && el.shadowRoot.activeElement) {
+      el = el.shadowRoot.activeElement;
+    }
+    return el;
+  }
+
+  // The parent never sees events inside a (cross-origin) child frame. When
+  // focus moves into one, describe the <iframe> element from this side so the
+  // engine can link the child frame's own evidence to a parent path.
+  function frameFocusEvidence() {
+    const el = deepActiveElement();
+    if (!el || el.nodeType !== 1) return null;
+    const tag = (el.tagName || '').toLowerCase();
+    if (tag !== 'iframe' && tag !== 'frame') return null;
+    const walk = shadowPiercingPath(el);
+    const src = (el.getAttribute && el.getAttribute('src')) || el.src || '';
+    let resolved = null;
+    try {
+      resolved = src ? new URL(src, location.href).href : null;
+    } catch (e) {
+      resolved = null;
+    }
+    const srcUrl = safeUrl(resolved);
+    let childOrigin = null;
+    try {
+      childOrigin = resolved ? new URL(resolved).origin : null;
+    } catch (e) {
+      childOrigin = null;
+    }
+    return {
+      schema: SCHEMA,
+      kind: 'frame_focus',
+      event: 'frame_focus',
+      tag,
+      id: el.id || null,
+      name: (el.getAttribute && el.getAttribute('name')) || null,
+      title: (el.getAttribute && el.getAttribute('title')) || null,
+      path: walk.path,
+      in_shadow: walk.in_shadow,
+      closed_shadow: walk.closed_shadow,
+      frame_src: srcUrl,
+      child_origin: childOrigin && childOrigin !== 'null' ? childOrigin : null,
+      cross_origin_child: Boolean(childOrigin && childOrigin !== frameOrigin()),
+      ...frameContext(),
+      secret_field: false,
+      value: null,
+      seq: seq++,
+      t_ms: Date.now(),
+    };
+  }
+
+  function onWindowBlur() {
+    // activeElement updates synchronously when focus enters a child frame.
+    emit(frameFocusEvidence());
   }
 
   function emit(evidence) {
@@ -165,6 +278,10 @@
     document.addEventListener('focusin', onFocusIn, true);
     document.addEventListener('input', onInput, true);
     attached.document = 3;
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('blur', onWindowBlur, true);
+      attached.window = 1;
+    }
   }
 
   function detach() {
@@ -173,6 +290,10 @@
     document.removeEventListener('focusin', onFocusIn, true);
     document.removeEventListener('input', onInput, true);
     attached.document = 0;
+    if (attached.window && typeof window !== 'undefined' && window.removeEventListener) {
+      window.removeEventListener('blur', onWindowBlur, true);
+    }
+    attached.window = 0;
   }
 
   function setRecording(active) {
@@ -203,6 +324,9 @@
       targetEvidence,
       isSecretField,
       eventTarget,
+      safeUrl,
+      frameContext,
+      frameFocusEvidence,
       get attached() {
         return { ...attached };
       },

@@ -567,8 +567,10 @@ def test_meta_matches_recorder_contract(converted: Path) -> None:
     assert meta["source"] == "openadapt-capture"
     assert meta["task_description"] == "add a note"
     # Regression: a NON-window session's meta carries exactly the recorder
-    # contract keys — no window-mode fields may leak into it.
-    assert set(meta.keys()) == {
+    # contract keys — no window-mode fields may leak into it. This fixture is
+    # a session from before capture persisted locale facts (#1897), so it
+    # stays unbound. The converting computer's own facts are never added.
+    expected = {
         "id",
         "created_at",
         "viewport",
@@ -577,6 +579,86 @@ def test_meta_matches_recorder_contract(converted: Path) -> None:
         "source",
         "task_description",
     }
+    assert set(meta.keys()) == expected
+
+
+# -- locale facts (#1897): recorded by capture, carried, never re-observed ----
+
+
+def _forbid_observing_this_computer(monkeypatch) -> None:
+    import openadapt_flow.locale_invariants as li
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("conversion read the converting computer's locale")
+
+    monkeypatch.setattr(li, "observe_locale_invariants", refuse)
+    monkeypatch.setattr(li, "read_os_locale_facts", refuse)
+
+
+def test_conversion_carries_the_recorded_locale_facts(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import json
+
+    _forbid_observing_this_computer(monkeypatch)
+    recorded = {"locale": "de_de", "date_order": "dmy", "keyboard_layout": "de"}
+    capture_dir = make_capture(
+        tmp_path,
+        demo_rows(),
+        config={"pixel_ratio": PIXEL_RATIO, "capture_locale": recorded},
+    )
+    convert_capture(capture_dir, tmp_path / "recording", settle_s=1.0)
+    meta = json.loads((tmp_path / "recording" / "meta.json").read_text())
+    assert meta["locale_invariants"] == recorded
+
+
+def test_an_unreadable_recording_observation_stays_bound_and_refuses(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import json
+
+    from openadapt_flow.compiler.compile import _locale_invariants_from_meta
+    from openadapt_flow.ir import ActionKind, Step, Workflow
+    from openadapt_flow.locale_invariants import (
+        LocaleInvariantMismatch,
+        LocaleInvariants,
+        enforce_workflow_locale_invariants,
+    )
+
+    _forbid_observing_this_computer(monkeypatch)
+    unknown = {"locale": None, "date_order": None, "keyboard_layout": None}
+    capture_dir = make_capture(
+        tmp_path,
+        demo_rows(),
+        config={"pixel_ratio": PIXEL_RATIO, "capture_locale": unknown},
+    )
+    convert_capture(capture_dir, tmp_path / "recording", settle_s=1.0)
+    meta = json.loads((tmp_path / "recording" / "meta.json").read_text())
+    # Kept, not dropped: dropping it made a new recording look unbound.
+    assert meta["locale_invariants"] == unknown
+    bound = _locale_invariants_from_meta(meta)
+    assert bound is not None
+    workflow = Workflow(
+        name="demo",
+        locale_invariants=bound,
+        steps=[Step(id="s1", action=ActionKind.TYPE, intent="type a note")],
+    )
+    here = LocaleInvariants(locale="en_US", date_order="mdy", keyboard_layout="us")
+    with pytest.raises(LocaleInvariantMismatch, match="when recording"):
+        enforce_workflow_locale_invariants(workflow, current=here)
+
+
+def test_malformed_recorded_locale_facts_refuse_conversion(tmp_path: Path) -> None:
+    capture_dir = make_capture(
+        tmp_path,
+        demo_rows(),
+        config={
+            "pixel_ratio": PIXEL_RATIO,
+            "capture_locale": {"date_order": "dym"},
+        },
+    )
+    with pytest.raises(ValueError, match="locale"):
+        convert_capture(capture_dir, tmp_path / "recording", settle_s=1.0)
 
 
 def test_frames_selected_from_video(converted: Path) -> None:

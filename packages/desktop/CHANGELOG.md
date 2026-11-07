@@ -1,12 +1,15 @@
 # CHANGELOG
 
 
-## v0.27.0 (2026-11-06)
+## v0.27.0 (2026-11-05)
 
 ### Features
 
-- **desktop**: register the Chrome extension host per recording (Part of #1872)
+- Ask before sending Desktop usage stats; add a daily update check
 
+### Bug Fixes
+
+- **desktop**: honor TELEMETRY=0 and stop stale update GET clobber
 
 
 ## v0.26.0 (2026-11-03)
