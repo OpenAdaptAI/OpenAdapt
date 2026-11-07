@@ -224,7 +224,9 @@ def test_an_audited_edit_by_another_user_is_concurrent() -> None:
         audit_before=[OLD_ENTRY],
         audit_after=entries,
     )
-    assert verdict.status == "held"
+    # Attributed, so nothing refutes; without frame.database the frame never
+    # holds (#1505).
+    assert verdict.status == "not_checked"
     assert len(verdict.concurrent) == 1
 
 
@@ -281,10 +283,11 @@ def test_a_bot_log_entry_on_an_undeclared_record_is_collateral() -> None:
     [
         # Both reads read uuid_registry as append-only, and the profile marks
         # it: the bot's insert there, filed under no chart, is bookkeeping.
-        (["openemr.uuid_registry"], {}, "held"),
+        # Nothing refutes; without frame.database the frame never holds.
+        (["openemr.uuid_registry"], {}, "not_checked"),
         # An empty record field names no record in any app.
-        (["openemr.uuid_registry"], {"record": None, "values": ()}, "held"),
-        (["openemr.uuid_registry"], {"record": "", "values": ()}, "held"),
+        (["openemr.uuid_registry"], {"record": None, "values": ()}, "not_checked"),
+        (["openemr.uuid_registry"], {"record": "", "values": ()}, "not_checked"),
         # Record 0 names no record only where the app profile says so; in an
         # app whose profile doesn't, 0 is a record id and the entry counts.
         (["openemr.uuid_registry"], {"values": ()}, "refuted"),
@@ -453,84 +456,173 @@ def test_verify_run_stray_addition_is_refuted(sor, tmp_path: Path) -> None:
     assert result["evidence"]["frame"]["collateral_kinds"] == ["added"]
 
 
-def test_verify_run_attributes_through_an_audit_read(tmp_path: Path) -> None:
-    """A SQL store with its own audit log: another user's edit is concurrent."""
+def _audited_store(tmp_path: Path) -> Path:
+    """A SQL store with its own audit log, and a table the record read skips."""
 
     db = tmp_path / "app.sqlite"
     con = sqlite3.connect(db)
     con.executescript(
         "CREATE TABLE chart (id INTEGER PRIMARY KEY, lname TEXT, phone TEXT);"
-        "CREATE TABLE log (id INTEGER PRIMARY KEY, user TEXT, chart_id INTEGER);"
+        "CREATE TABLE insurance (id INTEGER PRIMARY KEY, chart_id INTEGER, "
+        "provider TEXT);"
+        "CREATE TABLE log (id INTEGER PRIMARY KEY, user TEXT, chart_id INTEGER, "
+        "event TEXT, tbl TEXT);"
         "INSERT INTO chart VALUES (1, 'Priorchart', '555-0188');"
-        "INSERT INTO log VALUES (1, 'clinic2', 1);"
+        "INSERT INTO log VALUES (1, 'clinic2', 1, 'update', 'chart');"
     )
     con.commit()
+    con.close()
+    return db
 
-    def doc(self_user: str) -> dict:
-        return {
-            "schema_version": "openadapt.verify/v1",
-            "verifier": {
+
+def _audited_doc(db: Path, *, whole_database: bool) -> dict:
+    frame: dict = {
+        "identity_field": "id",
+        "attribution": {
+            "kind": "audit_read",
+            "actor_field": "user",
+            "record_field": "chart_id",
+            "self": ["bot"],
+            "event_field": "event",
+            "write_events": ["insert", "update", "delete"],
+            "insert_events": ["insert"],
+            "delete_events": ["delete"],
+            "table_field": "tbl",
+            "read": {
                 "kind": "sql",
                 "sqlite_database": str(db),
-                "sql_query": "SELECT id, lname, phone FROM chart",
+                "sql_query": "SELECT id, user, chart_id, event, tbl FROM log",
             },
-            "effects": [
-                {
-                    "kind": "record_written",
-                    "match": {"lname": {"param": "lname"}},
-                    "count_new_only": True,
-                    "timeout_s": 0.2,
-                }
-            ],
-            "frame": {
-                "identity_field": "id",
-                "attribution": {
-                    "kind": "audit_read",
-                    "actor_field": "user",
-                    "record_field": "chart_id",
-                    "self": [self_user],
-                    "read": {
-                        "kind": "sql",
-                        "sqlite_database": str(db),
-                        "sql_query": "SELECT id, user, chart_id FROM log",
-                    },
-                },
-            },
+        },
+    }
+    if whole_database:
+        frame["attribution"]["record_key"] = "id"
+        frame["attribution"]["record_keys"] = {"insurance": "chart_id"}
+        frame["database"] = {
+            "dialect": "sqlite",
+            "read": {"sqlite_database": str(db)},
+            "allow_tables": ["log"],
+            "views": {"chart": ""},
+            "new_row_fields": {"chart": ["phone"]},
         }
+    return {
+        "schema_version": "openadapt.verify/v1",
+        "verifier": {
+            "kind": "sql",
+            "sqlite_database": str(db),
+            "sql_query": "SELECT id, lname, phone FROM chart",
+        },
+        "effects": [
+            {
+                "kind": "record_written",
+                "match": {"lname": {"param": "lname"}},
+                "count_new_only": True,
+                "timeout_s": 0.2,
+            }
+        ],
+        "frame": frame,
+    }
+
+
+def _audited_run(
+    tmp_path: Path,
+    db: Path,
+    name: str,
+    *,
+    whole_database: bool,
+    edit_user: str = "",
+    insurance_by: str = "",
+) -> dict:
+    """The bot saves a chart; ``edit_user`` then edits chart 1, and
+    ``insurance_by`` adds an insurance row for the new chart."""
 
     params = {"lname": "Newchart"}
-
-    def run(edit_user: str, name: str) -> dict:
-        cfg = parse_verify_config(doc("bot"))
-        baseline = tmp_path / f"{name}.json"
-        capture_baseline(cfg, params, baseline)
-        con.execute("DELETE FROM chart WHERE id > 1")
-        con.execute("UPDATE chart SET phone = '555-0188' WHERE id = 1")
-        con.execute("INSERT INTO chart (lname, phone) VALUES ('Newchart', '555-0131')")
-        con.execute(
-            "INSERT INTO log (user, chart_id) VALUES ('bot', last_insert_rowid())"
-        )
-        con.execute("UPDATE chart SET phone = '555-0199' WHERE id = 1")
-        con.execute("INSERT INTO log (user, chart_id) VALUES (?, 1)", (edit_user,))
-        con.commit()
-        return verify_run(
-            cfg,
-            params=params,
-            run_record={"executor_kind": "agent", "executor_id": "test-agent"},
-            authorization_ref="ticket-0000-audit",
-            baseline_path=baseline,
-            private_dir=tmp_path / name,
-        )
-
+    cfg = parse_verify_config(_audited_doc(db, whole_database=whole_database))
+    baseline = tmp_path / f"{name}.json"
+    con = sqlite3.connect(db)
     try:
-        concurrent = run("clinic3", "concurrent")
-        assert concurrent["receipt"]["outcome"] == "verified", concurrent["evidence"]
-        assert concurrent["evidence"]["frame"]["concurrent_count"] == 1
-        own = run("bot", "own")
-        assert own["receipt"]["checked"]["frame"] == "refuted"
-        assert own["receipt"]["outcome"] == "reconciliation_required"
+        con.execute("DELETE FROM chart WHERE id > 1")
+        con.execute("DELETE FROM insurance")
+        con.execute("UPDATE chart SET phone = '555-0188' WHERE id = 1")
+        con.commit()
+        capture_baseline(cfg, params, baseline)
+        con.execute("INSERT INTO chart (lname, phone) VALUES ('Newchart', '555-0131')")
+        new_id = con.execute("SELECT last_insert_rowid()").fetchone()[0]
+        con.execute(
+            "INSERT INTO log (user, chart_id, event, tbl) VALUES "
+            "('bot', ?, 'insert', 'chart')",
+            (new_id,),
+        )
+        if edit_user:
+            con.execute("UPDATE chart SET phone = '555-0199' WHERE id = 1")
+            con.execute(
+                "INSERT INTO log (user, chart_id, event, tbl) VALUES "
+                "(?, 1, 'update', 'chart')",
+                (edit_user,),
+            )
+        if insurance_by:
+            con.execute(
+                "INSERT INTO insurance (chart_id, provider) VALUES (?, 'Acme')",
+                (new_id,),
+            )
+            con.execute(
+                "INSERT INTO log (user, chart_id, event, tbl) VALUES "
+                "(?, ?, 'insert', 'insurance')",
+                (insurance_by, new_id),
+            )
+        con.commit()
     finally:
         con.close()
+    return verify_run(
+        cfg,
+        params=params,
+        run_record={"executor_kind": "agent", "executor_id": "test-agent"},
+        authorization_ref="ticket-0000-audit",
+        baseline_path=baseline,
+        private_dir=tmp_path / name,
+    )
+
+
+def test_verify_run_attributes_through_an_audit_read(tmp_path: Path) -> None:
+    """With the whole-database diff, another user's edit is concurrent and
+    the bot's own edit of another chart refutes."""
+
+    db = _audited_store(tmp_path)
+    concurrent = _audited_run(
+        tmp_path, db, "concurrent", whole_database=True, edit_user="clinic3"
+    )
+    assert concurrent["receipt"]["outcome"] == "verified", concurrent["evidence"]
+    assert concurrent["evidence"]["frame"]["concurrent_count"] == 1
+    own = _audited_run(tmp_path, db, "own", whole_database=True, edit_user="bot")
+    assert own["receipt"]["checked"]["frame"] == "refuted"
+    assert own["receipt"]["outcome"] == "reconciliation_required"
+
+
+def test_the_bots_unrelated_write_for_the_saved_record_is_never_excused(
+    tmp_path: Path,
+) -> None:
+    """#1505: the bot's log entry for the chart it saved is excused by
+    record, so its insurance row for that chart must be judged as a row.
+
+    Without ``frame.database`` the frame can't read the insurance table, so
+    it never holds and the save is never verified. With it, the row refutes.
+    A clean save holds only with it.
+    """
+
+    db = _audited_store(tmp_path)
+    unread = _audited_run(
+        tmp_path, db, "unread", whole_database=False, insurance_by="bot"
+    )
+    assert unread["receipt"]["checked"]["frame"] == "not_checked"
+    assert unread["receipt"]["outcome"] != "verified"
+    whole = _audited_run(tmp_path, db, "whole", whole_database=True, insurance_by="bot")
+    assert whole["receipt"]["checked"]["frame"] == "refuted"
+    assert whole["receipt"]["outcome"] == "reconciliation_required"
+    clean_unread = _audited_run(tmp_path, db, "clean-unread", whole_database=False)
+    assert clean_unread["receipt"]["checked"]["frame"] == "not_checked"
+    assert clean_unread["receipt"]["outcome"] != "verified"
+    clean = _audited_run(tmp_path, db, "clean", whole_database=True)
+    assert clean["receipt"]["outcome"] == "verified", clean["evidence"]
 
 
 def test_receipt_check_refuses_verified_with_an_unchecked_part(
