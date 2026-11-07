@@ -394,7 +394,9 @@ def test_legacy_explicit_release_is_workflow_not_absence_proof() -> None:
 
 @pytest.mark.parametrize("outcome", ["REFUTED", "UNCERTAIN"])
 def test_current_positive_observation_does_not_release_prior_settlement(
-    ledger: wl.Ledger, tmp_path: Path, outcome: str,
+    ledger: wl.Ledger,
+    tmp_path: Path,
+    outcome: str,
 ) -> None:
     saved = tmp_path / "retained-baseline"
     saved.mkdir()
@@ -403,8 +405,9 @@ def test_current_positive_observation_does_not_release_prior_settlement(
     ledger.resolved(KEY, "first", outcome=outcome, retry_safe=False, review=True)
     before = ledger.latest(KEY)
     assert before is not None
-    after = ledger.rechecked(KEY, "first", outcome="CONFIRMED",
-                             expected_revision=before.revision)
+    after = ledger.rechecked(
+        KEY, "first", outcome="CONFIRMED", expected_revision=before.revision
+    )
     assert after.events[-1]["applied"] is True
     assert after.events[-1]["outcome"] == "CONFIRMED"
     assert after.resolved == before.resolved

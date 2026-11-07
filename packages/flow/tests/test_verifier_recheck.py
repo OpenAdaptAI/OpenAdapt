@@ -1295,7 +1295,8 @@ def test_a_later_uncertain_recheck_does_not_replace_a_held_refuted(
 
 
 def test_fresh_excused_recheck_does_not_release_hold_or_retry(
-    tmp_path: Path, due_now: None,
+    tmp_path: Path,
+    due_now: None,
 ) -> None:
     contract, db, first = _first(tmp_path)
     second = _save(contract, db, 3)
@@ -1312,6 +1313,8 @@ def test_fresh_excused_recheck_does_not_release_hold_or_retry(
     assert after.resolved == before.resolved and not after.resolved["retry_safe"]
     assert after.events[-1]["applied"] is True
     assert after.events[-1]["outcome"] == "CONFIRMED"
-    assert {str(p): p.read_bytes() for p in before.folder.rglob("*") if p.is_file()} == files
+    assert {
+        str(p): p.read_bytes() for p in before.folder.rglob("*") if p.is_file()
+    } == files
     with pytest.raises(verifier.WriteHeld):
         begin_write(contract, _params(2), actor=BOT)

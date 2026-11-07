@@ -637,7 +637,9 @@ class Ledger:
             person = kind == "released" or event.get("via") == "person"
             # A current positive recheck is an observation, not a release.
             # The fold leaves earlier non-confirmed settlements unchanged.
-            positive_recheck = kind == "rechecked" and event.get("outcome") == "CONFIRMED"
+            positive_recheck = (
+                kind == "rechecked" and event.get("outcome") == "CONFIRMED"
+            )
             if kind == "begun":
                 applied = fresh and (prior is None or self.state(prior) == "free")
                 applied = applied and not any(
@@ -652,7 +654,10 @@ class Ledger:
                     applied = False
                 if kind == "rechecked" and (
                     prior is None
-                    or ((prior.resolved or {}).get("outcome") != "CONFIRMED" and not positive_recheck)
+                    or (
+                        (prior.resolved or {}).get("outcome") != "CONFIRMED"
+                        and not positive_recheck
+                    )
                 ):
                     applied = False
             stored = {
