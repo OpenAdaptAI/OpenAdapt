@@ -890,3 +890,77 @@ class TestStopWaitsForInFlightWrites:
             assert not list(control.glob(f"{host.ACTIVE_PREFIX}*"))
         finally:
             db.close()
+
+
+class TestLockReleaseIsCheckedNotAssumed:
+    """Stop verifies that no exclusive holder of the marker lock remains."""
+
+    def _start(self, tmp_path: Path, host_script: Path):
+        disp, db = _dispatcher(
+            tmp_path,
+            chrome_extension_id=EXT_ID,
+            chrome_native_hosts_dir=tmp_path / "p" / "NativeMessagingHosts",
+            chrome_extension_host_script=host_script,
+        )
+        disp.dispatch("start_recording", {})
+        active = disp.config.data_dir / "recording-control" / ".extension-active-cap1"
+        assert disp.extension_host.active
+        return disp, db, active
+
+    def test_normal_stop_verifies_release(self, tmp_path: Path, host_script: Path, linux) -> None:
+        disp, db, _active = self._start(tmp_path, host_script)
+        try:
+            disp.dispatch("stop_recording", {})
+            assert not disp.extension_host.lock_unreleased
+            assert disp.extension_host.revoked
+        finally:
+            db.close()
+
+    def test_an_inherited_descriptor_keeps_the_lock_and_is_reported(
+        self, tmp_path: Path, host_script: Path, linux
+    ) -> None:
+        import fcntl
+
+        disp, db, active = self._start(tmp_path, host_script)
+        # Stands in for a child forked during the recording: same open file
+        # description, so the same flock.
+        inherited = os.dup(disp.extension_host._lease_fd)
+        try:
+            disp.dispatch("stop_recording", {})
+            assert disp.extension_host.lock_unreleased
+            assert not disp.extension_host.revoked
+            if active.exists():
+                probe = os.open(active, os.O_RDONLY)
+                try:
+                    with pytest.raises(BlockingIOError):
+                        fcntl.flock(probe, fcntl.LOCK_SH | fcntl.LOCK_NB)
+                finally:
+                    os.close(probe)
+        finally:
+            os.close(inherited)
+            db.close()
+
+    def test_close_that_keeps_the_descriptor_is_reported(
+        self, tmp_path: Path, host_script: Path, linux, monkeypatch
+    ) -> None:
+        import errno as _errno
+
+        disp, db, _active = self._start(tmp_path, host_script)
+        lease_fd = disp.extension_host._lease_fd
+        real_close = os.close
+
+        def eintr_close(fd: int) -> None:
+            if fd == lease_fd:
+                # POSIX.1-2024 allows EINTR with the descriptor left open.
+                raise OSError(_errno.EINTR, "Interrupted system call")
+            real_close(fd)
+
+        try:
+            with monkeypatch.context() as patched:
+                patched.setattr(host.os, "close", eintr_close)
+                disp.dispatch("stop_recording", {})
+            assert disp.extension_host.lock_unreleased
+            assert not disp.extension_host.revoked
+        finally:
+            real_close(lease_fd)
+            db.close()

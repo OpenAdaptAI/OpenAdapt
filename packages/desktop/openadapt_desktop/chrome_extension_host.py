@@ -23,13 +23,23 @@ Desktop does this for the person, only while a native recording runs:
   host that is already running stops writing even when every cleanup step
   fails. A marker Desktop could not revoke is retried, and no new
   registration is made until it is gone.
-- Revocation is immediate, not only at lease expiry. Desktop holds an
-  exclusive lock on the marker for the whole recording and the launcher runs
-  the host with ``--active-lock``, so the host also requires that lock. Stop
-  releases it first (closing a file cannot fail, and the lock also goes away
-  if Desktop exits). Each host write holds a shared lock on ``<marker>.gate``
-  from its check until the evidence is on disk; stop then takes the gate
-  exclusively before it returns, so no authorized write lands after stop.
+- Revocation normally takes effect at stop, not only at lease expiry.
+  Desktop holds an exclusive ``flock`` on the marker for the whole recording
+  and the launcher runs the host with ``--active-lock``, so the host also
+  requires that lock. Stop closes the locked file first, then checks with a
+  non-blocking shared lock that no exclusive holder remains; only then is the
+  lock counted as released. Limits, stated rather than assumed: a flock
+  belongs to the open file description, so a forked child that inherited the
+  descriptor keeps it held (O_CLOEXEC only covers exec); POSIX leaves a
+  descriptor's state unspecified after ``close`` reports EINTR (Linux always
+  releases it); and flock over network filesystems is emulated or refused.
+  In each of those cases the check fails, ``revoked`` stays False and the
+  lease (no renewal after stop) is what ends the host's writes.
+- Each host write holds a shared lock on ``<marker>.gate`` from its check
+  until the evidence is on disk; stop then takes the gate exclusively, waiting
+  at most ``GATE_DRAIN_SECONDS``. When that succeeds, no write that passed its
+  check before the stop is still in flight when stop returns; when it times
+  out, ``undrained`` is set and ``revoked`` stays False.
 - Desktop never overwrites or removes a registration it did not write (for
   example one made by hand with ``install_host.py``). Its launcher carries an
   ownership marker line.
@@ -294,6 +304,35 @@ def revoke_marker(marker: Path) -> bool:
     return marker_revoked(marker)
 
 
+def _no_exclusive_holder(marker: Path | None) -> bool:
+    """Whether no open file still holds an exclusive flock on ``marker``.
+
+    Probes with a non-blocking SHARED lock, which a host also treats as "not
+    locked", so the probe itself never makes the recording look active. A
+    missing marker counts as released (a host refuses it). Any other error is
+    unproven, so False.
+    """
+
+    if marker is None:
+        return True
+    if fcntl is None:
+        return False
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+    try:
+        fd = os.open(marker, flags | getattr(os, "O_NONBLOCK", 0))
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        return True
+    except OSError:
+        return False
+    finally:
+        os.close(fd)  # also drops the probe's shared lock
+
+
 class RevocationError(OSError):
     """Some active markers could not be revoked."""
 
@@ -357,8 +396,12 @@ class ExtensionHostRegistrar:
         # Open files holding the marker lock and the write gate while recording.
         self._lease_fd: int | None = None
         self._gate_fd: int | None = None
+        self._lease_path: Path | None = None
         # A host write authorized before stop that stop could not wait out.
         self.undrained = False
+        # Stop could not confirm that no exclusive holder of the marker lock
+        # remains (inherited descriptor, close error, unsupported locking).
+        self.lock_unreleased = False
 
     @property
     def control_dir(self) -> Path:
@@ -455,7 +498,12 @@ class ExtensionHostRegistrar:
     def revoked(self) -> bool:
         """Whether every marker this registrar wrote is verified revoked."""
 
-        return not self.active and not self.unrevoked and not self.undrained
+        return (
+            not self.active
+            and not self.unrevoked
+            and not self.undrained
+            and not self.lock_unreleased
+        )
 
     def _hold_lease(self, active_file: Path) -> None:
         """Lock the marker exclusively and open the gate. Raises on failure."""
@@ -484,18 +532,31 @@ class ExtensionHostRegistrar:
             os.close(lease_fd)
             raise
         self._lease_fd, self._gate_fd = lease_fd, gate_fd
+        self._lease_path = Path(active_file)
         self.undrained = False
+        self.lock_unreleased = False
 
     def _release_lease(self) -> None:
         """Release the marker lock, then wait out in-flight host writes."""
 
         lease_fd, gate_fd = self._lease_fd, self._gate_fd
+        marker = self._lease_path
         self._lease_fd = self._gate_fd = None
+        self._lease_path = None
         if lease_fd is not None:
             try:
-                os.close(lease_fd)  # releases the lock even if close reports an error
-            except OSError:
-                pass
+                os.close(lease_fd)
+            except OSError as exc:
+                # Linux releases the descriptor even when close reports an
+                # error; other systems may not. The check below decides.
+                logger.warning("Closing the Chrome extension marker lock reported: {}", exc)
+            self.lock_unreleased = not _no_exclusive_holder(marker)
+            if self.lock_unreleased:
+                logger.error(
+                    "The Chrome extension marker lock is still held after stop; a running "
+                    "host stops writing within {} seconds when its lease runs out",
+                    LEASE_SECONDS,
+                )
         if gate_fd is None:
             return
         try:

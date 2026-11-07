@@ -18,13 +18,16 @@ host keeps refusing even when Desktop's stop-time cleanup could not remove the
 file: the lease simply runs out.
 
 With ``--active-lock`` as well (what Desktop's launcher passes), the marker
-must also be exclusively locked by another process (Desktop holds the lock for
-the whole recording). Releasing a lock cannot fail and also happens when
-Desktop exits, so a running host refuses the moment the recording stops, even
-when every file cleanup step fails and before the lease runs out. Each write
-holds a shared lock on the ``<marker>.gate`` file from the check until the
-evidence is persisted, and Desktop takes that gate exclusively before its stop
-returns, so no write that was authorized before the stop lands after it.
+must also be exclusively locked (``flock``) by another open file. Desktop holds
+that lock for the whole recording and releases it at stop, or the kernel does
+when Desktop exits, so a running host normally refuses from the stop on, even
+when every file cleanup step fails and before the lease runs out. A descriptor
+inherited by a forked child keeps the lock held; Desktop checks for that at
+stop and reports it, and the lease remains the backstop. Each write holds a
+shared lock on the ``<marker>.gate`` file from the check until the evidence is
+persisted; Desktop's stop takes that gate exclusively (bounded wait) so a write
+that already passed its check finishes before stop returns, or stop reports
+that it could not wait it out. If locking is unavailable the host refuses.
 Persistence never creates the recording folder.
 
 This is the unpack-first host for local development. A store listing and

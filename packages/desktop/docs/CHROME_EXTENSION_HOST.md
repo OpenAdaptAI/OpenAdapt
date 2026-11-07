@@ -34,19 +34,29 @@ OPENADAPT_CHROME_EXTENSION_HOST_SCRIPT=/path/to/openadapt_extension_host.py
   Desktop holds an exclusive lock on the marker for the whole recording and
   touches it every 5 seconds. If the lock can't be taken, nothing stays
   registered and recording continues without extension evidence.
-- **Recording stops**: Desktop stops touching the marker and releases its lock. That can't
-  fail, and the lock also goes away if Desktop exits, so a host that is
-  already running refuses its next write at once. Desktop then takes the
-  gate exclusively: each host write holds the gate (shared) from its check
-  until the evidence is on disk, so stop returns only after any write that
-  was authorized before it has finished (it waits at most 10 seconds and
-  reports the recording as not revoked if a write is still running). Then it
-  removes the manifest, the launcher, the marker and the gate. The host checks the lock, the marker and the capture
-  folder before every write, never creates the capture folder, and so never
-  recreates a deleted one.
+- **Recording stops**: Desktop stops touching the marker and closes the
+  locked file, then checks (with a non-blocking shared lock) that no
+  exclusive holder remains. The kernel also drops the lock if Desktop exits.
+  A host that is already running then refuses its next write. Desktop next
+  takes the gate exclusively: each host write holds the gate (shared) from
+  its check until the evidence is on disk, so a write that passed its check
+  before the stop finishes before stop returns. Stop waits at most 10
+  seconds and reports the recording as not revoked if a write is still
+  running. Then it removes the manifest, the launcher, the marker and the
+  gate. The host checks the lock, the marker and the capture folder before
+  every write, never creates the capture folder, and so never recreates a
+  deleted one.
+- **Known limits of the lock**: a flock belongs to the open file
+  description, so a child process forked while recording (without exec)
+  keeps it held; POSIX leaves a descriptor's state unspecified when `close`
+  reports EINTR (Linux always releases it); flock over network filesystems
+  may be emulated or refused. Desktop's stop-time check catches a lock that
+  is still held and reports the recording as not revoked; the 30-second
+  lease then ends the host's writes. Where locking is refused, registration
+  fails and recording continues without extension evidence.
 - **Cleanup fails**: if the marker can't be removed, Desktop overwrites it
   with `revoked` and backdates it. If even that fails, the released lock
-  already stops the host, and the lease is a second guard: the marker goes
+  normally already stops the host, and the lease is a second guard: the marker goes
   stale after 30 seconds because nothing renews it. Desktop logs an error and
   makes no new registration until the old marker is revoked; recording itself
   continues without extension evidence.
