@@ -169,43 +169,53 @@ def test_quickstart_forwards_the_break_it_option_and_names_the_evidence(
     assert "unchanged" not in result.output
     # vocab-allow: no-change-claim -- asserts that the claim is absent
     assert "nothing was written" not in result.output
-    assert (
-        "Result: check the record (transaction outcome RECONCILIATION_REQUIRED)"
-        in result.output
-    )
+    assert "Result: Check the record." in result.output
     assert "nothing is retried until a person checks the record" in result.output
 
 
 @pytest.mark.parametrize(
-    ("report_text", "expected"),
+    ("report_text", "expected", "reported_outcome"),
     [
         (
             '{"transaction_outcome": "HALTED_BEFORE_EFFECT"}',
-            "Result: stopped before saving (transaction outcome "
-            "HALTED_BEFORE_EFFECT). The engine proved nothing was written.",
+            "Result: Stopped before saving. The engine proved nothing was written.",
+            "HALTED_BEFORE_EFFECT",
         ),
         (
             '{"transaction_outcome": "RECONCILIATION_REQUIRED"}',
-            "Result: check the record (transaction outcome RECONCILIATION_REQUIRED)",
+            "Result: Check the record.",
+            "RECONCILIATION_REQUIRED",
+        ),
+        (
+            '{"transaction_outcome": "ROLLED_BACK"}',
+            "Result: Check the record.",
+            "ROLLED_BACK",
+        ),
+        (
+            '{"transaction_outcome": "SAVED_AWAITING_CHECK"}',
+            "Result: Check the record.",
+            "SAVED_AWAITING_CHECK",
         ),
         # A value this launcher doesn't know, a coarse HALTED with no
         # transaction outcome, an unreadable report, or no report at all
         # can't prove that nothing was written.
         (
             '{"transaction_outcome": "SOMETHING_NEW"}',
-            "Result: check the record (transaction outcome SOMETHING_NEW)",
+            "Result: Check the record.",
+            "SOMETHING_NEW",
         ),
         (
             '{"execution_outcome": "HALTED"}',
-            "Result: check the record (transaction outcome unknown)",
+            "Result: Check the record.",
+            "unknown",
         ),
-        ("not json", "Result: check the record (transaction outcome unknown)"),
-        ("[]", "Result: check the record (transaction outcome unknown)"),
-        (None, "Result: check the record (transaction outcome unknown)"),
+        ("not json", "Result: Check the record.", "unknown"),
+        ("[]", "Result: Check the record.", "unknown"),
+        (None, "Result: Check the record.", "unknown"),
     ],
 )
 def test_quickstart_derives_the_halted_rerun_result_from_its_report(
-    engine_tutorial, monkeypatch, report_text, expected
+    engine_tutorial, monkeypatch, report_text, expected, reported_outcome
 ):
     calls = []
     monkeypatch.setattr(
@@ -221,7 +231,8 @@ def test_quickstart_derives_the_halted_rerun_result_from_its_report(
 
     assert result.exit_code == 0, result.output
     assert expected in result.output
-    if "HALTED_BEFORE_EFFECT" not in expected:
+    assert f"Transaction outcome: {reported_outcome}." in result.output
+    if expected.startswith("Result: Check the record"):
         assert "nothing was written" not in result.output
         assert "A save may have gone through" in result.output
 
@@ -1018,7 +1029,10 @@ def test_flow_record_web_invocation_forwards_verbatim(monkeypatch):
     ]
 
 
-def test_flow_missing_shows_install_hint(monkeypatch):
+@pytest.mark.parametrize(
+    "command", [["flow", "compile"], ["compile"], ["record"], ["run"]]
+)
+def test_flow_missing_shows_install_hint(monkeypatch, command):
     """When openadapt-flow isn't installed, `openadapt flow <verb>` exits
     nonzero with a pip install hint instead of a traceback."""
     import builtins
@@ -1035,12 +1049,10 @@ def test_flow_missing_shows_install_hint(monkeypatch):
     monkeypatch.delitem(sys.modules, "openadapt_flow.__main__", raising=False)
 
     runner = CliRunner()
-    result = runner.invoke(
-        cli_main, ["flow", "compile", "rec", "--out", "b", "--name", "x"]
-    )
+    result = runner.invoke(cli_main, [*command, "rec", "--out", "b", "--name", "x"])
     assert result.exit_code != 0
     assert "pip install --upgrade openadapt" in result.output
-    assert "pip install openadapt-flow" in result.output
+    assert "pip install openadapt-flow" not in result.output
 
 
 def _require_openadapt_flow():

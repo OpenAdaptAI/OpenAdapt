@@ -37,6 +37,7 @@ from benchmark.effectbench.task_pack._authoring import (
 from benchmark.harness.effectbench import DivergenceCategory as DC
 from benchmark.harness.effectbench import Effect, Substrate, TaskSpec
 from benchmark.harness.effectbench.schema import OracleChannel
+from openadapt_flow.mockmed.fault_server import mockmed_rest_read_kwargs
 
 TARGET_PATIENT = "p1"
 TARGET_TYPE = "Triage"
@@ -103,8 +104,7 @@ def _oracle(description: str, *, audited: bool, refusal: bool = False):
         OracleChannel.REST,
         description=description,
         config={
-            "records_path": "/api/db",
-            "records_key": "records",
+            **mockmed_rest_read_kwargs(),
             "base_url": "http://127.0.0.1:<ephemeral>",
         },
         isolated_from_agent=True,

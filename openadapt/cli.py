@@ -1,8 +1,8 @@
 """Unified CLI for OpenAdapt ecosystem.
 
 Usage:
-    openadapt flow record --url <app> --out rec   # record a workflow
-    openadapt flow compile rec --out bundle        # compile it
+    openadapt record --url <app> --out rec   # record a workflow
+    openadapt compile rec --out bundle        # compile it
     openadapt flow replay bundle --url <app>        # run it, local, $0
     openadapt flow lint bundle
     openadapt flow certify bundle --policy clinical-write
@@ -37,6 +37,13 @@ from typing import Optional
 import click
 
 from openadapt.version import __version__
+
+
+class _FlowAliasCommand(click.Command):
+    """Parse a root alias exactly as the existing ``flow <verb>`` form."""
+
+    def parse_args(self, ctx, args):
+        return super().parse_args(ctx, [self.name, *args])
 
 
 class _FlowFirstGroup(click.Group):
@@ -99,7 +106,7 @@ def _print_version(ctx: click.Context, _param, value: bool) -> None:
     help="Show the version and exit.",
 )
 def main():
-    """OpenAdapt launcher for the openadapt-flow compiler.
+    """Record, compile and run workflows with OpenAdapt.
 
     Compile a demonstrated workflow into deterministic local replay. Healthy
     runs make no model calls; configured checks can halt on ambiguity. Native
@@ -114,7 +121,7 @@ def main():
     \b
     Manual Demo Lifecycle:
         openadapt flow demo-record --out rec
-        openadapt flow compile rec --out bundle --name demo
+        openadapt compile rec --out bundle --name demo
         openadapt flow lint bundle
         openadapt flow certify bundle --policy permissive
         openadapt flow replay bundle --demo-app
@@ -257,7 +264,6 @@ def _invoke_flow(argv: list[str]) -> int:
     except ImportError:
         click.echo("Error: openadapt-flow not installed.", err=True)
         click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
-        click.echo("Engine only: pip install openadapt-flow", err=True)
         return 1
 
     _correct_released_flow_x11_sonames()
@@ -439,15 +445,16 @@ def _halted_rerun_result(run_dir: Path) -> str:
     that a retry is safe.
     """
     outcome = _transaction_outcome(run_dir)
+    detail = f"Transaction outcome: {outcome or 'unknown'}."
     if outcome == "HALTED_BEFORE_EFFECT":
         return (
-            "Result: stopped before saving (transaction outcome "
-            "HALTED_BEFORE_EFFECT). The engine proved nothing was written."
+            "Result: Stopped before saving. The engine proved nothing was written. "
+            + detail
         )
     return (
-        f"Result: check the record (transaction outcome {outcome or 'unknown'}). "
+        "Result: Check the record. "
         "A save may have gone through, so nothing is retried until a person "
-        "checks the record."
+        "checks the record. " + detail
     )
 
 
@@ -1139,6 +1146,25 @@ def flow(command_ctx: click.Context) -> None:
     _run_flow(list(command_ctx.args))
 
 
+for _verb, _help in (
+    ("record", "Record a workflow. Uses the same options as flow record."),
+    ("compile", "Compile a recording. Uses the same options as flow compile."),
+    ("run", "Run a bundle with its checks. Uses the same options as flow run."),
+):
+    main.add_command(
+        _FlowAliasCommand(
+            _verb,
+            callback=flow.callback,
+            help=_help,
+            context_settings={
+                "ignore_unknown_options": True,
+                "allow_extra_args": True,
+                "help_option_names": [],
+            },
+        )
+    )
+
+
 @main.command(
     "pull",
     context_settings={
@@ -1483,7 +1509,9 @@ def wrap(command_ctx: click.Context) -> None:
     try:
         from openadapt_flow.wrap.cli import main as wrap_main
     except ImportError:
-        click.echo("Error: this openadapt-flow installation has no wrap command.", err=True)
+        click.echo(
+            "Error: this openadapt-flow installation has no wrap command.", err=True
+        )
         sys.exit(2)
     sys.exit(int(wrap_main(list(command_ctx.args)) or 0))
 

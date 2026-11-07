@@ -1,6 +1,7 @@
 """Throwaway real lab keys; none are copied into test evidence or source."""
 
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pytest
 
@@ -10,6 +11,15 @@ from openadapt_flow.integrations.agents.lab_authority import (
     create_lab_authorities,
 )
 from openadapt_flow.jit import authority
+
+
+@pytest.fixture
+def tmp_path():
+    """Lab identities stay outside Git even when CI puts basetemp in the checkout."""
+    with TemporaryDirectory(prefix="openadapt-lab-authority-") as directory:
+        parent = Path(directory).resolve()
+        parent.chmod(0o700)
+        yield parent
 
 
 def test_lab_handles_use_normal_registered_signatures_without_approving_a_task(

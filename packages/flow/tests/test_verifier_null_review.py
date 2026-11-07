@@ -45,6 +45,15 @@ def _dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 STATE: dict[str, Any] = {"issues": []}
 
 
+# _Issues.do_GET returns the entire literal in-memory issue list.
+ISSUES_READ_CONTRACT = {
+    "kind": "rest",
+    "records_path": "/issues.json",
+    "records_key": "issues",
+    "records_complete": True,
+}
+
+
 class _Issues(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         body = json.dumps({"issues": STATE["issues"]}).encode()
@@ -70,10 +79,8 @@ def _rest(url: str, match: dict[str, Any], frame: bool) -> Contract:
     doc: dict[str, Any] = {
         "schema_version": "openadapt.verify/v1",
         "verifier": {
-            "kind": "rest",
+            **ISSUES_READ_CONTRACT,
             "base_url": url,
-            "records_path": "/issues.json",
-            "records_key": "issues",
         },
         "effects": [
             {
@@ -380,7 +387,12 @@ def test_a_legacy_attempt_released_as_absent_lets_the_write_go(tmp_path: Path) -
 
 def _declared(kind: str, key: str, url: str = "http://127.0.0.1:1") -> dict[str, Any]:
     verifier: dict[str, Any] = (
-        {"kind": "rest", "base_url": url, "records_path": "/i", "records_key": "i"}
+        {
+            **ISSUES_READ_CONTRACT,
+            "base_url": url,
+            "records_path": "/i",
+            "records_key": "i",
+        }
         if kind == "rest"
         else {
             "kind": "sql",

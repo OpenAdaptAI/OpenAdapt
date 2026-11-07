@@ -24,6 +24,8 @@ from typing import Any, Iterator, Optional
 
 import pytest
 
+from tests._rest_read_contract_fixtures import mockmed_effects_yaml
+
 pytest.importorskip("langgraph")
 pytest.importorskip("mcp")
 
@@ -119,7 +121,14 @@ class ScriptedChat(BaseChatModel):
                 content="",
                 tool_calls=[{"name": name, "args": args, "id": f"c{self.calls}"}],
             )
-        usage = {"input_tokens": 1000, "output_tokens": 20, "total_tokens": 1020}
+        # This deterministic scripted producer has no prompt-cache operation.
+        usage = {
+            "input_tokens": 1000,
+            "output_tokens": 20,
+            "total_tokens": 1020,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        }
         message.usage_metadata = usage
         return ChatResult(generations=[ChatGeneration(message=message)])
 
@@ -166,10 +175,7 @@ def _cache(tmp_path: Path, base: str, monkeypatch: pytest.MonkeyPatch, offered: 
     verify = tmp_path / "verify.yaml"
     verify.write_text(
         "verifier:\n"
-        "  kind: rest\n"
-        f"  base_url: {base}\n"
-        "  records_path: /api/db\n"
-        "  records_key: records\n"
+        f"{mockmed_effects_yaml(base)}"
         "  timeout_s: 2.0\n"
         "  poll_interval_s: 0.05\n"
     )
