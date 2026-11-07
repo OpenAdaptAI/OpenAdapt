@@ -1201,8 +1201,13 @@ class CompiledAgent:
 
     # -- cache hit -----------------------------------------------------------
 
-    def _run_admitted(self, values: dict[str, str]) -> JitResult:
+    def _run_admitted(
+        self, values: dict[str, str], *, bundle_dir: Optional[Path] = None
+    ) -> JitResult:
         from openadapt_flow.ir import Workflow
+
+        def bundle() -> Path:
+            return self.bundle_dir if bundle_dir is None else Path(bundle_dir)
 
         def refused(detail: str) -> JitResult:
             return self._to_inbox(
@@ -1216,10 +1221,12 @@ class CompiledAgent:
             )
 
         try:
-            record = lifecycle.verify_admission(self.bundle_dir, key_dir=self.key_dir)
-            workflow = Workflow.load(self.bundle_dir)
+            record = lifecycle.verify_admission(bundle(), key_dir=self.key_dir)
+            workflow = Workflow.load(bundle())
         except Exception as exc:  # noqa: BLE001 - any doubt is a refusal
             return refused(f"the admission does not hold: {exc}")
+        if bundle_dir is not None and record.get("admission_mode") != "repair":
+            return refused("an explicit repair canary requires normal repair admission")
         # Pin what was admitted, not what is on disk now: the bundle is loaded
         # again for the run, and must still be the admitted one.
         digest = str(record["digest"])
@@ -1253,7 +1260,9 @@ class CompiledAgent:
             )
         run_dir = self.runs_dir / f"{_stamp()}-{uuid.uuid4().hex[:8]}"
         run_dir.parent.mkdir(parents=True, exist_ok=True)
-        gate_detail, report = self._run_governed(workflow, digest, values, run_dir)
+        gate_detail, report = self._run_governed(
+            workflow, digest, values, run_dir, bundle_dir=bundle_dir
+        )
         if report is None:
             return refused(gate_detail or "the run gate refused")
         result = JitResult(
@@ -1284,6 +1293,7 @@ class CompiledAgent:
         run_dir: Path,
         *,
         attended_by: Any = None,
+        bundle_dir: Optional[Path] = None,
     ) -> tuple[Optional[str], Any]:
         """The standard-profile run: gate, authorization, Replayer, verifier.
 
@@ -1303,9 +1313,12 @@ class CompiledAgent:
         )
         from openadapt_flow.runtime import Replayer
 
+        def bundle() -> Path:
+            return self.bundle_dir if bundle_dir is None else Path(bundle_dir)
+
         if attended_by is None:
             try:
-                lifecycle.verify_admission(self.bundle_dir, key_dir=self.key_dir)
+                lifecycle.verify_admission(bundle(), key_dir=self.key_dir)
             except AdmissionError as exc:
                 return f"a DRAFT never runs unattended: {exc}", None
         refusal = getattr(self.app, "run_refusal", lambda: None)()
@@ -1313,7 +1326,7 @@ class CompiledAgent:
             return f"refused before any action: {refusal}", None
         gate = evaluate_run_gate(
             workflow,
-            bundle_dir=self.bundle_dir,
+            bundle_dir=bundle(),
             deployment=DeploymentConfig(policy=PolicySection(policy=self.policy)),
             effect_verifier=self.verifier,
             profile_contract=execution_profile_contract(ExecutionProfile.STANDARD),
@@ -1349,7 +1362,7 @@ class CompiledAgent:
             ).run(
                 workflow.model_copy(deep=True),
                 params=values,
-                bundle_dir=self.bundle_dir,
+                bundle_dir=bundle(),
                 run_dir=run_dir,
                 execution_target_kind=self.app.kind,
                 execution_origin=self.app.origin if self.app.kind == "web" else None,

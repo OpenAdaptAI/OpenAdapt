@@ -646,6 +646,7 @@ class SkillCache:
             # unique task record and all input values. It is a state check,
             # not a new causal write claim; the normal receipt is separate.
             rows = compiler.observer.system_of_record
+            values = set(map(str, params.values()))
             matching = (
                 []
                 if rows is None
@@ -656,11 +657,10 @@ class SkillCache:
                         str(row.get(k)) == str(v)
                         for k, v in self.common["expect"].items()
                     )
+                    and values.issubset({str(v) for v in row.values() if v is not None})
                 ]
             )
-            if len(matching) != 1 or not set(map(str, params.values())).issubset(
-                {str(v) for v in matching[0].values() if v is not None}
-            ):
+            if len(matching) != 1:
                 raise ValueError("fresh record check failed")
             archive = compiler.dir / f"skill-stop-repaired-{candidate_id}.json"
             if archive.exists() or archive.is_symlink():
@@ -683,6 +683,18 @@ class SkillCache:
             raise RepairError(
                 "This promoted repair has no matching verified cache handoff."
             ) from None
+
+    def complete_repair(
+        self, prompt: str, params: Mapping[str, Any], *, repair_desk: Any,
+        candidate_id: str, canary_params: Sequence[Mapping[str, Any]],
+    ) -> Any:
+        """Run an approved repair on explicit synthetic canaries, then select it."""
+        from openadapt_flow.compile_agent.repair_bridge import complete_approved_repair
+
+        return complete_approved_repair(
+            self, prompt, params, repair_desk=repair_desk,
+            candidate_id=candidate_id, canary_params=canary_params,
+        )
 
     def _skill_run(
         self, compiler: Any, server: Path, params: Mapping[str, Any], started: float
