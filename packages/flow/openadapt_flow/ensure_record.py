@@ -1391,6 +1391,59 @@ def judge(
     return _review(reasons, evidence)
 
 
+def _version_meta(version: Mapping[str, Any]) -> tuple[Optional[datetime], str]:
+    meta = version.get("meta") or {}
+    if not isinstance(meta, Mapping):
+        return None, ""
+    vid = meta.get("versionId")
+    return _when(meta.get("lastUpdated")), str(vid) if vid not in (None, "") else ""
+
+
+def window_versions_unbound(change: Change) -> Optional[str]:
+    """Why the observed window cannot identify its last version, or None.
+
+    This checks version metadata only. Readers must separately establish
+    complete history and exact version counts before treating it as proof.
+    """
+
+    if not change.bodies:
+        return "the created record's _history shows no version in the window"
+    timed = [_version_meta(body) for body in change.bodies]
+    if any(when is None or not vid for when, vid in timed):
+        return "a version in the window has no versionId or time to bind to"
+    newest = max(when for when, _ in timed if when is not None)
+    last = {vid for when, vid in timed if when == newest}
+    if len(last) != 1:
+        return "two versions share the newest time, so the last write can't be told"
+    return None
+
+
+def read_back_unbound(change: Change, created: Mapping[str, Any]) -> Optional[str]:
+    """Why the read-back can't be shown to be the last version written, or None.
+
+    With ``_history`` read, the record judged must be the newest version in
+    the window, by ``meta.versionId``: a version written after the window
+    (by anyone) or a stale read is not what the agent's writes left. Without
+    history (``versions`` None) there is nothing to bind to, and the other
+    checks decide as before.
+    """
+
+    if change.versions is None:
+        return None
+    unbound = window_versions_unbound(change)
+    if unbound is not None:
+        return unbound
+    timed = [_version_meta(body) for body in change.bodies]
+    newest = max(when for when, _ in timed if when is not None)
+    last = {vid for when, vid in timed if when == newest}
+    _, got = _version_meta(created)
+    if not got:
+        return "the read-back carries no versionId to bind to"
+    if got not in last:
+        return "the read-back is not the last version written in the window"
+    return None
+
+
 def correction_refused(
     contract: EnsureContract,
     change: Change,

@@ -5,9 +5,17 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from openadapt_flow.ensure_invariants import judge_ensure_invariants
-from openadapt_flow.ensure_record import Baseline, Change, EnsureContract, judge
+from openadapt_flow.ensure_record import (
+    Baseline,
+    Change,
+    EnsureContract,
+    judge,
+    read_back_unbound,
+)
 
 BOT = "Practitioner/synthetic-writer"
 OTHER = "Practitioner/synthetic-other"
@@ -38,6 +46,7 @@ def patient(rid, **over):
     return {
         "resourceType": "Patient",
         "id": rid,
+        "meta": {"versionId": "1", "lastUpdated": "2026-11-04T12:00:01Z"},
         "identifier": [{"system": "urn:synthetic:key", "value": PARAMS["key"]}],
         "telecom": [{"system": "phone", "value": PARAMS["phone"]}],
         **over,
@@ -95,8 +104,11 @@ def test_caller_cannot_implicitly_claim_completeness():
     assert {v.status for v in verdict.checks} == {"not_checked"}
 
 
-@pytest.mark.parametrize("by, attributed", [(BOT, True), (OTHER, False), ("", True)])
-def test_outside_scope_change_is_refuted_with_conservative_attribution(by, attributed):
+@pytest.mark.parametrize(
+    "by, attributed, expected",
+    [(BOT, True, "refuted"), (OTHER, False, "not_checked"), ("", True, "not_checked")],
+)
+def test_outside_scope_change_requires_proven_attribution(by, attributed, expected):
     other = change(
         "Observation/outside",
         "U",
@@ -105,7 +117,8 @@ def test_outside_scope_change_is_refuted_with_conservative_attribution(by, attri
         attributed=attributed,
     )
     verdict = result({**created(), other.ref: other})
-    assert checks(verdict)["declared_scope"].status == "refuted"
+    assert checks(verdict)["declared_scope"].status == expected
+    assert verdict.status != "held"
 
 
 def test_authoritatively_attributed_other_actor_change_is_not_our_scope_violation():
@@ -276,16 +289,24 @@ def test_missing_business_key_parameters_cannot_establish_history():
 
 
 def test_correction_scope_uses_existing_proof_instead_of_only_accept_switch():
-    x = patient("x")
-    updated = change("Patient/x", "C", "U", bodies=[x, x])
-    assert result({updated.ref: updated}).status == "held"
+    first = patient("x")
+    x = patient("x", meta={"versionId": "2", "lastUpdated": "2026-11-04T12:00:02Z"})
+    updated = change("Patient/x", "C", "U", bodies=[first, x])
+    assert result({updated.ref: updated}, after={"x": x}).status == "held"
     updated.reads = [(T0 + timedelta(seconds=1.5), frozenset({OTHER}))]
-    assert checks(result({updated.ref: updated}))["declared_scope"].status == "refuted"
+    assert (
+        checks(result({updated.ref: updated}, after={"x": x}))["declared_scope"].status
+        == "refuted"
+    )
     updated.reads = []
     assert (
-        checks(result({updated.ref: updated}, c=contract(accept_corrections=False)))[
-            "declared_scope"
-        ].status
+        checks(
+            result(
+                {updated.ref: updated},
+                after={"x": x},
+                c=contract(accept_corrections=False),
+            )
+        )["declared_scope"].status
         == "refuted"
     )
 
@@ -295,3 +316,146 @@ def test_malformed_early_history_does_not_hide_a_later_known_duplicate():
     gone = change("Patient/gone", "C", "D", bodies=[patient("gone")], by=OTHER)
     verdict = result({unreadable.ref: unreadable, **created(), gone.ref: gone})
     assert checks(verdict)["at_most_one"].status == "refuted"
+
+
+@pytest.mark.parametrize(
+    "meta",
+    [
+        None,
+        [],
+        {},
+        {"versionId": "1"},
+        {"lastUpdated": "2026-11-04T12:00:01Z"},
+        {"versionId": "", "lastUpdated": "2026-11-04T12:00:01Z"},
+        {"versionId": "1", "lastUpdated": "invalid"},
+        {"versionId": "1", "lastUpdated": "2026-11-04T12:00:01"},
+    ],
+)
+def test_unbindable_version_metadata_cannot_establish_history(meta):
+    verdict = result(created(meta=meta))
+    assert checks(verdict)["at_most_one"].status == "not_checked"
+    assert verdict.status != "held"
+
+
+@pytest.mark.parametrize("versions", [None, False, True, -1, 0, 2])
+def test_metadata_does_not_replace_complete_counted_history(versions):
+    changes = created()
+    changes["Patient/x"].versions = versions
+    assert checks(result(changes))["at_most_one"].status == "not_checked"
+    if versions is None:
+        # This legacy compatibility return is explicitly not proof of binding.
+        assert read_back_unbound(changes["Patient/x"], patient("x")) is None
+
+
+@pytest.mark.parametrize("mode", ["stale", "missing", "tied_latest"])
+def test_current_read_back_must_bind_to_the_unique_last_history_version(mode):
+    changes = created()
+    after = patient("x")
+    if mode == "stale":
+        after["meta"]["versionId"] = "0"
+    elif mode == "missing":
+        after.pop("meta")
+    else:
+        changes["Patient/x"].bodies.append(
+            patient("x", meta={"versionId": "2", "lastUpdated": "2026-11-04T12:00:01Z"})
+        )
+        changes["Patient/x"].versions = 2
+    assert read_back_unbound(changes["Patient/x"], after) is not None
+    assert (
+        checks(result(changes, after={"x": after}))["at_most_one"].status
+        == "not_checked"
+    )
+
+
+def test_valid_last_version_binding_is_shared_with_canonical_read_back():
+    first = patient("x")
+    last = patient("x", meta={"versionId": "2", "lastUpdated": "2026-11-04T12:00:02Z"})
+    changes = {"Patient/x": change("Patient/x", "C", "U", bodies=[first, last])}
+    assert read_back_unbound(changes["Patient/x"], last) is None
+    assert result(changes, after={"x": last}).status == "held"
+
+
+@pytest.mark.parametrize("operation", ["C", "U", "D", "cleanup", "correction"])
+@pytest.mark.parametrize("attribution", ["missing", "unattributed"])
+def test_unknown_attribution_never_becomes_a_proven_scope_or_delete_violation(
+    operation, attribution
+):
+    actions = {"cleanup": ("C", "D"), "correction": ("C", "U")}.get(
+        operation, (operation,)
+    )
+    unknown = change(
+        "Patient/unknown",
+        *actions,
+        bodies=[patient("unknown", identifier=[])],
+        by="" if attribution == "missing" else BOT,
+        attributed=attribution != "unattributed",
+    )
+    c = contract(operations={"cardinality": {"own_transient": True}})
+    verdict = result({**created(), unknown.ref: unknown}, c=c)
+    assert checks(verdict)["declared_scope"].status == "not_checked"
+    assert checks(verdict)["declared_scope"].observed_count == 0
+    deletes = checks(verdict)["no_undeclared_deletes"]
+    assert deletes.observed_count == 0
+    assert deletes.status == ("not_checked" if "D" in actions else "held")
+
+
+@settings(max_examples=80, deadline=None)
+@given(
+    st.lists(
+        st.tuples(
+            st.sampled_from(["own", "foreign", "unknown", "missing"]),
+            st.sampled_from(["C", "U", "D"]),
+        ),
+        min_size=1,
+        max_size=12,
+    ),
+    st.booleans(),
+)
+def test_attribution_model_preserves_proven_violation_dominance(observations, found):
+    changes = {} if found else created()
+    for index, (who, action) in enumerate(observations):
+        ref = f"Observation/outside-{index}"
+        changes[ref] = change(
+            ref,
+            action,
+            by={"own": BOT, "foreign": OTHER, "unknown": BOT, "missing": ""}[who],
+            attributed=who != "unknown",
+        )
+    verdict = checks(result(changes, before=[patient("x")] if found else []))
+    for name, selected in (
+        ("declared_scope", observations),
+        ("no_undeclared_deletes", [(who, op) for who, op in observations if op == "D"]),
+    ):
+        count = sum(who == "own" for who, _ in selected)
+        unknown = any(who in {"unknown", "missing"} for who, _ in selected)
+        expected = "refuted" if count else "not_checked" if unknown else "held"
+        assert verdict[name].observed_count == count
+        assert verdict[name].status == expected
+    assert verdict["at_most_one"].status == "held"
+
+
+def test_known_key_duplicate_still_refutes_with_unknown_attribution_and_metadata():
+    unknown = change("Patient/other", "C", bodies=[patient("other", meta=None)], by="")
+    verdict = result({**created(), unknown.ref: unknown})
+    assert checks(verdict)["at_most_one"].status == "refuted"
+    assert checks(verdict)["declared_scope"].status == "not_checked"
+    assert verdict.status == "refuted"
+
+
+@settings(max_examples=30, deadline=None)
+@given(st.permutations([1, 2, 3]), st.integers(min_value=0, max_value=4))
+def test_version_binding_depends_on_latest_timestamp_not_history_order(order, read_id):
+    bodies = [
+        patient(
+            "x", meta={"versionId": str(i), "lastUpdated": f"2026-11-04T12:00:0{i}Z"}
+        )
+        for i in order
+    ]
+    written = change("Patient/x", "C", "U", "U", bodies=bodies)
+    current = patient(
+        "x", meta={"versionId": str(read_id), "lastUpdated": "2026-11-04T12:00:03Z"}
+    )
+    expected = read_id == 3
+    assert (read_back_unbound(written, current) is None) == expected
+    verdict = result({written.ref: written}, after={"x": current})
+    assert (checks(verdict)["at_most_one"].status == "held") == expected

@@ -41,15 +41,17 @@ def judge_ensure_invariants(
         bookkeeping_only,
         correction_refused,
         is_person,
+        read_back_unbound,
         transient_ok,
+        window_versions_unbound,
     )
 
     rtype = contract.resource_type
     selves = {_ref(a) for a in contract.self_actors}
+    # Unknown attribution blocks a proof; it does not prove an own violation.
+    unresolved = {r: c for r, c in changes.items() if not c.attributed or not c.authors}
     mine = {
-        r: c
-        for r, c in changes.items()
-        if not c.attributed or not c.authors or c.authors & selves
+        r: c for r, c in changes.items() if r not in unresolved and c.authors & selves
     }
     protected = {f"{rtype}/{rid}" for rid in (*baseline.matches, *after_matches)}
     protected |= {r for r, c in mine.items() if "C" in c.actions}
@@ -111,6 +113,32 @@ def judge_ensure_invariants(
             key_history_complete = False
         if "D" in change.actions and not change.bodies and change.prior is None:
             key_history_complete = False
+        # A canonical metadata check cannot turn absent/partial history into
+        # proof: read_back_unbound deliberately skips versions=None for legacy
+        # callers. Validate history independently before using either helper.
+        valid_window = (
+            type(change.versions) is int
+            and change.versions == len(change.bodies)
+            and bool(change.bodies)
+            and all(
+                isinstance(body, Mapping)
+                and body.get("resourceType") == rtype
+                and body.get("id") == ref.split("/", 1)[1]
+                for body in change.bodies
+            )
+        )
+        if valid_window:
+            try:
+                unbound = window_versions_unbound(change)
+                rid = ref.split("/", 1)[1]
+                if unbound is None and rid in after_matches:
+                    unbound = read_back_unbound(change, after_matches[rid])
+                if unbound is not None:
+                    key_history_complete = False
+            except (Unreadable, TypeError, ValueError):
+                key_history_complete = False
+        else:
+            key_history_complete = False
         bodies = list(change.bodies)
         if change.prior is not None:
             bodies.append(change.prior)
@@ -133,8 +161,9 @@ def judge_ensure_invariants(
         before_matches=len(baseline.matches),
         after_matches=len(after_matches),
         history_matches=len(keys),
-        scope_complete=audit_complete,
-        deletes_complete=audit_complete,
+        scope_complete=audit_complete and not unresolved,
+        deletes_complete=audit_complete
+        and not any("D" in change.actions for change in unresolved.values()),
         history_complete=key_history_complete,
         search_complete=search_complete,
     )

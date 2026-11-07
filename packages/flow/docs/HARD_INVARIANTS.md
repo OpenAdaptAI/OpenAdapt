@@ -20,8 +20,16 @@ actor attribution, correction proof, bookkeeping proof and declared transient
 cleanup proof.
 History bodies and their prior versions contribute business-key records;
 an audit-free sweep, unlogged write or missing history cannot establish
-complete history. The caller must finish the audit/history and search reads
-before asserting their completeness.
+complete history. Window versions must carry readable timestamps and version
+IDs, and current read-back must bind to the unique last version. The canonical
+read-back helper's legacy skip when history is absent is not a success witness.
+The caller must finish the audit/history and search reads before asserting
+their completeness.
+
+Unknown attribution cannot prove an own scope or delete violation: the affected
+predicate remains `not_checked`. Independently proven own violations still
+refute it. Historical business-key cardinality describes the literal store,
+including other actors' records; it does not assign blame to the agent.
 
 This adapter evaluates record-level scope. Existing field comparisons still
 check the values on the target record. A proven declared transient cleanup
