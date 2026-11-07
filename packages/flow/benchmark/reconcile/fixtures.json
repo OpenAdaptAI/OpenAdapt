@@ -1,0 +1,828 @@
+{
+ "evaluated_at_offset_s": 129600,
+ "note": "Synthetic units only. Pre-registered: expected breaks are fixed before the run. An expected break is caught when the reconciler reports that kind on that leg with that outcome; any other REFUTED break is false.",
+ "schema_version": "openadapt.reconcile-fixtures/v1",
+ "units": [
+  {
+   "category": "clean",
+   "expected": [],
+   "family": "Synthetic001",
+   "fault": null,
+   "member_id": "SYNM00001",
+   "n": 1,
+   "near_code": "72149",
+   "service_code": "72148",
+   "service_date": "2026-12-02",
+   "submission_id": "PA-SYN-001",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "clean",
+   "expected": [],
+   "family": "Synthetic002",
+   "fault": null,
+   "member_id": "SYNM00002",
+   "n": 2,
+   "near_code": "E0606",
+   "service_code": "E0601",
+   "service_date": "2026-12-03",
+   "submission_id": "PA-SYN-002",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "clean",
+   "expected": [],
+   "family": "Synthetic003",
+   "fault": null,
+   "member_id": "SYNM00003",
+   "n": 3,
+   "near_code": "97535",
+   "service_code": "97530",
+   "service_date": "2026-12-04",
+   "submission_id": "PA-SYN-003",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "clean",
+   "expected": [],
+   "family": "Synthetic004",
+   "fault": null,
+   "member_id": "SYNM00004",
+   "n": 4,
+   "near_code": "73722",
+   "service_code": "73721",
+   "service_date": "2026-12-05",
+   "submission_id": "PA-SYN-004",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "clean",
+   "expected": [],
+   "family": "Synthetic005",
+   "fault": null,
+   "member_id": "SYNM00005",
+   "n": 5,
+   "near_code": "G0281",
+   "service_code": "G0283",
+   "service_date": "2026-12-06",
+   "submission_id": "PA-SYN-005",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "clean",
+   "expected": [],
+   "family": "Synthetic006",
+   "fault": null,
+   "member_id": "SYNM00006",
+   "n": 6,
+   "near_code": "70552",
+   "service_code": "70553",
+   "service_date": "2026-12-07",
+   "submission_id": "PA-SYN-006",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "clean",
+   "expected": [],
+   "family": "Synthetic007",
+   "fault": null,
+   "member_id": "SYNM00007",
+   "n": 7,
+   "near_code": "95811",
+   "service_code": "95810",
+   "service_date": "2026-12-08",
+   "submission_id": "PA-SYN-007",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "clean",
+   "expected": [],
+   "family": "Synthetic008",
+   "fault": null,
+   "member_id": "SYNM00008",
+   "n": 8,
+   "near_code": "97112",
+   "service_code": "97110",
+   "service_date": "2026-12-09",
+   "submission_id": "PA-SYN-008",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "clean",
+   "expected": [],
+   "family": "Synthetic009",
+   "fault": null,
+   "member_id": "SYNM00009",
+   "n": 9,
+   "near_code": "72149",
+   "service_code": "72148",
+   "service_date": "2026-12-10",
+   "submission_id": "PA-SYN-009",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "clean",
+   "expected": [],
+   "family": "Synthetic010",
+   "fault": null,
+   "member_id": "SYNM00010",
+   "n": 10,
+   "near_code": "E0606",
+   "service_code": "E0601",
+   "service_date": "2026-12-11",
+   "submission_id": "PA-SYN-010",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "lookalike",
+   "expected": [],
+   "family": "Synthetic011",
+   "fault": "lookalike",
+   "member_id": "SYNM00011",
+   "n": 11,
+   "near_code": "97535",
+   "service_code": "97530",
+   "service_date": "2026-12-12",
+   "submission_id": "PA-SYN-011",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "lookalike",
+   "expected": [],
+   "family": "Synthetic012",
+   "fault": "lookalike",
+   "member_id": "SYNM00012",
+   "n": 12,
+   "near_code": "73722",
+   "service_code": "73721",
+   "service_date": "2026-12-13",
+   "submission_id": "PA-SYN-012",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "in_flight",
+   "expected": [
+    [
+     "not_received",
+     "clearinghouse",
+     "UNCERTAIN"
+    ],
+    [
+     "not_received",
+     "payer",
+     "UNCERTAIN"
+    ]
+   ],
+   "family": "Synthetic013",
+   "fault": "in_flight",
+   "member_id": "SYNM00013",
+   "n": 13,
+   "near_code": "G0281",
+   "service_code": "G0283",
+   "service_date": "2026-12-14",
+   "submission_id": "PA-SYN-013",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "in_flight",
+   "expected": [
+    [
+     "not_received",
+     "clearinghouse",
+     "UNCERTAIN"
+    ],
+    [
+     "not_received",
+     "payer",
+     "UNCERTAIN"
+    ]
+   ],
+   "family": "Synthetic014",
+   "fault": "in_flight",
+   "member_id": "SYNM00014",
+   "n": 14,
+   "near_code": "70552",
+   "service_code": "70553",
+   "service_date": "2026-12-15",
+   "submission_id": "PA-SYN-014",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "in_flight",
+   "expected": [
+    [
+     "not_received",
+     "clearinghouse",
+     "UNCERTAIN"
+    ],
+    [
+     "not_received",
+     "payer",
+     "UNCERTAIN"
+    ]
+   ],
+   "family": "Synthetic015",
+   "fault": "in_flight",
+   "member_id": "SYNM00015",
+   "n": 15,
+   "near_code": "95811",
+   "service_code": "95810",
+   "service_date": "2026-12-16",
+   "submission_id": "PA-SYN-015",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "not_received",
+     "clearinghouse",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic016",
+   "fault": "drop_clearinghouse",
+   "member_id": "SYNM00016",
+   "n": 16,
+   "near_code": "97112",
+   "service_code": "97110",
+   "service_date": "2026-12-17",
+   "submission_id": "PA-SYN-016",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "not_received",
+     "clearinghouse",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic017",
+   "fault": "drop_clearinghouse",
+   "member_id": "SYNM00017",
+   "n": 17,
+   "near_code": "72149",
+   "service_code": "72148",
+   "service_date": "2026-12-18",
+   "submission_id": "PA-SYN-017",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "not_received",
+     "clearinghouse",
+     "REFUTED"
+    ],
+    [
+     "not_received",
+     "payer",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic018",
+   "fault": "drop_payer",
+   "member_id": "SYNM00018",
+   "n": 18,
+   "near_code": "E0606",
+   "service_code": "E0601",
+   "service_date": "2026-12-19",
+   "submission_id": "PA-SYN-018",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "not_received",
+     "clearinghouse",
+     "REFUTED"
+    ],
+    [
+     "not_received",
+     "payer",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic019",
+   "fault": "drop_payer",
+   "member_id": "SYNM00019",
+   "n": 19,
+   "near_code": "97535",
+   "service_code": "97530",
+   "service_date": "2026-12-20",
+   "submission_id": "PA-SYN-019",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "not_received",
+     "clearinghouse",
+     "REFUTED"
+    ],
+    [
+     "not_received",
+     "payer",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic020",
+   "fault": "drop_payer",
+   "member_id": "SYNM00020",
+   "n": 20,
+   "near_code": "73722",
+   "service_code": "73721",
+   "service_date": "2026-12-21",
+   "submission_id": "PA-SYN-020",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "mismatch",
+     "payer",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic021",
+   "fault": "code_payer",
+   "member_id": "SYNM00021",
+   "n": 21,
+   "near_code": "G0281",
+   "service_code": "G0283",
+   "service_date": "2026-12-22",
+   "submission_id": "PA-SYN-021",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "mismatch",
+     "payer",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic022",
+   "fault": "code_payer",
+   "member_id": "SYNM00022",
+   "n": 22,
+   "near_code": "70552",
+   "service_code": "70553",
+   "service_date": "2026-12-23",
+   "submission_id": "PA-SYN-022",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "mismatch",
+     "clearinghouse",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic023",
+   "fault": "code_clearinghouse",
+   "member_id": "SYNM00023",
+   "n": 23,
+   "near_code": "95811",
+   "service_code": "95810",
+   "service_date": "2026-12-24",
+   "submission_id": "PA-SYN-023",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "mismatch",
+     "clearinghouse",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic024",
+   "fault": "code_clearinghouse",
+   "member_id": "SYNM00024",
+   "n": 24,
+   "near_code": "97112",
+   "service_code": "97110",
+   "service_date": "2026-12-25",
+   "submission_id": "PA-SYN-024",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "mismatch",
+     "payer",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic025",
+   "fault": "date_payer",
+   "member_id": "SYNM00025",
+   "n": 25,
+   "near_code": "72149",
+   "service_code": "72148",
+   "service_date": "2026-12-26",
+   "submission_id": "PA-SYN-025",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "mismatch",
+     "payer",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic026",
+   "fault": "date_payer",
+   "member_id": "SYNM00026",
+   "n": 26,
+   "near_code": "E0606",
+   "service_code": "E0601",
+   "service_date": "2026-12-27",
+   "submission_id": "PA-SYN-026",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "mismatch",
+     "clearinghouse",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic027",
+   "fault": "member_clearinghouse",
+   "member_id": "SYNM00027",
+   "n": 27,
+   "near_code": "97535",
+   "service_code": "97530",
+   "service_date": "2026-12-28",
+   "submission_id": "PA-SYN-027",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "mismatch",
+     "clearinghouse",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic028",
+   "fault": "member_clearinghouse",
+   "member_id": "SYNM00028",
+   "n": 28,
+   "near_code": "73722",
+   "service_code": "73721",
+   "service_date": "2026-12-01",
+   "submission_id": "PA-SYN-028",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "not_written_back",
+     "writeback",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic029",
+   "fault": "missed_writeback",
+   "member_id": "SYNM00029",
+   "n": 29,
+   "near_code": "G0281",
+   "service_code": "G0283",
+   "service_date": "2026-12-02",
+   "submission_id": "PA-SYN-029",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "not_written_back",
+     "writeback",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic030",
+   "fault": "missed_writeback",
+   "member_id": "SYNM00030",
+   "n": 30,
+   "near_code": "70552",
+   "service_code": "70553",
+   "service_date": "2026-12-03",
+   "submission_id": "PA-SYN-030",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "not_written_back",
+     "writeback",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic031",
+   "fault": "missed_writeback",
+   "member_id": "SYNM00031",
+   "n": 31,
+   "near_code": "95811",
+   "service_code": "95810",
+   "service_date": "2026-12-04",
+   "submission_id": "PA-SYN-031",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "not_written_back",
+     "writeback",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic032",
+   "fault": "wrong_writeback",
+   "member_id": "SYNM00032",
+   "n": 32,
+   "near_code": "97112",
+   "service_code": "97110",
+   "service_date": "2026-12-05",
+   "submission_id": "PA-SYN-032",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "duplicate",
+     "payer",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic033",
+   "fault": "duplicate_payer",
+   "member_id": "SYNM00033",
+   "n": 33,
+   "near_code": "72149",
+   "service_code": "72148",
+   "service_date": "2026-12-06",
+   "submission_id": "PA-SYN-033",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "duplicate",
+     "payer",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic034",
+   "fault": "duplicate_payer",
+   "member_id": "SYNM00034",
+   "n": 34,
+   "near_code": "E0606",
+   "service_code": "E0601",
+   "service_date": "2026-12-07",
+   "submission_id": "PA-SYN-034",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "duplicate",
+     "clearinghouse",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic035",
+   "fault": "duplicate_clearinghouse",
+   "member_id": "SYNM00035",
+   "n": 35,
+   "near_code": "97535",
+   "service_code": "97530",
+   "service_date": "2026-12-08",
+   "submission_id": "PA-SYN-035",
+   "unit": "prior_authorization"
+  },
+  {
+   "category": "clean",
+   "expected": [],
+   "family": "Synthetic036",
+   "fault": null,
+   "member_id": "SYNM00036",
+   "n": 36,
+   "near_code": "99214",
+   "service_code": "99213",
+   "service_date": "2026-12-09",
+   "submission_id": "CLM-SYN-036",
+   "unit": "claim"
+  },
+  {
+   "category": "clean",
+   "expected": [],
+   "family": "Synthetic037",
+   "fault": null,
+   "member_id": "SYNM00037",
+   "n": 37,
+   "near_code": "99215",
+   "service_code": "99214",
+   "service_date": "2026-12-10",
+   "submission_id": "CLM-SYN-037",
+   "unit": "claim"
+  },
+  {
+   "category": "clean",
+   "expected": [],
+   "family": "Synthetic038",
+   "fault": null,
+   "member_id": "SYNM00038",
+   "n": 38,
+   "near_code": "93005",
+   "service_code": "93000",
+   "service_date": "2026-12-11",
+   "submission_id": "CLM-SYN-038",
+   "unit": "claim"
+  },
+  {
+   "category": "clean",
+   "expected": [],
+   "family": "Synthetic039",
+   "fault": null,
+   "member_id": "SYNM00039",
+   "n": 39,
+   "near_code": "80048",
+   "service_code": "80053",
+   "service_date": "2026-12-12",
+   "submission_id": "CLM-SYN-039",
+   "unit": "claim"
+  },
+  {
+   "category": "clean",
+   "expected": [],
+   "family": "Synthetic040",
+   "fault": null,
+   "member_id": "SYNM00040",
+   "n": 40,
+   "near_code": "99214",
+   "service_code": "99213",
+   "service_date": "2026-12-13",
+   "submission_id": "CLM-SYN-040",
+   "unit": "claim"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "not_received",
+     "clearinghouse",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic041",
+   "fault": "drop_clearinghouse",
+   "member_id": "SYNM00041",
+   "n": 41,
+   "near_code": "99215",
+   "service_code": "99214",
+   "service_date": "2026-12-14",
+   "submission_id": "CLM-SYN-041",
+   "unit": "claim"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "not_received",
+     "clearinghouse",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic042",
+   "fault": "drop_clearinghouse",
+   "member_id": "SYNM00042",
+   "n": 42,
+   "near_code": "93005",
+   "service_code": "93000",
+   "service_date": "2026-12-15",
+   "submission_id": "CLM-SYN-042",
+   "unit": "claim"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "mismatch",
+     "clearinghouse",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic043",
+   "fault": "code_clearinghouse",
+   "member_id": "SYNM00043",
+   "n": 43,
+   "near_code": "80048",
+   "service_code": "80053",
+   "service_date": "2026-12-16",
+   "submission_id": "CLM-SYN-043",
+   "unit": "claim"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "mismatch",
+     "clearinghouse",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic044",
+   "fault": "date_clearinghouse",
+   "member_id": "SYNM00044",
+   "n": 44,
+   "near_code": "99214",
+   "service_code": "99213",
+   "service_date": "2026-12-17",
+   "submission_id": "CLM-SYN-044",
+   "unit": "claim"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "mismatch",
+     "clearinghouse",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic045",
+   "fault": "member_clearinghouse",
+   "member_id": "SYNM00045",
+   "n": 45,
+   "near_code": "99215",
+   "service_code": "99214",
+   "service_date": "2026-12-18",
+   "submission_id": "CLM-SYN-045",
+   "unit": "claim"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "duplicate",
+     "clearinghouse",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic046",
+   "fault": "duplicate_clearinghouse",
+   "member_id": "SYNM00046",
+   "n": 46,
+   "near_code": "93005",
+   "service_code": "93000",
+   "service_date": "2026-12-19",
+   "submission_id": "CLM-SYN-046",
+   "unit": "claim"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "duplicate",
+     "clearinghouse",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic047",
+   "fault": "duplicate_clearinghouse",
+   "member_id": "SYNM00047",
+   "n": 47,
+   "near_code": "80048",
+   "service_code": "80053",
+   "service_date": "2026-12-20",
+   "submission_id": "CLM-SYN-047",
+   "unit": "claim"
+  }
+ ]
+}

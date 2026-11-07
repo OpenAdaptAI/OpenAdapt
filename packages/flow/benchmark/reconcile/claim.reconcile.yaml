@@ -1,0 +1,58 @@
+# One claim across the EHR (Medplum, FHIR R4) and the clearinghouse (X12 277
+# claim status in a folder). The 277's referenced trace (TRN02) is the 837's
+# patient control number, which is the EHR's submission id.
+schema_version: openadapt.reconcile/v1
+unit: claim
+anchor: ehr
+legs:
+  ehr:
+    role: ehr
+    environment_id: medplum-ehr-reconcile
+    verifier:
+      kind: fhir
+      base_url: ${RECON_EHR_FHIR}
+      access_token_env: RECON_EHR_TOKEN
+      resource_type: Claim
+      search_param_exprs:
+        identifier: {param: submission_ref}
+        _include: {literal: "Claim:patient"}
+      field_paths:
+        resourceType: resourceType
+        id: id
+        submission_id: identifier[system=urn:openadapt:synthetic:submission].value
+        use: use
+        patient_ref: patient.reference
+        member_id: identifier[type.coding.code=MB].value
+        service_code: item.productOrService.coding.code
+        service_date: item.servicedDate
+        submitted_at: created
+    join:
+      member_id: {via: patient_ref, field: member_id}
+    identity:
+      submission_id: {param: submission_id}
+      use: claim
+    provides:
+      member_id: member_id
+      service_code: service_code
+      service_date: service_date
+      submitted_at: submitted_at
+
+  clearinghouse:
+    role: clearinghouse
+    environment_id: x12-inbox-reconcile
+    verifier:
+      kind: x12
+      options: {root: "${RECON_X12_INBOX}", glob: "*.x12", transaction: "277"}
+    identity:
+      trace: {param: submission_id}
+    compare: &same
+      member_id: {param: ehr.member_id}
+      service_code: {param: ehr.service_code}
+      service_date: {param: ehr.service_date}
+    duplicate_key: *same
+    # An acknowledgement and a later status share a trace: judge the latest.
+    group_by: [trace]
+    latest_by: sent_at
+    # Two payer claim numbers under one trace are two claims, not a history.
+    distinct_by: [payer_claim_number]
+    due: {after: ehr.submitted_at, within_s: 259200}
