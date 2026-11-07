@@ -364,8 +364,31 @@ ROW_PROXIMITY_MIN_PX = 4
 
 
 def squash(text: str) -> str:
-    """Lowercase and remove ALL whitespace (OCR-tolerant comparison form)."""
-    return "".join(text.lower().split())
+    """Lowercase and drop whitespace and OCR-volatile name punctuation.
+
+    Comma and period on letter tokens are stripped because thin identity-band
+    crops routinely make RapidOCR read ``Smith,`` as ``Smith.`` (and the
+    reverse). Leaving them in the comparison form turned a glyph-collapse
+    ABSTAIN into a false affirmative MISMATCH on native Windows while Mac
+    stayed consistent.
+
+    Periods that separate digits (``01.01.1900``) are kept: collapsing them
+    turns a date into a digit run that the glyph-vulnerable-identifier gate
+    then mistreats as an MRN-like token and spuriously abstains.
+    """
+    lowered = text.lower()
+    out: list[str] = []
+    for i, ch in enumerate(lowered):
+        if ch.isspace():
+            continue
+        if ch in ",.":
+            prev = lowered[i - 1] if i else ""
+            nxt = lowered[i + 1] if i + 1 < len(lowered) else ""
+            if prev.isdigit() and nxt.isdigit():
+                out.append(ch)  # date / decimal separator
+            continue
+        out.append(ch)
+    return "".join(out)
 
 
 def band_region(point: Point, band_height: int, viewport: tuple[int, int]) -> Region:
