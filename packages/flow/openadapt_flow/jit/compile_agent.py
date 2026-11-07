@@ -39,6 +39,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Literal,
     Mapping,
     Optional,
     Protocol,
@@ -726,7 +727,8 @@ class RecordingDispatcher:
         self._after_action: list[Callable[[Mapping[str, Any]], None]] = []
         self._finalizers: list[Callable[[], None]] = []
         self._closers: list[Callable[[], None]] = []
-        self._finished = False
+        self._finish_state: Literal["open", "running", "complete", "failed"] = "open"
+        self._finish_error: Optional[BaseException] = None
         self._closed = False
 
     @property
@@ -738,21 +740,25 @@ class RecordingDispatcher:
     def execute(self, native: Mapping[str, Any]) -> Any:
         """Perform one action under the live recording's guard."""
 
-        if self._closed or self._finished or self._recording.computer is None:
+        if (
+            self._closed
+            or self._finish_state != "open"
+            or self._recording.computer is None
+        ):
             raise RuntimeError("the recording action dispatcher is closed")
         return self._recording.computer.execute(native)
 
     def add_after_action(self, callback: Callable[[Mapping[str, Any]], None]) -> None:
         """Run a capture controller after each guarded operation."""
 
-        if self._closed or self._finished:
+        if self._closed or self._finish_state != "open":
             raise RuntimeError("the recording action dispatcher is finishing")
         self._after_action.append(callback)
 
     def add_settle_callback(self, callback: Callable[[float], None]) -> None:
         """Pump a guard while the recorder samples an action's settled result."""
 
-        if self._closed or self._finished:
+        if self._closed or self._finish_state != "open":
             raise RuntimeError("the recording action dispatcher is finishing")
         if self._recording._session is None:
             raise RuntimeError("the recording session has not started")
@@ -761,7 +767,7 @@ class RecordingDispatcher:
     def before_finish(self, callback: Callable[[], None]) -> None:
         """Require capture-side checks to finish before a draft is written."""
 
-        if self._closed or self._finished:
+        if self._closed or self._finish_state != "open":
             raise RuntimeError("the recording action dispatcher is finishing")
         self._finalizers.append(callback)
 
@@ -775,15 +781,43 @@ class RecordingDispatcher:
     def after_action(self, native: Mapping[str, Any]) -> None:
         """Internal action boundary used by :class:`Recording`."""
 
+        if self._closed or self._finish_state != "open":
+            raise RuntimeError("the recording action dispatcher is closed")
         for callback in tuple(self._after_action):
             callback(native)
 
     def finish(self) -> None:
-        if self._finished:
+        """Complete checks once; a caught refusal never authorizes a draft."""
+
+        if self._finish_state == "failed":
+            assert self._finish_error is not None
+            raise self._finish_error
+        if self._finish_state == "complete":
             return
-        self._finished = True
-        for callback in tuple(self._finalizers):
-            callback()
+        if self._finish_state == "running" or self._closed:
+            self._finish_error = RuntimeError(
+                "recording completion was reentered or its dispatcher closed"
+            )
+            self._finish_state = "failed"
+            raise self._finish_error
+        self._finish_state = "running"
+        try:
+            for callback in tuple(self._finalizers):
+                callback()
+                # A callback may catch a reentrant finish refusal. It still
+                # cannot turn that failed completion back into success.
+                if self._finish_error is not None:
+                    raise self._finish_error
+                if self._closed:
+                    raise RuntimeError(
+                        "the recording dispatcher closed during completion"
+                    )
+        except BaseException as error:
+            if self._finish_error is None:
+                self._finish_error = error
+            self._finish_state = "failed"
+            raise self._finish_error
+        self._finish_state = "complete"
 
     def close(self) -> None:
         if self._closed:
