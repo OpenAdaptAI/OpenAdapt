@@ -2485,7 +2485,11 @@ def _recheck_claim_problem(
         if not isinstance(result, Mapping):
             return "a prior refutation has no bound claim identity; it cannot be replaced by a current read"
         receipt = result.get("receipt_sha256")
-        if not digest(receipt) or receipt != event.get("receipt_sha256"):
+        if (
+            not isinstance(receipt, str)
+            or not digest(receipt)
+            or receipt != event.get("receipt_sha256")
+        ):
             return "a prior refutation has no bound claim identity; it cannot be replaced by a current read"
         claims.add(receipt)
         seen_receipts.add(receipt)
