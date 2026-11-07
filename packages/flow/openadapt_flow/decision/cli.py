@@ -47,19 +47,21 @@ def _cmd_plan(args: argparse.Namespace) -> int:
 
     observations: list[SaveObservation] = []
     if args.observations:
-        for line in Path(args.observations).read_text().splitlines():
+        for line in Path(args.observations).read_text(encoding="utf-8").splitlines():
             if line.strip():
                 observations.append(SaveObservation.model_validate_json(line))
     for run_dir in args.run_dir or []:
         from openadapt_flow.ir import RunReport
 
         path = Path(run_dir)
-        report = RunReport.model_validate_json((path / "report.json").read_text())
+        report = RunReport.model_validate_json(
+            (path / "report.json").read_text(encoding="utf-8")
+        )
         observations.append(observation_from_report(report, run_dir=path))
     artifacts: dict[str, CalibrationArtifact] = {}
     if args.artifact:
         artifact = CalibrationArtifact.model_validate_json(
-            Path(args.artifact).read_text()
+            Path(args.artifact).read_text(encoding="utf-8")
         )
         artifacts[artifact.group_key] = artifact
     config = TriageConfig(
@@ -76,7 +78,7 @@ def _cmd_plan(args: argparse.Namespace) -> int:
 def _load_plan(path: str):
     from openadapt_flow.decision.triage import TriagePlan
 
-    return TriagePlan.model_validate_json(Path(path).read_text())
+    return TriagePlan.model_validate_json(Path(path).read_text(encoding="utf-8"))
 
 
 def _cmd_approve_batch(args: argparse.Namespace) -> int:
@@ -176,7 +178,7 @@ def _cmd_eligibility(args: argparse.Namespace) -> int:
 
     try:
         artifact = CalibrationArtifact.model_validate_json(
-            Path(args.artifact).read_text()
+            Path(args.artifact).read_text(encoding="utf-8")
         )
     except (OSError, ValueError) as exc:
         return _refuse("calibration_artifact_unreadable", str(exc))

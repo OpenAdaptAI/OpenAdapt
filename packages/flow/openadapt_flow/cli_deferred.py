@@ -150,7 +150,7 @@ def cmd_deferred_status(args: argparse.Namespace) -> int:
         spec = _from_config(args.config)
         ledger = _ledger(args, spec)
         report = RunReport.model_validate_json(
-            (Path(args.run) / "report.json").read_text()
+            (Path(args.run) / "report.json").read_text(encoding="utf-8")
         )
     except (OSError, ValueError) as exc:
         print(f"deferred status: {exc}", file=sys.stderr)

@@ -286,7 +286,8 @@ def validate(
         if out is not None:
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(
-                json.dumps({"partial": True, "episodes": rows}, indent=1) + "\n"
+                json.dumps({"partial": True, "episodes": rows}, indent=1) + "\n",
+                encoding="utf-8",
             )
 
     try:
@@ -341,7 +342,9 @@ def validate(
     }
     result = {"summary": summary, "episodes": rows}
     if out is not None:
-        out.write_text(json.dumps(result, indent=1, sort_keys=True) + "\n")
+        out.write_text(
+            json.dumps(result, indent=1, sort_keys=True) + "\n", encoding="utf-8"
+        )
     return result
 
 

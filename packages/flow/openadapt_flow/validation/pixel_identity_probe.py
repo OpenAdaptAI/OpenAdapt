@@ -1090,7 +1090,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     floor = run_font_floor(FLOOR_FONTS)
 
     md = render_markdown(sep, drift, floor, recommended)
-    (out / "PIXEL_IDENTITY.md").write_text(md)
+    (out / "PIXEL_IDENTITY.md").write_text(md, encoding="utf-8")
 
     # Strip the big raw sample arrays from the JSON for readability but keep
     # the separation stats, per-pair distances, drift, and floor.
@@ -1110,7 +1110,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "best": best,
             },
             indent=2,
-        )
+        ),
+        encoding="utf-8",
     )
 
     if args.save_crops:

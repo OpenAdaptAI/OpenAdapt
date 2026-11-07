@@ -1578,9 +1578,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         json.dumps(
             {"meta": result["meta"], "aggregate": agg, "trials": result["trials"]},
             indent=2,
-        )
+        ),
+        encoding="utf-8",
     )
-    (out / "DENSE_SURFACE.md").write_text(render_markdown(result, agg))
+    (out / "DENSE_SURFACE.md").write_text(
+        render_markdown(result, agg), encoding="utf-8"
+    )
 
     if args.save_frames:
         seed = args.seeds[0]

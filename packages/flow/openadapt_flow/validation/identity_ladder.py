@@ -630,9 +630,9 @@ def run(out_dir: Path, pair_subset=None) -> dict:
     }
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "identity_ladder.json").write_text(
-        json.dumps({"summary": summary, "results": results}, indent=1)
+        json.dumps({"summary": summary, "results": results}, indent=1), encoding="utf-8"
     )
-    (out_dir / "IDENTITY_LADDER.md").write_text(_markdown(summary))
+    (out_dir / "IDENTITY_LADDER.md").write_text(_markdown(summary), encoding="utf-8")
     return summary
 
 

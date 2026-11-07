@@ -383,7 +383,7 @@ def record_desktop_capture(
     if backend_kind is None and identifier_region is None:
         return recording
     meta_path = Path(recording) / "meta.json"
-    meta = json.loads(meta_path.read_text())
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
     changed = False
     if backend_kind is not None:
         # Capture accepts a substring selector, while replay requires one exact
@@ -422,5 +422,5 @@ def record_desktop_capture(
         meta["identifier_region"] = [int(v) for v in identifier_region]
         changed = True
     if changed:
-        meta_path.write_text(json.dumps(meta, indent=2))
+        meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
     return recording

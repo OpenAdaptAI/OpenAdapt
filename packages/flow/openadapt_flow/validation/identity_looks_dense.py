@@ -493,7 +493,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             },
             indent=1,
         )
-        + "\n"
+        + "\n",
+        encoding="utf-8",
     )
     for key, groups in scored.items():
         a = groups["all"]

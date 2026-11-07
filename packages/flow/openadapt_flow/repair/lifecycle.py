@@ -274,14 +274,14 @@ class RepairStore:
             raise RepairLifecycleError(
                 f"no repair candidate {candidate_id!r} in store {self.root}"
             )
-        return RepairCandidate.model_validate_json(path.read_text())
+        return RepairCandidate.model_validate_json(path.read_text(encoding="utf-8"))
 
     def list_candidates(self) -> list[RepairCandidate]:
         directory = self.root / _CANDIDATES_DIR
         if not directory.is_dir():
             return []
         candidates = [
-            RepairCandidate.model_validate_json(path.read_text())
+            RepairCandidate.model_validate_json(path.read_text(encoding="utf-8"))
             for path in sorted(directory.glob("*.json"))
         ]
         return candidates
@@ -297,7 +297,9 @@ class RepairStore:
     def active_pointer(self) -> Optional[ActivePointer]:
         if not self.active_path.is_file():
             return None
-        return ActivePointer.model_validate_json(self.active_path.read_text())
+        return ActivePointer.model_validate_json(
+            self.active_path.read_text(encoding="utf-8")
+        )
 
     # -- transitions ---------------------------------------------------------
 
@@ -519,7 +521,9 @@ class RepairStore:
         self._reverify_invariants(candidate)
         report_path = Path(preflight_run_dir) / "report.json"
         try:
-            preflight = RunReport.model_validate_json(report_path.read_text())
+            preflight = RunReport.model_validate_json(
+                report_path.read_text(encoding="utf-8")
+            )
         except (OSError, ValueError) as exc:
             raise RepairLifecycleError(
                 f"refused: no readable test-record run at {report_path}"

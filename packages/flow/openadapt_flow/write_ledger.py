@@ -155,7 +155,7 @@ class FileLedger:
         # Another worker may be writing it: wait for the whole key.
         for _ in range(50):
             try:
-                text = path.read_text().strip()
+                text = path.read_text(encoding="utf-8").strip()
             except OSError as exc:
                 raise LedgerError(f"can't read the ledger key: {exc}") from exc
             if len(text) == 64:
@@ -207,7 +207,7 @@ class FileLedger:
     def lease(self, key: str) -> Optional[Lease]:
         path = self._locks / f"{_check_key(key)}.lock"
         try:
-            handle = open(path, "a")  # noqa: SIM115 - the lease owns it
+            handle = open(path, "a", encoding="utf-8")  # noqa: SIM115 - the lease owns it
         except OSError as exc:
             raise LedgerError(f"can't lease a write ledger key: {exc}") from exc
         try:
