@@ -14,12 +14,15 @@ availability. Cost caps are required explicitly for every constructed agent.
 from __future__ import annotations
 
 import asyncio
+from datetime import date
 import importlib.util
 import math
 import os
 import time
+from decimal import Decimal
 from functools import wraps
 from typing import Any, Literal, Mapping, Optional
+from urllib.parse import urlparse
 
 from openadapt_flow.compile_agent.agents import (
     DEFAULT_MODEL,
@@ -29,6 +32,7 @@ from openadapt_flow.compile_agent.agents import (
     ClaudeAgent,
     ModelCall,
     ToolInvocation,
+    _exact_ledger_cost,
 )
 from openadapt_flow.integrations.agents.skills import BrowserTools
 
@@ -36,6 +40,9 @@ __all__ = ["agent_usage", "build_agent", "provider_status"]
 
 Provider = Literal["claude", "openai"]
 _PRICE_FIELDS = ("input", "output", "cache_write", "cache_read")
+OPENAI_PRICING_URL = "https://developers.openai.com/api/docs/pricing"
+PRICING_REVIEWED_AT = "2026-11-07"
+MAX_AGENT_RUN_SECONDS = 120.0
 
 
 def provider_status(
@@ -44,6 +51,9 @@ def provider_status(
     max_cost_usd: Optional[float],
     model: Optional[str] = None,
     prices: Optional[Mapping[str, float]] = None,
+    price_model: Optional[str] = None,
+    pricing_source_url: Optional[str] = None,
+    pricing_verified_at: Optional[str] = None,
     opaque_key_configured: bool = False,
 ) -> dict[str, Any]:
     """Return a no-network configuration check without exposing credentials.
@@ -68,11 +78,25 @@ def provider_status(
         }
 
     if provider == "openai":
-        pricing_available = _prices_are_valid(prices)
+        pricing_available = _reviewed_openai_prices(
+            model=model,
+            prices=prices,
+            price_model=price_model,
+            source_url=pricing_source_url,
+            verified_at=pricing_verified_at,
+        )
     else:
+        selected = model or DEFAULT_MODEL
         pricing_available = (
-            model or DEFAULT_MODEL
-        ) in PRICES_PER_MTOK or _prices_are_valid(prices)
+            prices is None and selected in PRICES_PER_MTOK
+        ) or _reviewed_prices(
+            model=selected,
+            prices=prices,
+            price_model=price_model,
+            source_url=pricing_source_url,
+            verified_at=pricing_verified_at,
+            expected_host="www.anthropic.com",
+        )
 
     module = "anthropic" if provider == "claude" else "agents"
     try:
@@ -109,14 +133,23 @@ def build_agent(
     max_turns: int,
     max_cost_usd: float,
     prices: Optional[Mapping[str, float]] = None,
+    price_model: Optional[str] = None,
+    pricing_source_url: Optional[str] = None,
+    pricing_verified_at: Optional[str] = None,
+    max_input_bytes: int = 65536,
+    max_output_tokens: int = 1024,
+    max_run_seconds: float = 110.0,
+    request_timeout_seconds: float = 25.0,
     client: Any = None,
 ) -> Any:
     """Build an agent accepted by ``SkillCache.run``/``compile_first_run``.
 
-    Prices are USD per million tokens. OpenAI prices must be supplied by the
-    caller for the exact model because pricing changes; this module has no
-    implicit price table or default spend cap. Claude uses compile-agent's
-    existing reviewed model price table and still requires an explicit cap.
+    Prices are USD per million tokens. OpenAI prices must be supplied for the
+    exact model with an official pricing URL and review date; this module has
+    no implicit OpenAI price table or default spend cap. Claude uses
+    compile-agent's reviewed prices for its exact listed model. Both adapters
+    reserve worst-case request cost before generation and use one bounded run
+    deadline.
     ``client`` injects Claude's existing client object; for OpenAI it is an
     optional client factory called with the request's customer key and
     ``max_retries=0``. It cannot bypass the request's model-key provenance.
@@ -125,11 +158,39 @@ def build_agent(
     _require_cap(max_cost_usd)
     if isinstance(max_turns, bool) or not isinstance(max_turns, int) or max_turns < 1:
         raise ValueError("max_turns must be a positive integer")
+    _validate_deadlines(max_run_seconds, request_timeout_seconds)
+    for name, value in (
+        ("max_input_bytes", max_input_bytes),
+        ("max_output_tokens", max_output_tokens),
+    ):
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ValueError(f"{name} must be a positive integer")
     if provider == "claude":
+        selected_model = model or "claude-opus-5-5"
+        built_in_reviewed = prices is None and selected_model in PRICES_PER_MTOK
+        supplied_reviewed = _reviewed_prices(
+            model=selected_model,
+            prices=prices,
+            price_model=price_model,
+            source_url=pricing_source_url,
+            verified_at=pricing_verified_at,
+            expected_host="www.anthropic.com",
+        )
+        if not (built_in_reviewed or supplied_reviewed):
+            raise ValueError("Claude model requires exact-model reviewed pricing")
         kwargs: dict[str, Any] = {
             "vision": "every_turn",
             "max_turns": max_turns,
             "max_cost_usd": max_cost_usd,
+            "preflight_required": True,
+            "max_input_bytes": max_input_bytes,
+            "max_tokens": max_output_tokens,
+            "max_run_seconds": max_run_seconds,
+            "request_timeout_seconds": request_timeout_seconds,
+            "pricing_source_url": (
+                pricing_source_url or _anthropic_pricing_url(selected_model)
+            ),
+            "pricing_verified_at": pricing_verified_at or PRICING_REVIEWED_AT,
         }
         if model is not None:
             kwargs["model"] = model
@@ -146,6 +207,13 @@ def build_agent(
             max_turns=max_turns,
             max_cost_usd=max_cost_usd,
             prices=_validated_prices(prices),
+            price_model=price_model,
+            pricing_source_url=pricing_source_url,
+            pricing_verified_at=pricing_verified_at,
+            max_input_bytes=max_input_bytes,
+            max_output_tokens=max_output_tokens,
+            max_run_seconds=max_run_seconds,
+            request_timeout_seconds=request_timeout_seconds,
             client_factory=client,
         )
     raise ValueError(f"unsupported provider: {provider!r}")
@@ -197,13 +265,26 @@ class OpenAIBrowserAgent:
         max_turns: int,
         max_cost_usd: float,
         prices: Mapping[str, float],
+        price_model: Optional[str],
+        pricing_source_url: Optional[str],
+        pricing_verified_at: Optional[str],
         max_input_bytes: int = 65536,
         max_output_tokens: int = 1024,
+        max_run_seconds: float = 110.0,
+        request_timeout_seconds: float = 25.0,
         client_factory: Any = None,
     ) -> None:
         _require_cap(max_cost_usd)
         if not model:
             raise ValueError("model must be non-empty")
+        if not _reviewed_openai_prices(
+            model=model,
+            prices=prices,
+            price_model=price_model,
+            source_url=pricing_source_url,
+            verified_at=pricing_verified_at,
+        ):
+            raise ValueError("OpenAI requires exact-model reviewed pricing metadata")
         if (
             isinstance(max_turns, bool)
             or not isinstance(max_turns, int)
@@ -220,26 +301,30 @@ class OpenAIBrowserAgent:
         self.max_turns = max_turns
         self.max_cost_usd = max_cost_usd
         self.prices = dict(prices)
+        self.pricing_source_url = pricing_source_url
+        self.pricing_verified_at = pricing_verified_at
         # The preflight uses UTF-8 bytes, a conservative upper bound for the
         # request's visible-content token count.
         self.max_input_bytes = max_input_bytes
         self.max_output_tokens = max_output_tokens
+        _validate_deadlines(max_run_seconds, request_timeout_seconds)
+        self.max_run_seconds = max_run_seconds
+        self.request_timeout_seconds = request_timeout_seconds
         worst_input_rate = max(
-            self.prices[key] for key in ("input", "cache_write", "cache_read")
+            Decimal(str(self.prices[key]))
+            for key in ("input", "cache_write", "cache_read")
         )
-        maximum_run_cost = (
-            self.max_turns
-            * (
-                self.max_input_bytes * worst_input_rate
-                + self.max_output_tokens * self.prices["output"]
-            )
-            / 1_000_000
-        )
-        if maximum_run_cost > self.max_cost_usd:
+        maximum_run_cost = Decimal(self.max_turns) * (
+            Decimal(self.max_input_bytes) * worst_input_rate
+            + Decimal(self.max_output_tokens)
+            * Decimal(str(self.prices["output"]))
+        ) / Decimal(1_000_000)
+        if maximum_run_cost > Decimal(str(self.max_cost_usd)):
             raise ValueError(
                 "configured run cap is below the worst-case token-budget cost"
             )
         self.principal_id = f"agent:openai-agents:{model}"
+        self.client_factory = client_factory
         self.last_ledger: Optional[AgentLedger] = None
 
     def drive(self, request: Any, harness: Any) -> AgentLedger:
@@ -260,10 +345,15 @@ class OpenAIBrowserAgent:
             model=self.model,
             vision="browser-tools",
             prices=self.prices,
+            pricing_model=self.model,
+            pricing_source_url=self.pricing_source_url,
+            pricing_verified_at=self.pricing_verified_at,
+            pricing_tier="default",
         )
         self.last_ledger = ledger
         browser = BrowserTools(harness)
-        started_at: list[float] = []
+        started_at: list[tuple[float, int]] = []
+        deadline = time.monotonic() + self.max_run_seconds
 
         class UsageHooks(RunHooks):
             async def on_llm_start(
@@ -280,14 +370,29 @@ class OpenAIBrowserAgent:
                     raise BudgetExceeded(
                         "rendered request exceeds the configured input-token ceiling"
                     )
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("agent run deadline expired before request")
+                reserve = _request_reservation_usd(
+                    request_size, self.max_output_tokens, self.prices
+                )
+                if (
+                    _exact_ledger_cost(ledger, self.prices) + reserve
+                    > Decimal(str(self.max_cost_usd))
+                ):
+                    raise BudgetExceeded(
+                        "worst-case request reservation exceeds remaining run budget"
+                    )
                 ledger.model_requests_started += 1
                 ledger.usage_known = False
-                started_at.append(time.monotonic())
+                started_at.append((time.monotonic(), request_size))
 
             async def on_llm_end(
                 hook_self, context: Any, agent: Any, response: Any
             ) -> None:
-                started = started_at.pop() if started_at else time.monotonic()
+                started, input_bound = (
+                    started_at.pop() if started_at else (time.monotonic(), 0)
+                )
                 usage = getattr(response, "usage", None)
                 parsed = _openai_usage(usage)
                 if parsed is None:
@@ -310,7 +415,20 @@ class OpenAIBrowserAgent:
                 )
                 ledger.model_seconds += ledger.calls[-1].seconds
                 ledger.usage_known = True
-                if ledger.cost_usd() > self.max_cost_usd:
+                if output_tokens > self.max_output_tokens:
+                    raise BudgetExceeded(
+                        "OpenAI response exceeded the configured output-token ceiling"
+                    )
+                if input_tokens > input_bound:
+                    raise BudgetExceeded(
+                        "OpenAI usage exceeded the reserved request-size bound"
+                    )
+                if time.monotonic() >= deadline:
+                    ledger.usage_known = False
+                    raise TimeoutError("agent run deadline expired during request")
+                if _exact_ledger_cost(ledger, self.prices) > Decimal(
+                    str(self.max_cost_usd)
+                ):
                     raise BudgetExceeded(
                         "estimated OpenAI spend passed the configured run cap"
                     )
@@ -318,10 +436,14 @@ class OpenAIBrowserAgent:
         def instrument(name: str, fn: Any) -> Any:
             @wraps(fn)
             def called(*args: Any, **kwargs: Any) -> Any:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("agent run deadline expired before browser tool")
                 started = time.monotonic()
                 outcome = "returned"
                 try:
                     value = fn(*args, **kwargs)
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError("agent run deadline expired during browser tool")
                     if isinstance(value, str):
                         if value.startswith("Stopped:"):
                             outcome = "refused"
@@ -358,6 +480,8 @@ class OpenAIBrowserAgent:
                 max_tokens=self.max_output_tokens,
                 preserve_raw_usage=True,
                 parallel_tool_calls=False,
+                timeout=self.request_timeout_seconds,
+                extra_args={"service_tier": "default"},
             ),
         }
         request_key = getattr(request, "model_key", None)
@@ -365,8 +489,10 @@ class OpenAIBrowserAgent:
             raise RuntimeError(
                 "OpenAI browser agent needs the customer's OpenAI model key"
             )
-        client = (client_factory or AsyncOpenAI)(
-            api_key=request_key.secret(), max_retries=0
+        client = (self.client_factory or AsyncOpenAI)(
+            api_key=request_key.secret(),
+            max_retries=0,
+            timeout=self.request_timeout_seconds,
         )
         agent_options["model"] = OpenAIResponsesModel(
             model=self.model,
@@ -376,12 +502,13 @@ class OpenAIBrowserAgent:
 
         async def run() -> Any:
             try:
-                return await Runner.run(
-                    agent,
-                    f"Task: {request.instruction}",
-                    max_turns=self.max_turns,
-                    hooks=UsageHooks(),
-                )
+                async with asyncio.timeout(self.max_run_seconds):
+                    return await Runner.run(
+                        agent,
+                        f"Task: {request.instruction}",
+                        max_turns=self.max_turns,
+                        hooks=UsageHooks(),
+                    )
             finally:
                 await client.close()
 
@@ -500,3 +627,111 @@ def _prices_are_valid(prices: Optional[Mapping[str, float]]) -> bool:
     except (TypeError, ValueError):
         return False
     return True
+
+
+def _reviewed_openai_prices(
+    *,
+    model: Optional[str],
+    prices: Optional[Mapping[str, float]],
+    price_model: Optional[str],
+    source_url: Optional[str],
+    verified_at: Optional[str],
+) -> bool:
+    return model is not None and price_model == model and _reviewed_prices(
+        model=model,
+        prices=prices,
+        price_model=price_model,
+        source_url=source_url,
+        verified_at=verified_at,
+        expected_host="developers.openai.com",
+        expected_url=OPENAI_PRICING_URL,
+    )
+
+
+def _anthropic_pricing_url(model: str) -> Optional[str]:
+    if "opus" in model:
+        return "https://www.anthropic.com/claude/opus"
+    if "sonnet" in model:
+        return "https://www.anthropic.com/claude/sonnet"
+    return None
+
+
+def _reviewed_prices(
+    *,
+    model: str,
+    prices: Optional[Mapping[str, float]],
+    price_model: Optional[str],
+    source_url: Optional[str],
+    verified_at: Optional[str],
+    expected_host: str,
+    expected_url: Optional[str] = None,
+) -> bool:
+    if (
+        not model
+        or price_model != model
+        or not _prices_are_valid(prices)
+        or not isinstance(source_url, str)
+    ):
+        return False
+    parsed = urlparse(source_url)
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != expected_host
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or (expected_url is not None and source_url != expected_url)
+    ):
+        return False
+    if expected_host == "www.anthropic.com":
+        expected_anthropic_url = (
+            "https://www.anthropic.com/claude/opus"
+            if "opus" in model
+            else "https://www.anthropic.com/claude/sonnet"
+            if "sonnet" in model
+            else None
+        )
+        if source_url != expected_anthropic_url:
+            return False
+    if not isinstance(verified_at, str):
+        return False
+    try:
+        reviewed = date.fromisoformat(verified_at)
+    except ValueError:
+        return False
+    return reviewed <= date.today()
+
+
+def _validate_deadlines(max_run_seconds: float, request_timeout_seconds: float) -> None:
+    for name, value in (
+        ("max_run_seconds", max_run_seconds),
+        ("request_timeout_seconds", request_timeout_seconds),
+    ):
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(float(value))
+            or value <= 0
+        ):
+            raise ValueError(f"{name} must be finite and positive")
+    if max_run_seconds > MAX_AGENT_RUN_SECONDS:
+        raise ValueError("max_run_seconds exceeds the approved 120-second ceiling")
+    if request_timeout_seconds > max_run_seconds:
+        raise ValueError("request timeout cannot exceed the total run deadline")
+
+
+def _request_reservation_usd(
+    input_token_upper_bound: int,
+    max_output_tokens: int,
+    prices: Mapping[str, float],
+) -> Decimal:
+    input_rate = max(
+        Decimal(str(prices[key]))
+        for key in ("input", "cache_write", "cache_read")
+    )
+    amount = (
+        Decimal(input_token_upper_bound) * input_rate
+        + Decimal(max_output_tokens) * Decimal(str(prices["output"]))
+    ) / Decimal(1_000_000)
+    return amount

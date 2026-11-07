@@ -5,7 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from openadapt_flow.compile_agent.agents import AgentLedger, ModelCall
+from openadapt_flow.compile_agent.agents import AgentLedger, BudgetExceeded, ModelCall
+from openadapt_flow.compile_agent import agents as compile_agent_module
 from openadapt_flow.integrations.agents.providers import (
     _openai_usage,
     _request_upper_bound_bytes,
@@ -14,6 +15,12 @@ from openadapt_flow.integrations.agents.providers import (
     provider_status,
 )
 from openadapt_flow.integrations.agents.skills import FrameworkAgent, _skill_usage
+
+OPENAI_PRICE_METADATA = {
+    "price_model": "gpt-6-luna",
+    "pricing_source_url": "https://developers.openai.com/api/docs/pricing",
+    "pricing_verified_at": "2026-11-07",
+}
 
 
 def test_openai_usage_uses_responses_cached_input_and_known_zero_cache_writes():
@@ -81,6 +88,7 @@ def test_openai_factory_requires_finite_cost_bound_and_explicit_prices():
             max_turns=2,
             max_cost_usd=0.01,
             prices={"input": 1, "output": 1, "cache_write": 1, "cache_read": 1},
+            **OPENAI_PRICE_METADATA,
         )
 
 
@@ -100,6 +108,7 @@ def test_provider_status_is_local_configuration_only(monkeypatch):
         model="gpt-6-luna",
         max_cost_usd=5,
         prices=prices,
+        **OPENAI_PRICE_METADATA,
         opaque_key_configured=True,
     )
 
@@ -224,9 +233,10 @@ def test_openai_browser_adapter_runs_the_sdk_with_a_scripted_local_model(monkeyp
             raise NotImplementedError
 
     class NoNetworkClient:
-        def __init__(self, *, api_key, max_retries):
+        def __init__(self, *, api_key, max_retries, timeout):
             assert api_key == "test-only-opaque-key"
             assert max_retries == 0
+            assert timeout == 25.0
             self.closed = False
 
         async def close(self):
@@ -247,6 +257,9 @@ def test_openai_browser_adapter_runs_the_sdk_with_a_scripted_local_model(monkeyp
         max_turns=1,
         max_cost_usd=1,
         prices={"input": 1, "output": 1, "cache_write": 1, "cache_read": 1},
+        price_model="scripted-test-model",
+        pricing_source_url="https://developers.openai.com/api/docs/pricing",
+        pricing_verified_at="2026-11-07",
     )
     request = SimpleNamespace(
         instruction="inspect the current page",
@@ -263,3 +276,144 @@ def test_openai_browser_adapter_runs_the_sdk_with_a_scripted_local_model(monkeyp
     assert ledger.total("output_tokens") == 3
     assert agent_usage(agent)["usage_known"] is True
     assert len(clients) == 1 and clients[0].closed is True
+
+
+def test_openai_provider_requires_reviewed_prices_for_exact_model():
+    prices = {"input": 1, "output": 1, "cache_write": 1, "cache_read": 1}
+    with pytest.raises(ValueError, match="reviewed pricing metadata"):
+        build_agent(
+            "openai", model="gpt-6-luna", max_turns=1, max_cost_usd=1, prices=prices
+        )
+    with pytest.raises(ValueError, match="reviewed pricing metadata"):
+        build_agent(
+            "openai",
+            model="gpt-6-luna",
+            max_turns=1,
+            max_cost_usd=1,
+            prices=prices,
+            **{**OPENAI_PRICE_METADATA, "price_model": "gpt-6-other"},
+        )
+
+
+def test_claude_reserves_before_generation_and_disables_retries(monkeypatch):
+    class Messages:
+        def __init__(self):
+            self.created = 0
+
+        def count_tokens(self, **kwargs):
+            assert kwargs["model"] == "claude-opus-5-5"
+            return SimpleNamespace(input_tokens=100_000)
+
+        def create(self, **_kwargs):
+            self.created += 1
+            raise AssertionError("generation must not start after reservation refusal")
+
+    class FakeClient:
+        def __init__(self):
+            self.messages = Messages()
+            self.options = []
+
+        def with_options(self, *, timeout, max_retries):
+            self.options.append((timeout, max_retries))
+            return self
+
+    client = FakeClient()
+    monkeypatch.setattr(
+        compile_agent_module,
+        "_image",
+        lambda _png: {"type": "image", "source": {"data": "test"}},
+    )
+    agent = build_agent(
+        "claude",
+        model="claude-opus-5-5",
+        max_turns=1,
+        max_cost_usd=0.001,
+        max_output_tokens=10,
+        client=client,
+    )
+    harness = SimpleNamespace(screenshot=lambda _reason: b"png")
+    request = SimpleNamespace(instruction="inspect", model_key=None)
+
+    with pytest.raises(BudgetExceeded, match="reservation"):
+        agent.drive(request, harness)
+
+    assert client.messages.created == 0
+    assert client.options == [(25.0, 0)]
+    assert agent.last_ledger.model_calls == 0
+    assert agent_usage(agent) == {"usage": [], "usage_known": True}
+
+
+def test_claude_token_count_precedes_bounded_generation(monkeypatch):
+    class Messages:
+        def __init__(self):
+            self.events = []
+
+        def count_tokens(self, **_kwargs):
+            self.events.append("count")
+            return SimpleNamespace(input_tokens=10)
+
+        def create(self, **kwargs):
+            self.events.append("generate")
+            assert kwargs["max_tokens"] == 10
+            return SimpleNamespace(
+                usage=SimpleNamespace(
+                    input_tokens=10,
+                    output_tokens=1,
+                    cache_creation_input_tokens=0,
+                    cache_read_input_tokens=0,
+                ),
+                content=[{"type": "text", "text": "done"}],
+                stop_reason="end_turn",
+            )
+
+    class FakeClient:
+        def __init__(self):
+            self.messages = Messages()
+            self.options = []
+
+        def with_options(self, *, timeout, max_retries):
+            self.options.append((timeout, max_retries))
+            return self
+
+    client = FakeClient()
+    monkeypatch.setattr(
+        compile_agent_module,
+        "_image",
+        lambda _png: {"type": "image", "source": {"data": "test"}},
+    )
+    agent = build_agent(
+        "claude",
+        model="claude-opus-5-5",
+        max_turns=1,
+        max_cost_usd=0.001,
+        max_output_tokens=10,
+        client=client,
+    )
+    ledger = agent.drive(
+        SimpleNamespace(instruction="inspect", model_key=None),
+        SimpleNamespace(screenshot=lambda _reason: b"png"),
+    )
+
+    assert client.messages.events == ["count", "generate"]
+    assert client.options == [(25.0, 0), (25.0, 0)]
+    assert ledger.model_calls == 1 and ledger.usage_known is True
+
+
+def test_agent_deadline_and_request_timeout_are_bounded():
+    with pytest.raises(ValueError, match="120-second ceiling"):
+        build_agent(
+            "claude",
+            model="claude-opus-5-5",
+            max_turns=1,
+            max_cost_usd=1,
+            max_run_seconds=121,
+        )
+    with pytest.raises(ValueError, match="cannot exceed"):
+        build_agent(
+            "claude",
+            model="claude-opus-5-5",
+            max_turns=1,
+            max_cost_usd=1,
+            max_run_seconds=10,
+            request_timeout_seconds=11,
+        )
