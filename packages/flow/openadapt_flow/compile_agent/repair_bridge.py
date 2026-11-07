@@ -42,15 +42,14 @@ def complete_approved_repair(
     canary monitor and cache handoff make every decision. A stopped/uncertain
     canary is never retried by this call or accepted by a later invocation.
     """
-    from openadapt_flow.compile_agent.pipeline import _receipt_outcome, _repeats_run1
-    from openadapt_flow.compile_agent.repair_selection import _document, _inside
+    from openadapt_flow.compile_agent.pipeline import _repeats_run1
+    from openadapt_flow.compile_agent.repair_selection import _document, _inside, _proof
     from openadapt_flow.ir import RunReport, Workflow
     from openadapt_flow.jit import lifecycle
     from openadapt_flow.repair.candidate import Actor
     from openadapt_flow.repair.lifecycle import RepairStore, observation_from_report
     from openadapt_flow.repair.self_repair import _carry_admission, _repairable
     from openadapt_flow.transaction import steps_requiring_reconciliation
-    from openadapt_flow.verify_run import evidence_problem, receipt_problem
 
     automation = Actor(kind="automation", id="compiled-repair-canary")
     compiler, key = cache._compiler(prompt, params)
@@ -80,7 +79,9 @@ def complete_approved_repair(
             raise ValueError("prior delivery cannot be repaired")
         store = RepairStore(Path(repair_desk.store_for(prior.name)).resolve(strict=True))
         candidate = store.load_candidate(candidate_id)
-        approval, provenance = candidate.approval, candidate.provenance
+        approval, provenance, metrics = (
+            candidate.approval, candidate.provenance, candidate.canary_metrics
+        )
         if not (
             candidate.state in {"approved", "staged"}
             and candidate.campaigns_passed() and not candidate.contract_weakenings
@@ -94,6 +95,9 @@ def complete_approved_repair(
             and provenance.halted_run_id == halted_dir.name
             and provenance.halted_step_id == found[0].id
             and len(candidate.taught_steps) == 1
+            and metrics.runs_completed == metrics.verified_runs == 0
+            and metrics.silent_incorrect == metrics.verification_regressions == 0
+            and not metrics.halted and metrics.last_run_at is None
         ):
             raise ValueError("no person-approved one-step candidate")
         rows = [compiler.task.validate(row) for row in canary_params]
@@ -101,6 +105,8 @@ def complete_approved_repair(
             raise ValueError("canary inputs do not match the existing budget")
         if _repeats_run1(compiler.out_dir / "run1_values.json", compiler.task, rows) is not None:
             raise ValueError("canary inputs need fresh values")
+        if any(row == compiler.task.validate(halted.params) for row in rows):
+            raise ValueError("the held item is not a canary")
         store._reverify_invariants(candidate)
         if candidate.state == "approved":
             candidate = store.stage(candidate_id, automation)
@@ -121,24 +127,27 @@ def complete_approved_repair(
     last_receipt = None
     for values in rows:
         try:
-            result, receipt, receipt_path = compiler._governed(
+            result, _receipt, receipt_path = compiler._governed(
                 "repair-canary", values,
                 lambda: jit._run_admitted(values, bundle_dir=staged),
             )
-            report = result.report
-            if not isinstance(report, RunReport):
-                store.rollback(automation, candidate_id)
+            if not isinstance(result.report, RunReport) or result.run_dir is None or receipt_path is None:
+                raise RepairBridgeError("REPAIR_CANARY_UNAVAILABLE")
+            run_dir = Path(result.run_dir)
+            if run_dir.is_symlink() or run_dir.resolve(strict=True) != _inside(jit.runs_dir, run_dir.name):
+                raise RepairBridgeError("REPAIR_CANARY_UNAVAILABLE")
+            # Reuse the selector's normal report/receipt join for EACH canary,
+            # not merely the final run that will be selected after promotion.
+            report = _proof(
+                jit,
+                {"verified_run": run_dir.name,
+                 "receipt": str(Path(receipt_path).relative_to(compiler.dir / "receipts"))},
+                Workflow.load(staged), halted,
+            )
+            if report.model_dump() != result.report.model_dump() or compiler.task.validate(report.params) != values:
                 raise RepairBridgeError("REPAIR_CANARY_UNAVAILABLE")
             observation = observation_from_report(report)
-            normal_receipt = (
-                isinstance(receipt, dict) and _receipt_outcome(receipt) == "VERIFIED"
-                and receipt_problem(receipt.get("receipt")) is None
-                and evidence_problem(receipt.get("evidence"), receipt.get("receipt")) is None
-                and receipt["receipt"]["verification_tier"] == "independent_readback"
-                and receipt["receipt"]["effect_verdict"] == "CONFIRMED"
-                and receipt_path is not None
-            )
-            if not normal_receipt or result.status != "VERIFIED" or type(result.model_calls) is not int or result.model_calls != 0:
+            if result.status != "VERIFIED" or type(result.model_calls) is not int or result.model_calls != 0:
                 observation = observation.model_copy(update={"verified": False, "detail": "compiled canary or independent receipt unavailable"})
             candidate = store.record_canary_run(candidate_id, observation)
             if candidate.canary_metrics.halted:

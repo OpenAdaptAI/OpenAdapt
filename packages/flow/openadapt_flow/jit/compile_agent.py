@@ -1260,9 +1260,12 @@ class CompiledAgent:
             )
         run_dir = self.runs_dir / f"{_stamp()}-{uuid.uuid4().hex[:8]}"
         run_dir.parent.mkdir(parents=True, exist_ok=True)
-        gate_detail, report = self._run_governed(
-            workflow, digest, values, run_dir, bundle_dir=bundle_dir
-        )
+        if bundle_dir is None:
+            gate_detail, report = self._run_governed(workflow, digest, values, run_dir)
+        else:
+            gate_detail, report = self._run_governed(
+                workflow, digest, values, run_dir, bundle_dir=bundle_dir
+            )
         if report is None:
             return refused(gate_detail or "the run gate refused")
         result = JitResult(
