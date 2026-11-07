@@ -772,10 +772,16 @@ class RecheckResult:
     #: The frame's closed evidence since the post-save read (counts and
     #: names, no values).
     evidence: dict[str, Any] = field(default_factory=dict)
+    #: Identity of the original receipt plus the separately validated later
+    #: receipts. These are data bindings, never native-write authority.
+    recheck_claim_sha256: str = ""
+    #: None means the later-receipt context was not validated. An empty
+    #: tuple is the validated context with no later receipts.
+    excuse_receipt_sha256s: Optional[tuple[str, ...]] = None
 
     @property
     def verified(self) -> bool:
-        """True only when the earlier verdict still stands."""
+        """True only when this receipt-bound recheck claim still stands."""
 
         return self.outcome == "CONFIRMED"
 
@@ -2396,6 +2402,9 @@ def _mark_rechecked(
             outcome=late.outcome,
             read_at=late.read_at,
             receipt_sha256=late.receipt_sha256 or None,
+            recheck_claim_sha256=late.recheck_claim_sha256 or None,
+            excuse_receipt_sha256s=list(late.excuse_receipt_sha256s)
+            if late.excuse_receipt_sha256s is not None else None,
             expected_revision=expected_revision,
         )
         if (
@@ -2411,6 +2420,9 @@ def _mark_rechecked(
                     "the ledger did not accept this recheck; the attempt remains held",
                 ],
             )
+        problem = _recheck_claim_problem(recorded.events, late)
+        if problem is not None:
+            return _replace(late, outcome="UNCERTAIN", reasons=[*late.reasons, problem])
     except Exception:  # noqa: BLE001 - the list keeps showing it owed
         return _replace(
             late,
@@ -2421,6 +2433,65 @@ def _mark_rechecked(
             ],
         )
     return late
+
+
+def _recheck_claim_id(receipt: str, excuses: Sequence[str]) -> str:
+    """One data identity, insensitive to excuse order or duplication."""
+
+    return _state_digest({"receipt_sha256": receipt,
+                          "excuse_receipt_sha256s": sorted(set(excuses))})
+
+
+def _recheck_claim_problem(
+    events: Sequence[Mapping[str, Any]], late: RecheckResult,
+) -> Optional[str]:
+    """A historical refutation is not erased by restoring current rows.
+
+    A new claim needs a separately validated new receipt. Journal labels
+    are not native proof; missing legacy context stays unresolved, and
+    this comparison never releases a workflow hold or permits a resend.
+    """
+
+    negative = [e for e in events if e.get("event") == "resolved"
+                and e.get("outcome") == "REFUTED" and e.get("applied") is not False]
+    if not negative:
+        return None
+
+    def digest(value: Any) -> bool:
+        return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+    current = late.excuse_receipt_sha256s
+    if (not digest(late.receipt_sha256) or current is None
+        or late.recheck_claim_sha256 != _recheck_claim_id(late.receipt_sha256, current)):
+        return "the recheck has no validated receipt-bound claim context; the earlier hold remains"
+    claims: set[str] = set()
+    seen_receipts: set[str] = set()
+    unknown_context = False
+    for event in negative:
+        result = event.get("result")
+        if not isinstance(result, Mapping):
+            return "a prior refutation has no bound claim identity; it cannot be replaced by a current read"
+        receipt = result.get("receipt_sha256")
+        if not digest(receipt) or receipt != event.get("receipt_sha256"):
+            return "a prior refutation has no bound claim identity; it cannot be replaced by a current read"
+        claims.add(receipt)
+        seen_receipts.add(receipt)
+        refs = result.get("excuse_receipt_sha256s")
+        if (not isinstance(refs, (list, tuple)) or not all(digest(ref) for ref in refs)
+            or list(refs) != sorted(set(refs))
+            or result.get("recheck_claim_sha256") != _recheck_claim_id(receipt, refs)):
+            unknown_context = True
+            continue
+        if late.recheck_claim_sha256 == result["recheck_claim_sha256"]:
+            return "this historical recheck claim was already refuted; restoring current rows cannot confirm it"
+        seen_receipts.update(refs)
+    if late.receipt_sha256 not in claims:
+        return None  # A separately issued new original receipt is a new claim.
+    if unknown_context:
+        return "a prior refutation has no validated excuse context; the earlier claim remains unresolved"
+    if set(current) - seen_receipts:
+        return None  # A genuinely new validated later receipt binds a new claim.
+    return "a fresh confirmation needs a new validated receipt, not a reordered, removed, or recycled excuse context"
 
 
 def _hold_after_recheck(
@@ -2510,6 +2581,9 @@ def _hold_after_recheck(
                 "late": late.late,
                 "reason": reason,
                 "receipt_sha256": digest,
+                "recheck_claim_sha256": late.recheck_claim_sha256 or None,
+                "excuse_receipt_sha256s": list(late.excuse_receipt_sha256s)
+                if late.excuse_receipt_sha256s is not None else None,
             },
             expected_revision=expected_revision,
         )
@@ -2661,6 +2735,10 @@ def _judge_recheck(
             True,
             revision,
         )
+    # recheck_run has now validated every later receipt, its params and
+    # read contract, and its temporal window. A count or caller label is
+    # insufficient; bind the exact issued receipt identities instead.
+    excuse_refs = tuple(sorted({receipt_sha256(other["receipt"]) for other, _ in excused}))
     evidence = verdict.evidence(spec) if spec is not None else {}
     reasons: list[str] = []
     status = verdict.status
@@ -2697,6 +2775,8 @@ def _judge_recheck(
             read_at=read_at,
             excused=len(excused),
             evidence=evidence,
+            recheck_claim_sha256=_recheck_claim_id(base.receipt_sha256, excuse_refs),
+            excuse_receipt_sha256s=excuse_refs,
         ),
         True,
         revision,
