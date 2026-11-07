@@ -142,28 +142,19 @@ class WrappedTask:
 
 def _result(run: SkillRun, agent: Any) -> dict[str, Any]:
     """Keep raw inputs, model summaries and exception text out of run records."""
-    cost: float | None = None
-    if run.path == "skill" and run.model_calls == 0:
-        cost = 0.0
-    elif run.path == "agent":
-        from openadapt_flow.compile_agent.agents import PRICES_PER_MTOK
+    from openadapt_flow.integrations.agents.skills import _skill_usage
 
-        ledger = getattr(agent, "last_ledger", None)
-        if (
-            ledger is not None
-            and getattr(ledger, "usage_known", True)
-            and (
-                getattr(ledger, "prices", None)
-                or getattr(ledger, "model", None) in PRICES_PER_MTOK
-            )
-        ):
-            cost = run.cost_usd
+    model_calls, cost, usage, usage_known = _skill_usage(run.to_dict())
+    if usage == [] and not usage_known:
+        model_calls = None
     result = {
         "path": run.path,
         "status": run.status,
         "verified": run.verified,
-        "model_calls": run.model_calls,
+        "model_calls": model_calls,
         "cost_usd": cost,
+        "usage": usage,
+        "usage_known": usage_known,
         "seconds": run.seconds,
         "wire_checked": run.wire_checked,
         "receipt": run.replay.get("receipt"),
