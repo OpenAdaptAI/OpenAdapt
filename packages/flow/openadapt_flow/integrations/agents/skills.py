@@ -685,15 +685,24 @@ class SkillCache:
             ) from None
 
     def complete_repair(
-        self, prompt: str, params: Mapping[str, Any], *, repair_desk: Any,
-        candidate_id: str, canary_params: Sequence[Mapping[str, Any]],
+        self,
+        prompt: str,
+        params: Mapping[str, Any],
+        *,
+        repair_desk: Any,
+        candidate_id: str,
+        canary_params: Sequence[Mapping[str, Any]],
     ) -> Any:
         """Run an approved repair on explicit synthetic canaries, then select it."""
         from openadapt_flow.compile_agent.repair_bridge import complete_approved_repair
 
         return complete_approved_repair(
-            self, prompt, params, repair_desk=repair_desk,
-            candidate_id=candidate_id, canary_params=canary_params,
+            self,
+            prompt,
+            params,
+            repair_desk=repair_desk,
+            candidate_id=candidate_id,
+            canary_params=canary_params,
         )
 
     def _skill_run(
