@@ -13,7 +13,7 @@ matching the Windows Agent Arena Flask contract (the WAADirect pattern):
     POST /uia/locator-at    -> stable UIA locator at a demonstrated point
     POST /uia/element-identity-at -> role, name, AutomationId, window path and
                                process of the element at a point
-    POST /uia/authoring-tree -> the foreground app's controls, each with its
+    POST /uia/authoring-tree -> the configured window's controls, each with its
                                element-identity-at identity
     POST /uia/text-at-point -> structured row text for identity verification
     POST /uia/identity-candidates-at -> rows that read the same as that row
@@ -715,20 +715,30 @@ _MAX_AUTHORING_NODES = 200
 _AUTHORING_DEADLINE_S = 8.0
 
 
-def _authoring_root(auto: Any) -> Optional[object]:
-    """The outermost window below the desktop that holds the foreground window."""
+def _authoring_root(auto: Any, user32: Any, window: dict[str, int]) -> Optional[object]:
+    """Exactly the configured HWND/PID root, never the foreground window."""
     try:
-        node = auto.GetForegroundControl()
-    except Exception:  # noqa: BLE001 - no foreground window is an empty tree
+        hwnd, pid = window["hwnd"], window["pid"]
+        if not user32.is_window(hwnd) or user32.pid_of(hwnd) != pid:
+            return None
+        candidates = _children(auto.GetRootControl())
+        if len(candidates) > _MAX_UIA_NODES:
+            return None
+        matches = []
+        for node in candidates:
+            handle = _control_value(node, "NativeWindowHandle", None)
+            process = _control_value(node, "ProcessId", None)
+            if (
+                _control_value(node, "ControlTypeName", "") == "WindowControl"
+                and type(handle) is int
+                and type(process) is int
+                and handle == hwnd
+                and process == pid
+            ):
+                matches.append(node)
+        return matches[0] if len(matches) == 1 else None
+    except Exception:  # noqa: BLE001 - an unreadable binding is no target
         return None
-    window: Optional[object] = None
-    for _ in range(_MAX_UIA_DEPTH):
-        if node is None:
-            break
-        if str(_control_value(node, "ControlTypeName", "")) == "WindowControl":
-            window = node
-        node = _parent(node)
-    return window
 
 
 def _top_level_window(user32: Any, control: object) -> Optional[dict[str, int]]:
@@ -752,8 +762,8 @@ def _top_level_window(user32: Any, control: object) -> Optional[dict[str, int]]:
     return {"hwnd": int(root), "pid": int(pid)}
 
 
-def _authoring_tree(auto: Any) -> dict[str, Any]:
-    """The foreground app's controls, each with its ``element-identity-at`` identity.
+def _authoring_tree(auto: Any, pinned_window: dict[str, int]) -> dict[str, Any]:
+    """The configured window's controls with their ``element-identity-at`` identity.
 
     Lists, in tree order, the controls of the roles in ``_AUTHORING_ROLES``
     that have an identity (an AutomationId, or a role and a name), at most
@@ -766,10 +776,15 @@ def _authoring_tree(auto: Any) -> dict[str, Any]:
     ``truncated`` is true when a cap, the visit budget or the deadline cut the
     walk short.
     """
-    root = _authoring_root(auto)
+    try:
+        user32 = _user32_factory()
+    except Exception as exc:  # noqa: BLE001 - no native binding is unavailable
+        raise AgentRequestError(
+            503, "uia_unavailable", "window binding unavailable"
+        ) from exc
+    root = _authoring_root(auto, user32, pinned_window)
     if root is None:
-        return {"status": "ok", "tree": [], "window": None, "truncated": False}
-    user32 = _user32_factory() if os.name == "nt" else None
+        raise AgentRequestError(409, "stale_target", "configured window is unavailable")
     started = time.monotonic()
     nodes: list[dict[str, Any]] = []
     shown = hidden = 0
@@ -848,7 +863,18 @@ def _authoring_tree(auto: Any) -> dict[str, Any]:
             else None
         ),
     }
-    return {"status": "ok", "tree": nodes, "window": window, "truncated": truncated}
+    if (
+        not user32.is_window(pinned_window["hwnd"])
+        or user32.pid_of(pinned_window["hwnd"]) != pinned_window["pid"]
+    ):
+        raise AgentRequestError(409, "stale_target", "configured window changed")
+    return {
+        "status": "ok",
+        "tree": nodes,
+        "window": window,
+        "window_binding": dict(pinned_window),
+        "truncated": truncated,
+    }
 
 
 def _locator_payload(value: object) -> dict[str, Any]:
@@ -1402,8 +1428,18 @@ def _perform_uia_initialized(
 ) -> dict[str, Any]:
     """Perform one typed UIA operation in an initialized COM apartment."""
     if operation == "authoring-tree":
-        _exact_object(payload, label=operation)
-        return _authoring_tree(auto)
+        data = _exact_object(payload, required=frozenset({"window"}), label=operation)
+        window = _exact_object(
+            data["window"],
+            required=frozenset({"hwnd", "pid"}),
+            label="authoring window",
+        )
+        for name, maximum in (("hwnd", 2**64 - 1), ("pid", 2**32 - 1)):
+            if type(window[name]) is not int or not 0 < window[name] <= maximum:
+                raise AgentRequestError(
+                    400, "invalid_schema", "bounded HWND/PID required"
+                )
+        return _authoring_tree(auto, window)
     if operation in {
         "locator-at",
         "element-identity-at",

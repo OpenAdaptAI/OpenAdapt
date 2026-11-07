@@ -1011,23 +1011,121 @@ def test_authoring_tree_keeps_only_nodes_in_the_exact_shape() -> None:
         "identity": _IDENTITY,
         "window": {"hwnd": 4242, "pid": 77},
     }
-    hidden = {**good, "backend_pixels": None, "offscreen": True, "window": None}
+    hidden = {**good, "backend_pixels": None, "offscreen": True}
     renamed = {**good, "name": "Delete"}  # disagrees with its own identity
     extra = {**good, "value": "Jane Roe"}
     bad_window = {**good, "window": {"hwnd": 0, "pid": 77}}
+    other_window = {**good, "window": {"hwnd": 4243, "pid": 77}}
     payload = {
         "status": "ok",
-        "tree": [good, hidden, renamed, extra, bad_window],
+        "tree": [good, hidden, renamed, extra, bad_window, other_window],
+        "window_binding": {"hwnd": 4242, "pid": 77},
         "window": {"process_name": "PatientNotes.exe", "bounds": None},
         "truncated": False,
     }
     server, seen = _serve_identity_route(200, payload)
     try:
-        tree = WindowsBackend(f"http://127.0.0.1:{server.server_port}").authoring_tree()
+        tree = WindowsBackend(
+            f"http://127.0.0.1:{server.server_port}",
+            authoring_window={"hwnd": 4242, "pid": 77},
+        ).authoring_tree()
     finally:
         server.shutdown()
-    assert seen == {"path": "/uia/authoring-tree", "payload": {}}
+    assert seen == {
+        "path": "/uia/authoring-tree",
+        "payload": {"window": {"hwnd": 4242, "pid": 77}},
+    }
     assert tree is not None
     assert tree["tree"] == [good, hidden]
     assert tree["truncated"] is True  # malformed nodes were dropped
     assert tree["window"] == {"process_name": "PatientNotes.exe", "bounds": None}
+
+
+@pytest.mark.parametrize(
+    "window",
+    [
+        None,
+        {},
+        {"hwnd": 0, "pid": 77},
+        {"hwnd": True, "pid": 77},
+        {"hwnd": 42, "pid": -1},
+        {"hwnd": 42, "pid": 2**32},
+        {"hwnd": 2**64, "pid": 77},
+        {"hwnd": "42", "pid": 77},
+        {"hwnd": 42, "pid": 77, "extra": 1},
+    ],
+)
+def test_windows_authoring_never_infers_a_missing_or_invalid_target(
+    monkeypatch, window
+):
+    if window is not None:
+        with pytest.raises(ValueError):
+            WindowsBackend(authoring_window=window)
+        return
+    backend = WindowsBackend()
+    monkeypatch.setattr(
+        backend, "_post_typed_read", lambda *_a: pytest.fail("no unbound tree request")
+    )
+    assert backend.authoring_tree() is None
+
+
+@pytest.mark.parametrize(
+    "response_binding", [None, {"hwnd": 43, "pid": 77}, {"hwnd": 42, "pid": 78}]
+)
+def test_windows_authoring_refuses_an_agent_bound_to_another_window(response_binding):
+    payload = {
+        "status": "ok",
+        "tree": [],
+        "window_binding": response_binding,
+        "window": None,
+        "truncated": False,
+    }
+    server, _seen = _serve_identity_route(200, payload)
+    try:
+        backend = WindowsBackend(
+            f"http://127.0.0.1:{server.server_port}",
+            authoring_window={"hwnd": 42, "pid": 77},
+        )
+        assert backend.authoring_tree() is None
+    finally:
+        server.shutdown()
+
+
+def test_factory_retains_the_configured_authoring_pair_without_mutable_rebinding():
+    from openadapt_flow.backends.factory import build_backend
+    from openadapt_flow.deployment import BackendConfig
+
+    raw = {"hwnd": 42, "pid": 77}
+    cfg = BackendConfig(
+        kind="windows",
+        agent_url="http://127.0.0.1:5001",
+        windows_authoring_window=raw,
+    )
+    backend = build_backend(cfg)
+    try:
+        raw["hwnd"] = 43
+        assert backend._authoring_window == (42, 77)
+        with pytest.raises(ValueError):
+            cfg.windows_authoring_window.hwnd = 43
+    finally:
+        backend._session.close()
+
+
+@pytest.mark.parametrize(
+    "window",
+    [
+        {"hwnd": True, "pid": 77},
+        {"hwnd": 42, "pid": "77"},
+        {"hwnd": 0, "pid": 77},
+        {"hwnd": 42, "pid": 2**32},
+        {"hwnd": 2**64, "pid": 77},
+        {"hwnd": 42, "pid": 77, "extra": 1},
+    ],
+)
+def test_deployment_authoring_window_is_strict_and_closed(window):
+    from pydantic import ValidationError
+
+    from openadapt_flow.deployment import BackendConfig
+
+    with pytest.raises(ValidationError):
+        BackendConfig(kind="windows", windows_authoring_window=window)

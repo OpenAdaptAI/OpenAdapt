@@ -1979,7 +1979,7 @@ def test_focus_change_over_http_is_uncertain_and_never_uses_legacy_delivery(
         agent.close()
 
 
-def test_authoring_tree_lists_the_foreground_apps_controls_with_identity(
+def test_authoring_tree_lists_the_configured_windows_controls_with_identity(
     monkeypatch,
 ) -> None:
     from openadapt_flow.backends.windows_backend import WindowsBackend
@@ -2003,10 +2003,11 @@ def test_authoring_tree_lists_the_foreground_apps_controls_with_identity(
     for child in group.children:
         child.parent = group
     window = group.parent
-    module.GetForegroundControl = lambda: window
-    monkeypatch.setitem(sys.modules, "uiautomation", module)
+    module.GetForegroundControl = lambda: pytest.fail("foreground is not a selector")
+    window.NativeWindowHandle = 0x1000
+    _install_authoring_uia(monkeypatch, module)
 
-    tree = _perform_uia("authoring-tree", {})
+    tree = _perform_uia("authoring-tree", {"window": {"hwnd": 0x1000, "pid": 1234}})
 
     assert [node["automation_id"] for node in tree["tree"]] == [
         "noteBox",
@@ -2035,7 +2036,11 @@ def test_authoring_tree_lists_the_foreground_apps_controls_with_identity(
 
     agent = RunningAgent(AgentConfig(host="127.0.0.1", port=0, token="secret"))
     try:
-        client = WindowsBackend(agent.url, auth_token="secret").authoring_tree()
+        client = WindowsBackend(
+            agent.url,
+            auth_token="secret",
+            authoring_window={"hwnd": 0x1000, "pid": 1234},
+        ).authoring_tree()
         assert client is not None
         assert [node["identity"] for node in client["tree"]] == [
             node["identity"] for node in tree["tree"]
@@ -2064,14 +2069,148 @@ def test_authoring_tree_names_each_controls_top_level_window() -> None:
     assert _top_level_window(user32, button) is None
 
 
-def test_authoring_tree_without_a_foreground_window_is_empty(monkeypatch) -> None:
-    module = _fake_uia_module()
-    module.GetForegroundControl = lambda: None
-    monkeypatch.setitem(sys.modules, "uiautomation", module)
+def _install_authoring_uia(monkeypatch, module):
+    import openadapt_flow.backends.win_agent.server as server
 
-    assert _perform_uia("authoring-tree", {}) == {
-        "status": "ok",
-        "tree": [],
-        "window": None,
-        "truncated": False,
-    }
+    class Windows(_FakeUser32):
+        def pid_of(self, hwnd):
+            return 1234 if hwnd in self.windows else 0
+
+    native = Windows()
+    monkeypatch.setitem(sys.modules, "uiautomation", module)
+    monkeypatch.setattr(server, "_user32_factory", lambda: native)
+    monkeypatch.setattr(server, "_process_image_identifier", lambda _pid: "fixture")
+    return native
+
+
+@pytest.mark.parametrize("foreground", ["foreign", "missing"])
+def test_configured_authoring_window_wins_over_foreground_through_real_http(
+    monkeypatch, foreground
+):
+    """Same-title windows: the deployment's exact HWND/PID is the target."""
+    from openadapt_flow.backends.factory import build_backend
+    from openadapt_flow.deployment import BackendConfig
+
+    wanted = _FakeControl(
+        "ButtonControl", automation_id="save", name="Save", bounds=(10, 10, 30, 30)
+    )
+    module = _fake_uia_module(wanted)
+    desktop = module.GetRootControl()
+    target = desktop.children[0]
+    target.NativeWindowHandle = 0x1000
+    other = _FakeControl(
+        "WindowControl",
+        name=target.Name,
+        parent=desktop,
+        bounds=(200, 200, 800, 600),
+    )
+    other.NativeWindowHandle = 0x2000
+    foreign_button = _FakeControl(
+        "ButtonControl",
+        automation_id="save",
+        name="Save",
+        bounds=(210, 210, 230, 230),
+        parent=other,
+    )
+    other.children = [foreign_button]
+    desktop.children.append(other)
+    foreground_reads = []
+
+    def read_foreground():
+        foreground_reads.append(True)
+        return other if foreground == "foreign" else None
+
+    module.GetForegroundControl = read_foreground
+    native = _install_authoring_uia(monkeypatch, module)
+    native.windows.add(0x2000)
+    agent = RunningAgent(AgentConfig(host="127.0.0.1", port=0, token="secret"))
+    try:
+        cfg = BackendConfig.model_validate(
+            {
+                "kind": "windows",
+                "agent_url": agent.url,
+                "agent_token": "secret",
+                "windows_authoring_window": {"hwnd": 0x1000, "pid": 1234},
+            }
+        )
+        backend = build_backend(cfg)
+        try:
+            tree = backend.authoring_tree()
+            assert tree is not None and len(tree["tree"]) == 1
+            assert tree["tree"][0]["backend_pixels"] == {
+                "x": 10,
+                "y": 10,
+                "w": 20,
+                "h": 20,
+            }
+            assert tree["tree"][0]["window"] == {"hwnd": 0x1000, "pid": 1234}
+            assert foreground_reads == []
+        finally:
+            backend._session.close()
+    finally:
+        agent.close()
+
+
+@pytest.mark.parametrize("failure", ["missing", "wrong_pid", "duplicate"])
+def test_authoring_window_binding_refuses_absent_changed_or_ambiguous_root(
+    monkeypatch, failure
+):
+    control = _FakeControl("ButtonControl", automation_id="save", name="Save")
+    module = _fake_uia_module(control)
+    target = module.GetRootControl().children[0]
+    target.NativeWindowHandle = 0x1000
+    native = _install_authoring_uia(monkeypatch, module)
+    if failure == "missing":
+        native.windows.remove(0x1000)
+    elif failure == "wrong_pid":
+        target.ProcessId = 4321
+    else:
+        module.GetRootControl().children.append(target)
+    with pytest.raises(AgentRequestError) as caught:
+        _perform_uia("authoring-tree", {"window": {"hwnd": 0x1000, "pid": 1234}})
+    assert caught.value.code == "stale_target"
+    assert control.invocations == 0
+
+
+@pytest.mark.parametrize("change", ["closed", "pid_changed"])
+def test_authoring_window_changed_during_tree_walk_is_not_returned(monkeypatch, change):
+    control = _FakeControl("ButtonControl", automation_id="save", name="Save")
+    module = _fake_uia_module(control)
+    target = module.GetRootControl().children[0]
+    target.NativeWindowHandle = 0x1000
+    native = _install_authoring_uia(monkeypatch, module)
+    original_pid = native.pid_of
+
+    def children():
+        if change == "closed":
+            native.windows.remove(0x1000)
+        else:
+            native.pid_of = lambda hwnd: 4321 if hwnd == 0x1000 else original_pid(hwnd)
+        return []
+
+    control.GetChildren = children
+    with pytest.raises(AgentRequestError) as caught:
+        _perform_uia("authoring-tree", {"window": {"hwnd": 0x1000, "pid": 1234}})
+    assert caught.value.code == "stale_target"
+    assert control.invocations == 0
+
+
+@pytest.mark.parametrize(
+    "window",
+    [
+        None,
+        {},
+        {"hwnd": True, "pid": 1234},
+        {"hwnd": 0, "pid": 1234},
+        {"hwnd": 0x1000, "pid": 2**32},
+        {"hwnd": 2**64, "pid": 1234},
+        {"hwnd": 0x1000, "pid": 1234, "extra": 1},
+    ],
+)
+def test_authoring_endpoint_refuses_unbound_or_malformed_window(monkeypatch, window):
+    module = _fake_uia_module()
+    _install_authoring_uia(monkeypatch, module)
+    with pytest.raises(AgentRequestError):
+        _perform_uia("authoring-tree", {"window": window})
+    with pytest.raises(AgentRequestError):
+        _perform_uia("authoring-tree", {})

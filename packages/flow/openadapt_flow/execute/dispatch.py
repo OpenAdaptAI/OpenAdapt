@@ -295,8 +295,6 @@ def _surface_replay(
         "standard",
         "--pin-digest",
         str(digest),
-        "--approval-mode",
-        "not_gated",
     ]
     argv += ["--qualification-authority-file", str(authority)]
     report_path = run_dir / "report.json"

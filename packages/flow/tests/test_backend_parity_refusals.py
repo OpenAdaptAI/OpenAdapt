@@ -396,3 +396,65 @@ def test_attended_citrix_actions_need_a_readiness_marker() -> None:
                 {"backend": {"kind": "citrix", "rdp_window": "wfica32"}}
             )
         )
+
+
+@pytest.mark.parametrize("surface", ["windows", "macos", "linux", "rdp", "citrix"])
+@pytest.mark.parametrize(
+    ("configured_mode", "expected_mode"),
+    [
+        (None, "each_item"),
+        ("each_item", "each_item"),
+        ("problems_only", "problems_only"),
+        ("not_gated", "not_gated"),
+        ("future_mode", "each_item"),
+    ],
+)
+def test_execute_surface_child_retains_deployment_approval_mode(
+    tmp_path: Path, monkeypatch, surface, configured_mode, expected_mode
+) -> None:
+    """Resolve the actual child argv through the ordinary run approval seam."""
+    import subprocess
+
+    import yaml
+
+    from openadapt_flow.__main__ import _resolve_run_approval_mode, build_parser
+    from openadapt_flow.deployment import load_deployment
+    from openadapt_flow.execute.dispatch import DispatchError, live_replay
+
+    bundle = _bundle(tmp_path, surface)
+    deploy = tmp_path / "deploy.yaml"
+    runtime = {"profile": "standard"}
+    if configured_mode is not None:
+        runtime["approval_mode"] = configured_mode
+    deploy.write_text(
+        yaml.safe_dump({"backend": {"kind": surface}, "runtime": runtime})
+    )
+    run_dir = tmp_path / "exec" / "run"
+    run_dir.mkdir(parents=True)
+    calls = []
+
+    def child(argv, **_kwargs):
+        calls.append(argv)
+        args = build_parser().parse_args(argv[3:])
+        cfg = load_deployment(args.config)
+        actual = _resolve_run_approval_mode(args, cfg, args.profile)
+        assert actual.value == expected_mode
+        # No native child is launched. A missing report remains uncertain.
+        return subprocess.CompletedProcess(argv, 2, b"", b"")
+
+    monkeypatch.setattr(subprocess, "run", child)
+    request = types.SimpleNamespace(parameters={}, workflow_digest="sha256:" + "0" * 64)
+    with pytest.raises(DispatchError, match="no readable run report") as caught:
+        live_replay(
+            _admission(
+                bundle,
+                deployment=str(deploy),
+                qualification_authority_file=str(tmp_path / "authority.json"),
+            ),
+            request,
+            run_dir,
+        )
+    assert caught.value.pre_effect is False
+    assert len(calls) == 1
+    assert calls[0][calls[0].index("--profile") + 1] == "standard"
+    assert "--qualification-authority-file" in calls[0]

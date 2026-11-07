@@ -104,10 +104,14 @@ def build_backend(
             )
         from openadapt_flow.backends.windows_backend import WindowsBackend
 
+        options: dict[str, Any] = {}
+        if cfg.windows_authoring_window is not None:
+            options["authoring_window"] = cfg.windows_authoring_window.model_dump()
         return WindowsBackend(
             cfg.agent_url,
             auth_token=cfg.agent_token,
             pin_fingerprint=cfg.agent_tls_pin,
+            **options,
         )
 
     if kind == "macos":

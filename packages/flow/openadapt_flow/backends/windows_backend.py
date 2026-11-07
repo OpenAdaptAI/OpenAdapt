@@ -337,6 +337,7 @@ class WindowsBackend:
         require_tls: Optional[bool] = None,
         session: Optional[requests.Session] = None,
         allow_legacy_exec: bool = False,
+        authoring_window: Optional[dict[str, int]] = None,
     ) -> None:
         self.server_url = server_url.rstrip("/")
         self._viewport = viewport
@@ -347,6 +348,13 @@ class WindowsBackend:
         self._auth_token = auth_token or None
         self._pin_fingerprint = pin_fingerprint or None
         self._allow_legacy_exec = bool(allow_legacy_exec)
+        self._authoring_window = _window_pair(authoring_window)
+        if authoring_window is not None and (
+            self._authoring_window is None
+            or self._authoring_window[0] > 2**64 - 1
+            or self._authoring_window[1] > 2**32 - 1
+        ):
+            raise ValueError("authoring_window must contain one bounded HWND/PID pair")
         # Top-level window (HWND, PID) each verified step was in, by step id;
         # steps whose captures disagreed have none, for good.
         self._verified_windows: dict[str, tuple[int, int]] = {}
@@ -1075,22 +1083,22 @@ class WindowsBackend:
         return _element_identity_payload(typed.payload.get("identity"))
 
     def authoring_tree(self) -> Optional[dict[str, Any]]:
-        """The foreground app's controls for an agent, from UI Automation.
+        """Controls from the explicitly configured HWND/PID, or unavailable.
 
-        Reads ``/uia/authoring-tree``: buttons, links, menu items, tabs, list
-        items, check boxes, radio buttons and edit fields of the outermost
-        window holding the foreground window, in tree order. Each node has the
-        browser tree's fields (``role``, ``control_type``, ``automation_id``,
-        ``class_name``, ``name``, ``enabled``, ``focused``, ``backend_pixels``)
-        and ``identity``, exactly what :meth:`element_identity_at` reads for
-        that control. A control scrolled out of view has ``offscreen: true``
-        and ``backend_pixels: None``. A node in any other shape is dropped
-        and the tree is marked ``truncated``. Returns
-        None when the agent is unreachable, lacks the endpoint, or answers
-        with anything else. Never raises.
+        The agent must bind that exact window. No foreground selection,
+        automatic rebinding or coordinate fallback supplies a missing tree.
+        Existing node-shape, truncation and action checks still apply.
         """
-        typed = self._post_typed_read("/uia/authoring-tree", {})
+        if self._authoring_window is None:
+            return None
+        hwnd, pid = self._authoring_window
+        typed = self._post_typed_read(
+            "/uia/authoring-tree", {"window": {"hwnd": hwnd, "pid": pid}}
+        )
         if not typed.available or typed.payload is None:
+            return None
+        window_binding = _window_pair(typed.payload.get("window_binding"))
+        if window_binding != self._authoring_window:
             return None
         raw_tree = typed.payload.get("tree")
         if not isinstance(raw_tree, list):
@@ -1099,7 +1107,10 @@ class WindowsBackend:
         dropped = False
         for raw in raw_tree[: 2 * _MAX_AUTHORING_NODES]:
             node = _authoring_node(raw)
-            if node is not None:
+            if (
+                node is not None
+                and _window_pair(node["window"]) == self._authoring_window
+            ):
                 nodes.append(node)
             else:
                 dropped = True

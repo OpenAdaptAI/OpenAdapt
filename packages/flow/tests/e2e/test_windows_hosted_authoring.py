@@ -50,7 +50,7 @@ def _private_json(path: Path, value) -> None:
         json.dump(value, stream)
 
 
-def _foreground(host, backend) -> None:
+def _foreground(host, backend) -> dict[str, int]:
     from openadapt_flow.backends.win32_window_client import Win32WindowClient
 
     app = host.app
@@ -72,6 +72,7 @@ def _foreground(host, backend) -> None:
     assert app.poll() is None
     identity = backend.qualification_environment_identity()
     assert identity is not None and identity[0] == "powershell"
+    return {"hwnd": target.window_id, "pid": app.pid}
 
 
 def _safe_case(function):
@@ -122,7 +123,7 @@ def owned(tmp_path, request, monkeypatch):
             backends.append(prototype)
             host.launch_app()
             _points(prototype)
-            _foreground(host, prototype)
+            authoring_window = _foreground(host, prototype)
             config = root / "deployment.yaml"
             _private_json(
                 config,
@@ -132,6 +133,7 @@ def owned(tmp_path, request, monkeypatch):
                         "agent_url": prototype.server_url,
                         "agent_token": prototype._auth_token,
                         "agent_tls_pin": prototype._pin_fingerprint,
+                        "windows_authoring_window": authoring_window,
                     }
                 },
             )
