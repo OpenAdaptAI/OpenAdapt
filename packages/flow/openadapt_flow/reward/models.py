@@ -32,6 +32,7 @@ from pydantic import (
     StrictInt,
     StrictStr,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -224,6 +225,10 @@ class OracleRecipeV1(_Strict):
     base_url: Optional[StrictStr] = None
     #: ``rest``: path of the records document. Required there.
     records_path: Optional[StrictStr] = None
+    #: ``rest``: declared pagination or validated unpaged endpoint semantics.
+    records_next_path: Optional[StrictStr] = None
+    records_total_path: Optional[StrictStr] = None
+    records_complete: Optional[StrictBool] = None
     #: ``rest``: environment variable holding a JSON object of headers.
     headers_env: Optional[StrictStr] = None
     #: ``sqlite``: database file. ``query``: one read-only SELECT.
@@ -247,6 +252,15 @@ class OracleRecipeV1(_Strict):
             raise ValueError(f"oracle recipe {self.kind} requires base_url")
         if self.kind == "rest" and not self.records_path:
             raise ValueError("oracle recipe rest requires records_path")
+        if self.kind != "rest" and any(
+            value is not None
+            for value in (
+                self.records_next_path,
+                self.records_total_path,
+                self.records_complete,
+            )
+        ):
+            raise ValueError("REST read completeness fields require kind rest")
         if self.kind == "fhir" and not (self.resource_type and self.field_paths):
             raise ValueError(
                 "oracle recipe fhir requires resource_type and field_paths"
@@ -254,6 +268,14 @@ class OracleRecipeV1(_Strict):
         if self.kind == "sqlite" and not self.query:
             raise ValueError("oracle recipe sqlite requires query")
         return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        for added in ("records_next_path", "records_total_path", "records_complete"):
+            if data.get(added) is None:
+                data.pop(added, None)
+        return data
 
     @property
     def channel(self) -> OracleChannel:

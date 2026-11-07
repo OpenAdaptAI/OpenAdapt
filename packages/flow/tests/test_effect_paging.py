@@ -13,6 +13,7 @@ import json
 import threading
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import cast
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -205,7 +206,7 @@ def test_rest_follows_relative_and_absolute_next_links(serve) -> None:
     assert records is not None and [r["id"] for r in records] == list("12345")
 
 
-def test_rest_without_next_path_reads_one_response(serve) -> None:
+def test_rest_without_next_path_refuses_one_incomplete_response(serve) -> None:
     holder: dict = {}
     holder["url"] = serve(
         lambda path, n: (
@@ -213,8 +214,86 @@ def test_rest_without_next_path_reads_one_response(serve) -> None:
             _rest_page(n, next_url=lambda m: f"/api/patient?page={m}"),
         )
     )
-    records = _read(_rest(holder["url"], next_path=None))
-    assert records is not None and len(records) == 2
+    request_count = len(SEEN)
+    state = _rest(holder["url"], next_path=None).capture_pre_state()
+    assert not state.reachable
+    assert state.records == []
+    assert state.readback_complete is None
+    assert len(SEEN) - request_count == 1
+
+
+def test_rest_unconfigured_single_page_cannot_confirm_or_refute(serve) -> None:
+    from openadapt_flow.runtime.effects import Effect, EffectKind
+
+    holder: dict = {}
+    holder["url"] = serve(
+        lambda path, n: (
+            200,
+            _rest_page(n, next_url=lambda m: f"/api/patient?page={m}"),
+        )
+    )
+    verifier = _rest(holder["url"], next_path=None)
+    request_count = len(SEEN)
+    before = verifier.capture_pre_state()
+    assert not before.reachable
+    assert before.records == []
+    assert before.readback_complete is None
+    assert len(SEEN) - request_count == 1
+
+    absent = Effect(
+        kind=EffectKind.EXACT_NEW_SET,
+        match={"id": "5"},
+        new_records=[{"id": "5", "fname": "F5", "lname": "L5"}],
+        expected_count=1,
+        identity_field="id",
+        timeout_s=0,
+    )
+    verdict = verifier.verify(absent, before)
+    assert verdict.verdict is rest.Verdict.INDETERMINATE
+    assert verdict.readback_complete is None
+    assert len(SEEN) - request_count == 2
+
+
+def test_rest_explicit_complete_single_response_can_establish_absence(serve) -> None:
+    from openadapt_flow.runtime.effects import Effect, EffectKind
+
+    holder: dict = {}
+    holder["url"] = serve(lambda path, n: (200, {"data": PATIENTS, "links": {}}))
+    verifier = RestRecordVerifier(
+        holder["url"],
+        records_path="/api/patient",
+        records_key="data",
+        records_complete=True,
+        timeout_s=1.0,
+    )
+    before = verifier.capture_pre_state()
+    assert before.readback_complete is True
+    absent = Effect(
+        kind=EffectKind.EXACT_NEW_SET,
+        match={"id": "6"},
+        new_records=[{"id": "6", "fname": "F6", "lname": "L6"}],
+        expected_count=1,
+        identity_field="id",
+        timeout_s=0,
+    )
+    verdict = verifier.verify(absent, before)
+    assert verdict.verdict is rest.Verdict.REFUTED
+    assert verdict.readback_complete is True
+
+
+def test_rest_malformed_record_entry_is_incomplete(serve) -> None:
+    holder: dict = {}
+    holder["url"] = serve(lambda path, n: (200, {"data": [PATIENTS[0], None]}))
+    verifier = RestRecordVerifier(
+        holder["url"],
+        records_path="/api/patient",
+        records_key="data",
+        records_complete=True,
+    )
+    state = verifier.capture_pre_state()
+    assert not state.reachable
+    assert state.readback_complete is False
+    assert "non-object" in state.detail["read_problem"]
 
 
 def test_rest_next_page_on_another_origin_is_unreadable(serve) -> None:
@@ -269,13 +348,39 @@ def test_records_next_path_in_a_config(serve) -> None:
         "records_key": "data",
         "records_next_path": "links.next",
     }
-    verifier = build_effect_verifier(EffectsConfig.model_validate(section))
+    verifier = cast(
+        rest.RestRecordVerifier,
+        build_effect_verifier(EffectsConfig.model_validate(section)),
+    )
     assert len(_read(verifier) or []) == 5
+    assert verifier.records_complete is None
     # Unset, the config serializes as before, so existing digests hold.
     plain = EffectsConfig.model_validate(
         {k: v for k, v in section.items() if k != "records_next_path"}
     )
     assert "records_next_path" not in plain.model_dump(mode="json")
+    assert "records_complete" not in plain.model_dump(mode="json")
+
+
+def test_records_complete_declaration_is_explicit_in_config_identity() -> None:
+    from openadapt_flow.deployment import _effect_verifier_config_identity
+
+    plain = EffectsConfig.model_validate(
+        {"kind": "rest", "base_url": "http://sor", "records_path": "/records"}
+    )
+    declared = EffectsConfig.model_validate(
+        {
+            "kind": "rest",
+            "base_url": "http://sor",
+            "records_path": "/records",
+            "records_complete": True,
+        }
+    )
+    assert "records_complete" not in plain.model_dump(mode="json")
+    assert declared.model_dump(mode="json")["records_complete"] is True
+    assert _effect_verifier_config_identity(plain, object()) != (
+        _effect_verifier_config_identity(declared, object())
+    )
 
 
 # -- review of #1538 ---------------------------------------------------------------
@@ -433,6 +538,7 @@ def test_rest_total_path(serve, total, ok) -> None:
     verifier = _rest_total(serve(page))
     state = verifier.capture_pre_state()
     assert state.reachable is ok
+    assert state.readback_complete is ok
     if not ok:
         assert "total" in state.detail["read_problem"]
 

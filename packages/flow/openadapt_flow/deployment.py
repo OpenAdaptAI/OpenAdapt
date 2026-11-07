@@ -32,6 +32,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictBool,
     field_validator,
     model_serializer,
     model_validator,
@@ -393,12 +394,17 @@ class EffectsConfig(BaseModel):
     #: ``rest`` only: dotted path in the response body to the next page's URL
     #: (``links.next``). Set, the read follows every page on the same origin
     #: and reads as unreadable when a page fails or the chain is too long.
-    #: Unset: one response is the whole read, as before.
+    #: Unset: no completeness guarantee is inferred from one response.
     records_next_path: Optional[str] = None
     #: ``rest`` only: dotted path in the first page's body to the number of
     #: records the read should return (``meta.total``). Set, a read whose
-    #: count differs reads as unreadable. Unset: the read trusts the chain.
+    #: count differs reads as unreadable. Unset: no total-count check is made.
     records_total_path: Optional[str] = None
+    #: ``rest`` only: validated declaration that a single, unpaged response
+    #: includes the complete matching record set. It is not inferred from the
+    #: number of returned records. Prefer ``records_next_path`` or
+    #: ``records_total_path`` when the endpoint exposes pagination metadata.
+    records_complete: Optional[StrictBool] = None
     #: Secret-isolated auth headers for the records read (bearer_env /
     #: header+value_env / basic_env). Never a credential literal.
     auth: Optional[AuthRef] = None
@@ -631,6 +637,7 @@ class EffectsConfig(BaseModel):
             "deferred_report",
             "records_next_path",
             "records_total_path",
+            "records_complete",
             "records_path",
             "resource_type",
         ):
@@ -645,6 +652,8 @@ class EffectsConfig(BaseModel):
             raise ValueError(
                 "effects.records_drop_fields applies only to kinds rest, sql and fhir"
             )
+        if self.records_complete is not None and kind != "rest":
+            raise ValueError("effects.records_complete applies only to kind rest")
         return self
 
     @model_validator(mode="after")
@@ -2161,6 +2170,7 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
         "deferred_report",
         "records_next_path",
         "records_total_path",
+        "records_complete",
     ):
         if config.get(added) is None:
             config.pop(added, None)
@@ -2324,6 +2334,7 @@ def _build_effect_verifier_unredacted(
             drop_fields=tuple(cfg.records_drop_fields),
             next_path=cfg.records_next_path,
             total_path=cfg.records_total_path,
+            records_complete=cfg.records_complete,
         )
 
     if kind == "fhir":

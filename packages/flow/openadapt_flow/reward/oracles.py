@@ -222,6 +222,9 @@ def _adapter_for(recipe: OracleRecipeV1, base_dir: Path) -> OracleAdapter:
                 records_key=recipe.records_key,
                 headers=recipe.headers(),
                 timeout_s=recipe.timeout_s,
+                next_path=recipe.records_next_path,
+                total_path=recipe.records_total_path,
+                records_complete=recipe.records_complete,
             ),
             channel=OracleChannel.API,
         )

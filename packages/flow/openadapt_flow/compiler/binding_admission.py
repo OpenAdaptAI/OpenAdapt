@@ -61,7 +61,6 @@ from openadapt_flow.runtime.actuators.api import (
     ApiActuator,
 )
 from openadapt_flow.runtime.effects.effect import Effect, EffectKind, EffectVerdict
-from openadapt_flow.runtime.effects.rest import RestRecordVerifier
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +128,20 @@ class AdmissionFixture:
     params: dict[str, str] = field(default_factory=dict)
     timeout_s: float = 2.0
     session: Any = None
+    records_next_path: Optional[str] = None
+    records_total_path: Optional[str] = None
+    records_complete: Optional[bool] = None
+
+    def __post_init__(self) -> None:
+        from openadapt_flow.deployment import EffectsConfig
+
+        # Validate the added declaration with the shared strict config model.
+        EffectsConfig(
+            kind="rest",
+            records_next_path=self.records_next_path,
+            records_total_path=self.records_total_path,
+            records_complete=self.records_complete,
+        )
 
 
 def _param_placeholders(
@@ -287,12 +300,22 @@ def admit_rest_binding(
             proposal=proposal,
         )
 
-    verifier = RestRecordVerifier(
-        fixture.base_url,
-        records_path=fixture.records_path,
-        records_key=fixture.records_key,
-        timeout_s=fixture.timeout_s,
+    from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
+
+    verifier = build_effect_verifier(
+        EffectsConfig(
+            kind="rest",
+            base_url=fixture.base_url,
+            records_path=fixture.records_path,
+            records_key=fixture.records_key,
+            timeout_s=fixture.timeout_s,
+            records_next_path=fixture.records_next_path,
+            records_total_path=fixture.records_total_path,
+            records_complete=fixture.records_complete,
+        )
     )
+    if verifier is None:
+        raise ValueError("the REST admission fixture built no verifier")
     actuator = ApiActuator(
         fixture.base_url,
         session=fixture.session,

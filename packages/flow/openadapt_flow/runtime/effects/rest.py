@@ -30,6 +30,7 @@ from openadapt_flow.runtime.effects.effect import (
     Effect,
     EffectState,
     EffectVerdict,
+    Verdict,
 )
 from openadapt_flow.verification import VerificationTier
 
@@ -37,6 +38,7 @@ from openadapt_flow.verification import VerificationTier
 MAX_PAGES = 50
 
 _UNREADABLE = object()
+_MISSING = object()
 
 
 def _dotted(body: Any, path: str) -> Any:
@@ -45,6 +47,17 @@ def _dotted(body: Any, path: str) -> Any:
         if not isinstance(node, dict):
             return None
         node = node.get(part)
+    return node
+
+
+def _dotted_value(body: Any, path: str) -> Any:
+    """Return a distinct sentinel when a configured path is absent."""
+
+    node = body
+    for part in path.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return _MISSING
+        node = node[part]
     return node
 
 
@@ -95,11 +108,15 @@ class RestRecordVerifier(VerifierAdapterBase):
         next_path: Dotted path in the body to the next page's URL. Set, every
             page on the same origin is read (at most :data:`MAX_PAGES`); a
             failed page or a longer chain reads as unreadable. Unset, one
-            response is the whole read.
+            response is not assumed to be the whole read.
         total_path: Dotted path in the first page's body to the number of
             records the server holds for the read. Set, a read whose record
             count differs, or a body without it, reads as unreadable. Unset,
-            the read trusts the page chain.
+            the read does not gain a completeness guarantee from the total.
+        records_complete: True only when a learned endpoint contract declares
+            that one response contains the complete matching record set. This
+            is for validated, unpaged endpoints; it is never inferred from
+            response length.
 
     Why the last read was unreadable is in :attr:`read_problem` (and in the
     state's ``detail`` and the verdict's reason).
@@ -121,10 +138,13 @@ class RestRecordVerifier(VerifierAdapterBase):
         drop_fields: tuple[str, ...] = (),
         next_path: Optional[str] = None,
         total_path: Optional[str] = None,
+        records_complete: Optional[bool] = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.next_path = next_path
         self.total_path = total_path
+        self.records_complete = records_complete
+        self.readback_complete: Optional[bool] = None
         self.read_problem: Optional[str] = None
         self.drop_fields = tuple(drop_fields)
         self.records_path = records_path
@@ -180,6 +200,10 @@ class RestRecordVerifier(VerifierAdapterBase):
         except Exception as exc:  # noqa: BLE001 - any transport failure is unreadable
             self.read_problem = f"GET {url} failed: {type(exc).__name__}"
             return _UNREADABLE
+        if resp.status_code == 206:
+            self.read_problem = f"GET {url} returned HTTP 206 Partial Content"
+            self.readback_complete = False
+            return _UNREADABLE
         if resp.status_code // 100 != 2:
             self.read_problem = f"GET {url} returned HTTP {resp.status_code}"
             return _UNREADABLE
@@ -211,27 +235,35 @@ class RestRecordVerifier(VerifierAdapterBase):
         longer than :data:`MAX_PAGES`. Never raises.
         """
         self.read_problem = None
+        self.readback_complete = None
         url = f"{self.base_url}{self.records_path}"
         collected: list[Any] = []
         total: Any = None
+        next_chain_complete = True
         for page in range(MAX_PAGES):
             body = self._get_json(url)
             if body is _UNREADABLE:
+                self.readback_complete = False
                 return None
             records = self._records_of(body)
             if records is None:
                 self.read_problem = f"GET {url}: no records list in the body"
+                self.readback_complete = False
                 return None
             if page == 0 and self.total_path is not None:
                 total = _dotted(body, self.total_path)
             collected.extend(records)
             if self.next_path is None:
                 break
-            following = _dotted(body, self.next_path)
+            following = _dotted_value(body, self.next_path)
+            if following is _MISSING:
+                next_chain_complete = False
+                break
             if following in (None, ""):
                 break
             if not isinstance(following, str):
                 self.read_problem = f"the next link at {self.next_path} is not a URL"
+                self.readback_complete = False
                 return None
             following = urljoin(url, following)
             if not _same_origin(following, self.base_url):
@@ -241,24 +273,41 @@ class RestRecordVerifier(VerifierAdapterBase):
                     f"next link origin {_origin(following)} != base_url "
                     f"{_origin(self.base_url)}"
                 )
+                self.readback_complete = False
                 return None
             url = following
         else:
             self.read_problem = f"more than {MAX_PAGES} pages"
+            self.readback_complete = False
             return None
         if self.total_path is not None:
             if isinstance(total, bool) or not isinstance(total, int):
                 self.read_problem = f"no record total at {self.total_path}"
+                self.readback_complete = False
                 return None
             if total != len(collected):
                 self.read_problem = (
                     f"the record total at {self.total_path} is {total}, the read "
                     f"returned {len(collected)}"
                 )
+                self.readback_complete = False
                 return None
-        return drop_record_fields(
-            [r for r in collected if isinstance(r, dict)], self.drop_fields
-        )
+        if any(not isinstance(record, dict) for record in collected):
+            self.read_problem = f"GET {url}: records list contains a non-object"
+            self.readback_complete = False
+            return None
+        if self.total_path is not None:
+            self.readback_complete = True
+        elif self.next_path is not None:
+            self.readback_complete = next_chain_complete
+        elif self.records_complete is True:
+            self.readback_complete = True
+        elif self.records_complete is False:
+            self.readback_complete = False
+        if self.readback_complete is not True:
+            self.read_problem = "REST read completeness was not established"
+            return None
+        return drop_record_fields(collected, self.drop_fields)
 
     # -- EffectVerifier protocol --------------------------------------------
 
@@ -271,6 +320,7 @@ class RestRecordVerifier(VerifierAdapterBase):
             substrate=self.substrate,
             reachable=records is not None,
             records=records or [],
+            readback_complete=self.readback_complete,
             detail=detail,
         )
 
@@ -286,6 +336,23 @@ class RestRecordVerifier(VerifierAdapterBase):
         while True:
             current = self._fetch_records()
             last = judge_records(expected, before, current, substrate=self.substrate)
+            current_complete = self.readback_complete
+            if before.readback_complete is not True or current_complete is not True:
+                read_problem = (
+                    "baseline" if before.readback_complete is not True else "current"
+                )
+                last = last.model_copy(
+                    update={
+                        "verdict": Verdict.INDETERMINATE,
+                        "reason": (
+                            f"{last.reason} (REST {read_problem} read completeness "
+                            "was not established)"
+                        ),
+                        "readback_complete": current_complete,
+                    }
+                )
+            else:
+                last = last.model_copy(update={"readback_complete": current_complete})
             if current is None and self.read_problem:
                 last = last.model_copy(
                     update={"reason": f"{last.reason} ({self.read_problem})"}
