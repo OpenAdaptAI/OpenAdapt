@@ -47,6 +47,7 @@ __all__ = [
     "ClaudeAgent",
     "DEFAULT_MODEL",
     "ModelCall",
+    "ToolInvocation",
     "PRICES_PER_MTOK",
     "ScriptedAgent",
 ]
@@ -105,6 +106,15 @@ class ModelCall:
 
 
 @dataclass
+class ToolInvocation:
+    """One actual tool invocation, without its arguments or returned data."""
+
+    name: str
+    seconds: float
+    outcome: str
+
+
+@dataclass
 class AgentLedger:
     """What one agent run cost: model calls, tokens, time, and screenshots."""
 
@@ -119,10 +129,15 @@ class AgentLedger:
     summary: Optional[str] = None
     tool_errors: int = 0
     prices: Optional[dict[str, float]] = None
+    tool_invocations: list[ToolInvocation] = field(default_factory=list)
+    usage_known: bool = True
+    model_requests_started: int = 0
 
     @property
     def model_calls(self) -> int:
-        return len(self.calls)
+        # Count observed request starts even when a provider failed before
+        # returning usage. Such a prefix is not a zero-call run.
+        return max(self.model_requests_started, len(self.calls))
 
     def total(self, name: str) -> int:
         return sum(int(getattr(call, name)) for call in self.calls)
@@ -139,6 +154,11 @@ class AgentLedger:
         ) / 1_000_000
 
     def to_dict(self) -> dict[str, Any]:
+        price_known = (
+            self.prices is not None
+            or self.model in PRICES_PER_MTOK
+            or self.model_calls == 0
+        )
         return {
             "agent": self.agent,
             "model": self.model,
@@ -150,13 +170,18 @@ class AgentLedger:
             "cache_read_input_tokens": self.total("cache_read_input_tokens"),
             "prompt_tokens": sum(call.prompt_tokens for call in self.calls),
             "images_in_requests": sum(call.images_in_request for call in self.calls),
-            "cost_usd": round(self.cost_usd(), 6),
+            "cost_usd": (
+                round(self.cost_usd(), 6) if self.usage_known and price_known else None
+            ),
             "wall_seconds": round(self.wall_seconds, 3),
             "model_seconds": round(self.model_seconds, 3),
             "finished": self.finished,
             "summary": self.summary,
             "tool_errors": self.tool_errors,
             "calls": [dict(call.__dict__) for call in self.calls],
+            "tool_invocations": [dict(call.__dict__) for call in self.tool_invocations],
+            "usage_known": self.usage_known,
+            "model_requests_started": self.model_calls,
         }
 
 
@@ -426,6 +451,7 @@ class ClaudeAgent:
     #: model not in :data:`PRICES_PER_MTOK`. The cost cap needs a price.
     prices: Optional[dict[str, float]] = None
     requires_model_key: ClassVar[bool] = True
+    model_key_provider: ClassVar[str] = "anthropic"
 
     def __post_init__(self) -> None:
         if self.vision not in VISION_MODES:
@@ -507,32 +533,50 @@ class ClaudeAgent:
         try:
             for turn in range(1, self.max_turns + 1):
                 started = time.monotonic()
-                response = client.messages.create(
-                    model=self.model,
-                    max_tokens=self.max_tokens,
-                    system=system,
-                    tools=tools,
-                    messages=messages,
-                    extra_body=extra,
-                )
+                ledger.model_requests_started += 1
+                ledger.usage_known = False
+                try:
+                    response = client.messages.create(
+                        model=self.model,
+                        max_tokens=self.max_tokens,
+                        system=system,
+                        tools=tools,
+                        messages=messages,
+                        extra_body=extra,
+                    )
+                except BaseException:
+                    # A failed request may have reached the provider, so its
+                    # usage cannot be reported as a measured zero.
+                    raise
                 elapsed = time.monotonic() - started
                 usage = _get(response, "usage")
+                usage_fields = (
+                    "input_tokens",
+                    "output_tokens",
+                    "cache_creation_input_tokens",
+                    "cache_read_input_tokens",
+                )
+                token_values = [_get(usage, field) for field in usage_fields]
+                if any(
+                    isinstance(value, bool) or not isinstance(value, int) or value < 0
+                    for value in token_values
+                ):
+                    raise RuntimeError(
+                        "Claude returned incomplete per-call token usage"
+                    )
                 ledger.calls.append(
                     ModelCall(
                         turn=turn,
-                        input_tokens=int(_get(usage, "input_tokens", 0) or 0),
-                        output_tokens=int(_get(usage, "output_tokens", 0) or 0),
-                        cache_creation_input_tokens=int(
-                            _get(usage, "cache_creation_input_tokens", 0) or 0
-                        ),
-                        cache_read_input_tokens=int(
-                            _get(usage, "cache_read_input_tokens", 0) or 0
-                        ),
+                        input_tokens=token_values[0],
+                        output_tokens=token_values[1],
+                        cache_creation_input_tokens=token_values[2],
+                        cache_read_input_tokens=token_values[3],
                         seconds=round(elapsed, 3),
                         stop_reason=_get(response, "stop_reason"),
                         images_in_request=_count_images(messages),
                     )
                 )
+                ledger.usage_known = True
                 ledger.model_seconds += elapsed
                 if ledger.cost_usd() > self.max_cost_usd:
                     raise BudgetExceeded(
@@ -588,6 +632,8 @@ class ClaudeAgent:
         toolset = call.get("toolset_name")
         if toolset:
             result["toolset_name"] = toolset
+        started = time.monotonic()
+        outcome = "returned"
         try:
             if self._tool is not None:
                 if name != "run":
@@ -600,12 +646,25 @@ class ClaudeAgent:
         except (GateRefused, ScopeViolation):
             # A refused save, or an action outside the task's declared scope:
             # run 1 ends here with no draft.
+            outcome = "refused"
             raise
         except (StaleRef, UnsupportedAction, LookupError, ValueError) as exc:
             # Nothing in the action was performed; the model can try another.
             ledger.tool_errors += 1
+            outcome = "retryable_error"
             result["content"] = [{"type": "text", "text": f"Not done: {exc}"}]
             result["is_error"] = True
+        except BaseException:
+            outcome = "failed"
+            raise
+        finally:
+            ledger.tool_invocations.append(
+                ToolInvocation(
+                    name=name,
+                    seconds=round(time.monotonic() - started, 6),
+                    outcome=outcome,
+                )
+            )
         return result
 
     def _selective(
