@@ -717,6 +717,9 @@ class CompiledAgent:
     teach_authorization: Any = None
     _sleep: Callable[[float], None] = field(default=time.sleep, repr=False)
 
+    # Enabled only by the compile-agent task loader, never a raw bundle path.
+    _use_skill_repair: bool = field(default=False, init=False, repr=False)
+
     # -- layout --------------------------------------------------------------
 
     @property
@@ -729,6 +732,12 @@ class CompiledAgent:
 
     @property
     def bundle_dir(self) -> Path:
+        if self._use_skill_repair:
+            from openadapt_flow.compile_agent.repair_selection import selected_bundle
+
+            selected = selected_bundle(self)
+            if selected is not None:
+                return selected
         return self.program_dir / "bundle"
 
     @property

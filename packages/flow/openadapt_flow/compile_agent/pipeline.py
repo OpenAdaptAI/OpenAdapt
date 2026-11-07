@@ -285,6 +285,9 @@ class ReplayResult:
         out = dict(self.__dict__)
         for key in ("run_dir", "receipt", "inbox_item"):
             out[key] = str(out[key]) if out[key] is not None else None
+        known_zero = type(self.model_calls) is int and self.model_calls == 0
+        out["usage"] = [] if known_zero else None
+        out["usage_known"] = known_zero
         return out
 
 
@@ -490,7 +493,7 @@ class FirstRunCompiler:
         )
 
     def _jit(self, agent: Any = None) -> CompiledAgent:
-        return compile_agent(
+        jit = compile_agent(
             agent,
             task=self.task,
             app=self._app(),
@@ -508,6 +511,11 @@ class FirstRunCompiler:
             else self.teach_scope,
             teach_authorization=self.teach_authorization,
         )
+
+        # Resolve only the fixed task-local promoted-repair pointer.
+        # The property revalidates it on every access, including each run.
+        jit._use_skill_repair = True
+        return jit
 
     def teach_scope(self, params: Mapping[str, Any]) -> Any:
         """What run 1 may do, from what this task declares before the agent
