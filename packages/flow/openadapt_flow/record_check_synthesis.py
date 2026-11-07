@@ -48,7 +48,7 @@ import sqlite3
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Iterable, Mapping, Optional
 from urllib.parse import parse_qsl, quote, urlsplit
 
 from openadapt_flow import sealed_set as _sealed
@@ -63,6 +63,9 @@ from openadapt_flow.runtime.effects.effect import (
 )
 from openadapt_flow.runtime.effects.sql import read_cell
 from openadapt_flow.runtime.effects.surfaces import surface_probe
+
+if TYPE_CHECKING:
+    from openadapt_flow.rest_setup import RestReadSetup
 
 #: The network capture ``record --capture-network`` writes. Read here without
 #: importing the recorder side, so the format has one owner
@@ -232,6 +235,8 @@ class ReadSearch:
     closed_world_basis: Optional[str] = None
     #: Surface names in use, across every source.
     taken: set[str] = field(default_factory=set)
+    #: Detached learning observations; never a reader authorization or admission.
+    rest_setup_observations: list[dict[str, Any]] = field(default_factory=list)
 
 
 # -- network capture ---------------------------------------------------------
@@ -1508,6 +1513,11 @@ class Proposal:
             "status": "working" if self.working else "draft",
             "approved": False,
             "reads": reads,
+            **(
+                {"rest_setup_observations": self.search.rest_setup_observations}
+                if self.search.rest_setup_observations
+                else {}
+            ),
             "not_read_back": sorted(
                 set(self.params) - {p for s in targets for p in s.bound.values()}
             ),
@@ -1540,6 +1550,7 @@ def synthesize(
     verifier: Optional[Mapping[str, Any]] = None,
     complete_read: bool = False,
     fault_gate: bool = False,
+    rest_setups: Optional[list[RestReadSetup]] = None,
 ) -> Proposal:
     """Find the read, build the check, and run the recorded-state fault test.
 
@@ -1575,6 +1586,10 @@ def synthesize(
         reads_from_sqlite(Path(db_path), params, search)
     if not any(s.is_target for s in search.surfaces):
         return Proposal(params, search, [], {}, [])
+    if rest_setups is not None:
+        from openadapt_flow.rest_setup import apply_rest_setups
+
+        apply_rest_setups(search, rest_setups)
     _apply_sent_constants(search, params)
     if complete_read and not search.closed_world:
         search.closed_world = True
