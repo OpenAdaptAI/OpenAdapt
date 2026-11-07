@@ -148,8 +148,23 @@ def launch_empty_playwright_chromium(url: str) -> Any:
         from playwright.sync_api import sync_playwright
     except ImportError as exc:
         raise AuthoringError("Playwright Chromium is unavailable.") from exc
+    try:
+        from openadapt_flow._browser_readiness import (
+            BrowserReadinessError,
+            launch_rendering_ready,
+        )
+    except ImportError:
+        raise AuthoringError("Browser rendering readiness is unavailable.") from None
+
     playwright = sync_playwright().start()
-    browser = playwright.chromium.launch(headless=False)
+    try:
+        browser = launch_rendering_ready(playwright.chromium, headless=False)
+    except BrowserReadinessError as exc:
+        playwright.stop()
+        raise AuthoringError(str(exc)) from None
+    except BaseException:
+        playwright.stop()
+        raise
     context = browser.new_context()
     cookies = context.cookies()
     if cookies:
@@ -656,7 +671,9 @@ class AuthoringRunner:
             "client_display": (
                 pending.get("client_display")
                 if pending
-                else self._allowed_display if self._allowed_sub else None
+                else self._allowed_display
+                if self._allowed_sub
+                else None
             ),
             "coach_only": self._pin.get("backend") in COACH_ONLY_BACKENDS,
         }
@@ -729,9 +746,7 @@ class AuthoringRunner:
             close = getattr(transport, "close", None)
             if self._client is None and callable(close):
                 close()
-            raise AuthoringError(
-                "Desktop could not store the authoring lease in the OS keychain."
-            )
+            raise AuthoringError("Desktop could not store the authoring lease in the OS keychain.")
         with self._lock:
             self._transport = transport
             self._pack = pack
@@ -859,9 +874,7 @@ class AuthoringRunner:
             "client_display": display,
         }
         status = (
-            "replace_allow"
-            if self._allowed_sub and self._allowed_sub != sub
-            else "pending_allow"
+            "replace_allow" if self._allowed_sub and self._allowed_sub != sub else "pending_allow"
         )
         copy = _allow_prompt(display, replace=status == "replace_allow")
         self.emit(
@@ -873,11 +886,7 @@ class AuthoringRunner:
         pending = self._pending_allow
         if pending is None:
             raise AuthoringError("There is no pending Allow request.")
-        if (
-            self._allowed_sub
-            and self._allowed_sub != pending["oauth_sub_sha256"]
-            and not replace
-        ):
+        if self._allowed_sub and self._allowed_sub != pending["oauth_sub_sha256"] and not replace:
             return self.status()
         command_id = pending.get("command_id")
         display = pending.get("client_display")

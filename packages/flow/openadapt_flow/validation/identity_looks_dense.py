@@ -180,7 +180,9 @@ def _open_page(pw: Any, table: Any, cond: Any, top_offset_px: int) -> tuple[Any,
         row_pad_px=cond.row_pad_px,
         top_offset_px=top_offset_px,
     )
-    browser = pw.chromium.launch(headless=True)
+    from openadapt_flow._browser_readiness import launch_rendering_ready
+
+    browser = launch_rendering_ready(pw.chromium, headless=True)
     page = browser.new_page(
         viewport={"width": 1120, "height": 1600},
         device_scale_factor=cond.device_scale_factor,

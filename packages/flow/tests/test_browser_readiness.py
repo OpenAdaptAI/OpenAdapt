@@ -1,0 +1,320 @@
+"""One acquisition/ownership model for launched and attached browsers."""
+
+from __future__ import annotations
+
+import ast
+import sys
+from contextlib import contextmanager
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
+import pytest
+
+from openadapt_flow import _browser_readiness as readiness
+from openadapt_flow import _browser_setup as setup
+
+
+class Cancelled(BaseException):
+    pass
+
+
+class Handle:
+    def __init__(self) -> None:
+        self.disposed = False
+
+    def dispose(self) -> None:
+        self.disposed = True
+
+
+class Page:
+    def __init__(self, context: Context, failure: str = "") -> None:
+        self.context = context
+        self.failure = failure
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.handles: list[Handle] = []
+
+    def is_closed(self) -> bool:
+        return self.failure == "closed_page"
+
+    def wait_for_function(self, expression: str, **kwargs: Any) -> Handle:
+        self.calls.append((expression, kwargs))
+        phase = {
+            readiness._START: "schedule",
+            readiness._PROGRESS: "progress",
+            readiness._CANCEL: "cleanup",
+        }[expression]
+        if self.failure == phase:
+            raise RuntimeError("private page value must not escape")
+        if self.failure == "cancel" and phase == "progress":
+            raise Cancelled()
+        handle = Handle()
+        self.handles.append(handle)
+        return handle
+
+
+class Context:
+    def __init__(self, browser: Browser, failure: str = "") -> None:
+        self.browser = browser
+        self.closed = False
+        self.page = Page(self, failure)
+
+    def new_page(self) -> Page:
+        return self.page
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class Browser:
+    def __init__(self, failure: str = "") -> None:
+        self.failure = failure
+        self.closed = False
+        self.contexts: list[Context] = []
+
+    def is_connected(self) -> bool:
+        return self.failure != "closed_browser"
+
+    def new_context(self, **kwargs: Any) -> Context:
+        assert kwargs == {"service_workers": "block"}
+        context = Context(self, self.failure)
+        self.contexts.append(context)
+        return context
+
+    def close(self) -> None:
+        self.closed = True
+
+
+@pytest.mark.parametrize("attached", [False, True])
+@pytest.mark.parametrize(
+    "failure", ["", "schedule", "progress", "cleanup", "cancel", "closed_browser"]
+)
+def test_acquisition_model_refuses_and_cleans_only_owned_resources(
+    attached: bool, failure: str
+) -> None:
+    browser = Browser(failure)
+    user_context = Context(browser, failure)
+    options = {"attached_page": user_context.page} if attached else {}
+    if failure:
+        error = Cancelled if failure == "cancel" else readiness.BrowserReadinessError
+        with pytest.raises(error) as caught:
+            readiness.require_rendering_ready(browser, **options)
+        assert "private page value" not in str(caught.value)
+    else:
+        readiness.require_rendering_ready(browser, **options)
+    assert browser.closed is (bool(failure) and not attached)
+    assert not user_context.closed
+    assert all(context.closed for context in browser.contexts)
+    assert len(browser.contexts) == (
+        0 if attached or failure == "closed_browser" else 1
+    )
+    page = (
+        user_context.page
+        if attached
+        else (browser.contexts[0].page if browser.contexts else None)
+    )
+    if page is not None:
+        assert all(handle.disposed for handle in page.handles)
+        for _expression, kwargs in page.calls:
+            assert 0 < kwargs["timeout"] <= readiness.READINESS_TIMEOUT_MS
+            assert kwargs["polling"] == 10
+        if failure in ("progress", "cancel"):
+            assert page.calls[-1][0] == readiness._CANCEL
+
+
+@pytest.mark.parametrize("kind", ["none", "foreign", "closed", "persistent"])
+def test_unsupported_attach_never_treats_the_browser_as_owned(kind: str) -> None:
+    browser = Browser()
+    context = Context(browser, "closed_page" if kind == "closed" else "")
+    page: Any = context.page
+    if kind == "none":
+        page = None
+    elif kind == "foreign":
+        context.browser = Browser()
+    elif kind == "persistent":
+        context.browser = None  # type: ignore[assignment]
+    with pytest.raises(readiness.BrowserReadinessError, match="readiness_unavailable"):
+        readiness.require_rendering_ready(browser, attached_page=page)
+    assert not browser.closed
+    assert not context.closed
+    assert not browser.contexts
+    assert not context.page.calls
+
+
+def test_host_deadline_can_refuse_before_scheduling_without_a_timer_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    times = iter([0.0, 2.0])
+    monkeypatch.setattr(readiness.time, "monotonic", lambda: next(times))
+    browser = Browser()
+    context = Context(browser)
+    with pytest.raises(readiness.BrowserReadinessError, match="rendering_unavailable"):
+        readiness.require_rendering_ready(browser, attached_page=context.page)
+    assert context.page.calls == []
+    assert not browser.closed
+    assert not context.closed
+
+
+@pytest.mark.parametrize("entry", ["selected", "direct"])
+def test_failed_rendering_never_retries_a_launch_or_changes_arguments(
+    monkeypatch: pytest.MonkeyPatch, entry: str
+) -> None:
+    browser = Browser("progress")
+    calls = []
+
+    class Chromium:
+        def launch(self, **options: Any) -> Browser:
+            calls.append(options)
+            return browser
+
+    monkeypatch.setattr(
+        setup, "chromium_launch_options", lambda **_: {"channel": "msedge"}
+    )
+    with pytest.raises(readiness.BrowserReadinessError):
+        if entry == "selected":
+            setup.launch_chromium(Chromium(), headless=True)
+        else:
+            readiness.launch_rendering_ready(
+                Chromium(), headless=True, channel="msedge"
+            )
+    assert calls == [{"headless": True, "channel": "msedge"}]
+    assert browser.closed
+
+
+def test_production_acquisition_inventory_has_no_unchecked_direct_launch() -> None:
+    root = Path(__file__).parents[1] / "openadapt_flow"
+    unchecked = []
+    paths = list(root.rglob("*.py"))
+    desktop = root.parents[1] / "desktop/openadapt_desktop/authoring_runner.py"
+    paths.append(desktop)
+    for path in paths:
+        if path.name in ("_browser_setup.py", "_browser_readiness.py"):
+            continue
+        for node in ast.walk(ast.parse(path.read_text(), filename=str(path))):
+            if not isinstance(node, ast.Call) or not isinstance(
+                node.func, ast.Attribute
+            ):
+                continue
+            owner = node.func.value
+            if (
+                node.func.attr == "launch"
+                and isinstance(owner, ast.Attribute)
+                and owner.attr == "chromium"
+            ):
+                unchecked.append(f"{path}:{node.lineno}")
+    assert unchecked == []
+
+
+def test_all_cdp_acquisitions_check_their_selected_page() -> None:
+    root = Path(__file__).parents[1] / "openadapt_flow"
+    expected = {
+        "__main__.py": "_attached_web_page",
+        "interactive_recorder.py": "start",
+        "cli_worklist_pool.py": "_open",
+        "agent_guard/session.py": "_connect",
+    }
+    observed = {}
+    for path in root.rglob("*.py"):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        connects = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "connect_over_cdp"
+        ]
+        if not connects:
+            continue
+        relative = path.relative_to(root).as_posix()
+        assert relative in expected
+        function = next(
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == expected[relative]
+        )
+        checks = [
+            node
+            for node in ast.walk(function)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "require_rendering_ready"
+        ]
+        assert len(connects) == len(checks) == 1
+        assert checks[0].lineno > connects[0].lineno
+        assert [keyword.arg for keyword in checks[0].keywords] == ["attached_page"]
+        observed[relative] = function.name
+    assert observed == expected
+
+
+@pytest.mark.parametrize("failure", ["", "progress", "cancel"])
+def test_actual_attach_entry_checks_selected_page_before_existing_guards(
+    monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    from openadapt_flow import interactive_recorder
+    from openadapt_flow.__main__ import _attached_web_page
+    from openadapt_flow.backends import playwright_backend
+
+    browser = Browser(failure)
+    context = Context(browser, failure)
+    guarded = []
+    stopped = []
+
+    @contextmanager
+    def playwright():
+        try:
+            yield SimpleNamespace(
+                chromium=SimpleNamespace(connect_over_cdp=lambda _: browser)
+            )
+        finally:
+            stopped.append(True)
+
+    monkeypatch.setitem(
+        sys.modules, "playwright.sync_api", SimpleNamespace(sync_playwright=playwright)
+    )
+    monkeypatch.setattr(
+        interactive_recorder, "select_attached_page", lambda *a, **k: context.page
+    )
+    monkeypatch.setattr(
+        playwright_backend, "prepare_ws_guard", lambda page: guarded.append(page)
+    )
+    cfg = SimpleNamespace(
+        browser_cdp_endpoint="http://127.0.0.1:9222", browser_page_url=None
+    )
+    if failure:
+        error = Cancelled if failure == "cancel" else readiness.BrowserReadinessError
+        with pytest.raises(error):
+            with _attached_web_page(cfg, url="https://synthetic.invalid"):
+                pytest.fail("an unready page reached the application")
+        assert guarded == []
+    else:
+        with _attached_web_page(cfg, url="https://synthetic.invalid") as selected:
+            assert selected is context.page
+            assert guarded == [selected]
+    assert stopped == [True]
+    assert not context.closed
+    assert not browser.closed
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+def test_owned_driver_stops_on_readiness_refusal_and_cancellation(
+    monkeypatch: pytest.MonkeyPatch, cancel: bool
+) -> None:
+    from openadapt_flow.backends._browser_process import _start_browser
+
+    stopped = []
+    driver = SimpleNamespace(chromium=object(), stop=lambda: stopped.append(True))
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.sync_api",
+        SimpleNamespace(sync_playwright=lambda: SimpleNamespace(start=lambda: driver)),
+    )
+    monkeypatch.setattr(setup, "require_browser_support", lambda: None)
+    error = Cancelled if cancel else readiness.BrowserReadinessError
+
+    def refuse(*args: Any, **kwargs: Any) -> None:
+        raise error("browser_rendering_unavailable")
+
+    monkeypatch.setattr(setup, "launch_chromium", refuse)
+    with pytest.raises(error):
+        _start_browser(True)
+    assert stopped == [True]

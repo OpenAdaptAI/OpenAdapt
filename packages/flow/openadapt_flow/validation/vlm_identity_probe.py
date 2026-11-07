@@ -125,7 +125,9 @@ def render_crop(text: str, cond: RenderCond) -> bytes:
 
     html = _render_html(text, cond)
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
+        from openadapt_flow._browser_readiness import launch_rendering_ready
+
+        browser = launch_rendering_ready(pw.chromium, headless=True)
         page = browser.new_page(device_scale_factor=cond.device_scale_factor)
         page.set_content(html, wait_until="networkidle")
         el = page.query_selector("#id")
