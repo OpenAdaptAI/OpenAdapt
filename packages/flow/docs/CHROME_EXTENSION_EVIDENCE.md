@@ -75,7 +75,8 @@ keeps only typed `frame` keys again (defense in depth).
 
 ## Deferred
 
-Network save capture, compiler identity use (including frame paths), and
-store listing. Frame linking is by stripped URL and arrival order, so two
-same-URL frames focused in turn can be confused; a later slice can use
-`chrome.webNavigation` parent frame ids instead.
+Compiler identity use (including frame paths) and store listing. Network
+saves are covered in [CHROME_EXTENSION_NETWORK.md](CHROME_EXTENSION_NETWORK.md).
+Frame linking is by stripped URL and arrival order, so two same-URL frames
+focused in turn can be confused; a later slice can use `chrome.webNavigation`
+parent frame ids instead.

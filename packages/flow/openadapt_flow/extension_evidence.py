@@ -22,6 +22,8 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, MutableMapping, Optional
 from urllib.parse import urlsplit
 
+from openadapt_flow.extension_network import NETWORK_SAVE_KIND, redact_network_save
+
 EVIDENCE_FILE = "extension_evidence.jsonl"
 SCHEMA = "openadapt.extension-evidence/1"
 REDACTED_VALUE = "<secret>"
@@ -174,9 +176,19 @@ class ExtensionEvidenceBuffer:
         return len(self._lines)
 
     def append(self, line: Mapping[str, Any]) -> dict[str, Any]:
-        """Redact and keep one evidence line. Returns the stored copy."""
+        """Redact and keep one evidence line. Returns the stored copy.
 
-        stored = redact_evidence(line, secret_names=self._secret_names)
+        A ``network_save`` line goes through the fail-closed network redactor;
+        one it cannot redact is refused (``ValueError``) and nothing is kept.
+        """
+
+        if line.get("kind") == NETWORK_SAVE_KIND:
+            network = redact_network_save(line)
+            if network is None:
+                raise ValueError("network_save evidence could not be redacted")
+            stored = network
+        else:
+            stored = redact_evidence(line, secret_names=self._secret_names)
         stored.setdefault("schema", SCHEMA)
         if "seq" not in stored:
             stored["seq"] = len(self._lines)
@@ -200,6 +212,11 @@ class ExtensionEvidenceBuffer:
         chunks = [json.dumps(header, sort_keys=True)]
         for line in lines:
             row = dict(line)
+            if row.get("kind") == NETWORK_SAVE_KIND:
+                network = redact_network_save(row)
+                if network is None:
+                    continue
+                row = network
             if row.get("secret_field") and "value" in row:
                 row["value"] = "<secret>"
             chunks.append(json.dumps(row, sort_keys=True))
@@ -223,7 +240,16 @@ def load_extension_evidence(recording_dir: Path | str) -> list[dict[str, Any]]:
     header = rows[0]
     if header.get("schema") != SCHEMA:
         raise ValueError(f"{path} is not a {SCHEMA} capture")
-    return [redact_evidence(row) for row in rows[1:]]
+    out: list[dict[str, Any]] = []
+    for row in rows[1:]:
+        if row.get("kind") == NETWORK_SAVE_KIND:
+            # Re-redact on load; a line that cannot be redacted is dropped.
+            network = redact_network_save(row)
+            if network is not None:
+                out.append(network)
+            continue
+        out.append(redact_evidence(row))
+    return out
 
 
 def shadow_targets(lines: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -265,6 +291,11 @@ def validate_native_message(message: Mapping[str, Any]) -> MutableMapping[str, A
     evidence = message.get("evidence")
     if not isinstance(evidence, Mapping):
         raise ValueError("evidence object required")
+    if evidence.get("kind") == NETWORK_SAVE_KIND:
+        network = redact_network_save(evidence)
+        if network is None:
+            raise ValueError("network_save evidence could not be redacted")
+        return network
     if evidence.get("kind") not in EVIDENCE_KINDS:
         raise ValueError(
             "evidence kind must be one of: " + ", ".join(sorted(EVIDENCE_KINDS))

@@ -532,6 +532,7 @@
     "chrome_extension/icons/icon48.png",
     "chrome_extension/manifest.json",
     "chrome_extension/native_host/com.openadapt.extension.json",
+    "chrome_extension/network_redact.js",
     "claims/citrix-pixel-validating.yaml",
     "claims/compose-recorded-bundles.yaml",
     "claims/deferred-report-check.yaml",
@@ -667,6 +668,7 @@
     "scripts/generality_baseline.json",
     "source-policy.public.json",
     "tests/extension_support/chrome_extension_harness.js",
+    "tests/extension_support/network_harness.js",
     "tests/golden/tutorial_run.json"
   ]
 }

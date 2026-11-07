@@ -27,9 +27,18 @@ source for those gaps. Without it, recording still works.
 - The Flow engine reads that file through
   `openadapt_flow.extension_evidence` and treats a missing file as empty.
 
-Not in this slice (follow-up PRs): `chrome.debugger` / `webRequest` network
-save capture, compiler use of extension and frame paths in identity checks,
+Not yet (follow-up PRs): response bodies and API-step compilation from
+network saves, compiler use of extension and frame paths in identity checks,
 and Chrome Web Store packaging.
+
+## Network saves
+
+While recording, `background.js` observes `POST`, `PUT`, `PATCH` and `DELETE`
+requests from tabs through `chrome.webRequest` (observe only) and sends one
+redacted `network_save` line per completed save. `network_redact.js` withholds
+credentials in headers, the URL and JSON or form bodies, drops any other body,
+and drops a record it cannot redact. See
+[CHROME_EXTENSION_NETWORK.md](../docs/CHROME_EXTENSION_NETWORK.md).
 
 ## Load unpacked (local only)
 
@@ -44,8 +53,8 @@ and Chrome Web Store packaging.
 4. Set `OPENADAPT_EXTENSION_RECORDING` to the recording directory before the
    host starts.
 
-Do not use this in a sensitive profile until network capture and reconnect
-acknowledgement land. Prefer Flow's Playwright recorder or CDP attach for
+Do not use this in a sensitive profile until reconnect acknowledgement
+lands. Prefer Flow's Playwright recorder or CDP attach for
 governed browser recording today
 ([BROWSER_RECORDING.md](../docs/BROWSER_RECORDING.md)).
 
@@ -54,6 +63,7 @@ governed browser recording today
 ```bash
 cd packages/flow
 pytest tests/test_extension_evidence.py tests/test_extension_shadow_evidence.py \
+  tests/test_extension_network.py tests/test_extension_network_browser.py \
   tests/test_extension_content_browser.py tests/test_extension_frame_browser.py
 ```
 
