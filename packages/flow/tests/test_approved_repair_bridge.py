@@ -157,6 +157,22 @@ def test_normal_signed_repair_canaries_promote_and_select_without_agent(prepared
     assert (p.compiler.dir / f"skill-stop-repaired-{p.candidate.candidate_id}.json").is_file()
 
 
+def test_programmatic_teach_authority_root_is_used_without_ambient_pin(prepared, monkeypatch):
+    from openadapt_flow import teach_authorization as ta
+    from openadapt_flow.approval_mode.approver_roster import ROOT_ENV
+    from tests._teach_authorization_support import authorizer
+
+    p = prepared
+    p.jit.teach_authorization = ta.TeachAuthority(
+        p.jit.bundle_dir / lifecycle.TEACH_AUTHORIZATION_DIR / ta.STATEMENT_FILE,
+        key_dir=p.jit.key_dir, approver_root=authorizer(p.jit.key_dir).root,
+    )
+    monkeypatch.delenv(ROOT_ENV)
+    result = complete(p)
+    assert result.canary_runs == p.candidate.canary.max_runs
+    assert lifecycle.verify_admission(result.bundle_dir, key_dir=p.jit.key_dir)["admission_mode"] == "repair"
+
+
 @pytest.mark.parametrize("change", ["unapproved", "prior", "two_steps", "canary_used", "regressed", "uncertain", "delivered", "identity"])
 def test_invalid_or_consumed_repair_never_runs_canary(prepared, change):
     p = prepared

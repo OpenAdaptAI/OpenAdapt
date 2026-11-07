@@ -115,7 +115,8 @@ def complete_approved_repair(
         # repaired admission after the store's actual person approval.
         _carry_admission(prior_bundle, staged, candidate_id,
                          approved_by=approval.approved_by, route="person",
-                         key_dir=jit.key_dir)
+                         key_dir=jit.key_dir,
+                         approver_root=getattr(jit.teach_authorization, "approver_root", None))
         carried = lifecycle.verify_admission(staged, key_dir=jit.key_dir)
         if carried.get("admission_mode") != "repair" or (carried.get("repair_of") or {}).get("candidate_id") != candidate_id:
             raise ValueError("repair admission unavailable")
