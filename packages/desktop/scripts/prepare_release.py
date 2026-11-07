@@ -148,11 +148,12 @@ def _path_state(root: Path, ref: str, path: str) -> tuple[str, str] | None:
 def commits_for_net_diff(root: Path, base: str, head: str) -> list[Commit]:
     """Classify only changes that remain in the squash-merged tree.
 
-    Exact per-file reversions discard the canceled intent. Moves retain the
-    source file's surviving intent; an ambiguous add/delete or fork keeps all
-    possible contributors conservatively. No blob contents or similarity
-    heuristics are used. A merge-only final state without commit metadata
-    refuses classification. Historical release preparation stays unchanged.
+    Exact per-file reversions discard the canceled intent. Copies inherit
+    intent from earlier equal tree versions, whether or when the source is
+    deleted. A content change without an exact source keeps possible current
+    source intent conservatively. No blob contents or similarity heuristics
+    are used. Missing merge intent refuses classification. Historical release
+    preparation stays unchanged.
     """
     net = _nul_paths(
         _git(root, "diff", "--no-renames", "--relative", "--name-only", "-z", base, head, "--", ".")
@@ -193,6 +194,35 @@ def commits_for_net_diff(root: Path, base: str, head: str) -> list[Commit]:
             states_cache[key] = _path_state(root, ref, path)
         return states_cache[key]
 
+    # All changed paths matter, including a feature's original location that
+    # disappears from the final diff. Version references are ordered before a
+    # consumer, so recursive lineage cannot cycle or depend on a later commit.
+    paths = sorted(set().union(*changed.values()))
+    versions = [
+        (path, index + 1, sha, state(sha, path))
+        for index, sha in enumerate(order)
+        for path in sorted(changed[sha])
+    ]
+
+    def sources(
+        path: str, index: int, sha: str, after: tuple[str, str]
+    ) -> set[tuple[str, int, str]]:
+        current = {
+            (source, index, sha + "^")
+            for source in paths
+            if source != path and state(sha + "^", source) is not None
+        }
+        exact = {
+            (source, stop, ref)
+            for source, stop, ref, version in versions
+            if source != path and stop <= index and version == after
+        }
+        exact.update(source for source in current if state(source[2], source[0]) == after)
+        # A modified copy cannot be distinguished from an independent edit
+        # using tree IDs alone. Retain every possible current source intent;
+        # a source already reverted to its base contributes no canceled intent.
+        return exact or current
+
     def contributions(path: str, stop: int, final_ref: str) -> set[str]:
         key = (path, stop, final_ref)
         if key in memo:
@@ -211,19 +241,12 @@ def commits_for_net_diff(root: Path, base: str, head: str) -> list[Commit]:
         for index, sha in contributors:
             before, after = state(sha + "^", path), state(sha, path)
             observed.append(after)
-            intent = {sha}
-            if before is None and after is not None:
-                deleted = [
-                    p
-                    for p in changed[sha]
-                    if p != path and state(sha + "^", p) is not None and state(sha, p) is None
-                ]
-                exact = [p for p in deleted if state(sha + "^", p) == after]
-                # Exact tree-state moves have known sources. A modified move
-                # cannot be distinguished from delete/add without blob reads;
-                # keep every possible source intent rather than under-bump.
-                for source in exact or deleted:
-                    intent |= contributions(source, index, sha + "^")
+            # A copy carries earlier shipped intent; it must not promote a
+            # docs/test-only commit into a releasable commit retroactively.
+            intent = {sha} if Commit(sha, "", "", (path,)).ships else set()
+            if after is not None and (before is None or before[1] != after[1]):
+                for source, source_stop, ref in sources(path, index, sha, after):
+                    intent |= contributions(source, source_stop, ref)
             possible |= intent
             if before != states[-1]:
                 ambiguous = True
