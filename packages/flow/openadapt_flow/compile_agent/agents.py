@@ -181,6 +181,8 @@ class ScriptedAgent:
     principal_id: Optional[str] = "agent:scripted"
     dialect: ClassVar[str] = "generic"
     requires_model_key: ClassVar[bool] = False
+    #: Steps name controls, which the surface harness lists too.
+    drives_surfaces: ClassVar[bool] = True
 
     def drive(self, request: TaskRequest, harness: Harness) -> AgentLedger:
         ledger = AgentLedger(agent="scripted")
@@ -444,6 +446,13 @@ class ClaudeAgent:
     @property
     def dialect(self) -> str:
         return "anthropic" if self.vision == "every_turn" else "generic"
+
+    @property
+    def drives_surfaces(self) -> bool:
+        """The listing and screenshot loops drive the surface harness too; the
+        code loop runs page scripts, so it needs a browser."""
+
+        return self.vision != "code"
 
     def _client(self, request: TaskRequest) -> Any:
         if self.client is not None:

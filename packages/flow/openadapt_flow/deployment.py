@@ -56,6 +56,14 @@ from openadapt_flow.runtime.effects.smart_auth import SmartBackendConfig
 from openadapt_flow.runtime.effects.ui_readback import UiReadbackSpec
 
 
+class WindowsAuthoringWindow(BaseModel):
+    """One explicitly selected native window; no process-generation claim."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    hwnd: int = Field(gt=0, le=2**64 - 1, strict=True)
+    pid: int = Field(gt=0, le=2**32 - 1, strict=True)
+
+
 class BackendConfig(BaseModel):
     """Where and how to drive the target application's GUI.
 
@@ -139,6 +147,9 @@ class BackendConfig(BaseModel):
     #: the Windows backend pins the exact certificate before sending screenshots
     #: or UIA/input requests; a mismatch fails at the TLS handshake.
     agent_tls_pin: Optional[str] = None
+    #: Exact HWND/PID required for Windows control-tree authoring. Omission
+    #: leaves that observation unavailable; it never selects the foreground.
+    windows_authoring_window: Optional[WindowsAuthoringWindow] = None
 
     # -- native macOS --------------------------------------------------------
     #: Owner application name/substring (e.g. ``"TextEdit"``). REQUIRED for

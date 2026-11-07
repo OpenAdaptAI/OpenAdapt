@@ -12670,6 +12670,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write the synthetic MockMed ok and banner-lie admissions",
     )
+    p.add_argument(
+        "--config",
+        default=None,
+        metavar="DEPLOY_YAML",
+        help=(
+            "Deployment file for bundles recorded off the web (Windows, "
+            "macOS, Linux, RDP, Citrix): they run through `openadapt-flow run "
+            "--config` on its backend. An admission's own `deployment` wins."
+        ),
+    )
     p.set_defaults(func=_cmd_serve_execute)
 
     p = sub.add_parser(
@@ -13068,6 +13078,7 @@ def _cmd_serve_execute(args: argparse.Namespace) -> int:
         data_dir,
         token=args.token,
         seed_mockmed=bool(args.seed_mockmed),
+        deployment=getattr(args, "config", None),
     )
     print("openadapt-flow reference Execute")
     print(f"  http://{args.host}:{args.port}")

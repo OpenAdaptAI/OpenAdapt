@@ -901,3 +901,214 @@ def test_atspi_focus_window_accepts_an_already_active_window() -> None:
         "0.1", "gedit", "oa-trial.txt", 9001, (0, 0, 1, 1), native=object()
     )
     assert client.focus_window(window) is False
+
+
+class _TreeLinuxClient(FakeLinuxClient):
+    """A client that walks the window and reads each element's ancestry."""
+
+    def walk_elements(self, window):
+        hidden = LinuxElement(
+            "0.1:2.9",
+            "save-button",
+            "button",
+            "Save",
+            "gedit",
+            "oa-trial.txt",
+            9001,
+            (0, 0, 0, 0),
+            (),
+        )
+        return [
+            (TEXT_ELEMENT, True, True, True),
+            (TARGET_ELEMENT, True, False, True),
+            (hidden, True, False, False),
+        ], False
+
+    def ancestry(self, window, element):
+        return [("panel", None, None), ("frame", window.title, window.bounds)]
+
+
+def test_linux_authoring_tree_gives_each_control_its_element_identity() -> None:
+    client = _TreeLinuxClient()
+    backend = LinuxBackend(client, app="gedit", window_title="oa-trial.txt")
+
+    tree = backend.authoring_tree()
+
+    assert tree is not None and tree["truncated"] is False
+    save = next(node for node in tree["tree"] if node.get("name") == "Save")
+    (hidden,) = [node for node in tree["tree"] if node.get("offscreen")]
+    assert hidden["identity"] == save["identity"]  # counted, never clicked
+    assert save["role"] == "button"
+    # Window-relative pixels: the element's screen box minus the window origin.
+    assert save["backend_pixels"] == {"x": 500, "y": 20, "w": 80, "h": 40}
+    client.text_at_point = TARGET_ELEMENT
+    assert backend.element_identity_at(540, 40) == save["identity"]
+    assert save["identity"] == {
+        "source": "atspi",
+        "role": "button",
+        "name": "Save",
+        "automation_id": "save-button",
+        "ancestry": [["panel", None], ["frame", "oa-trial.txt"]],
+        "window": "oa-trial.txt",
+        "process": "gedit",
+        "dialog_region": None,
+    }
+    text = next(node for node in tree["tree"] if node["role"] == "text_input")
+    assert "backend_pixels" not in hidden
+    assert text["focused"] is True
+
+
+def test_linux_hidden_control_whose_identity_cant_be_read_cuts_the_tree_short() -> None:
+    """It could be another control's twin, so no node is unique for sure."""
+
+    class _Unreadable(_TreeLinuxClient):
+        def ancestry(self, window, element):
+            if element.bounds == (0, 0, 0, 0):
+                return None
+            return super().ancestry(window, element)
+
+    tree = LinuxBackend(
+        _Unreadable(), app="gedit", window_title="oa-trial.txt"
+    ).authoring_tree()
+    assert tree is not None and tree["truncated"] is True
+    assert not any(node.get("offscreen") for node in tree["tree"])
+
+
+class _UniqueAuthoringLinuxClient(_TreeLinuxClient):
+    """One real-backend target without the earlier fixture's deliberate twin."""
+
+    def walk_elements(self, window):
+        entries, truncated = super().walk_elements(window)
+        return [entry for entry in entries if entry[3]], truncated
+
+
+def _linux_authoring_session(tmp_path, client):
+    from openadapt_flow.authoring import AuthoringSession
+
+    target = backend(client)  # The default coordinate-input refusal stays on.
+    session = AuthoringSession(
+        target,
+        tmp_path / "recording",
+        backend_kind="linux",
+        settle_interval_s=0.001,
+        settle_stable_frames=1,
+        settle_timeout_s=0.1,
+    )
+    node = next(n for n in session.observe()["tree"] if n.get("name") == "Save")
+    session.start_record()
+    return session, node
+
+
+def test_linux_authoring_uses_the_observed_native_control_without_coordinates(tmp_path):
+    client = _UniqueAuthoringLinuxClient()
+    session, node = _linux_authoring_session(tmp_path, client)
+
+    session.click(node_id=node["node_id"])
+
+    assert ("native", TARGET_ELEMENT.native_id, "invoke") in client.calls
+    assert not [call for call in client.calls if call[0] == "physical-click"]
+    assert session._recorder.event_count == 1
+
+
+@pytest.mark.parametrize("missing", [False, True], ids=["different", "missing"])
+def test_linux_authoring_refuses_a_changed_control(tmp_path, missing):
+    from openadapt_flow.authoring import AuthoringError
+
+    client = _UniqueAuthoringLinuxClient()
+    session, node = _linux_authoring_session(tmp_path, client)
+    client.text_at_point = None if missing else TEXT_ELEMENT
+
+    with pytest.raises(AuthoringError) as error:
+        session.click(node_id=node["node_id"])
+
+    assert error.value.code == "stale_node"
+    assert not [c for c in client.calls if c[0] in {"native", "physical-click"}]
+    assert session._recorder.event_count == 0
+
+
+def test_linux_authoring_refuses_replaced_window_binding(tmp_path):
+    from dataclasses import replace
+
+    from openadapt_flow.authoring import AuthoringError
+
+    client = _UniqueAuthoringLinuxClient()
+    session, node = _linux_authoring_session(tmp_path, client)
+    client.windows = [replace(TARGET_WINDOW, native_id="different-window")]
+
+    with pytest.raises(AuthoringError) as error:
+        session.click(node_id=node["node_id"])
+
+    assert error.value.code == "stale_node"
+    assert not [c for c in client.calls if c[0] in {"native", "physical-click"}]
+    assert session._recorder.event_count == 0
+
+
+@pytest.mark.parametrize("ambiguous", [False, True], ids=["missing", "ambiguous"])
+def test_linux_authoring_never_falls_back_when_native_resolution_refuses(
+    tmp_path, ambiguous
+):
+    from openadapt_flow.authoring import AuthoringError
+
+    client = _UniqueAuthoringLinuxClient()
+    session, node = _linux_authoring_session(tmp_path, client)
+    client.candidates = [TARGET_ELEMENT, TARGET_ELEMENT] if ambiguous else []
+
+    with pytest.raises((AuthoringError, StructuralResolutionRefused)):
+        session.click(node_id=node["node_id"])
+
+    assert not [c for c in client.calls if c[0] in {"native", "physical-click"}]
+    assert session._recorder.event_count == 0
+    assert (tmp_path / "recording" / "events.jsonl").read_text() == ""
+
+
+def test_linux_authoring_rechecks_window_after_structural_resolution(tmp_path):
+    from dataclasses import replace
+
+    from openadapt_flow.authoring import AuthoringError
+
+    class ChangedDuringResolve(_UniqueAuthoringLinuxClient):
+        def find_candidates(self, window, locator):
+            result = super().find_candidates(window, locator)
+            self.windows = [replace(window, native_id="replacement")]
+            return result
+
+    client = ChangedDuringResolve()
+    session, node = _linux_authoring_session(tmp_path, client)
+
+    with pytest.raises(AuthoringError) as error:
+        session.click(node_id=node["node_id"])
+
+    assert error.value.code == "stale_node"
+    assert not [c for c in client.calls if c[0] in {"native", "physical-click"}]
+    assert session._recorder.event_count == 0
+    assert (tmp_path / "recording" / "events.jsonl").read_text() == ""
+
+
+def test_linux_authoring_mismatched_receipt_is_uncertain_without_retry(
+    tmp_path, monkeypatch
+):
+    from openadapt_flow.backend import ActionDeliveryUncertain
+
+    client = _UniqueAuthoringLinuxClient()
+    session, node = _linux_authoring_session(tmp_path, client)
+    original = session._backend.act_structural
+
+    def mismatched_receipt(locator, handle, *, double=False):
+        receipt = original(locator, handle, double=double)
+        wrong = "0" * 64 if receipt.target_fingerprint != "0" * 64 else "1" * 64
+        return receipt.model_copy(update={"target_fingerprint": wrong})
+
+    monkeypatch.setattr(session._backend, "act_structural", mismatched_receipt)
+
+    with pytest.raises(ActionDeliveryUncertain) as error:
+        session.click(node_id=node["node_id"])
+
+    assert error.value.operation == "authoring_structural_click"
+    assert error.value.native is True
+    # Delivery happened once. An absent completed event does not undo it.
+    assert [c for c in client.calls if c[0] == "native"] == [
+        ("native", TARGET_ELEMENT.native_id, "invoke")
+    ]
+    assert not [c for c in client.calls if c[0] == "physical-click"]
+    assert session._recorder.event_count == 0
+    assert (tmp_path / "recording" / "events.jsonl").read_text() == ""

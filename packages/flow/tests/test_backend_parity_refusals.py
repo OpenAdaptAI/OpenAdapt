@@ -1,8 +1,9 @@
 """Commands that used to assume a browser now follow the bundle's surface.
 
-``emit-mcp`` and ``emit-skill`` name the app with a deployment file for a
-bundle recorded off the browser. ``serve-execute``, ``bench`` and the attended
-console refuse what they can't drive, with the reason, before any action. See
+``emit-mcp``, ``emit-skill`` and ``serve-execute`` name the app with a
+deployment file for a bundle recorded off the browser. ``bench`` and the
+attended console refuse what they can't drive, with the reason, before any
+action. See
 docs/BACKEND_PARITY.md.
 """
 
@@ -220,7 +221,7 @@ def test_a_multi_surface_bundle_is_named_by_its_primary_surface() -> None:
 
 
 @pytest.mark.parametrize("surface", ["windows", "macos", "linux", "rdp", "citrix"])
-def test_the_execute_worker_refuses_a_desktop_bundle_before_any_effect(
+def test_the_execute_worker_needs_a_deployment_for_a_desktop_bundle(
     tmp_path: Path, surface: str
 ) -> None:
     from openadapt_flow.execute.dispatch import DispatchError, live_replay
@@ -237,6 +238,141 @@ def test_the_execute_worker_refuses_a_desktop_bundle_before_any_effect(
     with pytest.raises(DispatchError, match=f"recorded on '{surface}'") as caught:
         live_replay(admission, None, tmp_path / "run")  # type: ignore[arg-type]
     assert caught.value.pre_effect is True
+
+
+def _admission(bundle: Path, **extra: Any) -> Any:
+    from openadapt_flow.execute.models import AdmittedBundle
+
+    return AdmittedBundle(
+        qualification_id="q",
+        workflow_version="1",
+        workflow_digest="sha256:" + "0" * 64,
+        environment_id="env",
+        minimum_effect_strength="independent_system_of_record",
+        bundle_dir=str(bundle),
+        **extra,
+    )
+
+
+def test_the_execute_worker_refuses_a_deployment_for_another_surface(
+    tmp_path: Path,
+) -> None:
+    from openadapt_flow.execute.dispatch import DispatchError, live_replay
+
+    deploy = tmp_path / "deploy.yaml"
+    deploy.write_text("backend:\n  kind: macos\n  macos_app: Calculator\n")
+    with pytest.raises(DispatchError, match="drives 'macos'") as caught:
+        live_replay(
+            _admission(_bundle(tmp_path, "windows")),
+            None,  # type: ignore[arg-type]
+            tmp_path / "run",
+            deployment=deploy,
+        )
+    assert caught.value.pre_effect is True
+
+
+def test_the_execute_worker_runs_a_desktop_bundle_under_its_deployment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The bundle runs through ``openadapt-flow run --config`` (build_backend),
+    pinned to its digest, and only that run's report is read."""
+
+    import subprocess
+
+    from openadapt_flow.execute.dispatch import DispatchError, live_replay
+
+    bundle = _bundle(tmp_path, "macos")
+    deploy = tmp_path / "deploy.yaml"
+    deploy.write_text("backend:\n  kind: macos\n  macos_app: Calculator\n")
+    run_dir = tmp_path / "exec" / "run"
+    run_dir.mkdir(parents=True)
+    (run_dir / "report.json").write_text("{}")  # an earlier run's: never read
+    seen: list[list[str]] = []
+
+    def fake_run(argv: list[str], **_kwargs: Any) -> Any:
+        seen.append(argv)
+        params = argv[argv.index("--params-file") + 1]
+        assert Path(params).read_text() == '{"note": "x"}'
+        assert Path(params).stat().st_mode & 0o777 == 0o600  # owner only
+        return subprocess.CompletedProcess(argv, 1, b"", b"REFUSED: no verifier")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    request = types.SimpleNamespace(
+        parameters={"note": "x"}, workflow_digest="sha256:" + "0" * 64
+    )
+    with pytest.raises(DispatchError, match="no readable run report") as caught:
+        live_replay(
+            _admission(
+                bundle,
+                deployment=str(deploy),
+                qualification_authority_file=str(tmp_path / "authority.json"),
+            ),
+            request,  # type: ignore[arg-type]
+            run_dir,
+        )
+    # The child may have written before it failed: never "nothing ran".
+    assert caught.value.pre_effect is False
+    (argv,) = seen
+    assert argv[3:5] == ["run", str(bundle)]
+    assert argv[argv.index("--config") + 1] == str(deploy)
+    assert argv[argv.index("--profile") + 1] == "standard"
+    digest = Workflow.load(bundle).manifest.content_digest
+    assert argv[argv.index("--pin-digest") + 1] == digest
+    authority = argv[argv.index("--qualification-authority-file") + 1]
+    assert authority == str(tmp_path / "authority.json")
+    assert not (run_dir / "report.json").exists()
+    assert not (run_dir.parent / "params.json").exists()  # inputs are removed
+
+
+def test_the_execute_worker_refuses_a_desktop_bundle_with_no_authority(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Standard actuation off the web needs a qualification authority: with
+    none named, nothing starts, and the refusal says nothing ran."""
+
+    import subprocess
+
+    from openadapt_flow.execute.dispatch import DispatchError, live_replay
+
+    deploy = tmp_path / "deploy.yaml"
+    deploy.write_text("backend:\n  kind: macos\n  macos_app: Calculator\n")
+
+    def never(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("the child must not start")
+
+    monkeypatch.setattr(subprocess, "run", never)
+    request = types.SimpleNamespace(
+        parameters={"note": "x"}, workflow_digest="sha256:" + "0" * 64
+    )
+    run_dir = tmp_path / "exec" / "run"
+    with pytest.raises(DispatchError, match="qualification authority") as caught:
+        live_replay(
+            _admission(_bundle(tmp_path, "macos"), deployment=str(deploy)),
+            request,  # type: ignore[arg-type]
+            run_dir,
+        )
+    assert caught.value.pre_effect is True
+    assert not (run_dir.parent / "params.json").exists()
+
+
+def test_a_deployment_that_fails_to_load_keeps_its_values_out_of_the_error(
+    tmp_path: Path,
+) -> None:
+    from openadapt_flow.execute.dispatch import DispatchError, live_replay
+
+    deploy = tmp_path / "deploy.yaml"
+    deploy.write_text(
+        "backend:\n  kind: windows\n  agent_url: https://10.0.0.5:5000\n"
+        "  agent_token: [s3cret-token]\n"
+    )
+    with pytest.raises(DispatchError) as caught:
+        live_replay(
+            _admission(_bundle(tmp_path, "windows"), deployment=str(deploy)),
+            None,  # type: ignore[arg-type]
+            tmp_path / "run",
+        )
+    assert caught.value.pre_effect is True
+    assert "s3cret" not in str(caught.value) and "10.0.0.5" not in str(caught.value)
 
 
 def test_bench_refuses_a_desktop_bundle(tmp_path: Path, capsys) -> None:
@@ -260,3 +396,65 @@ def test_attended_citrix_actions_need_a_readiness_marker() -> None:
                 {"backend": {"kind": "citrix", "rdp_window": "wfica32"}}
             )
         )
+
+
+@pytest.mark.parametrize("surface", ["windows", "macos", "linux", "rdp", "citrix"])
+@pytest.mark.parametrize(
+    ("configured_mode", "expected_mode"),
+    [
+        (None, "each_item"),
+        ("each_item", "each_item"),
+        ("problems_only", "problems_only"),
+        ("not_gated", "not_gated"),
+        ("future_mode", "each_item"),
+    ],
+)
+def test_execute_surface_child_retains_deployment_approval_mode(
+    tmp_path: Path, monkeypatch, surface, configured_mode, expected_mode
+) -> None:
+    """Resolve the actual child argv through the ordinary run approval seam."""
+    import subprocess
+
+    import yaml
+
+    from openadapt_flow.__main__ import _resolve_run_approval_mode, build_parser
+    from openadapt_flow.deployment import load_deployment
+    from openadapt_flow.execute.dispatch import DispatchError, live_replay
+
+    bundle = _bundle(tmp_path, surface)
+    deploy = tmp_path / "deploy.yaml"
+    runtime = {"profile": "standard"}
+    if configured_mode is not None:
+        runtime["approval_mode"] = configured_mode
+    deploy.write_text(
+        yaml.safe_dump({"backend": {"kind": surface}, "runtime": runtime})
+    )
+    run_dir = tmp_path / "exec" / "run"
+    run_dir.mkdir(parents=True)
+    calls = []
+
+    def child(argv, **_kwargs):
+        calls.append(argv)
+        args = build_parser().parse_args(argv[3:])
+        cfg = load_deployment(args.config)
+        actual = _resolve_run_approval_mode(args, cfg, args.profile)
+        assert actual.value == expected_mode
+        # No native child is launched. A missing report remains uncertain.
+        return subprocess.CompletedProcess(argv, 2, b"", b"")
+
+    monkeypatch.setattr(subprocess, "run", child)
+    request = types.SimpleNamespace(parameters={}, workflow_digest="sha256:" + "0" * 64)
+    with pytest.raises(DispatchError, match="no readable run report") as caught:
+        live_replay(
+            _admission(
+                bundle,
+                deployment=str(deploy),
+                qualification_authority_file=str(tmp_path / "authority.json"),
+            ),
+            request,
+            run_dir,
+        )
+    assert caught.value.pre_effect is False
+    assert len(calls) == 1
+    assert calls[0][calls[0].index("--profile") + 1] == "standard"
+    assert "--qualification-authority-file" in calls[0]

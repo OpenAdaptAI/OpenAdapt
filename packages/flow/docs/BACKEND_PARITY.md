@@ -100,6 +100,73 @@ A recording made by a script through the real recorder counts here.
 - **Citrix, TESTED.** `tests/test_citrix_workspace_backend.py`,
   `tests/test_jit_surface_pixels.py` (MockMed in a stand-in window).
 
+### Agent control authoring
+
+`AuthoringSession.observe()` lists actionable controls from Windows UI
+Automation, macOS Accessibility and Linux AT-SPI. Native node references keep
+the observed element identity inside the session. Before a node action, the
+session rechecks its identity and window, resolves a unique structural
+fingerprint, and dispatches through the backend's structural action. An
+unreadable, stale or ambiguous target refuses without a coordinate retry.
+RDP and Citrix observations remain screen-based.
+
+The component controls in `tests/test_authoring.py`,
+`tests/test_windows_backend.py`, `tests/test_win_agent_server.py`,
+`tests/test_macos_structural.py` and `tests/test_linux_backend.py` use
+intercepted native boundaries. They are **TESTED**, not live-OS qualification.
+
+### Deployment-backed agent commands
+
+#### compile-agent
+
+`compile-agent` runs an agent once, checks the resulting record, and compiles
+the demonstration into a program. Use `--url` for a browser app or `--config`
+for a deployment that names the target backend:
+
+```sh
+openadapt-flow compile-agent "Create a record for {record_id} with note {note}" \
+  --config deploy.yaml --agent steps.json \
+  --verify verify.yaml --expect record_id=record-001 \
+  --param record_id=record-001 --param note="Follow up" \
+  --on-screen "Record 001" --hold
+```
+
+The deployment's `backend:` section selects Windows, macOS, Linux, RDP or
+Citrix through `build_backend`. `steps.json` can contain scripted control
+steps, with no model calls. The record check uses `verify.yaml`; a screen
+change alone does not confirm the write.
+
+The record check requires exactly one new record, no changes to existing
+records, and the declared input and expected values. Run the example at an
+interactive terminal: native gated actions require a person's hold. A
+noninteractive run without a hold refuses before the gated action. Admission
+remains a separate reviewed step.
+
+With `admit TASK_DIR`, a person confirms and admits a waiting draft, such as
+one an agent taught over MCP (`openadapt-agent serve --teach`). Resuming a
+task reloads its deployment file; credentials are not copied into the saved
+task specification.
+
+#### serve-execute
+
+`serve-execute` hosts the local Execute HTTP and MCP interfaces. Supply the
+worker's deployment for programs recorded on a native or remote surface:
+
+```sh
+openadapt-flow serve-execute --config deploy.yaml --data-dir ./execute-state
+```
+
+An admission's own `deployment` takes precedence over the worker's default.
+The deployment must name the same backend as the recorded program. Native
+and remote dispatch requires the admission's signed
+`qualification_authority_file` and runs the program through the standard
+`run --config` path, pinned to its bundle digest. A missing authority or
+mismatched surface refuses before the child starts. A child that may have
+run but leaves no readable report requires reconciliation.
+
+Receipts from this local service are self-signed; they are not OpenAdapt
+production Seals.
+
 ### Compile
 
 Compile reads files, so it runs anywhere. What differs by surface is the

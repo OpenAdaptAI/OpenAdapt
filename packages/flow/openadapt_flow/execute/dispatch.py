@@ -22,6 +22,8 @@ from openadapt_types.execute import (
 from openadapt_flow.execute.models import AdmittedBundle
 
 Runner = Callable[["AdmittedBundle", "ExecuteRequestV1", Path], "DispatchResult"]
+#: How long a non-web bundle's child run may take before it counts as stuck.
+SURFACE_RUN_TIMEOUT_S = 1800.0
 
 
 class DispatchError(RuntimeError):
@@ -61,8 +63,14 @@ def default_runner(
     admission: AdmittedBundle,
     request: ExecuteRequestV1,
     run_dir: Path,
+    *,
+    deployment: Optional[Path] = None,
 ) -> DispatchResult:
-    """Run synthetic MockMed or local governed replay."""
+    """Run synthetic MockMed or local governed replay.
+
+    ``deployment`` is the deployment file (``serve-execute --config``) a
+    bundle recorded off the web runs under when its admission names none.
+    """
 
     if admission.synthetic and admission.target_url:
         # A synthetic outcome describes the demo app, never another target.
@@ -72,7 +80,7 @@ def default_runner(
         )
     if admission.synthetic or not admission.bundle_dir:
         return synthetic_mockmed(admission, request)
-    return live_replay(admission, request, run_dir)
+    return live_replay(admission, request, run_dir, deployment=deployment)
 
 
 def synthetic_mockmed(
@@ -119,14 +127,17 @@ def live_replay(
     admission: AdmittedBundle,
     request: ExecuteRequestV1,
     run_dir: Path,
+    *,
+    deployment: Optional[Path] = None,
 ) -> DispatchResult:
-    """Replay a compiled bundle in this process under the standard profile.
+    """Replay an admitted bundle under the standard profile.
 
-    The reference worker replays only on the demo app it serves itself: its
-    runner resets and reads that app's store. An admission naming another
-    target is refused before anything runs; such a bundle runs through
-    ``openadapt-flow run BUNDLE --config deploy.yaml``, which reads the app's
-    own deployment config.
+    A non-web bundle runs through the governed ``openadapt-flow run BUNDLE
+    --config DEPLOYMENT`` child path. The web reference worker replays only
+    on the demo app it serves itself: its runner resets and reads that app's
+    store. An admission naming another target is refused before anything
+    runs; such a bundle runs through ``openadapt-flow run BUNDLE --config
+    deploy.yaml``, which reads the app's own deployment config.
     """
 
     if admission.target_url:
@@ -170,12 +181,15 @@ def live_replay(
 
     surface = bundle_surface(workflow)
     if surface != "web":
-        raise DispatchError(
-            "the reference Execute worker drives a browser only, and this "
-            f"bundle was recorded on {surface!r}; run it with `openadapt-flow "
-            "run BUNDLE --config deploy.yaml` or through `openadapt-flow "
-            "connector run`. Nothing was executed.",
-            pre_effect=True,
+        chosen = admission.deployment or deployment
+        return _surface_replay(
+            bundle,
+            workflow,
+            surface,
+            Path(chosen) if chosen else None,
+            request,
+            run_dir,
+            authority=admission.qualification_authority_file,
         )
     stop: Optional[Callable[[], None]] = None
     try:
@@ -197,6 +211,143 @@ def live_replay(
     finally:
         if stop is not None:
             stop()
+    return project_run_report(report, workflow_digest=request.workflow_digest)
+
+
+def _surface_replay(
+    bundle: Path,
+    workflow: Any,
+    surface: str,
+    deployment: Optional[Path],
+    request: ExecuteRequestV1,
+    run_dir: Path,
+    *,
+    authority: Optional[str] = None,
+) -> DispatchResult:
+    """Run a non-web bundle through ``openadapt-flow run --config``.
+
+    Refused before anything runs when no deployment file is named, when it
+    can't be loaded, when its backend is not the surface the bundle was
+    recorded on, or when the admission names no
+    ``qualification_authority_file`` (Standard actuation needs one). The
+    child re-runs the whole admission gate under that authority, pinned to
+    the content digest of the bundle loaded here (as the web path does, the
+    admission's ``workflow_digest`` is the request's, not re-derived from the
+    bundle). Its ``report.json`` is the only result read: a child that leaves
+    none, or does not finish in ``SURFACE_RUN_TIMEOUT_S``, may have written,
+    so that is an error after dispatch, never "nothing ran". Error text never
+    carries the deployment's or the child's own words, which can hold
+    credentials or entered values.
+    """
+
+    import os
+    import subprocess
+    import sys
+
+    from openadapt_flow.backends.factory import _normalize_kind
+    from openadapt_flow.deployment import load_deployment
+    from openadapt_flow.ir import RunReport
+
+    if deployment is None:
+        raise DispatchError(
+            f"this bundle was recorded on {surface!r}; name the deployment "
+            "file for that surface with `serve-execute --config deploy.yaml` "
+            "or the admission's `deployment`. Nothing was executed.",
+            pre_effect=True,
+        )
+    try:
+        cfg = load_deployment(deployment)
+        kind = _normalize_kind(cfg.backend.kind)
+    except Exception as exc:
+        raise DispatchError(
+            f"deployment file could not be loaded: {type(exc).__name__}",
+            pre_effect=True,
+        ) from exc
+    if kind != _normalize_kind(surface):
+        raise DispatchError(
+            f"the deployment drives {kind!r}, and this bundle was recorded on "
+            f"{surface!r}. Nothing was executed.",
+            pre_effect=True,
+        )
+    digest = getattr(getattr(workflow, "manifest", None), "content_digest", None)
+    if not digest:
+        raise DispatchError(
+            "admitted bundle has no content digest to pin", pre_effect=True
+        )
+    if not authority:
+        raise DispatchError(
+            "Standard actuation off the web needs a signed qualification "
+            "authority; set the admission's `qualification_authority_file`. "
+            "Nothing was executed.",
+            pre_effect=True,
+        )
+    argv = [
+        sys.executable,
+        "-m",
+        "openadapt_flow",
+        "run",
+        str(bundle),
+        "--config",
+        str(deployment),
+        "--run-dir",
+        str(run_dir),
+        "--profile",
+        "standard",
+        "--pin-digest",
+        str(digest),
+    ]
+    argv += ["--qualification-authority-file", str(authority)]
+    report_path = run_dir / "report.json"
+    try:
+        # Only this run's report may be read back.
+        report_path.unlink(missing_ok=True)
+    except OSError as exc:
+        raise DispatchError(
+            "an earlier run report could not be cleared", pre_effect=True
+        ) from exc
+    params_file = run_dir.parent / "params.json" if request.parameters else None
+    try:
+        if params_file is not None:
+            try:
+                # Owner-only: the inputs may be PHI.
+                fd = os.open(params_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    handle.write(json.dumps(request.parameters))
+            except OSError as exc:
+                raise DispatchError(
+                    f"the run's inputs could not be written: {type(exc).__name__}",
+                    pre_effect=True,
+                ) from exc
+            argv += ["--params-file", str(params_file)]
+        try:
+            proc = subprocess.run(  # nosec - fixed argv, this process's own env
+                argv,
+                capture_output=True,
+                env=dict(os.environ),
+                timeout=SURFACE_RUN_TIMEOUT_S,
+            )
+        except OSError as exc:
+            # The child never started, so nothing can have run.
+            raise DispatchError(
+                f"local replay could not start: {type(exc).__name__}",
+                pre_effect=True,
+            ) from exc
+        except subprocess.TimeoutExpired as exc:
+            raise DispatchError(
+                f"local replay did not finish in {SURFACE_RUN_TIMEOUT_S:.0f} s",
+                pre_effect=False,
+            ) from exc
+    finally:
+        if params_file is not None:
+            # The inputs may be PHI: they live on disk only while the child runs.
+            params_file.unlink(missing_ok=True)
+    try:
+        report = RunReport.model_validate_json(report_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise DispatchError(
+            f"local replay (exit {proc.returncode}) left no readable run report",
+            pre_effect=False,
+        ) from exc
     return project_run_report(report, workflow_digest=request.workflow_digest)
 
 

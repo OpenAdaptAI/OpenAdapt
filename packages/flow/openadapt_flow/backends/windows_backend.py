@@ -207,6 +207,82 @@ def _element_identity_payload(value: object) -> Optional[dict]:
     return {**value, "ancestry": pairs}
 
 
+_MAX_AUTHORING_NODES = 200
+_AUTHORING_ROLES = frozenset(
+    {
+        "button",
+        "link",
+        "menu_item",
+        "tab",
+        "list_item",
+        "checkbox",
+        "radio",
+        "text_input",
+    }
+)
+
+
+def _pixel_box(value: object) -> Optional[dict[str, int]]:
+    if not isinstance(value, dict) or set(value) != {"x", "y", "w", "h"}:
+        return None
+    if any(isinstance(value[k], bool) or not isinstance(value[k], int) for k in value):
+        return None
+    if value["w"] <= 0 or value["h"] <= 0:
+        return None
+    return {k: int(value[k]) for k in ("x", "y", "w", "h")}
+
+
+def _window_pair(raw: object) -> Optional[tuple[int, int]]:
+    """``(hwnd, pid)`` from an agent's ``{hwnd, pid}``, or None when off-shape."""
+    if not isinstance(raw, dict) or set(raw) != {"hwnd", "pid"}:
+        return None
+    values = (raw["hwnd"], raw["pid"])
+    if any(isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in values):
+        return None
+    return values  # type: ignore[return-value]
+
+
+def _authoring_node(raw: object) -> Optional[dict[str, Any]]:
+    """One ``/uia/authoring-tree`` node, or None when anything is off-shape."""
+    keys = {
+        "role",
+        "control_type",
+        "automation_id",
+        "class_name",
+        "name",
+        "enabled",
+        "focused",
+        "backend_pixels",
+        "offscreen",
+        "identity",
+        "window",
+    }
+    if not isinstance(raw, dict) or set(raw) != keys:
+        return None
+    if raw["role"] not in _AUTHORING_ROLES:
+        return None
+    if not all(
+        _optional_text(raw[k])
+        for k in ("control_type", "automation_id", "class_name", "name")
+    ):
+        return None
+    if not all(isinstance(raw[k], bool) for k in ("enabled", "focused", "offscreen")):
+        return None
+    window = raw["window"]
+    if window is not None and _window_pair(window) is None:
+        return None
+    pixels = _pixel_box(raw["backend_pixels"])
+    identity = _element_identity_payload(raw["identity"])
+    if identity is None or (pixels is None) != raw["offscreen"]:
+        return None
+    if (identity["automation_id"], identity["name"]) != (
+        raw["automation_id"],
+        raw["name"],
+    ):
+        return None
+    return {**raw, "backend_pixels": pixels, "identity": identity}
+
+
 class WindowsBackend:
     """`Backend` implementation over the WAA HTTP API.
 
@@ -261,6 +337,7 @@ class WindowsBackend:
         require_tls: Optional[bool] = None,
         session: Optional[requests.Session] = None,
         allow_legacy_exec: bool = False,
+        authoring_window: Optional[dict[str, int]] = None,
     ) -> None:
         self.server_url = server_url.rstrip("/")
         self._viewport = viewport
@@ -271,6 +348,13 @@ class WindowsBackend:
         self._auth_token = auth_token or None
         self._pin_fingerprint = pin_fingerprint or None
         self._allow_legacy_exec = bool(allow_legacy_exec)
+        self._authoring_window = _window_pair(authoring_window)
+        if authoring_window is not None and (
+            self._authoring_window is None
+            or self._authoring_window[0] > 2**64 - 1
+            or self._authoring_window[1] > 2**32 - 1
+        ):
+            raise ValueError("authoring_window must contain one bounded HWND/PID pair")
         # Top-level window (HWND, PID) each verified step was in, by step id;
         # steps whose captures disagreed have none, for good.
         self._verified_windows: dict[str, tuple[int, int]] = {}
@@ -883,21 +967,10 @@ class WindowsBackend:
         answer for itself. Returns False (and records nothing) when the agent
         cannot say which window that is. Never raises.
         """
-        typed = self._post_typed_read("/window/root-at", {"x": int(x), "y": int(y)})
-        window = typed.payload.get("window") if typed.payload is not None else None
-        if (
-            not isinstance(window, dict)
-            or set(window) != {"hwnd", "pid"}
-            or not all(
-                isinstance(window[k], int)
-                and not isinstance(window[k], bool)
-                and window[k] > 0
-                for k in ("hwnd", "pid")
-            )
-        ):
+        capture = self.window_root_at(x, y)
+        if capture is None:
             self._verified_windows.pop(step_id, None)
             return False
-        capture = (window["hwnd"], window["pid"])
         earlier = self._verified_windows.get(step_id)
         if step_id in self._conflicted_windows or (
             earlier is not None and earlier != capture
@@ -908,6 +981,21 @@ class WindowsBackend:
             return False
         self._verified_windows[step_id] = capture
         return True
+
+    def window_root_at(self, x: int, y: int) -> Optional[tuple[int, int]]:
+        """``(hwnd, pid)`` of the foreground app's top-level window at (x, y).
+
+        None when the window there is not the foreground app's, or the agent
+        can't say. The authoring tree names each control's window the same
+        way, so a click by node can check the window is still that one.
+        Never raises.
+        """
+        try:
+            typed = self._post_typed_read("/window/root-at", {"x": int(x), "y": int(y)})
+        except Exception:  # noqa: BLE001 - no answer is no window
+            return None
+        window = typed.payload.get("window") if typed.payload is not None else None
+        return _window_pair(window)
 
     def clear_verified_windows(self) -> None:
         """Forget every capture (call between runs: step ids repeat)."""
@@ -993,6 +1081,57 @@ class WindowsBackend:
         if not typed.available or typed.payload is None:
             return None
         return _element_identity_payload(typed.payload.get("identity"))
+
+    def authoring_tree(self) -> Optional[dict[str, Any]]:
+        """Controls from the explicitly configured HWND/PID, or unavailable.
+
+        The agent must bind that exact window. No foreground selection,
+        automatic rebinding or coordinate fallback supplies a missing tree.
+        Existing node-shape, truncation and action checks still apply.
+        """
+        if self._authoring_window is None:
+            return None
+        hwnd, pid = self._authoring_window
+        typed = self._post_typed_read(
+            "/uia/authoring-tree", {"window": {"hwnd": hwnd, "pid": pid}}
+        )
+        if not typed.available or typed.payload is None:
+            return None
+        window_binding = _window_pair(typed.payload.get("window_binding"))
+        if window_binding != self._authoring_window:
+            return None
+        raw_tree = typed.payload.get("tree")
+        if not isinstance(raw_tree, list):
+            return None
+        nodes: list[dict[str, Any]] = []
+        dropped = False
+        for raw in raw_tree[: 2 * _MAX_AUTHORING_NODES]:
+            node = _authoring_node(raw)
+            if (
+                node is not None
+                and _window_pair(node["window"]) == self._authoring_window
+            ):
+                nodes.append(node)
+            else:
+                dropped = True
+        window = typed.payload.get("window")
+        out_window = None
+        if isinstance(window, dict):
+            process = window.get("process_name")
+            bounds = _pixel_box(window.get("bounds"))
+            out_window = {
+                "process_name": process if _optional_text(process) else None,
+                "bounds": bounds,
+            }
+        return {
+            "tree": nodes,
+            "window": out_window,
+            # A dropped node might have shared another's identity, so the
+            # tree no longer proves any identity unique.
+            "truncated": typed.payload.get("truncated") is True
+            or dropped
+            or len(raw_tree) > 2 * _MAX_AUTHORING_NODES,
+        }
 
     def structural_locator_at(self, x: int, y: int) -> Optional[StructuralLocator]:
         """Return a stable UIA locator for the control under (x, y).
