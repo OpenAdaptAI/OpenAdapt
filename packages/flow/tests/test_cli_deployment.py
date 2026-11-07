@@ -235,7 +235,7 @@ def test_run_summary_keeps_result_safety_and_exit_policy(
         assert "run it again" not in output
     if transaction == "SAVED_AWAITING_CHECK":
         assert "Don't run it again." in output
-        assert "openadapt flow deferred settle" in output
-        assert "openadapt-flow" not in output
+        assert "openadapt-flow deferred settle" in output
+        assert "openadapt flow deferred settle" not in output
     if transaction:
         assert transaction not in output

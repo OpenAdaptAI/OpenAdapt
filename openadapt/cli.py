@@ -445,12 +445,16 @@ def _halted_rerun_result(run_dir: Path) -> str:
     that a retry is safe.
     """
     outcome = _transaction_outcome(run_dir)
+    detail = f"Transaction outcome: {outcome or 'unknown'}."
     if outcome == "HALTED_BEFORE_EFFECT":
-        return "Result: Stopped before saving. The engine proved nothing was written."
+        return (
+            "Result: Stopped before saving. The engine proved nothing was written. "
+            + detail
+        )
     return (
         "Result: Check the record. "
         "A save may have gone through, so nothing is retried until a person "
-        "checks the record."
+        "checks the record. " + detail
     )
 
 

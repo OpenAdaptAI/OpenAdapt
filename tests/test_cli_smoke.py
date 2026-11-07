@@ -174,15 +174,27 @@ def test_quickstart_forwards_the_break_it_option_and_names_the_evidence(
 
 
 @pytest.mark.parametrize(
-    ("report_text", "expected"),
+    ("report_text", "expected", "reported_outcome"),
     [
         (
             '{"transaction_outcome": "HALTED_BEFORE_EFFECT"}',
             "Result: Stopped before saving. The engine proved nothing was written.",
+            "HALTED_BEFORE_EFFECT",
         ),
         (
             '{"transaction_outcome": "RECONCILIATION_REQUIRED"}',
             "Result: Check the record.",
+            "RECONCILIATION_REQUIRED",
+        ),
+        (
+            '{"transaction_outcome": "ROLLED_BACK"}',
+            "Result: Check the record.",
+            "ROLLED_BACK",
+        ),
+        (
+            '{"transaction_outcome": "SAVED_AWAITING_CHECK"}',
+            "Result: Check the record.",
+            "SAVED_AWAITING_CHECK",
         ),
         # A value this launcher doesn't know, a coarse HALTED with no
         # transaction outcome, an unreadable report, or no report at all
@@ -190,18 +202,20 @@ def test_quickstart_forwards_the_break_it_option_and_names_the_evidence(
         (
             '{"transaction_outcome": "SOMETHING_NEW"}',
             "Result: Check the record.",
+            "SOMETHING_NEW",
         ),
         (
             '{"execution_outcome": "HALTED"}',
             "Result: Check the record.",
+            "unknown",
         ),
-        ("not json", "Result: Check the record."),
-        ("[]", "Result: Check the record."),
-        (None, "Result: Check the record."),
+        ("not json", "Result: Check the record.", "unknown"),
+        ("[]", "Result: Check the record.", "unknown"),
+        (None, "Result: Check the record.", "unknown"),
     ],
 )
 def test_quickstart_derives_the_halted_rerun_result_from_its_report(
-    engine_tutorial, monkeypatch, report_text, expected
+    engine_tutorial, monkeypatch, report_text, expected, reported_outcome
 ):
     calls = []
     monkeypatch.setattr(
@@ -217,6 +231,7 @@ def test_quickstart_derives_the_halted_rerun_result_from_its_report(
 
     assert result.exit_code == 0, result.output
     assert expected in result.output
+    assert f"Transaction outcome: {reported_outcome}." in result.output
     if expected.startswith("Result: Check the record"):
         assert "nothing was written" not in result.output
         assert "A save may have gone through" in result.output

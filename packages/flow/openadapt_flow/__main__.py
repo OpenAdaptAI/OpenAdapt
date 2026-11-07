@@ -1305,7 +1305,7 @@ def _finish_replay(
     )
     plain = plain_result(getattr(report, "transaction_outcome", None), outcome)
     print(f"Result: {plain.label}. {plain.meaning}")
-    print(f"Next: {plain.next_step.replace('openadapt-flow ', 'openadapt flow ')}")
+    print(f"Next: {plain.next_step}")
     print(f"Report: {report_md}")
     if report.screenshots_may_leave_box:
         print(
