@@ -221,3 +221,189 @@ def test_a_fix_confined_to_tests_docs_or_ci_needs_no_release(repo: Path) -> None
     assert len(problems) == 1
     assert "fix: patch a build script" in problems[0]
     assert "fix(ci): tighten a release check" not in problems[0]
+
+
+def test_intent_ignores_an_added_then_reverted_desktop_change(repo: Path) -> None:
+    base = _git(repo, "rev-parse", "HEAD")
+    change = _commit(repo, "fix: temporary tray change", touch="src/tray.txt")
+    _git(repo, "revert", "--no-edit", change)
+    head = _git(repo, "rev-parse", "HEAD")
+    assert prepare_release.commits_between(repo, base, head)
+    assert prepare_release.commits_for_net_diff(repo, base, head) == []
+    assert check_release_intent.check(repo, base, head) == []
+
+
+def test_intent_retains_tests_after_reverting_runtime_without_a_bump(repo: Path) -> None:
+    base = _git(repo, "rev-parse", "HEAD")
+    change = _commit(repo, "fix: temporary tray change", touch="src/tray.txt")
+    _git(repo, "revert", "--no-edit", change)
+    head = _commit(repo, "test: retain the tray contract", touch="tests/test_tray.py")
+    assert check_release_intent.check(repo, base, head) == []
+
+
+def test_intent_keeps_the_required_bump_for_a_remaining_runtime_fix(repo: Path) -> None:
+    base = _git(repo, "rev-parse", "HEAD")
+    change = _commit(repo, "feat: canceled screen", touch="src/canceled.txt")
+    _git(repo, "revert", "--no-edit", change)
+    head = _commit(repo, "fix: surviving tray repair", touch="src/tray.txt")
+    problems = check_release_intent.check(repo, base, head)
+    assert len(problems) == 1
+    assert "--bump patch" in problems[0]
+    assert "surviving tray repair" in problems[0]
+    assert "canceled screen" not in problems[0]
+
+
+def test_canceled_feature_does_not_inflate_a_later_fix_on_the_same_path(repo: Path) -> None:
+    _commit(repo, "chore: seed the tray", touch="src/tray.txt")
+    base = _git(repo, "rev-parse", "HEAD")
+    change = _commit(repo, "feat: canceled tray feature", touch="src/tray.txt")
+    _git(repo, "revert", "--no-edit", change)
+    head = _commit(repo, "fix: final tray repair", touch="src/tray.txt")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert [c.subject for c in commits] == ["fix: final tray repair"]
+    assert prepare_release.required_level(commits, _version(repo)) == "patch"
+    assert "--bump patch" in check_release_intent.check(repo, base, head)[0]
+
+
+def test_surviving_feature_still_requires_minor_after_a_later_same_file_fix(repo: Path) -> None:
+    base = _git(repo, "rev-parse", "HEAD")
+    _commit(repo, "feat: new tray feature", touch="src/tray.txt")
+    head = _commit(repo, "fix: refine the tray feature", touch="src/tray.txt")
+    assert "--bump minor" in check_release_intent.check(repo, base, head)[0]
+
+
+@pytest.mark.parametrize("operation", ["rename", "delete", "mode"])
+def test_net_path_operations_keep_release_intent(repo: Path, operation: str) -> None:
+    _commit(repo, "chore: seed runtime", touch="src/runtime.txt")
+    base = _git(repo, "rev-parse", "HEAD")
+    if operation == "rename":
+        _git(repo, "mv", "src/runtime.txt", "src/renamed.txt")
+    elif operation == "delete":
+        _git(repo, "rm", "src/runtime.txt")
+    else:
+        _git(repo, "update-index", "--chmod=+x", "src/runtime.txt")
+    # _commit adds working-tree bytes, so retain the index-only mode directly.
+    if operation == "mode":
+        _git(repo, "commit", "-q", "-m", "fix: runtime mode")
+        head = _git(repo, "rev-parse", "HEAD")
+    else:
+        head = _commit(repo, "fix: runtime path")
+    assert "--bump patch" in check_release_intent.check(repo, base, head)[0]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        pytest.param(
+            "src/line\nbreak.txt",
+            marks=pytest.mark.skipif(sys.platform == "win32", reason="POSIX filename control"),
+        ),
+        pytest.param(
+            "src/tab\tname.txt",
+            marks=pytest.mark.skipif(sys.platform == "win32", reason="POSIX filename control"),
+        ),
+        pytest.param(
+            ":(glob)literal.txt",
+            marks=pytest.mark.skipif(sys.platform == "win32", reason="POSIX filename control"),
+        ),
+        "unlisted/runtime.dat",
+    ],
+)
+def test_net_paths_are_literal_nul_delimited_and_unknown_paths_ship(repo: Path, path: str) -> None:
+    base = _git(repo, "rev-parse", "HEAD")
+    head = _commit(repo, "fix: exact runtime path", touch=path)
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert commits[0].paths == (path,)
+    assert "--bump patch" in check_release_intent.check(repo, base, head)[0]
+
+
+def test_merge_resolution_only_runtime_change_refuses_classification(repo: Path) -> None:
+    base = _git(repo, "rev-parse", "HEAD")
+    branch = _git(repo, "branch", "--show-current")
+    _git(repo, "checkout", "-q", "-b", "side")
+    _commit(repo, "docs: side", touch="docs/side.md")
+    _git(repo, "checkout", "-q", branch)
+    _commit(repo, "docs: main", touch="docs/main.md")
+    _git(repo, "merge", "--no-commit", "--no-ff", "side")
+    head = _commit(repo, "merge: resolution adds runtime", touch="src/merge-only.txt")
+    with pytest.raises(ValueError, match="no non-merge commit metadata"):
+        check_release_intent.check(repo, base, head)
+
+
+def test_net_diff_does_not_hide_version_consistency_problems(repo: Path) -> None:
+    base = _git(repo, "rev-parse", "HEAD")
+    change = _commit(repo, "fix: canceled runtime", touch="src/tray.txt")
+    _git(repo, "revert", "--no-edit", change)
+    native = _load("native_release")
+    native.set_native_version(prepare_release.bump(_version(repo), "patch"), repo)
+    head = _commit(repo, "chore: change only native version")
+    assert any(
+        "native installer" in problem for problem in check_release_intent.check(repo, base, head)
+    )
+
+
+def test_net_diff_is_relative_to_desktop_inside_the_monorepo(repo: Path) -> None:
+    package = repo / "packages" / "desktop"
+    for relative in VERSION_FILES:
+        target = package / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(repo / relative, target)
+    base = _commit(repo, "chore: nest Desktop in the monorepo")
+    change = _commit(package, "feat: canceled Desktop feature", touch="src/tray.txt")
+    _git(package, "revert", "--no-edit", change)
+    head = _commit(repo, "feat: another package", touch="packages/other/runtime.txt")
+    assert check_release_intent.check(package, base, head) == []
+    head = _commit(package, "fix: Desktop tray repair", touch="src/tray.txt")
+    problems = check_release_intent.check(package, base, head)
+    assert len(problems) == 1 and "--bump patch" in problems[0]
+    assert "another package" not in problems[0]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX filename control")
+def test_crlf_filename_keeps_the_actual_net_release_intent(repo: Path) -> None:
+    base = _git(repo, "rev-parse", "HEAD")
+    head = _commit(repo, "fix: literal CRLF path", touch="src/carriage\r\nline.txt")
+    problems = check_release_intent.check(repo, base, head)
+    assert len(problems) == 1 and "--bump patch" in problems[0]
+
+
+def test_inconsistent_tree_metadata_cannot_erase_a_net_change(repo: Path, monkeypatch) -> None:
+    base = _git(repo, "rev-parse", "HEAD")
+    head = _commit(repo, "fix: visible net change", touch="src/runtime.txt")
+    monkeypatch.setattr(prepare_release, "_path_state", lambda *_args: None)
+    with pytest.raises(ValueError, match="does not match exact tree metadata"):
+        check_release_intent.check(repo, base, head)
+
+
+@pytest.mark.parametrize("edited", [False, True])
+def test_feature_intent_survives_a_later_rename(repo: Path, edited: bool) -> None:
+    base = _git(repo, "rev-parse", "HEAD")
+    _commit(repo, "feat: new runtime component", touch="src/original.txt")
+    _git(repo, "mv", "src/original.txt", "src/renamed.txt")
+    if edited:
+        (repo / "src/renamed.txt").write_text("refined runtime component\n")
+    head = _commit(repo, "fix: move the runtime component")
+    problems = check_release_intent.check(repo, base, head)
+    assert len(problems) == 1 and "--bump minor" in problems[0]
+    assert "feat: new runtime component" in problems[0]
+
+
+def test_canceled_feature_does_not_inflate_a_later_rename(repo: Path) -> None:
+    _commit(repo, "chore: seed runtime", touch="src/original.txt")
+    base = _git(repo, "rev-parse", "HEAD")
+    feature = _commit(repo, "feat: canceled runtime change", touch="src/original.txt")
+    _git(repo, "revert", "--no-edit", feature)
+    _git(repo, "mv", "src/original.txt", "src/renamed.txt")
+    head = _commit(repo, "fix: move the original runtime")
+    assert "--bump patch" in check_release_intent.check(repo, base, head)[0]
+
+
+@pytest.mark.parametrize("final_name", ["src/third.txt", "src/original.txt"])
+def test_feature_lineage_survives_multiple_moves(repo: Path, final_name: str) -> None:
+    base = _git(repo, "rev-parse", "HEAD")
+    _commit(repo, "feat: new runtime component", touch="src/original.txt")
+    _git(repo, "mv", "src/original.txt", "src/second.txt")
+    _commit(repo, "fix: first runtime move")
+    _git(repo, "mv", "src/second.txt", final_name)
+    head = _commit(repo, "fix: second runtime move")
+    assert "--bump minor" in check_release_intent.check(repo, base, head)[0]
