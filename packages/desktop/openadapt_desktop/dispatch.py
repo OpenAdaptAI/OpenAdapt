@@ -50,6 +50,8 @@ from openadapt_desktop.private_fs import ensure_private_dir
 EmitFn = Callable[[str, dict], None]
 
 _RUN_PERSISTENCE_MARKER = ".desktop-run-persistence.json"
+#: A capture whose stop could not drain an authorized Chrome extension write.
+STOP_FAILED_MARKER = ".extension-stop-failed"
 _KNOWN_RUN_OUTCOMES = frozenset(
     {
         "VERIFIED",
@@ -258,6 +260,8 @@ class EngineDispatcher:
         # Opt-in Chrome extension evidence: registered only while a native
         # recording runs, removed on stop (OpenAdapt#1872).
         self.extension_host = ExtensionHostRegistrar(config)
+        # Captures whose stop could not drain an authorized extension write.
+        self._stop_failed_captures: set[str] = set()
         self._pending_run_memory: dict[tuple[str, str], tuple[Path, str, bool]] = {}
         # Work items whose run this engine process started and hasn't
         # finished. A queued item that isn't here was interrupted.
@@ -787,10 +791,12 @@ class EngineDispatcher:
             # A browser-extension write that was already authorized may still
             # land in the capture after this returns, so the recording is not
             # reported as completed and is not compiled automatically.
+            capture_id = str(metadata.get("id"))
+            self._refuse_capture_compile(capture_id)
             message = (
-                "The recording stopped, but a Chrome extension write was still in "
-                "progress, so it was not compiled automatically. The capture was "
-                "retained; compile it after the browser has closed"
+                "The recording stop failed: a Chrome extension write was still in "
+                "progress, so OpenAdapt will not compile this recording. The raw "
+                "capture was retained for inspection"
             )
             self.emit("recording_error", {"error": message})
             self.emit("status_update", self._status_dict(controller))
@@ -1193,6 +1199,26 @@ class EngineDispatcher:
             return {"ok": False, "error": "capture_id is required", "workflow_id": ""}
         return self._compile_registered_capture(str(capture_id), automatic=False)
 
+    def _refuse_capture_compile(self, capture_id: str) -> None:
+        """Mark a capture whose stop failed so no later compile accepts it.
+
+        A write authorized before the stop may still land in it afterwards.
+        The in-memory mark covers this session even if the marker file cannot
+        be written; the file covers later sessions.
+        """
+        self._stop_failed_captures.add(capture_id)
+        try:
+            capture = self.services.db.get_capture(capture_id)
+            capture_dir = capture and (capture.get("capture_path") or capture.get("capture_dir"))
+            if capture_dir and Path(capture_dir).is_dir():
+                (Path(capture_dir) / STOP_FAILED_MARKER).write_text(
+                    "chrome extension write did not drain at stop\n", encoding="utf-8"
+                )
+            else:
+                logger.error("Could not mark the failed-stop capture {}", capture_id)
+        except Exception as exc:
+            logger.error("Could not mark the failed-stop capture {}: {}", capture_id, exc)
+
     def _compile_registered_capture(self, capture_id: str, *, automatic: bool) -> dict:
         """Compile one retained capture and report a retryable local state.
 
@@ -1202,6 +1228,18 @@ class EngineDispatcher:
         progress = {"capture_id": capture_id, "automatic": automatic}
         capture = self.services.db.get_capture(capture_id)
         capture_dir = capture and (capture.get("capture_path") or capture.get("capture_dir"))
+        if capture_id in self._stop_failed_captures or (
+            capture_dir and (Path(capture_dir) / STOP_FAILED_MARKER).exists()
+        ):
+            error = (
+                "OpenAdapt will not compile this recording because its stop failed "
+                "while a Chrome extension write was still in progress."
+            )
+            self.emit(
+                "compile_progress",
+                {**progress, "state": "failed", "error": error, "recording_retained": True},
+            )
+            return {"ok": False, "error": error, "workflow_id": "", "recording_retained": True}
         if not capture_dir:
             error = f"OpenAdapt could not find the retained recording {capture_id}."
             self.emit(

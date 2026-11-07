@@ -895,6 +895,39 @@ class TestStopWaitsForInFlightWrites:
             os.close(writer)
             db.close()
 
+    def test_a_failed_stop_capture_is_refused_by_any_later_compile(
+        self, tmp_path: Path, host_script: Path, linux, monkeypatch
+    ) -> None:
+        from openadapt_desktop.dispatch import STOP_FAILED_MARKER
+
+        monkeypatch.setattr(host, "GATE_DRAIN_SECONDS", 0.2)
+        disp, db, active = self._start(tmp_path, host_script)
+        compiles: list[str] = []
+        monkeypatch.setattr(
+            disp.services.controller,
+            "compile_capture",
+            lambda capture_id, capture_dir: compiles.append(capture_id) or {"id": "wf"},
+            raising=False,
+        )
+        writer = _hold_shared(host.gate_path(active))
+        try:
+            result = disp.dispatch("stop_recording", {})
+            assert result["completed"] is False
+        finally:
+            os.close(writer)
+        try:
+            capture_dir = disp.services.controller.capture_dir
+            assert (capture_dir / STOP_FAILED_MARKER).is_file()
+            # The pending write has now landed; a manual compile still refuses,
+            # and so does a fresh dispatcher that only has the marker file.
+            manual = disp._compile_registered_capture("cap1", automatic=False)
+            assert manual["ok"] is False and manual["recording_retained"] is True
+            disp._stop_failed_captures.clear()
+            assert disp._compile_registered_capture("cap1", automatic=False)["ok"] is False
+            assert compiles == []
+        finally:
+            db.close()
+
     def test_a_drained_stop_still_completes_and_compiles(
         self, tmp_path: Path, host_script: Path, linux, monkeypatch
     ) -> None:
