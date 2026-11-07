@@ -137,3 +137,38 @@ it("keeps a newer available-release event when an older initial GET resolves lat
   // A stale initial GET must not hide the newer event-driven notice.
   expect(screen.getByText(/OpenAdapt 0.26.0 is available/)).toBeTruthy();
 });
+
+it("keeps the release-notes email off by default and sends nothing until Subscribe", async () => {
+  vi.mocked(engineTry).mockResolvedValue(UNANSWERED);
+  vi.mocked(engineInvoke).mockResolvedValue({ ok: true });
+  render(<UsageStatsPrompt engineUp />);
+
+  const box = (await screen.findByLabelText("Get release notes by email")) as HTMLInputElement;
+  expect(box.checked).toBe(false);
+  expect(screen.queryByLabelText("Email for release notes")).toBeNull();
+
+  fireEvent.click(box);
+  const input = screen.getByLabelText("Email for release notes");
+  expect(engineInvoke).not.toHaveBeenCalled();
+  const subscribe = screen.getByRole("button", { name: "Subscribe" }) as HTMLButtonElement;
+  expect(subscribe.disabled).toBe(true);
+
+  fireEvent.change(input, { target: { value: " ops@example.com " } });
+  fireEvent.click(subscribe);
+  await waitFor(() =>
+    expect(engineInvoke).toHaveBeenCalledWith(CMD.SUBSCRIBE_RELEASE_NOTES, { email: "ops@example.com" }),
+  );
+  expect(await screen.findByText(/Release notes will come by email/)).toBeTruthy();
+  // The usage-stats answer is untouched by the signup.
+  expect(engineInvoke).toHaveBeenCalledTimes(1);
+});
+
+it("shows the engine's error when the signup fails", async () => {
+  vi.mocked(engineTry).mockResolvedValue(UNANSWERED);
+  vi.mocked(engineInvoke).mockResolvedValue({ ok: false, error: "Enter an email address, like you@company.com." });
+  render(<UsageStatsPrompt engineUp />);
+  fireEvent.click(await screen.findByLabelText("Get release notes by email"));
+  fireEvent.change(screen.getByLabelText("Email for release notes"), { target: { value: "nope" } });
+  fireEvent.click(screen.getByRole("button", { name: "Subscribe" }));
+  expect(await screen.findByText(/like you@company.com/)).toBeTruthy();
+});
