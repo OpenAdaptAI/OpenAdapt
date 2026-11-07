@@ -150,10 +150,14 @@ class _QuietServer(ThreadingHTTPServer):
 class Shadow:
     """One shadow session: the proxy, the episodes and the checks."""
 
+    #: Writes reach the shadow through its proxy. ``shadow_db.DatabaseShadow``
+    #: has no proxy: the agent announces each action instead.
+    proxy = True
+
     def __init__(
         self,
         *,
-        upstream: str,
+        upstream: Optional[str],
         mode: str,
         contracts: Optional[list[Any]] = None,
         routes: Optional[list[Route]] = None,
@@ -170,8 +174,8 @@ class Shadow:
             raise ShadowConfigError(f"mode {mode!r} is not fhir or sql")
         if listen[0] not in ("127.0.0.1", "localhost", "::1"):
             raise ShadowConfigError("the shadow listens on the loopback interface only")
-        parts = urlsplit(upstream)
-        if parts.scheme not in ("http", "https") or not parts.hostname:
+        parts = urlsplit(upstream or "")
+        if self.proxy and (parts.scheme not in ("http", "https") or not parts.hostname):
             raise ShadowConfigError(f"upstream {upstream!r} is not an http(s) URL")
         self.mode = mode
         self.upstream = parts
@@ -1152,6 +1156,11 @@ class Shadow:
             self.errors.append(text[:2000])
 
     # -- results -----------------------------------------------------------------------
+
+    def target(self) -> str:
+        """What the agent writes to, for the report."""
+
+        return f"{self.upstream.scheme}://{self.upstream.netloc}"
 
     def results(self) -> dict[str, Any]:
         from openadapt_flow.shadow_report import summarize

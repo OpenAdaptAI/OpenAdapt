@@ -340,3 +340,68 @@ def test_dispatched_click_in_closed_shadow_stays_at_host():
     assert evidence["tag"] == "my-form"
     assert evidence["in_shadow"] is False
     assert "123-45-6789" not in json.dumps(sent)
+
+
+def test_frame_url_drops_query_and_fragment():
+    # Harness location is https://app.example/form?token=abc#frag
+    results = _run(
+        "content",
+        CONTENT,
+        [
+            {
+                "build": _shadow_form({"tag": "button", "attrs": {"id": "go"}}),
+                "action": "evidence",
+                "event": "click",
+            },
+            {"safeUrl": "https://u:p@pay.example:8443/a/b?token=x#y"},
+            {"safeUrl": "data:text/html,<b>secret</b>"},
+            {"safeUrl": "about:srcdoc"},
+            {"safeUrl": "not a url"},
+        ],
+    )
+    evidence = results[0]["evidence"]
+    assert evidence["frame_url"] == "https://app.example/form"
+    assert evidence["frame_origin"] == "https://app.example"
+    assert evidence["is_iframe"] is False
+    assert evidence["cross_origin_parent"] is False
+    assert "token" not in json.dumps(evidence)
+    assert [r["url"] for r in results[1:]] == [
+        "https://pay.example:8443/a/b",
+        "data:",
+        "about:srcdoc",
+        None,
+    ]
+
+
+def test_background_stamps_frame_identity_from_sender_not_page():
+    spoof = {
+        "schema": "openadapt.extension-evidence/1",
+        "kind": "target",
+        "path": "button#go",
+        "frame": {"tab_id": 999, "frame_id": 0, "origin": "https://bank.example"},
+    }
+    sender = {
+        "tab": {"id": 7},
+        "frameId": 3,
+        "documentId": "DOC-A",
+        "origin": "https://child.example",
+        "url": "https://child.example/frame?token=SENDER-TOKEN",
+    }
+    results = _run(
+        "background",
+        BACKGROUND,
+        [
+            {"mode": "record"},
+            {"evidence": spoof, "sender": sender},
+            {"state": True},
+        ],
+    )
+    queued = [r for r in results if "queued" in r][0]["queued"]
+    assert len(queued) == 1
+    assert queued[0]["frame"] == {
+        "tab_id": 7,
+        "frame_id": 3,
+        "document_id": "DOC-A",
+        "origin": "https://child.example",
+    }
+    assert "SENDER-TOKEN" not in json.dumps(queued)

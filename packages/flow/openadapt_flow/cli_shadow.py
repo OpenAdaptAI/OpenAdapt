@@ -12,6 +12,17 @@ Config file (``--config shadow.yaml``, ``openadapt.shadow/v1``)::
       - write: "POST /api/v1/Contact"
         contract: contact.verify.yaml
         params: {email: emailAddress, lname: lastName}
+
+Database mode (``mode: db``) has no upstream: the agent announces each action
+(``POST /begin``, ``POST /end``) and each contract needs ``frame.database``::
+
+    mode: db
+    actor: "7"
+    audit_sql: "SELECT id FROM audit_log WHERE user_id = %(actor)s"
+    actions:
+      - name: create_patient
+        contract: patient.verify.yaml
+        params: {lname: last_name}
 """
 
 from __future__ import annotations
@@ -34,7 +45,11 @@ def register(sub: argparse._SubParsersAction) -> None:
         "without blocking or changing it, and write a report",
     )
     p.add_argument("--config", help=f"{SCHEMA} YAML (flags override it)")
-    p.add_argument("--mode", choices=("fhir", "sql"))
+    p.add_argument(
+        "--mode",
+        choices=("fhir", "sql", "db"),
+        help="db: no proxy; the agent announces each action (POST /begin, /end)",
+    )
     p.add_argument("--upstream", help="the server the agent writes to")
     p.add_argument(
         "--contract",
@@ -74,6 +89,13 @@ def register(sub: argparse._SubParsersAction) -> None:
         "300; 0 turns it off); --until-idle waits for the rechecks",
     )
     p.add_argument(
+        "--guard",
+        action="store_true",
+        default=None,
+        help="db: refuse an action that can't be checked or that follows one not "
+        "CONFIRMED, and answer /end with the verdict",
+    )
+    p.add_argument(
         "--receipts",
         action="store_true",
         default=None,
@@ -105,6 +127,7 @@ def load(args: argparse.Namespace) -> dict[str, Any]:
         "quiet_s",
         "recheck_s",
         "receipts",
+        "guard",
     ):
         value = getattr(args, key, None)
         if value is not None:
@@ -112,8 +135,15 @@ def load(args: argparse.Namespace) -> dict[str, Any]:
     if args.contract:
         cfg["contracts"] = list(args.contract)
     cfg["_base"] = base
-    if not cfg.get("mode") or not cfg.get("upstream"):
+    if cfg.get("mode") == "db":
+        if cfg.get("upstream"):
+            raise ShadowConfigError(
+                "db mode has no upstream: the agent announces actions"
+            )
+    elif not cfg.get("mode") or not cfg.get("upstream"):
         raise ShadowConfigError("give --mode and --upstream (or a --config with both)")
+    if cfg.get("guard") and cfg.get("mode") != "db":
+        raise ShadowConfigError("--guard applies to db mode")
     return cfg
 
 
@@ -129,9 +159,13 @@ def build(cfg: dict[str, Any], out: Path) -> Any:
     else:
         from openadapt_flow.verifier import Contract
 
-        for i, r in enumerate(cfg.get("routes") or []):
-            if not isinstance(r, dict) or not r.get("write") or not r.get("contract"):
-                raise ShadowConfigError(f"route {i + 1} needs write and contract")
+        db = cfg["mode"] == "db"
+        key = "name" if db else "write"
+        for i, r in enumerate(cfg.get("actions" if db else "routes") or []):
+            if not isinstance(r, dict) or not r.get(key) or not r.get("contract"):
+                raise ShadowConfigError(
+                    f"{'action' if db else 'route'} {i + 1} needs {key} and contract"
+                )
             contract = Contract.load(base / r["contract"])
             params = dict(r.get("params") or {})
             for name in contract.params:
@@ -143,11 +177,32 @@ def build(cfg: dict[str, Any], out: Path) -> Any:
                     )
             routes.append(
                 Route(
-                    re.compile(r["write"]),
+                    None if db else re.compile(r["write"]),  # type: ignore[arg-type]
                     contract,
                     params,
                     r.get("name") or r["write"],
                 )
+            )
+        if db:
+            from openadapt_flow.shadow_db import DatabaseShadow
+
+            if not routes:
+                raise ShadowConfigError("db mode needs at least one action")
+            if cfg.get("audit_sql") and not cfg.get("actor"):
+                raise ShadowConfigError(
+                    "audit_sql needs actor: the agent's own user id in the app"
+                )
+            return DatabaseShadow(
+                routes=routes,
+                actor_id=str(cfg.get("actor") or "agent"),
+                out=out,
+                listen=("127.0.0.1", int(cfg.get("listen") or 9670)),
+                hold_ms=float(cfg.get("hold_ms", 30000)),
+                quiet_s=float(cfg.get("quiet_s", 5)),
+                receipts=bool(cfg.get("receipts", False)),
+                guard=bool(cfg.get("guard", False)),
+                audit_sql=cfg.get("audit_sql"),
+                max_action_s=float(cfg.get("max_action_s", 600)),
             )
     return Shadow(
         upstream=str(cfg["upstream"]),
@@ -187,11 +242,19 @@ def cmd_shadow(args: argparse.Namespace) -> int:
     except (ShadowConfigError, OSError, ValueError) as exc:
         print(f"shadow: {exc}", file=sys.stderr)
         return 2
-    print(
-        f"Shadow is listening at {shadow.url}; point the agent there instead of "
-        f"{args.upstream or 'the server'}. Ctrl-C ends the run.",
-        flush=True,
-    )
+    if shadow.proxy:
+        print(
+            f"Shadow is listening at {shadow.url}; point the agent there instead of "
+            f"{args.upstream or 'the server'}. Ctrl-C ends the run.",
+            flush=True,
+        )
+    else:
+        print(
+            f"Shadow is watching {shadow.target()}. The agent announces each "
+            f"action: POST {shadow.url}/begin and {shadow.url}/end. Ctrl-C ends "
+            "the run.",
+            flush=True,
+        )
     stopping = []
     signal.signal(signal.SIGTERM, lambda *_: stopping.append(1))
     try:
@@ -211,7 +274,7 @@ def cmd_shadow(args: argparse.Namespace) -> int:
     page = write_report(doc, out)
     n = doc["counts"]
     print(
-        f"{doc['writes_seen']} writes, {doc['checks']} checks: {n['CONFIRMED']} "
+        f"{doc['writes_seen']} {'writes' if shadow.proxy else 'actions'}, {doc['checks']} checks: {n['CONFIRMED']} "
         f"confirmed, {n['REFUTED']} refuted, {n['UNCERTAIN']} uncertain"
         + (f", {n['PENDING']} never checked" if n["PENDING"] else "")
         + "".join(

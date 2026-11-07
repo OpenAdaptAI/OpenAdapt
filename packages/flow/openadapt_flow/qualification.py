@@ -72,6 +72,7 @@ from openadapt_flow.verification import VerificationTier
 if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.ir import BusinessDecisionSpec, IdentityTemplate, Step, Workflow
     from openadapt_flow.policy import Policy
+    from openadapt_flow.subroutines import SubroutineLibrary
 
 
 QUALIFICATION_SCHEMA: Final[Literal["openadapt.qualification-project/v1"]] = (
@@ -1125,6 +1126,7 @@ class QualificationRefusalCode(str, Enum):
     JUDGMENT_CASE_EVIDENCE_UNVERIFIED = "judgment_case_evidence_unverified"
     BUSINESS_DECISION_DELIVERY_INVALID = "business_decision_delivery_invalid"
     POLICY_VIOLATION = "policy_violation"
+    SUBROUTINE_NOT_ADMITTED = "subroutine_not_admitted"
 
 
 class QualificationRefusal(BaseModel):
@@ -5434,6 +5436,34 @@ def evaluate_qualification(
     )
 
 
+def subroutine_certification_refusals(
+    workflow: "Workflow",
+    library: Optional["SubroutineLibrary"],
+    *,
+    workflow_id: Optional[str] = None,
+) -> list[QualificationRefusal]:
+    """Certification refusals for the subroutines ``workflow`` embeds.
+
+    Runs :func:`openadapt_flow.subroutines.certify_subroutine_uses`, which
+    registers the workflow as a user of each embedded digest and then admits
+    every use. Empty for a workflow that embeds no subroutine. Messages name
+    subroutines, inputs and codes only.
+    """
+
+    from openadapt_flow.subroutines import certify_subroutine_uses
+
+    admission = certify_subroutine_uses(workflow, library, workflow_id=workflow_id)
+    return [
+        QualificationRefusal(
+            code=QualificationRefusalCode.SUBROUTINE_NOT_ADMITTED,
+            path=f"subflows.{refusal.subflow}",
+            message=refusal.message,
+            details={"subroutine_code": refusal.code},
+        )
+        for refusal in admission.refusals
+    ]
+
+
 def certify_project(
     workflow: "Workflow",
     *,
@@ -5441,8 +5471,18 @@ def certify_project(
     evidence_root: Path | str,
     transition_predicate_vision: Any | None = None,
     execution_profile: Literal["standard", "regulated"] = "standard",
+    subroutine_library: Optional["SubroutineLibrary"] = None,
+    subroutine_workflow_id: Optional[str] = None,
 ) -> QualificationReport:
-    """Evaluate and persist the exact qualification decision in memory."""
+    """Evaluate and persist the exact qualification decision in memory.
+
+    A workflow that embeds subroutines (``subroutine/<name>/<sha256>``
+    subflows) is certified only when every use is admitted by
+    ``subroutine_library``; certifying also registers the workflow with the
+    library so a later version of any of those subroutines re-qualifies it.
+    Without a library such a workflow is refused. A workflow that embeds no
+    subroutine is evaluated exactly as before.
+    """
 
     project = workflow.qualification
     report = evaluate_qualification(
@@ -5451,6 +5491,16 @@ def certify_project(
         evidence_root=evidence_root,
         transition_predicate_vision=transition_predicate_vision,
     )
+    subroutine_refusals = subroutine_certification_refusals(
+        workflow, subroutine_library, workflow_id=subroutine_workflow_id
+    )
+    if subroutine_refusals:
+        report = report.model_copy(
+            update={
+                "passed": False,
+                "refusals": [*report.refusals, *subroutine_refusals],
+            }
+        )
     if project is not None:
         from openadapt_flow.policy import policy_contract_sha256
 
@@ -5691,6 +5741,31 @@ def current_certification_matches(
         and certification.lookup_sha256
         == (project.lookup.contract_sha256() if project.lookup is not None else None)
     )
+
+
+def persist_registration_before_certificate(
+    workflow: "Workflow",
+    bundle_dir: Path | str,
+    persist: Optional[Callable[[], None]],
+) -> None:
+    """Write certification's subroutine registration before any certificate.
+
+    ``certify_project`` registers the workflow with the subroutine library in
+    memory; ``persist`` writes that library. It must succeed before a new
+    certificate becomes durable, or a later version of a subroutine could not
+    list this workflow for re-qualification. When it raises, the certificate
+    is withdrawn in memory, ``bundle_dir`` is saved uncertified and the error
+    is re-raised, so no valid new certificate is left behind.
+    """
+
+    if persist is None:
+        return
+    try:
+        persist()
+    except BaseException:
+        _invalidate_certification(workflow)
+        save_qualified_workflow(workflow, bundle_dir)
+        raise
 
 
 def save_qualified_workflow(

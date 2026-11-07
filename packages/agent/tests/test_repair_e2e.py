@@ -75,7 +75,9 @@ class ReplayEngine:
     def __init__(self, tmp: Path, desk: RepairDesk, bundle: Path, held: HeldPage) -> None:
         self.tmp, self.desk, self.bundle, self.held = tmp, desk, bundle, held
 
-    def execute(self, entry, run_id, inputs, raw) -> EngineResult:
+    def execute(
+        self, entry, run_id, inputs, raw, *, admitted_bundle_sha256=None
+    ) -> EngineResult:
         bundle = self.desk.active_bundle(entry.name, self.bundle)
         run_dir = self.tmp / "runs" / run_id
         app = fx.DialogApp()

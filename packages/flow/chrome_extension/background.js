@@ -45,6 +45,23 @@ function ensurePort() {
   return port;
 }
 
+// Frame identity comes from Chrome (MessageSender), not from the page: a
+// content script cannot spoof which tab/frame/origin it runs in. Any
+// page-supplied `frame` block is replaced. sender.url is not copied (it can
+// carry query tokens); the content script sends a stripped frame_url.
+function stampSender(evidence, sender) {
+  const out = Object.assign({}, evidence);
+  delete out.frame;
+  if (!sender || typeof sender !== 'object') return out;
+  const frame = {};
+  if (sender.tab && Number.isInteger(sender.tab.id)) frame.tab_id = sender.tab.id;
+  if (Number.isInteger(sender.frameId)) frame.frame_id = sender.frameId;
+  if (typeof sender.documentId === 'string') frame.document_id = sender.documentId;
+  if (typeof sender.origin === 'string') frame.origin = sender.origin;
+  if (Object.keys(frame).length) out.frame = frame;
+  return out;
+}
+
 function deliver(evidence) {
   if (!recording) return;
   const p = ensurePort();
@@ -81,7 +98,7 @@ function setRecording(active) {
   }
 }
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || typeof msg !== 'object') return;
   if (msg.type === 'SET_RECORDING') {
     setRecording(Boolean(msg.active));
@@ -93,7 +110,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'EXTENSION_EVIDENCE') {
-    if (recording && msg.evidence) deliver(msg.evidence);
+    if (recording && msg.evidence) deliver(stampSender(msg.evidence, sender));
     sendResponse({ ok: true, active: recording });
     return true;
   }
@@ -183,6 +200,7 @@ if (typeof globalThis !== 'undefined') {
   globalThis.__openadaptExtensionBackground = {
     setRecording,
     deliver,
+    stampSender,
     get recording() {
       return recording;
     },
