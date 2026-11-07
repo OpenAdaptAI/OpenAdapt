@@ -285,3 +285,10 @@ def test_actual_ci_command_rejects_force_added_synthetic_key_without_values(tmp_
     assert "EVIDENCE_KEYS_DENIED" in result.stdout
     assert "benchmark/run/authority.key" in result.stdout
     assert marker not in result.stdout + result.stderr
+    abbreviated = subprocess.run(
+        [sys.executable, str(REPO / "scripts/check_evidence_keys.py"), "--roo", str(tmp_path)],
+        capture_output=True, text=True,
+    )
+    assert abbreviated.returncode == 2
+    assert "unrecognized arguments: --roo" in abbreviated.stderr
+    assert marker not in abbreviated.stdout + abbreviated.stderr

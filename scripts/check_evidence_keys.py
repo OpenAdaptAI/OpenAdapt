@@ -152,7 +152,7 @@ def violations(root: Path, names: Iterable[str]) -> list[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--root", type=Path, default=ROOT)
     args = parser.parse_args()
     try:
