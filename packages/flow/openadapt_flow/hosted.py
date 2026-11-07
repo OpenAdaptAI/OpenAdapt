@@ -939,6 +939,7 @@ def _zip_dir(src: Path) -> Path:
     ``.zip`` and return its path. The caller is responsible for deleting it."""
     if not src.is_dir():
         raise HostedError(f"Not a directory: {src}")
+    _assert_upload_tree_safe(src)
     tmp = tempfile.mkdtemp(prefix="openadapt-flow-push-")
     base = Path(tmp) / src.name
     archive = shutil.make_archive(str(base), "zip", root_dir=str(src))
@@ -947,7 +948,11 @@ def _zip_dir(src: Path) -> Path:
 
 def _assert_upload_tree_safe(src: Path) -> None:
     """Refuse filesystem indirection that could escape an upload directory."""
+    from openadapt_flow.evidence_files import is_key_material_path
+
     for path in sorted(src.rglob("*")):
+        if is_key_material_path(path.relative_to(src)):
+            raise HostedError("Refusing to upload local key material")
         if path.is_symlink():
             raise HostedError(
                 f"Refusing to upload {src}: symlink {path.relative_to(src)} "
@@ -977,6 +982,7 @@ def _scrub_recording_tree(src: Path) -> Path:
     """
     from openadapt_flow import privacy
 
+    _assert_upload_tree_safe(src)
     scrubber = privacy.get_scrubber()
     if scrubber is None:  # defensive; the caller gates on scrubbing_available()
         raise HostedError(

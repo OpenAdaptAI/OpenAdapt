@@ -55,6 +55,15 @@ omnimcp.bak/
 performance/
 
 # Secrets (should never be committed)
+*.key
+*.key.*
+*.key~
+*.[kK][eE][yY]
+*.[kK][eE][yY].*
+*.p12
+*.pfx
+*.jks
+*.keystore
 *.pem
 .env.backup
 deploy/.env
