@@ -17,6 +17,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--task", required=True, help="Generated task and read-back configuration")
     parser.add_argument("--provider", choices=("claude", "openai"), default="claude")
     parser.add_argument("--model")
+    parser.add_argument(
+        "--price", action="append", default=[], metavar="KIND=USD_PER_MTOK",
+        help="Explicit input, output, cache_write and cache_read model prices",
+    )
     parser.add_argument("--max-turns", type=int, default=40)
     parser.add_argument("--max-cost-usd", type=float, help="Explicit model spend cap for a cache miss")
     parser.add_argument("--param", action="append", default=[], metavar="NAME=VALUE")
@@ -35,6 +39,21 @@ def _params(rows: Sequence[str]) -> dict[str, str]:
             raise TaskArgumentsError("--param requires unique NAME=VALUE pairs")
         values[name] = value
     return values
+
+
+def _prices(rows: Sequence[str]) -> dict[str, float] | None:
+    if not rows:
+        return None
+    raw = _params(rows)
+    if set(raw) != {"input", "output", "cache_write", "cache_read"}:
+        raise TaskArgumentsError("--price requires input, output, cache_write and cache_read")
+    try:
+        prices = {name: float(value) for name, value in raw.items()}
+    except ValueError:
+        raise TaskArgumentsError("model prices must be finite non-negative numbers") from None
+    if any(not math.isfinite(value) or value < 0 for value in prices.values()):
+        raise TaskArgumentsError("model prices must be finite non-negative numbers")
+    return prices
 
 
 def _task(args: argparse.Namespace, parser: argparse.ArgumentParser) -> WrappedTask:
@@ -77,6 +96,7 @@ def _task(args: argparse.Namespace, parser: argparse.ArgumentParser) -> WrappedT
             model=args.model,
             max_turns=args.max_turns,
             max_cost_usd=cap,
+            prices=_prices(args.price),
         )
         if getattr(agent, "requires_model_key", True):
             provider = "anthropic" if args.provider == "claude" else "openai"

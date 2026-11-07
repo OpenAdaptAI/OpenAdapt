@@ -142,7 +142,7 @@ def _result(run: SkillRun, agent: Any) -> dict[str, Any]:
         from openadapt_flow.compile_agent.agents import PRICES_PER_MTOK
 
         ledger = getattr(agent, "last_ledger", None)
-        if ledger is not None and (
+        if ledger is not None and getattr(ledger, "usage_known", True) and (
             getattr(ledger, "prices", None)
             or getattr(ledger, "model", None) in PRICES_PER_MTOK
         ):
