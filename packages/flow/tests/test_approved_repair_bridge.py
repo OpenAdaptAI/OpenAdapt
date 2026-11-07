@@ -20,9 +20,11 @@ from PIL import Image
 
 from openadapt_flow.compile_agent import repair_bridge as bridge
 from openadapt_flow.compile_agent.pipeline import FirstRunCompiler, _write_run1_values
+from openadapt_flow.compiler import compile_recording
 from openadapt_flow.integrations.agents.skills import SkillCache
 from openadapt_flow.ir import Anchor, HaltObservation, RunReport, StepResult, Workflow
 from openadapt_flow.jit import TaskSignature, lifecycle
+from openadapt_flow.jit.lift import lift_params
 from openadapt_flow.repair.candidate import (
     Actor,
     CampaignResult,
@@ -37,15 +39,15 @@ from openadapt_flow.verify_run import (
     load_verify_config,
 )
 from tests._teach_authorization_support import repair_authorization
-from tests.test_jit_lifecycle import (  # noqa: F401 -- genuine shared autouse policy fixture
+from tests.test_field_label_params import _blank, _write_recording
+from tests.test_jit_lifecycle import (
     REVIEWER,
     _ci,
     _jit,
-    _policy_passes,
     _report,
-    _review,
     _stub_runs,
 )
+from tests.test_jit_lifecycle import _policy_passes as _policy_passes
 
 PROMPT = "Create a synthetic note with {value}"
 
@@ -91,15 +93,20 @@ def prepared(tmp_path, monkeypatch, _policy_passes):
     )
     jit = _jit(tmp_path, verifier=verifier, task=task)
     prior = jit.bundle_dir
-    Image.new("RGB", (20, 20), "white").save(prior / "target.png")
-    workflow = Workflow.load(prior)
-    workflow.params = {"value": ""}
-    workflow.steps[-1].anchor = Anchor(
-        template="target.png", region=(0, 0, 20, 20), click_point=(10, 10)
+    fixture_effects = Workflow.load(prior).steps[-1].effects
+    recording = _write_recording(
+        jit.program_dir,
+        [
+            {"i": 0, "kind": "type", "text": "seed", "field_label": "Value", "t": 1.0},
+            {"i": 1, "kind": "click", "x": 10, "y": 10, "t": 2.0},
+        ],
+        {0: _blank(), 1: _blank()},
     )
-    workflow.save(prior)
-    # A source fixture changed the draft before admission, so its genuine
-    # recorder signature is recomputed; no admitted bundle is re-signed here.
+    compile_recording(recording, prior, name=task.task_id)
+    lifted = lift_params(prior, {"value": "seed"})
+    assert [(item.name, item.step_id) for item in lifted.lifted] == [
+        ("value", "step_000")
+    ]
     candidate_path = jit.program_dir / "candidate.json"
     candidate_path.write_text(
         json.dumps(
@@ -110,7 +117,39 @@ def prepared(tmp_path, monkeypatch, _policy_passes):
             )
         )
     )
-    _review(jit)
+    confirmed = jit.confirm_params(
+        principal_id=REVIEWER, accept_params=["value"], confirm="ok"
+    )
+    assert confirmed["steps"] == ["step_000", "step_001"]
+    Image.new("RGB", (20, 20), "white").save(prior / "target.png")
+    workflow = Workflow.load(prior)
+    assert workflow.steps[0].param == "value"
+    # As in the original component fixture, the browser target and effect
+    # declaration are synthetic. Parameter application above is the real
+    # recording/recompile path, not a candidate flag or confirmation-file edit.
+    workflow.steps[-1].effects = fixture_effects
+    workflow.steps[-1].risk = "irreversible"
+    workflow.steps[-1].anchor = Anchor(
+        template="target.png", region=(0, 0, 20, 20), click_point=(10, 10)
+    )
+    workflow.save(prior)
+    # A source fixture changed the draft before admission, so its genuine
+    # recorder signature is recomputed; no admitted bundle is re-signed here.
+    candidate_path.write_text(
+        json.dumps(
+            lifecycle.sign_recorder(
+                jit.program_dir,
+                json.loads(candidate_path.read_text()),
+                key_dir=jit.key_dir,
+            )
+        )
+    )
+    # Reconfirm the current draft digest after adding the explicit fixture
+    # target/effect, then review exactly the steps the normal API returns.
+    confirmed = jit.confirm_params(
+        principal_id=REVIEWER, accept_params=["value"], confirm="ok"
+    )
+    jit.review(principal_id=REVIEWER, reviewed_steps=confirmed["steps"], confirm="ok")
     _stub_runs(jit, monkeypatch, _report())
     jit.canary(principal_id=REVIEWER, value="seed")
     assert jit.admit_with_key(_ci(jit, monkeypatch))["outcome"] == "admitted"
