@@ -573,3 +573,111 @@ def test_shipped_feature_lineage_survives_a_documentation_transit(
     (repo / "src/final.txt").write_bytes(stage.read_bytes())
     head = _commit(repo, "chore: install staged component")
     assert "--bump minor" in check_release_intent.check(repo, base, head)[0]
+
+
+def _merge_independent_release(repo: Path, main: str, feature: str, number: int) -> str:
+    """A real merge adopts main's independently changed package metadata."""
+    import json
+
+    _git(repo, "checkout", "-q", main)
+    package = repo / "package.json"
+    data = json.loads(package.read_text())
+    data["lineage_fixture"] = f"main-{number}"
+    package.write_text(json.dumps(data) + "\n")
+    base = _commit(repo, f"chore: independently prepare main {number}")
+    _git(repo, "checkout", "-q", feature)
+    merged = subprocess.run(
+        ["git", "merge", "--no-ff", "--no-commit", main],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    assert merged.returncode in {0, 1}, merged.stderr
+    if merged.returncode:
+        assert _git(repo, "diff", "--name-only", "--diff-filter=U") == "package.json"
+        _git(repo, "checkout", "--theirs", "--", "package.json")
+        _git(repo, "add", "package.json")
+    _commit(repo, f"merge: adopt main release metadata {number}")
+    return base
+
+
+@pytest.mark.parametrize("subject,expected", [("feat", "minor"), ("fix", "patch"), ("chore", None)])
+@pytest.mark.parametrize("main_updates", [1, 2])
+@pytest.mark.parametrize("operation", ["keep", "copy-delete", "modified-copy-delete"])
+def test_historical_copy_sources_use_their_own_shared_ancestor(
+    repo: Path,
+    subject: str,
+    expected: str | None,
+    main_updates: int,
+    operation: str,
+) -> None:
+    """Pre-merge file versions are ambient history, not unexplained net edits."""
+    import json
+
+    main = _git(repo, "branch", "--show-current")
+    feature = "feature-history"
+    _git(repo, "checkout", "-q", "-b", feature)
+    origin = _commit(repo, f"{subject}: introduce host", touch="src/original.txt")
+    package = repo / "package.json"
+    data = json.loads(package.read_text())
+    data["lineage_fixture"] = "branch-release"
+    package.write_text(json.dumps(data) + "\n")
+    _commit(repo, "chore: prepare branch release")
+    for number in range(1, main_updates + 1):
+        base = _merge_independent_release(repo, main, feature, number)
+    if operation != "keep":
+        source = repo / "src/original.txt"
+        copied = repo / "src/copied.txt"
+        copied.write_bytes(
+            source.read_bytes() + (b"modified copy\n" if operation.startswith("modified") else b"")
+        )
+        _commit(repo, "chore: copy host to its final path")
+        source.unlink()
+        _commit(repo, "chore: delete previous host location")
+        final_path = "src/copied.txt"
+    else:
+        final_path = "src/original.txt"
+    head = _git(repo, "rev-parse", "HEAD")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) == expected
+    assert any(commit.sha == origin and final_path in commit.paths for commit in commits)
+    assert not any("package.json" in commit.paths for commit in commits)
+
+
+def test_a_merge_only_source_cannot_gain_intent_by_copying_after_a_base_merge(repo: Path) -> None:
+    """Historical baselines cannot turn unclassified merge payload into a chore."""
+    main = _git(repo, "branch", "--show-current")
+    feature = "merge-only-source"
+    _git(repo, "checkout", "-q", "-b", feature)
+    _commit(repo, "docs: branch context", touch="docs/branch.md")
+    _git(repo, "checkout", "-q", main)
+    base = _commit(repo, "docs: main context", touch="docs/main.md")
+    _git(repo, "checkout", "-q", feature)
+    _git(repo, "merge", "--no-ff", "--no-commit", main)
+    _commit(repo, "merge: introduces an unclassified source", touch="src/merge-only.txt")
+    source = repo / "src/merge-only.txt"
+    copied = repo / "src/copy.txt"
+    copied.write_bytes(source.read_bytes())
+    _commit(repo, "chore: copy unclassified payload")
+    source.unlink()
+    head = _commit(repo, "chore: remove original unclassified payload")
+    with pytest.raises(ValueError, match="no non-merge commit metadata"):
+        prepare_release.commits_for_net_diff(repo, base, head)
+
+
+@pytest.mark.parametrize("metadata", ["", "a" * 40 + "\n" + "b" * 40 + "\n"])
+def test_historical_lineage_requires_a_unique_common_ancestor(
+    repo: Path, monkeypatch, metadata: str
+) -> None:
+    base = _git(repo, "rev-parse", "HEAD")
+    head = _commit(repo, "fix: runtime change", touch="src/runtime.txt")
+    original = prepare_release._git
+
+    def incomplete(root: Path, *args: str) -> str:
+        if args[:2] == ("merge-base", "--all"):
+            return metadata
+        return original(root, *args)
+
+    monkeypatch.setattr(prepare_release, "_git", incomplete)
+    with pytest.raises(ValueError, match="unique merge base"):
+        prepare_release.commits_for_net_diff(repo, base, head)

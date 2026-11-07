@@ -223,11 +223,25 @@ def commits_for_net_diff(root: Path, base: str, head: str) -> list[Commit]:
         # a source already reverted to its base contributes no canceled intent.
         return exact or current
 
+    historical_bases: dict[str, str] = {}
+
+    def historical_base(ref: str) -> str:
+        # A recursive copy source can precede a merge from base. Its original
+        # ambient tree is then their shared ancestor, not the later base tree.
+        # Top-level head still starts at base. Merge-only changes with no
+        # non-merge contributor continue to refuse below.
+        if ref not in historical_bases:
+            ancestors = _git(root, "merge-base", "--all", base, ref).splitlines()
+            if len(ancestors) != 1:
+                raise ValueError("historical Desktop lineage has no unique merge base")
+            historical_bases[ref] = ancestors[0]
+        return historical_bases[ref]
+
     def contributions(path: str, stop: int, final_ref: str) -> set[str]:
         key = (path, stop, final_ref)
         if key in memo:
             return memo[key]
-        initial, final = state(base, path), state(final_ref, path)
+        initial, final = state(historical_base(final_ref), path), state(final_ref, path)
         contributors = [(i, sha) for i, sha in enumerate(order[:stop]) if path in changed[sha]]
         if not contributors:
             if initial != final:
