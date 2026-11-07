@@ -98,6 +98,10 @@ MAX_EVAL_WORK = 4_000_000
 #: slow evaluation is refused, so the worst case is "unknown", not a hang
 #: that a caller treats as success.
 MAX_EVAL_SECONDS = 2.0
+MAX_PARAMS = 1_000
+# One model for admission before potentially expanding operations. These are
+# conservative work units, not a promise about elapsed time on a given host.
+WORK_MODEL = "bounded-branches-and-text/v1"
 
 _IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _PARAM_NAME = r"^[A-Za-z_][A-Za-z0-9_]{0,127}$"
@@ -642,7 +646,66 @@ def _quantifier_at(p: str, i: int) -> tuple[int, bool, bool]:
     return 0, False, False
 
 
-def _check_pattern(p: str) -> re.Pattern[str]:
+@dataclass
+class _PatternWork:
+    """Saturating upper bounds for the existing regex scanner's branches.
+
+    Concatenation multiplies possible backtracking paths; alternation adds
+    them; a repeat composes its atom repeatedly. Steps bound a single path.
+    Unlike input-length times pattern-length, this accounts for independent
+    optional groups, alternatives and nested fixed repeats before calling re.
+    """
+
+    paths: int = 1
+    alternatives: int = 0
+    steps: int = 0
+
+    def append(self, paths: int, steps: int) -> None:
+        self.paths = min(MAX_EVAL_WORK + 1, self.paths * paths)
+        self.steps = min(MAX_EVAL_WORK + 1, self.steps + steps)
+
+    def branch(self) -> None:
+        self.alternatives = min(MAX_EVAL_WORK + 1, self.alternatives + self.paths)
+        self.paths = 1
+
+    def finish(self) -> tuple[int, int]:
+        return min(MAX_EVAL_WORK + 1, self.alternatives + self.paths), self.steps + 1
+
+
+def _repeat_work(q: str, size: int, paths: int, steps: int) -> tuple[int, int]:
+    if q[0] == "?":
+        lo, hi = 0, 1
+    elif q[0] in "*+":
+        lo, hi = (0 if q[0] == "*" else 1), size + 1
+    else:
+        match = _REPEAT.match(q)
+        assert match is not None
+        lo = int(match.group(1) or 0)
+        hi = (
+            lo
+            if match.group(2) is None
+            else int(match.group(3))
+            if match.group(3)
+            else max(lo, size + 1)
+        )
+    # The scanner already limits explicit counts. Saturate each arithmetic
+    # operation: an attacker cannot turn this estimator into a big-int job.
+    limit = MAX_EVAL_WORK + 1
+    power, total = 1, int(lo == 0)
+    for count in range(1, hi + 1):
+        power = min(limit, power * paths)
+        if count >= lo:
+            total = min(limit, total + power)
+        if total == limit:
+            break
+    # Variable repeat lengths already contribute one path per length. Count
+    # the mandatory prefix here rather than charging that traversal twice.
+    return max(1, total), min(limit, (steps + 1) * max(1, lo) + 1)
+
+
+def _check_pattern(
+    p: str, *, input_size: Optional[int] = None, ctx: Optional[_Ctx] = None
+) -> re.Pattern[str]:
     """Refuse patterns that can backtrack badly: back-references, look-around,
     conditionals, a repeated group that itself repeats or alternates, and more
     than a few variable-length quantifiers."""
@@ -651,12 +714,14 @@ def _check_pattern(p: str) -> re.Pattern[str]:
         raise _refuse(RefusalCode.UNSAFE_PATTERN, "pattern too long")
     # Each open group: [contains a quantifier, contains an alternation].
     stack: list[list[bool]] = [[False, False]]
+    costs = [_PatternWork()]
     variable = unbounded = 0
     i = 0
     last_group: Optional[list[bool]] = None
     while i < len(p):
         c = p[i]
         just_closed: Optional[list[bool]] = None
+        paths, steps = 1, 1
         if c == "\\":
             nxt = p[i + 1 : i + 2]
             if nxt == "" or nxt.isdigit() or nxt in ("g", "k"):
@@ -691,17 +756,21 @@ def _check_pattern(p: str) -> re.Pattern[str]:
             else:
                 i += 1
             stack.append([False, False])
+            costs.append(_PatternWork())
             continue
         elif c == ")":
             if len(stack) == 1:
                 raise _refuse(RefusalCode.SYNTAX, "unbalanced ')'")
             just_closed = stack.pop()
+            paths, steps = costs.pop().finish()
             stack[-1][0] = stack[-1][0] or just_closed[0]
             stack[-1][1] = stack[-1][1] or just_closed[1]
             i += 1
         elif c == "|":
             stack[-1][1] = True
+            costs[-1].branch()
             i += 1
+            continue
         else:
             i += 1
         last_group = just_closed
@@ -721,7 +790,9 @@ def _check_pattern(p: str) -> re.Pattern[str]:
                 )
             if var or unb:
                 stack[-1][0] = True
+            paths, steps = _repeat_work(p[i : i + qlen], input_size or 0, paths, steps)
             i += qlen
+        costs[-1].append(paths, steps)
     if len(stack) != 1:
         raise _refuse(RefusalCode.SYNTAX, "unbalanced '('")
     if unbounded > MAX_UNBOUNDED_QUANTIFIERS:
@@ -734,6 +805,15 @@ def _check_pattern(p: str) -> re.Pattern[str]:
             RefusalCode.UNSAFE_PATTERN,
             f"more than {MAX_VARIABLE_QUANTIFIERS} variable quantifiers",
         )
+    paths, steps = costs[0].finish()
+    # A fixed-repeat explosion is independent of input size. Do not even
+    # compile it. Input-dependent backtracking is charged before fullmatch.
+    if steps > MAX_EVAL_WORK:
+        raise _refuse(
+            RefusalCode.UNSAFE_PATTERN, "pattern expansion exceeds work bound"
+        )
+    if ctx is not None:
+        ctx.spend(paths * steps)
     try:
         # ASCII: \d, \w and \s mean the same thing on every interpreter, so
         # a receipt doesn't depend on the Unicode database version.
@@ -770,8 +850,19 @@ def _regex_input(s: str) -> str:
 # --------------------------------------------------------------------------
 
 
-def _normalize(s: str) -> str:
-    return " ".join(unicodedata.normalize("NFKC", s).casefold().split())
+def _normalize(s: str, ctx: _Ctx) -> str:
+    # Canonical ordering can be quadratic in combining sequences. Charge raw
+    # work before normalization, then bound the expanded intermediate before
+    # case folding, splitting or similarity scoring.
+    ctx.spend(max(1, len(s)) ** 2)
+    normalized = unicodedata.normalize("NFKC", s)
+    if len(normalized) > MAX_FUZZY_CHARS:
+        raise _refuse(RefusalCode.BOUNDS, "normalized fuzzy text exceeds bound")
+    ctx.spend(3 * len(normalized))
+    folded = normalized.casefold()
+    if len(folded) > MAX_FUZZY_CHARS:
+        raise _refuse(RefusalCode.BOUNDS, "folded fuzzy text exceeds bound")
+    return " ".join(folded.split())
 
 
 def _similarity(a: str, b: str) -> float:
@@ -857,15 +948,22 @@ def _text(v: Value) -> str:
     return canonical_text(v)
 
 
-def _matches(s: str, pattern: str) -> bool:
-    return _check_pattern(pattern).fullmatch(_regex_input(s)) is not None
+def _matches(s: str, pattern: str, ctx: Optional[_Ctx] = None) -> bool:
+    ctx = ctx if ctx is not None else _Ctx(params={})
+    s = _regex_input(s)
+    result = _check_pattern(pattern, input_size=len(s), ctx=ctx).fullmatch(s)
+    ctx.spend(0)
+    return result is not None
 
 
-def _extract(s: str, pattern: str, group: int) -> str:
-    rx = _check_pattern(pattern)
+def _extract(s: str, pattern: str, group: int, ctx: Optional[_Ctx] = None) -> str:
+    ctx = ctx if ctx is not None else _Ctx(params={})
+    s = _regex_input(s)
+    rx = _check_pattern(pattern, input_size=len(s), ctx=ctx)
     if not 0 <= group <= rx.groups:
         raise _refuse(RefusalCode.INVALID_VALUE, "no such regex group")
-    m = rx.fullmatch(_regex_input(s))
+    m = rx.fullmatch(s)
+    ctx.spend(0)
     if m is None or m.group(group) is None:
         raise _refuse(RefusalCode.NO_MATCH, "pattern does not match the value")
     return m.group(group)
@@ -1093,6 +1191,41 @@ class _Ctx:
             raise _refuse(RefusalCode.BOUNDS, "evaluation time budget exceeded")
 
 
+def _params(params: Mapping[str, str], ctx: _Ctx) -> dict[str, str]:
+    if len(params) > MAX_PARAMS:
+        raise _refuse(RefusalCode.BOUNDS, "too many parameters")
+    checked: dict[str, str] = {}
+    for name, value in params.items():
+        if not isinstance(name, str) or not isinstance(value, str):
+            raise _refuse(RefusalCode.TYPE, "parameter names and values must be text")
+        if len(name) > 128:
+            raise _refuse(RefusalCode.BOUNDS, "parameter name too long")
+        _check_str(value)  # Reject size before allocating a UTF-8 copy.
+        ctx.spend(len(name) + len(value) + 1)
+        _check_text(name, "parameter name")
+        checked[name] = _check_text(value, "parameter")
+    return checked
+
+
+def _value_work(value: Value) -> int:
+    if isinstance(value, str):
+        return len(value) + 1
+    if isinstance(value, tuple):
+        return 1 + sum(_value_work(item) for item in value)
+    return 1
+
+
+def _call_work(name: str, args: list[Value]) -> int:
+    work = 1 + sum(_value_work(arg) for arg in args)
+    if name in {"contains", "replace", "split"}:
+        # Include comparison work, not just the output size. Values have
+        # already been bounded; saturating admission happens before the call.
+        work *= max(1, _value_work(args[1]))
+    elif name in {"lower", "upper"}:
+        work *= 3  # Unicode full case mappings can expand a scalar.
+    return work
+
+
 def _as_bool(v: Value) -> bool:
     # The checker already proved this; re-check so a checker bug fails closed.
     if not isinstance(v, bool):
@@ -1128,7 +1261,9 @@ def _eval(node: Node, ctx: _Ctx) -> Value:
         v = ctx.params[node.name]
         if not isinstance(v, str):
             raise _refuse(RefusalCode.TYPE, f"parameter {node.name!r} is not text")
-        return _check_str(_check_text(v, f"parameter {node.name!r}"))
+        _check_str(v)
+        ctx.spend(len(v))
+        return _check_text(v, "parameter")
     if isinstance(node, ListLit):
         return _check_list(tuple(_eval(x, ctx) for x in node.items))
     if isinstance(node, Unary):
@@ -1140,6 +1275,7 @@ def _eval(node: Node, ctx: _Ctx) -> Value:
         op = node.op
         left = _eval(node.left, ctx)
         right = _eval(node.right, ctx)  # strict: both sides always evaluate
+        ctx.spend(_value_work(left) + _value_work(right))
         if op == "and":
             return _as_bool(left) and _as_bool(right)
         if op == "or":
@@ -1165,15 +1301,20 @@ def _eval(node: Node, ctx: _Ctx) -> Value:
             return _check_int(li * ri)
     if isinstance(node, Call):
         args = [_eval(a, ctx) for a in node.args]
+        ctx.spend(_call_work(node.fn, args))
         if node.fn == "text":
             return _text(args[0])
         if node.fn == "if_else":
             return args[1] if _as_bool(args[0]) else args[2]
         if node.fn == "fuzzy_match":
             return _fuzzy(args[0], args[1], float(args[2]), ctx)  # type: ignore[arg-type]
-        if node.fn in ("matches", "extract"):
-            ctx.spend(len(str(args[0])) * len(str(args[1])))
-        return _STDLIB[node.fn].impl(*args)
+        if node.fn == "matches":
+            return _matches(args[0], args[1], ctx)  # type: ignore[arg-type]
+        if node.fn == "extract":
+            return _extract(args[0], args[1], args[2], ctx)  # type: ignore[arg-type]
+        value = _STDLIB[node.fn].impl(*args)
+        ctx.spend(0)
+        return value
     raise _refuse(RefusalCode.SYNTAX, "unknown node")  # pragma: no cover
 
 
@@ -1186,8 +1327,8 @@ def _fuzzy(value: str, options: tuple, threshold: float, ctx: _Ctx) -> str:
         raise _refuse(
             RefusalCode.BOUNDS, f"fuzzy_match() text longer than {MAX_FUZZY_CHARS}"
         )
-    q = _normalize(value)
-    norms = [_normalize(o) for o in options]
+    q = _normalize(value, ctx)
+    norms = [_normalize(o, ctx) for o in options]
     # NFKC can expand one code point to many (U+FDFA becomes 18), so the
     # bounds that limit difflib's quadratic work apply to normalized text.
     if len(q) > MAX_FUZZY_CHARS or any(len(o) > MAX_FUZZY_CHARS for o in norms):
@@ -1199,7 +1340,10 @@ def _fuzzy(value: str, options: tuple, threshold: float, ctx: _Ctx) -> str:
     if work > MAX_FUZZY_WORK:
         raise _refuse(RefusalCode.BOUNDS, "fuzzy_match() work bound exceeded")
     ctx.spend(work)
-    scored = [(_similarity(q, o), idx) for idx, o in enumerate(norms)]
+    scored = []
+    for idx, option in enumerate(norms):
+        scored.append((_similarity(q, option), idx))
+        ctx.spend(0)
     best = max(s for s, _ in scored)
     # An exact match (after case and space folding) wins outright; otherwise
     # exactly one distinct option may clear the threshold. Two or more is a
@@ -1266,12 +1410,20 @@ def compile_expression(source: str, names: Optional[set[str]] = None) -> Node:
 def evaluate(source: str, params: Mapping[str, str]) -> Evaluation:
     """Evaluate ``source`` against ``params`` (all text), or refuse."""
 
-    names = set(params)
+    ctx = _Ctx(params={})
+    ctx.params = _params(params, ctx)
+    return _evaluate(source, ctx)
+
+
+def _evaluate(source: str, ctx: _Ctx) -> Evaluation:
+    names = set(ctx.params)
     node = parse(source)
+    ctx.spend(len(source) + 1)
     typ = check(node, names)
-    ctx = _Ctx(params=params)
+    start = len(ctx.matches)
     value = _eval(node, ctx)
-    return Evaluation(value, typ, tuple(refs(node)), tuple(ctx.matches))
+    ctx.spend(0)
+    return Evaluation(value, typ, tuple(refs(node)), tuple(ctx.matches[start:]))
 
 
 # --------------------------------------------------------------------------
@@ -1323,6 +1475,7 @@ def operator_set() -> dict[str, Any]:
     functions.update(_SPECIAL_SIGNATURES)
     return {
         "language": LANGUAGE_VERSION,
+        "work_model": WORK_MODEL,
         "types": [t.value for t in ExprType],
         "operators": _OPERATOR_SIGNATURES,
         "functions": {k: functions[k] for k in sorted(functions)},
@@ -1344,6 +1497,7 @@ def operator_set() -> dict[str, Any]:
             "max_fuzzy_work": MAX_FUZZY_WORK,
             "max_eval_work": MAX_EVAL_WORK,
             "max_eval_seconds": MAX_EVAL_SECONDS,
+            "max_params": MAX_PARAMS,
         },
         # casefold, lower/upper and NFKC depend on the Unicode database, so
         # the same receipt is only reproducible against the same version.
@@ -1421,13 +1575,15 @@ def evaluate_predicate(source: str, params: Mapping[str, str]) -> PredicateResul
 
     inputs: tuple[str, ...] = ()
     try:
+        ctx = _Ctx(params={})
+        ctx.params = _params(params, ctx)
         node = parse(source)
         inputs = tuple(refs(node))
         typ = check(node, set(params))
         if typ != B:
             raise _refuse(RefusalCode.TYPE, "a predicate must be a bool expression")
-        ctx = _Ctx(params=params)
         value = _as_bool(_eval(node, ctx))
+        ctx.spend(0)
     except ExpressionRefused as exc:
         # Keep which parameters it read: the receipt's evidence for "unknown".
         return PredicateResult(Outcome.UNKNOWN, exc.code, exc.reason, inputs=inputs)
@@ -1522,11 +1678,9 @@ def apply_transforms(
 
     if len(transforms) > MAX_TRANSFORMS:
         raise _refuse(RefusalCode.BOUNDS, f"more than {MAX_TRANSFORMS} transforms")
-    working = dict(params)
-    for name, value in working.items():
-        if not isinstance(value, str):
-            raise _refuse(RefusalCode.TYPE, f"parameter {name!r} is not text")
-        _check_text(value, f"parameter {name!r}")
+    ctx = _Ctx(params={})
+    working = _params(params, ctx)
+    ctx.params = working
     records: list[TransformRecord] = []
     ops_digest = operator_set_sha256()
     for t in transforms:
@@ -1535,7 +1689,7 @@ def apply_transforms(
                 RefusalCode.CONFLICT,
                 f"transform would overwrite parameter {t.output_param!r}",
             )
-        result = evaluate(t.expression, working)
+        result = _evaluate(t.expression, ctx)
         if result.type in (L, N):
             raise _refuse(RefusalCode.TYPE, "a transform must produce one scalar value")
         text = canonical_text(result.value)

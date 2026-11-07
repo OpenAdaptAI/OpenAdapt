@@ -11,8 +11,6 @@ import hashlib
 import time
 
 import pytest
-from pydantic import ValidationError
-
 from openadapt_flow.transforms import (
     MAX_DEPTH,
     MAX_INT_ABS,
@@ -27,6 +25,7 @@ from openadapt_flow.transforms import (
     evaluate,
     stdlib_names,
 )
+from pydantic import ValidationError
 
 PROVIDERS = "Dr. Jane Smith|Dr. John Smith|Dr. Ann Lee"
 
@@ -463,7 +462,7 @@ def test_random_input_only_ever_returns_or_refuses() -> None:
 #: Pinned on purpose. A change to any function, signature, operator, bound or
 #: refusal code changes this digest, and so needs a reviewed new language
 #: version: a stored transform or generated effect model binds it.
-OPERATOR_SET_SHA256 = "20e0a2da16129baabaeb5775531596440e445dc8aeac6770f2ec263bcb1b350b"
+OPERATOR_SET_SHA256 = "e66145859a3b1ee399ef35777744123db92d55ed1683c5f2f0391cf9824e47f2"
 
 
 def test_operator_set_is_pinned_and_matches_the_library() -> None:

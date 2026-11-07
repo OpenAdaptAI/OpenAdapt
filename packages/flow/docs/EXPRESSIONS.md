@@ -59,9 +59,17 @@ exact numbers. A value that would go past a bound is refused, not truncated.
 `fuzzy_match` checks its length bound on the NFKC-normalized text, because
 normalization can turn one character into 18. It also caps total matching
 work, which is the sum over options of the query length times the option
-length. Every evaluation also has a deterministic work budget: one unit per
-node, plus the estimated cost of each regex and fuzzy call. A wall-clock limit
-of 2 seconds, checked between nodes, backs that up. Running out of either is a
+length. Every evaluation also has a deterministic work budget shared by all
+transforms in a batch. Text validation, Unicode normalization, string operations
+and similarity scoring spend that budget before expensive work. Regex admission
+counts products of repeat choices and alternatives, including nested fixed
+repeats, before calling the matcher; input length times pattern length alone
+does not bound backtracking. Oversized parameter sets and text refuse before
+UTF-8 copies are allocated. The operator-set digest binds this cost model.
+
+A 2-second elapsed-time check runs before and after operations. It is an
+additional refusal check, not an interrupt of a running library call. The
+pre-operation work bounds limit those calls. Running out of either budget is a
 `bounds` refusal. Text that isn't valid Unicode, such as a lone surrogate, is
 refused with `invalid_value`.
 
