@@ -916,9 +916,27 @@ class WebFormSpec(BaseModel):
     fields: list[WebFormField] = Field(min_length=1)
     controls: list[str] = Field(default_factory=list)
     #: How the save's body is encoded, as the recorded request was:
-    #: ``urlencoded`` (``application/x-www-form-urlencoded``) or ``multipart``
-    #: (``multipart/form-data`` with no file attached).
-    encoding: Literal["urlencoded", "multipart"] = "urlencoded"
+    #: ``urlencoded`` (``application/x-www-form-urlencoded``), ``multipart``
+    #: (``multipart/form-data`` with no file attached) or ``json`` (a JSON
+    #: body the page's script built, a GraphQL mutation included).
+    encoding: Literal["urlencoded", "multipart", "json"] = "urlencoded"
+    #: A ``json`` save's body as recorded, every value a constant except the
+    #: leaves a ``param`` field names (by JSON pointer, as the field's
+    #: ``name``): those hold an empty value of the recorded type ("" or 0).
+    json_body: Optional[Any] = None
+    #: Headers the page's script added to the save (names only, lowercase).
+    #: Each run sends the value the app's own script last sent to this
+    #: origin in this session (runtime/actuators/session_headers.py); one the
+    #: app hasn't sent keeps the save on the GUI.
+    session_headers: list[str] = Field(default_factory=list)
+    #: The save is a GraphQL mutation: its operation text is a constant of
+    #: ``json_body``, and success needs a response with data and no errors.
+    graphql: bool = False
+    #: A ``json`` save the page's script sent to another origin than its own
+    #: (an app whose API has its own host). The save goes only there, and
+    #: only when the app's own script sent that origin its headers in this
+    #: session.
+    api_origin: Optional[str] = None
     #: The path the form's own ``action`` names, when the save goes elsewhere:
     #: the page's script sent the form's fields to another endpoint (for
     #: example ``admin-ajax.php``) instead of submitting the form. The runtime
@@ -974,7 +992,8 @@ class WebFormSpec(BaseModel):
 
     @model_serializer(mode="wrap")
     def _omit_new_defaults(self, handler: Any) -> Any:
-        # A binding proposed before ``encoding`` and ``form_action`` existed
+        # A binding proposed before ``encoding``, ``form_action`` and the JSON
+        # fields existed
         # keeps the admission digest a person admitted: the keys are written
         # only when they say something.
         data = handler(self)
@@ -983,6 +1002,14 @@ class WebFormSpec(BaseModel):
                 data.pop("encoding")
             if data.get("form_action") is None:
                 data.pop("form_action", None)
+            if data.get("json_body") is None:
+                data.pop("json_body", None)
+            if not data.get("session_headers"):
+                data.pop("session_headers", None)
+            if not data.get("graphql"):
+                data.pop("graphql", None)
+            if data.get("api_origin") is None:
+                data.pop("api_origin", None)
         return data
 
 

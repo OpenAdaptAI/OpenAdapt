@@ -17,7 +17,7 @@ page script posts the same form for a preview):
 Each request is logged to ``log_path`` (one JSON line) so the harness can
 count how many times a save reached the app.
 
-    python -m benchmark.api_generalization.proxy --listen 9822 --upstream 9821 --state <dir>
+    python -m benchmark.api_generalization.proxy --listen 9662 --upstream 9661 --state <dir>
 """
 
 from __future__ import annotations

@@ -321,6 +321,27 @@ def test_a_script_sent_save_runs_the_script_first(app_page):
     ]
 
 
+def test_a_settings_form_posting_to_the_same_page_is_not_the_save(app_page):
+    app, page = app_page
+    # A form with no action posts to its own page, as the save's form does.
+    settings = '<form method="post" id="adv"><input name="per_page" value="20"></form>'
+    app.pages["/edit"] = settings + SCRIPT_SENT.format(extra="")
+    from openadapt_flow.runtime.actuators.web_form import client_rules, page_scripts
+
+    html = app.pages["/edit"].replace("{n}", "1")
+    binding = _script_binding()
+    binding.web_form.form_path = "/edit"
+    binding.web_form.client_scripts = page_scripts(
+        html, "/edit", ["action", "nonce", "tag-name"], client_rules(html), "/edit"
+    )
+    assert form_parts(html, "/edit", "/edit")["controls"].keys() == {"per_page"}
+    result = WebFormActuator(PlaywrightSessionTransport(page)).actuate(
+        binding, {"name": "Community"}
+    )
+    assert result.status is ActuationStatus.ACTUATED, result.reason
+    assert [p for p, _, _ in app.posts] == ["/ajax"]
+
+
 def test_a_script_that_sends_another_field_keeps_the_save_on_the_gui(app_page):
     app, page = app_page
     app.pages["/tags"] = SCRIPT_SENT.format(extra="body.append('screen', 'edit');")
