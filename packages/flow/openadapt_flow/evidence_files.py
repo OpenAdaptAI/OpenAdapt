@@ -70,10 +70,7 @@ def is_key_material_path(relative: str | os.PathLike[str]) -> bool:
     unclassified PEM containers are denied because they can hold either.
     """
     parts = PurePosixPath(os.fspath(relative).replace("\\", "/")).parts
-    source_workflow = tuple(part.casefold() for part in parts[-3:]) == (
-        ".github", "workflows", "secret-scan.yml"
-    )
-    for position, part in enumerate(parts):
+    for part in parts:
         name = part.casefold()
         if name in _PRIVATE_DIRECTORIES or any(
             _name_or_backup(name, protected) for protected in _PRIVATE_NAMES
@@ -88,7 +85,7 @@ def is_key_material_path(relative: str | os.PathLike[str]) -> bool:
             return True
         if any(_name_or_backup(name, store) for store in _KEY_STORES):
             return True
-        if _DATA_SUFFIX.search(name) and _CREDENTIAL_DATA.search(name) and not (source_workflow and position == len(parts) - 1):
+        if _DATA_SUFFIX.search(name) and _CREDENTIAL_DATA.search(name):
             return True
     return False
 

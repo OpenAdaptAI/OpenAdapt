@@ -65,6 +65,7 @@ PRIVATE_NAMES = (
     "credentials.txt",
     "secret.toml",
     "secret-scan.yml",
+    ".github/workflows/secret-scan.yml",
     "token.yml",
     "webauthn_passkey_double.json",
     "named_person_binding.json",
@@ -104,7 +105,7 @@ def test_generated_private_families_are_denied_at_any_depth(name, parents, windo
     (
         "seal_keys.py",
         "keys.py",
-        ".github/workflows/secret-scan.yml",
+        "build.yml",
         "tokens.css",
         "report.json",
         "public.crt",
@@ -550,5 +551,5 @@ def test_synthetic_assertion_schema_refuses_live_or_ambiguous_shapes(guard, muta
 
 
 @pytest.mark.parametrize("parent", ("credentials.yaml", ".ssh", "keys.json"))
-def test_workflow_source_exception_cannot_bypass_protected_parent(parent):
+def test_secret_workflow_is_denied_below_protected_parents(parent):
     assert is_key_material_path(parent + "/.github/workflows/secret-scan.yml")
