@@ -229,6 +229,9 @@ class _Controller:
         self.db = db
         self.capture_dir = capture_dir
         self.compiled = {"bundle_id": "bnd1", "bundle_path": "/tmp/b", "ok": True}
+        # Like the real controller, each recording gets its own capture id.
+        self.starts = 0
+        self.capture_id = "cap1"
 
     @property
     def is_recording(self) -> bool:
@@ -240,18 +243,22 @@ class _Controller:
 
     @property
     def current_capture_id(self) -> str | None:
-        return "cap1" if self.is_recording else None
+        return self.capture_id if self.is_recording else None
 
     def start(self, task_description: str = "", *, metadata=None) -> str:
         self.state = RecordingState.RECORDING
+        self.starts += 1
+        self.capture_id = "cap1" if self.starts == 1 else f"cap{self.starts}"
         self.capture_dir.mkdir(parents=True, exist_ok=True)
-        if self.db.get_capture("cap1") is None:
-            self.db.insert_capture("cap1", str(self.capture_dir), "2026-11-06T00:00:00+00:00")
-        return "cap1"
+        if self.db.get_capture(self.capture_id) is None:
+            self.db.insert_capture(
+                self.capture_id, str(self.capture_dir), "2026-11-06T00:00:00+00:00"
+            )
+        return self.capture_id
 
     def stop(self) -> dict:
         self.state = RecordingState.IDLE
-        return {"id": "cap1", "duration": 1.0, "event_count": 0, "size_bytes": 0}
+        return {"id": self.capture_id, "duration": 1.0, "event_count": 0, "size_bytes": 0}
 
     def compile_capture(self, capture_id, capture_dir):
         return self.compiled
@@ -898,8 +905,6 @@ class TestStopWaitsForInFlightWrites:
     def test_a_failed_stop_capture_is_refused_by_any_later_compile(
         self, tmp_path: Path, host_script: Path, linux, monkeypatch
     ) -> None:
-        from openadapt_desktop.dispatch import STOP_FAILED_MARKER
-
         monkeypatch.setattr(host, "GATE_DRAIN_SECONDS", 0.2)
         disp, db, active = self._start(tmp_path, host_script)
         compiles: list[str] = []
@@ -913,42 +918,47 @@ class TestStopWaitsForInFlightWrites:
         try:
             result = disp.dispatch("stop_recording", {})
             assert result["completed"] is False
+            assert result["refusal_durable"] is True
         finally:
             os.close(writer)
         try:
-            capture_dir = disp.services.controller.capture_dir
-            assert (capture_dir / STOP_FAILED_MARKER).is_file()
-            # The pending write has now landed; a manual compile still refuses,
-            # and so does a fresh dispatcher that only has the marker file.
+            assert db.capture_completion("cap1") == "stop_failed"
+            # The pending write has now landed; a manual compile still refuses.
             manual = disp._compile_registered_capture("cap1", automatic=False)
             assert manual["ok"] is False and manual["recording_retained"] is True
-            disp._stop_failed_captures.clear()
-            assert disp._compile_registered_capture("cap1", automatic=False)["ok"] is False
             assert compiles == []
         finally:
             db.close()
 
-    def _failed_stop(
-        self, tmp_path: Path, host_script: Path, monkeypatch, *, deny_folder, deny_index
+    def _stop_with_index_read_only(
+        self, tmp_path: Path, host_script: Path, monkeypatch, *, undrained: bool
     ):
+        """Stop with a genuine SQLite read-only index and a denied capture folder."""
+        import sqlite3
+
         monkeypatch.setattr(host, "GATE_DRAIN_SECONDS", 0.2)
         disp, db, active = self._start(tmp_path, host_script)
+        assert db.capture_completion("cap1") == "pending"
         capture_dir = disp.services.controller.capture_dir
-        if deny_index:
-
-            def refuse(*_args, **_kwargs):
-                raise OSError("synthetic: index is read-only")
-
-            monkeypatch.setattr(db, "mark_stop_failed", refuse)
-        writer = _hold_shared(host.gate_path(active))
+        writer = _hold_shared(host.gate_path(active)) if undrained else None
+        writable = db._conn
+        read_only = sqlite3.connect(
+            f"file:{db._db_path}?mode=ro", uri=True, check_same_thread=False
+        )
+        read_only.row_factory = sqlite3.Row
         try:
-            if deny_folder:
-                capture_dir.chmod(0o500)  # a real permission denial for the marker
+            capture_dir.chmod(0o500)  # no folder-level record can be written either
+            db._conn = read_only
+            with pytest.raises(sqlite3.OperationalError):
+                db.mark_capture_stop_failed("cap1")  # the write channel really fails
             result = disp.dispatch("stop_recording", {})
         finally:
-            os.close(writer)
+            if writer is not None:
+                os.close(writer)
             capture_dir.chmod(0o700)
-        db.close()
+            db._conn = writable
+            read_only.close()
+            db.close()
         return disp, result
 
     def _fresh_compile(self, tmp_path: Path, monkeypatch) -> tuple[dict, list[str]]:
@@ -966,42 +976,72 @@ class TestStopWaitsForInFlightWrites:
             db.close()
 
     @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
-    def test_a_failed_stop_survives_restart_when_the_marker_cannot_be_written(
+    def test_a_failed_stop_stays_uncompilable_after_restart_when_no_write_succeeds(
         self, tmp_path: Path, host_script: Path, linux, monkeypatch
     ) -> None:
-        from openadapt_desktop.dispatch import STOP_FAILED_MARKER
-
-        _disp, result = self._failed_stop(
-            tmp_path, host_script, monkeypatch, deny_folder=True, deny_index=False
+        _disp, result = self._stop_with_index_read_only(
+            tmp_path, host_script, monkeypatch, undrained=True
         )
-        assert result["completed"] is False and result["refusal_durable"] is True
-        assert not (tmp_path / ".openadapt/captures/cap1" / STOP_FAILED_MARKER).exists()
+        assert result["completed"] is False
+        assert result["refusal_durable"] is True
+        assert "compile" not in result
         compiled, compiles = self._fresh_compile(tmp_path, monkeypatch)
         assert compiled["ok"] is False and compiled["recording_retained"] is True
         assert compiles == []
 
-    def test_a_failed_stop_survives_restart_when_the_index_cannot_be_written(
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+    def test_a_clean_stop_whose_completion_cannot_be_saved_is_not_compiled(
         self, tmp_path: Path, host_script: Path, linux, monkeypatch
     ) -> None:
-        _disp, result = self._failed_stop(
-            tmp_path, host_script, monkeypatch, deny_folder=False, deny_index=True
+        disp, result = self._stop_with_index_read_only(
+            tmp_path, host_script, monkeypatch, undrained=False
         )
-        assert result["refusal_durable"] is True
+        assert not disp.extension_host.stop_incomplete
+        assert result["completed"] is False
+        assert "could not record that this recording completed" in result["error"]
+        assert "compile" not in result
         compiled, compiles = self._fresh_compile(tmp_path, monkeypatch)
         assert compiled["ok"] is False
         assert compiles == []
 
-    @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
-    def test_a_failed_stop_with_no_durable_record_says_so(
+    def test_an_unreadable_completion_record_refuses_compile(
         self, tmp_path: Path, host_script: Path, linux, monkeypatch
     ) -> None:
-        disp, result = self._failed_stop(
-            tmp_path, host_script, monkeypatch, deny_folder=True, deny_index=True
+        disp, db, _active = self._start(tmp_path, host_script)
+        disp.dispatch("stop_recording", {})
+        assert db.capture_completion("cap1") == "completed"
+
+        def unreadable(_capture_id):
+            raise OSError("synthetic: index unreadable")
+
+        monkeypatch.setattr(db, "capture_completion", unreadable)
+        try:
+            assert disp._compile_registered_capture("cap1", automatic=False)["ok"] is False
+        finally:
+            db.close()
+
+    def test_no_extension_host_without_a_committed_pending_record(
+        self, tmp_path: Path, host_script: Path, linux, monkeypatch
+    ) -> None:
+        hosts = tmp_path / "p" / "NativeMessagingHosts"
+        disp, db = _dispatcher(
+            tmp_path,
+            chrome_extension_id=EXT_ID,
+            chrome_native_hosts_dir=hosts,
+            chrome_extension_host_script=host_script,
         )
-        assert result["completed"] is False
-        assert result["refusal_durable"] is False
-        assert "could not save this refusal" in result["error"]
-        assert "cap1" in disp._stop_failed_captures
+
+        def refuse(_capture_id):
+            raise OSError("synthetic: index is read-only")
+
+        monkeypatch.setattr(db, "begin_capture_completion", refuse)
+        try:
+            disp.dispatch("start_recording", {})
+            assert not disp.extension_host.active
+            assert not (hosts / host.MANIFEST_FILE).exists()
+            assert db.capture_completion("cap1") is None
+        finally:
+            db.close()
 
     def test_a_drained_stop_still_completes_and_compiles(
         self, tmp_path: Path, host_script: Path, linux, monkeypatch
@@ -1022,6 +1062,7 @@ class TestStopWaitsForInFlightWrites:
             assert result.get("completed") is not False
             assert result["compile"] == {"ok": True}
             assert compiled == ["cap1"]
+            assert db.capture_completion("cap1") == "completed"
             assert "recording_stopped" in events
             assert "recording_error" not in events
         finally:

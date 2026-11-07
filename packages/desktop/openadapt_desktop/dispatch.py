@@ -50,8 +50,6 @@ from openadapt_desktop.private_fs import ensure_private_dir
 EmitFn = Callable[[str, dict], None]
 
 _RUN_PERSISTENCE_MARKER = ".desktop-run-persistence.json"
-#: A capture whose stop could not drain an authorized Chrome extension write.
-STOP_FAILED_MARKER = ".extension-stop-failed"
 _KNOWN_RUN_OUTCOMES = frozenset(
     {
         "VERIFIED",
@@ -260,8 +258,9 @@ class EngineDispatcher:
         # Opt-in Chrome extension evidence: registered only while a native
         # recording runs, removed on stop (OpenAdapt#1872).
         self.extension_host = ExtensionHostRegistrar(config)
-        # Captures whose stop could not drain an authorized extension write.
-        self._stop_failed_captures: set[str] = set()
+        # The capture whose pending completion record this process committed
+        # before registering the extension host (see capture_completions).
+        self._completion_pending: str | None = None
         self._pending_run_memory: dict[tuple[str, str], tuple[Path, str, bool]] = {}
         # Work items whose run this engine process started and hasn't
         # finished. A queued item that isn't here was interrupted.
@@ -723,7 +722,22 @@ class EngineDispatcher:
             task_description=str(task),
             metadata=recording_metadata,
         )
-        self.extension_host.start(str(capture_id), getattr(controller, "current_capture_dir", None))
+        self._completion_pending = None
+        try:
+            # Default durable state before any extension write is possible:
+            # not completed, so not compilable until a clean stop says so.
+            self.services.db.begin_capture_completion(str(capture_id))
+            self._completion_pending = str(capture_id)
+        except Exception as exc:
+            logger.warning(
+                "Chrome extension evidence is off for this recording: its completion "
+                "record could not be saved ({})",
+                exc,
+            )
+        if self._completion_pending is not None:
+            self.extension_host.start(
+                str(capture_id), getattr(controller, "current_capture_dir", None)
+            )
         self._remember_first_workflow_recording(
             params=params,
             capture_id=capture_id,
@@ -787,22 +801,34 @@ class EngineDispatcher:
             metadata = controller.stop()
         finally:
             self.extension_host.stop()
+        capture_id = str(metadata.get("id"))
+        tracked = self._completion_pending == capture_id
+        self._completion_pending = None
+        message = None
         if getattr(self.extension_host, "stop_incomplete", False) is True:
             # A browser-extension write that was already authorized may still
             # land in the capture after this returns, so the recording is not
-            # reported as completed and is not compiled automatically.
-            capture_id = str(metadata.get("id"))
-            durable = self._refuse_capture_compile(capture_id)
+            # reported as completed and is not compiled. Its committed pending
+            # record already refuses any compile; the label is informational.
+            try:
+                self.services.db.mark_capture_stop_failed(capture_id)
+            except Exception as exc:
+                logger.error("Could not label the failed stop of {}: {}", capture_id, exc)
             message = (
                 "The recording stop failed: a Chrome extension write was still in "
                 "progress, so OpenAdapt will not compile this recording. The raw "
                 "capture was retained for inspection"
             )
-            if not durable:
-                message += (
-                    ". OpenAdapt could not save this refusal; delete the recording "
-                    "rather than compile it after a restart"
+        elif tracked:
+            try:
+                self.services.db.complete_capture(capture_id)
+            except Exception as exc:
+                logger.error("Could not record that {} completed: {}", capture_id, exc)
+                message = (
+                    "OpenAdapt could not record that this recording completed, so it "
+                    "will not compile it. The raw capture was retained for inspection"
                 )
+        if message is not None:
             self.emit("recording_error", {"error": message})
             self.emit("status_update", self._status_dict(controller))
             self.clear_coach()
@@ -811,7 +837,8 @@ class EngineDispatcher:
                 **metadata,
                 "recording": False,
                 "completed": False,
-                "refusal_durable": durable,
+                # The refusal rests on the pending record committed at start.
+                "refusal_durable": tracked,
                 "error": message,
             }
         self.emit("recording_stopped", metadata)
@@ -1205,56 +1232,19 @@ class EngineDispatcher:
             return {"ok": False, "error": "capture_id is required", "workflow_id": ""}
         return self._compile_registered_capture(str(capture_id), automatic=False)
 
-    def _refuse_capture_compile(self, capture_id: str) -> bool:
-        """Mark a capture whose stop failed so no later compile accepts it.
+    def _completion_refuses(self, capture_id: str) -> bool:
+        """Whether this capture lacks a positive completion record. Fails closed.
 
-        A write authorized before the stop may still land in it afterwards.
-        The refusal is recorded in memory (this session), in the local index
-        (``failed_stops``) and as a marker file in the capture folder. Either
-        durable record alone survives a restart. Returns whether at least one
-        durable record was written.
+        A capture with a completion record compiles only once it is
+        'completed'. One without a record was never exposed to the extension
+        host, which is registered only after its pending record commits.
         """
-        self._stop_failed_captures.add(capture_id)
-        durable = False
         try:
-            self.services.db.mark_stop_failed(capture_id, "extension_write_not_drained")
-            durable = True
+            state = self.services.db.capture_completion(capture_id)
         except Exception as exc:
-            logger.error("Could not record the failed stop of {} in the index: {}", capture_id, exc)
-        try:
-            capture = self.services.db.get_capture(capture_id)
-            capture_dir = capture and (capture.get("capture_path") or capture.get("capture_dir"))
-            if capture_dir and Path(capture_dir).is_dir():
-                (Path(capture_dir) / STOP_FAILED_MARKER).write_text(
-                    "chrome extension write did not drain at stop\n", encoding="utf-8"
-                )
-                durable = True
-            else:
-                logger.error("Could not mark the failed-stop capture folder of {}", capture_id)
-        except Exception as exc:
-            logger.error("Could not mark the failed-stop capture folder of {}: {}", capture_id, exc)
-        if not durable:
-            logger.error(
-                "The failed stop of {} is recorded only for this session; neither the "
-                "index nor the capture folder could be written",
-                capture_id,
-            )
-        return durable
-
-    def _stop_failed(self, capture_id: str, capture_dir: object) -> bool:
-        """Whether any record says this capture's stop failed. Fails closed."""
-        if capture_id in self._stop_failed_captures:
+            logger.error("Could not read the completion record of {}: {}", capture_id, exc)
             return True
-        try:
-            if self.services.db.is_stop_failed(capture_id):
-                return True
-        except Exception as exc:
-            logger.error("Could not read failed stops for {}: {}", capture_id, exc)
-            return True
-        try:
-            return bool(capture_dir) and (Path(str(capture_dir)) / STOP_FAILED_MARKER).exists()
-        except OSError:
-            return True
+        return state is not None and state != "completed"
 
     def _compile_registered_capture(self, capture_id: str, *, automatic: bool) -> dict:
         """Compile one retained capture and report a retryable local state.
@@ -1265,10 +1255,11 @@ class EngineDispatcher:
         progress = {"capture_id": capture_id, "automatic": automatic}
         capture = self.services.db.get_capture(capture_id)
         capture_dir = capture and (capture.get("capture_path") or capture.get("capture_dir"))
-        if self._stop_failed(capture_id, capture_dir):
+        if self._completion_refuses(capture_id):
             error = (
-                "OpenAdapt will not compile this recording because its stop failed "
-                "while a Chrome extension write was still in progress."
+                "OpenAdapt will not compile this recording because its stop was not "
+                "recorded as complete; a Chrome extension write may still have been "
+                "in progress."
             )
             self.emit(
                 "compile_progress",
