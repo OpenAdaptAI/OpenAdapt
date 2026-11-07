@@ -13,9 +13,16 @@ Desktop does this for the person, only while a native recording runs:
   origin; there is never a wildcard.
 - On recording start Desktop writes the manifest, a launcher that points the
   host at the capture folder, and an "active" marker. On stop it removes all
-  three. The host writes only while the marker and the capture folder exist,
-  so a host Chrome keeps running after the stop writes nothing more and never
-  recreates a deleted folder.
+  three. The host writes only while the marker holds ``active`` and the
+  capture folder exists, so a host Chrome keeps running after the stop writes
+  nothing more and never recreates a deleted folder.
+- Revocation fails closed. The marker is also a lease: Desktop touches it
+  while the recording runs and the host refuses a marker older than
+  ``LEASE_SECONDS``. On stop Desktop stops touching it first, then removes it;
+  if removal fails it overwrites it with ``revoked`` and backdates it. So a
+  host that is already running stops writing even when every cleanup step
+  fails. A marker Desktop could not revoke is retried, and no new
+  registration is made until it is gone.
 - Desktop never overwrites or removes a registration it did not write (for
   example one made by hand with ``install_host.py``). Its launcher carries an
   ownership marker line.
@@ -36,6 +43,8 @@ import os
 import re
 import shlex
 import sys
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +57,12 @@ OWNER_MARKER = "# openadapt-desktop: registered for the active recording"
 ACTIVE_PREFIX = ".extension-active-"
 # Matched with fullmatch: "$" alone would also accept a trailing newline.
 EXTENSION_ID = re.compile(r"[a-p]{32}")
+ACTIVE_TEXT = "active\n"
+REVOKED_TEXT = "revoked\n"
+# The host refuses a marker not touched within LEASE_SECONDS; Desktop touches it
+# every HEARTBEAT_SECONDS while the recording runs.
+LEASE_SECONDS = 30
+HEARTBEAT_SECONDS = 5.0
 BROWSERS = ("chrome", "chromium")
 
 _USER_DIRS = {
@@ -126,6 +141,8 @@ def launcher_text(python: str, host_script: Path, recording: Path, active_file: 
         str(recording),
         "--active-file",
         str(active_file),
+        "--active-lease",
+        str(LEASE_SECONDS),
     ]
     command = " ".join(shlex.quote(part) for part in argv)
     return f'#!/bin/sh\n{OWNER_MARKER}\nexec {command} "$@"\n'
@@ -189,7 +206,7 @@ def register(
     manifest = build_manifest(extension_id, launcher)
     active_file = Path(active_file)
     active_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    _write_private(active_file, "", 0o600)
+    _write_private(active_file, ACTIVE_TEXT, 0o600)
     _write_private(
         launcher,
         launcher_text(python, Path(host_script).resolve(), recording.resolve(), active_file),
@@ -200,15 +217,97 @@ def register(
     return path
 
 
+def marker_revoked(marker: Path) -> bool:
+    """Whether a running host would refuse ``marker``. Unreadable counts as live.
+
+    Mirrors the host's check: gone, not holding exactly ``active``, or not
+    touched within the lease.
+    """
+
+    marker = Path(marker)
+    try:
+        if not marker.exists() and not marker.is_symlink():
+            return True
+        if not marker.is_file():
+            return False  # unexpected; leave it counted as live
+        if not _holds_active(marker):
+            return True
+        return abs(time.time() - marker.stat().st_mtime) > LEASE_SECONDS
+    except OSError:
+        return False
+
+
+def _holds_active(marker: Path) -> bool:
+    with Path(marker).open("r", encoding="utf-8", errors="replace") as handle:
+        return handle.read(len(ACTIVE_TEXT) + 1) == ACTIVE_TEXT
+
+
+def revoke_marker(marker: Path) -> bool:
+    """End one active marker. Tries every route; True only when verified.
+
+    Removal first. If that fails, overwrite the marker with ``revoked`` and
+    backdate it past the lease, each attempted on its own. Never raises.
+    """
+
+    marker = Path(marker)
+    try:
+        marker.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        logger.warning("Could not remove a Chrome extension active marker: {}", exc)
+        try:
+            fd = os.open(marker, os.O_WRONLY | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0))
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(REVOKED_TEXT)
+        except OSError as write_exc:
+            logger.warning("Could not overwrite a Chrome extension active marker: {}", write_exc)
+        try:
+            os.utime(marker, (0, 0), follow_symlinks=False)
+        except (OSError, NotImplementedError) as time_exc:
+            logger.warning("Could not expire a Chrome extension active marker: {}", time_exc)
+    return marker_revoked(marker)
+
+
+class RevocationError(OSError):
+    """Some active markers could not be revoked."""
+
+    def __init__(self, markers: list[Path]) -> None:
+        super().__init__(f"{len(markers)} active marker(s) could not be revoked")
+        self.markers = markers
+
+
 def unregister(manifest_dir: Path | None, *, control_dir: Path | None = None) -> list[Path]:
-    """Remove Desktop's registration and active markers. Foreign files stay."""
+    """Remove Desktop's registration and active markers. Foreign files stay.
+
+    Raises RevocationError when an active marker could not be revoked; every other
+    marker and the registration files are still attempted first.
+    """
 
     removed: list[Path] = []
+    unrevoked: list[Path] = []
     if control_dir is not None and Path(control_dir).is_dir():
         for marker in Path(control_dir).glob(f"{ACTIVE_PREFIX}*"):
-            if marker.is_file():
-                marker.unlink()
-                removed.append(marker)
+            if not marker.exists() and not marker.is_symlink():
+                continue
+            if revoke_marker(marker):
+                if not marker.exists():
+                    removed.append(marker)
+            else:
+                unrevoked.append(marker)
+    error: OSError | None = None
+    try:
+        _unregister_files(manifest_dir, removed)
+    except OSError as exc:
+        error = exc
+    if unrevoked:
+        raise RevocationError(unrevoked)
+    if error is not None:
+        raise error
+    return removed
+
+
+def _unregister_files(manifest_dir: Path | None, removed: list[Path]) -> list[Path]:
     if manifest_dir is None or not owned_by_desktop(manifest_dir):
         return removed
     for name in (MANIFEST_FILE, LAUNCHER_FILE):
@@ -225,6 +324,11 @@ class ExtensionHostRegistrar:
     def __init__(self, config: Any) -> None:
         self.config = config
         self.active = False
+        # Markers this registrar wrote and has not verified as revoked. A new
+        # registration waits until this is empty.
+        self.unrevoked: set[Path] = set()
+        self._heartbeat_stop: threading.Event | None = None
+        self._heartbeat: threading.Thread | None = None
 
     @property
     def control_dir(self) -> Path:
@@ -246,6 +350,8 @@ class ExtensionHostRegistrar:
         if not extension_id:
             return None
         try:
+            if self.unrevoked and not self._revoke_known():
+                raise ValueError("an earlier recording's host is not revoked yet")
             if getattr(sys, "frozen", False):
                 raise ValueError("the packaged app does not ship the native host yet")
             target = self.manifest_dir()
@@ -258,6 +364,7 @@ class ExtensionHostRegistrar:
             if host_script is None:
                 raise ValueError("native host script is not installed")
             active_file = self.control_dir / f"{ACTIVE_PREFIX}{capture_id}"
+            self.unrevoked.add(active_file)
             path = register(
                 target,
                 extension_id,
@@ -271,13 +378,14 @@ class ExtensionHostRegistrar:
             self.sweep()  # leave nothing half-written
             return None
         self.active = True
+        self._start_heartbeat(active_file)
         logger.info("Chrome extension host registered for this recording")
         return path
 
     def stop(self) -> list[Path]:
         """End this recording's registration, if one was made. Never raises."""
 
-        if not self.active:
+        if not self.active and not self.unrevoked:
             return []
         return self.sweep()
 
@@ -285,11 +393,72 @@ class ExtensionHostRegistrar:
         """Remove any Desktop-owned registration and markers. Never raises.
 
         Called at engine start and shutdown, when no recording can be active.
+        The lease heartbeat stops first, so even if every later step fails a
+        running host refuses once the lease runs out.
         """
 
+        self._stop_heartbeat()
         self.active = False
+        self._revoke_known()
         try:
-            return unregister(self.manifest_dir(), control_dir=self.control_dir)
+            manifest_dir = self.manifest_dir()
         except Exception as exc:
-            logger.warning("Could not remove the Chrome extension host registration: {}", exc)
+            logger.warning("Could not locate the Chrome native host folder: {}", exc)
+            manifest_dir = None
+        try:
+            return unregister(manifest_dir, control_dir=self.control_dir)
+        except RevocationError as exc:
+            self.unrevoked.update(exc.markers)
+            logger.error("Could not revoke the Chrome extension host: {}", exc)
             return []
+        except Exception as exc:
+            logger.error("Could not remove the Chrome extension host registration: {}", exc)
+            return []
+        finally:
+            self._revoke_known()
+
+    @property
+    def revoked(self) -> bool:
+        """Whether every marker this registrar wrote is verified revoked."""
+
+        return not self.active and not self.unrevoked
+
+    def _revoke_known(self) -> bool:
+        for marker in sorted(self.unrevoked):
+            if revoke_marker(marker):
+                self.unrevoked.discard(marker)
+            else:
+                logger.error(
+                    "Chrome extension host for an ended recording is not revoked; "
+                    "it stops writing within {} seconds",
+                    LEASE_SECONDS,
+                )
+        return not self.unrevoked
+
+    def _start_heartbeat(self, active_file: Path) -> None:
+        stop = threading.Event()
+
+        def beat() -> None:
+            while not stop.wait(HEARTBEAT_SECONDS):
+                try:
+                    # A lapsed lease (say after sleep) is renewed; a removed or
+                    # overwritten marker never is.
+                    if not active_file.is_file() or not _holds_active(active_file):
+                        return
+                    os.utime(active_file)
+                except OSError as exc:
+                    # Fail closed: without a touch the lease runs out.
+                    logger.warning("Chrome extension host lease not renewed: {}", exc)
+                    return
+
+        thread = threading.Thread(target=beat, name="extension-host-lease", daemon=True)
+        self._heartbeat_stop, self._heartbeat = stop, thread
+        thread.start()
+
+    def _stop_heartbeat(self) -> None:
+        stop, thread = self._heartbeat_stop, self._heartbeat
+        self._heartbeat_stop = self._heartbeat = None
+        if stop is not None:
+            stop.set()
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=HEARTBEAT_SECONDS * 2)

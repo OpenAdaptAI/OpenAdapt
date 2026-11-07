@@ -11,6 +11,7 @@ import os
 import stat
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -92,8 +93,11 @@ class TestRegister:
             str(recording.resolve()),
             "--active-file",
             str(active),
+            "--active-lease",
+            str(host.LEASE_SECONDS),
             f"chrome-extension://{EXT_ID}/",
         ]
+        assert active.read_text(encoding="utf-8") == host.ACTIVE_TEXT
 
     @pytest.mark.parametrize(
         "bad",
@@ -505,4 +509,276 @@ def test_registered_launcher_runs_real_host_into_capture_until_stop(tmp_path: Pa
         assert rows[1]["value"] == "<secret>"
         assert not (hosts / host.MANIFEST_FILE).exists()
     finally:
+        db.close()
+
+
+def _fail_unlink_for(monkeypatch, target: Path) -> None:
+    real_unlink = Path.unlink
+
+    def unlink(self: Path, missing_ok: bool = False) -> None:
+        if self == target:
+            raise PermissionError("synthetic: cannot remove the marker")
+        real_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", unlink)
+
+
+def _fail_open_for(monkeypatch, target: Path) -> None:
+    real_open = os.open
+
+    def fake_open(path, flags, *args, **kwargs):
+        if Path(path) == target and flags & os.O_WRONLY:
+            raise PermissionError("synthetic: cannot overwrite the marker")
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(host.os, "open", fake_open)
+
+
+def _fail_utime_for(monkeypatch, target: Path) -> None:
+    real_utime = os.utime
+
+    def fake_utime(path, *args, **kwargs):
+        if Path(path) == target:
+            raise PermissionError("synthetic: cannot change the marker's time")
+        return real_utime(path, *args, **kwargs)
+
+    monkeypatch.setattr(host.os, "utime", fake_utime)
+
+
+class TestRevokeMarker:
+    def _marker(self, tmp_path: Path) -> Path:
+        marker = tmp_path / ".extension-active-cap1"
+        marker.write_text(host.ACTIVE_TEXT, encoding="utf-8")
+        return marker
+
+    def test_removed(self, tmp_path: Path) -> None:
+        marker = self._marker(tmp_path)
+        assert host.marker_revoked(marker) is False
+        assert host.revoke_marker(marker) is True
+        assert not marker.exists()
+
+    def test_overwritten_and_expired_when_removal_fails(self, tmp_path: Path, monkeypatch) -> None:
+        marker = self._marker(tmp_path)
+        _fail_unlink_for(monkeypatch, marker)
+        assert host.revoke_marker(marker) is True
+        assert marker.read_text(encoding="utf-8") == host.REVOKED_TEXT
+        assert marker.stat().st_mtime == 0
+
+    def test_expired_lease_alone_counts(self, tmp_path: Path, monkeypatch) -> None:
+        marker = self._marker(tmp_path)
+        _fail_unlink_for(monkeypatch, marker)
+        _fail_open_for(monkeypatch, marker)
+        assert host.revoke_marker(marker) is True
+        assert marker.read_text(encoding="utf-8") == host.ACTIVE_TEXT
+        assert marker.stat().st_mtime == 0
+
+    def test_every_route_failing_is_reported(self, tmp_path: Path, monkeypatch) -> None:
+        marker = self._marker(tmp_path)
+        _fail_unlink_for(monkeypatch, marker)
+        _fail_open_for(monkeypatch, marker)
+        _fail_utime_for(monkeypatch, marker)
+        assert host.revoke_marker(marker) is False
+        with pytest.raises(host.RevocationError) as err:
+            host.unregister(None, control_dir=tmp_path)
+        assert err.value.markers == [marker]
+
+    @pytest.mark.parametrize("text", ["", "revoked\n", "active", "active\n\n"])
+    def test_anything_but_exact_active_is_revoked(self, tmp_path: Path, text: str) -> None:
+        marker = tmp_path / ".extension-active-cap1"
+        marker.write_text(text, encoding="utf-8")
+        assert host.marker_revoked(marker) is True
+
+    def test_stale_lease_is_revoked(self, tmp_path: Path) -> None:
+        marker = self._marker(tmp_path)
+        old = marker.stat().st_mtime - host.LEASE_SECONDS - 5
+        os.utime(marker, (old, old))
+        assert host.marker_revoked(marker) is True
+
+
+class TestStopFailsClosed:
+    """Stop-time cleanup failures still end an already-running host (BLOCK on #2017)."""
+
+    def _start(self, tmp_path: Path, host_script: Path):
+        hosts = tmp_path / "profile" / "NativeMessagingHosts"
+        disp, db = _dispatcher(
+            tmp_path,
+            chrome_extension_id=EXT_ID,
+            chrome_native_hosts_dir=hosts,
+            chrome_extension_host_script=host_script,
+        )
+        disp.dispatch("start_recording", {})
+        active = disp.config.data_dir / "recording-control" / ".extension-active-cap1"
+        assert host.marker_revoked(active) is False
+        return disp, db, hosts, active
+
+    def test_unlocatable_hosts_folder_still_revokes(
+        self, tmp_path: Path, host_script: Path, linux, monkeypatch
+    ) -> None:
+        disp, db, _hosts, active = self._start(tmp_path, host_script)
+        try:
+
+            def broken() -> Path:
+                raise RuntimeError("synthetic: no home folder")
+
+            monkeypatch.setattr(disp.extension_host, "manifest_dir", broken)
+            disp.dispatch("stop_recording", {})
+            assert not active.exists()
+            assert disp.extension_host.revoked
+        finally:
+            db.close()
+
+    def test_failing_unregister_still_revokes(
+        self, tmp_path: Path, host_script: Path, linux, monkeypatch
+    ) -> None:
+        disp, db, _hosts, active = self._start(tmp_path, host_script)
+        try:
+
+            def broken(*args, **kwargs):
+                raise OSError("synthetic: cleanup failed")
+
+            monkeypatch.setattr(host, "unregister", broken)
+            disp.dispatch("stop_recording", {})
+            assert host.marker_revoked(active)
+            assert disp.extension_host.revoked
+        finally:
+            db.close()
+
+    def test_unremovable_marker_is_overwritten(
+        self, tmp_path: Path, host_script: Path, linux, monkeypatch
+    ) -> None:
+        disp, db, hosts, active = self._start(tmp_path, host_script)
+        try:
+            _fail_unlink_for(monkeypatch, active)
+            disp.dispatch("stop_recording", {})
+            assert active.read_text(encoding="utf-8") == host.REVOKED_TEXT
+            assert host.marker_revoked(active)
+            assert disp.extension_host.revoked
+            assert not (hosts / host.MANIFEST_FILE).exists()
+        finally:
+            db.close()
+
+    def test_unrevoked_marker_blocks_the_next_registration_until_revoked(
+        self, tmp_path: Path, host_script: Path, linux, monkeypatch
+    ) -> None:
+        disp, db, hosts, active = self._start(tmp_path, host_script)
+        try:
+            with monkeypatch.context() as broken:
+                _fail_unlink_for(broken, active)
+                _fail_open_for(broken, active)
+                _fail_utime_for(broken, active)
+                disp.dispatch("stop_recording", {})
+                assert not disp.extension_host.revoked
+                assert active in disp.extension_host.unrevoked
+                # Registration files still go, so Chrome can't start a new host.
+                assert not (hosts / host.MANIFEST_FILE).exists()
+
+                # The next recording still records, without extension evidence.
+                assert disp.dispatch("start_recording", {})["recording"] is True
+                assert not (hosts / host.MANIFEST_FILE).exists()
+                disp.dispatch("stop_recording", {})
+                assert not disp.extension_host.revoked
+
+            # Once revocation works again, the next stop or start clears it.
+            disp.extension_host.stop()
+            assert disp.extension_host.revoked
+            assert not active.exists()
+            disp.dispatch("start_recording", {})
+            assert (hosts / host.MANIFEST_FILE).exists()
+            disp.dispatch("stop_recording", {})
+        finally:
+            db.close()
+
+    def test_lease_is_renewed_while_recording_and_not_after_stop(
+        self, tmp_path: Path, host_script: Path, linux, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(host, "HEARTBEAT_SECONDS", 0.05)
+        disp, db, _hosts, active = self._start(tmp_path, host_script)
+        try:
+            os.utime(active, (1000, 1000))
+            deadline = time.monotonic() + 10
+            while active.stat().st_mtime == 1000 and time.monotonic() < deadline:
+                time.sleep(0.02)
+            assert active.stat().st_mtime > 1000
+            assert host.marker_revoked(active) is False
+
+            with monkeypatch.context() as broken:
+                _fail_unlink_for(broken, active)
+                _fail_open_for(broken, active)
+                disp.dispatch("stop_recording", {})
+            # Only the backdated lease revoked it; the heartbeat must not renew it.
+            assert active.read_text(encoding="utf-8") == host.ACTIVE_TEXT
+            time.sleep(0.3)
+            assert active.stat().st_mtime == 0
+            assert host.marker_revoked(active)
+            assert disp.extension_host._heartbeat is None
+        finally:
+            db.close()
+
+
+@pytest.mark.skipif(not REAL_HOST.is_file(), reason="Flow host script not in this checkout")
+@pytest.mark.parametrize("failure", ["unlink", "unlink+overwrite", "everything"])
+def test_real_host_refuses_after_a_failed_stop_cleanup(
+    tmp_path: Path, linux, monkeypatch, failure: str
+) -> None:
+    """A host Chrome keeps running after stop writes nothing, even when cleanup fails."""
+
+    hosts = tmp_path / "profile" / "NativeMessagingHosts"
+    disp, db = _dispatcher(
+        tmp_path,
+        chrome_extension_id=EXT_ID,
+        chrome_native_hosts_dir=hosts,
+        chrome_extension_host_script=REAL_HOST,
+    )
+    evidence = {
+        "type": "EXTENSION_EVIDENCE",
+        "evidence": {"kind": "target", "event": "click", "path": "button#save"},
+    }
+    proc = None
+    try:
+        disp.dispatch("start_recording", {})
+        capture = disp.services.controller.capture_dir
+        active = disp.config.data_dir / "recording-control" / ".extension-active-cap1"
+        manifest = json.loads((hosts / host.MANIFEST_FILE).read_text())
+        proc = subprocess.Popen(
+            [manifest["path"], f"chrome-extension://{EXT_ID}/"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+        )
+        assert proc.stdin is not None and proc.stdout is not None
+        proc.stdin.write(_frame(evidence))
+        proc.stdin.flush()
+        assert _read(proc.stdout) == {"ok": True, "count": 1}
+
+        with monkeypatch.context() as broken:
+
+            def no_hosts_dir() -> Path:
+                raise RuntimeError("synthetic: no home folder")
+
+            broken.setattr(disp.extension_host, "manifest_dir", no_hosts_dir)
+            _fail_unlink_for(broken, active)
+            if failure != "unlink":
+                _fail_open_for(broken, active)
+            if failure == "everything":
+                _fail_utime_for(broken, active)
+            disp.dispatch("stop_recording", {})
+        assert disp.extension_host.revoked is (failure != "everything")
+        if failure == "everything":
+            # Nothing Desktop tried worked; the heartbeat has stopped, so the
+            # lease runs out. Stand in for LEASE_SECONDS passing.
+            stale = time.time() - host.LEASE_SECONDS - 1
+            os.utime(active, (stale, stale))
+
+        proc.stdin.write(_frame(evidence))
+        proc.stdin.flush()
+        assert _read(proc.stdout) == {"ok": False, "error": "not_recording"}
+        proc.stdin.close()
+        proc.wait(timeout=30)
+        proc = None
+        rows = (capture / "extension_evidence.jsonl").read_text().splitlines()
+        assert json.loads(rows[0])["events"] == 1
+        assert len(rows) == 2
+    finally:
+        if proc is not None:
+            proc.kill()
+            proc.wait(timeout=30)
         db.close()

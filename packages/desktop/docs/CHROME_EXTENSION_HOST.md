@@ -27,13 +27,20 @@ OPENADAPT_CHROME_EXTENSION_HOST_SCRIPT=/path/to/openadapt_extension_host.py
 ## What Desktop does
 
 - **Recording starts** (native recording): Desktop writes the manifest, a
-  launcher and an "active" marker. The manifest allows exactly
-  `chrome-extension://<id>/`. The launcher runs the host with
-  `--recording <capture folder> --active-file <marker>`.
-- **Recording stops**: Desktop removes the manifest, the launcher and the
-  marker. Chrome may keep an already-started host running. That host checks
-  the marker and the capture folder before every write, so it writes nothing
-  after the stop and never recreates a deleted capture folder.
+  launcher and an "active" marker holding `active`. The manifest allows
+  exactly `chrome-extension://<id>/`. The launcher runs the host with
+  `--recording <capture folder> --active-file <marker> --active-lease 30`.
+  While the recording runs, Desktop touches the marker every 5 seconds.
+- **Recording stops**: Desktop stops touching the marker, then removes the
+  manifest, the launcher and the marker. Chrome may keep an already-started
+  host running. That host checks the marker and the capture folder before
+  every write, so it writes nothing after the stop and never recreates a
+  deleted capture folder.
+- **Cleanup fails**: if the marker can't be removed, Desktop overwrites it
+  with `revoked` and backdates it. If even that fails, the host stops writing
+  once the marker is 30 seconds old, because nothing renews it. Desktop logs
+  an error and makes no new registration until the old marker is revoked;
+  recording itself continues without extension evidence.
 - **Engine start and shutdown**: no recording is active, so Desktop removes
   any registration it wrote earlier (after a crash, or after you turned the
   setting off).
