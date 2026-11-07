@@ -23,6 +23,13 @@ Desktop does this for the person, only while a native recording runs:
   host that is already running stops writing even when every cleanup step
   fails. A marker Desktop could not revoke is retried, and no new
   registration is made until it is gone.
+- Revocation is immediate, not only at lease expiry. Desktop holds an
+  exclusive lock on the marker for the whole recording and the launcher runs
+  the host with ``--active-lock``, so the host also requires that lock. Stop
+  releases it first (closing a file cannot fail, and the lock also goes away
+  if Desktop exits). Each host write holds a shared lock on ``<marker>.gate``
+  from its check until the evidence is on disk; stop then takes the gate
+  exclusively before it returns, so no authorized write lands after stop.
 - Desktop never overwrites or removes a registration it did not write (for
   example one made by hand with ``install_host.py``). Its launcher carries an
   ownership marker line.
@@ -38,6 +45,7 @@ No network. The files are local and owner-only.
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import re
@@ -49,6 +57,11 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - registration is POSIX only
+    fcntl = None  # type: ignore[assignment]
 
 HOST_NAME = "com.openadapt.extension"
 MANIFEST_FILE = f"{HOST_NAME}.json"
@@ -63,6 +76,9 @@ REVOKED_TEXT = "revoked\n"
 # every HEARTBEAT_SECONDS while the recording runs.
 LEASE_SECONDS = 30
 HEARTBEAT_SECONDS = 5.0
+GATE_SUFFIX = ".gate"
+# Stop waits at most this long for host writes that passed their check.
+GATE_DRAIN_SECONDS = 10.0
 BROWSERS = ("chrome", "chromium")
 
 _USER_DIRS = {
@@ -143,9 +159,17 @@ def launcher_text(python: str, host_script: Path, recording: Path, active_file: 
         str(active_file),
         "--active-lease",
         str(LEASE_SECONDS),
+        "--active-lock",
     ]
     command = " ".join(shlex.quote(part) for part in argv)
     return f'#!/bin/sh\n{OWNER_MARKER}\nexec {command} "$@"\n'
+
+
+def gate_path(active_file: Path) -> Path:
+    """The write gate a host holds (shared) for each check-and-persist."""
+
+    active_file = Path(active_file)
+    return active_file.with_name(active_file.name + GATE_SUFFIX)
 
 
 def owned_by_desktop(manifest_dir: Path) -> bool:
@@ -207,6 +231,7 @@ def register(
     active_file = Path(active_file)
     active_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     _write_private(active_file, ACTIVE_TEXT, 0o600)
+    _write_private(gate_path(active_file), "", 0o600)
     _write_private(
         launcher,
         launcher_text(python, Path(host_script).resolve(), recording.resolve(), active_file),
@@ -329,6 +354,11 @@ class ExtensionHostRegistrar:
         self.unrevoked: set[Path] = set()
         self._heartbeat_stop: threading.Event | None = None
         self._heartbeat: threading.Thread | None = None
+        # Open files holding the marker lock and the write gate while recording.
+        self._lease_fd: int | None = None
+        self._gate_fd: int | None = None
+        # A host write authorized before stop that stop could not wait out.
+        self.undrained = False
 
     @property
     def control_dir(self) -> Path:
@@ -373,6 +403,7 @@ class ExtensionHostRegistrar:
                 host_script=host_script,
                 python=sys.executable,
             )
+            self._hold_lease(active_file)
         except Exception as exc:
             logger.warning("Chrome extension evidence is off for this recording: {}", exc)
             self.sweep()  # leave nothing half-written
@@ -399,6 +430,9 @@ class ExtensionHostRegistrar:
 
         self._stop_heartbeat()
         self.active = False
+        # Immediate revocation first: a host with --active-lock refuses as soon
+        # as the lock is gone, whatever happens to the files below.
+        self._release_lease()
         self._revoke_known()
         try:
             manifest_dir = self.manifest_dir()
@@ -421,7 +455,76 @@ class ExtensionHostRegistrar:
     def revoked(self) -> bool:
         """Whether every marker this registrar wrote is verified revoked."""
 
-        return not self.active and not self.unrevoked
+        return not self.active and not self.unrevoked and not self.undrained
+
+    def _hold_lease(self, active_file: Path) -> None:
+        """Lock the marker exclusively and open the gate. Raises on failure."""
+
+        if fcntl is None:
+            raise ValueError("file locking is unavailable on this system")
+        self._release_lease()
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+        lease_fd = os.open(active_file, flags)
+        try:
+            deadline = time.monotonic() + 1.0
+            while True:
+                try:
+                    fcntl.flock(lease_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    # A host probing the marker holds a shared lock briefly.
+                    if time.monotonic() >= deadline:
+                        raise
+                    time.sleep(0.01)
+            opened, named = os.fstat(lease_fd), os.stat(active_file, follow_symlinks=False)
+            if (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino):
+                raise ValueError("active marker changed while it was being locked")
+            gate_fd = os.open(gate_path(active_file), flags)
+        except BaseException:
+            os.close(lease_fd)
+            raise
+        self._lease_fd, self._gate_fd = lease_fd, gate_fd
+        self.undrained = False
+
+    def _release_lease(self) -> None:
+        """Release the marker lock, then wait out in-flight host writes."""
+
+        lease_fd, gate_fd = self._lease_fd, self._gate_fd
+        self._lease_fd = self._gate_fd = None
+        if lease_fd is not None:
+            try:
+                os.close(lease_fd)  # releases the lock even if close reports an error
+            except OSError:
+                pass
+        if gate_fd is None:
+            return
+        try:
+            deadline = time.monotonic() + GATE_DRAIN_SECONDS
+            while True:
+                try:
+                    fcntl.flock(gate_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    self.undrained = False
+                    break
+                except OSError as exc:
+                    if exc.errno not in (errno.EWOULDBLOCK, errno.EAGAIN):
+                        raise
+                    if time.monotonic() >= deadline:
+                        self.undrained = True
+                        logger.error(
+                            "A Chrome extension host write did not finish within {} seconds "
+                            "of the recording stopping",
+                            GATE_DRAIN_SECONDS,
+                        )
+                        break
+                    time.sleep(0.01)
+        except OSError as exc:
+            self.undrained = True
+            logger.error("Could not wait for Chrome extension host writes: {}", exc)
+        finally:
+            try:
+                os.close(gate_fd)
+            except OSError:
+                pass
 
     def _revoke_known(self) -> bool:
         for marker in sorted(self.unrevoked):

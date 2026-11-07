@@ -186,15 +186,23 @@ class ExtensionEvidenceBuffer:
     def lines(self) -> list[dict[str, Any]]:
         return [dict(line) for line in self._lines]
 
-    def write(self, recording_dir: Path | str) -> Path:
+    def truncate(self, count: int) -> None:
+        """Drop lines after the first ``count`` (undo an append that was not persisted)."""
+
+        del self._lines[count:]
+
+    def write(self, recording_dir: Path | str, *, create_dir: bool = True) -> Path:
         """Write ``extension_evidence.jsonl``. Empty buffer still writes a header.
 
         Secret field values are forced to the plain ``"<secret>"`` literal at
         serialize time so the on-disk payload never carries a live value.
+        With ``create_dir=False`` a missing recording folder raises OSError
+        instead of being created.
         """
 
         path = Path(recording_dir) / EVIDENCE_FILE
-        path.parent.mkdir(parents=True, exist_ok=True)
+        if create_dir:
+            path.parent.mkdir(parents=True, exist_ok=True)
         lines = self.lines()
         header = {"schema": SCHEMA, "events": len(lines), "source": "chrome_extension"}
         chunks = [json.dumps(header, sort_keys=True)]

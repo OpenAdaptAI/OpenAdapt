@@ -27,20 +27,29 @@ OPENADAPT_CHROME_EXTENSION_HOST_SCRIPT=/path/to/openadapt_extension_host.py
 ## What Desktop does
 
 - **Recording starts** (native recording): Desktop writes the manifest, a
-  launcher and an "active" marker holding `active`. The manifest allows
-  exactly `chrome-extension://<id>/`. The launcher runs the host with
-  `--recording <capture folder> --active-file <marker> --active-lease 30`.
-  While the recording runs, Desktop touches the marker every 5 seconds.
-- **Recording stops**: Desktop stops touching the marker, then removes the
-  manifest, the launcher and the marker. Chrome may keep an already-started
-  host running. That host checks the marker and the capture folder before
-  every write, so it writes nothing after the stop and never recreates a
-  deleted capture folder.
+  launcher, an "active" marker holding `active` and an empty `<marker>.gate`
+  file. The manifest allows exactly `chrome-extension://<id>/`. The launcher
+  runs the host with
+  `--recording <capture folder> --active-file <marker> --active-lease 30 --active-lock`.
+  Desktop holds an exclusive lock on the marker for the whole recording and
+  touches it every 5 seconds. If the lock can't be taken, nothing stays
+  registered and recording continues without extension evidence.
+- **Recording stops**: Desktop stops touching the marker and releases its lock. That can't
+  fail, and the lock also goes away if Desktop exits, so a host that is
+  already running refuses its next write at once. Desktop then takes the
+  gate exclusively: each host write holds the gate (shared) from its check
+  until the evidence is on disk, so stop returns only after any write that
+  was authorized before it has finished (it waits at most 10 seconds and
+  reports the recording as not revoked if a write is still running). Then it
+  removes the manifest, the launcher, the marker and the gate. The host checks the lock, the marker and the capture
+  folder before every write, never creates the capture folder, and so never
+  recreates a deleted one.
 - **Cleanup fails**: if the marker can't be removed, Desktop overwrites it
-  with `revoked` and backdates it. If even that fails, the host stops writing
-  once the marker is 30 seconds old, because nothing renews it. Desktop logs
-  an error and makes no new registration until the old marker is revoked;
-  recording itself continues without extension evidence.
+  with `revoked` and backdates it. If even that fails, the released lock
+  already stops the host, and the lease is a second guard: the marker goes
+  stale after 30 seconds because nothing renews it. Desktop logs an error and
+  makes no new registration until the old marker is revoked; recording itself
+  continues without extension evidence.
 - **Engine start and shutdown**: no recording is active, so Desktop removes
   any registration it wrote earlier (after a crash, or after you turned the
   setting off).

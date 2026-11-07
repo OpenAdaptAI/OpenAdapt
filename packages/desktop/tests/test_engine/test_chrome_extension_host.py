@@ -11,6 +11,7 @@ import os
 import stat
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -95,9 +96,12 @@ class TestRegister:
             str(active),
             "--active-lease",
             str(host.LEASE_SECONDS),
+            "--active-lock",
             f"chrome-extension://{EXT_ID}/",
         ]
         assert active.read_text(encoding="utf-8") == host.ACTIVE_TEXT
+        assert host.gate_path(active).read_text(encoding="utf-8") == ""
+        assert _mode(host.gate_path(active)) == 0o600
 
     @pytest.mark.parametrize(
         "bad",
@@ -200,6 +204,7 @@ class TestRegister:
             host.MANIFEST_FILE,
             host.LAUNCHER_FILE,
             ".extension-active-cap1",
+            ".extension-active-cap1.gate",
         }
         assert sorted(p.name for p in hosts.iterdir()) == ["other.host.json"]
         assert (control / ".stop-cap1").exists()
@@ -763,10 +768,11 @@ def test_real_host_refuses_after_a_failed_stop_cleanup(
             disp.dispatch("stop_recording", {})
         assert disp.extension_host.revoked is (failure != "everything")
         if failure == "everything":
-            # Nothing Desktop tried worked; the heartbeat has stopped, so the
-            # lease runs out. Stand in for LEASE_SECONDS passing.
-            stale = time.time() - host.LEASE_SECONDS - 1
-            os.utime(active, (stale, stale))
+            # Nothing on disk changed: the marker still says active and its
+            # lease is fresh. Only the released lock revokes the host, and it
+            # must do so before the lease could run out.
+            assert active.read_text(encoding="utf-8") == host.ACTIVE_TEXT
+            assert abs(time.time() - active.stat().st_mtime) < host.LEASE_SECONDS
 
         proc.stdin.write(_frame(evidence))
         proc.stdin.flush()
@@ -782,3 +788,105 @@ def test_real_host_refuses_after_a_failed_stop_cleanup(
             proc.kill()
             proc.wait(timeout=30)
         db.close()
+
+
+def _hold_shared(path: Path) -> int:
+    import fcntl
+
+    fd = os.open(path, os.O_RDONLY)
+    fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+    return fd
+
+
+class TestStopWaitsForInFlightWrites:
+    """Stop releases the marker lock, then takes the write gate exclusively."""
+
+    def _start(self, tmp_path: Path, host_script: Path):
+        disp, db = _dispatcher(
+            tmp_path,
+            chrome_extension_id=EXT_ID,
+            chrome_native_hosts_dir=tmp_path / "p" / "NativeMessagingHosts",
+            chrome_extension_host_script=host_script,
+        )
+        disp.dispatch("start_recording", {})
+        active = disp.config.data_dir / "recording-control" / ".extension-active-cap1"
+        assert disp.extension_host.active
+        return disp, db, active
+
+    def test_marker_is_locked_while_recording_and_released_by_stop(
+        self, tmp_path: Path, host_script: Path, linux
+    ) -> None:
+        import fcntl
+
+        disp, db, active = self._start(tmp_path, host_script)
+        try:
+            probe = os.open(active, os.O_RDONLY)
+            try:
+                with pytest.raises(BlockingIOError):
+                    fcntl.flock(probe, fcntl.LOCK_SH | fcntl.LOCK_NB)
+                disp.dispatch("stop_recording", {})
+                assert not active.exists()
+                fcntl.flock(probe, fcntl.LOCK_SH | fcntl.LOCK_NB)  # lock is gone
+            finally:
+                os.close(probe)
+        finally:
+            db.close()
+
+    def test_stop_returns_only_after_an_in_flight_write_finishes(
+        self, tmp_path: Path, host_script: Path, linux
+    ) -> None:
+        disp, db, active = self._start(tmp_path, host_script)
+        writer = _hold_shared(host.gate_path(active))  # a host mid-write
+        done = threading.Event()
+        try:
+            thread = threading.Thread(
+                target=lambda: (disp.dispatch("stop_recording", {}), done.set())
+            )
+            thread.start()
+            assert not done.wait(0.5), "stop returned while a host write was in flight"
+            os.close(writer)
+            writer = None
+            assert done.wait(10)
+            thread.join(timeout=10)
+            assert disp.extension_host.revoked
+        finally:
+            if writer is not None:
+                os.close(writer)
+            db.close()
+
+    def test_a_write_that_never_finishes_is_reported_not_revoked(
+        self, tmp_path: Path, host_script: Path, linux, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(host, "GATE_DRAIN_SECONDS", 0.2)
+        disp, db, active = self._start(tmp_path, host_script)
+        writer = _hold_shared(host.gate_path(active))
+        try:
+            disp.dispatch("stop_recording", {})
+            assert disp.extension_host.undrained
+            assert not disp.extension_host.revoked
+        finally:
+            os.close(writer)
+            db.close()
+
+    def test_registration_fails_closed_when_the_marker_cannot_be_locked(
+        self, tmp_path: Path, host_script: Path, linux, monkeypatch
+    ) -> None:
+        def no_lock(self, active_file):
+            raise OSError("synthetic: no locking")
+
+        monkeypatch.setattr(host.ExtensionHostRegistrar, "_hold_lease", no_lock)
+        hosts = tmp_path / "p" / "NativeMessagingHosts"
+        disp, db = _dispatcher(
+            tmp_path,
+            chrome_extension_id=EXT_ID,
+            chrome_native_hosts_dir=hosts,
+            chrome_extension_host_script=host_script,
+        )
+        try:
+            disp.dispatch("start_recording", {})
+            assert not disp.extension_host.active
+            assert not (hosts / host.MANIFEST_FILE).exists()
+            control = disp.config.data_dir / "recording-control"
+            assert not list(control.glob(f"{host.ACTIVE_PREFIX}*"))
+        finally:
+            db.close()
