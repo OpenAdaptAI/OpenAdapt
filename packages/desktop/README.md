@@ -329,6 +329,7 @@ Environment variables win over the file:
   area by area
 - [Which release to download](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/RELEASES.md)
 - [OpenAdapt documentation](https://docs.openadapt.ai)
+- [Get updates](https://openadapt.ai/#updates): release notes and setup tips by email
 
 ## License
 
