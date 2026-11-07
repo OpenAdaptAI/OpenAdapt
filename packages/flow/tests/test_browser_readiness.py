@@ -181,24 +181,112 @@ def test_failed_rendering_never_retries_a_launch_or_changes_arguments(
     assert browser.closed
 
 
+def _unchecked_launches(source: str) -> list[int]:
+    """Inspect launch references as well as calls, including dynamic aliases.
+
+    The public backend class delegates to the checked browser-process helper;
+    every other launch reference belongs in the shared acquisition primitive.
+    This is a source inventory, not arbitrary Python data-flow verification.
+    """
+    tree = ast.parse(source)
+    delegated = {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and node.module == "openadapt_flow.backends.playwright_backend"
+        for alias in node.names
+        if alias.name == "PlaywrightBackend"
+    }
+    unchecked = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr == "launch":
+            if not (isinstance(node.value, ast.Name) and node.value.id in delegated):
+                unchecked.append(node.lineno)
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "getattr"
+            and len(node.args) >= 2
+            and isinstance(node.args[1], ast.Constant)
+            and node.args[1].value == "launch"
+        ):
+            if not (
+                isinstance(node.args[0], ast.Name) and node.args[0].id in delegated
+            ):
+                unchecked.append(node.lineno)
+    return sorted(unchecked)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "pw.chromium.launch(headless=True)",
+        "pw.firefox.launch(headless=True)",
+        "pw.webkit.launch(headless=True)",
+        "launcher = getattr(pw, spec.browser)\nlauncher.launch(**options)",
+        "launcher = pw.chromium\nlaunch = launcher.launch\nlaunch(**options)",
+        "getattr(getattr(pw, spec.browser), 'launch')(**options)",
+        "PlaywrightBackend.launch(url)",
+    ],
+)
+def test_acquisition_inventory_recognizes_direct_and_aliased_browser_launches(
+    source: str,
+) -> None:
+    assert len(_unchecked_launches(source)) == 1
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "launch_rendering_ready(getattr(pw, spec.browser), **options)",
+        "from openadapt_flow.backends.playwright_backend import PlaywrightBackend\n"
+        "PlaywrightBackend.launch(url)",
+        "from openadapt_flow.backends.playwright_backend import PlaywrightBackend as B\n"
+        "B.launch(url)",
+    ],
+)
+def test_acquisition_inventory_retains_shared_primitives_and_backend_delegation(
+    source: str,
+) -> None:
+    assert _unchecked_launches(source) == []
+
+
+@pytest.mark.parametrize(
+    ("source", "unchecked"),
+    [
+        (
+            "from openadapt_flow.backends.playwright_backend import PlaywrightBackend\n"
+            "launch = getattr(PlaywrightBackend, 'launch', None)\nlaunch(url)",
+            False,
+        ),
+        (
+            "from openadapt_flow.backends.playwright_backend import PlaywrightBackend as B\n"
+            "getattr(B, 'launch')(url)",
+            False,
+        ),
+        ("getattr(PlaywrightBackend, 'launch')(url)", True),
+        (
+            "from unrelated import PlaywrightBackend\n"
+            "getattr(PlaywrightBackend, 'launch')(url)",
+            True,
+        ),
+    ],
+)
+def test_acquisition_inventory_requires_exact_import_for_dynamic_delegation(
+    source: str, unchecked: bool
+) -> None:
+    assert bool(_unchecked_launches(source)) is unchecked
+
+
 def test_production_acquisition_inventory_has_no_unchecked_direct_launch() -> None:
     root = Path(__file__).parents[1] / "openadapt_flow"
     unchecked = []
     for path in root.rglob("*.py"):
         if path.name in ("_browser_setup.py", "_browser_readiness.py"):
             continue
-        for node in ast.walk(ast.parse(path.read_text(), filename=str(path))):
-            if not isinstance(node, ast.Call) or not isinstance(
-                node.func, ast.Attribute
-            ):
-                continue
-            owner = node.func.value
-            if (
-                node.func.attr == "launch"
-                and isinstance(owner, ast.Attribute)
-                and owner.attr == "chromium"
-            ):
-                unchecked.append(f"{path}:{node.lineno}")
+        unchecked.extend(
+            f"{path}:{line}" for line in _unchecked_launches(path.read_text())
+        )
     assert unchecked == []
 
 
