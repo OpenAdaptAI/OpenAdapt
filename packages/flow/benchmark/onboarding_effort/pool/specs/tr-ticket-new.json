@@ -1,0 +1,42 @@
+{
+  "id": "tr-ticket-new",
+  "app": "trac",
+  "intent": "File a new service-desk ticket with its summary, description, type, priority and component.",
+  "shape": "single",
+  "batch_run": false,
+  "inputs": [
+    "summary",
+    "description",
+    "type",
+    "priority",
+    "component"
+  ],
+  "keys": [],
+  "policy": "permissive",
+  "second_installation": "a new custom field 'Site' (a select, default HQ) added to the ticket form (trac.ini [ticket-custom])",
+  "second_kind": "custom_field",
+  "viewport": {
+    "first": [
+      1280,
+      900
+    ],
+    "second": [
+      1280,
+      900
+    ]
+  },
+  "device_scale": {
+    "first": 1.0,
+    "second": 1.0
+  },
+  "verify_yaml": {
+    "first": "schema_version: openadapt.verify/v1\napp:\n  name: Trac service desk (local test copy)\n  url: http://127.0.0.1:9485/newticket\n  version: trac@1.6\n  session: benchmark.onboarding_effort.hooks:open_session\n  reset:\n    python: benchmark.onboarding_effort.hooks:reset\nverifier:\n  kind: sql\n  sqlite_database: /Users/abrichr/oa/scratch/onboarding-effort/trac-db/trac.db\n  sql_query: \"SELECT id, summary, description, type, priority, component, reporter FROM ticket\"\nrecord:\n  name: ticket\n  match: [summary]\n  duplicate_key: summary\n  fields:\n    summary: summary\n    description: description\n    type: type\n    priority: priority\n    component: component\nsave_step: auto\ninputs:\n  source: recorded\n  unique: [summary]\ncampaign:\n  id: onboarding-tr-ticket-new-first\n  trials: 3\n  policy: permissive\n",
+    "second": "schema_version: openadapt.verify/v1\napp:\n  name: Trac service desk (local test copy)\n  url: http://127.0.0.1:9485/newticket\n  version: trac@1.6\n  session: benchmark.onboarding_effort.hooks:open_session\n  reset:\n    python: benchmark.onboarding_effort.hooks:reset\nverifier:\n  kind: sql\n  sqlite_database: /Users/abrichr/oa/scratch/onboarding-effort/trac-db/trac.db\n  sql_query: \"SELECT id, summary, description, type, priority, component, reporter FROM ticket\"\nrecord:\n  name: ticket\n  match: [summary]\n  duplicate_key: summary\n  fields:\n    summary: summary\n    description: description\n    type: type\n    priority: priority\n    component: component\nsave_step: auto\ninputs:\n  source: recorded\n  unique: [summary]\ncampaign:\n  id: onboarding-tr-ticket-new-second\n  trials: 3\n  policy: permissive\n"
+  },
+  "oracle_source_sha256": "5e10e5f638e1093f70ab54ee8718e69e3beaef832dd4af087b25a2a095644969",
+  "heldout_items_sha256": {
+    "first": "1fc5e3bde4c43507af8889c28bad98cc1c4d14591041527794b70dea1ed8f9f8",
+    "second": "ec14b5bd6607bf98c0091d28b06a54fd4d9f8b9643df208101ed7d064f8e2281"
+  },
+  "heldout_n": 25
+}

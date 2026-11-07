@@ -1,0 +1,41 @@
+{
+  "id": "nb-vlan-conditional",
+  "app": "netbox",
+  "intent": "Add a VLAN with its ID and name; when the request names a VLAN group, assign that group.",
+  "shape": "conditional",
+  "batch_run": false,
+  "inputs": [
+    "vid",
+    "name",
+    "group",
+    "cost_center"
+  ],
+  "keys": [],
+  "policy": "permissive",
+  "second_installation": "a required custom field 'Cost center' on VLANs; requests now carry a cost center",
+  "second_kind": "required_field",
+  "viewport": {
+    "first": [
+      1280,
+      900
+    ],
+    "second": [
+      1280,
+      900
+    ]
+  },
+  "device_scale": {
+    "first": 1.0,
+    "second": 1.0
+  },
+  "verify_yaml": {
+    "first": "schema_version: openadapt.verify/v1\napp:\n  name: NetBox (local test copy)\n  url: http://127.0.0.1:9486/ipam/vlans/add/\n  version: netbox@4.1.11\n  session: benchmark.onboarding_effort.hooks:open_session\n  reset:\n    python: benchmark.onboarding_effort.hooks:reset\nverifier:\n  kind: sql\n  sql_driver: pg8000.dbapi\n  sql_connect_args: {host: 127.0.0.1, port: 9489, user: nb_reader, database: netbox}\n  sql_password_env: NB_READER_PASSWORD\n  sql_query: \"SELECT v.vid::text AS vid, v.name, COALESCE(g.name, '') AS vlan_group, COALESCE(v.custom_field_data->>'cost_center', '') AS cost_center FROM ipam_vlan v LEFT JOIN ipam_vlangroup g ON g.id=v.group_id\"\nrecord:\n  name: vlan\n  match: [name]\n  duplicate_key: name\n  fields:\n    vid: vid\n    name: name\n    vlan_group: group\nsave_step: auto\ninputs:\n  source: recorded\ncampaign:\n  id: onboarding-nb-vlan-conditional-first\n  trials: 3\n  policy: permissive\n",
+    "second": "schema_version: openadapt.verify/v1\napp:\n  name: NetBox (local test copy)\n  url: http://127.0.0.1:9486/ipam/vlans/add/\n  version: netbox@4.1.11\n  session: benchmark.onboarding_effort.hooks:open_session\n  reset:\n    python: benchmark.onboarding_effort.hooks:reset\nverifier:\n  kind: sql\n  sql_driver: pg8000.dbapi\n  sql_connect_args: {host: 127.0.0.1, port: 9489, user: nb_reader, database: netbox}\n  sql_password_env: NB_READER_PASSWORD\n  sql_query: \"SELECT v.vid::text AS vid, v.name, COALESCE(g.name, '') AS vlan_group, COALESCE(v.custom_field_data->>'cost_center', '') AS cost_center FROM ipam_vlan v LEFT JOIN ipam_vlangroup g ON g.id=v.group_id\"\nrecord:\n  name: vlan\n  match: [name]\n  duplicate_key: name\n  fields:\n    vid: vid\n    name: name\n    vlan_group: group\n    cost_center: cost_center\nsave_step: auto\ninputs:\n  source: recorded\ncampaign:\n  id: onboarding-nb-vlan-conditional-second\n  trials: 3\n  policy: permissive\n"
+  },
+  "oracle_source_sha256": "422d84beb07fea1153a481b211112724cf9597f12f021e629effbb49b44e705f",
+  "heldout_items_sha256": {
+    "first": "65d5728616a32999c974f6c71205272caab7d2694b67fd700619df1ba918526b",
+    "second": "e64fcae13ed59b869ffe8f6d74b8cfb3b0e831ebc113b67a10642165ff6a9ccd"
+  },
+  "heldout_n": 25
+}

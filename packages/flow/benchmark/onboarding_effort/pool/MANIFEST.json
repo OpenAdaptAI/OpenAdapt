@@ -1,0 +1,254 @@
+{
+  "waves": [
+    {
+      "wave": 1,
+      "frozen_at": "2026-10-20T13:20:02-0400",
+      "workflows": [
+        "tr-ticket-new",
+        "tr-ticket-resolve",
+        "tr-triage-loop",
+        "nb-device-add",
+        "nb-ip-paginated",
+        "nb-vlan-conditional"
+      ],
+      "files": {
+        "PROTOCOL.md": "01e6d4fa220b1e48b7538f502493b95a94a5595dc99687fc56ce66ae3764bd58",
+        "apps/netbox_app.py": "8a99401eee9db1100714020e21f5e4d40b46cb8cee974b32fabba43884735201",
+        "apps/trac_app.py": "35d71e667bbcc8ea36b7e21960b0dfa351906de239335e1aaf56d6179f52249f",
+        "heldout.py": "4b9e7965d0e49dab0f6a75143f30599c7bea04e00548fd37dcb723fbc6fe4303",
+        "hooks.py": "962ea2722616c2f9e106840984ffb4fdaf00fd949c1b293bf82ecbd9d5d00b65",
+        "implementer.py": "d556eee7f8d02161bd0d631238e9a05381e3c460f88091aa60a7ca00933e00e5",
+        "ledger.py": "62f67f74378695d3df09313472e2496299faa6c93004093460f033e06d764904",
+        "pool/base.py": "d0cd31649a286009dce757e8b00366863d920a048165f395fdc9934a43c3d244",
+        "pool/netbox.py": "e6797bc75d3a8dcdae1a137ce83c476013dbe0995796decb759266f01c7f9075",
+        "pool/specs/nb-device-add.json": "bdc4c7a67803e992436a49894c6bc7a6c27c0b5120fb99bdb592633cf6905a55",
+        "pool/specs/nb-ip-paginated.json": "49a3f5df3643878b5309b9f3fb70020a3c0539d7d6612766968afd19e35efc1e",
+        "pool/specs/nb-vlan-conditional.json": "163977874381187558aaae550a53c79c6ce0ce3b33928f50ed08a4d58a555211",
+        "pool/specs/tr-ticket-new.json": "4ba21cb1a35cac50cc2cd08b90c0d9f6d08615335fc564895b050ca902105685",
+        "pool/specs/tr-ticket-resolve.json": "cce031ea236d8557fe340a2882bf35c2e1856b95696df7d674a8339a2c6cb093",
+        "pool/specs/tr-triage-loop.json": "0bf143ce13e2718cf9c1b045cc92cecff6084cf4d4f62ef3cd1e9d69c8007446",
+        "pool/trac.py": "1c96e9e1a2ff9e4dedf18f79207a9f304c538d245c9136ffbd26726b07fc59f9",
+        "registry.py": "711f5305897867e656ecab8798bb7251f9c9557048434045854850795e84b6d1",
+        "validate.py": "59a2cc02d3b0fe507794a627802de8f0acbdd543e2de7e686f120dc289311525"
+      },
+      "validation": [
+        {
+          "workflow": "tr-ticket-new",
+          "installation": "first",
+          "ok": true,
+          "idle": [
+            "MISSING"
+          ],
+          "performed": [
+            "VERIFIED"
+          ],
+          "keyed": null
+        },
+        {
+          "workflow": "tr-ticket-resolve",
+          "installation": "first",
+          "ok": true,
+          "idle": [
+            "MISSING",
+            "MISSING"
+          ],
+          "performed": [
+            "VERIFIED",
+            "VERIFIED"
+          ],
+          "keyed": null
+        },
+        {
+          "workflow": "tr-triage-loop",
+          "installation": "first",
+          "ok": true,
+          "idle": [
+            "MISSING",
+            "MISSING",
+            "MISSING"
+          ],
+          "performed": [
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED"
+          ],
+          "keyed": "VERIFIED"
+        },
+        {
+          "workflow": "nb-device-add",
+          "installation": "first",
+          "ok": true,
+          "idle": [
+            "MISSING"
+          ],
+          "performed": [
+            "VERIFIED"
+          ],
+          "keyed": null
+        },
+        {
+          "workflow": "nb-ip-paginated",
+          "installation": "first",
+          "ok": true,
+          "idle": [
+            "MISSING",
+            "MISSING",
+            "MISSING",
+            "MISSING",
+            "MISSING",
+            "MISSING",
+            "MISSING",
+            "MISSING",
+            "MISSING",
+            "MISSING",
+            "MISSING",
+            "MISSING"
+          ],
+          "performed": [
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED"
+          ],
+          "keyed": "VERIFIED"
+        },
+        {
+          "workflow": "nb-vlan-conditional",
+          "installation": "first",
+          "ok": true,
+          "idle": [
+            "MISSING",
+            "MISSING"
+          ],
+          "performed": [
+            "VERIFIED",
+            "VERIFIED"
+          ],
+          "keyed": null
+        },
+        {
+          "workflow": "tr-ticket-new",
+          "installation": "second",
+          "ok": true,
+          "idle": [
+            "MISSING"
+          ],
+          "performed": [
+            "VERIFIED"
+          ],
+          "keyed": null
+        },
+        {
+          "workflow": "tr-ticket-resolve",
+          "installation": "second",
+          "ok": true,
+          "idle": [
+            "MISSING",
+            "MISSING"
+          ],
+          "performed": [
+            "VERIFIED",
+            "VERIFIED"
+          ],
+          "keyed": null
+        },
+        {
+          "workflow": "tr-triage-loop",
+          "installation": "second",
+          "ok": true,
+          "idle": [
+            "MISSING",
+            "MISSING",
+            "MISSING"
+          ],
+          "performed": [
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED"
+          ],
+          "keyed": "VERIFIED"
+        },
+        {
+          "workflow": "nb-device-add",
+          "installation": "second",
+          "ok": true,
+          "idle": [
+            "MISSING"
+          ],
+          "performed": [
+            "VERIFIED"
+          ],
+          "keyed": null
+        },
+        {
+          "workflow": "nb-ip-paginated",
+          "installation": "second",
+          "ok": true,
+          "idle": [
+            "MISSING",
+            "MISSING",
+            "MISSING",
+            "MISSING",
+            "MISSING",
+            "MISSING",
+            "MISSING",
+            "MISSING",
+            "MISSING",
+            "MISSING",
+            "MISSING",
+            "MISSING"
+          ],
+          "performed": [
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED",
+            "VERIFIED"
+          ],
+          "keyed": "VERIFIED"
+        },
+        {
+          "workflow": "nb-vlan-conditional",
+          "installation": "second",
+          "ok": true,
+          "idle": [
+            "MISSING",
+            "MISSING"
+          ],
+          "performed": [
+            "VERIFIED",
+            "VERIFIED"
+          ],
+          "keyed": null
+        },
+        {
+          "workflow": "tr-ticket-new",
+          "installation": "first",
+          "ok": true,
+          "idle": [
+            "MISSING"
+          ],
+          "performed": [
+            "VERIFIED"
+          ],
+          "keyed": null
+        }
+      ]
+    }
+  ]
+}
