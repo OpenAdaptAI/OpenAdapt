@@ -105,7 +105,6 @@ from openadapt_flow.write_ledger import (
     LedgerError,
     MemoryLedger,
     default_ledger,
-    prune,
 )
 
 __all__ = [
@@ -1064,8 +1063,10 @@ def _settle(
             result["provisional"] = False
             result["recheck_due_at"] = None
             result["rechecked_at"] = attempt.rechecked.get("at")
-        if not attempt.delivered:
-            led.delivered(key, attempt.attempt_id)
+        # The lifecycle lease does not exclude late rechecks. Linearize the
+        # handback against their settlements even if an earlier reply was
+        # already delivered.
+        led.delivered(key, attempt.attempt_id, expected_revision=attempt.revision)
         raise AlreadyWritten(
             (
                 "this write was already made: the store holds it, though it "
@@ -1215,6 +1216,22 @@ def _reconcile(
         result,
     )
     if (
+        result.outcome is Outcome.UNCERTAIN
+        and result.observed == "absent"
+        and led.settle_s is not None
+        and _age_s(attempt) >= led.settle_s
+    ):
+        led.resolved(
+            key,
+            attempt.attempt_id,
+            outcome=Outcome.UNCERTAIN.value,
+            retry_safe=True,
+            delivered=True,
+            via="settled",
+            expected_revision=attempt.revision,
+            reason=f"the store showed nothing {int(led.settle_s)}s after the attempt",
+        )
+    elif (
         result.outcome is not Outcome.UNCERTAIN
         or attempt.resolved is None
         or _landed(result)
@@ -1228,21 +1245,7 @@ def _reconcile(
             via="reconcile",
             write_key_bound=bool(attempt.begun.get("write_key_bound")),
             folder=folder,
-        )
-    if (
-        result.outcome is Outcome.UNCERTAIN
-        and result.observed == "absent"
-        and led.settle_s is not None
-        and _age_s(attempt) >= led.settle_s
-    ):
-        led.resolved(
-            key,
-            attempt.attempt_id,
-            outcome=Outcome.UNCERTAIN.value,
-            retry_safe=True,
-            delivered=True,
-            via="settled",
-            reason=f"the store showed nothing {int(led.settle_s)}s after the attempt",
+            expected_revision=attempt.revision,
         )
 
 
@@ -1322,6 +1325,10 @@ def verify_write(
     # attempt: judge, but leave the ledger to it.
     holds_lease = pending.ledger is not None and pending._lease is not None
     try:
+        before_judge = (
+            pending.ledger.latest(pending.write_key)
+            if holds_lease and pending.ledger is not None else None
+        )
         result = _judge(
             pending, write_attempted=write_attempted, source=source, seal=seal
         )
@@ -1335,7 +1342,7 @@ def verify_write(
                 pending.started,
                 result,
             )
-            _record(
+            result = _record(
                 pending.ledger,
                 pending.write_key,
                 pending.write_id,
@@ -1344,6 +1351,7 @@ def verify_write(
                 via="verify_write",
                 write_key_bound=pending.write_key_bound,
                 folder=pending.workdir,
+                expected_revision=before_judge.revision if before_judge is not None else -1,
             )
     finally:
         pending.release()
@@ -1426,8 +1434,9 @@ def _record(
     via: str,
     write_key_bound: bool,
     folder: Optional[Path] = None,
-) -> None:
-    led.resolved(
+    expected_revision: Optional[int] = None,
+) -> WriteResult:
+    attempt = led.resolved(
         key,
         attempt_id,
         outcome=result.outcome.value,
@@ -1439,9 +1448,16 @@ def _record(
         write_key_bound=write_key_bound,
         receipt_sha256=result.receipt_sha256 or None,
         result=result.to_dict(),
+        expected_revision=expected_revision,
+        cleanup=folder if _landed(result) else None,
     )
-    if folder is not None and _landed(result):
-        prune(folder)
+    if (
+        attempt.attempt_id != attempt_id
+        or not attempt.events
+        or attempt.events[-1].get("applied") is False
+    ):
+        return _downgrade(result, "the ledger attempt changed while the write was checked")
+    return result
 
 
 def _landed(result: WriteResult) -> bool:
@@ -2266,19 +2282,20 @@ def recheck(
     if late.outcome != "CONFIRMED":
         late = _hold_after_recheck(ledger, write, late, trusted=trusted)
     else:
-        _mark_rechecked(ledger, write, late)
+        late = _mark_rechecked(ledger, write, late)
     return late
 
 
 def _mark_rechecked(
     ledger: Any, write: WriteResult | RecheckState, late: RecheckResult
-) -> None:
+) -> RecheckResult:
     """Record on the write's ledger attempt that a recheck confirmed it, so
     ``openadapt verify ledger list`` no longer shows a recheck owed and a
     retry is handed a result that is no longer provisional.
 
-    Best effort: the verdict stands either way. If nothing is recorded, the
-    list keeps showing the recheck as owed, which is the safe side.
+    A journal change can invalidate this positive handback. If settlement
+    fails or the attempt is held, return UNCERTAIN rather than handing back
+    a positive that the ledger did not accept. The read facts stay intact.
     """
 
     try:
@@ -2291,25 +2308,34 @@ def _mark_rechecked(
             write_id, key = str(receipt.get("correlation_id") or ""), ""
         led = _resolve_ledger(ledger)
         if led is None or not write_id:
-            return
+            return late
         if key:
             attempt = led.latest(key)
         else:
             found = led.find_attempt(write_id)
             key, attempt = found if found is not None else ("", None)
         if attempt is None or attempt.attempt_id != write_id:
-            return
-        if (attempt.resolved or {}).get("outcome") != "CONFIRMED":
-            return
-        led.rechecked(
+            return _replace(late, outcome="UNCERTAIN", reasons=[*late.reasons,
+                "the ledger no longer has this attempt as its current write"])
+        recorded = led.rechecked(
             key,
             write_id,
             outcome=late.outcome,
             read_at=late.read_at,
             receipt_sha256=late.receipt_sha256 or None,
+            expected_revision=attempt.revision,
         )
+        if (
+            recorded.attempt_id != write_id
+            or not recorded.events
+            or recorded.events[-1].get("applied") is False
+        ):
+            return _replace(late, outcome="UNCERTAIN", reasons=[*late.reasons,
+                "the ledger did not accept this recheck; the attempt remains held"])
     except Exception:  # noqa: BLE001 - the list keeps showing it owed
-        return
+        return _replace(late, outcome="UNCERTAIN", reasons=[*late.reasons,
+            "the ledger could not record the recheck; hold this write by hand"])
+    return late
 
 
 def _hold_after_recheck(
@@ -2379,18 +2405,8 @@ def _hold_after_recheck(
         if attempt.attempt_id != write_id:
             return unheld("a newer attempt of this write is in the ledger")
         prior = attempt.resolved or {}
-        if prior.get("outcome") == "REFUTED" and late.outcome != "REFUTED":
-            # An earlier recheck refuted it: a later UNCERTAIN doesn't soften
-            # that. The attempt stays held as it is.
-            return _replace(
-                late,
-                reasons=[
-                    *late.reasons,
-                    "the ledger already holds this write as REFUTED; left as is",
-                ],
-            )
         reason = "; ".join(late.reasons) or "the recheck did not confirm the write"
-        led.resolved(
+        recorded = led.resolved(
             key,
             write_id,
             outcome=late.outcome,
@@ -2409,7 +2425,19 @@ def _hold_after_recheck(
                 "reason": reason,
                 "receipt_sha256": digest,
             },
+            expected_revision=attempt.revision,
         )
+        if (
+            recorded.attempt_id != write_id
+            or not recorded.events
+            or recorded.events[-1].get("applied") is False
+        ):
+            if recorded.attempt_id == write_id and (
+                recorded.resolved or {}
+            ).get("outcome") == "REFUTED":
+                return _replace(late, reasons=[*late.reasons,
+                    "the ledger already holds this write as REFUTED; the new observation was retained without changing the hold"])
+            return unheld("a concurrent settlement kept the existing hold or changed the attempt")
     except Exception as exc:  # noqa: BLE001 - the verdict stands; say so
         return _replace(
             late,
