@@ -40,7 +40,6 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 import requests
-
 from benchmark.ap_invoice import ground_truth
 from benchmark.ap_invoice.fixtures import (
     ADJACENT_INVOICE,
@@ -429,7 +428,7 @@ def run_benchmark(
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--n", type=int, default=DEFAULT_N)
     parser.add_argument("--out", default=str(HERE))
     parser.add_argument("--print", action="store_true", dest="print_only")

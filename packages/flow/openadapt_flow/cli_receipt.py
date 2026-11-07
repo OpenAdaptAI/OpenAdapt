@@ -18,10 +18,13 @@ def register(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser(
         "receipt",
         help="Check a signed write receipt offline, or export the keys to check it",
+        allow_abbrev=False,
     )
     rsub = p.add_subparsers(dest="receipt_command", required=True)
 
-    v = rsub.add_parser("verify", help="Check a write receipt against pinned keys")
+    v = rsub.add_parser(
+        "verify", help="Check a write receipt against pinned keys", allow_abbrev=False
+    )
     v.add_argument("file", help="a .receipt.cbor file")
     v.add_argument(
         "--issuer-key", required=True, help="the issuer's public key (PEM or key entry)"
@@ -43,9 +46,13 @@ def register(sub: argparse._SubParsersAction) -> None:
     v.add_argument("--json", action="store_true", help="print the result as JSON")
     v.set_defaults(func=cmd_verify)
 
-    k = rsub.add_parser("keys", help="Export the public keys a checker pins")
+    k = rsub.add_parser(
+        "keys", help="Export the public keys a checker pins", allow_abbrev=False
+    )
     ksub = k.add_subparsers(dest="keys_command", required=True)
-    e = ksub.add_parser("export", help="Write issuer.pub.pem and log.pub.pem to DIR")
+    e = ksub.add_parser(
+        "export", help="Write issuer.pub.pem and log.pub.pem to DIR", allow_abbrev=False
+    )
     e.add_argument("dir")
     e.set_defaults(func=cmd_keys_export)
 
@@ -53,6 +60,7 @@ def register(sub: argparse._SubParsersAction) -> None:
         "anchor",
         help="Put the receipt's digest in Sigstore Rekor (sends a digest, the "
         "public key and a signature; nothing else)",
+        allow_abbrev=False,
     )
     a.add_argument("file")
     a.set_defaults(func=cmd_anchor)

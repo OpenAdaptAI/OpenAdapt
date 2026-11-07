@@ -546,7 +546,9 @@ def qualify(root: Path, *, steady_caret: bool) -> dict[str, Any]:
 
 def main() -> int:
     os.environ["OPENADAPT_FLOW_OCR"] = "native"
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--keep", action="store_true", help="keep the work folder")
     parser.add_argument(

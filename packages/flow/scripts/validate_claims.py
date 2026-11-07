@@ -789,7 +789,7 @@ def _collect_junit(junit_path: Optional[str]) -> Optional[dict[str, str]]:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument(
         "--check", action="store_true", help="gate: exit 1 on any violation"
     )

@@ -463,7 +463,6 @@ def run2(
     """
 
     import anyio
-
     from openadapt_flow.agent.bridge import AgentBridge
     from openadapt_flow.agent.mcp import build_server
     from openadapt_flow.agent.runner import RunnerConfig
@@ -772,7 +771,9 @@ def summarize(results: dict[str, Any]) -> dict[str, Any]:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.split("\n\n")[0], allow_abbrev=False
+    )
     parser.add_argument("--n", type=int, default=3)
     parser.add_argument("--think", type=float, default=1.0)
     parser.add_argument("--arms", default=",".join(ARMS))

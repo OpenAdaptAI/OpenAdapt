@@ -65,8 +65,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from pydantic import BaseModel
-
 from benchmark.harness import agent_baseline
 from benchmark.harness.openemr_benchmark import (
     BILLING_ABORT_AFTER,
@@ -79,6 +77,7 @@ from benchmark.harness.run_benchmark import (
     identity_coverage_block,
 )
 from openadapt_flow.ir import Workflow
+from pydantic import BaseModel
 
 WORKFLOW_NAME = "triage-hybrid"
 #: Note used only to record the demonstration; every run substitutes its own.
@@ -1655,7 +1654,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             "Four-arm hybrid benchmark on MockMed (compiled / agent / "
             "demo-conditioned agent / compiled+fallback hybrid). The "
             "paid arms spend real money under a hard total ceiling."
-        )
+        ),
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--out",

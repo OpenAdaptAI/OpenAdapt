@@ -71,7 +71,9 @@ def patient(v: dict[str, str], **override: str) -> dict[str, Any]:
         telecom.insert(0, {"system": "phone", "value": v["phone"], "use": "home"})
     return {
         "resourceType": "Patient",
-        "identifier": [{"use": "usual", "system": SSN_SYSTEM, "value": v.get("ssn") or _ssn()}],
+        "identifier": [
+            {"use": "usual", "system": SSN_SYSTEM, "value": v.get("ssn") or _ssn()}
+        ],
         "name": [{"use": "usual", "family": v["family"], "given": [v["given"]]}],
         "gender": v["gender"],
         "birthDate": v["birth_date"],
@@ -104,65 +106,123 @@ def _day_after(iso: str) -> str:
 # ``seed`` runs before the baseline; ``act`` is the agent's write.
 Act = Callable[[EpicClient, dict[str, str], dict[str, Any]], None]
 CASES: list[tuple[str, str, str, bool, Act, Act, str]] = [
-    ("clean-1", "clean", "register_patient.yaml", False,
-     lambda c, v, s: None,
-     lambda c, v, s: s.update(loc=_create(c, patient(v))),
-     "CONFIRMED"),
-    ("clean-2", "clean", "register_patient.yaml", False,
-     lambda c, v, s: None,
-     lambda c, v, s: s.update(loc=_create(c, patient(v))),
-     "CONFIRMED"),
+    (
+        "clean-1",
+        "clean",
+        "register_patient.yaml",
+        False,
+        lambda c, v, s: None,
+        lambda c, v, s: s.update(loc=_create(c, patient(v))),
+        "CONFIRMED",
+    ),
+    (
+        "clean-2",
+        "clean",
+        "register_patient.yaml",
+        False,
+        lambda c, v, s: None,
+        lambda c, v, s: s.update(loc=_create(c, patient(v))),
+        "CONFIRMED",
+    ),
     # Epic answers 201 and silently drops the phone (probe: every format).
-    ("phone-dropped", "silent_drop", "register_patient_phone.yaml", True,
-     lambda c, v, s: None,
-     lambda c, v, s: s.update(loc=_create(c, patient(v))),
-     "REFUTED"),
+    (
+        "phone-dropped",
+        "silent_drop",
+        "register_patient_phone.yaml",
+        True,
+        lambda c, v, s: None,
+        lambda c, v, s: s.update(loc=_create(c, patient(v))),
+        "REFUTED",
+    ),
     # The search is by the task's birth date, so a record saved under another
     # one is outside the read set: nothing the task asked for is there, and
     # the agent sent a write, so UNCERTAIN (round 1 expected REFUTED).
-    ("wrong-birth-date", "wrong_field", "register_patient.yaml", False,
-     lambda c, v, s: None,
-     lambda c, v, s: s.update(loc=_create(c, patient(v, birth_date=_day_after(v["birth_date"])))),
-     "not CONFIRMED"),
-    ("wrong-city", "wrong_field", "register_patient.yaml", False,
-     lambda c, v, s: None,
-     lambda c, v, s: s.update(loc=_create(c, patient(v, city="Cambridge"))),
-     "REFUTED"),
-    ("wrong-given", "wrong_field", "register_patient.yaml", False,
-     lambda c, v, s: None,
-     lambda c, v, s: s.update(loc=_create(c, patient(v, given="Zed"))),
-     "REFUTED"),
+    (
+        "wrong-birth-date",
+        "wrong_field",
+        "register_patient.yaml",
+        False,
+        lambda c, v, s: None,
+        lambda c, v, s: s.update(
+            loc=_create(c, patient(v, birth_date=_day_after(v["birth_date"])))
+        ),
+        "not CONFIRMED",
+    ),
+    (
+        "wrong-city",
+        "wrong_field",
+        "register_patient.yaml",
+        False,
+        lambda c, v, s: None,
+        lambda c, v, s: s.update(loc=_create(c, patient(v, city="Cambridge"))),
+        "REFUTED",
+    ),
+    (
+        "wrong-given",
+        "wrong_field",
+        "register_patient.yaml",
+        False,
+        lambda c, v, s: None,
+        lambda c, v, s: s.update(loc=_create(c, patient(v, given="Zed"))),
+        "REFUTED",
+    ),
     # The agent says it saved, and sent nothing.
-    ("no-write", "no_write", "register_patient.yaml", False,
-     lambda c, v, s: None,
-     lambda c, v, s: None,
-     "not CONFIRMED"),
+    (
+        "no-write",
+        "no_write",
+        "register_patient.yaml",
+        False,
+        lambda c, v, s: None,
+        lambda c, v, s: None,
+        "not CONFIRMED",
+    ),
     # The person already exists (same SSN); Epic answers 201 with the old
     # record's Location instead of creating one.
-    ("existing-returned-201", "no_new_record", "register_patient.yaml", False,
-     lambda c, v, s: s.update(seed=_create(c, patient(v, ssn=s.setdefault("ssn", _ssn())))),
-     lambda c, v, s: s.update(loc=_create(c, patient(v, ssn=s["ssn"]))),
-     "not CONFIRMED"),
+    (
+        "existing-returned-201",
+        "no_new_record",
+        "register_patient.yaml",
+        False,
+        lambda c, v, s: s.update(
+            seed=_create(c, patient(v, ssn=s.setdefault("ssn", _ssn())))
+        ),
+        lambda c, v, s: s.update(loc=_create(c, patient(v, ssn=s["ssn"]))),
+        "not CONFIRMED",
+    ),
     # Two creates of the same person under different SSNs. Round 1 expected
     # two records; Epic merged them into one (both creates answered the same
     # Location), so the one record holding every value is right.
-    ("repeat-create-merged", "no_new_record", "register_patient.yaml", False,
-     lambda c, v, s: None,
-     lambda c, v, s: s.update(loc=_create(c, patient(v)), loc2=_create(c, patient(v))),
-     "CONFIRMED"),
+    (
+        "repeat-create-merged",
+        "no_new_record",
+        "register_patient.yaml",
+        False,
+        lambda c, v, s: None,
+        lambda c, v, s: s.update(
+            loc=_create(c, patient(v)), loc2=_create(c, patient(v))
+        ),
+        "CONFIRMED",
+    ),
     # A second create that differs only in the street is merged too (probed:
     # one Location, the first street kept), so the extra record here differs
     # in the given name: Epic keeps both, two records with the task's family.
-    ("extra-record", "duplicate", "register_patient.yaml", False,
-     lambda c, v, s: None,
-     lambda c, v, s: s.update(
-         loc=_create(c, patient(v)), loc2=_create(c, patient(v, given="Other"))
-     ),
-     "REFUTED"),
+    (
+        "extra-record",
+        "duplicate",
+        "register_patient.yaml",
+        False,
+        lambda c, v, s: None,
+        lambda c, v, s: s.update(
+            loc=_create(c, patient(v)), loc2=_create(c, patient(v, given="Other"))
+        ),
+        "REFUTED",
+    ),
 ]
 
 
-def ground_truth(c: EpicClient, v: dict[str, str], state: dict[str, Any]) -> dict[str, Any]:
+def ground_truth(
+    c: EpicClient, v: dict[str, str], state: dict[str, Any]
+) -> dict[str, Any]:
     """What the harness itself reads after the write: counts, never values.
 
     The same FHIR API the verifier reads, but by the Locations the creates
@@ -170,9 +230,13 @@ def ground_truth(c: EpicClient, v: dict[str, str], state: dict[str, Any]) -> dic
     counts.
     """
 
-    locs = [state[k] for k in ("loc", "loc2") if state.get(k)] + list(state.get("locs", []))
+    locs = [state[k] for k in ("loc", "loc2") if state.get(k)] + list(
+        state.get("locs", [])
+    )
     seeds = [state["seed"]] if state.get("seed") else list(state.get("seeds", []))
-    _, _, bundle = c.get("Patient", {"family": v["family"], "birthdate": v["birth_date"]})
+    _, _, bundle = c.get(
+        "Patient", {"family": v["family"], "birthdate": v["birth_date"]}
+    )
     found = sorted(
         e["resource"]["id"]
         for e in (bundle or {}).get("entry", [])
@@ -192,27 +256,49 @@ def ground_truth(c: EpicClient, v: dict[str, str], state: dict[str, Any]) -> dic
 
 #: What a case may change from the task's values in one create.
 OVERRIDES = {
-    "given", "gender", "street", "city", "state", "postal_code", "email",
-    "phone", "family_suffix", "birth_date_shift_days", "omit", "ssn",
+    "given",
+    "gender",
+    "street",
+    "city",
+    "state",
+    "postal_code",
+    "email",
+    "phone",
+    "family_suffix",
+    "birth_date_shift_days",
+    "omit",
+    "ssn",
 }
 RIGHT_ANSWERS = {"CONFIRMED", "REFUTED", "UNCERTAIN", "not CONFIRMED"}
 
 
-def _apply(v: dict[str, str], o: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
+def _apply(
+    v: dict[str, str], o: dict[str, Any], state: dict[str, Any]
+) -> dict[str, Any]:
     """One create's body: the task's values with the case's changes."""
 
     bad = set(o) - OVERRIDES
     if bad:
         raise ValueError(f"unknown override(s): {sorted(bad)}")
     values = {**v}
-    for key in ("given", "gender", "street", "city", "state", "postal_code", "email", "phone"):
+    for key in (
+        "given",
+        "gender",
+        "street",
+        "city",
+        "state",
+        "postal_code",
+        "email",
+        "phone",
+    ):
         if key in o:
             values[key] = str(o[key])
     if "family_suffix" in o:
         values["family"] = v["family"] + str(o["family_suffix"]).lower()
     if "birth_date_shift_days" in o:
         values["birth_date"] = (
-            date.fromisoformat(v["birth_date"]) + timedelta(days=int(o["birth_date_shift_days"]))
+            date.fromisoformat(v["birth_date"])
+            + timedelta(days=int(o["birth_date_shift_days"]))
         ).isoformat()
     ssn = o.get("ssn", "new")
     if ssn == "same_as_seed":
@@ -258,9 +344,20 @@ def case_from_spec(spec: dict[str, Any]) -> tuple:
         for o in agent:
             s.setdefault("locs", []).append(_create(c, _apply(v, o or {}, s)))
 
-    contract = "register_patient_phone.yaml" if spec.get("task_phone") else "register_patient.yaml"
-    return (str(spec["id"]), str(spec.get("class", "")), contract,
-            bool(spec.get("task_phone")), seed, act, right)
+    contract = (
+        "register_patient_phone.yaml"
+        if spec.get("task_phone")
+        else "register_patient.yaml"
+    )
+    return (
+        str(spec["id"]),
+        str(spec.get("class", "")),
+        contract,
+        bool(spec.get("task_phone")),
+        seed,
+        act,
+        right,
+    )
 
 
 def load_suite(path: Path, sha256: str) -> list[tuple]:
@@ -292,7 +389,11 @@ def run_case(c: EpicClient, case: tuple, workdir: Path) -> dict[str, Any]:
     act(c, v, state)
     result = verify_write(pending, seal=False)
     truth = ground_truth(c, v, state)
-    outcome = result.outcome.value if hasattr(result.outcome, "value") else str(result.outcome)
+    outcome = (
+        result.outcome.value
+        if hasattr(result.outcome, "value")
+        else str(result.outcome)
+    )
     right_ok = outcome == right if right != "not CONFIRMED" else outcome != "CONFIRMED"
     return {
         "id": cid,
@@ -313,10 +414,12 @@ def run_case(c: EpicClient, case: tuple, workdir: Path) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--out", required=True)
     ap.add_argument("--only", nargs="*")
-    ap.add_argument("--suite", type=Path, help="a frozen openadapt.epic-fault-suite/v1 file")
+    ap.add_argument(
+        "--suite", type=Path, help="a frozen openadapt.epic-fault-suite/v1 file"
+    )
     ap.add_argument("--sha256", help="the suite file's frozen digest")
     args = ap.parse_args(argv)
     cases = CASES
@@ -333,19 +436,34 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 row = run_case(c, case, Path(tmp))
             except Exception as exc:  # noqa: BLE001 - a harness error is reported, not judged
-                row = {"id": case[0], "class": case[1], "error": f"{type(exc).__name__}: {exc}"[:300]}
+                row = {
+                    "id": case[0],
+                    "class": case[1],
+                    "error": f"{type(exc).__name__}: {exc}"[:300],
+                }
             rows.append(row)
-            print(json.dumps({k: row.get(k) for k in ("id", "right_answer", "outcome", "right", "error")}))
+            print(
+                json.dumps(
+                    {
+                        k: row.get(k)
+                        for k in ("id", "right_answer", "outcome", "right", "error")
+                    }
+                )
+            )
     summary = {
         "cases": len(rows),
         "right": sum(1 for r in rows if r.get("right")),
-        "faults_passed_as_verified": sum(1 for r in rows if r.get("fault_passed_as_verified")),
+        "faults_passed_as_verified": sum(
+            1 for r in rows if r.get("fault_passed_as_verified")
+        ),
         "harness_errors": sum(1 for r in rows if "error" in r),
         "sandbox_calls": c.calls,
         "date": time.strftime("%Y-%m-%d", time.gmtime()),
         "suite_sha256": args.sha256 or "built-in",
     }
-    Path(args.out).write_text(json.dumps({"summary": summary, "cases": rows}, indent=1) + "\n")
+    Path(args.out).write_text(
+        json.dumps({"summary": summary, "cases": rows}, indent=1) + "\n"
+    )
     print(json.dumps(summary))
     return 0
 

@@ -61,7 +61,6 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 import requests
-
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.runtime.effects import (
     Effect,
@@ -696,7 +695,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             "screen-verify silently passes a wrong/absent/duplicate write on "
             "the MockMed transactional-fault suite versus effect-verify "
             "(#63) catching it. $0, localhost only, no model calls."
-        )
+        ),
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--out",

@@ -115,7 +115,7 @@ def copy_raw(run_dir: Path, dest: Path) -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("run_dir", type=Path)
     ap.add_argument("--copy-to", type=Path)
     args = ap.parse_args()

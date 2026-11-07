@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 import requests
-
 from benchmark.effect_e2e import ground_truth
 from benchmark.effect_e2e.record_service import TARGET_PATIENT, TARGET_TYPE, serve
 from benchmark.effect_e2e.run import ACTUATOR_TIMEOUT_S, NOTE, SCENARIOS
@@ -304,7 +303,7 @@ def run_one(scenario: Any, rep: int, views: Path) -> dict[str, Any]:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--n", type=int, default=9)
     ap.add_argument("--out", default=str(OUT))
     args = ap.parse_args(argv)

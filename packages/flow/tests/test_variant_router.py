@@ -895,7 +895,10 @@ def test_replay_refuses_a_variant_set(tmp_path: Path) -> None:
         main(["replay", str(out)])
 
 
-def test_cli_add_promotes_a_repaired_bundle(tmp_path: Path) -> None:
+@pytest.mark.parametrize("permission_flag", ["--admission", "--permission"])
+def test_cli_add_promotes_a_repaired_bundle(
+    tmp_path: Path, permission_flag: str
+) -> None:
     from openadapt_flow.__main__ import main
 
     variant_set, parent = _author(tmp_path, names=("light", "dark"))
@@ -909,7 +912,7 @@ def test_cli_add_promotes_a_repaired_bundle(tmp_path: Path) -> None:
             str(parent),
             "--variant",
             f"medicare_v2={bundle}",
-            "--admission",
+            permission_flag,
             str(envelope),
             "--when-theme",
             "light",
