@@ -163,9 +163,10 @@ def test_actual_export_boundaries_do_not_read_or_copy_private_names(
 
     from benchmark.harness.harness2 import traces
 
-    assert Path(traces.__file__).resolve() == (
-        FLOW / "benchmark/harness/harness2/traces.py"
-    ).resolve()
+    assert (
+        Path(traces.__file__).resolve()
+        == (FLOW / "benchmark/harness/harness2/traces.py").resolve()
+    )
     trace_root = traces.export(tmp_path / "traces", [], harnesses={"sample": source})
     assert not (trace_root / "candidates/sample/harness" / name).exists()
     assert (trace_root / "candidates/sample/harness/report.json").is_file()

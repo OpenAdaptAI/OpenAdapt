@@ -167,12 +167,12 @@ def _source_files(src: Path) -> list[Path]:
         # Logical names from the authenticated index; content decrypts later.
         base = Path(os.path.abspath(src))
         sealed_files = [src / p.relative_to(base) for p in artifacts.list_files(base)]
-        if any(
-            is_publication_input_path_excluded(p.relative_to(src)) for p in sealed_files
-        ):
-            raise SanitizationError(
-                "Artifact contains local key material or unclassified containers"
-            )
+        for path in sealed_files:
+            if is_publication_input_path_excluded(path.relative_to(src)):
+                raise SanitizationError(
+                    "Artifact contains local key material or unclassified containers: "
+                    f"{path.relative_to(src)}"
+                )
         if not sealed_files:
             raise SanitizationError(f"Artifact has no files: {src}")
         return sealed_files
@@ -180,7 +180,8 @@ def _source_files(src: Path) -> list[Path]:
     for path in sorted(src.rglob("*")):
         if is_publication_input_path_excluded(path.relative_to(src)):
             raise SanitizationError(
-                "Artifact contains local key material or unclassified containers"
+                "Artifact contains local key material or unclassified containers: "
+                f"{path.relative_to(src)}"
             )
         if path.is_symlink():
             raise SanitizationError(
