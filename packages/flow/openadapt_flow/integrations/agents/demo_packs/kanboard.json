@@ -18,7 +18,7 @@
     "description"
   ],
   "record_scope_column": "project_id",
-  "instruction": "Create exactly one task in the Wrap demo project with title {title} and description {description}. Save it once. Do not change another task.",
+  "instruction": "Sign in with the disposable demo username admin and password admin. Create exactly one task in the Wrap demo project with title {title} and description {description}. Save it once. Do not change another task.",
   "project_name": "Wrap demo",
   "environment": {
     "PLUGIN_INSTALLER": "false",
@@ -40,6 +40,18 @@
       "date_modification": "https://github.com/kanboard/kanboard/blob/2ddb31bf72d355727d0639fc3423630f3bae1a9c/app/Model/TaskCreationModel.php#L88",
       "date_moved": "https://github.com/kanboard/kanboard/blob/2ddb31bf72d355727d0639fc3423630f3bae1a9c/app/Model/TaskCreationModel.php#L89",
       "position": "https://github.com/kanboard/kanboard/blob/2ddb31bf72d355727d0639fc3423630f3bae1a9c/app/Model/TaskCreationModel.php#L90"
+    },
+    "host_sidecar_access": {
+      "kind": "tested_fixture_data_override",
+      "source_url": "https://www.sqlite.org/wal.html#read_only_databases",
+      "scope": "Fresh owned synthetic fixture coordination child only; native database ownership and read-only connection are preserved.",
+      "status": "NATIVE_READ_WRITE_COOPERATION_UNQUALIFIED"
+    },
+    "login": "https://docs.kanboard.org/v1/admin/installation/",
+    "login_entry": {
+      "kind": "public_official_image_root",
+      "path": "/",
+      "status": "DOCUMENTED_DEFAULTS_UI_FLOW_UNMEASURED"
     }
   },
   "status": "SOURCE_DERIVED_NOT_RUNTIME_VALIDATED",
@@ -69,5 +81,9 @@
     "date_moved",
     "position"
   ],
-  "task_id": "create-task"
+  "task_id": "create-task",
+  "host_sidecar_access": true,
+  "constants": [
+    "admin"
+  ]
 }

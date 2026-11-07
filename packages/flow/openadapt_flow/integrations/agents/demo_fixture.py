@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import sqlite3
+import stat
 import subprocess
 import time
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from importlib.resources import files as resource_files
@@ -72,14 +75,28 @@ def packaged_pack(name: str) -> Path:
     return path
 
 
+def _demo_constants(spec: dict[str, Any]) -> list[str]:
+    values = spec.get("constants", [])
+    if (
+        type(values) is not list
+        or any(type(value) is not str or not value.strip() for value in values)
+        or len(values) != len(set(values))
+    ):
+        raise ValueError("INVALID_DEMO_CONSTANTS")
+    return list(values)
+
+
 def load_pack(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     spec = json.loads(path.read_bytes())
     if (
         not isinstance(spec, dict)
-        or set(spec) != _PACK_KEYS
+        or not _PACK_KEYS <= set(spec) <= _PACK_KEYS | {"host_sidecar_access", "constants"}
         or spec["format"] != "openadapt.demo-fixture/v1"
     ):
         raise ValueError("INVALID_DEMO_PACK")
+    _demo_constants(spec)
+    if type(spec.get("host_sidecar_access", False)) is not bool:
+        raise ValueError("INVALID_DEMO_COORDINATION_POLICY")
     if not re.fullmatch(
         r"[a-z0-9./_-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}", spec["image"]
     ):
@@ -177,9 +194,42 @@ def load_pack(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     return spec, rows
 
 
+def _native_coordination_access(root: Path) -> None:
+    """Enable sidecars only in the newly-created child of a private own root."""
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    root_fd = os.open(root, flags)
+    try:
+        info = os.fstat(root_fd)
+        if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o700:
+            raise ValueError("DEMO_COORDINATION_ROOT_UNSAFE")
+        child_fd = os.open("data", flags, dir_fd=root_fd)
+        try:
+            child = os.fstat(child_fd)
+            if child.st_uid != os.geteuid() or not stat.S_ISDIR(child.st_mode):
+                raise ValueError("DEMO_COORDINATION_CHILD_UNSAFE")
+            os.fchmod(child_fd, 0o1777)
+            if stat.S_IMODE(os.fstat(child_fd).st_mode) != 0o1777:
+                raise ValueError("DEMO_COORDINATION_MODE_UNAVAILABLE")
+        finally:
+            os.close(child_fd)
+    finally:
+        os.close(root_fd)
+
+
 def prepare(
     spec: dict[str, Any], root: Path, *, project: str, port: int
 ) -> FixtureFiles:
+    sidecars = spec.get("host_sidecar_access", False)
+    if type(sidecars) is not bool:
+        raise ValueError("INVALID_DEMO_COORDINATION_POLICY")
+    if sidecars and (
+        os.name != "posix"
+        or not all(
+            hasattr(os, name)
+            for name in ("O_DIRECTORY", "O_NOFOLLOW", "fchmod", "geteuid")
+        )
+    ):
+        raise ValueError("DEMO_COORDINATION_UNSUPPORTED")
     if (
         not _PROJECT.fullmatch(project)
         or isinstance(port, bool)
@@ -196,6 +246,8 @@ def prepare(
     root.mkdir(mode=0o700)
     data = root / "data"
     data.mkdir(mode=0o755)
+    if sidecars:
+        _native_coordination_access(root)
     service: dict[str, Any] = {
         "image": spec["image"],
         "restart": "no",
@@ -276,6 +328,7 @@ def generate_task(
     spec: dict[str, Any], rows: list[dict[str, Any]], files: FixtureFiles
 ) -> dict[str, Any]:
     """Generate the READ projection from a real local SQLite schema observation."""
+    constants = _demo_constants(spec)
     if set(spec["generated_fields"]).intersection(
         [*spec["parameter_columns"], spec["record_scope_column"]]
     ):
@@ -326,6 +379,7 @@ def generate_task(
     task = {
         "instruction": spec["instruction"],
         "parameters": spec["parameter_columns"],
+        "constants": constants,
         "url": files.url,
         "verifier": {
             "kind": "sql",
@@ -364,10 +418,62 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+_BOOTSTRAP_REASONS = frozenset(
+    {
+        "RESPONSE_TOO_LARGE",
+        "INVALID_JSON",
+        "ENVELOPE_NOT_OBJECT",
+        "ID_MISMATCH",
+        "RPC_ERROR",
+        "BOOLEAN_RESULT",
+        "RESULT_NOT_INTEGER",
+        "NONPOSITIVE_ID",
+        "HTTP_REFUSED",
+        "URL_UNAVAILABLE",
+        "TIMEOUT",
+        "IO_UNAVAILABLE",
+        "OTHER",
+    }
+)
+
+
+class DemoBootstrapError(ValueError):
+    """Fixed external message with a closed failure reason, never response data."""
+
+    def __init__(self, reason: str) -> None:
+        if reason not in _BOOTSTRAP_REASONS:
+            raise ValueError("INVALID_DEMO_BOOTSTRAP_REASON")
+        self.reason = reason
+        super().__init__("DEMO_BOOTSTRAP_UNAVAILABLE")
+
+
+def _check_bootstrap_response(raw: bytes) -> None:
+    if len(raw) > 65536:
+        raise DemoBootstrapError("RESPONSE_TOO_LARGE")
+    try:
+        result = json.loads(raw)
+    except ValueError:
+        raise DemoBootstrapError("INVALID_JSON") from None
+    if not isinstance(result, dict):
+        raise DemoBootstrapError("ENVELOPE_NOT_OBJECT")
+    # A JSON boolean is not the integer correlation ID sent in the request.
+    if type(result.get("id")) is not int or result["id"] != 1:
+        raise DemoBootstrapError("ID_MISMATCH")
+    if result.get("error") is not None:
+        raise DemoBootstrapError("RPC_ERROR")
+    value = result.get("result")
+    if isinstance(value, bool):
+        raise DemoBootstrapError("BOOLEAN_RESULT")
+    if not isinstance(value, int):
+        raise DemoBootstrapError("RESULT_NOT_INTEGER")
+    if value < 1:
+        raise DemoBootstrapError("NONPOSITIVE_ID")
+
+
 def bootstrap(
     files: FixtureFiles, spec: dict[str, Any], *, auth: tuple[str, str]
 ) -> None:
-    """Invoke the declared vendor setup API on the owned local instance only."""
+    """Invoke the declared vendor setup API; expose only fixed refusal metadata."""
     action = spec["bootstrap"]
     if (
         not isinstance(action, dict)
@@ -400,17 +506,16 @@ def bootstrap(
             urllib.request.ProxyHandler({}), _NoRedirect()
         ).open(request, timeout=5) as response:
             raw = response.read(65537)
-        if len(raw) > 65536:
-            raise ValueError("DEMO_BOOTSTRAP_UNAVAILABLE")
-        result = json.loads(raw)
-        if (
-            not isinstance(result, dict)
-            or result.get("id") != 1
-            or result.get("error") is not None
-            or isinstance(result.get("result"), bool)
-            or not isinstance(result.get("result"), int)
-            or result["result"] < 1
-        ):
-            raise ValueError("DEMO_BOOTSTRAP_UNAVAILABLE")
-    except Exception:  # noqa: BLE001 - fixed boundary withholds URL/auth/response context
-        raise ValueError("DEMO_BOOTSTRAP_UNAVAILABLE") from None
+        _check_bootstrap_response(raw)
+    except DemoBootstrapError:
+        raise
+    except urllib.error.HTTPError:
+        raise DemoBootstrapError("HTTP_REFUSED") from None
+    except urllib.error.URLError:
+        raise DemoBootstrapError("URL_UNAVAILABLE") from None
+    except TimeoutError:
+        raise DemoBootstrapError("TIMEOUT") from None
+    except OSError:
+        raise DemoBootstrapError("IO_UNAVAILABLE") from None
+    except Exception:  # noqa: BLE001 - fixed reason withholds URL/auth/response context
+        raise DemoBootstrapError("OTHER") from None
