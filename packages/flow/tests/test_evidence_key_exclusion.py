@@ -8,6 +8,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 import runpy
 import subprocess
 import sys
@@ -63,6 +64,7 @@ PRIVATE_NAMES = (
     "credentials.yaml",
     "credentials.txt",
     "secret.toml",
+    "secret-scan.yml",
     "token.yml",
     "webauthn_passkey_double.json",
     "named_person_binding.json",
@@ -102,7 +104,7 @@ def test_generated_private_families_are_denied_at_any_depth(name, parents, windo
     (
         "seal_keys.py",
         "keys.py",
-        "secret-scan.yml",
+        ".github/workflows/secret-scan.yml",
         "tokens.css",
         "report.json",
         "public.crt",
@@ -121,8 +123,8 @@ def _forbid_payload_reads(monkeypatch, denied: set[Path]) -> None:
 
     def checked(opener):
         def open_checked(file, *args, **kwargs):
-            if isinstance(file, (str, bytes, Path)):
-                candidate = Path(file)
+            if isinstance(file, (str, bytes, os.PathLike)):
+                candidate = Path(os.fsdecode(file))
                 assert candidate not in denied, "excluded payload was opened"
             return opener(file, *args, **kwargs)
 
@@ -160,6 +162,9 @@ def test_actual_export_boundaries_do_not_read_or_copy_private_names(
 
     from benchmark.harness.harness2 import traces
 
+    assert Path(traces.__file__).resolve() == (
+        FLOW / "benchmark/harness/harness2/traces.py"
+    ).resolve()
     trace_root = traces.export(tmp_path / "traces", [], harnesses={"sample": source})
     assert not (trace_root / "candidates/sample/harness" / name).exists()
     assert (trace_root / "candidates/sample/harness/report.json").is_file()
