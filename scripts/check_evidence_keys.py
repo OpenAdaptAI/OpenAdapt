@@ -110,7 +110,7 @@ def is_public_certificate(payload: str) -> bool:
 
 def _is_evidence_path(name: str) -> bool:
     return bool(
-        set(Path(name).parts)
+        {part.casefold() for part in Path(name).parts}
         & {"benchmark", "evidence", "evidence-packs", "fixtures", "public-demo", "showcase"}
     )
 

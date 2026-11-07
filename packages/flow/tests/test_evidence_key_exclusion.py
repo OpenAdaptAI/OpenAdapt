@@ -203,6 +203,7 @@ def test_exact_public_registry_exception_requires_closed_schema(tmp_path, guard)
     target.write_text(json.dumps([entry]))
     assert guard["violations"](tmp_path, [relative]) == [relative]
     assert guard["violations"](tmp_path, ["benchmark/other/seal-key.json"]) == ["benchmark/other/seal-key.json"]
+    assert guard["violations"](tmp_path, ["Evidence/KEYS.JSON"]) == ["Evidence/KEYS.JSON"]
     assert guard["violations"](tmp_path, ["root.key", "root.key/data.json"]) == ["root.key", "root.key/data.json"]
 
 
