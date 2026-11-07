@@ -216,13 +216,32 @@ def _rows(recording: Path) -> list[dict]:
     return [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines()]
 
 
-def _wait_rows(page, recording: Path, count: int) -> list[dict]:
+def _wait_rows(page, recording: Path, ready) -> list[dict]:
+    """The rows once ``ready(lines)`` holds, else the rows at the deadline.
+
+    Waits for the evidence a test requires, not a row count: focus and other
+    events also produce rows, so a count can be reached before a later event
+    (such as the click) arrives.
+    """
+
     for _ in range(100):
         rows = _rows(recording)
-        if len(rows) - 1 >= count:
+        if rows and ready(rows[1:]):
             return rows
         page.wait_for_timeout(100)
     return _rows(recording)
+
+
+def _typed_form_complete(lines: list[dict]) -> bool:
+    secret = [x for x in lines if x.get("id") == "password" and x["event"] == "input"]
+    memo = [x for x in lines if x.get("id") == "memo" and x["event"] == "input"]
+    clicked = any(x["event"] == "click" and x.get("id") == "go" for x in lines)
+    return (
+        len(secret) >= len(LIVE_SECRET)
+        and bool(memo)
+        and memo[-1].get("value") == "ok"
+        and clicked
+    )
 
 
 _DIRECT = """async (msg) => {
@@ -255,7 +274,7 @@ def test_typed_password_reaches_installed_host_redacted(chrome, server, tmp_path
     page.type("#password", LIVE_SECRET)
     page.type("#memo", "ok")
     page.click("#go")
-    rows = _wait_rows(page, recording, len(LIVE_SECRET) + 3)
+    rows = _wait_rows(page, recording, _typed_form_complete)
     assert rows, "the installed host wrote nothing"
     header, lines = rows[0], rows[1:]
     assert header["schema"] == "openadapt.extension-evidence/1"
