@@ -174,10 +174,22 @@ def test_private_agent_summary_is_not_a_transport_artifact(tmp_path: Any) -> Non
 @pytest.mark.parametrize("known", [None, False, True])
 def test_result_empty_usage_requires_explicit_knowledge(path, known):
     from types import SimpleNamespace
+
     from openadapt_flow.wrap import _result
 
-    run = SkillRun(path=path, status="COMPONENT", verified=False, model_calls=0, cost_usd=0.0, seconds=0.1, usage=[], usage_known=known)
-    stale_agent = SimpleNamespace(last_ledger=SimpleNamespace(usage_known=True, prices={"input": 1}))
+    run = SkillRun(
+        path=path,
+        status="COMPONENT",
+        verified=False,
+        model_calls=0,
+        cost_usd=0.0,
+        seconds=0.1,
+        usage=[],
+        usage_known=known,
+    )
+    stale_agent = SimpleNamespace(
+        last_ledger=SimpleNamespace(usage_known=True, prices={"input": 1})
+    )
     result = _result(run, stale_agent)
     assert result["usage_known"] is (known is True)
     assert result["model_calls"] == (0 if known is True else None)
@@ -189,7 +201,16 @@ def test_result_empty_usage_requires_explicit_knowledge(path, known):
 def test_result_preserves_actual_repair_usage_and_unknown_cost(path, known):
     from openadapt_flow.wrap import _result
 
-    run = SkillRun(path=path, status="COMPONENT", verified=False, model_calls=2, cost_usd=99.0, seconds=0.1, usage=[{"calls": 2, "usd": 0.25}], usage_known=known)
+    run = SkillRun(
+        path=path,
+        status="COMPONENT",
+        verified=False,
+        model_calls=2,
+        cost_usd=99.0,
+        seconds=0.1,
+        usage=[{"calls": 2, "usd": 0.25}],
+        usage_known=known,
+    )
     result = _result(run, None)
     assert result["model_calls"] == 2
     assert result["cost_usd"] == (0.25 if known else None)

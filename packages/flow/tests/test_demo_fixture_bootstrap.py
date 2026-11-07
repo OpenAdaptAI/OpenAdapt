@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
+
 from openadapt_flow.integrations.agents import demo_fixture as fixture
 
 CANARY = "synthetic-private-body-auth-canary"

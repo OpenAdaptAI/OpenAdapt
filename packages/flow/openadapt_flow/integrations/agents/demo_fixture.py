@@ -65,9 +65,9 @@ def packaged_pack(name: str) -> Path:
         raise ValueError("INVALID_DEMO_PACK_NAME")
     path = Path(
         str(
-            resource_files("openadapt_flow.integrations.agents").joinpath(
-                "demo_packs"
-            ).joinpath(name + ".json")
+            resource_files("openadapt_flow.integrations.agents")
+            .joinpath("demo_packs")
+            .joinpath(name + ".json")
         )
     )
     if not path.is_file() or path.is_symlink():
@@ -90,7 +90,9 @@ def load_pack(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     spec = json.loads(path.read_bytes())
     if (
         not isinstance(spec, dict)
-        or not _PACK_KEYS <= set(spec) <= _PACK_KEYS | {"host_sidecar_access", "constants"}
+        or not _PACK_KEYS
+        <= set(spec)
+        <= _PACK_KEYS | {"host_sidecar_access", "constants"}
         or spec["format"] != "openadapt.demo-fixture/v1"
     ):
         raise ValueError("INVALID_DEMO_PACK")

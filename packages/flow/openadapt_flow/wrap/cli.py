@@ -21,9 +21,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model")
     parser.add_argument("--key-dir", help="Existing admission key directory")
     parser.add_argument("--teach-authorization", help="Signed teaching authorization")
-    parser.add_argument("--approver-root", help="Pinned approver root for that authorization")
+    parser.add_argument(
+        "--approver-root", help="Pinned approver root for that authorization"
+    )
     parser.add_argument("--admit-key", help="Encrypted key of a registered admitter")
-    parser.add_argument("--admission-policy", help="Signed admission policy for --admit-key")
+    parser.add_argument(
+        "--admission-policy", help="Signed admission policy for --admit-key"
+    )
     parser.add_argument(
         "--price",
         action="append",

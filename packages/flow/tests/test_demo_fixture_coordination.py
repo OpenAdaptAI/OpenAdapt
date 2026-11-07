@@ -8,6 +8,7 @@ import sqlite3
 import stat
 
 import pytest
+
 from openadapt_flow.integrations.agents import demo_fixture
 from openadapt_flow.runtime.effects.db_snapshot import SnapshotError, take_snapshot
 
