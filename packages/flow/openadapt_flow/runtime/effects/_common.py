@@ -38,6 +38,26 @@ from openadapt_flow.runtime.effects.effect import (
 TYPED_SUBSTRATES = frozenset({"sql", "db"})
 
 
+def page_snapshot_token(body: Any, path: str) -> str | int:
+    """Read a declared immutable-snapshot token, without logging its value.
+
+    A matching token is useful only under the endpoint's reviewed snapshot
+    semantics. It is not freshness, attribution or qualification authority.
+    """
+    if not isinstance(path, str) or not path or len(path) > 256:
+        raise ValueError("invalid declared snapshot path")
+    node = body
+    for part in path.split("."):
+        if not part or part.isspace() or not isinstance(node, dict) or part not in node:
+            raise ValueError("declared page snapshot token is missing")
+        node = node[part]
+    if isinstance(node, str) and node.strip() and len(node) <= 4096:
+        return node
+    if type(node) is int and node >= 0:
+        return node
+    raise ValueError("declared page snapshot token has an unsupported value")
+
+
 def drop_record_fields(
     records: Optional[list[dict[str, Any]]], fields: Iterable[str]
 ) -> Optional[list[dict[str, Any]]]:

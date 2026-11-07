@@ -68,12 +68,21 @@ import time
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 from urllib.parse import parse_qs, urlparse
 
 from openadapt_flow.mockmed.chart_pages import ChartPages
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+# This fixture's GET /api/db returns the entire locked store snapshot.
+# Count-boundary HTTP controls validate this unpaged endpoint declaration.
+MOCKMED_RECORDS_READ_CONTRACT: dict[str, Any] = {
+    "kind": "rest",
+    "records_path": "/api/db",
+    "records_key": "records",
+    "records_complete": True,
+}
 
 # How long ``timeout`` mode hangs after committing, in seconds. The app's
 # client-side abort fires well before this, so the app sees a failed write
