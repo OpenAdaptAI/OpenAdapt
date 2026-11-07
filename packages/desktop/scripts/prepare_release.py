@@ -21,9 +21,11 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import difflib
 import re
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -145,14 +147,75 @@ def _path_state(root: Path, ref: str, path: str) -> tuple[str, str] | None:
     return mode, oid
 
 
+def _clean_path_merge(root: Path, path: str, parents: tuple[str, ...]) -> tuple[str, str] | None:
+    """Reconstruct one path using Git's text three-way merge, without attributes."""
+    if len(parents) != 2:
+        raise ValueError("a net Desktop merge has unsupported parent metadata")
+    bases = _git(root, "merge-base", "--all", *parents).splitlines()
+    if len(bases) != 1:
+        raise ValueError("a net Desktop merge has no unique merge base")
+    ancestor = _path_state(root, bases[0], path)
+    ours, theirs = (_path_state(root, parent, path) for parent in parents)
+    if ours == theirs or theirs == ancestor:
+        return ours
+    if ours == ancestor:
+        return theirs
+    if any(
+        value is None or value[0] not in {"100644", "100755"} for value in (ancestor, ours, theirs)
+    ):
+        raise ValueError("a net Desktop merge cannot be reconstructed from regular files")
+    assert ancestor is not None and ours is not None and theirs is not None
+    modes = (ancestor[0], ours[0], theirs[0])
+    if modes[1] == modes[2] or modes[2] == modes[0]:
+        mode = modes[1]
+    elif modes[1] == modes[0]:
+        mode = modes[2]
+    else:
+        raise ValueError("a net Desktop merge has unexplained file modes")
+    with tempfile.TemporaryDirectory(prefix="desktop-release-merge-") as directory:
+        files = []
+        for label, value in (("ours", ours), ("base", ancestor), ("theirs", theirs)):
+            size = int(_git(root, "cat-file", "-s", value[1]).strip())
+            if not 0 <= size <= 8 * 1024 * 1024:
+                raise ValueError("a net Desktop merge blob exceeds its reconstruction bound")
+            content = subprocess.run(
+                ["git", "cat-file", "blob", value[1]], cwd=root, check=True, capture_output=True
+            ).stdout
+            if len(content) != size or b"\0" in content:
+                raise ValueError("a net Desktop merge has non-text or incomplete blob data")
+            target = Path(directory) / label
+            target.write_bytes(content)
+            files.append(str(target))
+        merged = subprocess.run(
+            ["git", "merge-file", "--stdout", *files], cwd=root, capture_output=True
+        )
+        if merged.returncode != 0:
+            raise ValueError("a net Desktop merge resolution has no clean combination")
+    oid = (
+        subprocess.run(
+            ["git", "hash-object", "--stdin"],
+            cwd=root,
+            input=merged.stdout,
+            check=True,
+            capture_output=True,
+        )
+        .stdout.decode("ascii")
+        .strip()
+    )
+    if re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", oid) is None:
+        raise ValueError("a net Desktop merge result has incomplete object metadata")
+    return mode, oid
+
+
 def commits_for_net_diff(root: Path, base: str, head: str) -> list[Commit]:
     """Classify only changes that remain in the squash-merged tree.
 
     Exact per-file reversions discard the canceled intent. Copies inherit
     intent from earlier equal tree versions, whether or when the source is
     deleted. A content change without an exact source keeps possible current
-    source intent conservatively. No blob contents or similarity heuristics
-    are used. Missing merge intent refuses classification. Historical release
+    source intent conservatively. A merge may carry the exact clean three-way
+    combination of its parents; unexplained resolution bytes still refuse.
+    No similarity heuristic is used. Historical release
     preparation stays unchanged.
     """
     net = _nul_paths(
@@ -185,8 +248,50 @@ def commits_for_net_diff(root: Path, base: str, head: str) -> list[Commit]:
         )
         for sha in order
     }
+    # Keep actual merge edges as well as ordinary commits. Main's side is
+    # ambient because base..head already excludes its non-merge commits.
+    history = [
+        line.split()
+        for line in _git(
+            root, "rev-list", "--parents", "--topo-order", "--reverse", f"{base}..{head}"
+        ).splitlines()
+    ]
+    # Use one topological event order for ordinary commits and merge sources.
+    order = [row[0] for row in history if row[0] in by_sha]
+    rank = {sha: index for index, sha in enumerate(order)}
+    ancestor_cache: dict[str, set[str]] = {}
+    merge_cache: dict[tuple[str, str], tuple[str, str] | None] = {}
+    history_rank = {row[0]: index for index, row in enumerate(history)}
+    # Combined tree metadata includes novel merge bytes but excludes files
+    # merely adopted unchanged from an ambient parent. Git's combined output
+    # does not honor --relative consistently; normalize an explicit root path.
+    prefix = _git(root, "rev-parse", "--show-prefix").removesuffix("\n")
+    merge_changed = {}
+    for row in history:
+        if len(row) <= 2:
+            continue
+        names = _nul_paths(
+            _git(
+                root,
+                "diff-tree",
+                "--cc",
+                "--no-commit-id",
+                "--no-renames",
+                "--no-relative",
+                "--name-only",
+                "-z",
+                "-r",
+                row[0],
+                "--",
+                ".",
+            )
+        )
+        if any(not name.startswith(prefix) for name in names):
+            raise ValueError("Git returned a merge source outside Desktop")
+        merge_changed[row[0]] = {name[len(prefix) :] for name in names}
     states_cache: dict[tuple[str, str], tuple[str, str] | None] = {}
     memo: dict[tuple[str, int, str], set[str]] = {}
+    blob_cache: dict[str, bytes] = {}
 
     def state(ref: str, path: str) -> tuple[str, str] | None:
         key = (ref, path)
@@ -194,15 +299,67 @@ def commits_for_net_diff(root: Path, base: str, head: str) -> list[Commit]:
             states_cache[key] = _path_state(root, ref, path)
         return states_cache[key]
 
+    def content(oid: str) -> bytes:
+        if oid not in blob_cache:
+            size = int(_git(root, "cat-file", "-s", oid).strip())
+            if not 0 <= size <= 8 * 1024 * 1024:
+                raise ValueError("a Desktop copy source exceeds its content bound")
+            raw = subprocess.run(
+                ["git", "cat-file", "blob", oid], cwd=root, check=True, capture_output=True
+            ).stdout
+            if len(raw) != size:
+                raise ValueError("a Desktop copy source has incomplete content")
+            blob_cache[oid] = raw
+        return blob_cache[oid]
+
+    delta_cache: dict[tuple[tuple[str, str] | None, tuple[str, str]], tuple[bytes, ...]] = {}
+
+    def added_lines(before: tuple[str, str] | None, after: tuple[str, str]) -> tuple[bytes, ...]:
+        key = (before, after)
+        if key not in delta_cache:
+            old = content(before[1]).splitlines() if before is not None else []
+            new = content(after[1]).splitlines()
+            diff = difflib.SequenceMatcher(a=old, b=new, autojunk=False)
+            delta_cache[key] = tuple(
+                line
+                for kind, _i, _j, start, end in diff.get_opcodes()
+                if kind in {"insert", "replace"}
+                for line in new[start:end]
+            )
+        return delta_cache[key]
+
+    def related_content(
+        source_path: str, source_ref: str, before: tuple[str, str] | None, after: tuple[str, str]
+    ) -> bool:
+        source = state(source_ref, source_path)
+        assert source is not None
+        if source[1] == after[1]:
+            return True
+        source_base = state(historical_base(source_ref), source_path)
+        values = (source_base, source, before, after)
+        if any(value is not None and value[0] not in {"100644", "100755"} for value in values):
+            return True
+        if any(value is not None and b"\0" in content(value[1]) for value in values):
+            return True
+        # Shared ambient text is not evidence that branch intent was copied.
+        # Compare the source's contributed bytes with the destination edit.
+        destination_delta = b"\n".join(added_lines(before, after))
+        return any(
+            line.strip() and line in destination_delta for line in added_lines(source_base, source)
+        )
+
     # All changed paths matter, including a feature's original location that
     # disappears from the final diff. Version references are ordered before a
     # consumer, so recursive lineage cannot cycle or depend on a later commit.
-    paths = sorted(set().union(*changed.values()))
-    versions = [
-        (path, index + 1, sha, state(sha, path))
-        for index, sha in enumerate(order)
-        for path in sorted(changed[sha])
-    ]
+    paths = sorted(set().union(*changed.values(), *merge_changed.values()))
+    versions = []
+    source_stop = 0
+    for row in history:
+        sha = row[0]
+        if sha in rank:
+            source_stop += 1
+        for path in sorted(changed.get(sha, merge_changed.get(sha, set()))):
+            versions.append((path, source_stop, sha, state(sha, path)))
 
     def sources(
         path: str, index: int, sha: str, after: tuple[str, str]
@@ -215,13 +372,27 @@ def commits_for_net_diff(root: Path, base: str, head: str) -> list[Commit]:
         exact = {
             (source, stop, ref)
             for source, stop, ref, version in versions
-            if source != path and stop <= index and version == after
+            if source != path
+            and stop <= index
+            and history_rank[ref] < history_rank[sha]
+            and version == after
         }
         exact.update(source for source in current if state(source[2], source[0]) == after)
-        # A modified copy cannot be distinguished from an independent edit
-        # using tree IDs alone. Retain every possible current source intent;
-        # a source already reverted to its base contributes no canceled intent.
-        return exact or current
+        # Removing a source in the same commit is a conservative move edge,
+        # even when its destination was rewritten completely. Other inexact
+        # sources need actual contributed content, not shared ambient text.
+        removed = {
+            candidate
+            for candidate in current
+            if candidate[0] in changed[sha] and state(sha, candidate[0]) is None
+        }
+        if exact:
+            return exact | removed
+        return removed | {
+            candidate
+            for candidate in current
+            if related_content(candidate[0], candidate[2], state(sha + "^", path), after)
+        }
 
     historical_bases: dict[str, str] = {}
 
@@ -242,25 +413,64 @@ def commits_for_net_diff(root: Path, base: str, head: str) -> list[Commit]:
         if key in memo:
             return memo[key]
         initial, final = state(historical_base(final_ref), path), state(final_ref, path)
-        contributors = [(i, sha) for i, sha in enumerate(order[:stop]) if path in changed[sha]]
-        if not contributors:
-            if initial != final:
-                raise ValueError("a net Desktop change has no non-merge commit metadata")
+        if initial == final:
+            memo[key] = set()
             return set()
-        states = [initial]
+        if final_ref not in ancestor_cache:
+            ancestor_cache[final_ref] = set(
+                _git(root, "rev-list", final_ref, "^" + historical_base(final_ref)).splitlines()
+            )
+        ancestors = ancestor_cache[final_ref]
+        contributors = [
+            (i, sha)
+            for i, sha in enumerate(order[:stop])
+            if sha in ancestors and path in changed[sha]
+        ]
+        if not contributors:
+            raise ValueError("a net Desktop change has no non-merge commit metadata")
+        # Branch commits can precede main's ambient edits. Replay their
+        # exact first-parent chain from its own starting tree, then validate
+        # the merge that adds the ambient side. Starting from newer base
+        # would turn ordinary reversions into ambiguous parallel history.
+        chain_initial = state(contributors[0][1] + "^", path)
+        states = [chain_initial]
         edges: list[set[str]] = []
-        observed = [initial]
+        observed = [initial, chain_initial]
         possible: set[str] = set()
         ambiguous = False
-        for index, sha in contributors:
-            before, after = state(sha + "^", path), state(sha, path)
+        for row in history:
+            sha, *parents_list = row
+            if sha not in ancestors:
+                continue
+            if sha in rank:
+                index = rank[sha]
+                if index >= stop or path not in changed[sha]:
+                    continue
+                before, after = state(sha + "^", path), state(sha, path)
+                # A copy carries earlier shipped intent; it must not promote
+                # docs/test-only intent into a releasable commit retroactively.
+                intent = {sha} if Commit(sha, "", "", (path,)).ships else set()
+                if after is not None and (before is None or before[1] != after[1]):
+                    for source, source_stop, ref in sources(path, index, sha, after):
+                        intent |= contributions(source, source_stop, ref)
+            elif len(parents_list) > 1:
+                parents = tuple(parents_list)
+                before, after = state(parents[0], path), state(sha, path)
+                if before == after or after == states[-1]:
+                    continue
+                # An exact already-observed parent version is attributable,
+                # as before. A new combined blob needs independent reconstruction.
+                parent_states = {state(parent, path) for parent in parents}
+                if after not in parent_states or after not in observed:
+                    merge_key = (sha, path)
+                    if merge_key not in merge_cache:
+                        merge_cache[merge_key] = _clean_path_merge(root, path, parents)
+                    if merge_cache[merge_key] != after:
+                        raise ValueError("a net Desktop merge resolution has unexplained content")
+                intent = set()
+            else:
+                continue
             observed.append(after)
-            # A copy carries earlier shipped intent; it must not promote a
-            # docs/test-only commit into a releasable commit retroactively.
-            intent = {sha} if Commit(sha, "", "", (path,)).ships else set()
-            if after is not None and (before is None or before[1] != after[1]):
-                for source, source_stop, ref in sources(path, index, sha, after):
-                    intent |= contributions(source, source_stop, ref)
             possible |= intent
             if before != states[-1]:
                 ambiguous = True
@@ -281,6 +491,11 @@ def commits_for_net_diff(root: Path, base: str, head: str) -> list[Commit]:
     for path in sorted(net):
         if state(base, path) == state(head, path):
             raise ValueError("a net Desktop path does not match exact tree metadata")
+        # Reuse the existing shipped-path policy. Version/changelog guards
+        # remain independent, and a non-shipped path used as a copy source
+        # still takes the full lineage/reconstruction path above.
+        if not Commit("", "", "", (path,)).ships:
+            continue
         for sha in contributions(path, len(order), head):
             surviving[sha].add(path)
     return [
