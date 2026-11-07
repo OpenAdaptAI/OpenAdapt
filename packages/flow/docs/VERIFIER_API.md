@@ -341,9 +341,35 @@ two intended writes with the same values need distinct `write_key`s. With a
 **Storage.** `FileLedger` is the default, in `~/.openadapt/ledger/`
 (`OPENADAPT_LEDGER_DIR` overrides it). It keeps one append-only JSON Lines
 file per key. Events are `begun`, `resolved`, `delivered` and `released`.
-Nothing is rewritten or deleted. A `LedgerBackend` protocol (`events`,
-`append`, `lease`) lets a deployment keep it elsewhere, such as a shared
-database for workers on several hosts. `MemoryLedger` is for tests.
+Nothing is rewritten or deleted. A `LedgerBackend` protocol lets a
+deployment keep it elsewhere, such as a shared database for workers on
+several hosts. In addition to `events`, `append` and `lease`, a backend must
+provide `transaction(key)`: a short exclusive journal transaction whose
+`events()` read and durable `append(event)` use the same lock. All appends
+must participate in that lock. It must be separate from the lifecycle lease,
+which a write holds while a late recheck may settle its journal. A backend
+without this primitive refuses mutations; a separate read and append is not
+an atomic substitute. `MemoryLedger` is for tests.
+
+Ledger mutations record the target attempt and journal revision. Settlements
+derived from a read supply the revision they observed before that read.
+Concurrent observations remain in the journal, including rejected ones, but
+a stale weak observation cannot release a hold, grant a retry, mark a
+recheck complete, hand back an older positive result, or remove its saved
+baseline. Attempt history and the latest attempt use the same fold. A
+recorded refutation holds the workflow until an explicit current-revision
+person decision releases it. This ordering does not establish that a native
+write happened or that its effect is absent. A person's release remains a
+workflow decision, separate from native verification. Rechecks bind the
+original receipt and the exact set of separately validated later receipts.
+Restoring current rows cannot confirm a historical claim already refuted
+under that context. A fresh confirmation needs a new issued receipt, not
+reordered, duplicated, removed or recycled excuses. Missing legacy context
+stays unresolved. A new receipt-bound claim can report its fresh read while
+the earlier workflow hold remains; it does not grant retry, cleanup or
+old-result handback. These context identities are data bindings, not native
+write or absence authority.
+
 `ledger=None` turns the ledger off; use it only for a sandbox that resets
 between runs, such as RL episodes.
 

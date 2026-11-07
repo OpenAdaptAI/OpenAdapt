@@ -13,11 +13,15 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from openadapt_flow import verifier
 from openadapt_flow.runtime.effects.frame import FrameSpec
@@ -33,6 +37,7 @@ from openadapt_flow.verifier import (
     recheck,
     verify_write,
 )
+from openadapt_flow.write_ledger import FileLedger, Ledger, MemoryLedger
 
 BOT = Actor(kind="agent", id="bot")
 
@@ -185,6 +190,176 @@ def _recheck(
     contract: Contract, result: WriteResult | RecheckState, n: int = 2, **kw: Any
 ) -> RecheckResult:
     return recheck(contract, result, params=_params(n), actor=BOT, **kw)
+
+
+@pytest.mark.parametrize("backend", ["memory", "file"])
+def test_concurrent_saved_state_uncertain_cannot_erase_refutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    due_now: None,
+    backend: str,
+) -> None:
+    """Pause after a real failed read, then commit a real refuting read."""
+    store = (
+        MemoryLedger(tmp_path / "memory")
+        if backend == "memory"
+        else FileLedger(tmp_path / "file")
+    )
+    ledger = Ledger(store)
+    db = _db(tmp_path)
+    contract = Contract.from_dict(_doc(db))
+    pending = begin_write(contract, _params(2), actor=BOT, ledger=ledger)
+    _sql(db, *_save_sql(2))
+    first = verify_write(pending)
+    assert first.verified and first.recheck is not None
+    saved = first.recheck.save(tmp_path / "state.json")
+    state = RecheckState.load(saved, params=_params(2))
+    read_finished, continue_append = threading.Event(), threading.Event()
+    original = ledger.resolved
+
+    def pause(key: str, attempt: str, **fields: Any) -> Any:
+        if threading.current_thread().name.startswith("failed-read"):
+            assert fields["outcome"] == "UNCERTAIN"
+            read_finished.set()
+            assert continue_append.wait(15)
+        return original(key, attempt, **fields)
+
+    monkeypatch.setattr(ledger, "resolved", pause)
+    unavailable = db.with_suffix(".offline")
+    db.rename(unavailable)
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="failed-read") as pool:
+        stale = pool.submit(_recheck, contract, state, ledger=ledger)
+        try:
+            assert read_finished.wait(15)
+            # SQLite may have opened a new empty file during the outage.
+            db.unlink(missing_ok=True)
+            unavailable.rename(db)
+            _sql(db, "UPDATE patient_data SET phone_cell='unexpected' WHERE id=1")
+            negative = _recheck(contract, state, ledger=ledger)
+            assert negative.outcome == "REFUTED", negative.reasons
+        finally:
+            continue_append.set()
+        assert stale.result(timeout=15).outcome == "UNCERTAIN"
+    held = ledger.latest(first.write_key)
+    assert held is not None and held.resolved is not None
+    assert held.resolved["outcome"] == "REFUTED" and held.state == "held"
+    _sql(db, "UPDATE patient_data SET phone_cell='' WHERE id=1")
+    later = _recheck(contract, state, ledger=ledger)
+    assert not later.verified, later.reasons
+    assert any(e.get("outcome") == "UNCERTAIN" for e in held.events)
+    with pytest.raises(verifier.WriteHeld):
+        begin_write(contract, _params(2), actor=BOT, ledger=ledger)
+
+
+@pytest.mark.parametrize("already_delivered", [False, True])
+def test_handback_cannot_return_positive_after_concurrent_refutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    due_now: None,
+    already_delivered: bool,
+) -> None:
+    db = _db(tmp_path)
+    contract = Contract.from_dict(_doc(db))
+    pending = begin_write(contract, _params(2), actor=BOT)
+    _sql(db, *_save_sql(2))
+    first = verify_write(pending, delivered=already_delivered)
+    assert first.verified
+    assert first.ledger is not None
+    ledger = first.ledger
+    original = ledger.delivered
+
+    def refute_then_deliver(key: str, attempt: str, **fields: Any) -> Any:
+        _sql(db, "UPDATE patient_data SET phone_cell='unexpected' WHERE id=1")
+        late = _recheck(contract, first, ledger=ledger)
+        assert late.outcome == "REFUTED", late.reasons
+        return original(key, attempt, **fields)
+
+    monkeypatch.setattr(ledger, "delivered", refute_then_deliver)
+    with pytest.raises((verifier.WriteHeld, verifier.VerifierError)) as failure:
+        begin_write(contract, _params(2), actor=BOT, ledger=ledger)
+    assert not isinstance(failure.value, verifier.AlreadyWritten)
+    current = ledger.latest(first.write_key)
+    assert current is not None and current.state == "held"
+
+
+def test_positive_recheck_cannot_mark_over_concurrent_refutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    due_now: None,
+) -> None:
+    contract, db, first = _first(tmp_path)
+    assert first.ledger is not None
+    ledger = first.ledger
+    read_finished, resume = threading.Event(), threading.Event()
+    before = ledger.latest(first.write_key)
+    assert before is not None
+    original = verifier.recheck_run
+
+    def pause(*args: Any, **fields: Any) -> Any:
+        observed = original(*args, **fields)
+        if threading.current_thread().name.startswith("positive-read"):
+            read_finished.set()
+            assert resume.wait(15)
+        return observed
+
+    monkeypatch.setattr(verifier, "recheck_run", pause)
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="positive-read") as pool:
+        positive = pool.submit(_recheck, contract, first, ledger=ledger)
+        try:
+            assert read_finished.wait(15)
+            _sql(db, "UPDATE patient_data SET phone_cell='unexpected' WHERE id=1")
+            negative = _recheck(contract, first, ledger=ledger)
+            assert negative.outcome == "REFUTED", negative.reasons
+        finally:
+            resume.set()
+        assert not positive.result(timeout=15).verified
+    current = ledger.latest(first.write_key)
+    assert current is not None and current.state == "held" and current.rechecked is None
+    assert current.events[-1]["event"] == "rechecked"
+    assert current.events[-1]["based_on"] == before.revision
+
+
+def test_initial_record_cannot_prune_or_return_positive_over_refutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    due_now: None,
+) -> None:
+    db = _db(tmp_path)
+    contract = Contract.from_dict(_doc(db))
+    pending = begin_write(contract, _params(2), actor=BOT)
+    assert pending.ledger is not None
+    _sql(db, *_save_sql(2))
+    read_finished, resume = threading.Event(), threading.Event()
+    actual_results: list[WriteResult] = []
+    original = verifier._record
+
+    def pause(
+        led: Ledger, key: str, attempt: str, result: WriteResult, **fields: Any
+    ) -> WriteResult:
+        # The real verifier has completed its read. Its exact result/state
+        # goes to the independent recheck; no verdict is manufactured.
+        assert result.verified and result.recheck is not None
+        actual_results.append(result)
+        read_finished.set()
+        assert resume.wait(15)
+        return original(led, key, attempt, result, **fields)
+
+    monkeypatch.setattr(verifier, "_record", pause)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        initial = pool.submit(verify_write, pending)
+        try:
+            assert read_finished.wait(15)
+            _sql(db, "UPDATE patient_data SET phone_cell='unexpected' WHERE id=1")
+            negative = _recheck(contract, actual_results[0], ledger=pending.ledger)
+            assert negative.outcome == "REFUTED", negative.reasons
+        finally:
+            resume.set()
+        checked = initial.result(timeout=15)
+    assert not checked.verified and not checked.retry_safe
+    assert (pending.workdir / "attempt.json").is_file()
+    assert (pending.workdir / "baseline.json").is_file()
+    current = pending.ledger.latest(pending.write_key)
+    assert current is not None and current.state == "held"
 
 
 # -- scheduling ----------------------------------------------------------------
@@ -1119,3 +1294,159 @@ def test_a_later_uncertain_recheck_does_not_replace_a_held_refuted(
     assert attempt is not None and attempt.resolved["outcome"] == "REFUTED"
     with pytest.raises(verifier.WriteHeld):
         begin_write(contract, _params(2), actor=BOT, write_key="k-keep")
+
+
+def test_fresh_excused_recheck_does_not_release_hold_or_retry(
+    tmp_path: Path,
+    due_now: None,
+) -> None:
+    contract, db, first = _first(tmp_path)
+    second = _save(contract, db, 3)
+    assert _recheck(contract, first).outcome == "REFUTED"
+    led = first.ledger
+    assert led is not None
+    before = led.latest(first.write_key)
+    assert before is not None and before.state == "held"
+    files = {str(p): p.read_bytes() for p in before.folder.rglob("*") if p.is_file()}
+    assert files, "the genuine saved attempt must contain retained files"
+    assert _recheck(contract, first, excused_by=[second]).outcome == "CONFIRMED"
+    after = led.latest(first.write_key)
+    assert after is not None and after.state == "held"
+    assert after.resolved == before.resolved and not after.resolved["retry_safe"]
+    assert after.events[-1]["applied"] is True
+    assert after.events[-1]["outcome"] == "CONFIRMED"
+    assert {
+        str(p): p.read_bytes() for p in before.folder.rglob("*") if p.is_file()
+    } == files
+    with pytest.raises(verifier.WriteHeld):
+        begin_write(contract, _params(2), actor=BOT)
+
+
+def test_historical_claim_cannot_be_revived_by_recycled_excuses(
+    tmp_path: Path,
+    due_now: None,
+) -> None:
+    contract, db, first = _first(tmp_path)
+    second = _save(contract, db, 3)
+    plain = _recheck(contract, first)
+    assert plain.outcome == "REFUTED" and plain.excuse_receipt_sha256s == ()
+    explained = _recheck(contract, first, excused_by=[second])
+    assert (
+        explained.verified
+        and explained.recheck_claim_sha256 != plain.recheck_claim_sha256
+    )
+    _sql(db, "UPDATE patient_data SET phone_cell='unexpected' WHERE id=1")
+    disputed = _recheck(contract, first, excused_by=[second])
+    assert disputed.outcome == "REFUTED"
+    _sql(db, "UPDATE patient_data SET phone_cell='' WHERE id=1")
+    for excuses in ([second], [second, second], []):
+        later = _recheck(contract, first, excused_by=excuses)
+        assert not later.verified, later.reasons
+    third = _save(contract, db, 4)
+    new_claim = _recheck(contract, first, excused_by=[second, third])
+    assert new_claim.verified, new_claim.reasons
+    assert new_claim.excuse_receipt_sha256s == tuple(
+        sorted({second.receipt_sha256, third.receipt_sha256})
+    )
+    _sql(db, "UPDATE patient_data SET phone_cell='unexpected' WHERE id=1")
+    assert _recheck(contract, first, excused_by=[second, third]).outcome == "REFUTED"
+    _sql(db, "UPDATE patient_data SET phone_cell='' WHERE id=1")
+    reordered = _recheck(contract, first, excused_by=[third, second, third])
+    assert reordered.recheck_claim_sha256 == new_claim.recheck_claim_sha256
+    assert not reordered.verified
+    assert first.ledger is not None
+    held = first.ledger.latest(first.write_key)
+    assert held is not None and held.state == "held"
+    assert held.resolved is not None and held.resolved["outcome"] == "REFUTED"
+    with pytest.raises(verifier.WriteHeld):
+        begin_write(contract, _params(2), actor=BOT)
+
+
+def test_legacy_missing_context_does_not_admit_a_fresh_confirmation(
+    tmp_path: Path,
+    due_now: None,
+) -> None:
+    contract, db, first = _first(tmp_path)
+    second = _save(contract, db, 3)
+    assert _recheck(contract, first).outcome == "REFUTED"
+    assert first.ledger is not None
+    original = first.ledger.backend.events(first.write_key)
+    legacy = Ledger(FileLedger(tmp_path / "legacy-ledger"))
+    # A NEW synthetic old-format file; original journal facts are untouched.
+    old_format = json.loads(json.dumps(original))
+    for event in old_format:
+        if event.get("outcome") == "REFUTED" and isinstance(event.get("result"), dict):
+            event["result"].pop("recheck_claim_sha256", None)
+            event["result"].pop("excuse_receipt_sha256s", None)
+    file = tmp_path / "legacy-ledger/entries" / (first.write_key + ".jsonl")
+    file.write_text("".join(json.dumps(event) + "\n" for event in old_format))
+    late = _recheck(contract, first, excused_by=[second], ledger=legacy)
+    assert not late.verified and late.outcome == "UNCERTAIN"
+    assert "context" in late.reasons[-1]
+    held = legacy.latest(first.write_key)
+    assert held is not None and held.state == "held"
+    assert first.ledger.backend.events(first.write_key) == original
+
+
+def test_receipt_bound_revision_model_on_generated_sqlite_histories(
+    tmp_path: Path,
+    due_now: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    case = 0
+
+    @settings(max_examples=8, deadline=None)
+    @given(
+        st.lists(
+            st.tuples(st.lists(st.sampled_from([0, 1]), max_size=4), st.booleans()),
+            min_size=1,
+            max_size=6,
+        )
+    )
+    def histories(operations: list[tuple[list[int], bool]]) -> None:
+        nonlocal case
+        folder = tmp_path / str(case)
+        case += 1
+        folder.mkdir()
+        with monkeypatch.context() as patch:
+            patch.setenv("OPENADAPT_LEDGER_DIR", str(folder / "ledger"))
+            patch.setenv("OPENADAPT_SEAL_HOME", str(folder / "seal"))
+            patch.setattr(verifier, "USED_DIR", folder / "used")
+            contract, db, first = _first(folder)
+            later = [_save(contract, db, 3), _save(contract, db, 4)]
+            assert first.ledger is not None
+            negative_contexts: set[tuple[str, ...]] = set()
+            negative_receipts: set[str] = set()
+            for indexes, harm in operations:
+                value = "unexpected" if harm else ""
+                _sql(db, f"UPDATE patient_data SET phone_cell='{value}' WHERE id=1")
+                context = tuple(sorted({later[i].receipt_sha256 for i in indexes}))
+                prefix = first.ledger.backend.events(first.write_key)
+                result = _recheck(
+                    contract, first, excused_by=[later[i] for i in indexes]
+                )
+                assert result.excuse_receipt_sha256s == context
+                if harm or set(indexes) != {0, 1}:
+                    assert result.outcome == "REFUTED", result.reasons
+                    negative_contexts.add(context)
+                    negative_receipts.update(context)
+                else:
+                    permitted = not negative_contexts or (
+                        context not in negative_contexts
+                        and bool(set(context) - negative_receipts)
+                    )
+                    assert result.verified is permitted, result.reasons
+                    if not permitted:
+                        assert result.outcome == "UNCERTAIN"
+                events = first.ledger.backend.events(first.write_key)
+                assert (
+                    events[: len(prefix)] == prefix and len(events) == len(prefix) + 1
+                )
+                if negative_contexts:
+                    held = first.ledger.latest(first.write_key)
+                    assert held is not None and held.state == "held"
+                    assert held.resolved is not None and not held.resolved["retry_safe"]
+                    with pytest.raises(verifier.WriteHeld):
+                        begin_write(contract, _params(2), actor=BOT)
+
+    histories()

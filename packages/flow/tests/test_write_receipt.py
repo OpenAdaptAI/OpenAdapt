@@ -558,3 +558,28 @@ def test_a_recheck_of_another_write_gets_no_receipt(tmp_path: Path) -> None:
     )
     state, path = issue_recheck_receipt(result, other)
     assert state.startswith("not issued: recheck_mismatch") and path is None
+
+
+def test_recheck_receipt_evidence_binds_the_actual_claim_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow import verifier
+
+    db = shadow_fx._db(tmp_path)
+    contract = shadow_fx._contract(db)
+    contract.config.frame.database.recheck_after_s = 1
+    params = {"fname": "Ada", "lname": "Quill", "email": "ada@example.test"}
+    pending = begin_write(contract, params, actor=api_fx.BOT, ledger=MemoryLedger())
+    api_fx._write(db, api_fx.SAVE)
+    result = verify_write(pending, write_receipt=True)
+    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+    late = verifier.recheck(contract, result, params=params, actor=api_fx.BOT)
+    assert late.verified and late.excuse_receipt_sha256s == ()
+    state, path = verifier.issue_recheck_receipt(result, late)
+    assert state == "issued" and path is not None
+    evidence = Path(str(path) + ".evidence.json").read_bytes()
+    opened = json.loads(evidence)["evidence"]["recheck"]
+    assert opened["recheck_claim_sha256"] == late.recheck_claim_sha256
+    assert opened["excuse_receipt_sha256s"] == []
+    checked = _verify(Path(str(path)).read_bytes(), evidence=evidence)
+    assert checked.evidence_opened and checked.payload.verdict == "CONFIRMED"

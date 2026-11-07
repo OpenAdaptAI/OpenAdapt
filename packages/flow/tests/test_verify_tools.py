@@ -411,3 +411,18 @@ def test_the_recheck_tool_says_another_agent_id_is_not_excused(sqlite_bridge) ->
     bridge, _ = sqlite_bridge
     spec = {t.name: t for t in bridge.list_tool_specs()}["verify_recheck"]
     assert "another agent_id" in spec.description
+
+
+def test_recheck_reply_identifies_its_validated_receipt_context(
+    sqlite_bridge, monkeypatch
+) -> None:
+    bridge, db = sqlite_bridge
+    first = _provisional(bridge, db)
+    second = _second(bridge, db)
+    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+    reply = bridge.dispatch("verify_recheck", {"write_id": first["write_id"]})
+    assert reply["verified"] is True
+    assert reply["excuse_receipt_sha256s"] == [second["receipt_sha256"]]
+    assert reply["recheck_claim_sha256"] == verifier._recheck_claim_id(
+        first["receipt_sha256"], [second["receipt_sha256"]]
+    )
