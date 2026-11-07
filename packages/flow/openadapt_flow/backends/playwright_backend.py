@@ -1618,9 +1618,22 @@ _STRUCTURAL_LOCATOR_AT_JS = (
     ) || el;
     const tag = actionable.tagName.toLowerCase();
     let selector = null;
+    // A selector counts only when, in the clicked element's own document,
+    // it matches exactly one element and that element is the clicked one. A
+    // look-alike elsewhere must not make a selector "unique" for the wrong
+    // element. Inside a shadow root no selector is built: Playwright's CSS
+    // locator pierces open shadow roots at replay, so a selector unique in
+    // one root could match a look-alike in the page or another root.
+    const root = actionable.getRootNode();
+    const unique = (candidate) => {
+        if (!(root instanceof Document)) return false;
+        try {
+            return root.querySelectorAll(candidate).length === 1 &&
+                root.querySelector(candidate) === actionable;
+        } catch (_) { return false; }
+    };
     const id = actionable.id;
-    if (id && document.querySelectorAll(
-            '#' + CSS.escape(id)).length === 1) {
+    if (id && unique('#' + CSS.escape(id))) {
         selector = '#' + CSS.escape(id);
     }
     // <input type=submit> and its kin are buttons named by their value,
@@ -1628,12 +1641,28 @@ _STRUCTURAL_LOCATOR_AT_JS = (
     const inputType = (actionable.getAttribute('type') || '').toLowerCase();
     const inputButton = tag === 'input' &&
         ['submit', 'button', 'reset', 'image'].includes(inputType);
+    // No unique id: the same unique attributes the interactive recorder uses.
+    // A button's `name` alone names the form field it submits, not the
+    // button: `button[name=action]` would find Deny where Approve was
+    // recorded, so a button keeps its role and label. A bracketed name
+    // (`items[0][qty]`) is a row position, which a reordered list moves to
+    // another row. Neither is a selector.
+    const buttonLike = inputButton || tag === 'button';
+    for (const attr of ['data-testid', 'data-test', 'name']) {
+        if (selector) break;
+        const value = actionable.getAttribute(attr);
+        if (!value) continue;
+        if (attr === 'name' && (buttonLike || /\[/.test(value))) continue;
+        const candidate = tag + '[' + attr + '="' + CSS.escape(value) + '"]';
+        if (unique(candidate)) selector = candidate;
+    }
     let role = actionable.getAttribute('role');
     if (!role) {
         const map = {button: 'button', a: 'link', input: 'textbox',
             select: 'combobox', textarea: 'textbox'};
         role = inputButton ? 'button' : (map[tag] || null);
         if (tag === 'a' && !actionable.getAttribute('href')) role = null;
+        if (inputType === 'checkbox' || inputType === 'radio') role = inputType;
     }
     const fieldLabel = """
     + _FIELD_LABEL_JS

@@ -397,12 +397,22 @@ gesture compiles to one `DOUBLE_CLICK` step), right click, drag, text entry
 (including `contenteditable` and `role="textbox"`), special keys, keyboard
 shortcuts, and wheel scrolling.
 
+A native `<select>` choice, by mouse or by typing, is recorded as the chosen
+option's label typed into the select. Replay types the label and reads the
+select's chosen option back; a select that ends on another option stops the
+run. Parameterize it like any field (`--param` with the select's `name`) to
+choose a different option on each run; a value that is no option stops the
+run too, since type-ahead lands on another option. No Enter is recorded for it. A choice made from a widget drawn over a
+hidden select (TomSelect, Select2) is recorded as the clicks and typing on the
+widget; the change the widget's script then sends to the hidden select is not
+recorded again. A multiple-choice select is refused.
+
 Refused loudly, never recorded silently wrong:
 
-- A native `<select>` selection. Its option commit happens in browser-native
-  dropdown UI that produces no recordable action events, so the choice would
-  be silently absent from the compiled workflow. The recording stops with an
-  explicit error at the moment of selection.
+- A multiple-choice `<select multiple>`, a select that holds a declared
+  secret, or a choice whose label another option of the select also shows
+  (case aside): replay chooses by label and couldn't tell them apart. The
+  recording stops at the moment of selection.
 - In attach mode, a new tab that no followed page opened, or a popup on
   another origin. Popups and tabs that a followed page opens are recorded as
   surfaces ([MULTI_SURFACE.md](MULTI_SURFACE.md)). A popup that closes itself

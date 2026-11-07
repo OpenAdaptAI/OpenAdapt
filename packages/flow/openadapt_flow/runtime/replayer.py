@@ -17773,7 +17773,11 @@ class Replayer:
         # Dropdown: typing selects the option whose label matches. When the
         # focused <select> at the field point now shows exactly the typed
         # label (whitespace-squashed, case-insensitive), the input landed.
-        # Any other answer falls through to the visual check, unchanged.
+        # When it shows another label, type-ahead stopped on a different
+        # option ("Mrs" for "Mr", the nearest prefix of a value that is no
+        # option): that never counts as landed, and nothing is retyped. Only
+        # no answer (no focused select there) falls through to the visual
+        # check.
         if field_point is not None and not allow_masked:
             reader = getattr(self.backend, "focused_select_label_at", None)
             label: Optional[str] = None
@@ -17782,13 +17786,12 @@ class Replayer:
                     label = reader(int(field_point[0]), int(field_point[1]))
                 except Exception:
                     label = None
-            if (
-                isinstance(label, str)
-                and identity_mod.squash(text)
-                and identity_mod.squash(label).casefold()
-                == identity_mod.squash(text).casefold()
-            ):
-                return True, True
+            if isinstance(label, str):
+                landed = bool(identity_mod.squash(text)) and (
+                    identity_mod.squash(label).casefold()
+                    == identity_mod.squash(text).casefold()
+                )
+                return landed, True
         if not changed:
             return False, False
         needle = identity_mod.squash(text)
