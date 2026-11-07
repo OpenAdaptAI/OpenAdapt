@@ -27,6 +27,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Explicit input, output, cache_write and cache_read model prices",
     )
     parser.add_argument("--max-turns", type=int, default=40)
+    parser.add_argument("--max-run-seconds", type=float, default=110)
+    parser.add_argument("--request-timeout-seconds", type=float, default=25)
+    parser.add_argument("--price-model", help="Exact model covered by supplied prices")
+    parser.add_argument("--pricing-source-url", help="Primary source for model prices")
+    parser.add_argument("--pricing-verified-at", help="Date prices were verified")
     parser.add_argument(
         "--max-cost-usd", type=float, help="Explicit model spend cap for a cache miss"
     )
@@ -114,9 +119,17 @@ def _task(args: argparse.Namespace, parser: argparse.ArgumentParser) -> WrappedT
             max_turns=args.max_turns,
             max_cost_usd=cap,
             prices=_prices(args.price),
+            max_run_seconds=args.max_run_seconds,
+            request_timeout_seconds=args.request_timeout_seconds,
+            price_model=args.price_model,
+            pricing_source_url=args.pricing_source_url,
+            pricing_verified_at=args.pricing_verified_at,
         )
         if getattr(agent, "requires_model_key", True):
-            provider = "anthropic" if args.provider == "claude" else "openai"
+            provider = getattr(agent, "model_key_provider", None)
+            expected = "anthropic" if args.provider == "claude" else "openai"
+            if provider != expected:
+                parser.error("provider adapter has no matching model-key provenance")
             setup.cache.model_key = load_customer_model_key(provider)
     return WrappedTask(
         cache=setup.cache,
