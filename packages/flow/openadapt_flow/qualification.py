@@ -1956,6 +1956,13 @@ def set_business_decision(
         raise QualificationError(
             f"the authored business decision makes the workflow invalid: {exc}"
         ) from exc
+    # This authoring API starts from a verified source, makes a deliberate
+    # in-memory derivative, and validates its complete serialized shape. Keep
+    # that source authority on the validated derivative; arbitrary callers of
+    # model_validate(model_dump()) remain unverified.
+    from openadapt_flow.bundle_validation import transfer_verified_load_capability
+
+    transfer_verified_load_capability(candidate, validated)
     validation = validate_workflow(validated)
     if not validation.structural_ok:
         details = "; ".join(

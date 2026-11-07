@@ -788,13 +788,18 @@ def _tree_rows(dest: Path) -> list[tuple[str, str]]:
     ]
 
 
-def _reseal_sanitized_bundle(bundle: Path) -> None:
+def _reseal_sanitized_bundle(
+    bundle: Path, verified_source: Any, source_bundle: Path
+) -> None:
     """Rebuild generated bundle surfaces after a load-bearing transformation."""
 
     from openadapt_flow.compiler.codegen import render_workflow_py
     from openadapt_flow.ir import Workflow
 
     workflow = Workflow.load(bundle, verify_integrity=False)
+    from openadapt_flow.bundle_validation import authorize_sanitized_derivative
+
+    authorize_sanitized_derivative(workflow, verified_source, source_bundle)
     if workflow.manifest is not None:
         provenance = workflow.manifest.provenance
         provenance.policy_name = None
@@ -869,6 +874,17 @@ def sanitize_artifact(
         artifacts.is_file(source / name)
         for name in ("workflow.json", "workflow.py", "manifest.json")
     )
+    verified_source = None
+    if canonical_bundle:
+        from openadapt_flow.bundle_validation import BundleIntegrityError
+        from openadapt_flow.ir import Workflow
+
+        try:
+            verified_source = Workflow.load(source)
+        except (BundleIntegrityError, OSError, ValueError, TypeError) as exc:
+            raise SanitizationError(
+                f"Cannot verify source bundle before sanitizing: {exc}"
+            ) from exc
     scrubber = privacy.get_scrubber()
     if scrubber is None:
         raise SanitizationError(
@@ -992,7 +1008,7 @@ def sanitize_artifact(
                 }
             )
         if canonical_bundle and semantics == "not-preserved":
-            _reseal_sanitized_bundle(staging)
+            _reseal_sanitized_bundle(staging, verified_source, source)
             for entry in entries:
                 derivative = staging / entry["path"]
                 entry["derivative_sha256"] = _sha256_file(derivative)

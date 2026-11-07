@@ -53,13 +53,27 @@ class SignRefused(RuntimeError):
 def bundle_digest(bundle_dir: Path) -> str:
     """Verify content identity against the original seal and current asset bytes."""
     from openadapt_flow.bundle_validation import (
+        BundleIntegrityError,
         compute_file_hashes,
         content_identity_digest,
     )
     from openadapt_flow.ir import Workflow
 
-    workflow = Workflow.load(bundle_dir)
-    return content_identity_digest(workflow, compute_file_hashes(workflow, bundle_dir))
+    try:
+        workflow = Workflow.load(bundle_dir)
+    except BundleIntegrityError as exc:
+        raise BundleIntegrityError(
+            "authorization summary requires a persisted bundle integrity seal"
+        ) from exc
+    if workflow._loaded_seal is None or not workflow._loaded_seal.content_digest:
+        raise BundleIntegrityError(
+            "authorization summary requires a persisted bundle integrity seal"
+        )
+    assets = workflow.decrypted_templates() if workflow.encrypted else None
+    return content_identity_digest(
+        workflow,
+        compute_file_hashes(workflow, bundle_dir, assets=assets),
+    )
 
 
 def matching_bundle(digest: str, candidates: Sequence[Path]) -> Optional[Path]:
@@ -115,9 +129,7 @@ def outline(bundle_dir: Path) -> ProgramOutline:
     """Sections (compiled ones if present, else one per field filled), writes, stops."""
     from openadapt_flow.ir import Workflow
 
-    wf = Workflow.model_validate_json(
-        (Path(bundle_dir) / "workflow.json").read_text(encoding="utf-8")
-    )
+    wf = Workflow.load(bundle_dir)
     steps = list(wf.steps)
     env = getattr(getattr(wf, "qualification", None), "environment", None)
     app = str(getattr(env, "application", "") or "") or wf.name.split("-", 1)[0]
@@ -187,16 +199,21 @@ def _covered_by_digest(bundle_dir: Path, report: Path) -> bool:
     """True only when the report's exact bytes are a hashed file of the bundle."""
     import hashlib
 
-    from openadapt_flow.bundle_validation import compute_file_hashes
+    from openadapt_flow.bundle_validation import (
+        BundleIntegrityError,
+        compute_file_hashes,
+    )
     from openadapt_flow.ir import Workflow
 
     try:
         rel = report.resolve().relative_to(bundle_dir.resolve()).as_posix()
-        wf = Workflow.model_validate_json(
-            (bundle_dir / "workflow.json").read_text("utf-8")
+        wf = Workflow.load(bundle_dir)
+        hashes = compute_file_hashes(
+            wf,
+            bundle_dir,
+            assets=wf.decrypted_templates() if wf.encrypted else None,
         )
-        hashes = compute_file_hashes(wf, bundle_dir)
-    except (ValueError, OSError):
+    except (BundleIntegrityError, OSError, ValueError):
         return False
     return hashes.get(rel) == hashlib.sha256(report.read_bytes()).hexdigest()
 
