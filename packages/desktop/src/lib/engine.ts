@@ -113,6 +113,7 @@ export const CMD = {
   // Nothing is sent before SET_USAGE_STATS {share: true}.
   GET_PRIVACY_SETTINGS: "get_privacy_settings",
   SET_USAGE_STATS: "set_usage_stats",
+  SUBSCRIBE_RELEASE_NOTES: "subscribe_release_notes",
   SET_UPDATE_CHECK: "set_update_check",
   // Returns the last result at once; a due (or forced) check answers with
   // the UPDATE_STATUS event.
