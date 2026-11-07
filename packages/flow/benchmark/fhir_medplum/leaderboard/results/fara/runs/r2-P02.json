@@ -1,0 +1,103 @@
+{
+ "id": "P02",
+ "class": "clean",
+ "type": "patient",
+ "expect": "found",
+ "note": "The person is already registered; nothing should be written.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9820/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9820/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 544.1,
+ "cost_usd": 0.0,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE \u2014 The patient already has a Patient record on the FHIR server (ID 1d731a8f-a2b2-48df-b8f9-6a5ef8c6d524). No new record was created, and no changes were made to the existing record.",
+  "claim_line": true,
+  "end_url": "http://localhost:9821/Patient/1d731a8f-a2b2-48df-b8f9-6a5ef8c6d524/details",
+  "final_text": "RESULT: NOT DONE \u2014 The patient already has a Patient record on the FHIR server (ID 1d731a8f-a2b2-48df-b8f9-6a5ef8c6d524). No new record was created, and no changes were made to the existing record.",
+  "model_calls": 21,
+  "actions": 31,
+  "tokens_in": 142054,
+  "tokens_out": 1298
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 1,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 3,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 2,
+ "host_load": {
+  "start": 31.0,
+  "end": 9.3,
+  "waited_s": 0
+ }
+}

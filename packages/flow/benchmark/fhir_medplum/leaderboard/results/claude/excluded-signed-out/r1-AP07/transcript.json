@@ -1,0 +1,61 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't book the appointment. Medplum is showing its \"Sign in to Medplum\" page even though the task said I'd already be signed in. I reloaded the page and got the same screen. I wasn't given an email or password, and I won't register a new account. Because of that I couldn't look up Tomasz Wren's Patient record or check for an existing appointment, so nothing was created or changed.\n\nRESULT: NOT DONE Medplum shows a sign-in page and I have no credentials, so I couldn't search for or create the appointment.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6283,
+   "out": 103,
+   "usd": 0.002294,
+   "cached": 6279
+  },
+  {
+   "in": 7759,
+   "out": 162,
+   "usd": 0.006575,
+   "cached": 6279
+  },
+  {
+   "in": 9317,
+   "out": 172,
+   "usd": 0.00717,
+   "cached": 7757
+  }
+ ]
+}

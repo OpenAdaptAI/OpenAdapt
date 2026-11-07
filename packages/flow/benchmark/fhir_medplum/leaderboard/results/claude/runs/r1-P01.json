@@ -1,0 +1,155 @@
+{
+ "id": "P01",
+ "class": "clean",
+ "type": "patient",
+ "expect": "create",
+ "note": "A plain registration.",
+ "agent_s": 107.9,
+ "cost_usd": 0.237655,
+ "claim": {
+  "status": "done",
+  "id": "Patient/6b7df2a9-6a50-472b-9fc1-aaad7d73f88e",
+  "note": "RESULT: DONE Patient/6b7df2a9-6a50-472b-9fc1-aaad7d73f88e",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/Patient/6b7df2a9-6a50-472b-9fc1-aaad7d73f88e",
+  "final_text": "I created a Patient record for Lena Okafor. Searches for \"Okafor\" and \"Lena\" now return only this one record.\n\nThe Patient list was empty when I started, and a search for \"Okafor\" before creating found nothing. The list view also failed to show the new record afterwards, so I used the search box to check for duplicates. I wrote only the requested values:\n- **Name:** Lena Okafor\n- **Date of birth:** 1988-04-22\n- **Sex:** female\n- **Address:** 14 Birch Lane, Springfield, MA 01103\n- **Home phone:** 413-555-0187\n- **Email:** lena.okafor@example.org\n\nI clicked OK twice in the JSON editor. The page was slow to move on, and the first click may have been the one that saved.\n\nRESULT: DONE Patient/6b7df2a9-6a50-472b-9fc1-aaad7d73f88e",
+  "model_calls": 22,
+  "actions": 52,
+  "tokens_in": 504360,
+  "tokens_out": 4493
+ },
+ "verifier": {
+  "outcome": "created_verified",
+  "id": "6b7df2a9-6a50-472b-9fc1-aaad7d73f88e",
+  "reasons": [
+   "created once, every value read back"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ]
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "created_verified",
+  "id": "6b7df2a9-6a50-472b-9fc1-aaad7d73f88e",
+  "reasons": [
+   "created once, every value read back"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ]
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.3,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/6b7df2a9-6a50-472b-9fc1-aaad7d73f88e"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Patient/6b7df2a9-6a50-472b-9fc1-aaad7d73f88e": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1
+}

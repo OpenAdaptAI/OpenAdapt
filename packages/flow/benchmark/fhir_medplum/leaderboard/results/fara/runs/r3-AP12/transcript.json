@@ -1,0 +1,822 @@
+{
+ "transcript": [
+  {
+   "reply": "We need to locate the patient's existing record first, so perform a Medplum search for the name and birth date.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [204, 32], \"text\": \"Tomasz Wren 1966-01-30\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the patient record to view details and later reference the ID.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [218, 302]}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to keep the patient\u2019s UUID handy so we can reference it when searching for or creating the Appointment that involves this patient.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Patient Tomasz Wren (born 1966-01-30) has FHIR UUID e573bcf4-1262-4715-9386-230214315081\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Need to locate the practitioner Dr Ama Osei on Medplum to obtain UUID for appointment.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [204, 32], \"text\": \"Dr Ama Osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Clear the search field and enter practitioner name to find UUID.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [276, 32], \"text\": \"Dr Ama Osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter practitioner name into search bar to locate UUID.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [276, 32], \"text\": \"Dr Ama Osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter practitioner name into search bar to locate practitioner record.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [276, 32], \"text\": \"Dr Ama Osei\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Execute the search for the practitioner by sending the search query.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [87, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter practitioner name into search bar to locate practitioner record.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [276, 32], \"text\": \"Dr Ama Osei\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Execute the search query for practitioner by pressing Enter in the search field.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"Enter\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Directly navigate to the Practitioner search results URL to locate Dr Ama Osei without relying on the unresponsive search bar.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Practitioner?name=Dr%20Ama%20Osei\"}}\n</tool_call>"
+  },
+  {
+   "reply": "We need the practitioner\u2019s UUID to reference when creating the appointment with the patient.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Practitioner Dr Ama Osei has FHIR UUID 8bf415b-f3af-4726-b2ef-6043f4fc1fb8\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the practitioner record to view details and capture the URL for reference.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [218, 302]}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to keep the practitioner\u2019s exact URL so we can reference it when constructing the appointment resource that involves this practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Practitioner Dr Ama Osei URL is http://localhost:9821/Practitioner/8bfb415b-f3af-4726-b2ef-6043f4fc1fb8\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Need to create an Appointment resource; clicking the 'Event' tab should open or navigate to the appointment event view where we can create a new appointment.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [253, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Allow the Event view to fully load so the appointment form appears before interacting.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"wait\", \"time\": 3}}\n</tool_call>"
+  },
+  {
+   "reply": "Allow additional time for the Event view to finish loading and display the appointment form so we can interact with it.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"wait\", \"time\": 3}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Event' tab again to ensure navigation to the appointment form is initiated.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [253, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Need to create appointment from scratch; directly navigate to Appointment create endpoint to open form.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Appointment\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the '+' button to open the create form for Appointment resource so we can fill in details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1232, 170]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal additional fields such as participant sections.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -846}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to reveal the participant sections (e.g., patient, practitioner) needed to fill in the appointment details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -846}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to reveal the participant sections (patient and practitioner) required to fill appointment details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -846}}\n</tool_call>"
+  },
+  {
+   "reply": "Need to add the patient as first participant, so click 'Add Participant' button.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [281, 522]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the Patient reference input field within the participant form.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -846}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to reveal the Patient reference input field within the participant form so we can fill in the patient UUID.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -846}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to reveal the Patient reference input field within the participant form.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -846}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Actor' dropdown to select Patient type for the participant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [424, 176]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Actor' dropdown again to display options so we can select 'Patient'.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [424, 176]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Status' dropdown to select 'required' status for the participant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 366]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Actor' dropdown to display options so we can select 'Patient'.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [424, 176]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Status' dropdown to display options so we can select 'required' status for the participant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 366]}}\n</tool_call>"
+  },
+  {
+   "reply": "Select 'Req' (required) as the participant status.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 583]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Status' dropdown to change selection from 'Needs Action' to 'Accepted'.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 366]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Actor' dropdown to display options so we can select 'Patient'.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [424, 176]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Status' dropdown to display options so we can select 'Accepted' for the participant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 366]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Status' dropdown to display options so we can select 'Accepted' for the participant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 366]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Actor' dropdown to display options so we can select 'Patient'.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [424, 176]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Status' dropdown to display options so we can select 'Accepted' for the participant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 366]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Status' dropdown to display options so we can select 'Accepted' for the participant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 366]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Actor' dropdown to display options so we can select 'Patient'.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [424, 176]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Status' dropdown to display options so we can select 'Accepted' for the participant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 366]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Status' dropdown to display options so we can select 'Accepted' for the participant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 366]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Status' dropdown to display options so we can select 'Accepted' for the participant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 366]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Status' dropdown to display options so we can select 'Accepted' for the participant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 366]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Status' dropdown to display options so we can select 'Accepted' for the participant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 366]}}\n</tool_call>"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Tomasz Wren 1966-01-30"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 216.64596273291926,
+   "y": 297.5369458128079,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Dr Ama Osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 274.2857142857143,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Dr Ama Osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 274.2857142857143,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Dr Ama Osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 274.2857142857143,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Dr Ama Osei"
+  },
+  {
+   "a": "click",
+   "x": 86.45962732919254,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 274.2857142857143,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Dr Ama Osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Practitioner?name=Dr%20Ama%20Osei"
+  },
+  {
+   "a": "click",
+   "x": 216.64596273291926,
+   "y": 297.5369458128079,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 251.42857142857142,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 251.42857142857142,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Appointment"
+  },
+  {
+   "a": "click",
+   "x": 1224.3478260869565,
+   "y": 167.48768472906403,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 846.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 846.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 846.0
+  },
+  {
+   "a": "click",
+   "x": 279.25465838509314,
+   "y": 514.2857142857143,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 846.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 846.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 846.0
+  },
+  {
+   "a": "click",
+   "x": 421.36645962732916,
+   "y": 173.39901477832512,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 421.36645962732916,
+   "y": 173.39901477832512,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 360.5911330049261,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 421.36645962732916,
+   "y": 173.39901477832512,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 360.5911330049261,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 574.384236453202,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 360.5911330049261,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 421.36645962732916,
+   "y": 173.39901477832512,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 360.5911330049261,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 360.5911330049261,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 421.36645962732916,
+   "y": 173.39901477832512,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 360.5911330049261,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 360.5911330049261,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 421.36645962732916,
+   "y": 173.39901477832512,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 360.5911330049261,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 360.5911330049261,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 360.5911330049261,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 360.5911330049261,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 360.5911330049261,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 3028,
+   "out": 91,
+   "usd": 0.0
+  },
+  {
+   "in": 4515,
+   "out": 48,
+   "usd": 0.0
+  },
+  {
+   "in": 5970,
+   "out": 114,
+   "usd": 0.0
+  },
+  {
+   "in": 6155,
+   "out": 75,
+   "usd": 0.0
+  },
+  {
+   "in": 6301,
+   "out": 67,
+   "usd": 0.0
+  },
+  {
+   "in": 6439,
+   "out": 65,
+   "usd": 0.0
+  },
+  {
+   "in": 6575,
+   "out": 66,
+   "usd": 0.0
+  },
+  {
+   "in": 6712,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 6828,
+   "out": 66,
+   "usd": 0.0
+  },
+  {
+   "in": 6965,
+   "out": 41,
+   "usd": 0.0
+  },
+  {
+   "in": 7077,
+   "out": 78,
+   "usd": 0.0
+  },
+  {
+   "in": 7215,
+   "out": 87,
+   "usd": 0.0
+  },
+  {
+   "in": 7362,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 7479,
+   "out": 106,
+   "usd": 0.0
+  },
+  {
+   "in": 7653,
+   "out": 65,
+   "usd": 0.0
+  },
+  {
+   "in": 7787,
+   "out": 41,
+   "usd": 0.0
+  },
+  {
+   "in": 7897,
+   "out": 48,
+   "usd": 0.0
+  },
+  {
+   "in": 8014,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 8135,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 8242,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 8334,
+   "out": 39,
+   "usd": 0.0
+  },
+  {
+   "in": 8410,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 8499,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 8583,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 8672,
+   "out": 42,
+   "usd": 0.0
+  },
+  {
+   "in": 8751,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 8839,
+   "out": 43,
+   "usd": 0.0
+  },
+  {
+   "in": 8919,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 9005,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 9094,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 9182,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 9270,
+   "out": 56,
+   "usd": 0.0
+  },
+  {
+   "in": 9363,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 9447,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 9537,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 9625,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 9717,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 9809,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 9897,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 9989,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 10081,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 10169,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 10261,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 10353,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 10445,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 10537,
+   "out": 55,
+   "usd": 0.0
+  }
+ ]
+}
