@@ -83,12 +83,25 @@ smoke gate. The replay uses the Demo profile and returns
 ## Record and replay one surface
 
 ```bash
-openadapt flow record --out rec
-openadapt flow record --url https://your-app.example --out rec
-openadapt flow replay bundle --url https://your-app.example --run-dir run
+openadapt flow record --backend <web|windows|macos|linux|rdp|citrix> <target> --out rec
 ```
 
-Omit `--backend`. No `--url` records this OS. `--url` records the browser.
+The target is `--url` for a web app and `--window` (plus `--window-title`) for
+a desktop app or a local RDP or Citrix client window. Network RDP is recorded
+inside the remote session, and Linux records the local desktop. Side by side:
+
+```bash
+# A web app
+openadapt flow record --backend web --url https://your-app.example --out rec
+openadapt flow replay bundle --url https://your-app.example --run-dir run
+
+# A desktop app (macOS here; Windows and Citrix take --window too)
+openadapt flow record --backend macos --window "Your App" --out rec
+openadapt flow replay bundle --macos-app "Your App" --run-dir run
+```
+
+`--backend` can be left out: with `--url` it records the browser, and without
+it records this computer's desktop.
 
 Supported selectors are `web`, `windows`, `macos`, `linux`, `rdp`, and
 `citrix`. The required target flags differ by surface. Run these commands for

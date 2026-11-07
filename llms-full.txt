@@ -183,16 +183,31 @@ covers other clients.
 
 ### Record a task by hand
 
+Recording works the same way on every surface; only the target differs:
+`--url` for a web app, `--window` (and `--window-title`) for a desktop app or a
+local RDP or Citrix client window.
+
 ```bash
 python -m pip install --upgrade openadapt
-openadapt flow record --url https://staging.your-app.example --out rec
+openadapt flow record --backend <web|windows|macos|linux|rdp|citrix> <target> --out rec
+
+# A web app
+openadapt flow record --backend web --url https://staging.your-app.example --out rec
 openadapt flow compile rec --out bundle --name my-first-workflow
 openadapt flow replay bundle --url https://staging.your-app.example --run-dir run
+
+# A desktop app (macOS here; Windows and Citrix take --window too)
+openadapt flow record --backend macos --window "Your App" --out rec
+openadapt flow compile rec --out bundle --name my-first-workflow
+openadapt flow replay bundle --macos-app "Your App" --run-dir run
 ```
 
-`replay` drives the app at `--url` and performs every recorded action,
+`replay` drives the app and performs every recorded action,
 including saves you can't undo. It doesn't ask first and doesn't check the
 saved record. Point it at a test or staging copy, never at production data.
+
+The commands for every surface, including Linux, RDP and Citrix, are in
+[SURFACES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SURFACES.md#first-workflow-per-surface).
 
 A program that writes to a real system also needs record checks, a deployment
 file, certification, qualification, and an admission; then `openadapt flow run`

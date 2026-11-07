@@ -64,14 +64,29 @@ fault cases, and deployment policy before production use.
 
 ## Record a workflow
 
-Omit `--backend`. No `--url` records this OS. `--url` records the browser.
+Recording is the same on every surface; only the target differs: `--url`
+for a web app, `--window` for a desktop app or a local RDP or Citrix client
+window.
 
 ```bash
-openadapt flow record --out rec
-openadapt flow record --url https://your-app.example --out rec
+openadapt flow record --backend <web|windows|macos|linux|rdp|citrix> <target> --out rec
+```
+
+```bash
+# A web app
+openadapt flow record --backend web --url https://your-app.example --out rec
 openadapt flow compile rec --out bundle --name my-workflow
 openadapt flow replay bundle --url https://your-app.example --run-dir run
+
+# A desktop app (macOS here; Windows and Citrix take --window too)
+openadapt flow record --backend macos --window "Your App" --out rec
+openadapt flow compile rec --out bundle --name my-workflow
+openadapt flow replay bundle --macos-app "Your App" --run-dir run
 ```
+
+`--backend` can be left out: with `--url` it records the browser, and without
+it records this computer's desktop. Every surface's commands are in
+[SURFACES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SURFACES.md#first-workflow-per-surface).
 
 Password fields and fields declared with `--secret` exclude their values at
 record time. Read the
