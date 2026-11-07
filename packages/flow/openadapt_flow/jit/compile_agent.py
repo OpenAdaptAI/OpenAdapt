@@ -39,6 +39,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Literal,
     Mapping,
     Optional,
     Protocol,
@@ -62,6 +63,7 @@ __all__ = [
     "App",
     "RECORDING_WARNING",
     "Recording",
+    "RecordingDispatcher",
     "SURFACE_KINDS",
     "SurfaceApp",
     "TaskRequest",
@@ -486,8 +488,10 @@ class Recording:
     """One capture, as a context manager. Get it from
     :meth:`CompiledAgent.recording`.
 
-    Inside the ``with`` block, send each action to ``computer.execute`` and
-    give the model the observation. On exit the recording is compiled into a
+    Inside the ``with`` block, send each action to ``dispatcher.execute`` and
+    give the agent the observation. The dispatcher is the action boundary for
+    external agents; capture controllers may register per-action and
+    pre-finish checks on it. On exit the recording is compiled into a
     DRAFT bundle, and :attr:`result` says what happened. An
     :class:`UnsupportedAction` raised in the block ends the capture with no
     draft and is not re-raised; any other exception is recorded as
@@ -512,6 +516,7 @@ class Recording:
         self.result: Optional[JitResult] = None
         #: The teach scope's guard, when the task declared one.
         self.guard: Optional["TeachGuard"] = None
+        self.dispatcher: Optional[RecordingDispatcher] = None
         self._baseline: Optional[list[dict[str, Any]]] = None
 
     def __enter__(self) -> "Recording":
@@ -577,7 +582,10 @@ class Recording:
                 else None,
                 sleep=owner._sleep,
                 guard=self.guard,
+                after_action=self._dispatch_after_action,
             )
+            self.dispatcher = RecordingDispatcher(self)
+            self.computer.dispatcher = self.dispatcher
             self._session.start_record()
         except BaseException:
             self._close()
@@ -594,6 +602,8 @@ class Recording:
         try:
             self.result = self._finish(exc)
         finally:
+            if self.dispatcher is not None:
+                self.dispatcher.close()
             self._close()
         return isinstance(exc, UnsupportedAction)
 
@@ -604,6 +614,11 @@ class Recording:
         owner, session, computer = self._owner, self._session, self.computer
         assert computer is not None
         guard = self.guard
+        if exc is None and self.dispatcher is not None:
+            try:
+                self.dispatcher.finish()
+            except Exception as finish_error:  # noqa: BLE001 - fail closed
+                exc = finish_error
         if guard is not None and exc is None:
             # A request the page made after the agent's last action.
             try:
@@ -691,6 +706,131 @@ class Recording:
             guard=guard,
             readback=readback,
         )
+
+    def _dispatch_after_action(self, native: Mapping[str, Any]) -> None:
+        if self.dispatcher is not None:
+            self.dispatcher.after_action(native)
+
+
+class RecordingDispatcher:
+    """The capture-owned action interface for an external agent.
+
+    Pass only this object to an external agent. Each call to :meth:`execute`
+    goes through the recording computer and its pre-action teach guard. A
+    capture controller can register request-pump and completion callbacks;
+    those run before the observation is taken and before the recording is
+    finalized, respectively.
+    """
+
+    def __init__(self, recording: Recording) -> None:
+        self._recording = recording
+        self._after_action: list[Callable[[Mapping[str, Any]], None]] = []
+        self._finalizers: list[Callable[[], None]] = []
+        self._closers: list[Callable[[], None]] = []
+        self._finish_state: Literal["open", "running", "complete", "failed"] = "open"
+        self._finish_error: Optional[BaseException] = None
+        self._closed = False
+
+    @property
+    def recording(self) -> Recording:
+        """The owning capture, for trusted capture controllers."""
+
+        return self._recording
+
+    def execute(self, native: Mapping[str, Any]) -> Any:
+        """Perform one action under the live recording's guard."""
+
+        if (
+            self._closed
+            or self._finish_state != "open"
+            or self._recording.computer is None
+        ):
+            raise RuntimeError("the recording action dispatcher is closed")
+        return self._recording.computer.execute(native)
+
+    def add_after_action(self, callback: Callable[[Mapping[str, Any]], None]) -> None:
+        """Run a capture controller after each guarded operation."""
+
+        if self._closed or self._finish_state != "open":
+            raise RuntimeError("the recording action dispatcher is finishing")
+        self._after_action.append(callback)
+
+    def add_settle_callback(self, callback: Callable[[float], None]) -> None:
+        """Pump a guard while the recorder samples an action's settled result."""
+
+        if self._closed or self._finish_state != "open":
+            raise RuntimeError("the recording action dispatcher is finishing")
+        if self._recording._session is None:
+            raise RuntimeError("the recording session has not started")
+        self._recording._session.add_settle_callback(callback)
+
+    def before_finish(self, callback: Callable[[], None]) -> None:
+        """Require capture-side checks to finish before a draft is written."""
+
+        if self._closed or self._finish_state != "open":
+            raise RuntimeError("the recording action dispatcher is finishing")
+        self._finalizers.append(callback)
+
+    def on_close(self, callback: Callable[[], None]) -> None:
+        """Release a capture controller on both success and refusal."""
+
+        if self._closed:
+            raise RuntimeError("the recording action dispatcher is closed")
+        self._closers.append(callback)
+
+    def after_action(self, native: Mapping[str, Any]) -> None:
+        """Internal action boundary used by :class:`Recording`."""
+
+        if self._closed or self._finish_state != "open":
+            raise RuntimeError("the recording action dispatcher is closed")
+        for callback in tuple(self._after_action):
+            callback(native)
+
+    def finish(self) -> None:
+        """Complete checks once; a caught refusal never authorizes a draft."""
+
+        if self._finish_state == "failed":
+            assert self._finish_error is not None
+            raise self._finish_error
+        if self._finish_state == "complete":
+            return
+        if self._finish_state == "running" or self._closed:
+            self._finish_error = RuntimeError(
+                "recording completion was reentered or its dispatcher closed"
+            )
+            self._finish_state = "failed"
+            raise self._finish_error
+        self._finish_state = "running"
+        try:
+            for callback in tuple(self._finalizers):
+                callback()
+                # A callback may catch a reentrant finish refusal. It still
+                # cannot turn that failed completion back into success.
+                if self._finish_error is not None:
+                    raise self._finish_error
+                if self._closed:
+                    raise RuntimeError(
+                        "the recording dispatcher closed during completion"
+                    )
+        except BaseException as error:
+            if self._finish_error is None:
+                self._finish_error = error
+            self._finish_state = "failed"
+            raise self._finish_error
+        self._finish_state = "complete"
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        errors: list[Exception] = []
+        for callback in reversed(self._closers):
+            try:
+                callback()
+            except Exception as exc:  # noqa: BLE001 - close remaining resources
+                errors.append(exc)
+        if errors and self._recording.result is None:
+            raise errors[0]
 
 
 @dataclass
