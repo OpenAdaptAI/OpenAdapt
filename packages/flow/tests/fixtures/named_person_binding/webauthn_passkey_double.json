@@ -1,56 +1,32 @@
 {
-  "approval_payload": {
-    "decision": "approve",
-    "request_id": "req-fixture-0001",
-    "schema_version": "openadapt.item-approval-request/v1"
-  },
-  "approval_payload_sha256": "sha256:0df621837e1f30a7a32576d976d80d5d5b0785fa0eeaadea232053040972607d",
+  "approval_payload_sha256": "sha256:1c63a0bf0dc51e43cf3c55c390ff0dc2f169ea203bf45ead4c4a5dec076fc6a4",
   "assertion_hex": {
     "authenticator_data": "f032c72798a7c370874c6b07ea18aa24ed30efc30af571e0fef5057bd1b8e4a00100000001",
-    "client_data_json": "{\"challenge\":\"0df621837e1f30a7a32576d976d80d5d5b0785fa0eeaadea232053040972607d\",\"fixture\":\"openadapt.named-person.webauthn-double/v1\",\"origin\":\"https://approve.openadapt.test\",\"type\":\"webauthn.get\"}",
-    "credential_id": "c0ffee0000000000000000000000000000000000000000000000000000000000",
-    "signature": "6a5bdea20aa5571a021d986e13e300edf39d5c2e6edd673857cc27eda6ed8493"
+    "client_data_json": "{\"challenge\":\"1c63a0bf0dc51e43cf3c55c390ff0dc2f169ea203bf45ead4c4a5dec076fc6a4\",\"fixture\":\"openadapt.named-person.webauthn-double/v1\",\"origin\":\"https://approve.openadapt.test\",\"type\":\"webauthn.get\"}",
+    "credential_id": "637265642d616c6963652d31",
+    "signature": "dce88a18e430e672c144fc3292b17f183b0e81c30b28e459cdb1032cee5c49cb"
   },
   "binding": {
-    "approval_payload_sha256": "sha256:0df621837e1f30a7a32576d976d80d5d5b0785fa0eeaadea232053040972607d",
+    "approval_payload_sha256": "sha256:1c63a0bf0dc51e43cf3c55c390ff0dc2f169ea203bf45ead4c4a5dec076fc6a4",
     "evidence": {
       "authenticator_data_sha256": "sha256:b965ac9d59d891b6f7deeda46c377a115253a1a0ca80067de56df86c92f6295a",
-      "challenge_sha256": "sha256:0df621837e1f30a7a32576d976d80d5d5b0785fa0eeaadea232053040972607d",
-      "client_data_sha256": "sha256:9350621ef5b18b257430975a707aa38ca90dea325694e6cad1018a7dbe1bef9f",
-      "credential_id_sha256": "sha256:5db8414a3b4b48b05f2d27dce4e768381f255881cd351d4afcf6ba690743ba9e",
+      "challenge_sha256": "sha256:1c63a0bf0dc51e43cf3c55c390ff0dc2f169ea203bf45ead4c4a5dec076fc6a4",
+      "client_data_sha256": "sha256:02085406e4d4b045adcea58769faa431c09fb54060adf3828a4007e9d3cc7a65",
+      "credential_id_sha256": "sha256:41c85abfc67f3c8fca2b7ef00587b3bfc5d86f93f84288a6ce95f27c3bde72a4",
       "rp_id": "approve.openadapt.test",
-      "signature_sha256": "sha256:fdaa9d3ae9ab0baa1082f13c7bc5285cf904100d48d60b7fd826d0042cf77db5",
+      "signature_sha256": "sha256:a871310118a9eb7e30cdc100c48640bb1ad1876e938d1a820648fab0a699ac78",
       "user_handle_sha256": null
     },
     "method": "webauthn_passkey",
-    "person_id": "person:fixture-alice",
+    "person_id": "person:alice",
     "schema_version": "openadapt.named-person-binding/v1",
     "verified_at": "2026-11-05T17:00:00Z"
   },
-  "note": "Synthetic DeterministicPasskeyDouble fixture \u2014 NOT a live WebAuthn ceremony.",
+  "note": "Synthetic DeterministicPasskeyDouble vector; NOT a live WebAuthn ceremony.",
   "registered_passkey": {
-    "credential_id_hex": "c0ffee0000000000000000000000000000000000000000000000000000000000",
-    "person_id": "person:fixture-alice",
-    "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111",
+    "credential_id_hex": "637265642d616c6963652d31",
+    "person_id": "person:alice",
+    "public_key_hex": "5050505050505050505050505050505050505050505050505050505050505050",
     "rp_id": "approve.openadapt.test"
-  },
-  "seal_extension": {
-    "binding": {
-      "approval_payload_sha256": "sha256:0df621837e1f30a7a32576d976d80d5d5b0785fa0eeaadea232053040972607d",
-      "evidence": {
-        "authenticator_data_sha256": "sha256:b965ac9d59d891b6f7deeda46c377a115253a1a0ca80067de56df86c92f6295a",
-        "challenge_sha256": "sha256:0df621837e1f30a7a32576d976d80d5d5b0785fa0eeaadea232053040972607d",
-        "client_data_sha256": "sha256:9350621ef5b18b257430975a707aa38ca90dea325694e6cad1018a7dbe1bef9f",
-        "credential_id_sha256": "sha256:5db8414a3b4b48b05f2d27dce4e768381f255881cd351d4afcf6ba690743ba9e",
-        "rp_id": "approve.openadapt.test",
-        "signature_sha256": "sha256:fdaa9d3ae9ab0baa1082f13c7bc5285cf904100d48d60b7fd826d0042cf77db5",
-        "user_handle_sha256": null
-      },
-      "method": "webauthn_passkey",
-      "person_id": "person:fixture-alice",
-      "schema_version": "openadapt.named-person-binding/v1",
-      "verified_at": "2026-11-05T17:00:00Z"
-    },
-    "schema": "openadapt.named-person-binding/v1"
   }
 }
