@@ -464,20 +464,23 @@ jobs:
         # dependencies than the published one Flow's lock names.
         run: >-
           python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,capture,agent]' --lock packages/capture
-          --editable packages/types --editable packages/capture --editable packages/flow
+          --editable packages/types --editable packages/capture --editable packages/flow --editable packages/agent
       - name: Install Harness² for the integration tests
         # Not on PyPI. Pinned to the commit benchmark.harness.harness2
         # is written against; it has no runtime dependencies.
         run: >-
           uv pip install --system --no-deps
           'harness2 @ git+https://github.com/google-research/harness2@1cfe254e8d25b15f37048c3730134686abe60335'
-      - name: Verify the in-tree openadapt-capture imports headless
+      - name: Verify the in-tree capture and compatibility agent import headless
         run: |
           python - <<'PY'
-          import pathlib, openadapt_capture
+          import pathlib, openadapt_agent, openadapt_capture
           here = pathlib.Path(openadapt_capture.__file__).resolve().as_posix()
           assert "packages/capture/openadapt_capture" in here, here
           print("openadapt_capture from", here)
+          agent = pathlib.Path(openadapt_agent.__file__).resolve().as_posix()
+          assert "packages/agent/src/openadapt_agent" in agent, agent
+          print("openadapt_agent from", agent)
           PY
       - name: Resolve Playwright version
         id: pw
