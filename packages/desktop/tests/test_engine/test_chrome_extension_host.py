@@ -928,6 +928,81 @@ class TestStopWaitsForInFlightWrites:
         finally:
             db.close()
 
+    def _failed_stop(
+        self, tmp_path: Path, host_script: Path, monkeypatch, *, deny_folder, deny_index
+    ):
+        monkeypatch.setattr(host, "GATE_DRAIN_SECONDS", 0.2)
+        disp, db, active = self._start(tmp_path, host_script)
+        capture_dir = disp.services.controller.capture_dir
+        if deny_index:
+
+            def refuse(*_args, **_kwargs):
+                raise OSError("synthetic: index is read-only")
+
+            monkeypatch.setattr(db, "mark_stop_failed", refuse)
+        writer = _hold_shared(host.gate_path(active))
+        try:
+            if deny_folder:
+                capture_dir.chmod(0o500)  # a real permission denial for the marker
+            result = disp.dispatch("stop_recording", {})
+        finally:
+            os.close(writer)
+            capture_dir.chmod(0o700)
+        db.close()
+        return disp, result
+
+    def _fresh_compile(self, tmp_path: Path, monkeypatch) -> tuple[dict, list[str]]:
+        fresh, db = _dispatcher(tmp_path)  # restart: same index, new process state
+        compiles: list[str] = []
+        monkeypatch.setattr(
+            fresh.services.controller,
+            "compile_capture",
+            lambda capture_id, capture_dir: compiles.append(capture_id) or {"id": "wf"},
+            raising=False,
+        )
+        try:
+            return fresh._compile_registered_capture("cap1", automatic=False), compiles
+        finally:
+            db.close()
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+    def test_a_failed_stop_survives_restart_when_the_marker_cannot_be_written(
+        self, tmp_path: Path, host_script: Path, linux, monkeypatch
+    ) -> None:
+        from openadapt_desktop.dispatch import STOP_FAILED_MARKER
+
+        _disp, result = self._failed_stop(
+            tmp_path, host_script, monkeypatch, deny_folder=True, deny_index=False
+        )
+        assert result["completed"] is False and result["refusal_durable"] is True
+        assert not (tmp_path / ".openadapt/captures/cap1" / STOP_FAILED_MARKER).exists()
+        compiled, compiles = self._fresh_compile(tmp_path, monkeypatch)
+        assert compiled["ok"] is False and compiled["recording_retained"] is True
+        assert compiles == []
+
+    def test_a_failed_stop_survives_restart_when_the_index_cannot_be_written(
+        self, tmp_path: Path, host_script: Path, linux, monkeypatch
+    ) -> None:
+        _disp, result = self._failed_stop(
+            tmp_path, host_script, monkeypatch, deny_folder=False, deny_index=True
+        )
+        assert result["refusal_durable"] is True
+        compiled, compiles = self._fresh_compile(tmp_path, monkeypatch)
+        assert compiled["ok"] is False
+        assert compiles == []
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+    def test_a_failed_stop_with_no_durable_record_says_so(
+        self, tmp_path: Path, host_script: Path, linux, monkeypatch
+    ) -> None:
+        disp, result = self._failed_stop(
+            tmp_path, host_script, monkeypatch, deny_folder=True, deny_index=True
+        )
+        assert result["completed"] is False
+        assert result["refusal_durable"] is False
+        assert "could not save this refusal" in result["error"]
+        assert "cap1" in disp._stop_failed_captures
+
     def test_a_drained_stop_still_completes_and_compiles(
         self, tmp_path: Path, host_script: Path, linux, monkeypatch
     ) -> None:

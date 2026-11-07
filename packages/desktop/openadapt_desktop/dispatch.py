@@ -792,12 +792,17 @@ class EngineDispatcher:
             # land in the capture after this returns, so the recording is not
             # reported as completed and is not compiled automatically.
             capture_id = str(metadata.get("id"))
-            self._refuse_capture_compile(capture_id)
+            durable = self._refuse_capture_compile(capture_id)
             message = (
                 "The recording stop failed: a Chrome extension write was still in "
                 "progress, so OpenAdapt will not compile this recording. The raw "
                 "capture was retained for inspection"
             )
+            if not durable:
+                message += (
+                    ". OpenAdapt could not save this refusal; delete the recording "
+                    "rather than compile it after a restart"
+                )
             self.emit("recording_error", {"error": message})
             self.emit("status_update", self._status_dict(controller))
             self.clear_coach()
@@ -806,6 +811,7 @@ class EngineDispatcher:
                 **metadata,
                 "recording": False,
                 "completed": False,
+                "refusal_durable": durable,
                 "error": message,
             }
         self.emit("recording_stopped", metadata)
@@ -1199,14 +1205,22 @@ class EngineDispatcher:
             return {"ok": False, "error": "capture_id is required", "workflow_id": ""}
         return self._compile_registered_capture(str(capture_id), automatic=False)
 
-    def _refuse_capture_compile(self, capture_id: str) -> None:
+    def _refuse_capture_compile(self, capture_id: str) -> bool:
         """Mark a capture whose stop failed so no later compile accepts it.
 
         A write authorized before the stop may still land in it afterwards.
-        The in-memory mark covers this session even if the marker file cannot
-        be written; the file covers later sessions.
+        The refusal is recorded in memory (this session), in the local index
+        (``failed_stops``) and as a marker file in the capture folder. Either
+        durable record alone survives a restart. Returns whether at least one
+        durable record was written.
         """
         self._stop_failed_captures.add(capture_id)
+        durable = False
+        try:
+            self.services.db.mark_stop_failed(capture_id, "extension_write_not_drained")
+            durable = True
+        except Exception as exc:
+            logger.error("Could not record the failed stop of {} in the index: {}", capture_id, exc)
         try:
             capture = self.services.db.get_capture(capture_id)
             capture_dir = capture and (capture.get("capture_path") or capture.get("capture_dir"))
@@ -1214,10 +1228,33 @@ class EngineDispatcher:
                 (Path(capture_dir) / STOP_FAILED_MARKER).write_text(
                     "chrome extension write did not drain at stop\n", encoding="utf-8"
                 )
+                durable = True
             else:
-                logger.error("Could not mark the failed-stop capture {}", capture_id)
+                logger.error("Could not mark the failed-stop capture folder of {}", capture_id)
         except Exception as exc:
-            logger.error("Could not mark the failed-stop capture {}: {}", capture_id, exc)
+            logger.error("Could not mark the failed-stop capture folder of {}: {}", capture_id, exc)
+        if not durable:
+            logger.error(
+                "The failed stop of {} is recorded only for this session; neither the "
+                "index nor the capture folder could be written",
+                capture_id,
+            )
+        return durable
+
+    def _stop_failed(self, capture_id: str, capture_dir: object) -> bool:
+        """Whether any record says this capture's stop failed. Fails closed."""
+        if capture_id in self._stop_failed_captures:
+            return True
+        try:
+            if self.services.db.is_stop_failed(capture_id):
+                return True
+        except Exception as exc:
+            logger.error("Could not read failed stops for {}: {}", capture_id, exc)
+            return True
+        try:
+            return bool(capture_dir) and (Path(str(capture_dir)) / STOP_FAILED_MARKER).exists()
+        except OSError:
+            return True
 
     def _compile_registered_capture(self, capture_id: str, *, automatic: bool) -> dict:
         """Compile one retained capture and report a retryable local state.
@@ -1228,9 +1265,7 @@ class EngineDispatcher:
         progress = {"capture_id": capture_id, "automatic": automatic}
         capture = self.services.db.get_capture(capture_id)
         capture_dir = capture and (capture.get("capture_path") or capture.get("capture_dir"))
-        if capture_id in self._stop_failed_captures or (
-            capture_dir and (Path(capture_dir) / STOP_FAILED_MARKER).exists()
-        ):
+        if self._stop_failed(capture_id, capture_dir):
             error = (
                 "OpenAdapt will not compile this recording because its stop failed "
                 "while a Chrome extension write was still in progress."

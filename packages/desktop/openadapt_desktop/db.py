@@ -188,6 +188,15 @@ CREATE TABLE IF NOT EXISTS task_targets (
     updated_at TEXT NOT NULL
 );
 
+-- Captures whose recording stop could not prove Chrome extension persistence
+-- quiescent. A write authorized before the stop may land afterwards, so these
+-- captures are never compiled. Additive; nothing removes a row.
+CREATE TABLE IF NOT EXISTS failed_stops (
+    capture_id TEXT PRIMARY KEY,
+    reason TEXT NOT NULL,
+    recorded_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_captures_review ON captures(review_status);
 CREATE INDEX IF NOT EXISTS idx_work_items_workflow ON work_items(workflow_id, status);
 CREATE INDEX IF NOT EXISTS idx_captures_tier ON captures(tier);
@@ -475,6 +484,21 @@ class IndexDB:
         vals = list(fields.values()) + [capture_id]
         self.conn.execute(f"UPDATE captures SET {sets} WHERE capture_id = ?", vals)
         self.conn.commit()
+
+    def mark_stop_failed(self, capture_id: str, reason: str) -> None:
+        """Durably record that this capture's stop failed. Raises on failure."""
+        self.conn.execute(
+            "INSERT OR IGNORE INTO failed_stops (capture_id, reason, recorded_at) VALUES (?, ?, ?)",
+            (capture_id, reason, datetime.now(timezone.utc).isoformat()),
+        )
+        self.conn.commit()
+
+    def is_stop_failed(self, capture_id: str) -> bool:
+        """Whether a failed stop was recorded for this capture."""
+        row = self.conn.execute(
+            "SELECT 1 FROM failed_stops WHERE capture_id = ?", (capture_id,)
+        ).fetchone()
+        return row is not None
 
     def delete_capture(self, capture_id: str) -> None:
         """Delete a capture record from the database."""
