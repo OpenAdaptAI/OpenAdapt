@@ -547,3 +547,8 @@ def test_synthetic_assertion_schema_refuses_live_or_ambiguous_shapes(guard, muta
     if mutation == "duplicate_outer":
         payload = payload[:-1] + ',"note":"Synthetic duplicate"}'
     assert not guard["is_synthetic_assertion_fixture"](payload)
+
+
+@pytest.mark.parametrize("parent", ("credentials.yaml", ".ssh", "keys.json"))
+def test_workflow_source_exception_cannot_bypass_protected_parent(parent):
+    assert is_key_material_path(parent + "/.github/workflows/secret-scan.yml")
