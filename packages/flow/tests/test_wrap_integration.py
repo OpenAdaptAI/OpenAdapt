@@ -177,7 +177,11 @@ class SqliteComponent:
             # Deliberately claims success even for fault modes. The genuine
             # cache's independent SQLite read-back must reject this claim.
             reply = pipeline.ReplayResult(
-                status="VERIFIED", verified=True, model_calls=0, seconds=0, run_dir=None,
+                status="VERIFIED",
+                verified=True,
+                model_calls=0,
+                seconds=0,
+                run_dir=None,
             ).to_dict()
             reply.update(receipt_outcome="VERIFIED", receipt="component-boundary-only")
             return reply

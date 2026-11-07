@@ -1117,9 +1117,9 @@ class FirstRunCompiler:
                     f"canary-{i + 1}",
                     values,
                     functools.partial(
-                        jit.canary,
+                        jit.canary_params,
+                        params,
                         principal_id=admitter if admitter is not None else person,
-                        **params,
                     ),
                 )
             except lifecycle.AdmissionError as exc:
@@ -1209,7 +1209,7 @@ class FirstRunCompiler:
 
     # -- every later run -------------------------------------------------------------
 
-    def run(self, **params: Any) -> ReplayResult:
+    def run(self, /, **params: Any) -> ReplayResult:
         """Run the admitted program: no model calls, every save read back,
         and a verify-run receipt against the confirmed checks."""
 
@@ -1451,6 +1451,7 @@ def compile_first_run(
 
 def run_compiled(
     task_dir: Union[str, Path],
+    /,
     *,
     reset: Optional[Callable[[], None]] = None,
     **params: Any,
@@ -1462,4 +1463,20 @@ def run_compiled(
     doesn't end VERIFIED goes to the exception inbox.
     """
 
-    return FirstRunCompiler.load(task_dir, reset=reset).run(**params)
+    return run_compiled_params(task_dir, params, reset=reset)
+
+
+def run_compiled_params(
+    task_dir: Union[str, Path],
+    params: Mapping[str, Any],
+    /,
+    *,
+    reset: Optional[Callable[[], None]] = None,
+) -> ReplayResult:
+    """Run input data separately from the fixed task and trusted controls.
+
+    Generated tools use this mapping entry point. Admission, record checks
+    and receipts use the same compiler run path as ordinary callers.
+    """
+
+    return FirstRunCompiler.load(task_dir, reset=reset).run(**dict(params))

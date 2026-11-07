@@ -777,7 +777,7 @@ class CompiledAgent:
 
     # -- run -----------------------------------------------------------------
 
-    def run(self, **params: Any) -> JitResult:
+    def run(self, /, **params: Any) -> JitResult:
         """Run the task with ``params``.
 
         Raises:
@@ -809,7 +809,7 @@ class CompiledAgent:
             )
         return self._explore(params, values)
 
-    def recording(self, **params: Any) -> Recording:
+    def recording(self, /, **params: Any) -> Recording:
         """Record your own CUA loop: ``with jit.recording(note="x") as rec:``.
 
         ``rec.request`` is what to ask the model, ``rec.computer.execute``
@@ -1048,7 +1048,14 @@ class CompiledAgent:
             key_dir=self.key_dir,
         )
 
-    def canary(self, *, principal_id: Any, **params: Any) -> JitResult:
+    def canary(self, /, *, principal_id: Any, **params: Any) -> JitResult:
+        """Run a canary with keyword data; use canary_params for control-name keys."""
+
+        return self.canary_params(params, principal_id=principal_id)
+
+    def canary_params(
+        self, params: Mapping[str, Any], /, *, principal_id: Any
+    ) -> JitResult:
         """Run the draft once on the target app, attended.
 
         ``principal_id`` is a person's name, or a registered
