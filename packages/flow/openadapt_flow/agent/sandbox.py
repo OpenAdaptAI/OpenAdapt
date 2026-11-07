@@ -413,17 +413,22 @@ class SandboxEngine:
     ) -> EngineResult:
         """Admit and run once, the way Flow's tutorial does, with the caller's note."""
         from openadapt_flow.backends.playwright_backend import PlaywrightBackend
-        from openadapt_flow.deployment import DeploymentConfig, PolicySection
+        from openadapt_flow.deployment import (
+            DeploymentConfig,
+            EffectsConfig,
+            PolicySection,
+            build_effect_verifier,
+        )
         from openadapt_flow.execution_profiles import (
             ExecutionProfile,
             execution_profile_contract,
         )
+        from openadapt_flow.mockmed.fault_server import MOCKMED_RECORDS_READ_CONTRACT
         from openadapt_flow.run_gate import (
             build_runtime_authorization,
             evaluate_run_gate,
         )
         from openadapt_flow.runtime import Replayer
-        from openadapt_flow.runtime.effects import RestRecordVerifier
 
         workflow = self._workflow
         bundle_dir = self._session.bundle_dir
@@ -431,13 +436,18 @@ class SandboxEngine:
         entry_url = f"{base_url.rstrip('/')}/{case.query}"
         try:
             _reset(base_url)
-            verifier = RestRecordVerifier(
-                base_url,
-                records_path="/api/db",
-                records_key="records",
-                timeout_s=2.0,
-                poll_interval_s=0.05,
+            verifier = build_effect_verifier(
+                EffectsConfig.model_validate(
+                    {
+                        **MOCKMED_RECORDS_READ_CONTRACT,
+                        "base_url": base_url,
+                        "timeout_s": 2.0,
+                        "poll_interval_s": 0.05,
+                    }
+                )
             )
+            if verifier is None:
+                raise ValueError("the fixture record contract built no verifier")
             gate = evaluate_run_gate(
                 workflow,
                 bundle_dir=bundle_dir,

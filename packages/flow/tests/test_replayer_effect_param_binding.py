@@ -41,6 +41,7 @@ from openadapt_flow.runtime.effects import (
     Verdict,
 )
 from openadapt_flow.runtime.replayer import Replayer
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 from tests.test_replayer import FakeBackend, FakeVision, Match
 
 # -- helpers -----------------------------------------------------------------
@@ -504,9 +505,7 @@ def test_parameterized_effect_confirmed_against_real_sor(tmp_path):
         replayer = Replayer(
             backend,
             vision=_vision_confirms_saved(),
-            effect_verifier=RestRecordVerifier(
-                url, records_path="/api/db", records_key="records"
-            ),
+            effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
             poll_interval_s=0.01,
         )
         report = replayer.run(
@@ -546,9 +545,7 @@ def test_demo_literal_effect_refutes_when_run_writes_different_patient(tmp_path)
         replayer = Replayer(
             backend,
             vision=_vision_confirms_saved(),
-            effect_verifier=RestRecordVerifier(
-                url, records_path="/api/db", records_key="records"
-            ),
+            effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
             poll_interval_s=0.01,
         )
         report = replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)

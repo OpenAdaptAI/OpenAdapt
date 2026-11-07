@@ -87,6 +87,7 @@ def service(tmp_path):
         challenge_remaining = 0
         change_unrelated = False
         frozen = {}
+        request_paths: list[str]
 
         def seed(self, count):
             db.execute("DELETE FROM objects")
@@ -105,6 +106,7 @@ def service(tmp_path):
             ]
 
     state = Service()
+    state.request_paths = []
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_args):
@@ -112,6 +114,13 @@ def service(tmp_path):
 
         def do_GET(self):
             state.calls += 1
+            state.request_paths.append(urlsplit(self.path).path)
+            if state.mode == "redirect":
+                self.send_response(302)
+                self.send_header("Location", state.url + "/export")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
             query = parse_qs(urlsplit(self.path).query)
             rows = state.snapshot()
             if "subject" in query and state.mode != "ignore-filter":
@@ -147,6 +156,19 @@ def service(tmp_path):
                 )
                 if "subject" in query:
                     following += "&subject=" + query["subject"][0]
+            if following is not None:
+                if state.mode == "next-other-path":
+                    following = following.replace("/objects?", "/export?")
+                elif state.mode == "next-child-path":
+                    following = following.replace("/objects?", "/objects/archive?")
+                elif state.mode == "next-encoded-path":
+                    following = following.replace("/objects?", "/%6fbjects?")
+                elif state.mode == "next-fragment":
+                    following += "#different-view"
+                elif state.mode == "next-relative-query":
+                    following = following.removeprefix("/objects")
+                elif state.mode == "next-same-absolute":
+                    following = state.url + following
             payload = {
                 "items": page,
                 "meta": {"size": len(rows), "following": following, "snapshot": token},
@@ -599,3 +621,55 @@ def test_detached_setup_never_rebinds_a_reader_from_endpoint_or_auth_names(
     assert setup.evidence == original_observations
     setup.evidence["probe_counts"].clear()
     assert search.rest_setup_observations[0]["evidence"] == original_observations
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "next-other-path",
+        "next-child-path",
+        "next-encoded-path",
+        "next-fragment",
+    ],
+)
+def test_next_links_cannot_expand_the_declared_endpoint(service, mode):
+    service.seed(201)
+    setup = learn(service)
+    assert setup.observations_match, setup.problems
+    service.mode = mode
+    service.calls = 0
+    service.request_paths.clear()
+    verifier = build_effect_verifier(EffectsConfig.model_validate(setup.config))
+    state = verifier.capture_pre_state()
+    assert not state.reachable
+    assert state.records == []
+    assert verifier.readback_complete is False
+    assert verifier.read_problem == "next link leaves the declared endpoint path"
+    assert service.calls == 1
+    assert service.request_paths == ["/objects"]
+    service.calls = 0
+    service.request_paths.clear()
+    refused = learn(service)
+    assert not refused.observations_match
+    assert refused.config is None
+    assert refused.problems
+    assert service.calls == 1
+    assert service.request_paths == ["/objects"]
+
+
+@pytest.mark.parametrize("mode", ["next-relative-query", "next-same-absolute"])
+def test_next_links_preserve_same_endpoint_query_pagination(service, mode):
+    service.seed(201)
+    service.mode = mode
+    setup = learn(service)
+    assert setup.observations_match, setup.problems
+    service.calls = 0
+    service.request_paths.clear()
+    verifier = build_effect_verifier(EffectsConfig.model_validate(setup.config))
+    state = verifier.capture_pre_state()
+    assert state.reachable
+    assert state.records == service.snapshot()
+    assert len(state.records) == 201
+    assert verifier.readback_complete is True
+    assert service.calls == 2
+    assert service.request_paths == ["/objects", "/objects"]

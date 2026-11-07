@@ -19,6 +19,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from openadapt_flow.evidence_files import is_publication_input_path_excluded
+
 ARMS = ("base", "harness2", "harness2_readback")
 LABEL = {
     "base": "base harness",
@@ -103,8 +105,12 @@ def copy_raw(run_dir: Path, dest: Path) -> int:
     n = 0
     for src in sorted(run_dir.rglob("*")):
         rel = src.relative_to(run_dir)
+        if is_publication_input_path_excluded(rel):
+            continue
         if not src.is_file() or src.name in SKIP_NAMES or SKIP_DIRS & set(rel.parts):
             continue
+        if src.is_symlink():
+            raise ValueError("Evidence cannot contain a symbolic link")
         if src.suffix in (".log",):
             continue
         out = dest / rel

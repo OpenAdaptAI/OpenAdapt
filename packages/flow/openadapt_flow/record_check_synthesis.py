@@ -65,7 +65,7 @@ from openadapt_flow.runtime.effects.sql import read_cell
 from openadapt_flow.runtime.effects.surfaces import surface_probe
 
 if TYPE_CHECKING:
-    from openadapt_flow.rest_setup import RestReadSetup
+    from openadapt_flow.rest_setup import RestReadContext, RestReadSetup
 
 #: The network capture ``record --capture-network`` writes. Read here without
 #: importing the recorder side, so the format has one owner
@@ -237,6 +237,9 @@ class ReadSearch:
     taken: set[str] = field(default_factory=set)
     #: Detached learning observations; never a reader authorization or admission.
     rest_setup_observations: list[dict[str, Any]] = field(default_factory=list)
+    rest_read_contexts: dict[str, RestReadContext] = field(
+        default_factory=dict, repr=False
+    )
 
 
 # -- network capture ---------------------------------------------------------
@@ -1128,7 +1131,11 @@ def _signature(records: list[dict[str, Any]]) -> Counter:
 
 
 def check_reads(
-    surfaces: list[Surface], section: Mapping[str, Any], params: Mapping[str, str]
+    surfaces: list[Surface],
+    section: Mapping[str, Any],
+    params: Mapping[str, str],
+    *,
+    read_contexts: Mapping[str, RestReadContext] | None = None,
 ) -> list[str]:
     """Build every generated read; run each database read and compare it with
     what the scan saw. Returns the problems (no record values)."""
@@ -1147,13 +1154,42 @@ def check_reads(
             if name not in configs:
                 continue
             try:
+                cfg = EffectsConfig.model_validate(configs[name])
                 verifier = build_effect_verifier(
-                    EffectsConfig.model_validate(configs[name]), params
+                    cfg, params, read_context=(read_contexts or {}).get(name)
                 )
             except Exception as exc:  # noqa: BLE001 - any build failure is a problem
                 problems.append(f"{name}: the generated read does not build ({exc})")
                 continue
-            if configs[name].get("kind") != "sql" or verifier is None:
+            if (cfg.kind or "none").strip().lower() == "rest":
+                has_paging_or_complete_contract = (
+                    bool(cfg.records_next_path and cfg.records_next_path.strip())
+                    or bool(cfg.records_total_path and cfg.records_total_path.strip())
+                    or cfg.records_complete is True
+                )
+                if not has_paging_or_complete_contract:
+                    problems.append(
+                        f"{name}: REST read completeness is not declared; configure "
+                        "records_next_path, records_total_path, or validated "
+                        "records_complete semantics"
+                    )
+                if (
+                    cfg.records_next_path
+                    and not cfg.records_snapshot_path
+                    and cfg.records_consistency is None
+                ):
+                    problems.append(
+                        f"{name}: a paged REST read needs reviewed immutable "
+                        "snapshot semantics in records_snapshot_path"
+                    )
+                if cfg.records_read_context is None:
+                    continue
+            if (
+                configs[name].get("kind") not in ("sql", "rest", "fhir")
+                or verifier is None
+            ):
+                continue
+            if cfg.kind == "fhir" and cfg.records_read_context is None:
                 continue
             state = verifier.capture_pre_state()
             expected = surface.after
@@ -1551,6 +1587,7 @@ def synthesize(
     complete_read: bool = False,
     fault_gate: bool = False,
     rest_setups: Optional[list[RestReadSetup]] = None,
+    rest_read_contexts: Optional[Mapping[str, RestReadContext]] = None,
 ) -> Proposal:
     """Find the read, build the check, and run the recorded-state fault test.
 
@@ -1589,7 +1626,9 @@ def synthesize(
     if rest_setups is not None:
         from openadapt_flow.rest_setup import apply_rest_setups
 
-        apply_rest_setups(search, rest_setups)
+        apply_rest_setups(
+            search, rest_setups, contexts=rest_read_contexts, params=params
+        )
     _apply_sent_constants(search, params)
     if complete_read and not search.closed_world:
         search.closed_world = True
@@ -1606,7 +1645,11 @@ def synthesize(
             )
     effects = effects_for(search.surfaces)
     section = verifier_section(search.surfaces)
-    search.problems.extend(check_reads(search.surfaces, section, params))
+    search.problems.extend(
+        check_reads(
+            search.surfaces, section, params, read_contexts=search.rest_read_contexts
+        )
+    )
     faults = prove_against_faults(
         search.surfaces,
         effects_for(search.surfaces, confirmed=True),
