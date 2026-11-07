@@ -99,6 +99,24 @@ openadapt flow record --help
 openadapt flow replay --help
 ```
 
+## Record a workflow that crosses windows
+
+When the work moves from a browser to a desktop app or a remote desktop
+window and back, record it in one session. Declare each window once; the
+browser is `--url`:
+
+```bash
+openadapt flow record --url https://portal.example --surface chart=linux:Chart --out rec
+openadapt flow compile rec --out bundle --name referral
+openadapt flow replay bundle --url https://portal.example --surface chart=linux:chart --run-dir run
+```
+
+`--surface NAME=KIND:WINDOW` names the surface, its kind (`windows`,
+`macos`, `linux`, `rdp` or `citrix`) and part of its window title. Switch
+windows as you normally would; each change becomes a checked switch step.
+An action in a window you did not declare stops the recording. See
+[MULTI_SURFACE.md](../packages/flow/docs/MULTI_SURFACE.md#recording-across-windows-record---surface).
+
 ## Launcher diagnostics
 
 ```bash
