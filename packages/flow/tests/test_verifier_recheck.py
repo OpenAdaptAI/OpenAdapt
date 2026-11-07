@@ -277,15 +277,19 @@ def test_positive_recheck_cannot_mark_over_concurrent_refutation(
     assert first.ledger is not None
     ledger = first.ledger
     read_finished, resume = threading.Event(), threading.Event()
-    original = ledger.rechecked
+    before = ledger.latest(first.write_key)
+    assert before is not None
+    original = verifier.recheck_run
 
-    def pause(key: str, attempt: str, **fields: Any) -> Any:
-        read_finished.set()
-        assert resume.wait(15)
-        return original(key, attempt, **fields)
+    def pause(*args: Any, **fields: Any) -> Any:
+        observed = original(*args, **fields)
+        if threading.current_thread().name.startswith("positive-read"):
+            read_finished.set()
+            assert resume.wait(15)
+        return observed
 
-    monkeypatch.setattr(ledger, "rechecked", pause)
-    with ThreadPoolExecutor(max_workers=1) as pool:
+    monkeypatch.setattr(verifier, "recheck_run", pause)
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="positive-read") as pool:
         positive = pool.submit(_recheck, contract, first, ledger=ledger)
         try:
             assert read_finished.wait(15)
@@ -297,6 +301,8 @@ def test_positive_recheck_cannot_mark_over_concurrent_refutation(
         assert not positive.result(timeout=15).verified
     current = ledger.latest(first.write_key)
     assert current is not None and current.state == "held" and current.rechecked is None
+    assert current.events[-1]["event"] == "rechecked"
+    assert current.events[-1]["based_on"] == before.revision
 
 
 def test_initial_record_cannot_prune_or_return_positive_over_refutation(

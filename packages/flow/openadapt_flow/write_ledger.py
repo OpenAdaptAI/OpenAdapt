@@ -680,14 +680,16 @@ class Ledger:
     def attempts(self) -> list[tuple[str, dict[str, Any], Optional[dict[str, Any]]]]:
         """Every attempt in the ledger: (key, begun event, resolved event).
 
-        A released attempt counts as resolved when a person released it.
+        A release counts as settlement only when there was no read outcome.
+        A workflow release must not erase an existing observation from the
+        overlap check.
         """
 
         out = []
         for key in self.backend.keys():
             for attempt in _fold_attempts(self.backend.events(key)):
                 resolved = attempt.resolved
-                if attempt.released:
+                if attempt.released and resolved is None:
                     resolved = next(
                         e for e in reversed(attempt.events) if e.get("event") == "released"
                         and e.get("applied") is not False

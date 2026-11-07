@@ -173,7 +173,7 @@ def test_explicit_release_is_separate_and_stale_release_refuses(
     released = ledger.release(KEY, by="operator", reason="synthetic check", found="absent")
     assert released.state == "free" and released.released
     assert released.resolved is not None and released.resolved["outcome"] == "REFUTED"
-    assert ledger.attempts()[0][2]["event"] == "released"  # type: ignore[index]
+    assert ledger.attempts()[0][2] == released.resolved
 
 
 def test_raw_fields_cannot_mint_acceptance_or_release(ledger: wl.Ledger) -> None:

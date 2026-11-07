@@ -1055,6 +1055,11 @@ def _settle(
         return
     if state == "undelivered":
         assert attempt is not None and attempt.resolved is not None
+        # The lifecycle lease does not exclude late rechecks. Linearize the
+        # handback against their settlements even if an earlier reply was
+        # already delivered, then use that accepted snapshot.
+        attempt = led.delivered(key, attempt.attempt_id, expected_revision=attempt.revision)
+        assert attempt.resolved is not None
         result = dict(attempt.resolved.get("result") or {})
         result["not_sent_again"] = True
         if attempt.rechecked is not None:
@@ -1063,10 +1068,6 @@ def _settle(
             result["provisional"] = False
             result["recheck_due_at"] = None
             result["rechecked_at"] = attempt.rechecked.get("at")
-        # The lifecycle lease does not exclude late rechecks. Linearize the
-        # handback against their settlements even if an earlier reply was
-        # already delivered.
-        led.delivered(key, attempt.attempt_id, expected_revision=attempt.revision)
         raise AlreadyWritten(
             (
                 "this write was already made: the store holds it, though it "
@@ -1229,6 +1230,11 @@ def _reconcile(
             delivered=True,
             via="settled",
             expected_revision=attempt.revision,
+            landed=result.landed,
+            review=result.review,
+            write_key_bound=bool(attempt.begun.get("write_key_bound")),
+            receipt_sha256=result.receipt_sha256 or None,
+            result=result.to_dict(),
             reason=f"the store showed nothing {int(led.settle_s)}s after the attempt",
         )
     elif (
@@ -2276,18 +2282,48 @@ def recheck(
     A write that lands after the recheck's read (``read_at``) is not seen.
     """
 
-    late, trusted = _judge_recheck(
-        contract, write, params=params, actor=actor, excused_by=excused_by, wait=wait
+    late, trusted, revision = _judge_recheck(
+        contract, write, params=params, actor=actor, excused_by=excused_by, wait=wait,
+        ledger=ledger,
     )
     if late.outcome != "CONFIRMED":
-        late = _hold_after_recheck(ledger, write, late, trusted=trusted)
+        late = _hold_after_recheck(ledger, write, late, trusted=trusted,
+                                   expected_revision=revision)
     else:
-        late = _mark_rechecked(ledger, write, late)
+        late = _mark_rechecked(ledger, write, late, expected_revision=revision)
     return late
 
 
+def _recheck_revision(ledger: Any, write: WriteResult | RecheckState) -> Optional[int]:
+    """Snapshot a validated write's journal before its native read.
+
+    Failure is a deliberately unmatchable revision, never a fresh basis.
+    This is only called after saved-state validation, not for its claims.
+    """
+    try:
+        if isinstance(write, WriteResult):
+            write_id, key = write.write_id, write.write_key
+            if ledger is _NO_LEDGER and write.ledger is not None:
+                ledger = write.ledger
+        else:
+            receipt = write.payload.get("receipt") or {}
+            write_id, key = str(receipt.get("correlation_id") or ""), ""
+        led = _resolve_ledger(ledger)
+        if led is None:
+            return None
+        if key:
+            attempt = led.latest(key)
+        else:
+            found = led.find_attempt(write_id)
+            attempt = found[1] if found is not None else None
+        return attempt.revision if attempt is not None and attempt.attempt_id == write_id else -1
+    except Exception:  # noqa: BLE001 - no read can grant permission on failure
+        return -1
+
+
 def _mark_rechecked(
-    ledger: Any, write: WriteResult | RecheckState, late: RecheckResult
+    ledger: Any, write: WriteResult | RecheckState, late: RecheckResult, *,
+    expected_revision: Optional[int] = None,
 ) -> RecheckResult:
     """Record on the write's ledger attempt that a recheck confirmed it, so
     ``openadapt verify ledger list`` no longer shows a recheck owed and a
@@ -2307,8 +2343,11 @@ def _mark_rechecked(
             receipt = write.payload.get("receipt") or {}
             write_id, key = str(receipt.get("correlation_id") or ""), ""
         led = _resolve_ledger(ledger)
-        if led is None or not write_id:
+        if led is None:
             return late
+        if not write_id:
+            return _replace(late, outcome="UNCERTAIN", reasons=[*late.reasons,
+                "the write has no ledger attempt identity; hold this write by hand"])
         if key:
             attempt = led.latest(key)
         else:
@@ -2323,7 +2362,7 @@ def _mark_rechecked(
             outcome=late.outcome,
             read_at=late.read_at,
             receipt_sha256=late.receipt_sha256 or None,
-            expected_revision=attempt.revision,
+            expected_revision=expected_revision,
         )
         if (
             recorded.attempt_id != write_id
@@ -2344,6 +2383,7 @@ def _hold_after_recheck(
     late: RecheckResult,
     *,
     trusted: bool = True,
+    expected_revision: Optional[int] = None,
 ) -> RecheckResult:
     """Resolve the write's ledger attempt again with the recheck's outcome,
     for review: ``REFUTED`` holds it, ``UNCERTAIN`` keeps it uncertain.
@@ -2425,7 +2465,7 @@ def _hold_after_recheck(
                 "reason": reason,
                 "receipt_sha256": digest,
             },
-            expected_revision=attempt.revision,
+            expected_revision=expected_revision,
         )
         if (
             recorded.attempt_id != write_id
@@ -2484,8 +2524,9 @@ def _judge_recheck(
     actor: Actor,
     excused_by: Sequence[WriteResult | RecheckState],
     wait: bool,
-) -> tuple[RecheckResult, bool]:
-    """The recheck's result, and whether the state passed validation."""
+    ledger: Any,
+) -> tuple[RecheckResult, bool, Optional[int]]:
+    """The read result, state validation, and its pre-read journal revision."""
 
     state = write.recheck if isinstance(write, WriteResult) else write
     receipt = state.payload.get("receipt") if state is not None else None
@@ -2522,6 +2563,7 @@ def _judge_recheck(
         return (
             _replace(base, reasons=[_recheck_refusal(problem)]),
             False,
+            None,
         )
     wait_s = seconds_until(state.due_at)
     if wait_s > 0:
@@ -2547,6 +2589,7 @@ def _judge_recheck(
                 "(path, params=...)"
             )
         excused.append((later.payload, later.params))
+    revision = _recheck_revision(ledger, write)
     try:
         verdict, read_at = recheck_run(
             cfg, state.payload, params=params, run_record=run_record, excused=excused
@@ -2562,6 +2605,7 @@ def _judge_recheck(
                 ],
             ),
             True,
+            revision,
         )
     evidence = verdict.evidence(spec) if spec is not None else {}
     reasons: list[str] = []
@@ -2601,6 +2645,7 @@ def _judge_recheck(
             evidence=evidence,
         ),
         True,
+        revision,
     )
 
 
