@@ -51,7 +51,11 @@ def plan():
 
 def result(case_id, prediction, **identity_changes):
     verdict = Verdict.REFUTED if prediction == "false" else Verdict.INDETERMINATE
-    reason = {"true": "model_unqualified", "false": "contradiction", "unknown": "evidence_unavailable"}[prediction]
+    reason = {
+        "true": "model_unqualified",
+        "false": "contradiction",
+        "unknown": "evidence_unavailable",
+    }[prediction]
     return ReplayResult(
         case_id=case_id,
         result=CandidateResult(
@@ -129,9 +133,7 @@ def test_changed_dependency_requires_full_replay(field, value):
 
 def test_duplicate_and_unexpected_results_cannot_replace_a_missing_case():
     clean = correct_results()[0]
-    summary = summarize_predictions(
-        plan(), (clean, clean, result("extra", "false"))
-    )
+    summary = summarize_predictions(plan(), (clean, clean, result("extra", "false")))
     assert not summary.matches_supplied_history
     expected = {"duplicate_result", "missing_result", "unexpected_result"}
     assert expected <= set(summary.reasons)

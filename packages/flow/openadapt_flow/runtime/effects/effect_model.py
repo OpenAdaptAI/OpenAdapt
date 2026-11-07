@@ -271,7 +271,8 @@ def evaluate_effect_model(
         outcomes = tuple(result.outcome for result in results)
         if "unknown" in outcomes:
             return CandidateResult(
-                identity=identity, reason="language_refused",
+                identity=identity,
+                reason="language_refused",
                 predicate_outcomes=outcomes,
             )
         used = {name for result in results for name in result.inputs}

@@ -78,7 +78,10 @@ def test_shared_language_predicts_intended_edit_without_mutating_snapshots():
     result = evaluate_effect_candidate(*args)
     model, observations, _, _ = args
     bindings = bind_observations(
-        model, task=observations.task, before=observations.before, after=observations.after
+        model,
+        task=observations.task,
+        before=observations.before,
+        after=observations.after,
     )
     raw = transforms.evaluate_effect_predicates(model.obligations, bindings)
     assert tuple(item.outcome for item in raw) == ("true", "true")

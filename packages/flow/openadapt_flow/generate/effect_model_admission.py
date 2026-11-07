@@ -148,7 +148,8 @@ def summarize_predictions(
 
     history = summarize_replays(plan, results)
     reasons = set(history.reasons) - {
-        "clean_not_confirmed", "fault_not_judged_refuted",
+        "clean_not_confirmed",
+        "fault_not_judged_refuted",
         "unqualified_model_predictions",
     }
     actual = {replay.case_id: replay.result for replay in results}
