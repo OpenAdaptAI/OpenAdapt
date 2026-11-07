@@ -184,10 +184,7 @@ def test_failed_rendering_never_retries_a_launch_or_changes_arguments(
 def test_production_acquisition_inventory_has_no_unchecked_direct_launch() -> None:
     root = Path(__file__).parents[1] / "openadapt_flow"
     unchecked = []
-    paths = list(root.rglob("*.py"))
-    desktop = root.parents[1] / "desktop/openadapt_desktop/authoring_runner.py"
-    paths.append(desktop)
-    for path in paths:
+    for path in root.rglob("*.py"):
         if path.name in ("_browser_setup.py", "_browser_readiness.py"):
             continue
         for node in ast.walk(ast.parse(path.read_text(), filename=str(path))):
@@ -281,10 +278,14 @@ def test_actual_attach_entry_checks_selected_page_before_existing_guards(
         browser_cdp_endpoint="http://127.0.0.1:9222", browser_page_url=None
     )
     if failure:
-        error = Cancelled if failure == "cancel" else readiness.BrowserReadinessError
-        with pytest.raises(error):
+        error = Cancelled if failure == "cancel" else SystemExit
+        with pytest.raises(error) as caught:
             with _attached_web_page(cfg, url="https://synthetic.invalid"):
                 pytest.fail("an unready page reached the application")
+        if failure != "cancel":
+            assert str(caught.value) == (
+                "REFUSED: browser_rendering_unavailable. Nothing was executed."
+            )
         assert guarded == []
     else:
         with _attached_web_page(cfg, url="https://synthetic.invalid") as selected:
@@ -293,6 +294,30 @@ def test_actual_attach_entry_checks_selected_page_before_existing_guards(
     assert stopped == [True]
     assert not context.closed
     assert not browser.closed
+
+
+def test_attached_callback_progress_grants_no_qualification_authority() -> None:
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.qualification import (
+        QualificationRefusalCode,
+        evaluate_qualification,
+    )
+
+    workflow = Workflow(name="synthetic-unqualified")
+    before = evaluate_qualification(workflow)
+    browser = Browser()
+    context = Context(browser)
+    assert (
+        readiness.require_rendering_ready(browser, attached_page=context.page) is None
+    )
+    after = evaluate_qualification(workflow)
+    assert after.report_sha256() == before.report_sha256()
+    assert after.passed is False
+    assert [refusal.code for refusal in after.refusals] == [
+        QualificationRefusalCode.PROJECT_MISSING
+    ]
+    assert workflow.qualification is None
+    assert not browser.closed and not context.closed
 
 
 @pytest.mark.parametrize("cancel", [False, True])

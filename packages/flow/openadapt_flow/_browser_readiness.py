@@ -114,7 +114,9 @@ def require_rendering_ready(
     separate 250 ms host deadline. Closing the owned context cancels pending
     script. If an attached transport disappears, cleanup is unproved and the
     check refuses; the finite callback chain cannot become a polling observer.
-    The check uses the page's main-world RAF API, not a native attestation.
+    The check uses the page's main-world RAF API, which an attached application
+    can replace. Callback progress is not a native rendering attestation and
+    grants no qualification, action or outcome-verification authority.
     """
     context = None
     ready = False
