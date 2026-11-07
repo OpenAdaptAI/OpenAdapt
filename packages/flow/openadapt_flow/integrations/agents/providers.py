@@ -337,6 +337,7 @@ class OpenAIBrowserAgent:
             Agent,
             ModelSettings,
             OpenAIResponsesModel,
+            RunConfig,
             RunHooks,
             Runner,
             function_tool,
@@ -512,6 +513,7 @@ class OpenAIBrowserAgent:
                         f"Task: {request.instruction}",
                         max_turns=self.max_turns,
                         hooks=UsageHooks(),
+                        run_config=RunConfig(tracing_disabled=True),
                     ),
                     timeout=self.max_run_seconds,
                 )

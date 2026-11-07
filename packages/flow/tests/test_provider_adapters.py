@@ -295,9 +295,14 @@ def test_openai_late_sdk_completion_cannot_run_a_browser_tool(monkeypatch):
         def __init__(self, **kwargs):
             self.__dict__.update(kwargs)
 
+    class FakeRunConfig:
+        def __init__(self, *, tracing_disabled):
+            self.tracing_disabled = tracing_disabled
+
     class FakeRunner:
         @staticmethod
-        async def run(agent, *_args, **_kwargs):
+        async def run(agent, *_args, run_config, **_kwargs):
+            assert run_config.tracing_disabled is True
             try:
                 await asyncio.sleep(1)
             except asyncio.CancelledError:
@@ -316,6 +321,7 @@ def test_openai_late_sdk_completion_cannot_run_a_browser_tool(monkeypatch):
 
     monkeypatch.setattr(agents, "Agent", FakeAgent)
     monkeypatch.setattr(agents, "ModelSettings", FakeModelSettings)
+    monkeypatch.setattr(agents, "RunConfig", FakeRunConfig)
     monkeypatch.setattr(agents, "OpenAIResponsesModel", lambda **_kwargs: object())
     monkeypatch.setattr(agents, "RunHooks", type("RunHooks", (), {}))
     monkeypatch.setattr(agents, "Runner", FakeRunner)
