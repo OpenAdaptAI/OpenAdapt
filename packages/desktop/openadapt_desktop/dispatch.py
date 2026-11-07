@@ -393,6 +393,7 @@ class EngineDispatcher:
             "set_usage_stats": self.set_usage_stats,
             "set_update_check": self.set_update_check,
             "get_update_status": self.get_update_status,
+            "subscribe_release_notes": self.subscribe_release_notes,
             # effective policy (fail-closed; Tier-1 user / Tier-2 org / Tier-3 safety)
             "get_effective_policy": self.get_effective_policy,
             "refresh_policy": self.refresh_policy,
@@ -6115,6 +6116,16 @@ class EngineDispatcher:
             # The launch event was skipped before consent; count this session.
             telemetry.capture("app_opened", {"surface": "consent"})
         return {"ok": True, **privacy_settings.status()}
+
+    def subscribe_release_notes(self, **params: Any) -> dict:
+        """Send the optional release-notes signup (release_notes_signup.py).
+
+        Runs only when the person types an address and presses Subscribe.
+        The address is not stored.
+        """
+        from openadapt_desktop import release_notes_signup
+
+        return release_notes_signup.subscribe(params.get("email"))
 
     def set_update_check(self, **params: Any) -> dict:
         """Turn the daily update check on or off."""

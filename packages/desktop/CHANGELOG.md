@@ -5,12 +5,7 @@
 
 ### Features
 
-- **desktop**: register the Chrome extension host per recording (Part of #1872)
-
-### Bug Fixes
-
-- **desktop**: revoke a running extension host even when stop cleanup fails (Part of #1872)
-- **desktop**: validate the whole Chrome extension id before registering (Part of #1872)
+- **desktop**: optional release-notes email in the first-launch question
 
 
 

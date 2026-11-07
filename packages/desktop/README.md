@@ -309,6 +309,13 @@ shows a notice with a download link when one does. The request carries no
 install id, version, or account. Installing stays manual. Turn it off in
 **Settings → Version and updates**.
 
+**Release notes by email are optional and off by default.** The first-launch
+question has a **Get release notes by email** box. Only if you tick it, type an
+address, and press **Subscribe** does Desktop post that address to the
+website's signup form (`https://openadapt.ai/form.html`, form `newsletter`,
+`source=desktop`). Nothing else goes with it, and the address isn't stored on
+this computer.
+
 Both choices are saved in the `[privacy]` table of `~/.openadapt/config.toml`.
 Environment variables win over the file:
 
@@ -319,6 +326,7 @@ Environment variables win over the file:
 | `OPENADAPT_TELEMETRY_ENABLED=false` | Same as above |
 | `OPENADAPT_TELEMETRY_ENABLED=true` | Usage stats on without asking (managed installs) |
 | `OPENADAPT_UPDATE_CHECK=false` | Update check off |
+| `OPENADAPT_EMAIL_SIGNUP=false` | The release-notes signup sends nothing |
 | `OPENADAPT_POSTHOG_KEY`, `OPENADAPT_POSTHOG_HOST` | Send usage stats to another PostHog project |
 
 ## More documentation
@@ -329,6 +337,7 @@ Environment variables win over the file:
   area by area
 - [Which release to download](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/RELEASES.md)
 - [OpenAdapt documentation](https://docs.openadapt.ai)
+- [Get updates](https://openadapt.ai/#updates): release notes and setup tips by email
 
 ## License
 

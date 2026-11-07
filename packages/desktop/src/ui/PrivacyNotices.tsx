@@ -13,6 +13,10 @@ import type { PrivacySettings, UpdateStatus } from "../lib/types";
 import { Button, Callout } from "./primitives";
 
 export const USAGE_STATS_TITLE = "Help improve OpenAdapt";
+export const RELEASE_NOTES_LABEL = "Get release notes by email";
+export const RELEASE_NOTES_CONSENT =
+  "Optional. We send release notes and setup tips from MLDSAI Inc. (OpenAdapt), 180 John St., Toronto, ON M5T 1X5. Unsubscribe any time with the link in each email or at hello@openadapt.ai. Your address isn't stored on this computer.";
+
 export const USAGE_STATS_BODY =
   "Share anonymous usage stats, like which features are used and whether they work. No screen content, keystrokes, file paths, or task text. You can change this in Settings.";
 
@@ -69,7 +73,77 @@ export function UsageStatsPrompt({ engineUp }: { engineUp: boolean }) {
           </Button>
         </div>
         {error && <p className="hint">{error}</p>}
+        <ReleaseNotesSignup />
       </Callout>
+    </div>
+  );
+}
+
+// Off by default: the address field appears only after the box is ticked,
+// and nothing is sent until the person presses Subscribe.
+export function ReleaseNotesSignup() {
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [message, setMessage] = useState<string | null>(null);
+
+  if (state === "sent") {
+    return <p className="hint" role="status">Thanks. Release notes will come by email.</p>;
+  }
+
+  async function subscribe() {
+    setState("sending");
+    setMessage(null);
+    try {
+      const result = await engineInvoke<{ ok: boolean; error?: string }>(
+        CMD.SUBSCRIBE_RELEASE_NOTES,
+        { email: email.trim() },
+      );
+      if (result.ok) {
+        setState("sent");
+        return;
+      }
+      setMessage(result.error || "That didn't go through.");
+    } catch {
+      setMessage("That didn't go through.");
+    }
+    setState("error");
+  }
+
+  return (
+    <div className="release-notes-signup">
+      <label className="row">
+        <input
+          type="checkbox"
+          checked={open}
+          onChange={(e) => setOpen(e.target.checked)}
+        />
+        <span>{RELEASE_NOTES_LABEL}</span>
+      </label>
+      {open && (
+        <>
+          <div className="row">
+            <input
+              type="email"
+              aria-label="Email for release notes"
+              placeholder="you@company.com"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={state === "sending" || !email.trim()}
+              onClick={() => void subscribe()}
+            >
+              {state === "sending" ? "Sending…" : "Subscribe"}
+            </Button>
+          </div>
+          <p className="hint">{RELEASE_NOTES_CONSENT}</p>
+          {message && <p className="hint">{message}</p>}
+        </>
+      )}
     </div>
   );
 }

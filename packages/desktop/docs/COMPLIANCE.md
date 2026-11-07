@@ -101,6 +101,9 @@ deployment HIPAA-compliant.
   [the README](../README.md#usage-stats-and-update-checks).
 - A daily update check reads GitHub's public release list with no
   identifiers. `OPENADAPT_UPDATE_CHECK=false` turns it off.
+- An optional release-notes signup posts an email address to the website's
+  form only when the person ticks the box, types it, and presses Subscribe.
+  The address isn't stored locally. `OPENADAPT_EMAIL_SIGNUP=false` disables it.
 - Desktop starts without downloading a browser. The first browser workflow
   pulls the Chromium revision pinned by the bundled Playwright runtime into
   `~/.openadapt/browser-runtime`. Air-gapped packages point
