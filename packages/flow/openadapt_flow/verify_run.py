@@ -2573,7 +2573,7 @@ def recheck_run(
     refuted with one in ``excused``, ``excused_by`` holds
     ``LATER_WRITE_UNJUDGED``, since the change may be that write's. The
     database is read twice, ``settle_s`` apart, as after the save. Returns
-    the frame verdict and when the database was read.
+    the frame verdict and a conservative lower bound on when its reads began.
 
     Raises :class:`VerifyRunError` for an excuse that doesn't qualify.
     """
@@ -2610,6 +2610,9 @@ def recheck_run(
         detail[FRAME_AUDIT_DETAIL] = dict(post["audit"])
     before = EffectState(substrate="database", reachable=True, detail=detail)
     verifier = _build_verifier(cfg, params)
+    # A lower bound on every observation in this pass. Completion may be
+    # delayed after the database snapshots were taken, even past due_at.
+    read_started_at = _now()
     verdict = judge_run_frame(
         cfg,
         verifier,
@@ -2626,7 +2629,7 @@ def recheck_run(
         # A later write whose frame wasn't judged excuses nothing, so what
         # refuted this write may be that write's own change.
         verdict.excused_by.add(late_write.LATER_WRITE_UNJUDGED)
-    return verdict, _now()
+    return verdict, read_started_at
 
 
 def write_result(result: Mapping[str, Any], out_dir: Path) -> Path:
