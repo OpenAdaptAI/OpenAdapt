@@ -41,6 +41,22 @@ def fake_native_recorder(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_real_secure_enclave(monkeypatch):
+    """Keep tests off this Mac's Secure Enclave and the in-app approver key.
+
+    The engine's default approver keychain would probe the Secure Enclave and
+    read the login Keychain. Tests get a computer without one (the terminal
+    path) unless they build an ``ApproverKeychain`` with a fake enclave. The
+    real-hardware test (tests/test_approver_keychain_real.py) makes its own.
+    """
+
+    from openadapt_desktop import approver_keychain
+
+    monkeypatch.setattr(approver_keychain, "default_enclave", approver_keychain.NoEnclave)
+    monkeypatch.setattr(approver_keychain, "_DEFAULT", [])
+
+
+@pytest.fixture(autouse=True)
 def restore_umask():
     """The engine entry points set a private umask; keep it from leaking between tests."""
 
@@ -94,3 +110,29 @@ def sample_capture_dir(tmp_data_dir: Path) -> Path:
     (capture_dir / "meta.json").write_text(json.dumps(meta))
 
     return capture_dir
+
+
+@pytest.fixture(autouse=True)
+def _isolated_flow_at_rest(tmp_path_factory, monkeypatch):
+    """Keep Flow's at-rest key and plaintext ledger out of the real home.
+
+    Flow encrypts at rest by default (openadapt_flow.at_rest); these tests
+    use its recorded opt-out, as the Flow suite does.
+    """
+    monkeypatch.setenv(
+        "OPENADAPT_FLOW_AT_REST_HOME", str(tmp_path_factory.mktemp("at-rest-home"))
+    )
+    monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "test suite: synthetic data")
+    monkeypatch.delenv("OPENADAPT_FLOW_AT_REST", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def no_usage_stats_or_update_check(monkeypatch):
+    """Keep the suite from sending usage stats or asking GitHub for releases.
+
+    A developer machine may have said Share; tests that exercise either path
+    clear these and point ``OPENADAPT_CONFIG_TOML`` at a temporary file.
+    """
+
+    monkeypatch.setenv("DO_NOT_TRACK", "1")
+    monkeypatch.setenv("OPENADAPT_UPDATE_CHECK", "false")

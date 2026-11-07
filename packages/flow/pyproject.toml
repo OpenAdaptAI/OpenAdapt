@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-flow"
-version = "2.3.0"
+version = "2.6.0"
 description = "Compile demonstrated GUI workflows into deterministic local replay with governed repair and refusal"
 readme = "README.md"
 license = { text = "MIT" }
@@ -94,6 +94,8 @@ browser = [
 dev = [
     "pytest>=8",
     "pytest-timeout>=2.2",
+    # CI runs the unit shards with `pytest -n auto --dist loadfile`.
+    "pytest-xdist>=3.6",
     # Property-based (fuzz) testing of the identity gate's never-false-accept
     # invariant (tests/test_identity_fuzz.py).
     "hypothesis>=6.100",
@@ -122,9 +124,18 @@ dev = [
     "jsonschema>=4.21",
     # Countersigned Seals tests (RFC 3161 tokens); see the `countersign` extra.
     "asn1crypto>=1.5",
+    # Write receipt tests (COSE); see the `receipts` extra.
+    "cwt>=3.3,<4",
+    "cbor2>=5.6,<6",
     # Browser tests remain part of the full development matrix even though the
     # published base runtime no longer installs Playwright for non-web users.
     "playwright>=1.44",
+    # The Windows real-app row census drives a WPF list through UI Automation
+    # (tests/test_native_census_real_apps.py).
+    "uiautomation>=2.0.20; sys_platform == 'win32'",
+    # The registry's Sigstore attestation tests; see the `registry` extra.
+    # Python 3.11+: on 3.10 it pulls dnspython 2.8, which has an open advisory.
+    "sigstore>=4.5,<5; python_version >= '3.11'",
 ]
 grounder = ["anthropic>=0.40"]
 # PRIMARY grounding rung: OCR text-anchoring via openadapt-grounding
@@ -132,6 +143,13 @@ grounder = ["anthropic>=0.40"]
 # OCRAnchorGrounder imports it lazily and abstains (returns None) when absent,
 # so the core stays installable and the ladder safe-halts without it.
 grounding = ["openadapt-grounding>=0.1.0"]
+# Local grounding model for pixel surfaces (runtime.local_grounder,
+# `--local-grounding`): DINOv2-small int8 on onnxruntime, which the base
+# install already carries through rapidocr-onnxruntime, so the extra adds no
+# distribution and the install-weight budget is unchanged. The 24 MB weights
+# are not in the wheel; they are fetched once from a pinned revision and
+# SHA-256 checked (or placed under OPENADAPT_FLOW_MODEL_DIR for offline sites).
+local-grounding = ["onnxruntime>=1.17"]
 # Operator console: `openadapt-flow console` serves a localhost-only web UI
 # over compiled bundles / run reports / skill libraries (openadapt_flow.console).
 # FastAPI app + uvicorn server; the API client side (httpx) is already core.
@@ -145,6 +163,13 @@ console = [
 # Seal verifier is openadapt_types.seal (openadapt-types, a base dependency).
 countersign = [
     "asn1crypto>=1.5",
+]
+# Signed write receipts (openadapt_flow.write_receipt, `openadapt-flow
+# receipt`): COSE_Sign1 checked through python-cwt (MIT), with cbor2 (MIT);
+# cwt also pulls pyhpke (MIT). See docs/WRITE_RECEIPTS.md.
+receipts = [
+    "cwt>=3.3,<4",
+    "cbor2>=5.6,<6",
 ]
 # Customer-held offline Seal keys (openadapt_flow.seal_keys). `keychain`
 # stores the key in the OS keychain through keyring (MIT): macOS Keychain,
@@ -172,12 +197,16 @@ reward = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
 ]
-# Harness² integration (openadapt_flow.integrations.harness2): GUI tasks on
-# resettable apps, scored by reading the system of record, for
-# google-research/harness2's harness search. Harness² (Apache-2.0, Python
-# 3.12+) is not on PyPI, and a published wheel cannot name a git URL, so it is
-# installed beside this extra; docs/HARNESS2.md gives the pinned command.
-harness2 = ["playwright>=1.44"]
+# Standard RL environments (openadapt_flow.rl_env): the record-checked apps
+# served over the OpenEnv protocol (BSD-3-Clause) and rewarded by verify-run.
+# See environments/openenv/README.md. Python 3.11+: on 3.10 the OpenEnv stack
+# resolves to a dnspython release with a known advisory (GHSA-45c3-73f7-pv4m).
+openenv = [
+    "openenv>=0.11,<0.12; python_version >= '3.11'",
+    "playwright>=1.44; python_version >= '3.11'",
+    "fastapi>=0.110; python_version >= '3.11'",
+    "uvicorn>=0.29; python_version >= '3.11'",
+]
 # Native macOS window capture/input. Imported lazily; other platforms never
 # install or import these framework bindings.
 macos = [
@@ -195,6 +224,10 @@ linux = [
 # (legacy EMR over RDP). Lazily imported by AardwolfTransport — never
 # needed for the mock-tested adapter, only for the real/live transport.
 rdp = ["aardwolf==0.2.14"]
+# `pull` from the skills registry: verifies the release workflow's Sigstore
+# attestation of the index (openadapt_flow.registry_attest), offline against
+# the pinned trusted root. Only `pull` of a remote index needs it.
+registry = ["sigstore>=4.5,<5; python_version >= '3.11'"]
 # PHI/PII scrubbing on persist/log paths (Presidio-backed). Optional: the
 # runtime imports openadapt_flow.privacy unconditionally, but it degrades to a
 # no-op when this extra is absent (OPENADAPT_FLOW_SCRUB=auto). A regulated
@@ -243,6 +276,17 @@ agent = [
     "jsonschema>=4.20.0",
     "anyio>=4.0",
 ]
+
+# Verified write tools for agent frameworks
+# (openadapt_flow.integrations.agents): one extra per framework, each only
+# the framework itself. Every write the wrapped tool makes is read back from
+# the system of record before the agent sees a result.
+claude-agent-sdk = ["claude-agent-sdk>=0.2.174,<0.3"]
+openai-agents = ["openai-agents>=0.24,<0.25"]
+langgraph = ["langgraph>=1.2,<2", "langchain-core>=1.7,<2"]
+# CrewAI has no extra: every release pins a chromadb with open critical
+# advisories, and its current releases need mcp<2 and openai<3. The CrewAI
+# adapter works with whatever crewai the user installs.
 
 [project.urls]
 Homepage = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow"
@@ -299,11 +343,15 @@ exclude = [
     "/benchmark/**/outputs",
     "/benchmark/**/recording-live*",
     "/benchmark/**/results-*",
+    "/benchmark/**/RESULTS-*",
     "/benchmark/**/state",
     "/benchmark/**/work",
     "/benchmark/**/_bundle",
     "/benchmark/**/_recording",
     "/benchmark/**/_work",
+    # Verifier-baselines evidence (judge views, rubrics, scores) is repository-only.
+    "/benchmark/verifier_baselines/results",
+    "/benchmark/verifier_baselines/inputs",
     "/public-demo",
     "/benchmark/reliability",
     "/docs/validation/IDENTITY_ROC.md",
@@ -313,6 +361,7 @@ exclude = [
     "/docs/validation/identity_roc.json",
     "/docs/validation/identity_roc.png",
     "/openadapt_flow/benchmark/reliability_corpus.py",
+    "/benchmark/harness/reliability_corpus.py",
     "/openadapt_flow/validation/adversary_corpus.py",
     "/openadapt_flow/validation/adversary_corpus_v2.py",
     "/openadapt_flow/validation/adversary_corpus_v3.py",
@@ -358,11 +407,15 @@ exclude = [
     "/benchmark/**/outputs",
     "/benchmark/**/recording-live*",
     "/benchmark/**/results-*",
+    "/benchmark/**/RESULTS-*",
     "/benchmark/**/state",
     "/benchmark/**/work",
     "/benchmark/**/_bundle",
     "/benchmark/**/_recording",
     "/benchmark/**/_work",
+    # Verifier-baselines evidence (judge views, rubrics, scores) is repository-only.
+    "/benchmark/verifier_baselines/results",
+    "/benchmark/verifier_baselines/inputs",
     "/public-demo",
     "/THIRD_PARTY_NOTICES.md",
     "/benchmark/openimis_claims",
@@ -376,10 +429,12 @@ exclude = [
     "/docs/validation/identity_roc.json",
     "/docs/validation/identity_roc.png",
     "/openadapt_flow/benchmark/reliability_corpus.py",
+    "/benchmark/harness/reliability_corpus.py",
     "/openadapt_flow/validation/adversary_corpus.py",
     "/openadapt_flow/validation/adversary_corpus_v2.py",
     "/openadapt_flow/validation/adversary_corpus_v3.py",
     "/openadapt_flow/validation/identity_roc.py",
+    "/environments/openenv/openimis_claims",
     "/scripts/openimis_claims_demo.py",
     "/scripts/openimis_eligibility_demo.py",
     "/scripts/openimis_submit_binding_probe.py",
@@ -445,12 +500,24 @@ patch_tags = ["fix", "perf"]
 # --------------------------------------------------------------------------
 # Lint + format (ruff). Real, enforced gates — see .github/workflows/ci.yml.
 # --------------------------------------------------------------------------
+[tool.uv]
+# Wheel-only dependencies drop old Pythons (onnxruntime 1.24 has no cp310
+# wheel and no sdist), and a universal lock does not notice: it locked 1.24.3
+# for Python 3.10, which no 3.10 interpreter can install. These environments
+# make the resolver keep a version with a wheel for the oldest supported
+# Python on each platform CI runs.
+required-environments = [
+    "python_version == '3.10' and sys_platform == 'linux'",
+    "python_version == '3.10' and sys_platform == 'darwin'",
+    "python_version == '3.10' and sys_platform == 'win32'",
+]
+
 [tool.ruff]
 target-version = "py310"
 line-length = 88
 # Generated / non-package trees at the repo root are not part of the lint
-# surface. Anchored with a leading slash so the package's own
-# openadapt_flow/benchmark/ IS still linted (a bare "benchmark" would match it).
+# surface. The benchmark harness (benchmark/harness/) is linted by naming it
+# explicitly in CI (`ruff check openadapt_flow benchmark/harness`).
 extend-exclude = ["/benchmark", "/docs", "/runs", "/dist"]
 
 [tool.ruff.lint]
@@ -540,7 +607,7 @@ follow_imports_for_stubs = true
 #   - alternate backends: backends.playwright_backend, backends.rdp_backend
 #   - benchmark & interactive tooling: benchmark.desktop_benchmark,
 #     interactive_recorder
-#   - learning-loop synthesis: learning.synth_stream
+#   - learning-loop synthesis: learning.induce
 #   - disambiguation heuristics: compiler.disambiguation
 #   - runtime helpers still on untyped deps: runtime.effects._common,
 #     runtime.grounder, runtime.healing.perturbation
@@ -553,10 +620,9 @@ module = [
     "openadapt_flow.__main__",
     "openadapt_flow.backends.playwright_backend",
     "openadapt_flow.backends.rdp_backend",
-    "openadapt_flow.benchmark.desktop_benchmark",
     "openadapt_flow.compiler.disambiguation",
     "openadapt_flow.interactive_recorder",
-    "openadapt_flow.learning.synth_stream",
+    "openadapt_flow.learning.induce",
     "openadapt_flow.report",
     "openadapt_flow.runtime.effects._common",
     "openadapt_flow.runtime.grounder",

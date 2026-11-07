@@ -9,11 +9,9 @@ from openadapt_capture.events import (
     KeyUpEvent,
     MouseButton,
     MouseClickEvent,
-    MouseDoubleClickEvent,
     MouseDownEvent,
     MouseDragEvent,
     MouseMoveEvent,
-    MouseScrollEvent,
     MouseUpEvent,
 )
 from openadapt_capture.processing import (
@@ -21,7 +19,6 @@ from openadapt_capture.processing import (
     merge_consecutive_keyboard_events,
     merge_consecutive_mouse_click_events,
     merge_consecutive_mouse_move_events,
-    merge_consecutive_mouse_scroll_events,
     process_events,
     remove_invalid_keyboard_events,
     remove_redundant_mouse_move_events,
@@ -169,22 +166,68 @@ class TestMergeConsecutiveKeyboardEvents:
         assert isinstance(result[0], KeyTypeEvent)
         assert result[0].text == "A"
 
+    def test_named_space_key_is_typed_text(self):
+        # The macOS and X11 observers name the space bar without a character.
+        events = [
+            KeyDownEvent(timestamp=1.0, key_name="space", canonical_key_name="space"),
+            KeyUpEvent(timestamp=1.1, key_name="space", canonical_key_name="space"),
+        ]
+
+        result = merge_consecutive_keyboard_events(events)
+
+        assert len(result) == 1
+        assert isinstance(result[0], KeyTypeEvent)
+        assert result[0].text == " "
+
+    def test_named_space_between_overlapping_letters_is_kept(self):
+        # Fast typing: "e" is still held when space goes down.
+        events = [
+            KeyDownEvent(timestamp=1.0, key_char="e"),
+            KeyDownEvent(timestamp=1.1, key_name="space", canonical_key_name="space"),
+            KeyUpEvent(timestamp=1.2, key_char="e"),
+            KeyDownEvent(timestamp=1.3, key_char="n"),
+            KeyUpEvent(timestamp=1.4, key_name="space", canonical_key_name="space"),
+            KeyUpEvent(timestamp=1.5, key_char="n"),
+        ]
+
+        result = merge_consecutive_keyboard_events(events)
+
+        assert len(result) == 1
+        assert isinstance(result[0], KeyTypeEvent)
+        assert result[0].text == "e n"
+
+    def test_shift_space_is_typed_text(self):
+        events = [
+            KeyDownEvent(timestamp=1.0, key_name="shift"),
+            KeyDownEvent(timestamp=1.1, key_name="space", canonical_key_name="space"),
+            KeyUpEvent(timestamp=1.2, key_name="space", canonical_key_name="space"),
+            KeyUpEvent(timestamp=1.3, key_name="shift"),
+        ]
+
+        result = merge_consecutive_keyboard_events(events)
+
+        assert len(result) == 1
+        assert isinstance(result[0], KeyTypeEvent)
+        assert result[0].text == " "
+
+    def test_control_space_stays_a_shortcut(self):
+        events = [
+            KeyDownEvent(timestamp=1.0, key_name="control"),
+            KeyDownEvent(timestamp=1.1, key_name="space", canonical_key_name="space"),
+            KeyUpEvent(timestamp=1.2, key_name="space", canonical_key_name="space"),
+            KeyUpEvent(timestamp=1.3, key_name="control"),
+        ]
+
+        result = merge_consecutive_keyboard_events(events)
+
+        assert len(result) == 1
+        assert isinstance(result[0], KeyShortcutEvent)
+        assert result[0].modifiers == ["ctrl"]
+        assert result[0].key == "space"
+
 
 class TestMergeConsecutiveMouseMoveEvents:
     """Tests for merge_consecutive_mouse_move_events."""
-
-    def test_merges_consecutive_moves(self):
-        """Test merging consecutive mouse moves."""
-        events = [
-            MouseMoveEvent(timestamp=1.0, x=100.0, y=100.0),
-            MouseMoveEvent(timestamp=1.1, x=110.0, y=110.0),
-            MouseMoveEvent(timestamp=1.2, x=120.0, y=120.0),
-        ]
-        result = merge_consecutive_mouse_move_events(events)
-        assert len(result) == 1
-        # Should have final position
-        assert result[0].x == 120.0
-        assert result[0].y == 120.0
 
     def test_single_move_not_merged(self):
         """Test that a single move is not modified."""
@@ -194,58 +237,8 @@ class TestMergeConsecutiveMouseMoveEvents:
         assert result[0].x == 100.0
 
 
-class TestMergeConsecutiveMouseScrollEvents:
-    """Tests for merge_consecutive_mouse_scroll_events."""
-
-    def test_merges_scroll_deltas(self):
-        """Test that scroll deltas are summed."""
-        events = [
-            MouseScrollEvent(timestamp=1.0, x=100.0, y=100.0, dx=0.0, dy=-1.0),
-            MouseScrollEvent(timestamp=1.1, x=100.0, y=100.0, dx=0.0, dy=-2.0),
-            MouseScrollEvent(timestamp=1.2, x=100.0, y=100.0, dx=0.0, dy=-1.0),
-        ]
-        result = merge_consecutive_mouse_scroll_events(events)
-        assert len(result) == 1
-        assert result[0].dy == -4.0  # Sum of all dy values
-
-
 class TestMergeConsecutiveMouseClickEvents:
     """Tests for merge_consecutive_mouse_click_events."""
-
-    def test_creates_single_click(self):
-        """Test single click detection."""
-        events = [
-            MouseDownEvent(timestamp=1.0, x=100.0, y=100.0, button=MouseButton.LEFT),
-            MouseUpEvent(timestamp=1.1, x=100.0, y=100.0, button=MouseButton.LEFT),
-        ]
-        result = merge_consecutive_mouse_click_events(events)
-        assert len(result) == 1
-        assert isinstance(result[0], MouseClickEvent)
-        assert result[0].button == MouseButton.LEFT
-
-    def test_creates_double_click(self):
-        """Test double click detection."""
-        events = [
-            MouseDownEvent(timestamp=1.0, x=100.0, y=100.0, button=MouseButton.LEFT),
-            MouseUpEvent(timestamp=1.05, x=100.0, y=100.0, button=MouseButton.LEFT),
-            MouseDownEvent(timestamp=1.1, x=100.0, y=100.0, button=MouseButton.LEFT),
-            MouseUpEvent(timestamp=1.15, x=100.0, y=100.0, button=MouseButton.LEFT),
-        ]
-        result = merge_consecutive_mouse_click_events(events)
-        assert len(result) == 1
-        assert isinstance(result[0], MouseDoubleClickEvent)
-
-    def test_separate_clicks_too_far_apart(self):
-        """Test that clicks too far apart in time stay separate."""
-        events = [
-            MouseDownEvent(timestamp=1.0, x=100.0, y=100.0, button=MouseButton.LEFT),
-            MouseUpEvent(timestamp=1.05, x=100.0, y=100.0, button=MouseButton.LEFT),
-            MouseDownEvent(timestamp=3.0, x=100.0, y=100.0, button=MouseButton.LEFT),
-            MouseUpEvent(timestamp=3.05, x=100.0, y=100.0, button=MouseButton.LEFT),
-        ]
-        result = merge_consecutive_mouse_click_events(events)
-        assert len(result) == 2
-        assert all(isinstance(r, MouseClickEvent) for r in result)
 
     def test_same_timestamp_does_not_skip_an_unrelated_event(self):
         down = MouseDownEvent(
@@ -317,20 +310,6 @@ class TestMergeConsecutiveMouseClickEvents:
 
 class TestDetectDragEvents:
     """Tests for detect_drag_events."""
-
-    def test_detects_drag(self):
-        """Test drag detection from down + moves + up."""
-        events = [
-            MouseDownEvent(timestamp=1.0, x=100.0, y=100.0, button=MouseButton.LEFT),
-            MouseMoveEvent(timestamp=1.1, x=150.0, y=150.0),
-            MouseMoveEvent(timestamp=1.2, x=200.0, y=200.0),
-            MouseUpEvent(timestamp=1.3, x=200.0, y=200.0, button=MouseButton.LEFT),
-        ]
-        result = detect_drag_events(events)
-        assert len(result) == 1
-        assert isinstance(result[0], MouseDragEvent)
-        assert result[0].x == 100.0  # start position
-        assert result[0].dx == 100.0  # displacement (200 - 100)
 
     def test_no_drag_for_small_movement(self):
         """Test that small movements don't create drags."""

@@ -8,6 +8,10 @@ after a run halts, before the browser closes. It writes
 - ``{"secret": ..., "op": "viewport"}`` -> ``{"ok": true, "viewport": [w, h]}``
 - ``{"secret": ..., "op": "screenshot"}`` -> ``{"ok": true, "png_base64": ...}``
 - ``{"secret": ..., "op": "click", "x": X, "y": Y}`` -> ``{"ok": true}``
+- ``{"secret": ..., "op": "element_identity", "x": X, "y": Y}`` ->
+  ``{"ok": true, "identity": {...} | null}``: the element identity under the
+  point (:mod:`openadapt_flow.repair.element_identity`), or null when the
+  backend has no element tree there (a pixel-only backend)
 - ``{"secret": ..., "op": "release"}`` -> ends the hold
 
 The hold ends on ``release``, after ``timeout_s``, or on SIGTERM. Either way the socket,
@@ -58,6 +62,25 @@ def _handle(backend: Any, message: dict[str, Any]) -> tuple[dict[str, Any], bool
             return {"ok": False, "error": "x and y must be integers"}, False
         backend.click(x, y)
         return {"ok": True}, False
+    if op == "element_identity":
+        x, y = message.get("x"), message.get("y")
+        if not all(isinstance(v, int) and not isinstance(v, bool) for v in (x, y)):
+            return {"ok": False, "error": "x and y must be integers"}, False
+        from openadapt_flow.repair.element_identity import ElementIdentity
+
+        reader = getattr(backend, "element_identity_at", None)
+        try:
+            raw = reader(x, y) if callable(reader) else None
+        except Exception:  # noqa: BLE001 - an unreadable element is no identity
+            raw = None
+        identity = ElementIdentity.from_mapping(raw)
+        payload = None
+        if identity is not None:
+            payload = identity.evidence()
+            payload["dialog_region"] = (
+                list(identity.dialog_region) if identity.dialog_region else None
+            )
+        return {"ok": True, "identity": payload}, False
     if op == "release":
         return {"ok": True}, True
     return {"ok": False, "error": "unknown op"}, False
@@ -77,6 +100,8 @@ def hold_for_repair(
     ended = "timeout"
     stopping: list[int] = []
     previous = None
+    staged_hold: Path | None = None
+    published = False
     if threading.current_thread() is threading.main_thread():
         # The parent ending the hold (SIGTERM) must still clean up and let the
         # caller close the browser, so turn it into a normal end of the hold.
@@ -88,7 +113,10 @@ def hold_for_repair(
         os.chmod(sock_path, 0o600)
         server.listen(1)
         deadline = time.monotonic() + timeout_s
-        fd = os.open(hold_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        fd, staged_name = tempfile.mkstemp(
+            prefix=f".{HOLD_FILE}.", suffix=".tmp", dir=run_dir
+        )
+        staged_hold = Path(staged_name)
         with os.fdopen(fd, "w") as handle:
             json.dump(
                 {
@@ -100,6 +128,8 @@ def hold_for_repair(
                 },
                 handle,
             )
+        os.replace(staged_hold, hold_file)
+        published = True
         while True:
             remaining = deadline - time.monotonic()
             if stopping:
@@ -141,7 +171,10 @@ def hold_for_repair(
         if previous is not None:
             signal.signal(signal.SIGTERM, previous)
         server.close()
-        hold_file.unlink(missing_ok=True)
+        if staged_hold is not None:
+            staged_hold.unlink(missing_ok=True)
+        if published:
+            hold_file.unlink(missing_ok=True)
         shutil.rmtree(private, ignore_errors=True)
     return ended
 

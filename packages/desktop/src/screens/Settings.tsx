@@ -1,10 +1,12 @@
-// Settings — deployment lane, PHI mode, hosted host, auth, and updater.
+// Settings — deployment lane, PHI mode, hosted host, auth, usage stats, and updates.
 // Lane and PHI mode are the PHI-boundary routing controls (spec §1.3/§3e).
 import { useEffect, useState } from "react";
 import {
   CMD,
+  EVT,
   engineInvoke,
   engineTry,
+  onEngineEvent,
   openExternal,
   updaterAvailable,
 } from "../lib/engine";
@@ -13,6 +15,8 @@ import type {
   DeploymentLane,
   EffectivePolicy,
   PhiMode,
+  PrivacySettings,
+  UpdateStatus,
 } from "../lib/types";
 import {
   Button,
@@ -23,6 +27,7 @@ import {
   Pill,
   SegControl,
 } from "../ui/primitives";
+import { ApproverKeyCard } from "../ui/ApproverKey";
 import { OsWarning } from "../ui/OsWarning";
 import { ShadowModeCard } from "../ui/ShadowMode";
 import {
@@ -30,7 +35,8 @@ import {
   saveOverlayPresentation,
 } from "../overlay/preferences";
 
-const RELEASES_URL = "https://github.com/OpenAdaptAI/openadapt-desktop/releases";
+// Desktop releases are `openadapt-desktop-vX.Y.Z` in the monorepo (RELEASES.md).
+const RELEASES_URL = "https://github.com/OpenAdaptAI/OpenAdapt/releases";
 
 interface Cfg {
   host: string;
@@ -61,6 +67,56 @@ export function Settings({
   );
   const [overlayError, setOverlayError] = useState<string | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
+  const [privacy, setPrivacy] = useState<PrivacySettings | null>(null);
+  const [privacyError, setPrivacyError] = useState<string | null>(null);
+  const [release, setRelease] = useState<UpdateStatus | null>(null);
+  const [checkingRelease, setCheckingRelease] = useState(false);
+
+  useEffect(() => {
+    engineTry<PrivacySettings | null>(CMD.GET_PRIVACY_SETTINGS, {}, null).then(setPrivacy);
+    engineTry<UpdateStatus | null>(CMD.GET_UPDATE_STATUS, {}, null).then(setRelease);
+    // Outside the Tauri shell there is no event bus; the listener just stays off.
+    const unlisten = onEngineEvent(EVT.UPDATE_STATUS, (next: UpdateStatus) => {
+      setRelease(next);
+      setCheckingRelease(false);
+    }).catch(() => null);
+    return () => void unlisten.then((fn) => fn?.());
+  }, []);
+
+  async function savePrivacy(
+    cmd: typeof CMD.SET_USAGE_STATS | typeof CMD.SET_UPDATE_CHECK,
+    params: Record<string, boolean>,
+  ) {
+    setPrivacyError(null);
+    try {
+      const result = await engineInvoke<PrivacySettings & { ok: boolean; error?: string }>(
+        cmd,
+        params,
+      );
+      if (!result.ok) {
+        setPrivacyError(result.error || "The setting was refused.");
+        return;
+      }
+      setPrivacy(result);
+      if (cmd === CMD.SET_UPDATE_CHECK) {
+        setRelease(await engineTry<UpdateStatus | null>(CMD.GET_UPDATE_STATUS, {}, null));
+      }
+    } catch (error) {
+      setPrivacyError(`The setting was not saved: ${String(error)}`);
+    }
+  }
+
+  async function checkReleaseNow() {
+    setCheckingRelease(true);
+    const now = await engineTry<UpdateStatus | null>(
+      CMD.GET_UPDATE_STATUS,
+      { force: true },
+      null,
+    );
+    if (now) setRelease(now);
+    // The answer arrives as UPDATE_STATUS; stop waiting if it never does.
+    window.setTimeout(() => setCheckingRelease(false), 8000);
+  }
 
   useEffect(() => {
     engineTry<Cfg>(CMD.GET_CONFIG, {}, cfg).then(setCfg);
@@ -250,6 +306,8 @@ export function Settings({
 
       <ShadowModeCard />
 
+      <ApproverKeyCard />
+
       <Card>
         <CardHead
           title="On-screen controls"
@@ -281,6 +339,36 @@ export function Settings({
 
       <Card>
         <CardHead
+          title="Usage stats"
+          sub="Anonymous counts of which features are used and whether they work. No screen content, keystrokes, file paths, or task text."
+        />
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={privacy?.usage_stats === "share"}
+            disabled={!privacy || privacy.usage_stats_managed_by_env}
+            onChange={(event) =>
+              void savePrivacy(CMD.SET_USAGE_STATS, { share: event.target.checked })
+            }
+          />
+          <span>
+            Share anonymous usage stats
+            <span className="hint" style={{ display: "block" }}>
+              {privacy?.usage_stats_managed_by_env
+                ? "Set on this computer by DO_NOT_TRACK, OPENADAPT_TELEMETRY=0, or OPENADAPT_TELEMETRY_ENABLED."
+                : "Each event carries a random install id, the app version, and the operating system. Nothing is sent while this is off."}
+            </span>
+          </span>
+        </label>
+        {privacyError && (
+          <Callout tone="warn" title="That setting didn't change">
+            {privacyError}
+          </Callout>
+        )}
+      </Card>
+
+      <Card>
+        <CardHead
           title="Version and updates"
           sub={
             canUpdate
@@ -301,6 +389,49 @@ export function Settings({
           ) : null}
           {updateMsg && <span className="page-sub">{updateMsg}</span>}
         </div>
+        <label className="check-row" style={{ marginTop: "var(--space-3)" }}>
+          <input
+            type="checkbox"
+            checked={privacy?.update_check ?? false}
+            disabled={!privacy || privacy.update_check_managed_by_env}
+            onChange={(event) =>
+              void savePrivacy(CMD.SET_UPDATE_CHECK, { enabled: event.target.checked })
+            }
+          />
+          <span>
+            Check for new versions once a day
+            <span className="hint" style={{ display: "block" }}>
+              {privacy?.update_check_managed_by_env
+                ? "Turned off on this computer by OPENADAPT_UPDATE_CHECK."
+                : "An anonymous request to GitHub's release list. It sends no install id or account."}
+            </span>
+          </span>
+        </label>
+        {release?.enabled ? (
+          <div className="row">
+            <span className="page-sub">
+              {release.available && release.latest_version
+                ? `OpenAdapt ${release.latest_version} is available. You have ${release.current_version}.`
+                : release.checked_at
+                  ? `You have ${release.current_version}, the latest version.`
+                  : `You have ${release.current_version}.`}
+            </span>
+            {release.available ? (
+              <Button variant="primary" size="sm" onClick={() => void openExternal(release.url)}>
+                Download {release.latest_version}
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={checkingRelease}
+                onClick={() => void checkReleaseNow()}
+              >
+                {checkingRelease ? "Checking…" : "Check now"}
+              </Button>
+            )}
+          </div>
+        ) : null}
         <div style={{ marginTop: "var(--space-4)" }}>
           <OsWarning />
         </div>

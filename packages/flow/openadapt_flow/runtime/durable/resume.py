@@ -806,6 +806,14 @@ def _begin_continuation(
     )
 
 
+def was_compensated(run_dir: Path | str) -> bool:
+    """Did a compensating rollback start undoing this run (docs/ROLLBACK.md)?
+    Every resume path checks it: the CLI, the attended console and the relay."""
+    from openadapt_flow.rollback import COMPENSATED_MARKER
+
+    return (Path(run_dir) / COMPENSATED_MARKER).exists()
+
+
 def resume(
     run_dir: Path | str,
     replayer: Any,
@@ -828,6 +836,13 @@ def resume(
         ContinuationGuard,
     )
 
+    if was_compensated(run_dir):
+        from openadapt_flow.runtime.durable.approval import RunRejected
+
+        raise RunRejected(
+            "this run was rolled back after it stopped: its earlier writes may be "
+            "undone, so resuming would carry them as done. Start a new run."
+        )
     resolved_key = _crypto.resolve_key(key)
     coordinator = ContinuationCoordinator(run_dir, key=resolved_key)
     pending = coordinator.store.read_pending()
@@ -1221,7 +1236,9 @@ def _resume_under_lease(
                 checkpoint.model_copy(deep=True) for checkpoint in linear_checkpoints
             ],
             "program_checkpoints": [],
-            "auxiliary_digest": replayer._durable_auxiliary_digest(run_dir, []),
+            "auxiliary_digest": replayer._durable_auxiliary_digest(
+                run_dir, [], key=getattr(replayer, "checkpoint_key", None)
+            ),
         },
         authorizing_approval=approved.model_copy(deep=True),
     )
@@ -1368,7 +1385,9 @@ def _resume_program(
             "linear_checkpoints": [],
             "program_checkpoints": [item.model_copy(deep=True) for item in checkpoints],
             "auxiliary_digest": replayer._durable_auxiliary_digest(
-                store.run_dir, checkpoints
+                store.run_dir,
+                checkpoints,
+                key=getattr(replayer, "checkpoint_key", None),
             ),
         },
         authorizing_approval=approval.model_copy(deep=True),

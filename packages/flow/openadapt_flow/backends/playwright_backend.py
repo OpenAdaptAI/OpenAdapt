@@ -17,7 +17,7 @@ import re
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
 from urllib.parse import urlsplit
 
@@ -28,9 +28,15 @@ from openadapt_flow.runtime.step_timing import timed_span
 if TYPE_CHECKING:  # pragma: no cover
     from playwright.sync_api import Page
 
-from openadapt_flow.backend import ActionDeliveryUncertain, StructuralResolutionRefused
+from openadapt_flow.backend import (
+    ActionDeliveryUncertain,
+    StructuralElementNotActionable,
+    StructuralResolutionRefused,
+)
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
+    FormIdentity,
+    NativeSelectContract,
     StructuralHandle,
     StructuralLocator,
     SubmitBinding,
@@ -42,8 +48,16 @@ from openadapt_flow.runtime.resolver import (
 from openadapt_flow.submit_binding import (
     OBSERVE_SUBMIT_BINDING_JS,
     SUBMIT_BINDING_FIELD_SELECTOR,
+    form_values_from_page,
+    form_values_record,
     observation_from_page,
+    verify_form_identity,
     verify_submit_binding,
+)
+from openadapt_flow.wire_check import (
+    ExpectedSubmission,
+    WireCheck,
+    expected_submission,
 )
 
 VIEWPORT: tuple[int, int] = (1280, 800)
@@ -143,6 +157,17 @@ class _StructuralGuard:
 
 
 @dataclass
+class _NativeSelectBinding:
+    """Exact control retained across capture or delivery/readback."""
+
+    guard: _StructuralGuard
+    selector: str
+    options: list[dict[str, Any]]
+    value: Optional[str] = None
+    label: Optional[str] = None
+
+
+@dataclass
 class _CoordinateGuard:
     """One-shot visual target lease in one exact document/frame context."""
 
@@ -183,14 +208,130 @@ class _FramePoint:
 # The descriptor stays inside the page-local guard store. It binds the exact
 # actionable node, its ancestry, and the enclosing record row while excluding
 # the target's own cell (the same identity boundary as ``structured_text_at``).
-_DESCRIBE_TARGET_JS = r"""(node) => {
+# Repeated sibling structures count as record rows too (#1559): many apps build
+# a worklist from div rows, CSS-grid rows or cards, with no tr, li or role.
+# Two siblings are peers when they share a tag, at least one class (state
+# classes such as active or selected ignored; two class-less siblings match)
+# and the same shape, counting only children that carry text or a control (an
+# empty unread dot or an icon does not change the shape). A control is never
+# its own row, and peers that each hold a data-entry field are form field
+# groups, not rows. Peers are loose on purpose: over-counting look-alike rows
+# fails closed, under-counting signs the wrong chart.
+_REPEATED_ROW_HELPERS_JS = r"""
+    const cleanText = (value) => (value || '').replace(/\s+/g, ' ').trim();
+    const STATE_CLASS = /^(?:active|selected|hover|hovered|focus|focused|disabled|open|opened|expanded|collapsed|checked|current|highlighted|even|odd|first|last|visible|hidden|show|shown|(?:is|has)-.+)$/i;
+    const classesOf = (el) => Array.from(el.classList).filter((name) => !STATE_CLASS.test(name));
+    const FIELD = 'input:not([type="button"]):not([type="submit"]):not([type="reset"])' +
+        ':not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="image"]),' +
+        ' select, textarea, [contenteditable=""], [contenteditable="true"], [role="textbox"]';
+    const CONTROL = 'button, a[href], input, select, textarea, [role="button"],' +
+        ' [role="link"], [role="menuitem"], [role="tab"], [role="checkbox"], [role="radio"]';
+    const meaningful = (child) => (child.textContent || '').trim() !== '' ||
+        child.matches(CONTROL) || child.querySelector(CONTROL) !== null;
+    const shapeOf = (el) => Array.from(el.children).filter(meaningful)
+        .map((child) => child.tagName).join(',');
+    const alike = (a, b) => {
+        if (a.tagName !== b.tagName) return false;
+        const ca = classesOf(a);
+        const cb = classesOf(b);
+        const classes = (ca.length === 0 && cb.length === 0) ||
+            ca.some((name) => cb.includes(name));
+        return classes && shapeOf(a) === shapeOf(b);
+    };
+    const repeatedPeers = (el) => {
+        const parent = el.parentElement;
+        if (!parent || parent === document.documentElement) return [];
+        return Array.from(parent.children).filter((child) => alike(child, el));
+    };
+    // What a person reads as the control's name: aria-label, title, text,
+    // value, alt.
+    const accessibleName = (el) => cleanText(
+        el.getAttribute('aria-label') || el.getAttribute('title') ||
+        el.textContent || el.getAttribute('value') || el.getAttribute('alt') || ''
+    );
+    const siblingsLike = (el, controlTag) => {
+        const parent = el.parentElement;
+        const classes = classesOf(el);
+        if (!parent || parent === document.documentElement || !classes.length) return [];
+        return Array.from(parent.children).filter((child) =>
+            child.tagName === el.tagName &&
+            classesOf(child).some((name) => classes.includes(name)) &&
+            child.getElementsByTagName(controlTag).length > 0);
+    };
+    const repeatedRows = (node) => {
+        const found = [];
+        if (node.matches(FIELD)) return found;
+        const clicked = node.closest(CONTROL);
+        let cursor = node;
+        for (let depth = 0; cursor && depth < 10; depth += 1) {
+            if (cursor === document.body || cursor === document.documentElement) break;
+            if (!(cursor === node && cursor.matches(CONTROL))) {
+                let peers = repeatedPeers(cursor);
+                if (peers.length < 2 && clicked && cursor !== clicked && cursor.contains(clicked)) {
+                    // Rows whose badges differ have no same-shape peers.
+                    // Same-tag siblings that share a class and each hold a
+                    // control like the clicked one are rows too.
+                    peers = siblingsLike(cursor, clicked.tagName);
+                }
+                if (peers.length >= 2 && !peers.every((peer) => peer.querySelector(FIELD))) {
+                    found.push(cursor);
+                }
+            }
+            cursor = cursor.parentElement;
+        }
+        return found;
+    };
+    // One evaluation reads each element's text once.
+    const textMemo = new Map();
+    const textOf = (el) => {
+        let text = textMemo.get(el);
+        if (text === undefined) {
+            text = cleanText(el.textContent);
+            textMemo.set(el, text);
+        }
+        return text;
+    };
+    // A row's header: the direct child of the row that holds its heading (an
+    // h1-h6, role=heading or legend), or a first child made of several parts
+    // whose first plain text is the heading. [header child, heading text] or
+    // null.
+    const headerOf = (row) => {
+        const heading = row.querySelector('h1, h2, h3, h4, h5, h6, [role="heading"], legend');
+        if (heading) {
+            let child = heading;
+            while (child.parentElement && child.parentElement !== row) child = child.parentElement;
+            if (child.parentElement === row) return [child, textOf(heading)];
+        }
+        const first = row.firstElementChild;
+        if (first && first.children.length > 1) {
+            const label = Array.from(first.children).find((part) =>
+                textOf(part) && !part.matches(CONTROL) && !part.querySelector(CONTROL));
+            if (label) return [first, textOf(label)];
+        }
+        return null;
+    };
+    // An element's text without any descendant of the given tag (the clicked
+    // control's): a row's identity apart from its action buttons, whatever
+    // they are labelled.
+    const textWithout = (el, tag) => {
+        if (!tag) return textOf(el);
+        const clone = el.cloneNode(true);
+        for (const part of Array.from(clone.getElementsByTagName(tag))) part.remove();
+        if (clone.tagName === tag.toUpperCase()) return '';
+        return cleanText(clone.textContent);
+    };
+"""
+
+_DESCRIBE_TARGET_JS = (
+    r"""(node) => {
     const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
-    const row = node.closest('tr, [role="row"], li, [role="listitem"]');
+"""
+    + _REPEATED_ROW_HELPERS_JS
+    + r"""
     const own = node.closest(
         'td, th, [role="cell"], [role="gridcell"]'
-    ) || node;
-    let rowIdentity = '';
-    if (row) {
+    ) || node.closest(CONTROL) || node;
+    const identityOf = (row) => {
         // A row/list item with an explicit accessible name has already
         // declared its record identity. Prefer that stable application-owned
         // signal over concatenating every sibling control label, which would
@@ -216,7 +357,102 @@ _DESCRIBE_TARGET_JS = r"""(node) => {
             }
             if (cloneOwn) cloneOwn.remove();
         }
-        rowIdentity = declaredIdentity || clean(clone.textContent || '');
+        return declaredIdentity || clean(clone.textContent || '');
+    };
+    let row = node.closest('tr, [role="row"], li, [role="listitem"]');
+    let rowIdentity = row ? identityOf(row) : '';
+    let repeated = false;
+    let rowUncountable = false;
+    // The outermost element the identity was read from (the row itself, or
+    // the outer level a nested row's identity was combined with).
+    let scope = row;
+    // How the identity was read: 'row' (the row's text) or 'header' (a
+    // section header's text); the census compares candidates the same way.
+    let mode = 'row';
+    if (!row) {
+        // No table or list markup: the nearest repeated sibling structure is
+        // the row. Its identity is its heading when every peer's heading is
+        // unique (section cards: "Medications", whatever the patient), else
+        // its text minus the clicked cell. When that identity repeats across
+        // the document (a "Visit note" line in every patient card), the next
+        // repeated level up is added until it doesn't or no level is left.
+        const levels = repeatedRows(node).filter((level) => level.contains(own) || level === own);
+        // Heading-only identity applies only when the clicked control sits in
+        // the header with the heading (a section's Edit next to its title),
+        // and the headings that peers carry are unique. Then the identity is
+        // the header's text without its controls ("Medications"), whatever
+        // the record in the body. Anywhere else the row's full text is the
+        // identity.
+        const clickedControl = node.closest(CONTROL);
+        const levelIdentity = (level) => {
+            const header = headerOf(level);
+            if (header && header[1] && clickedControl && header[0] !== level &&
+                    header[0].contains(clickedControl)) {
+                const heads = repeatedPeers(level).map((peer) => headerOf(peer))
+                    .filter((found) => found && found[1]).map((found) => found[1]);
+                if (new Set(heads).size === heads.length) {
+                    return [textWithout(header[0], clickedControl.tagName), 'header'];
+                }
+            }
+            return [identityOf(level), 'row'];
+        };
+        const repeatsInDocument = (level) => {
+            const text = textOf(level);
+            let count = 0;
+            for (const other of document.getElementsByTagName(level.tagName)) {
+                if (textOf(other) === text && alike(other, level)) count += 1;
+                if (count > 1) return true;
+            }
+            return false;
+        };
+        for (let index = 0; index < levels.length; index += 1) {
+            const [text, textMode] = levelIdentity(levels[index]);
+            if (!text) continue;
+            row = levels[index];
+            rowIdentity = text;
+            mode = textMode;
+            repeated = true;
+            // The outer level's own text: everything outside the inner rows
+            // it holds (a card's patient heading). A plain group of rows has
+            // none, and combining with it would only add its other rows.
+            const ownTextOf = (outer, inner) => {
+                const clone = outer.cloneNode(true);
+                const innerClasses = classesOf(inner);
+                for (const part of Array.from(clone.getElementsByTagName(inner.tagName))) {
+                    const classes = classesOf(part);
+                    const same = innerClasses.length === 0
+                        ? classes.length === 0
+                        : classes.some((name) => innerClasses.includes(name));
+                    if (same) part.remove();
+                }
+                return cleanText(clone.textContent);
+            };
+            let level = index;
+            while (repeatsInDocument(levels[level]) && level + 1 < levels.length) {
+                const outerText = ownTextOf(levels[level + 1], levels[level]);
+                if (!outerText) break;
+                level += 1;
+                rowIdentity = rowIdentity + ' | ' + outerText;
+                mode = 'row';
+            }
+            scope = levels[level];
+            break;
+        }
+        // A repeated structure with no readable identity is a row nothing
+        // can count only when the clicked control's accessible name repeats
+        // too (every row's button reads "Open"). A menu or toolbar of
+        // uniquely named items is not a worklist.
+        if (!row && levels.length > 0) {
+            const control = node.closest(CONTROL) || node;
+            const name = accessibleName(control);
+            if (name) {
+                let same = 0;
+                for (const other of document.getElementsByTagName(control.tagName)) {
+                    if (accessibleName(other) === name) same += 1;
+                }
+                rowUncountable = same >= 2;
+            }
+        }
     }
     const ancestry = [];
     let cursor = node;
@@ -265,8 +501,13 @@ _DESCRIBE_TARGET_JS = r"""(node) => {
         ]),
         rowIdentity: rowIdentity,
         row: row,
+        repeated: repeated,
+        rowUncountable: rowUncountable,
+        scope: scope,
+        mode: mode,
     };
 }"""
+)
 
 _INSTALL_GUARD_BODY_JS = (
     r"""
@@ -337,8 +578,41 @@ _INSTALL_GUARD_BODY_JS = (
         context: {},
         invalidate: null,
         focusListener: null,
+        nativeFocus: null,
+        nativeFocusChanged: false,
+        stopNativeFocusTracking: null,
     };
+    // A native selection may acquire focus later, but only from the exact
+    // unchanged focus chain observed during structural resolution.
+    if (el.localName === 'select') {
+        const focusChain = [];
+        try {
+            let win = window;
+            for (let depth = 0; depth < 9; depth++) {
+                focusChain.push({win, active: win.document.activeElement});
+                if (win === win.top) break;
+                win = win.parent;
+            }
+            if (focusChain[focusChain.length - 1].win === win.top) {
+                entry.nativeFocus = focusChain;
+            }
+        } catch (_) { entry.nativeFocus = null; }
+        if (entry.nativeFocus) {
+            const changed = () => { entry.nativeFocusChanged = true; };
+            for (const item of entry.nativeFocus) {
+                item.win.document.addEventListener('focusin', changed, true);
+                item.win.document.addEventListener('focusout', changed, true);
+            }
+            entry.stopNativeFocusTracking = () => {
+                for (const item of entry.nativeFocus) {
+                    item.win.document.removeEventListener('focusin', changed, true);
+                    item.win.document.removeEventListener('focusout', changed, true);
+                }
+            };
+        }
+    }
     const invalidate = () => {
+        if (entry.stopNativeFocusTracking) entry.stopNativeFocusTracking();
         if (entry.observer) entry.observer.disconnect();
         if (entry.contextObserver) entry.contextObserver.disconnect();
         if (entry.focusListener) {
@@ -376,6 +650,10 @@ _INSTALL_GUARD_BODY_JS = (
 """
 )
 
+# True when the element is fully transparent. Such a control is laid over its
+# own visible box on purpose, so the bind guard refusing it is not occlusion.
+_TRANSPARENT_JS = "el => Number(window.getComputedStyle(el).opacity || '1') === 0"
+
 _BIND_STRUCTURAL_TARGET_JS = (
     "(el, args) => { const describe = "
     + _DESCRIBE_TARGET_JS
@@ -395,6 +673,54 @@ GUARDED_ACTIONABLE_SELECTOR = (
     ' [role="tab"], [role="option"], [role="checkbox"],'
     ' [role="radio"], [role="switch"]'
 )
+
+#: The focused element's own facts, in its document (``focus_identity``).
+_FOCUS_IDENTITY_JS = r"""(el) => {
+    const doc = el.ownerDocument;
+    if (el === doc.body || el === doc.documentElement) return {none: true};
+    // activeElement names a shadow host when the focus is inside its shadow
+    // root. An open root is not followed, and a registered custom element may
+    // hide a closed one: either way the focused control can't be told apart.
+    // An unregistered element with a dash (an Angular or other framework
+    // component without a shadow root) is an ordinary element.
+    if (el.shadowRoot) return {unreadable: true};
+    if (el.localName.includes('-') && window.customElements
+        && doc.defaultView.customElements.get(el.localName)) return {unreadable: true};
+    const count = (sel) => {
+        try { return doc.querySelectorAll(sel).length; } catch (e) { return 0; }
+    };
+    const testid = el.getAttribute('data-testid') || null;
+    const id = el.id || null;
+    // An option is active only inside the listbox the control names by
+    // aria-controls: aria-activedescendant points at one of its role=option
+    // elements, or one of them is aria-selected.
+    let active = false;
+    const boxId = el.getAttribute('aria-controls');
+    const box = boxId ? doc.getElementById(boxId) : null;
+    if (box && box.getAttribute('role') === 'listbox') {
+        const activeId = el.getAttribute('aria-activedescendant');
+        const option = activeId ? doc.getElementById(activeId) : null;
+        if (option) {
+            active = option.getAttribute('role') === 'option' && box.contains(option);
+        } else {
+            active = !!box.querySelector('[role="option"][aria-selected="true"]');
+        }
+    }
+    let top = false;
+    try { top = doc.defaultView === doc.defaultView.top; } catch (e) { top = false; }
+    return {
+        none: false,
+        tag: el.localName,
+        testid: testid,
+        testid_count: testid ? count('[data-testid="' + CSS.escape(testid) + '"]') : 0,
+        id: id,
+        id_count: id ? count('#' + CSS.escape(id)) : 0,
+        active_option: active,
+        top: top,
+    };
+}"""
+#: The first line of an ARIA snapshot: ``- role "name"``.
+_ARIA_LINE = re.compile(r'^\s*-\s+([a-z]+)(?:\s+"((?:[^"\\]|\\.)*)")?')
 
 _BIND_COORDINATE_TARGET_JS = (
     r"""(args) => {
@@ -456,7 +782,9 @@ _SUBMIT_BINDING_AT_JS = (
     + OBSERVE_SUBMIT_BINDING_JS
     + r""";
     const fills = window[args.fillKey];
-    return observe(control, Array.isArray(fills) ? fills : []);
+    return observe(
+        control, Array.isArray(fills) ? fills : [], window[args.fillKey + '_hidden']
+    );
 }"""
 )
 
@@ -474,9 +802,145 @@ _REGISTER_FILLED_FIELD_JS = (
         Object.defineProperty(window, key, {value: fills, configurable: true});
     }
     if (fills.indexOf(el) < 0) fills.push(el);
+    // Each hidden control's value as typing starts, so a create-new form's
+    // fingerprint can tell a token that rotates while the form is filled in.
+    let hidden = window[key + '_hidden'];
+    if (!(hidden instanceof WeakMap)) {
+        hidden = new WeakMap();
+        Object.defineProperty(
+            window, key + '_hidden', {value: hidden, configurable: true});
+    }
+    for (const input of el.ownerDocument.querySelectorAll('input[type="hidden"]')) {
+        if (!hidden.has(input)) hidden.set(input, String(input.value));
+    }
     return true;
 }"""
 )
+
+# Remember what a field holds once the run has finished typing into it, and
+# whether that is exactly what the run typed, for a create-new form's identity
+# check (openadapt_flow.ir.FormIdentity). A select holds what was typed when
+# its chosen option's label is the typed text. A field that reformatted the
+# typed text (a controlled input, a mask) does not. The WeakMap lives in the
+# field's own document under a per-backend random key and is only compared in
+# the page; no value is returned to Python.
+_SNAPSHOT_FILLED_VALUE_JS = r"""(el, args) => {
+    let values = window[args.key];
+    if (!(values instanceof WeakMap)) {
+        values = new WeakMap();
+        Object.defineProperty(window, args.key, {value: values, configurable: true});
+    }
+    const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+    const value = ('value' in el) ? String(el.value) : String(el.innerText || '');
+    let typed;
+    if (el.localName === 'select') {
+        const option = el.options[el.selectedIndex];
+        typed = Boolean(option) && (
+            typeof args.nativeValue === 'string'
+                ? option.value === args.nativeValue && option.label === args.typed
+                : clean(option.text) === clean(args.typed)
+        );
+    } else if ('value' in el) {
+        typed = value === String(args.typed);
+    } else {
+        typed = clean(value) === clean(args.typed);
+    }
+    values.set(el, {value: value, typed: typed});
+    return true;
+}"""
+
+# A create-new form's identity at a point: the submit-binding observation of
+# the control there against the fields this run typed into, and how many of
+# those fields in the control's form no longer hold what the run left in them
+# (or were never snapshotted). Counts only: no value leaves the page.
+_FORM_IDENTITY_AT_JS = (
+    r"""(args) => {
+    const hit = document.elementFromPoint(args.x, args.y);
+    if (!hit) return null;
+    const control = hit.closest("""
+    + json.dumps(GUARDED_ACTIONABLE_SELECTOR)
+    + r""");
+    if (!control) return null;
+    const observe = """
+    + OBSERVE_SUBMIT_BINDING_JS
+    + r""";
+    const fills = Array.isArray(window[args.fillKey]) ? window[args.fillKey] : [];
+    const out = observe(control, fills, window[args.fillKey + '_hidden']);
+    const values = window[args.valueKey];
+    const form = control.form || control.closest('form');
+    let changed = 0;
+    for (const field of fills) {
+        if (!field || !field.isConnected || !form) continue;
+        const owner = field.form || field.closest('form');
+        if (owner !== form) continue;
+        const now = ('value' in field) ? String(field.value)
+            : String(field.innerText || '');
+        const left = (values instanceof WeakMap) ? values.get(field) : null;
+        if (!left || !left.typed || left.value !== now) changed += 1;
+    }
+    return {observation: out.observation, changed: changed};
+}"""
+)
+
+# Before a create-new form's save: what the checked button would send (the
+# address with its query, the method, and every field, from the form's
+# controls, never from new FormData(), which runs the page's own formdata
+# listeners). The wire check holds the save's request to exactly this.
+_FORM_EXPECTED_JS = (
+    r"""(args) => {
+    const hit = document.elementFromPoint(args.x, args.y);
+    const control = hit ? hit.closest("""
+    + json.dumps(GUARDED_ACTIONABLE_SELECTOR)
+    + r""") : null;
+    const form = control ? (control.form || control.closest('form')) : null;
+    if (!form) return null;
+    const exempt = new Set(args.exempt || []);
+    const expected_parts = () => {
+        const pairs = [];
+        for (const el of Array.from(form.elements)) {
+            const name = el.name;
+            if (!name || exempt.has(name)) continue;
+            let disabled = false;
+            try { disabled = el.matches(':disabled'); } catch (_) {}
+            if (disabled) continue;
+            const type = String(el.type || el.localName || '').toLowerCase();
+            if (['submit', 'button', 'reset', 'image'].indexOf(type) >= 0) {
+                if (el === control && type !== 'image') pairs.push([name, String(el.value)]);
+                continue;
+            }
+            if (['fieldset', 'object', 'output'].indexOf(el.localName) >= 0) continue;
+            if ((type === 'checkbox' || type === 'radio') && !el.checked) continue;
+            if (type === 'file') {
+                const files = Array.from(el.files || []);
+                if (!files.length) pairs.push([name, 'file:']);
+                for (const f of files) pairs.push([name, 'file:' + f.name]);
+                continue;
+            }
+            if (el.localName === 'select') {
+                for (const o of Array.from(el.selectedOptions)) pairs.push([name, String(o.value)]);
+                continue;
+            }
+            pairs.push([name, String(el.value)]);
+        }
+        const target = control.hasAttribute('formaction') ? control.formAction : form.action;
+        let address = String(target);
+        const query = [];
+        try {
+            const url = new URL(target, document.baseURI);
+            address = url.origin + url.pathname;
+            for (const [k, v] of url.searchParams) if (!exempt.has('?' + k)) query.push([k, v]);
+        } catch (_) {}
+        const method = String((control.hasAttribute('formmethod')
+            ? control.formMethod : form.method) || 'get').toLowerCase();
+        const order = (x, y) => (x[0] + '\u0000' + x[1]) < (y[0] + '\u0000' + y[1]) ? -1 : 1;
+        pairs.sort(order);
+        query.sort(order);
+        return {address, query, method, pairs};
+    };
+    return expected_parts();
+}"""
+)
+
 
 # Page-structure identity of a FORM FIELD that sits in no record row.
 #
@@ -644,6 +1108,55 @@ _FOCUSED_PLAIN_TEXT_JS = r"""() => {
     return ['text', 'email', 'tel', 'search', 'url'].includes(t);
 }"""
 
+#: An ISO calendar date, the value a native ``<input type=date>`` holds.
+_ISO_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+#: Is the element an editable native date input?
+_IS_DATE_INPUT_JS = (
+    "e => e.tagName === 'INPUT' && e.type === 'date' && !e.readOnly && !e.disabled"
+)
+#: The focused element, through open shadow roots (frames are walked in Python).
+_ACTIVE_ELEMENT_JS = """() => {
+    let e = document.activeElement;
+    while (e && e.shadowRoot && e.shadowRoot.activeElement) {
+        e = e.shadowRoot.activeElement;
+    }
+    return e;
+}"""
+
+
+def _is_iso_date(text: str) -> bool:
+    """True for a real calendar date written ``YYYY-MM-DD`` in ASCII digits."""
+
+    if not _ISO_DATE.fullmatch(text or ""):
+        return False
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        return False
+    return True
+
+
+def _fill_iso_date(target: Any, text: str) -> bool:
+    """Set an ISO date (``YYYY-MM-DD``) into a native ``<input type=date>``.
+
+    Chromium splits a date input into locale-ordered segments that a typed
+    string can't fill: ``-`` doesn't move to the next segment, and the year
+    segment takes six digits. ``fill`` takes the ISO value whatever the
+    locale and fires ``input`` and ``change`` (no key events). ``target`` is
+    an element handle; the check and the fill run on that one element.
+    Returns ``False``, with nothing delivered, when ``text`` isn't a real ISO
+    date or the target isn't an editable date input. Once it is, a failed
+    ``fill`` raises rather than falling back to typing.
+    """
+
+    if not _is_iso_date(text):
+        return False
+    if target.evaluate(_IS_DATE_INPUT_JS) is not True:
+        return False
+    target.fill(text, timeout=1000)
+    return True
+
+
 _TEXT_AT_POINT_JS = r"""([px, py, target]) => {
     // Recorded texts come from OCR, which drops spaces and misreads
     // punctuation ("October-2026-" for "October 2026"): keep letters and
@@ -711,7 +1224,18 @@ _RECORD_KEY_JS = r"""(row, node) => {
     const POSITIONAL = /(?:index|idx|position|pos|order|rank|seq)/i;
     const parent = row.parentElement;
     const index = parent ? Array.prototype.indexOf.call(parent.children, row) : -1;
+    // Mirror of identity_census.positional_id: an id that names a position
+    // (row-3, r3c2, item_12, the row's own index) moves with the row.
+    const WORDS = 'row|item|idx|index|cell|col|column|line|pos|position|listviewitem|node|child';
+    const POSITION_TOKEN = new RegExp('^(?:(?:' + WORDS + ')\\d+|r\\d+c\\d+)$', 'i');
+    const POSITION_WORD = new RegExp('^(?:' + WORDS + '|r|c)$', 'i');
     const positional = (value) => {
+        const tokens = value.split(/[^A-Za-z0-9]+/).filter(Boolean);
+        if (tokens.some((t) => POSITION_TOKEN.test(t))) return true;
+        for (let i = 0; i + 1 < tokens.length; i += 1) {
+            if (POSITION_WORD.test(tokens[i]) && /^\d+$/.test(tokens[i + 1])) return true;
+        }
+        if (tokens.length > 1 && tokens.every((t) => /^\d{1,3}$/.test(t))) return true;
         const m = /^\D*(\d+)\D*$/.exec(value);
         if (!m) return false;
         const n = Number(m[1]);
@@ -747,9 +1271,15 @@ _RECORD_KEY_JS = r"""(row, node) => {
                             /^(?:id|pid|mrn)$/i.test(k)) ids.push(k + '=' + v);
                 }
                 ids.sort();
-                const here = url.pathname === location.pathname && !ids.length;
+                // A link back to this same document ("#", "#top") names no
+                // record, even when the page's own URL carries ids.
+                const sameDocument = url.origin === location.origin &&
+                    url.pathname === location.pathname && url.search === location.search;
+                const fragmentOnly = sameDocument && (!url.hash || url.hash === '#' ||
+                    url.hash === location.hash);
                 const value = url.pathname + (ids.length ? '?' + ids.join('&') : '') + url.hash;
-                if (!(here && !url.hash) && value.length <= 512 && !positional(value)) {
+                if (!fragmentOnly && !(sameDocument && !url.hash) &&
+                        value.length <= 512 && !positional(value)) {
                     parts.push('href=' + value);
                 }
             }
@@ -759,11 +1289,18 @@ _RECORD_KEY_JS = r"""(row, node) => {
     return Array.from(new Set(parts)).sort().join('\n');
 }"""
 
-# Every shown row whose record identity equals the identity of the row under
-# the point, with each row's stable record id and position. The identity is
-# computed exactly as ``structured_text_at`` does, for the cell at the same
-# place in each row. ``{row: false}`` when the point has no row identity (a
-# form field group, a standalone control): there is no row to compare.
+# Every shown row like the one under the point, with each row's stable record
+# id and position. Once the target's row level is known, the candidates are
+# all children of that row's container that hold a control, whatever the
+# control's label, case or opacity (shown-ness is judged on the row, never on
+# a hover-revealed button). Each is compared on one key read the same way as
+# the target's: its text without any control of the clicked control's tag,
+# or, for a section header, the header's text without them. Exactly one match
+# is the target. Filtering candidates is what lets a look-alike row escape the
+# count, so the census filters as little as it can: over-counting fails
+# closed. ``{row: false}`` when the point has no row identity; ``{row: true,
+# uncountable: true}`` for a row no identity can be read from.
+# ``label_repeats`` says whether other rows in the container hold a control.
 _IDENTITY_CANDIDATES_AT_JS = (
     r"""([px, py, cap]) => {
     const el = document.elementFromPoint(px, py);
@@ -774,53 +1311,126 @@ _IDENTITY_CANDIDATES_AT_JS = (
     const recordKey = """
     + _RECORD_KEY_JS
     + r""";
+"""
+    + _REPEATED_ROW_HELPERS_JS
+    + r"""
     const target = describe(el);
+    if (target.rowUncountable) return {row: true, uncountable: true};
     if (!target.rowIdentity || !target.row) return {row: false};
     const row = target.row;
-    const own = el.closest('td, th, [role="cell"], [role="gridcell"]') || el;
-    const path = [];
-    let cursor = own;
-    while (cursor && cursor !== row) {
-        const parent = cursor.parentElement;
-        if (!parent) break;
-        path.unshift(Array.prototype.indexOf.call(parent.children, cursor));
-        cursor = parent;
-    }
-    const ownInRow = cursor === row;
+    // Compare at the identity's outermost level: the row, or the card a
+    // nested row's identity was combined with.
+    const level = target.scope || row;
     const shown = (node) => {
         if (!node.isConnected) return false;
         if (typeof node.checkVisibility === 'function') {
-            return node.checkVisibility({visibilityProperty: true, opacityProperty: true});
+            return node.checkVisibility({visibilityProperty: true});
         }
         if (!node.getClientRects().length) return false;
-        const style = window.getComputedStyle(node);
-        return style.visibility !== 'hidden' && style.display !== 'none';
+        return window.getComputedStyle(node).visibility !== 'hidden';
     };
-    const rows = document.querySelectorAll('tr, [role="row"], li, [role="listitem"]');
-    const rowRect = row.getBoundingClientRect();
+    const control = el.closest(CONTROL);
+    const tag = control ? control.tagName : null;
+    const ownCell = el.closest('td, th, [role="cell"], [role="gridcell"]');
+    const cellIndex = ownCell && ownCell.parentElement === row && level === row
+        ? Array.prototype.indexOf.call(row.children, ownCell) : -1;
+    // Text of a part with its index-th control of the clicked tag removed.
+    const textMinus = (part, index) => {
+        const clone = part.cloneNode(true);
+        const drop = clone.getElementsByTagName(tag)[index];
+        if (drop) drop.remove();
+        return cleanText(clone.textContent);
+    };
+    const partOf = (candidate) => {
+        if (target.mode !== 'header') return candidate;
+        const header = headerOf(candidate);
+        return header ? header[0] : null;
+    };
+    // The target's key leaves out only the clicked control, as its identity
+    // does. A candidate matches when leaving out ONE of its own controls of
+    // that tag gives the same key: a look-alike whose action reads "Resume"
+    // still matches, and a row whose name is a link keeps its name.
+    const targetPart = partOf(level);
+    let targetKey;
+    if (tag && targetPart) {
+        const index = Array.prototype.indexOf.call(
+            targetPart.getElementsByTagName(tag), control);
+        targetKey = index >= 0 ? textMinus(targetPart, index) : textOf(targetPart);
+    } else if (cellIndex >= 0) {
+        const clone = level.cloneNode(true);
+        const cell = clone.children[cellIndex];
+        if (cell) cell.remove();
+        targetKey = cleanText(clone.textContent);
+    } else {
+        targetKey = targetPart ? textOf(targetPart) : null;
+    }
+    const matchOf = (candidate) => {
+        const part = partOf(candidate);
+        if (!part || targetKey === null) return null;
+        if (tag) {
+            const controls = part.getElementsByTagName(tag);
+            if (!controls.length || textOf(part).length < targetKey.length) return null;
+            for (let index = 0; index < controls.length; index += 1) {
+                if (textMinus(part, index) === targetKey) return controls[index];
+            }
+            return null;
+        }
+        if (cellIndex >= 0) {
+            const clone = candidate.cloneNode(true);
+            const cell = clone.children[cellIndex];
+            if (cell) cell.remove();
+            return cleanText(clone.textContent) === targetKey ? candidate : null;
+        }
+        return textOf(part) === targetKey ? candidate : null;
+    };
+    const holdsControl = (candidate) =>
+        candidate.matches(CONTROL) || candidate.querySelector(CONTROL) !== null;
+    const container = level.parentElement;
+    const siblings = container ? Array.from(container.children) : [level];
+    // Candidates: the container's children, and everything like the row
+    // across the page (another tbody, another group, a second list).
+    const pageWide = target.repeated || level !== row
+        ? Array.from(document.getElementsByTagName(level.tagName)).filter(
+            (candidate) => !tag || candidate.getElementsByTagName(tag).length > 0)
+        : Array.from(document.querySelectorAll('tr, [role="row"], li, [role="listitem"]'));
+    const dialog = el.closest(
+        'dialog:modal, [aria-modal="true"], [role="alertdialog"], .modal.show'
+    );
+    const pool = new Set(siblings.concat(pageWide).filter(
+        (candidate) => !dialog || dialog.contains(candidate)
+    ));
     const result = {
         record_key: recordKey(row, el),
-        incomplete: rows.length > cap,
+        incomplete: pool.size > cap,
+        label_repeats: false,
         candidates: [],
     };
     if (result.incomplete) return result;
-    for (const candidate of rows) {
-        if (candidate !== row && !shown(candidate)) continue;
-        let node = candidate;
-        if (ownInRow) {
-            for (const index of path) node = node && node.children[index];
-        }
-        if (!node) continue;
-        const observed = candidate === row ? target : describe(node);
-        if (observed.row !== candidate || observed.rowIdentity !== target.rowIdentity) {
+    const found = [[level, el]];
+    for (const candidate of pool) {
+        if (candidate === level || candidate.contains(level) || level.contains(candidate)) {
             continue;
         }
+        if (control && !holdsControl(candidate)) continue;
+        if (!shown(candidate)) continue;
+        const hit = matchOf(candidate);
+        if (hit) found.push([candidate, hit]);
+    }
+    let withControls = 0;
+    for (const candidate of siblings) {
+        if ((!control || holdsControl(candidate)) && (candidate === level || shown(candidate))) {
+            withControls += 1;
+        }
+    }
+    result.label_repeats = withControls >= 2;
+    const levelRect = level.getBoundingClientRect();
+    for (const [candidate, hit] of found) {
         const rect = candidate.getBoundingClientRect();
         result.candidates.push({
-            self: candidate === row,
-            record_key: candidate === row ? result.record_key : recordKey(candidate, node),
-            dx: rect.x - rowRect.x,
-            dy: rect.y - rowRect.y,
+            self: candidate === level,
+            record_key: candidate === level ? result.record_key : recordKey(candidate, hit),
+            dx: rect.x - levelRect.x,
+            dy: rect.y - levelRect.y,
         });
     }
     return result;
@@ -997,6 +1607,225 @@ _GUARD_CURRENT_JS = (
 }"""
 )
 
+# Native selection is a fixed semantic operation, never arbitrary supplied JS.
+# Its guard and option census are checked in the same JS task as the setter.
+_NATIVE_SELECT_STATE_JS = r"""(el, requireFocused = true) => {
+    if (!(el instanceof HTMLSelectElement) || !el.isConnected ||
+            el.multiple || el.size > 1 || el.matches(':disabled') ||
+            el.options.length < 1 || el.options.length > 2048) return null;
+    for (let node = el; node; node = node.parentElement) {
+        const style = getComputedStyle(node);
+        if (style.display === 'none' || style.visibility !== 'visible' ||
+                Number(style.opacity) === 0 || node.inert) return null;
+    }
+    const rect = el.getBoundingClientRect();
+    const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
+    if (rect.width <= 0 || rect.height <= 0 || x < 0 || y < 0 ||
+            x >= innerWidth || y >= innerHeight ||
+            document.elementFromPoint(x, y) !== el ||
+            (requireFocused && document.activeElement !== el)) return null;
+    const options = Array.from(el.options, option => ({
+        value: option.value,
+        label: option.label,
+        disabled: option.disabled ||
+            (option.parentElement instanceof HTMLOptGroupElement &&
+             option.parentElement.disabled),
+    }));
+    if (options.some(o => o.value.length > 512 || o.label.length > 512)) return null;
+    if (el.selectedOptions.length !== 1) return null;
+    const selected = el.selectedOptions[0];
+    return {value: selected.value, label: selected.label, options};
+}"""
+
+_NATIVE_SELECT_CURRENT_JS = (
+    "(el, args) => { const current = "
+    + _GUARD_CURRENT_JS
+    + "; const state = "
+    + _NATIVE_SELECT_STATE_JS
+    + "; const contextCurrent = (window, document) => { const check = "
+    + _CONTEXT_CURRENT_JS
+    + r"""; return check({context: args.context || {}}); };
+    const requireFocused = args.requireFocused !== false;
+    if (!current(el, {...args, requireFocused})) return null;
+    if (args.requireOriginalFocus) {
+        const entry = window[args.storeKey]?.get(args.token);
+        if (!entry || entry.nativeFocusChanged || !entry.nativeFocus ||
+                !entry.nativeFocus.every(item =>
+                    item.win.document.activeElement === item.active)) return null;
+    }
+    const matches = document.querySelectorAll(args.selector);
+    if (matches.length !== 1 || matches[0] !== el) return null;
+    const observed = state(el, requireFocused);
+    if (!observed || JSON.stringify(observed.options) !==
+            JSON.stringify(args.options)) return null;
+    // Re-prove the ancestor frame hit chain synchronously. Cross-origin
+    // ancestors cannot supply this proof and therefore refuse selection.
+    try {
+        let win = window;
+        const rect = el.getBoundingClientRect();
+        let x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
+        for (let i = args.framePath.length - 1; i >= 0; i--) {
+            const frame = win.frameElement;
+            const parent = win.parent;
+            if (!frame || parent === win ||
+                    (requireFocused && parent.document.activeElement !== frame)) return null;
+            const candidates = parent.document.querySelectorAll(args.framePath[i]);
+            if (candidates.length !== 1 || candidates[0] !== frame) return null;
+            for (let node = frame; node; node = node.parentElement) {
+                const style = parent.getComputedStyle(node);
+                if (style.transform !== 'none' || style.display === 'none' ||
+                        style.visibility !== 'visible' ||
+                        Number(style.opacity) === 0 || node.inert) return null;
+            }
+            const box = frame.getBoundingClientRect();
+            x += box.x + frame.clientLeft;
+            y += box.y + frame.clientTop;
+            if (parent.document.elementFromPoint(x, y) !== frame) return null;
+            win = parent;
+        }
+        if (win !== win.top || !contextCurrent(win, win.document)) return null;
+    } catch (_) { return null; }
+    return observed;
+}"""
+)
+
+_NATIVE_SELECT_DELIVER_JS = (
+    "(el, args) => { const current = "
+    + _NATIVE_SELECT_CURRENT_JS
+    + "; const register = "
+    + _REGISTER_FILLED_FIELD_JS
+    + "; const snapshot = "
+    + _SNAPSHOT_FILLED_VALUE_JS
+    + r""";
+    const before = current(el, {...args, requireFocused: false, requireOriginalFocus: true});
+    if (!before) return {status: 'refused'};
+    const chosen = before.options.filter(o => o.value === args.value);
+    if (chosen.length !== 1 || chosen[0].label !== args.label ||
+            chosen[0].disabled) return {status: 'refused'};
+    const setter = Object.getOwnPropertyDescriptor(
+        HTMLSelectElement.prototype, 'value').set;
+    let focusLost = false;
+    const focusDocuments = [];
+    const invalidateFocus = () => {
+        focusLost = true;
+        const entry = window[args.storeKey]?.get(args.token);
+        if (entry && entry.invalidate) entry.invalidate();
+    };
+    el.addEventListener('blur', invalidateFocus, true);
+    try {
+        if (!register(el, args.fillKey)) return {status: 'refused'};
+        const entry = window[args.storeKey]?.get(args.token);
+        if (entry?.stopNativeFocusTracking) entry.stopNativeFocusTracking();
+        if (document.activeElement !== el) el.focus({preventScroll: true});
+        // Focus itself delivers an event. If its handler changes the target,
+        // stop before setting a value and report that delivery is uncertain.
+        const focused = !focusLost && current(el, args);
+        if (!focused || focused.value !== before.value || focused.label !== before.label) {
+            return {status: 'uncertain'};
+        }
+        // The intended focus transition is complete. From here, losing
+        // focus anywhere in the frame chain permanently invalidates delivery,
+        // even if the child document keeps its activeElement unchanged.
+        for (const item of entry.nativeFocus) {
+            const doc = item.win.document;
+            doc.addEventListener('focusin', invalidateFocus, true);
+            doc.addEventListener('focusout', invalidateFocus, true);
+            focusDocuments.push(doc);
+        }
+        setter.call(el, args.value);
+        const stillSelected = () => {
+            const observed = !focusLost && current(el, args);
+            return observed && observed.value === args.value &&
+                observed.label === args.label;
+        };
+        if (!stillSelected()) return {status: 'uncertain'};
+        el.dispatchEvent(new Event('input', {bubbles: true}));
+        // Even a blur followed by refocus invalidates the retained proof.
+        // Never send a later event after losing the original focus lease.
+        if (!stillSelected()) return {status: 'uncertain'};
+        el.dispatchEvent(new Event('change', {bubbles: true}));
+        if (!stillSelected()) return {status: 'uncertain'};
+        snapshot(el, {key: args.valueKey, typed: args.label, nativeValue: args.value});
+        return {status: 'delivered'};
+    } finally {
+        el.removeEventListener('blur', invalidateFocus, true);
+        for (const doc of focusDocuments) {
+            doc.removeEventListener('focusin', invalidateFocus, true);
+            doc.removeEventListener('focusout', invalidateFocus, true);
+        }
+    }
+}"""
+)
+
+_NATIVE_SELECT_CAPTURE_JS = (
+    "(el, args) => { const read = "
+    + _NATIVE_SELECT_STATE_JS
+    + "; const bind = "
+    + _BIND_STRUCTURAL_TARGET_JS
+    + "; const register = "
+    + _REGISTER_FILLED_FIELD_JS
+    + r""";
+    const requireFocused = args.requireFocused !== false;
+    const observed = read(el, requireFocused);
+    if (!observed) return null;
+    let selector = el.id ? '#' + CSS.escape(el.id) : null;
+    if (!selector && el.name) selector = 'select[name="' + CSS.escape(el.name) + '"]';
+    if (!selector) return null;
+    const matches = document.querySelectorAll(selector);
+    if (matches.length !== 1 || matches[0] !== el) return null;
+    if (!bind(el, {...args, requireFocused, requireRowIdentity: false})) return null;
+    register(el, args.fillKey);
+    return {...observed, selector};
+}"""
+)
+
+_NATIVE_SELECT_CAPTURE_AT_JS = (
+    "args => { const capture = "
+    + _NATIVE_SELECT_CAPTURE_JS
+    + "; const el = document.elementFromPoint(args.x, args.y);"
+    + " return el ? capture(el, {...args, requireFocused: false}) : null; }"
+)
+
+_NATIVE_SELECT_CONTINUE_JS = (
+    "(el, args) => { const current = "
+    + _NATIVE_SELECT_CURRENT_JS
+    + r""";
+    const observed = current(el, args);
+    if (!observed || observed.value !== args.value || observed.label !== args.label) return false;
+    const entry = window[args.storeKey]?.get(args.token);
+    if (!entry || !entry.nativeFocus) return false;
+    if (!entry.captureFocusArmed) {
+        if (entry.stopNativeFocusTracking) entry.stopNativeFocusTracking();
+        const invalidate = () => entry.invalidate();
+        for (const item of entry.nativeFocus) {
+            item.win.document.addEventListener('focusin', invalidate, true);
+            item.win.document.addEventListener('focusout', invalidate, true);
+        }
+        entry.stopNativeFocusTracking = () => {
+            for (const item of entry.nativeFocus) {
+                item.win.document.removeEventListener('focusin', invalidate, true);
+                item.win.document.removeEventListener('focusout', invalidate, true);
+            }
+        };
+        entry.captureFocusArmed = true;
+    }
+    return true;
+}"""
+)
+
+_NATIVE_SELECT_COMMIT_OBSERVATION_JS = (
+    "(el, args) => { const current = "
+    + _NATIVE_SELECT_CURRENT_JS
+    + "; const snapshot = "
+    + _SNAPSHOT_FILLED_VALUE_JS
+    + r""";
+    const observed = current(el, args);
+    if (!observed || observed.value !== args.value || observed.label !== args.label) return null;
+    snapshot(el, {key: args.valueKey, typed: args.label, nativeValue: args.value});
+    return observed;
+}"""
+)
+
 _BIND_CONTEXT_IDENTITY_JS = (
     r"""(args) => {
     const tokenMap = window[args.storeKey];
@@ -1032,6 +1861,7 @@ _BIND_CONTEXT_IDENTITY_JS = (
 _CLEAN_GUARD_JS = r"""(args) => {
     const tokenMap = window[args.storeKey];
     const entry = tokenMap instanceof Map ? tokenMap.get(args.token) : null;
+    if (entry && entry.stopNativeFocusTracking) entry.stopNativeFocusTracking();
     if (entry && entry.observer) entry.observer.disconnect();
     if (entry && entry.contextObserver) entry.contextObserver.disconnect();
     if (entry && entry.focusListener && entry.el) {
@@ -1062,18 +1892,27 @@ _STRUCTURAL_LOCATOR_AT_JS = (
             '#' + CSS.escape(id)).length === 1) {
         selector = '#' + CSS.escape(id);
     }
+    // <input type=submit> and its kin are buttons named by their value,
+    // as the accessibility tree (and get_by_role) names them.
+    const inputType = (actionable.getAttribute('type') || '').toLowerCase();
+    const inputButton = tag === 'input' &&
+        ['submit', 'button', 'reset', 'image'].includes(inputType);
     let role = actionable.getAttribute('role');
     if (!role) {
         const map = {button: 'button', a: 'link', input: 'textbox',
             select: 'combobox', textarea: 'textbox'};
-        role = map[tag] || null;
+        role = inputButton ? 'button' : (map[tag] || null);
         if (tag === 'a' && !actionable.getAttribute('href')) role = null;
     }
     const fieldLabel = """
     + _FIELD_LABEL_JS
     + r""";
     let name = actionable.getAttribute('aria-label');
-    if (!name) name = fieldLabel(actionable);
+    if (!name && inputButton) {
+        name = (actionable.getAttribute(inputType === 'image' ? 'alt' : 'value') ||
+            '').replace(/\s+/g, ' ').trim() || null;
+    }
+    if (!name && !inputButton) name = fieldLabel(actionable);
     if (!name) {
         const text = (actionable.textContent || '').replace(/\s+/g, ' ').trim();
         name = text ? text.slice(0, 120) : null;
@@ -1109,6 +1948,82 @@ _FRAME_SELECTOR_JS = r"""(el) => {
     }
     return null;
 }"""
+
+# The active modal dialog holding the element under a viewport point. Walks the
+# hit-tested chain from the top document down through same-origin frames; the
+# first dialog met is the outermost one, and hit testing already follows the
+# stacking order, so a dialog painted over another wins. The box is the
+# dialog's first element (from the dialog down toward the hit) that does not
+# cover the viewport, so a Bootstrap ``.modal`` overlay yields its
+# ``.modal-dialog``. Answers ``{status: "dialog", box}``, ``{status: "none"}``,
+# or ``{status: "unknown"}`` when a frame on the chain is cross-origin or
+# transformed and the chain cannot be followed.
+_DIALOG_AT_JS = r"""([x, y]) => {
+    // Modal dialogs only: a popover or date picker with role="dialog" leaves
+    // the page behind live, and its rows stay identity evidence.
+    const SELECTOR = 'dialog:modal, [aria-modal="true"], [role="alertdialog"], ' +
+        '.modal.show';
+    const visible = (el, win) => {
+        const style = win.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        if (parseFloat(style.opacity) < 0.05) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+    };
+    let doc = document;
+    let win = window;
+    let ox = 0, oy = 0;
+    let px = x, py = y;
+    for (let depth = 0; depth < 9; depth++) {
+        const hit = doc.elementFromPoint(px, py);
+        if (!hit) return {status: 'none'};
+        const dialog = hit.closest(SELECTOR);
+        if (dialog && visible(dialog, win)) {
+            const chain = [];
+            for (let node = hit; node; node = node.parentElement) {
+                chain.push(node);
+                if (node === dialog) break;
+            }
+            const vw = win.innerWidth, vh = win.innerHeight;
+            let box = null;
+            for (let i = chain.length - 1; i >= 0; i--) {
+                const r = chain[i].getBoundingClientRect();
+                if (r.width <= 0 || r.height <= 0) continue;
+                if (r.width >= 0.95 * vw && r.height >= 0.95 * vh) continue;
+                box = r;
+                break;
+            }
+            if (!box) box = dialog.getBoundingClientRect();
+            const left = Math.max(0, box.left), top = Math.max(0, box.top);
+            const right = Math.min(vw, box.right), bottom = Math.min(vh, box.bottom);
+            if (right <= left || bottom <= top) return {status: 'unknown'};
+            return {status: 'dialog', box: [
+                Math.floor(left + ox), Math.floor(top + oy),
+                Math.ceil(right - left), Math.ceil(bottom - top),
+            ]};
+        }
+        const tag = hit.localName;
+        if (tag !== 'iframe' && tag !== 'frame') return {status: 'none'};
+        let child;
+        try { child = hit.contentDocument; } catch (_) { child = null; }
+        if (!child || !hit.contentWindow) return {status: 'unknown'};
+        const r = hit.getBoundingClientRect();
+        if (!(hit.offsetWidth > 0 && hit.offsetHeight > 0)) return {status: 'unknown'};
+        if (Math.abs(r.width / hit.offsetWidth - 1) > 0.01 ||
+                Math.abs(r.height / hit.offsetHeight - 1) > 0.01) {
+            return {status: 'unknown'};
+        }
+        const style = win.getComputedStyle(hit);
+        const dx = r.left + hit.clientLeft + (parseFloat(style.paddingLeft) || 0);
+        const dy = r.top + hit.clientTop + (parseFloat(style.paddingTop) || 0);
+        ox += dx; oy += dy;
+        px -= dx; py -= dy;
+        doc = child;
+        win = hit.contentWindow;
+    }
+    return {status: 'unknown'};
+}"""
+
 
 _PROJECT_FRAME_POINT_JS = r"""(el, point) => {
     const [px, py] = point;
@@ -1215,11 +2130,16 @@ class PlaywrightBackend:
         closed_page_frame: bool = False,
         bring_to_front_before_capture: bool = False,
         native_fill: Optional[bool] = None,
+        ws_guard: Optional[str] = None,
     ) -> None:
         """Wrap an existing Playwright page.
 
         Args:
             page: A Playwright page.
+            ws_guard: What :func:`prepare_ws_guard` returned for the page's
+                context (kept for callers; the backend looks the guard up on
+                the context, or prepares it). Documents opened before it was
+                prepared can't hold a create-form save.
             native_fill: Insert typed text in one call when the focused
                 element is an ordinary text field. Off by default; the
                 ``fast`` speed profile (``runtime/speed.py``) turns it on
@@ -1292,7 +2212,34 @@ class PlaywrightBackend:
         # Fields this backend typed into, kept page-side per document (element
         # references only) for submit bindings. A new backend starts empty.
         self._fill_store_key = f"__oaflow_filled_{uuid.uuid4().hex}"
+        self._fill_value_slot = f"__oaflow_filled_values_{uuid.uuid4().hex}"
+        self._form_wire: Any = None
+        # The page-side guard (see _arm_wire_check): one per browser context,
+        # kept in each document under a private key, installed by an init
+        # script so documents loaded from now on are guarded from their
+        # start. A page opened before it (``launch`` and the CLI prepare
+        # theirs first) can't hold a save.
+        (
+            self._ws_guard_key,
+            self._ws_guard_proof,
+            self._ws_guard_late,
+        ) = _ws_guard_secrets(self.page)
+        # The current hold's id and the secret that ends it (its hash goes
+        # to the page with the hold; the secret only when the hold ends).
+        self._ws_hold: Optional[str] = None
+        self._ws_release = ""
+        self._ws_commitment = ""
+        self._ws_hold_script: Any = None
+        self._held_pages: list[tuple[Any, Callable[[Any], None]]] = []
+        try:
+            # A message that still reaches the wire from this page's
+            # WebSockets while a save is held is reported.
+            self.page.on("websocket", self._watch_websocket)
+        except Exception:  # noqa: BLE001 - a page stand-in without events
+            pass
         self._structural_tokens: dict[str, _StructuralGuard] = {}
+        self._native_select_captures: dict[str, _NativeSelectBinding] = {}
+        self._native_selected_proof: Optional[_NativeSelectBinding] = None
         self._guarded_coordinate: Optional[_CoordinateGuard] = None
         # One-shot expectation that the next click closes this page surface
         # (Step.closes_surface; see expect_page_close).
@@ -1772,6 +2719,43 @@ class PlaywrightBackend:
             return None
         return result or None
 
+    def dialog_region_at(
+        self, x: int, y: int
+    ) -> tuple[str, Optional[tuple[int, int, int, int]]]:
+        """The box of the active dialog holding viewport pixel (x, y).
+
+        Returns ``("dialog", (x, y, w, h))`` when the element under the point
+        sits in an open modal dialog (a modal ``dialog``, ``aria-modal``, an
+        ``alertdialog``, or a shown Bootstrap modal), the outermost one along the frame
+        chain; ``("none", None)`` when the chain was followed and no dialog
+        holds the point; ``("unknown", None)`` when it could not be followed
+        (a cross-origin or transformed frame, an evaluation error). Callers
+        that need a dialog treat ``unknown`` as a failed check. Never raises.
+        """
+        try:
+            result = self.page.evaluate(_DIALOG_AT_JS, [int(x), int(y)])
+        except Exception:
+            return ("unknown", None)
+        if not isinstance(result, dict):
+            return ("unknown", None)
+        status = result.get("status")
+        if status == "none":
+            return ("none", None)
+        box = result.get("box")
+        if (
+            status == "dialog"
+            and isinstance(box, list)
+            and len(box) == 4
+            and all(isinstance(v, (int, float)) for v in box)
+            and box[2] > 0
+            and box[3] > 0
+        ):
+            bx, by, bw, bh = (int(v) for v in box)
+            if not (bx <= int(x) < bx + bw and by <= int(y) < by + bh):
+                return ("unknown", None)
+            return ("dialog", (bx, by, bw, bh))
+        return ("unknown", None)
+
     def identity_candidates_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
         """Census of the rows that show the same record identity as (x, y).
 
@@ -1859,6 +2843,63 @@ class PlaywrightBackend:
         )
         return result if isinstance(result, bool) else None
 
+    def focus_identity(self) -> Optional[dict[str, Any]]:
+        """Who has the focus: its testid, id, role and name, and how many share them.
+
+        For the ``focus_on`` postcondition. ``testid_count`` / ``id_count``
+        count the elements with the same ``data-testid`` / ``id`` in the
+        focused element's document; ``role_name_count`` counts the elements
+        with the same role and accessible name on the page (Playwright's own
+        accessibility tree, as replay resolves a role and a name). Role and
+        name are read only in the top document. ``active_option`` is whether
+        an option of the focused control is active: its
+        ``aria-activedescendant`` names an element, or the listbox it
+        controls has an ``aria-selected`` option. ``{"none": True}`` when
+        nothing has the focus; None when it can't be read.
+        """
+
+        frame_path: list[str] = []
+        info = self._focused_element_call(_FOCUS_IDENTITY_JS, frame_path_out=frame_path)
+        if not isinstance(info, dict) or info.get("unreadable"):
+            return None
+        if info.get("none"):
+            return {"none": True}
+        role: Optional[str] = None
+        name: Optional[str] = None
+        role_name_count = 0
+        if info.get("top"):
+            try:
+                snapshot = self.page.locator(":focus").aria_snapshot(timeout=1000)
+            except Exception:  # noqa: BLE001 - no snapshot: no role and name
+                snapshot = ""
+            first = snapshot.splitlines()[0] if snapshot else ""
+            match = _ARIA_LINE.match(first)
+            if match:
+                role = match.group(1)
+                name = (match.group(2) or "").replace('\\"', '"').strip() or None
+            if role and name:
+                try:
+                    role_name_count = self.page.get_by_role(
+                        role,  # type: ignore[arg-type]
+                        name=name,
+                        exact=True,
+                    ).count()
+                except Exception:  # noqa: BLE001 - uncountable is not unique
+                    role_name_count = 0
+        return {
+            "none": False,
+            "tag": info.get("tag"),
+            "testid": info.get("testid"),
+            "testid_count": int(info.get("testid_count") or 0),
+            "id": info.get("id"),
+            "id_count": int(info.get("id_count") or 0),
+            "role": role,
+            "name": name,
+            "role_name_count": role_name_count,
+            "active_option": info.get("active_option") is True,
+            "frame_path": list(frame_path),
+        }
+
     def element_texts(
         self, selector: str, frame_path: tuple[str, ...] = ()
     ) -> Optional[list[str]]:
@@ -1929,12 +2970,450 @@ class PlaywrightBackend:
             _REGISTER_FILLED_FIELD_JS, arg=self._fill_store_key, with_arg=True
         )
 
+    def _snapshot_focused_field(self, typed: str) -> None:
+        """Remember what the focused field holds now that ``typed`` is in,
+        and whether that is exactly ``typed``.
+
+        A create-new form's identity check compares each filled field with
+        this snapshot before the save. A field with no snapshot, or one that
+        did not end up holding exactly what was typed, counts as changed, so
+        a failure here makes that check refuse: the safe direction.
+        """
+
+        self._focused_element_call(
+            _SNAPSHOT_FILLED_VALUE_JS,
+            arg={"key": self._fill_value_slot, "typed": typed},
+            with_arg=True,
+        )
+
+    def form_identity_at(self, x: int, y: int, identity: FormIdentity) -> Optional[str]:
+        """Check a create-new form's identity for the control at a point.
+
+        Returns None when the control is still the submit button of the
+        demonstrated form (same address, method and set of fields), the form
+        owns exactly the fields this run typed into, each holding exactly what
+        the run typed, and every other field holds its demonstrated value.
+        Then it arms a one-shot guard that cancels any other submit during the
+        click (:meth:`form_submit_guard_refusal` reports it). Otherwise the
+        reason, in plain words, including when the page can't be read.
+        """
+
+        late = self.cancel_form_submit_guard()
+        if late is not None:
+            return f"after the previous save, {late}; that submission was cancelled"
+        try:
+            point = self._frame_point(int(x), int(y))
+            if point is None:
+                return "the resolved point has no readable page"
+            raw = point.scope.evaluate(
+                _FORM_IDENTITY_AT_JS,
+                {
+                    "x": point.x,
+                    "y": point.y,
+                    "fillKey": self._fill_store_key,
+                    "valueKey": self._fill_value_slot,
+                },
+            )
+            if not isinstance(raw, dict):
+                return "no control at the resolved point"
+            observation = observation_from_page(raw.get("observation"))
+            values = form_values_from_page(raw.get("observation"))
+            changed = int(raw.get("changed", -1))
+        except Exception:
+            return "could not read the form at the resolved point"
+        if changed < 0:
+            return "could not read the form's field values"
+        reason = verify_form_identity(
+            identity, observation, changed_fields=changed, values=values
+        )
+        if reason is not None:
+            return reason
+        try:
+            expected = point.scope.evaluate(
+                _FORM_EXPECTED_JS,
+                {"x": point.x, "y": point.y, "exempt": list(identity.exempt)},
+            )
+        except Exception:
+            expected = None
+        if not isinstance(expected, dict):
+            return "could not read what the form would send"
+        return self._arm_wire_check(expected_submission(expected, identity.exempt))
+
+    # -- the wire check (openadapt_flow.wire_check) --------------------------
+
+    def _arm_wire_check(self, submission: ExpectedSubmission) -> Optional[str]:
+        """Hold the save's request at the network to the checked form.
+
+        Until it is disarmed, every write request from any page of this
+        browser context (a popup or new tab included), and a GET navigation
+        to the form's address, goes through a
+        :class:`~openadapt_flow.wire_check.WireCheck`: the checked submission
+        goes once; anything else is aborted before it is sent. Connections
+        that don't go through those routes are held in the page by a guard
+        installed on the context (:func:`prepare_ws_guard`) that runs
+        before any page script in every document: a WebSocket,
+        WebTransport, RTCPeerConnection, Worker or SharedWorker constructed
+        meanwhile is refused at construction, so it is never created, and a
+        message sent on a WebSocket or RTCDataChannel already open is
+        dropped; each is reported. The page-side hold is set before the
+        click and released only when the outcome has been read
+        (:meth:`_disarm_wire_check`). A save is refused before the click
+        when a document on the page loaded before the guard (its scripts
+        may hold the browser's own constructors), when the guard can't be
+        kept in a frame, and when a dedicated worker runs (its WebSockets
+        skip the guard); a worker that still starts is reported. Not held:
+        a WebTransport session's streams opened before the hold, and a
+        shared worker started before it.
+        A service worker's requests skip routes, so a page a service
+        worker controls is refused before the click (the runner's contexts
+        block service workers), and one that starts meanwhile is reported.
+        Returns why the save can't be held, or None once it is.
+        """
+
+        self._disarm_wire_check()
+        context = self.page.context
+        try:
+            controlled = bool(context.service_workers) or bool(
+                self.page.evaluate(
+                    "() => !!(navigator.serviceWorker && navigator.serviceWorker.controller)"
+                )
+            )
+        except Exception:  # noqa: BLE001
+            return "could not tell whether a service worker controls the page"
+        if controlled:
+            return (
+                "a service worker runs on this page, and its requests can't be "
+                "checked; run with service workers blocked"
+            )
+        try:
+            pages = list(context.pages)
+            workers = any(page.workers for page in pages)
+        except Exception:  # noqa: BLE001
+            return "could not tell whether a worker runs on the page"
+        if workers:
+            # A worker's WebSockets skip the page's guard and its routes.
+            return "a worker runs on this page, and its WebSockets can't be held"
+        check = WireCheck(submission=submission)
+
+        def handler(route: Any) -> None:
+            check.handle(route, proceed=route.fallback)
+
+        # What the backend saw beside the requests it aborted.
+        notes: list[str] = []
+
+        def on_worker(_worker: Any) -> None:
+            notes.append(
+                "a service worker started while the save was held, and its "
+                "requests can't be checked"
+            )
+
+        def on_page_worker(_worker: Any) -> None:
+            # The page-side guard refuses new workers; one that still
+            # started is reported.
+            notes.append(
+                "a worker started while the save was held, and its "
+                "WebSockets can't be held"
+            )
+
+        context.route("**/*", handler)
+        context.on("serviceworker", on_worker)
+        for page in pages:
+            try:
+                page.on("worker", on_page_worker)
+            except Exception:  # noqa: BLE001
+                continue
+            self._held_pages.append((page, on_page_worker))
+        self._form_wire = (handler, check, on_worker, notes)
+        # Hold the page side: documents loaded from now on start held, and
+        # every open document is held now. The page decides at construction
+        # time, so no socket's fate depends on when Python services it.
+        hold = uuid.uuid4().hex
+        self._ws_hold = hold
+        self._ws_release = uuid.uuid4().hex + uuid.uuid4().hex
+        commitment = hashlib.sha256(self._ws_release.encode()).hexdigest()
+        self._ws_commitment = commitment
+        try:
+            self._ws_hold_script = context.add_init_script(
+                _ws_guard_call(
+                    self._ws_guard_key, None, False, "armed", hold, commitment
+                )
+            )
+        except Exception:  # noqa: BLE001
+            self._disarm_wire_check()
+            return "could not hold the page's WebSockets"
+        (_counts, late), unheld = self._ws_guard_frames("hold", commitment, on=True)
+        if self._ws_guard_tampered:
+            self._disarm_wire_check()
+            return (
+                "a page answered for the WebSocket guard, so saves in this "
+                "browser can't be held"
+            )
+        if unheld:
+            self._disarm_wire_check()
+            return (
+                "could not hold the WebSockets of a frame on the page, so "
+                "the save can't be held"
+            )
+        if late:
+            # Its scripts ran before the guard and may hold the browser's own
+            # WebSocket, Worker or send: nothing here can stop those.
+            self._disarm_wire_check()
+            return (
+                "the page loaded before the WebSocket guard was installed, so "
+                "the save can't be held; open the page after the backend "
+                "exists (reload it)"
+            )
+        return None
+
+    @property
+    def _ws_guard_tampered(self) -> bool:
+        """Whether a page on this context answered for the guard. The
+        secret may have reached page code, so no save on the context can be
+        held from then on."""
+
+        try:
+            return getattr(self.page.context, "_oaflow_ws_guard_tampered", 0) is True
+        except Exception:  # noqa: BLE001 - the context is gone
+            return True
+
+    @_ws_guard_tampered.setter
+    def _ws_guard_tampered(self, value: bool) -> None:
+        try:
+            self.page.context._oaflow_ws_guard_tampered = bool(value)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _ws_guard_frames(
+        self, op: str, extra: str = "", *, on: bool
+    ) -> tuple[tuple[tuple[int, int, int], int], int]:
+        """Run ``op`` on the page-side guard for the current hold in every
+        frame of every page of this context (installing the guard where the
+        document predates it). Returns what it refused for the hold
+        (sockets, workers, messages), how many documents were not guarded
+        from their start, and how many frames it could not reach. ``on`` is
+        whether the hold should be on afterwards.
+
+        Each answer is checked against the guard's signature over the
+        nonce, the operation and the result. One that fails, or that names a
+        document already seen in this pass (an answer passed on from
+        another document's guard), means something else answered for the
+        guard, and no save on this browser is held from then on."""
+
+        hold = self._ws_hold or ""
+        sockets = workers = sends = late = unreached = 0
+        docs: set[str] = set()
+        try:
+            pages = list(self.page.context.pages)
+        except Exception:  # noqa: BLE001 - the context is gone
+            return ((0, 0, 0), 0), 1
+        for page in pages:
+            try:
+                frames = list(page.frames)
+            except Exception:  # noqa: BLE001
+                unreached += 1
+                continue
+            for frame in frames:
+                nonce = uuid.uuid4().hex
+                key = json.dumps(self._ws_guard_key)
+                call = _ws_guard_call(
+                    self._ws_guard_key,
+                    self._ws_guard_late,
+                    False,
+                    op,
+                    hold,
+                    extra,
+                    nonce,
+                )
+                try:
+                    had, answer = frame.evaluate(
+                        f"(() => {{ const had = {key} in globalThis; "
+                        f"return [had, {call}]; }})()"
+                    )
+                except Exception:  # noqa: BLE001 - detached or closing
+                    unreached += 1
+                    continue
+                if not (
+                    isinstance(answer, list)
+                    and len(answer) == 7
+                    and all(isinstance(n, int) and n >= 0 for n in answer[:3])
+                    and isinstance(answer[3], bool)
+                    and isinstance(answer[4], str)
+                    and isinstance(answer[5], bool)
+                    and isinstance(answer[6], str)
+                ):
+                    if had:
+                        # Something else is under the guard's name.
+                        self._ws_guard_tampered = True
+                    unreached += 1
+                    continue
+                c0, c1, c2, early, doc, is_on, mac = answer
+                secret = self._ws_guard_proof if early else self._ws_guard_late
+                # The hold must be bound to Python's commitment, not one the
+                # page swapped in or took first.
+                commitment = self._ws_commitment if is_on else ""
+                signed = (
+                    f"{secret}|{nonce}|{doc}|{op}|{hold}|{int(is_on)}|"
+                    f"{commitment}|{c0},{c1},{c2}|{int(early)}"
+                )
+                relayed = doc in docs
+                docs.add(doc)
+                if relayed or mac != hashlib.sha256(signed.encode()).hexdigest():
+                    self._ws_guard_tampered = True
+                    late += 1
+                    continue
+                sockets += c0
+                workers += c1
+                sends += c2
+                if not early:
+                    late += 1
+                elif is_on != on:
+                    unreached += 1
+        return ((sockets, workers, sends), late), unreached
+
+    def _ws_guard_notes(self) -> list[str]:
+        ((sockets, workers, sends), _late), _unreached = self._ws_guard_frames(
+            "read", on=True
+        )
+        notes = []
+        if sockets:
+            notes.append(
+                "the page opened a connection (WebSocket, WebTransport or "
+                "WebRTC) while the save was held; it was refused before it "
+                "connected"
+            )
+        if workers:
+            notes.append(
+                "the page started a worker while the save was held; it was "
+                "refused before it ran"
+            )
+        if sends:
+            notes.append(
+                "the page sent a WebSocket or data channel message while the "
+                "save was held; it was not sent"
+            )
+        return notes
+
+    def _release_ws_guard(self) -> None:
+        hold, self._ws_hold = self._ws_hold, None
+        handle, self._ws_hold_script = self._ws_hold_script, None
+        if hold is None:
+            return
+        context = self.page.context
+        dispose = getattr(handle, "dispose", None)
+        try:
+            if callable(dispose):
+                dispose()
+            else:
+                # Playwright before 1.5x can't remove an init script: a
+                # later one marks this hold released for new documents.
+                context.add_init_script(
+                    _ws_guard_call(
+                        self._ws_guard_key,
+                        None,
+                        False,
+                        "released",
+                        hold,
+                        self._ws_release,
+                    )
+                )
+        except Exception:  # noqa: BLE001 - the context is gone
+            pass
+        self._ws_hold = hold  # the release names it
+        self._ws_guard_frames("release", self._ws_release, on=False)
+        self._ws_hold, self._ws_release, self._ws_commitment = None, "", ""
+
+    def _watch_websocket(self, ws: Any) -> None:
+        def on_frame(_payload: Any) -> None:
+            wire = self._form_wire
+            if wire is not None:
+                wire[3].append(
+                    "the page sent a WebSocket message while the save was held"
+                )
+
+        ws.on("framesent", on_frame)
+
+    def _disarm_wire_check(self) -> list[str]:
+        wire = self._form_wire
+        if wire is None:
+            return []
+        handler, check, on_worker, notes = wire
+        reasons = _wire_reasons(check, notes + self._ws_guard_notes())
+        # The page decides at construction, so releasing it is the last
+        # step that can matter: nothing waits on Python to refuse a socket.
+        self._release_ws_guard()
+        held_pages, self._held_pages = self._held_pages, []
+        for page, listener in held_pages:
+            try:
+                page.remove_listener("worker", listener)
+            except Exception:  # noqa: BLE001 - the page is gone
+                pass
+        context = self.page.context
+        try:
+            context.unroute("**/*", handler)
+            context.remove_listener("serviceworker", on_worker)
+        except Exception:  # noqa: BLE001 - the context is gone
+            pass
+        self._form_wire = None
+        return reasons
+
+    def wait_form_submit_guard(self, ms: int) -> None:
+        """Let the page and the wire check run for ``ms`` milliseconds."""
+
+        try:
+            self.page.wait_for_timeout(ms)
+        except Exception:  # noqa: BLE001 - the page is gone
+            time.sleep(ms / 1000)
+
+    def form_submit_guard_refusal(self, *, disarm: bool = False) -> Optional[str]:
+        """Why the wire check refused a request so far, or None. ``disarm``
+        also removes it."""
+
+        wire = self._form_wire
+        if wire is None:
+            return None
+        if disarm:
+            reasons = self._disarm_wire_check()
+        else:
+            reasons = _wire_reasons(wire[1], wire[3] + self._ws_guard_notes())
+        return "; ".join(dict.fromkeys(reasons)) if reasons else None
+
+    @property
+    def form_submit_guard_armed(self) -> bool:
+        return self._form_wire is not None
+
+    def cancel_form_submit_guard(self) -> Optional[str]:
+        """Read the wire check's last refusals and disarm it."""
+
+        return self.form_submit_guard_refusal(disarm=True)
+
+    def form_values_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """RECORD-TIME: the values of the form's fields the demonstration did
+        not type into, for the control at a point (see
+        :func:`~openadapt_flow.submit_binding.form_values_record`), or None.
+        Plaintext for the recording only; the compiler keeps salted digests.
+        Never raises.
+        """
+
+        try:
+            raw = self._observe_submit_binding(x, y)
+            values = form_values_from_page(raw.get("observation")) if raw else None
+        except Exception:
+            return None
+        return form_values_record(values) if values is not None else None
+
     def _focused_element_call(
-        self, js: str, *, arg: Any = None, with_arg: bool = False
+        self,
+        js: str,
+        *,
+        arg: Any = None,
+        with_arg: bool = False,
+        frame_path_out: Optional[list[str]] = None,
     ) -> Any:
         """Evaluate ``js`` on the exactly bound focused element (see above).
 
         Returns the raw result, or None on any frame mismatch or failure.
+        ``frame_path_out``, when given, receives the frame chain the focused
+        element is in (outermost first; empty in the top document).
         """
 
         scope: Any = self.page
@@ -1955,6 +3434,8 @@ class PlaywrightBackend:
                             scope, tuple(frame_path), box
                         ):
                             return None
+                        if frame_path_out is not None:
+                            frame_path_out[:] = frame_path
                         if with_arg:
                             return focused.evaluate(js, arg)
                         return focused.evaluate(js)
@@ -2180,9 +3661,12 @@ class PlaywrightBackend:
         """Locate ``locator``'s element in the live DOM; return its center.
 
         Resolves by the recorded ``selector`` first, else by ``role`` +
-        ``name``. Requires a UNIQUE, on-screen, UNOCCLUDED match. A missing,
-        off-viewport, or covered element returns None; ambiguity is an explicit
-        structural refusal and cannot fall through to a weaker pixel match.
+        ``name``. Requires a UNIQUE, on-screen, UNOCCLUDED match. A missing
+        element (or a transparent one, ``opacity: 0``) returns None.
+        Ambiguity raises ``StructuralResolutionRefused``; one candidate that
+        is covered, off-viewport, zero-sized or outside its recorded frame
+        chain raises ``StructuralElementNotActionable``. Neither may fall
+        through to a weaker pixel match.
         The returned handle binds an opaque one-shot token to the exact Element
         and its enclosing-row identity for same-operation delivery.
         """
@@ -2213,18 +3697,16 @@ class PlaywrightBackend:
                     },
                 )
                 box = loc.bounding_box()
-                if (
-                    not isinstance(observed, dict)
-                    or not isinstance(box, dict)
-                    or not self._frame_chain_matches(
-                        scope, tuple(locator.frame_path or ()), box
-                    )
-                ):
+                if not isinstance(box, dict):
                     self._cleanup_guard(token, scope)
-                    return None
+                    raise StructuralElementNotActionable(
+                        "DOM candidate is not rendered or has no bounding box"
+                    )
                 if float(box["width"]) <= 0 or float(box["height"]) <= 0:
                     self._cleanup_guard(token, scope)
-                    return None
+                    raise StructuralElementNotActionable(
+                        f"DOM candidate has non-positive dimensions: {box['width']}x{box['height']}"
+                    )
                 point = (
                     int(round(float(box["x"]) + float(box["width"]) / 2)),
                     int(round(float(box["y"]) + float(box["height"]) / 2)),
@@ -2232,7 +3714,23 @@ class PlaywrightBackend:
                 vw, vh = self.viewport
                 if not (0 <= point[0] < vw and 0 <= point[1] < vh):
                     self._cleanup_guard(token, scope)
+                    raise StructuralElementNotActionable(
+                        f"DOM candidate center is outside the viewport: point={point}, viewport=({vw}, {vh})"
+                    )
+                if not isinstance(observed, dict) and loc.evaluate(_TRANSPARENT_JS):
+                    # A transparent control laid over its own visible box (a
+                    # styled checkbox, radio, switch or file input) never
+                    # binds, and can't be shown covered either. It keeps the
+                    # visual ladder, as before.
+                    self._cleanup_guard(token, scope)
                     return None
+                if not isinstance(observed, dict) or not self._frame_chain_matches(
+                    scope, tuple(locator.frame_path or ()), box
+                ):
+                    self._cleanup_guard(token, scope)
+                    raise StructuralElementNotActionable(
+                        "DOM candidate is covered or outside its recorded frame chain"
+                    )
                 # The handle's region is the target's VISIBLE box: its
                 # bounding box clipped to the viewport. A control that runs a
                 # few pixels past the viewport edge (a full-width section
@@ -2247,7 +3745,9 @@ class PlaywrightBackend:
                 x1, y1 = min(vw, bx + bw), min(vh, by + bh)
                 if x1 <= x0 or y1 <= y0:
                     self._cleanup_guard(token, scope)
-                    return None
+                    raise StructuralElementNotActionable(
+                        "DOM candidate visible region clipped to viewport is empty"
+                    )
                 region = (x0, y0, x1 - x0, y1 - y0)
             except Exception:
                 self._cleanup_guard(token, scope)
@@ -2404,6 +3904,321 @@ class PlaywrightBackend:
             )
         except Exception:
             return False
+
+    def _native_select_args(self, binding: _NativeSelectBinding) -> dict[str, Any]:
+        guard = binding.guard
+        return {
+            "storeKey": self._structural_store_key,
+            "tokenAttribute": self._token_attribute(guard.token),
+            "token": guard.token,
+            "selector": binding.selector,
+            "framePath": list(guard.frame_path),
+            "context": guard.context,
+            "options": binding.options,
+            "value": binding.value,
+            "label": binding.label,
+            "fillKey": self._fill_store_key,
+            "valueKey": self._fill_value_slot,
+        }
+
+    def begin_native_select(
+        self, x: Optional[int] = None, y: Optional[int] = None
+    ) -> Optional[str]:
+        """Retain a focused select, or the exact unfocused select at a point."""
+
+        token = uuid.uuid4().hex
+        frame_path: list[str] = []
+        args: dict[str, Any] = {
+            "storeKey": self._structural_store_key,
+            "tokenAttribute": self._token_attribute(token),
+            "token": token,
+            "fillKey": self._fill_store_key,
+        }
+        if x is None and y is None:
+            observed = self._focused_element_call(
+                _NATIVE_SELECT_CAPTURE_JS,
+                arg=args,
+                with_arg=True,
+                frame_path_out=frame_path,
+            )
+        elif x is not None and y is not None:
+            point = self._frame_point(x, y)
+            if point is None:
+                return None
+            frame_path = list(point.frame_path)
+            try:
+                observed = point.scope.evaluate(
+                    _NATIVE_SELECT_CAPTURE_AT_JS, {**args, "x": point.x, "y": point.y}
+                )
+            except Exception:
+                observed = None
+        else:
+            return None
+        retained = False
+        try:
+            if not isinstance(observed, dict):
+                return None
+            scope = self._resolve_scope(tuple(frame_path))
+            if scope is None:
+                return None
+            binding = _NativeSelectBinding(
+                guard=_StructuralGuard(token, scope, tuple(frame_path)),
+                selector=observed["selector"],
+                options=observed["options"],
+                value=observed["value"],
+                label=observed["label"],
+            )
+            # Bound retention even if a recorder abandons a pending pair.
+            if len(self._native_select_captures) >= 16:
+                self.cancel_native_select(next(iter(self._native_select_captures)))
+            self._native_select_captures[token] = binding
+            retained = True
+            return token
+        except Exception:
+            return None
+        finally:
+            if not retained:
+                # A frame selector can become ambiguous after the page-local
+                # bind. Clean this token even if its original scope no longer
+                # resolves; navigation itself disposes detached documents.
+                try:
+                    for frame in self.page.frames:
+                        self._cleanup_guard(token, frame)
+                except Exception:
+                    pass
+
+    def begin_native_select_at(self, x: int, y: int) -> Optional[str]:
+        """Observe an exact native control before a recorded pointer gesture."""
+
+        return self.begin_native_select(x, y)
+
+    def continue_native_select(self, token: str) -> bool:
+        """Prove the recorded click retained control, census and selected value."""
+
+        binding = self._native_select_captures.get(token)
+        if binding is None:
+            return False
+        guard = binding.guard
+        try:
+            loc = self._token_locator(guard.token, guard.scope)
+            if loc.count() != 1:
+                return False
+            box = loc.bounding_box()
+            if not isinstance(box, dict) or not self._frame_chain_matches(
+                guard.scope, guard.frame_path, box
+            ):
+                return False
+            return bool(
+                loc.evaluate(
+                    _NATIVE_SELECT_CONTINUE_JS, self._native_select_args(binding)
+                )
+            )
+        except Exception:
+            return False
+
+    def cancel_native_select(self, token: str) -> None:
+        """Discard one recording observation without input."""
+
+        binding = self._native_select_captures.pop(token, None)
+        if binding is not None:
+            self._cleanup_guard(binding.guard.token, binding.guard.scope)
+
+    def finish_native_select(self, token: str) -> Optional[dict[str, Any]]:
+        """Read the same control after Enter; changed controls/censuses refuse."""
+
+        binding = self._native_select_captures.pop(token, None)
+        if binding is None:
+            return None
+        guard = binding.guard
+        value_before, label_before = binding.value, binding.label
+        try:
+            loc = self._token_locator(guard.token, guard.scope)
+            if loc.count() != 1:
+                return None
+            box = loc.bounding_box()
+            if not isinstance(box, dict) or not self._frame_chain_matches(
+                guard.scope, guard.frame_path, box
+            ):
+                return None
+            observed = loc.evaluate(
+                _NATIVE_SELECT_CURRENT_JS, self._native_select_args(binding)
+            )
+            if not isinstance(observed, dict):
+                return None
+            # Apply the same duplicate/disabled/label rules as replay.
+            contract = NativeSelectContract.model_validate(observed)
+            if (
+                not isinstance(value_before, str)
+                or not isinstance(label_before, str)
+                or contract.value == value_before
+            ):
+                return None
+            binding.value, binding.label = contract.value, contract.label
+            observed = loc.evaluate(
+                _NATIVE_SELECT_COMMIT_OBSERVATION_JS, self._native_select_args(binding)
+            )
+            if not isinstance(observed, dict):
+                return None
+            return {
+                **observed,
+                "value_before": value_before,
+                "label_before": label_before,
+                "selector": binding.selector,
+                "frame_path": list(guard.frame_path),
+            }
+        except Exception:
+            return None
+        finally:
+            self._cleanup_guard(guard.token, guard.scope)
+
+    def select_native_option_guarded(
+        self,
+        contract: NativeSelectContract,
+        *,
+        locator: StructuralLocator,
+        handle: StructuralHandle,
+    ) -> ActionDeliveryReceipt:
+        """Select one exact option using a consumed structural resolution."""
+
+        previous = self._native_selected_proof
+        self._native_selected_proof = None
+        if previous is not None:
+            self._cleanup_guard(previous.guard.token, previous.guard.scope)
+        fingerprint = handle.target_fingerprint
+        guard = self._structural_tokens.pop(fingerprint or "", None)
+        if guard is None or not fingerprint:
+            raise StructuralResolutionRefused(
+                "native selection requires a fresh handle"
+            )
+        retain = False
+        try:
+            if not isinstance(contract, NativeSelectContract) or not locator.selector:
+                raise StructuralResolutionRefused(
+                    "native selection requires an exact contract"
+                )
+            resolved = self._locator_with_scope(locator)
+            if resolved is None:
+                raise StructuralResolutionRefused(
+                    "native selection target is unavailable"
+                )
+            scope, loc = resolved
+            if (
+                scope != guard.scope
+                or tuple(locator.frame_path or ()) != guard.frame_path
+                or not self._context_guard_is_current(guard)
+                or loc.count() != 1
+                or not self._guard_is_current(loc, guard.token)
+            ):
+                raise StructuralResolutionRefused(
+                    "native selection target or context changed"
+                )
+            box = loc.bounding_box()
+            if not isinstance(box, dict) or not self._frame_chain_matches(
+                scope, guard.frame_path, box
+            ):
+                raise StructuralResolutionRefused(
+                    "native selection frame chain changed"
+                )
+            binding = _NativeSelectBinding(
+                guard=guard,
+                selector=locator.selector,
+                options=[option.model_dump() for option in contract.options],
+                value=contract.value,
+                label=contract.label,
+            )
+            self._assert_qualification_environment_current()
+            receipt_fingerprint = structural_resolution_fingerprint(locator, handle)
+            # The binding is independent of resolver tokens created during
+            # post-action verification. Keep it even if delivery is uncertain.
+            self._native_selected_proof = binding
+            retain = True
+            try:
+                result = loc.evaluate(
+                    _NATIVE_SELECT_DELIVER_JS, self._native_select_args(binding)
+                )
+            except Exception as exc:
+                raise ActionDeliveryUncertain(
+                    operation="guarded_dom_select",
+                    native=False,
+                    target_fingerprint=receipt_fingerprint,
+                    cause_type=type(exc).__name__,
+                ) from exc
+            status = result.get("status") if isinstance(result, dict) else None
+            if status == "refused":
+                retain = False
+                self._native_selected_proof = None
+                raise StructuralResolutionRefused(
+                    "native selection failed its atomic guard"
+                )
+            if status != "delivered":
+                raise ActionDeliveryUncertain(
+                    operation="guarded_dom_select",
+                    native=False,
+                    target_fingerprint=receipt_fingerprint,
+                    cause_type="SelectionContinuityLost",
+                )
+            return ActionDeliveryReceipt(
+                receipt_id=f"playwright-{uuid.uuid4().hex}",
+                operation="guarded_dom_select",
+                native=False,
+                target_fingerprint=receipt_fingerprint,
+                selection_value_sha256=hashlib.sha256(
+                    contract.value.encode("utf-8")
+                ).hexdigest(),
+                selection_commit_key=None,
+                delivered_at=datetime.now(timezone.utc).isoformat(),
+            )
+        except (ActionDeliveryUncertain, StructuralResolutionRefused):
+            raise
+        except Exception as exc:
+            raise StructuralResolutionRefused(
+                "native selection unavailable before dispatch"
+            ) from exc
+        finally:
+            if not retain:
+                self._cleanup_guard(guard.token, guard.scope)
+
+    def native_selected_option_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """Consume proof of the selected value on the original delivered node."""
+
+        binding = self._native_selected_proof
+        self._native_selected_proof = None
+        if binding is None:
+            return None
+        guard = binding.guard
+        try:
+            point = self._frame_point(x, y)
+            if (
+                point is None
+                or point.scope != guard.scope
+                or point.frame_path != guard.frame_path
+                or not self._context_guard_is_current(guard)
+            ):
+                return None
+            loc = self._token_locator(guard.token, guard.scope)
+            if loc.count() != 1 or not loc.evaluate(
+                "(el, p) => document.elementFromPoint(p[0], p[1]) === el",
+                [point.x, point.y],
+            ):
+                return None
+            observed = loc.evaluate(
+                _NATIVE_SELECT_CURRENT_JS, self._native_select_args(binding)
+            )
+            if (
+                not isinstance(observed, dict)
+                or observed.get("value") != binding.value
+                or observed.get("label") != binding.label
+            ):
+                return None
+            return {
+                **observed,
+                "selector": binding.selector,
+                "frame_path": list(guard.frame_path),
+            }
+        except Exception:
+            return None
+        finally:
+            self._cleanup_guard(guard.token, guard.scope)
 
     def act_structural(
         self,
@@ -3140,13 +4955,21 @@ class PlaywrightBackend:
         """Type through the pre-identity focused-element lease."""
 
         self._register_focused_field()
-        return self._act_guarded_keyboard(
+        receipt = self._act_guarded_keyboard(
             expected_frame_sha256=expected_frame_sha256,
             operation="guarded_dom_type",
             # Keys go through the leased element itself, never the page
             # keyboard, so delivery stays bound to the checked target.
-            deliver=lambda locator: locator.press_sequentially(text, timeout=1000),
+            deliver=lambda locator: (
+                (
+                    _is_iso_date(text)
+                    and _fill_iso_date(locator.element_handle(timeout=1000), text)
+                )
+                or locator.press_sequentially(text, timeout=1000)
+            ),
         )
+        self._snapshot_focused_field(text)
+        return receipt
 
     def _handle_screenshot_frame_lifecycle(self, _frame: Any = None) -> None:
         """Advance the irreversible frame-tree generation."""
@@ -3706,11 +5529,39 @@ class PlaywrightBackend:
         except Exception:
             return False
 
+    def _focused_element_handle(self) -> Any:
+        """The focused element's handle, through frames and open shadow
+        roots, or None."""
+
+        scope: Any = self.page
+        for _depth in range(9):
+            handle = scope.evaluate_handle(_ACTIVE_ELEMENT_JS).as_element()
+            if handle is None:
+                return None
+            if handle.evaluate("e => e.localName") not in {"iframe", "frame"}:
+                return handle
+            scope = handle.content_frame()
+            if scope is None:
+                return None
+        return None
+
+    def _fill_focused_iso_date(self, text: str) -> bool:
+        if not _is_iso_date(text):
+            return False
+        try:
+            target = self._focused_element_handle()
+        except Exception:  # noqa: BLE001 - unreadable focus: type as before
+            return False
+        return target is not None and _fill_iso_date(target, text)
+
     def _deliver_text(self, text: str, per_key: Callable[[], None]) -> None:
         """Insert ``text`` at the caret in one call when the focused element
         is an ordinary text field (native fill: the field's ``input`` event
         fires, and ``change`` on blur, as for typing); otherwise ``per_key``
-        types it key by key."""
+        types it key by key. An ISO date into a native date input is set
+        with ``fill`` (see :func:`_fill_iso_date`)."""
+        if self._fill_focused_iso_date(text):
+            return
         if self.native_fill and text and self._focused_plain_text_field():
             self.page.keyboard.insert_text(text)
             return
@@ -3721,6 +5572,7 @@ class PlaywrightBackend:
         self._assert_qualification_environment_current()
         self._register_focused_field()
         self._deliver_text(text, lambda: self.page.keyboard.type(text))
+        self._snapshot_focused_field(text)
 
     def press(self, key: str) -> None:
         """Press a key or chord, e.g. ``'Enter'`` or ``'Meta+a'``."""
@@ -3782,10 +5634,14 @@ class PlaywrightBackend:
                 device_scale_factor=1,
                 record_video_dir=record_video_dir,
                 record_video_size=viewport,
+                service_workers="block",
             )
             page = context.new_page()
         else:
-            page = browser.new_page(viewport=viewport, device_scale_factor=1)
+            # No service workers: their requests would skip the wire check.
+            page = browser.new_page(
+                viewport=viewport, device_scale_factor=1, service_workers="block"
+            )
 
         def close() -> None:
             if shared is not None:
@@ -3809,8 +5665,11 @@ class PlaywrightBackend:
             except BaseException:
                 close()
                 raise
+        # Guard WebSockets before the first document loads, so no page
+        # script can keep a reference to an unguarded constructor.
+        ws_guard = prepare_ws_guard(page)
         page.goto(url)
-        backend = cls(page)
+        backend = cls(page, ws_guard=ws_guard)
         # Read by the generic web environment observer: the environment
         # digest of a headless and a headed browser differ.
         backend.headless = headless
@@ -3822,3 +5681,306 @@ from openadapt_flow.backends._browser_process import (  # noqa: E402
     _start_browser,
     shared_browser,  # noqa: F401 - re-exported
 )
+
+# The page-side guard, run (``_ws_guard_call``) at the start of every
+# document by an init script, and in every open frame when a save is held.
+# It wraps the page's WebSocket, WebTransport, RTCPeerConnection, Worker and
+# SharedWorker constructors so one constructed while the document is held is
+# refused there and never created, and it drops what is sent on a WebSocket
+# or RTCDataChannel while held. No ``prototype.constructor`` on a wrapped
+# chain leads back to the unwrapped constructor, and the wrapper's own
+# prototype is EventTarget.
+#
+# Nothing the page can reach can end a hold or answer for the guard, even a
+# page that sees every call the backend makes (Playwright evaluates through
+# the page's own ``eval``):
+#
+# * Its state lives in a closure; it is strict mode code (no ``.arguments``
+#   or ``.caller``); calls take only string arguments, and while it runs it
+#   touches only what it captured when it installed, typed arrays and
+#   operators. The page sees one non-writable, non-configurable function
+#   under ``key``; if ``key`` is already defined when it would install, it
+#   installs nothing (-1), so holding refuses.
+# * A hold comes with the SHA-256 of a secret, and only that secret ends it;
+#   Python sends the secret only to end the hold.
+# * A hold taken again under a different commitment answers -1.
+# * Every answer is signed (SHA-256 over a secret, the call's nonce, the
+#   document's name, the operation, the hold's commitment and the result)
+#   with the secret the guard was installed with and never receives again:
+#   the init script's for a document guarded from its start, another for
+#   one guarded late. An answer Python can't verify (a commitment the page
+#   swapped in included), or one that names a document twice in a pass
+#   (passed on from another document's guard), stops all holds on that
+#   browser.
+#
+# An answer is ``[sockets, workers, sends, early, document, on, signature]``
+# for the hold, or -1 when the guard can't be kept here.
+_WS_GUARD_JS = r"""(key, secret, start, op, x, extra, nonce) => {
+  'use strict';  // no function here exposes .arguments or .caller
+  const g = globalThis;
+  if (key in g) {
+    if (start) return -1;  // defined before the guard: never trust it
+    const control = g[key];
+    if (typeof control !== 'function') return -1;
+    try { return control(op, x, extra, nonce); } catch (e) { return -1; }
+  }
+  // Only the start of a document or Python's own call installs a guard.
+  if (typeof secret !== 'string') return -1;
+  // Captured now: later page changes to these don't reach the guard.
+  const construct = Reflect.construct, apply = Reflect.apply;
+  const U8 = Uint8Array, U32 = Uint32Array, I32 = Int32Array;
+  const code = String.prototype.charCodeAt;
+  const HEX = '0123456789abcdef';
+  const K = new U32([
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
+    0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+    0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
+    0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
+    0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+    0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+    0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
+    0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2]);
+  const IV = new U32([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
+  // SHA-256 of an ASCII string, as hex: typed arrays and operators only, so
+  // nothing the page can change runs while it hashes.
+  const sha = (str) => {
+    const len = str.length, total = ((len + 9 + 63) >>> 6) << 6;
+    const m = new U8(total), h = new U32(8), w = new U32(64);
+    for (let i = 0; i < len; i++) m[i] = apply(code, str, [i]) & 0xff;
+    m[len] = 0x80;
+    const bits = len * 8;
+    m[total - 4] = (bits >>> 24) & 0xff; m[total - 3] = (bits >>> 16) & 0xff;
+    m[total - 2] = (bits >>> 8) & 0xff; m[total - 1] = bits & 0xff;
+    for (let i = 0; i < 8; i++) h[i] = IV[i];
+    for (let off = 0; off < total; off += 64) {
+      for (let i = 0; i < 16; i++) {
+        const j = off + 4 * i;
+        w[i] = (m[j] << 24) | (m[j + 1] << 16) | (m[j + 2] << 8) | m[j + 3];
+      }
+      for (let i = 16; i < 64; i++) {
+        const a = w[i - 15], b = w[i - 2];
+        const s0 = ((a >>> 7) | (a << 25)) ^ ((a >>> 18) | (a << 14)) ^ (a >>> 3);
+        const s1 = ((b >>> 17) | (b << 15)) ^ ((b >>> 19) | (b << 13)) ^
+          (b >>> 10);
+        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+      }
+      let a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5],
+        q = h[6], r = h[7];
+      for (let i = 0; i < 64; i++) {
+        const S1 = ((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^
+          ((e >>> 25) | (e << 7));
+        const t1 = (r + S1 + ((e & f) ^ (~e & q)) + K[i] + w[i]) | 0;
+        const S0 = ((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^
+          ((a >>> 22) | (a << 10));
+        const t2 = (S0 + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+        r = q; q = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a;
+        a = (t1 + t2) | 0;
+      }
+      h[0] = (h[0] + a) | 0; h[1] = (h[1] + b) | 0; h[2] = (h[2] + c) | 0;
+      h[3] = (h[3] + d) | 0; h[4] = (h[4] + e) | 0; h[5] = (h[5] + f) | 0;
+      h[6] = (h[6] + q) | 0; h[7] = (h[7] + r) | 0;
+    }
+    let out = '';
+    for (let i = 0; i < 8; i++) {
+      for (let j = 28; j >= 0; j -= 4) out += HEX[(h[i] >>> j) & 15];
+    }
+    return out;
+  };
+  const define = Object.defineProperty, own = Object.getOwnPropertyNames;
+  const describe = Object.getOwnPropertyDescriptor;
+  const protoOf = Object.getPrototypeOf, setProto = Object.setPrototypeOf;
+  const hasOwn = Object.prototype.hasOwnProperty;
+  const DOMEx = g.DOMException, TypeErr = TypeError;
+  const early = start === true;
+  // Names this document in answers: an answer passed on from another
+  // document's guard shows that document's name a second time.
+  const doc = String(Math.random()).slice(2) + String(Date.now());
+  const holds = Object.create(null);
+  const counts = Object.create(null);
+  const guarded = Object.create(null);
+  const patched = [];
+  let held = 0;
+  const bump = (i) => {
+    for (const h in holds) {
+      const c = counts[h] || (counts[h] = new I32(3));
+      c[i] += 1;
+    }
+  };
+  const base = typeof g.EventTarget === 'function' ? g.EventTarget : null;
+  const stop = base ? base.prototype : Object.prototype;
+  const seen = (q) => {
+    for (let i = 0; i < patched.length; i++) if (patched[i] === q) return true;
+    return false;
+  };
+  const patchSend = (q) => {
+    if (!q || !apply(hasOwn, q, ['send']) || seen(q)) return true;
+    const send = q.send;
+    if (typeof send !== 'function') return true;
+    try {
+      define(q, 'send', {
+        value: function send_(...args) {
+          if (held > 0) { bump(2); return undefined; }
+          return apply(send, this, args);
+        }, writable: true, configurable: true, enumerable: true,
+      });
+    } catch (e) { return false; }
+    patched[patched.length] = q;
+    return true;
+  };
+  const wrap = (name, slot) => {
+    const inner = g[name];
+    if (typeof inner !== 'function' || inner === guarded[name]) return true;
+    const Guarded = {[name]: function (...args) {
+      if (!new.target) {
+        throw new TypeErr("Failed to construct '" + name + "': " +
+          "Please use the 'new' operator");
+      }
+      if (held > 0) {
+        bump(slot);
+        throw new DOMEx(
+          'A ' + name + ' cannot start while a checked save is held',
+          'SecurityError');
+      }
+      return construct(
+        inner, args, new.target === Guarded ? inner : new.target);
+    }}[name];
+    Guarded.prototype = inner.prototype;
+    if (base) setProto(Guarded, base);
+    const names = own(inner);
+    for (let i = 0; i < names.length; i++) {
+      const k = names[i];
+      if (k === 'prototype' || k === 'length' || k === 'name') continue;
+      try { define(Guarded, k, describe(inner, k)); } catch (e) { return false; }
+    }
+    // No prototype's constructor leads back to the unguarded one.
+    for (let q = inner.prototype; q && q !== stop && q !== Object.prototype;
+         q = protoOf(q)) {
+      try {
+        define(q, 'constructor', {
+          value: Guarded, writable: true, configurable: true, enumerable: false,
+        });
+      } catch (e) { return false; }
+      if (name === 'WebSocket' && !patchSend(q)) return false;
+    }
+    try {
+      define(g, name, {
+        value: Guarded, writable: true, configurable: true, enumerable: false,
+      });
+    } catch (e) { return false; }
+    guarded[name] = Guarded;
+    return true;
+  };
+  const kept = wrap('WebSocket', 0) && wrap('WebTransport', 0) &&
+    wrap('RTCPeerConnection', 0) && wrap('webkitRTCPeerConnection', 0) &&
+    wrap('Worker', 1) && wrap('SharedWorker', 1) &&
+    (!g.RTCDataChannel || patchSend(g.RTCDataChannel.prototype));
+  if (!kept) return -1;
+  const zero = new I32(3);
+  // Python's only way in. Every argument is a string, read as is (nothing
+  // on the page's prototypes runs). A hold is ended only with the secret
+  // whose hash came with it, which Python sends only to end it. The answer
+  // is signed with the secret this guard was installed with, over what it
+  // did and the nonce, so nothing else can answer for it.
+  const control = function (op, x, extra, n) {
+    if (typeof op !== 'string' || typeof x !== 'string' ||
+        typeof extra !== 'string' || typeof n !== 'string') return -1;
+    if (op === 'hold' || op === 'armed') {
+      // A hold already taken under another commitment was taken by
+      // something else: refuse, and Python stops holding on this browser.
+      if (x in holds && holds[x] !== extra) return -1;
+      if (!(x in holds)) { holds[x] = extra; held += 1; }
+      if (op === 'hold') counts[x] = new I32(3);
+    } else if (op === 'release' || op === 'released') {
+      if (x in holds && sha(extra) === holds[x]) { delete holds[x]; held -= 1; }
+    } else if (op !== 'read') {
+      return -1;
+    }
+    const c = counts[x] || zero;
+    const on = x in holds;
+    const c0 = c[0], c1 = c[1], c2 = c[2];
+    const commitment = on ? holds[x] : '';
+    if (op === 'release' && !on) delete counts[x];
+    // Signs everything the answer says and what the hold is bound to.
+    const mac = sha(secret + '|' + n + '|' + doc + '|' + op + '|' + x + '|' +
+      (on ? '1' : '0') + '|' + commitment + '|' + c0 + ',' + c1 + ',' + c2 +
+      '|' + (early ? '1' : '0'));
+    return [c0, c1, c2, early, doc, on, mac];
+  };
+  try {
+    define(g, key, {
+      value: control, writable: false, configurable: false, enumerable: false,
+    });
+  } catch (e) { return -1; }
+  return control(op, x, extra, nonce);
+}"""
+
+
+def _ws_guard_call(
+    key: str,
+    secret: Optional[str],
+    start: bool,
+    op: str,
+    hold: str = "",
+    extra: str = "",
+    nonce: str = "",
+) -> str:
+    """A call of the page-side guard as JavaScript source, every argument a
+    literal (nothing passes through the page's objects on the way in)."""
+
+    args = ", ".join(
+        json.dumps(value) for value in (key, secret, start, op, hold, extra, nonce)
+    )
+    return f"({_WS_GUARD_JS})({args})"
+
+
+def prepare_ws_guard(target: Any) -> str:
+    """Install the page-side WebSocket guard on a browser context (once) and
+    return its key. ``target`` is the context or one of its pages. Call it
+    before the context's pages load anything, as
+    :meth:`PlaywrightBackend.launch` and the CLI do: a document loaded
+    before it can't hold a create-form save. It changes nothing while no
+    save is held. Never raises: if it can't install, holding refuses."""
+
+    return _ws_guard_secrets(target)[0]
+
+
+def _ws_guard_secrets(target: Any) -> tuple[str, str, str]:
+    """The context's guard key and the secrets its guards sign answers
+    with, installing the guard on first use: ``proof`` (in the init script
+    only, so only a guard installed at a document's start has it) and
+    ``late`` (for a guard installed in a document already open)."""
+
+    context = target
+    if not hasattr(target, "new_page"):  # a page: guard its context
+        context = getattr(target, "context", None)
+    known = getattr(context, "_oaflow_ws_guard", None)
+    if (
+        isinstance(known, tuple)
+        and len(known) == 3
+        and all(isinstance(part, str) for part in known)
+    ):
+        return known
+    secrets = (
+        f"__oaflow_ws_{uuid.uuid4().hex}",
+        uuid.uuid4().hex + uuid.uuid4().hex,
+        uuid.uuid4().hex + uuid.uuid4().hex,
+    )
+    key, proof, _late = secrets
+    try:
+        context.add_init_script(_ws_guard_call(key, proof, True, "read"))
+        context._oaflow_ws_guard = secrets
+    except Exception:  # noqa: BLE001 - a stand-in context; holding refuses
+        pass
+    return secrets
+
+
+def _wire_reasons(check: WireCheck, notes: list[str]) -> list[str]:
+    """Each refusal says what happened: an aborted request never left."""
+
+    return [
+        f"{why}; it was cancelled before it left the page" for why in check.refused
+    ] + notes

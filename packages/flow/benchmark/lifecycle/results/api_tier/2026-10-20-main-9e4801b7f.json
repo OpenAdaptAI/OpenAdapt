@@ -1,0 +1,26 @@
+{
+  "question": "Does OpenAdapt's API tier (PR #1269, the 3.33 s vs 22.45 s figure in PR #1365) run on the OpenEMR referral under the current gates?",
+  "answer": "No. On current main the compiler refuses to propose an API step for this form, so a gated run of the referral uses the GUI path and the API-tier speed-up does not apply.",
+  "engine_commit": "9e4801b7f",
+  "checked_at": "2026-10-20",
+  "how": "Offline recompile, no app and no model: openemr_local_demo.compile_recording on the recording the #1374 measurement used, then propose_api_step(replace=True), as benchmark/openemr_api_tier/feature_e2e.py cmd_compile does.",
+  "recording": {
+    "location": "outside the repository (holds a synthetic patient's values and a network capture)",
+    "events_jsonl_sha256": "8ea977fc79a34bcd9164ef43de141aef1b759b92c2d16173605ccf6cc564145f",
+    "network_jsonl_sha256": "94206b71f4ef8f8ed2cb119958f52d887e700758f3894122a4407f27feb92618"
+  },
+  "first_compile": {
+    "proposed": false,
+    "reasons": ["the form validates with rules the API step can't evaluate (form_DOB pastDate); it stays on the GUI"]
+  },
+  "propose_api_step_again": {
+    "step": null,
+    "reasons": ["the form validates with rules the API step can't evaluate (form_DOB pastDate); it stays on the GUI"]
+  },
+  "which_change_refuses_it": "#1371 (enforce native form validation; leave script validation to the GUI). The session notes record that #1370 (refuse an API step whose span also wrote) also refuses it, because OpenEMR posts execute_background_services.php while the form is filled; the compiler reports the first reason only.",
+  "earlier_figures_and_their_gates": [
+    {"source": "PR #1365 scoreboard arm 5", "figure": "3.33 s vs 22.45 s", "gates": "plain replayer; API step admitted by the harness; no approval, no durable run, no run gate"},
+    {"source": "PR #1374 (benchmark/openemr_api_tier/results/approval_durable)", "figure": "median engine 1.12 s (API) vs 15.95 s (GUI), 20 runs each", "gates": "each_item approval + durable run; no run gate; engine 352af585b, before #1367-#1372"}
+  ],
+  "consequence_for_the_lifecycle_comparison": "The openadapt_api arm runs the same certified GUI program as the openadapt arm; its describe() records the refusal. Per-item cost and time for OpenAdapt on this workflow are the GUI path's."
+}

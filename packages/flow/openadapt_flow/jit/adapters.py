@@ -44,7 +44,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Optional, Sequence
 
-from openadapt_flow.benchmark.agent_baseline import SCROLL_PX_PER_UNIT
+from openadapt_flow.anthropic_defaults import SCROLL_PX_PER_UNIT
 
 __all__ = [
     "DIALECTS",
@@ -579,6 +579,7 @@ class CaptureComputer:
         page: Any = None,
         sleep: Callable[[float], None] = time.sleep,
         guard: Any = None,
+        after_action: Optional[Callable[[Mapping[str, Any]], None]] = None,
     ) -> None:
         if dialect not in _TRANSLATORS:
             raise ValueError(
@@ -589,6 +590,11 @@ class CaptureComputer:
         self._page = page
         self._sleep = sleep
         self._guard = guard
+        self._after_action = after_action
+        #: Set by the owning JIT :class:`Recording`; agents can use this
+        #: dispatcher to register capture-side checks without bypassing the
+        #: action recorder.
+        self.dispatcher: Any = None
         self._pointer: Optional[tuple[int, int]] = None
         self.log: list[dict[str, Any]] = []
         self.actions = 0
@@ -643,6 +649,8 @@ class CaptureComputer:
         )
         if self._guard is not None:
             self._guard.after_action(self._page)
+        if self._after_action is not None:
+            self._after_action(native)
         return Observation(
             png=self._session.screenshot(), text=self._snapshot(), notes=notes
         )

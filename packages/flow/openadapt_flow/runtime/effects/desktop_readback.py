@@ -735,20 +735,48 @@ def _norm(text: str) -> str:
     return " ".join(text.casefold().split())
 
 
-#: What may sit right before or after an identifier that is shown on its own.
-#: ``-``, ``.`` and ``/`` are not here: ``123`` must not match ``123-01``.
-_BEFORE = r"(?:^|(?<=[\s(\[:,;\"']))"
-_AFTER = r"(?=$|[\s)\]:,;\"'])"
+#: What may stand between an identifier and the rest of the line: brackets,
+#: a colon, a semicolon, a bar or quotes, with spaces around them. A space
+#: alone, a comma, ``-``, ``.`` or ``/`` is not enough: ``Ann Smith`` must not
+#: match ``Ann Smith Jr`` or ``Dr Ann Smith``, nor ``123`` match ``123-01``.
+_IDENTITY_EDGES = "()[]:;|\"'"
 
 
 def _shows_identity(text: str, identity: str) -> bool:
-    """Whether ``text`` shows ``identity`` on its own: separated by spaces,
-    brackets, or a colon, never as part of a longer identifier."""
+    """Whether ``text`` shows ``identity`` on its own: the whole text, or set
+    apart from the rest of it by brackets, a colon or similar (``Patient:
+    Ann Smith (1984-03-12)``), never as part of a longer value."""
 
     want = _norm(identity)
     if not want:
         return False
-    return re.search(_BEFORE + re.escape(want) + _AFTER, _norm(text)) is not None
+    seen = _norm(text)
+    start = seen.find(want)
+    while start != -1:
+        before = seen[:start].rstrip()
+        after = seen[start + len(want) :].lstrip()
+        if (not before or before[-1] in _IDENTITY_EDGES) and (
+            not after or after[0] in _IDENTITY_EDGES
+        ):
+            return True
+        start = seen.find(want, start + 1)
+    return False
+
+
+def _row_shows_identity(row: Seen, identity: str) -> bool:
+    """Whether a result row shows ``identity`` on its own: in its text as
+    :func:`_shows_identity` reads it, or as the whole of a run of its cells
+    (``Neil`` | ``Sorenson`` | ``1980-02-11``), never as part of a cell."""
+
+    if _shows_identity(row.text, identity):
+        return True
+    want = _norm(identity)
+    cells = [_norm(text) for text, _ in row.parts]
+    return any(
+        " ".join(cells[start:end]) == want
+        for start in range(len(cells))
+        for end in range(start + 1, len(cells) + 1)
+    )
 
 
 def _identity_piece(row: Seen, identity: str) -> Seen:
@@ -780,7 +808,12 @@ def _present(surface: DesktopReadSurface, ref: ControlRef) -> bool:
         return surface.locate(ref).status == "ok"
     if seen.status != "ok" or seen.item is None or not seen.item.text.strip():
         return False
-    return ref.shows is None or _norm(ref.shows) in _norm(seen.item.text)
+    if ref.shows is None:
+        return True
+    from openadapt_flow.runtime.effects.readback_values import token_occurrences
+
+    # Whole tokens: a marker "Saved" is not shown by "Unsaved".
+    return token_occurrences(_norm(seen.item.text), _norm(ref.shows)) >= 1
 
 
 def _view(surface: DesktopReadSurface, spec: DesktopReadbackSpec) -> tuple[Any, ...]:
@@ -927,7 +960,7 @@ def look_up(
             if rows is None:
                 return None
             matching = [
-                r for r in rows if _shows_identity(r.text, target.identity_value)
+                r for r in rows if _row_shows_identity(r, target.identity_value)
             ]
             return matching or None
 
@@ -993,6 +1026,8 @@ class _ReadRecord:
     #: Fields read by OCR. A mismatch there may be a misread, so it never
     #: becomes REFUTED.
     ocr_fields: set[str] = field(default_factory=set)
+    #: ``records`` with OCR reads' spaces kept (collapsed, not removed).
+    spaced: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _without_spaces_for(effect: Effect, fields: set[str]) -> Effect:
@@ -1000,6 +1035,8 @@ def _without_spaces_for(effect: Effect, fields: set[str]) -> Effect:
 
     Fields read by OCR are compared without spaces on both sides, because OCR
     drops and adds them (``2026-11-02 09:30`` reads as ``2026-11-0209:30``).
+    That only keeps such a read from being REFUTED: a confirmation also needs
+    the read to match with its spaces kept (:func:`_collapse_spaces_for`).
     """
 
     if not fields:
@@ -1012,6 +1049,20 @@ def _without_spaces_for(effect: Effect, fields: set[str]) -> Effect:
 
     match = {k: squash(k, v) or v for k, v in effect.match.items()}
     value = squash(effect.field, effect.value) if effect.field else effect.value
+    return effect.model_copy(update={"match": match, "value": value}, deep=True)
+
+
+def _collapse_spaces_for(effect: Effect, fields: set[str]) -> Effect:
+    """``effect`` with runs of spaces collapsed in the expected values of
+    ``fields``, to compare with OCR reads whose spaces were kept."""
+
+    def collapse(name: str, expr: Optional[ValueExpr]) -> Optional[ValueExpr]:
+        if expr is None or expr.literal is None or name not in fields:
+            return expr
+        return ValueExpr(literal=" ".join(expr.literal.split()))
+
+    match = {k: collapse(k, v) or v for k, v in effect.match.items()}
+    value = collapse(effect.field, effect.value) if effect.field else effect.value
     return effect.model_copy(update={"match": match, "value": value}, deep=True)
 
 
@@ -1192,6 +1243,7 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
                 False,
             )
         record: dict[str, Any] = {}
+        spaced: dict[str, Any] = {}
         uncertain: set[tuple[int, str]] = set()
         for name, reader in spec.fields.items():
             seen = raw.values.get(name)
@@ -1206,6 +1258,11 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
             ):
                 uncertain.add((0, name))
             normalized, parsed = normalize_value(text, reader)  # type: ignore[arg-type]
+            spaced[name] = (
+                " ".join(normalized.split())
+                if seen.ocr and isinstance(normalized, str)
+                else normalized
+            )
             if seen.ocr and normalized is not None:
                 # OCR drops and adds spaces; compare OCR reads without them.
                 normalized = "".join(normalized.split())
@@ -1214,8 +1271,9 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
             record[name] = normalized
         if spec.identity.field is not None:
             record[spec.identity.field] = self._target.identity_value
+            spaced[spec.identity.field] = self._target.identity_value
         ocr_fields = {name for name, seen in raw.values.items() if seen.ocr}
-        return _ReadRecord(True, "", [record], uncertain, False, ocr_fields)
+        return _ReadRecord(True, "", [record], uncertain, False, ocr_fields, [spaced])
 
     def _effect_problem(self, effect: Effect) -> Optional[EffectVerdict]:
         """An effect this look-up can't judge, found before any session opens."""
@@ -1227,8 +1285,7 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
         named = set(effect.match)
         if effect.kind is EffectKind.FIELD_EQUALS and effect.field:
             named.add(effect.field)
-        if effect.idempotency_key is not None:
-            named.add(effect.key_field)
+        named.update(effect.key_selector())
         for member in effect.new_records:
             named.update(member)
         unknown = sorted(named - readable_fields)
@@ -1246,7 +1303,7 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
         counts = (
             effect.kind in (EffectKind.RECORD_WRITTEN, EffectKind.EXACT_NEW_SET)
             or effect.count_new_only
-            or effect.idempotency_key is not None
+            or bool(effect.key_selector())
         )
         if effect.kind is EffectKind.EXACT_NEW_SET or (
             effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count > 1
@@ -1319,6 +1376,29 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
                     "not proof of what was saved; HALT"
                 ),
             )
+        if verdict.confirmed and read.ocr_fields and read.spaced:
+            # Removing spaces lets OCR's dropped spaces through; it must not
+            # also turn "Room 1 2" into "Room 12". A read that matches only
+            # once its spaces are removed is not proof.
+            spaced = judge_records(
+                _collapse_spaces_for(
+                    normalized_effect(effect, spec.fields), read.ocr_fields
+                ),
+                before,
+                read.spaced,
+                substrate=self.substrate,
+            )
+            if not spaced.confirmed:
+                return EffectVerdict(
+                    verdict=Verdict.INDETERMINATE,
+                    kind=effect.kind,
+                    substrate=self.substrate,
+                    reason=(
+                        "the record view, read by OCR, matches the input only once "
+                        f"spaces are ignored ({', '.join(sorted(read.ocr_fields))}); "
+                        "that is not proof of what was saved; HALT"
+                    ),
+                )
         if verdict.verdict is Verdict.REFUTED and read.ocr_fields and read.records:
             return EffectVerdict(
                 verdict=Verdict.INDETERMINATE,

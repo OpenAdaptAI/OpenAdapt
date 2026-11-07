@@ -8,22 +8,23 @@ The open-source, verified execution layer for computer-use agents.
 
 [![CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml) [![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml) [![PyPI](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/) [![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE) [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
-[What it can do](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) · [Documentation](https://docs.openadapt.ai) · [Quickstart](https://docs.openadapt.ai/tutorials/quickstart/) · [Live demo](https://app.openadapt.ai/demo) · [Website](https://openadapt.ai) · [Discord](https://discord.gg/yF527cQbDG)
+[What it can do](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) · [Documentation](https://docs.openadapt.ai) · [Quickstart](https://docs.openadapt.ai/tutorials/quickstart/) · [Live demo](https://app.openadapt.ai/demo) · [Website](https://openadapt.ai) · [Get updates](https://openadapt.ai/#updates) · [Discord](https://discord.gg/yF527cQbDG)
 
 </div>
 
 A computer-use agent looks at the screen and chooses every click again, on
-every run. OpenAdapt lets your agent, or a person, do a task once in any app:
-web, Windows, macOS, Linux, RDP or Citrix. It compiles that run into a program,
+every run. OpenAdapt lets your agent, or a person, do a task once in a web,
+Windows, macOS, Linux or remote-desktop app. It compiles that run into a program,
 and your agent calls the program as one tool. The program runs with no model
 calls and sends no screenshots anywhere. It confirms the right record before
 each save, reads the save back from the system of record after it, and returns
 a plain outcome. When anything doesn't match, it stops and tells your agent
 instead of guessing.
 
-## Measured on OpenEMR
+## Measured on OpenEMR and openIMIS
 
-One new-patient referral in a test copy of OpenEMR, timed from a fresh
+One new-patient referral in a test copy of OpenEMR, the open-source EHR whose
+7.0 release is ONC-certified, timed from a fresh
 browser through sign-in, the entry and the saved record read back (median):
 
 | Who does the entry | Time per referral | Saved correctly | Model cost |
@@ -33,23 +34,25 @@ browser through sign-in, the entry and the saved record read back (median):
 | OpenAdapt program, API step | `██` 3.3 s | 18 of 18 | $0 |
 
 The API step replaces the program's 41 screen steps with the one form
-submission the app itself sends, then reads the record back. It covers single
-HTML form saves like this one; other apps and request types are not yet
-measured. In both program rows a
-possible-duplicate referral stopped without saving, as it should. Both program
-rows ran on 19 Oct on one copy of the app, interleaved, without the approval
-gate and without resumable runs; the API step was admitted by the benchmark
-harness, not by a person. The agent rows are the 14 to 15 Oct timing study, on
-its own copy of the app.
+submission the app itself sends, then reads the record back. In both program
+rows a possible-duplicate referral stopped without saving, as it should. Both
+program rows ran on 19 Oct on one copy of the app, interleaved, with the
+approval gate off; the benchmark harness admitted the API step. The agent row
+is the 14 to 15 Oct timing study, on its own copy of the app.
 [SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#openemr-agent-screen-program-and-api-step)
 has every run.
+
+On a test copy of openIMIS, the open-source insurance and claims system that
+runs Nepal's national health insurance scheme, the compiled program entered
+149 synthetic claims with no model calls: 148 read back correct and none were
+saved wrong
+([SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#openimis)).
 
 A screen can't show a save that went wrong behind it. On a test copy of
 OpenEMR, with faults injected in its database (a field blanked, a value changed, a
 duplicate chart, a chart removed, another chart deleted or edited), the agent
 claimed success on all 30 bad saves. Reading the record back caught 25 of the
-30 and confirmed all 5 clean saves, with no false alarms. It missed the 5 where
-a different chart was edited. On MockMed, a test app
+30 and confirmed all 5 clean saves, with no false alarms. On MockMed, a test app
 that shows a save as done before its server answers, the agent also claimed
 all 30 bad saves, and the read-back caught all 30
 ([details below](#why-the-read-back-matters)).
@@ -75,9 +78,8 @@ Each check below was asked whether those 72 bad saves had succeeded:
 | A read of the record over the app's REST API | 9 of 72 (all writes to a table it didn't read) |
 | A read of every table in the database | 0 of 72 |
 
-This is a coverage test over a small, hand-written set of faults, not a
-real-world error rate. [EFFECT_E2E.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effect_e2e/EFFECT_E2E.md)
-has the method and raw results.
+[EFFECT_E2E.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effect_e2e/EFFECT_E2E.md)
+has the fault set, the method and the raw results.
 
 An agent working alone can't see these faults either. Claude Sonnet 5.5, using
 computer use, did a task on a test app whose server broke the save in 6 ways,
@@ -149,8 +151,8 @@ jit.run(note="Recheck knee in ten days")  # the program runs: 0 model calls, sav
 ```
 
 [Compile a computer-use agent's run](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/JIT.md) has the full
-example. The same path compiles an agent's run in web apps and in Windows,
-macOS, Linux, RDP and Citrix apps.
+example. The same path takes an agent's run through the web, Windows, macOS,
+Linux, RDP and Citrix backends.
 
 ### Call programs from your agent
 
@@ -215,27 +217,31 @@ database read-back:
 | Median time | 36.5 s | 29.7 s |
 | Referrals saved correctly | 62 of 63 | 62 of 63 |
 
-Both were equally correct here, and the agent matched or beat OpenAdapt in
-three other tests. [Every result](https://openadapt.ai/compare/computer-use-agents)
-is published. That program was only about a fifth faster because it drove every
-page, as the agent does; the API step compiled from the recording's network
-traffic removes the page steps for single-form saves. OpenAdapt isn't
-affiliated with the OpenEMR project.
+The program drove every page, as the agent does. The API step compiled from
+the recording's network traffic removes those page steps: 3.3 s per referral,
+in the table at the top. [Every result](https://openadapt.ai/compare/computer-use-agents)
+is published. OpenAdapt isn't affiliated with the OpenEMR project.
 
 ## Every backend
 
-The same record, compile, run and repair steps work on every surface. Where
+Record, compile and run take every surface; the evidence differs by surface
+([BACKEND_PARITY.md](packages/flow/docs/BACKEND_PARITY.md)). Self-repair is
+qualified on browser runs ([benchmark/auto_repair](packages/flow/benchmark/auto_repair/README.md))
+and end to end on native macOS AX ([#1715](https://github.com/OpenAdaptAI/OpenAdapt/pull/1715)). Outside a browser it
+runs with `repair.session` ([#1717](https://github.com/OpenAdaptAI/OpenAdapt/pull/1717)), and native and pixel backends admit
+its new clicks by element identity ([#1709](https://github.com/OpenAdaptAI/OpenAdapt/pull/1709)). Teaching the fix for a
+halted run and rollback are tested on browser runs. Where
 the app exposes its structure, OpenAdapt uses it; on remote desktops it works
 from pixels.
 
-| Surface | What OpenAdapt reads | Tested so far |
+| Surface | What OpenAdapt reads | Validated on |
 |---|---|---|
-| Web apps | The screen, plus the page's DOM | Required CI on every build, plus runs against OpenEMR |
+| Web apps | The screen, plus the page's DOM | OpenEMR, Odoo and openIMIS test copies; CI runs in-tree apps on every build |
 | Windows apps | The screen, plus UI Automation | 3 of 3 saves in a WinForms test app |
 | macOS apps | The screen, plus Accessibility | 3 of 3 saves in TextEdit |
-| Linux apps (X11) | The screen, plus AT-SPI | A GTK3 app in CI |
-| Remote desktop (RDP) | The screen | 3 of 3 trials into Windows 11 over a real network |
-| Citrix | The screen | A stand-in app only; no run over a real Citrix session yet |
+| Linux apps (X11) | The screen, plus AT-SPI | Recording and an AT-SPI read in CI; backend actions are unit-tested |
+| Remote desktop (RDP) | The screen | 105 runs through the stock Remote Desktop client on a real AVC444 session: 55 saves confirmed in the database, 0 wrong-record saves, 40 false stops |
+| Citrix | The screen | A Citrix stand-in app with no DOM: 3 healthy runs, 3 stops on drift |
 
 Each application on each surface needs its own qualification.
 [Surfaces](https://docs.openadapt.ai/explanation/surfaces/) and [Limits](https://docs.openadapt.ai/explanation/limits/)
@@ -252,7 +258,7 @@ flowchart LR
 For each step the compiler uses the most reliable layer the app offers: page
 structure first (DOM, Windows UI Automation, macOS Accessibility, Linux
 AT-SPI), a direct API call where one is bound, and pixels (template, text and
-layout matching) only where nothing else exists, such as RDP and Citrix.
+layout matching) only where nothing else exists, such as a remote desktop.
 Qualification runs the program against normal and fault cases before an
 admission lets that exact version run. At each save the program checks that
 the right record is on screen, makes the entry, and reads the record back.
@@ -271,16 +277,16 @@ the right record is on screen, makes the entry, and reads the record back.
 
 ## What it can do
 
-- **Learns from any successful run**, a person's demonstration or a computer-use agent's verified run, and compiles it into a program that runs with no model calls.
+- **Learns from any successful run**, a person's demonstration or a computer-use agent's verified run, and compiles it into a program that runs with no calls to a hosted AI model.
 - **Uses the most reliable layer the app allows**: page structure (DOM, UI Automation, Accessibility), direct API calls where one is bound, and pixels only for remote desktops.
 - **Builds branching programs** from several demonstrations, repeated halts and background runs, and routes each item to the right verified variant.
-- **Works across surfaces**: web, Windows, macOS, RDP and Citrix, in one workflow.
+- **Works across surfaces**: web, Windows, macOS, Linux and RDP backends, chained in one workflow.
 - **Confirms the right record before every write and reads the saved record back** from the system of record, never just the screen.
 - **Stops instead of guessing**, never retries an uncertain save, and says what changed before a stop.
 - **Binds each approval to exactly what will be saved**, with one-tap answers on a paired phone.
-- **Repairs itself when the app changes**, probing a fix up to the save and asking a person to approve it.
+- **Repairs itself when the app changes**, probing a fix up to the save and asking a person to approve it (qualified on browser runs and end to end on native macOS).
 - **Works as a safety layer under any agent**: MCP tools, a guarded save, Agent Skills and a CLI.
-- **Runs locally**: no model calls on healthy runs, patient data redacted, signed receipts.
+- **Runs locally**: no calls to a hosted AI model on healthy runs, patient data redacted, signed receipts.
 
 [CAPABILITIES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) has the evidence and code for each.
 

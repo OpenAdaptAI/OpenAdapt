@@ -304,6 +304,15 @@ def evaluate_program_predicate(
             is not None
         )
     if kind is PredicateKind.TEXT_PRESENT:
+        if predicate.exact:
+            # Read exactly once; a vision without the exact counter fails
+            # closed (see Replayer._exact_text_holds).
+            counter = getattr(vision, "exact_text_count", None)
+            return (
+                bool(predicate.text)
+                and callable(counter)
+                and counter(frame_png, predicate.text) == 1
+            )
         return bool(predicate.text) and vision.text_present(frame_png, predicate.text)
     if kind is PredicateKind.TEXT_ABSENT:
         return not (predicate.text and vision.text_present(frame_png, predicate.text))

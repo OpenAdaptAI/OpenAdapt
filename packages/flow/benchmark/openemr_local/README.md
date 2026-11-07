@@ -33,7 +33,7 @@ publication bar. Raw per-run rows, environment fingerprints,
 application-specific adapter/oracle wiring, and the detailed cost ledger are
 retained in the private `OpenAdaptAI/openadapt-corpus` repository. The public
 generic cost-capped agent mechanism remains in
-`openadapt_flow/benchmark/agent_baseline.py`. See the
+`benchmark/harness/agent_baseline.py`. See the
 [aggregate report](../agent_arm_verticals/README.md).
 
 The accepted run used baseline SHA-256
@@ -296,3 +296,12 @@ labels a post-call threshold as a hard cap.
 one shared baseline hash. It is not certification and does not authorize a site
 claim without human review of every row, DB delta, screenshot, environment
 identity, and the matched Frappe run on the same machine/model/cost policy.
+
+## Startup diagnostics
+
+`OpenEMRFixture.startup_stage` is a read-only token for the current or last
+startup attempt: `not_started`, `runtime_preflight`, `image_pull`,
+`image_identity`, `compose_start`, `health_ready`, `source_verify`, or `ready`.
+On failure it retains the operation that failed; the original exception still
+propagates. `ready` is set only after running-source verification returns.
+The token contains no command output, paths or exception details.

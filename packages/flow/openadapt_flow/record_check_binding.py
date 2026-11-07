@@ -239,6 +239,10 @@ def effect_parameter_roles(effect: Effect) -> list[tuple[str, str]]:
     name = _expr_param(effect.idempotency_key)
     if name:
         found.append((name, f"idempotency_key.{effect.key_field}"))
+    for key, expr in effect.composite_key.items():
+        name = _expr_param(expr)
+        if name:
+            found.append((name, f"composite_key.{key}"))
     for position, selector in enumerate(effect.new_records):
         for key, expr in selector.items():
             name = _expr_param(expr)
@@ -473,7 +477,7 @@ def _bundle_key(bundle: Path) -> tuple[bool, Optional[str]]:
     if not (bundle / "workflow.json.enc").is_file():
         return False, None
     try:
-        return True, crypto.require_key(None)
+        return True, crypto.require_configured_key()
     except crypto.MissingKeyError as exc:
         raise RecordCheckBindingError(
             [f"the bundle is encrypted and {crypto.ENV_KEY} is not set: {exc}"]

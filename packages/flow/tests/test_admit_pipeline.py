@@ -379,7 +379,9 @@ def test_refused_induction_stops_without_a_bundle(tmp_path, monkeypatch) -> None
     monkeypatch.setattr(
         induction,
         "induce_program",
-        lambda traces: SimpleNamespace(certified=False, workflow=None, record_next=[]),
+        lambda traces, **_kw: SimpleNamespace(
+            certified=False, workflow=None, record_next=[]
+        ),
     )
     pending = ap.prepare_admission(
         [_recording(tmp_path, "rec1"), _recording(tmp_path, "rec2")],

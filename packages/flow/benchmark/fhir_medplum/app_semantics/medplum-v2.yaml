@@ -1,0 +1,25 @@
+# Medplum 5.2 operation semantics, version 2: corrections between "either" (the person,
+# or only the task's values). Proposed after the pre-registered re-score (version 1);
+# exploratory there, see leaderboard_rescore/PREREGISTRATION.md, deviation 3.
+# A sample of openadapt.app-semantics/v1 (docs/ENSURE_RECORD.md, "Operation
+# semantics"); a contract pins it with semantics: {path, app, version}.
+#
+# How Medplum's web app saves, seen in the write leaderboard's frozen runs
+# (benchmark/fhir_medplum/leaderboard_rescore): a new record can be created
+# as {} or with some fields, then updated until it is complete; a submit
+# whose response is lost can be resubmitted, and the extra record deleted.
+schema_version: openadapt.app-semantics/v1
+app: medplum
+version: 2
+resources:
+  Patient:
+    correction: {between: either}
+    cardinality: {own_transient: true}
+  AllergyIntolerance:
+    correction: {between: either}
+    cardinality: {own_transient: true}
+  Appointment:
+    correction: {between: either}
+    cardinality: {own_transient: true}
+# The app keeps no bookkeeping elements on other records in these runs.
+bookkeeping: []

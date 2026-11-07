@@ -1,0 +1,4907 @@
+{
+ "contracts": "main",
+ "inputs": {
+  "frozen-9800.jsonl.gz": "2839c7f1eb46a3b15e895973e6f5145c29fba03ededaa59dfa3add595b1b4984",
+  "frozen-9810.jsonl.gz": "de6b5fea06512d0e1bbcb9001810d00f3cd07b8ca7d6ff9bbdd072fa74a3c790",
+  "rows-claude.jsonl.gz": "574811b80fe7dfe47026376d3760f5dd41d837c45cb504ab699f4f4bdd0d7c69",
+  "rows-openai.jsonl.gz": "4d05dbd311d4fd2cbbdf907c298c9f379875c019c5347f6bc2ec896aecc54f53",
+  "times.json": "c36d63e2478795bbe67fddf9cf1eacdb44c7b992477e78191fae9941b68edb63"
+ },
+ "rows": {
+  "claude/runs/r1-A01": {
+   "baseline_at": "2026-11-03T03:43:27.534000+00:00",
+   "check_at": "2026-11-03T03:48:25.968638+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:48:26+00:00"
+   },
+   "id": "efb1be98-9c84-4554-91d0-468adee28aee",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-A02": {
+   "baseline_at": "2026-11-03T03:48:35.956000+00:00",
+   "check_at": "2026-11-03T03:49:51.054090+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:49:52+00:00"
+   },
+   "id": "6dc4a9af-806b-4c03-a219-a70c8d961443",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-A03": {
+   "baseline_at": "2026-11-03T05:03:15.212000+00:00",
+   "check_at": "2026-11-03T05:08:01.802946+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T05:08:02+00:00"
+   },
+   "id": "329911c0-7927-45ed-80bd-810ec454b13f",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-A04": {
+   "baseline_at": "2026-11-03T05:08:12.523000+00:00",
+   "check_at": "2026-11-03T05:14:53.662481+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T05:14:54+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 AllergyIntolerance records, not one",
+    "the agent wrote 2 other resource(s): AllergyIntolerance"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-A05": {
+   "baseline_at": "2026-11-03T05:18:07.159000+00:00",
+   "check_at": "2026-11-03T05:20:35.682344+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T05:20:36+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "wrong or missing: code",
+    "the created record is not the person",
+    "the created record does not come back from a search"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-A06": {
+   "baseline_at": "2026-11-03T05:20:45.612000+00:00",
+   "check_at": "2026-11-03T05:31:58.201203+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T05:31:59+00:00",
+    "writes_to_record": 2
+   },
+   "id": "e2da7b7e-8722-4830-b54d-8f108a3f806b",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-A07": {
+   "baseline_at": "2026-11-03T05:49:55.418000+00:00",
+   "check_at": "2026-11-03T06:03:57.426329+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:03:58+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-A08": {
+   "baseline_at": "2026-11-03T06:05:33.644000+00:00",
+   "check_at": "2026-11-03T06:17:26.271123+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance",
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:17:27+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-A09": {
+   "baseline_at": "2026-11-03T06:19:30.402000+00:00",
+   "check_at": "2026-11-03T06:22:31.488084+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 1,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:22:32+00:00"
+   },
+   "id": "47a867c5-c4c9-4d0b-950b-a72c3314ab6c",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-A10": {
+   "baseline_at": "2026-11-03T06:24:05.759000+00:00",
+   "check_at": "2026-11-03T06:29:48.498903+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:29:49+00:00"
+   },
+   "id": "fe75804c-2c33-4dd6-813e-13976208d3bc",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-A11": {
+   "baseline_at": "2026-11-03T06:30:23.307000+00:00",
+   "check_at": "2026-11-03T06:33:40.561197+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:33:41+00:00"
+   },
+   "id": "3883e4e5-3cca-4975-a3a1-11819dbce602",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-A12": {
+   "baseline_at": "2026-11-03T06:42:14.624000+00:00",
+   "check_at": "2026-11-03T06:45:11.409975+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 1,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:45:12+00:00"
+   },
+   "id": "df32a0ac-16de-4383-a820-e17c97d2f31a",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-AP01": {
+   "baseline_at": "2026-11-03T06:46:15.292000+00:00",
+   "check_at": "2026-11-03T06:51:00.976002+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:51:01+00:00"
+   },
+   "id": "6fe3cc80-5c1a-4feb-a51a-852457b2849f",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-AP02": {
+   "baseline_at": "2026-11-03T06:51:04.935000+00:00",
+   "check_at": "2026-11-03T06:52:40.668742+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:52:41+00:00"
+   },
+   "id": "9a54acbc-a5fe-4e83-9796-1ebe1be63cda",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-AP03": {
+   "baseline_at": "2026-11-03T06:52:44.467000+00:00",
+   "check_at": "2026-11-03T06:56:36.617476+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:56:37+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "wrong or missing: end, start",
+    "the created record is not the person",
+    "the created record does not come back from a search"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-AP04": {
+   "baseline_at": "2026-11-03T06:57:10.446000+00:00",
+   "check_at": "2026-11-03T07:00:47.247203+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:00:48+00:00",
+    "writes_to_record": 2
+   },
+   "id": "55624fae-bb69-4e6c-998a-693d2df2bb23",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-AP05": {
+   "baseline_at": "2026-11-03T07:02:51.509000+00:00",
+   "check_at": "2026-11-03T07:09:37.591996+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:09:38+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Appointment records, not one",
+    "the agent wrote 2 other resource(s): Appointment"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-AP06": {
+   "baseline_at": "2026-11-03T07:13:11.610000+00:00",
+   "check_at": "2026-11-03T07:17:18.720234+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:17:19+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Appointment records, not one",
+    "the agent wrote 2 other resource(s): Appointment"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-AP07": {
+   "baseline_at": "2026-11-03T07:17:52.621000+00:00",
+   "check_at": "2026-11-03T07:23:30.646914+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:23:31+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): Appointment"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-AP08": {
+   "baseline_at": "2026-11-03T07:26:04.930000+00:00",
+   "check_at": "2026-11-03T07:30:13.229582+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 1,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:30:14+00:00"
+   },
+   "id": "bce0caed-aa86-41d1-b300-521a83c95708",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-AP09": {
+   "baseline_at": "2026-11-03T07:35:17.340000+00:00",
+   "check_at": "2026-11-03T07:40:25.471961+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:40:26+00:00",
+    "writes_to_record": 2
+   },
+   "id": "71036b9c-9241-4556-9ab4-a8862f4bd122",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-AP10": {
+   "baseline_at": "2026-11-03T07:40:59.300000+00:00",
+   "check_at": "2026-11-03T07:43:40.678678+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance",
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:43:41+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): AllergyIntolerance"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-AP11": {
+   "baseline_at": "2026-11-03T07:46:44.643000+00:00",
+   "check_at": "2026-11-03T07:49:52.001502+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:49:53+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "wrong or missing: patient",
+    "the created record is not the person",
+    "the created record does not come back from a search"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-AP12": {
+   "baseline_at": "2026-11-03T07:52:26.598000+00:00",
+   "check_at": "2026-11-03T07:56:37.115032+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:56:38+00:00"
+   },
+   "id": "18250f2e-7adf-4298-817b-9c41fdf258b7",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-P01": {
+   "baseline_at": "2026-11-03T02:34:22.819000+00:00",
+   "check_at": "2026-11-03T02:36:10.831597+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T02:36:11+00:00"
+   },
+   "id": "6b7df2a9-6a50-472b-9fc1-aaad7d73f88e",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-P02": {
+   "baseline_at": "2026-11-03T02:36:18.969000+00:00",
+   "check_at": "2026-11-03T02:36:31.383388+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T02:36:32+00:00"
+   },
+   "id": "73d6bbe8-8011-4894-9aee-f5bc4e32d1a9",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-P03": {
+   "baseline_at": "2026-11-03T02:36:39.659000+00:00",
+   "check_at": "2026-11-03T02:37:18.357966+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T02:37:19+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-P04": {
+   "baseline_at": "2026-11-03T02:37:26.683000+00:00",
+   "check_at": "2026-11-03T02:41:39.569600+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T02:41:40+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-P05": {
+   "baseline_at": "2026-11-03T02:41:48.357000+00:00",
+   "check_at": "2026-11-03T02:46:09.414855+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T02:46:10+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-P06": {
+   "baseline_at": "2026-11-03T02:46:19.060000+00:00",
+   "check_at": "2026-11-03T02:55:19.688503+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T02:55:20+00:00",
+    "writes_to_record": 2
+   },
+   "id": "18e6a1c5-115a-4595-816f-29ea8ecfda84",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-P07": {
+   "baseline_at": "2026-11-03T03:00:54.042000+00:00",
+   "check_at": "2026-11-03T03:06:59.796677+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:07:00+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Patient records, not one",
+    "the agent wrote 2 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-P08": {
+   "baseline_at": "2026-11-03T03:07:39.406000+00:00",
+   "check_at": "2026-11-03T03:10:16.619321+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:10:17+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Patient records, not one",
+    "the agent wrote 2 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-P09": {
+   "baseline_at": "2026-11-03T03:10:25.237000+00:00",
+   "check_at": "2026-11-03T03:13:05.542141+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:13:06+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-P10": {
+   "baseline_at": "2026-11-03T03:16:46.761000+00:00",
+   "check_at": "2026-11-03T03:17:44.675435+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 2,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:17:45+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "2 records were already the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-P11": {
+   "baseline_at": "2026-11-03T03:18:23.700000+00:00",
+   "check_at": "2026-11-03T03:24:04.521550+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:24:05+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-P12": {
+   "baseline_at": "2026-11-03T03:25:51.379000+00:00",
+   "check_at": "2026-11-03T03:37:37.646982+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:37:38+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r1-P13": {
+   "baseline_at": "2026-11-03T03:37:46.729000+00:00",
+   "check_at": "2026-11-03T03:43:18.550727+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:43:19+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-A01": {
+   "baseline_at": "2026-11-03T08:59:43.251000+00:00",
+   "check_at": "2026-11-03T09:02:58.086233+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:02:59+00:00"
+   },
+   "id": "bb09ee9e-e1b5-467b-a784-3a64c7798f5d",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-A02": {
+   "baseline_at": "2026-11-03T09:03:01.871000+00:00",
+   "check_at": "2026-11-03T09:04:02.266823+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:04:03+00:00"
+   },
+   "id": "e0917715-26a3-4599-b61b-523458accbda",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-A03": {
+   "baseline_at": "2026-11-03T09:04:06.055000+00:00",
+   "check_at": "2026-11-03T09:13:59.322734+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:14:00+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and its history shows 2 versions where the audit trail shows 3 writes"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-A04": {
+   "baseline_at": "2026-11-03T09:14:03.244000+00:00",
+   "check_at": "2026-11-03T09:30:13.114725+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:30:14+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it",
+    "the created record can't be read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-A05": {
+   "baseline_at": "2026-11-03T09:30:17.431000+00:00",
+   "check_at": "2026-11-03T09:33:19.628322+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:33:20+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "wrong or missing: code",
+    "the created record is not the person",
+    "the created record does not come back from a search"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-A06": {
+   "baseline_at": "2026-11-03T09:33:23.454000+00:00",
+   "check_at": "2026-11-03T09:37:42.233664+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:37:43+00:00"
+   },
+   "id": "735ffea2-a0eb-427f-9ffc-55a77c9d2e09",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-A07": {
+   "baseline_at": "2026-11-03T09:37:46.031000+00:00",
+   "check_at": "2026-11-03T09:41:25.265798+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:41:26+00:00"
+   },
+   "id": "ba3f54ce-9568-410b-b9f0-da4bd0e0db78",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-A08": {
+   "baseline_at": "2026-11-03T09:44:59.385000+00:00",
+   "check_at": "2026-11-03T09:47:41.723349+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance",
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:47:42+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-A09": {
+   "baseline_at": "2026-11-03T09:47:45.609000+00:00",
+   "check_at": "2026-11-03T09:50:45.218840+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 1,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:50:46+00:00"
+   },
+   "id": "a539c219-8850-46fa-aa17-95249fc61360",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-A10": {
+   "baseline_at": "2026-11-03T09:50:49.320000+00:00",
+   "check_at": "2026-11-03T09:57:43.953933+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:57:44+00:00",
+    "writes_to_record": 2
+   },
+   "id": "b4607102-0d21-4265-ae59-616d2f335a14",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-A11": {
+   "baseline_at": "2026-11-03T09:57:47.829000+00:00",
+   "check_at": "2026-11-03T09:59:52.153381+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:59:53+00:00"
+   },
+   "id": "99836e0d-57a7-4b1c-a79f-810613aa4cc6",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-A12": {
+   "baseline_at": "2026-11-03T09:59:55.971000+00:00",
+   "check_at": "2026-11-03T10:10:39.451656+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 1,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T10:10:40+00:00",
+    "writes_to_record": 2
+   },
+   "id": "2b8a8c28-94bf-459c-9775-64468024b629",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-AP01": {
+   "baseline_at": "2026-11-03T10:10:43.384000+00:00",
+   "check_at": "2026-11-03T10:16:31.837033+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T10:16:32+00:00"
+   },
+   "id": "1d8b88d1-b3b9-4109-bfa9-6b7c454388b6",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-AP02": {
+   "baseline_at": "2026-11-03T10:16:35.663000+00:00",
+   "check_at": "2026-11-03T10:17:32.776684+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T10:17:33+00:00"
+   },
+   "id": "dc6a67d7-210b-456b-9581-7ff582dd8fcc",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-AP03": {
+   "baseline_at": "2026-11-03T10:17:36.577000+00:00",
+   "check_at": "2026-11-03T10:22:21.828908+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T10:22:22+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "wrong or missing: end, start",
+    "the created record is not the person",
+    "the created record does not come back from a search"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-AP04": {
+   "baseline_at": "2026-11-03T10:22:25.624000+00:00",
+   "check_at": "2026-11-03T10:29:20.895126+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T10:29:21+00:00",
+    "writes_to_record": 2
+   },
+   "id": "7c300342-3e1e-49fd-a422-0708374cebad",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-AP05": {
+   "baseline_at": "2026-11-03T10:29:24.724000+00:00",
+   "check_at": "2026-11-03T10:32:11.264272+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T10:32:12+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Appointment records, not one",
+    "the agent wrote 2 other resource(s): Appointment"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-AP06": {
+   "baseline_at": "2026-11-03T10:32:15.073000+00:00",
+   "check_at": "2026-11-03T10:35:35.665766+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T10:35:36+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Appointment records, not one",
+    "the agent wrote 2 other resource(s): Appointment"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-AP07": {
+   "baseline_at": "2026-11-03T10:35:39.493000+00:00",
+   "check_at": "2026-11-03T10:40:07.438919+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T10:40:08+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): Appointment"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-AP08": {
+   "baseline_at": "2026-11-03T10:40:11.238000+00:00",
+   "check_at": "2026-11-03T10:44:44.269757+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 1,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T10:44:45+00:00"
+   },
+   "id": "c03a2894-4d8f-4cf8-b030-1ed91d1abd26",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-AP09": {
+   "baseline_at": "2026-11-03T10:44:48.079000+00:00",
+   "check_at": "2026-11-03T10:48:05.176729+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T10:48:06+00:00",
+    "writes_to_record": 2
+   },
+   "id": "eafdada5-b964-4778-8f0e-c4b5982d93f1",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-AP10": {
+   "baseline_at": "2026-11-03T10:48:09.065000+00:00",
+   "check_at": "2026-11-03T10:50:55.791575+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance",
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T10:50:56+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): AllergyIntolerance"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-AP11": {
+   "baseline_at": "2026-11-03T10:50:59.543000+00:00",
+   "check_at": "2026-11-03T10:55:28.415855+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T10:55:29+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-AP12": {
+   "baseline_at": "2026-11-03T10:55:32.202000+00:00",
+   "check_at": "2026-11-03T10:58:58.543752+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T10:58:59+00:00"
+   },
+   "id": "3f8fa6b1-8d2c-4cb1-8871-25636c2b8232",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-P01": {
+   "baseline_at": "2026-11-03T07:56:40.886000+00:00",
+   "check_at": "2026-11-03T08:02:11.996116+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:02:12+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-P02": {
+   "baseline_at": "2026-11-03T08:04:16.008000+00:00",
+   "check_at": "2026-11-03T08:04:30.604197+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:04:31+00:00"
+   },
+   "id": "81eededc-9838-4179-91b2-e06c6dd92f3f",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-P03": {
+   "baseline_at": "2026-11-03T08:04:34.351000+00:00",
+   "check_at": "2026-11-03T08:04:49.789172+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:04:50+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-P04": {
+   "baseline_at": "2026-11-03T08:04:53.510000+00:00",
+   "check_at": "2026-11-03T08:08:57.226262+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:08:58+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-P05": {
+   "baseline_at": "2026-11-03T08:09:00.948000+00:00",
+   "check_at": "2026-11-03T08:11:58.069079+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:11:59+00:00",
+    "writes_to_record": 2
+   },
+   "id": "48b4121d-ec48-4ddd-a1c5-030bb171b073",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-P06": {
+   "baseline_at": "2026-11-03T08:12:01.779000+00:00",
+   "check_at": "2026-11-03T08:14:03.681811+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:14:04+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "not given by the task: deceasedBoolean"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-P07": {
+   "baseline_at": "2026-11-03T08:16:07.820000+00:00",
+   "check_at": "2026-11-03T08:22:18.606573+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:22:19+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Patient records, not one",
+    "the agent wrote 2 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-P08": {
+   "baseline_at": "2026-11-03T08:23:52.397000+00:00",
+   "check_at": "2026-11-03T08:31:07.988982+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:31:08+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Patient records, not one",
+    "the agent wrote 2 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-P09": {
+   "baseline_at": "2026-11-03T08:35:42.078000+00:00",
+   "check_at": "2026-11-03T08:44:26.112892+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:44:27+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): Patient",
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-P10": {
+   "baseline_at": "2026-11-03T08:44:30.345000+00:00",
+   "check_at": "2026-11-03T08:45:35.443257+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 2,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:45:36+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "2 records were already the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-P11": {
+   "baseline_at": "2026-11-03T08:45:39.556000+00:00",
+   "check_at": "2026-11-03T08:47:48.338830+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:47:49+00:00"
+   },
+   "id": "0ac9d3fe-094d-4435-b205-aac9ad4e81f3",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-P12": {
+   "baseline_at": "2026-11-03T08:47:52.087000+00:00",
+   "check_at": "2026-11-03T08:54:30.982619+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:54:31+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Patient records, not one",
+    "the agent wrote 2 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r2-P13": {
+   "baseline_at": "2026-11-03T08:54:34.754000+00:00",
+   "check_at": "2026-11-03T08:59:39.504319+00:00",
+   "evidence": {
+    "unreadable": true
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "unreadable: the agent wrote after the window closed"
+   ],
+   "unreadable": true
+  },
+  "claude/runs/r3-A01": {
+   "baseline_at": "2026-11-03T11:42:23.443000+00:00",
+   "check_at": "2026-11-03T11:45:54.772080+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T11:45:55+00:00"
+   },
+   "id": "dcacf4af-88a5-4acf-89dd-3b1ae041f532",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-A02": {
+   "baseline_at": "2026-11-03T11:45:58.739000+00:00",
+   "check_at": "2026-11-03T11:47:09.769929+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T11:47:10+00:00"
+   },
+   "id": "cd4ea2cc-b847-4f82-9741-ec725299b1f2",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-A03": {
+   "baseline_at": "2026-11-03T11:47:13.597000+00:00",
+   "check_at": "2026-11-03T11:49:14.687765+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T11:49:15+00:00"
+   },
+   "id": "a3e69413-0630-490c-88e2-a3d74c0c7764",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-A04": {
+   "baseline_at": "2026-11-03T11:49:18.498000+00:00",
+   "check_at": "2026-11-03T11:53:09.474672+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T11:53:10+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-A05": {
+   "baseline_at": "2026-11-03T11:53:13.269000+00:00",
+   "check_at": "2026-11-03T11:59:29.028049+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T11:59:30+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-A06": {
+   "baseline_at": "2026-11-03T11:59:32.981000+00:00",
+   "check_at": "2026-11-03T12:02:39.639950+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T12:02:40+00:00",
+    "writes_to_record": 2
+   },
+   "id": "3bf854ec-4651-4954-afb7-aee4d85f6d12",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-A07": {
+   "baseline_at": "2026-11-03T12:02:43.559000+00:00",
+   "check_at": "2026-11-03T12:07:20.879677+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T12:07:21+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 AllergyIntolerance records, not one",
+    "the agent wrote 2 other resource(s): AllergyIntolerance"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-A08": {
+   "baseline_at": "2026-11-03T12:07:24.674000+00:00",
+   "check_at": "2026-11-03T12:10:52.931326+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance",
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T12:10:53+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-A09": {
+   "baseline_at": "2026-11-03T12:10:56.790000+00:00",
+   "check_at": "2026-11-03T12:27:39.820256+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 1,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T12:27:40+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it",
+    "the created record can't be read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-A10": {
+   "baseline_at": "2026-11-03T12:27:43.770000+00:00",
+   "check_at": "2026-11-03T12:31:50.646333+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T12:31:51+00:00"
+   },
+   "id": "7a1e5ec9-f97d-44ef-b8d7-ce07aad2c148",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-A11": {
+   "baseline_at": "2026-11-03T12:39:24.761000+00:00",
+   "check_at": "2026-11-03T12:42:13.957426+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T12:42:14+00:00"
+   },
+   "id": "55995743-c845-4c4b-a8fa-7630f7fb54e0",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-A12": {
+   "baseline_at": "2026-11-03T12:43:17.801000+00:00",
+   "check_at": "2026-11-03T12:49:35.378573+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 1,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T12:49:36+00:00"
+   },
+   "id": "4fa378ea-e9d0-4fe8-92e9-c5ea6814f0b7",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-AP01": {
+   "baseline_at": "2026-11-03T12:49:39.254000+00:00",
+   "check_at": "2026-11-03T12:52:26.607833+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T12:52:27+00:00"
+   },
+   "id": "5b10614f-caef-42c2-93e4-874c14947b7c",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-AP02": {
+   "baseline_at": "2026-11-03T12:52:30.480000+00:00",
+   "check_at": "2026-11-03T12:54:10.561978+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T12:54:11+00:00"
+   },
+   "id": "9f10436f-59b5-4c4a-8815-5ece785329e2",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-AP03": {
+   "baseline_at": "2026-11-03T12:54:14.404000+00:00",
+   "check_at": "2026-11-03T12:58:28.554194+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T12:58:29+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "wrong or missing: end, start",
+    "the created record is not the person",
+    "the created record does not come back from a search"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-AP04": {
+   "baseline_at": "2026-11-03T12:58:32.399000+00:00",
+   "check_at": "2026-11-03T13:04:04.942506+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T13:04:05+00:00",
+    "writes_to_record": 2
+   },
+   "id": "257a8cf8-76ab-4c66-a257-fee1294443c7",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-AP05": {
+   "baseline_at": "2026-11-03T13:04:08.786000+00:00",
+   "check_at": "2026-11-03T13:08:57.214006+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T13:08:58+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Appointment records, not one",
+    "the agent wrote 2 other resource(s): Appointment"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-AP06": {
+   "baseline_at": "2026-11-03T13:09:01.361000+00:00",
+   "check_at": "2026-11-03T13:14:00.591094+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T13:14:01+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Appointment records, not one",
+    "the agent wrote 2 other resource(s): Appointment"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-AP07": {
+   "baseline_at": "2026-11-03T13:14:04.550000+00:00",
+   "check_at": "2026-11-03T13:18:52.600965+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T13:18:53+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): Appointment"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-AP08": {
+   "baseline_at": "2026-11-03T13:18:56.645000+00:00",
+   "check_at": "2026-11-03T13:24:48.251276+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 1,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T13:24:49+00:00"
+   },
+   "id": "637120a6-b8f1-43d3-bfd0-3f4816e2eb0d",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-AP09": {
+   "baseline_at": "2026-11-03T13:24:52.133000+00:00",
+   "check_at": "2026-11-03T13:27:38.073799+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T13:27:39+00:00",
+    "writes_to_record": 2
+   },
+   "id": "938e87e1-92ca-4a83-a100-4022be40acc4",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-AP10": {
+   "baseline_at": "2026-11-03T13:27:41.956000+00:00",
+   "check_at": "2026-11-03T13:31:52.738641+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance",
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T13:31:53+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): AllergyIntolerance"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-AP11": {
+   "baseline_at": "2026-11-03T13:32:56.695000+00:00",
+   "check_at": "2026-11-03T13:38:32.634541+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T13:38:33+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-AP12": {
+   "baseline_at": "2026-11-03T13:39:36.606000+00:00",
+   "check_at": "2026-11-03T13:44:07.121114+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T13:44:08+00:00"
+   },
+   "id": "c99f01f4-92c5-4dba-92d0-aeb7f3d717de",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-P01": {
+   "baseline_at": "2026-11-03T10:59:02.320000+00:00",
+   "check_at": "2026-11-03T11:03:55.827209+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T11:03:56+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-P02": {
+   "baseline_at": "2026-11-03T11:03:59.599000+00:00",
+   "check_at": "2026-11-03T11:04:13.351716+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T11:04:14+00:00"
+   },
+   "id": "1482ce90-1f08-4b3f-9733-ff31f727c4c4",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-P03": {
+   "baseline_at": "2026-11-03T11:04:17.104000+00:00",
+   "check_at": "2026-11-03T11:04:31.262089+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T11:04:32+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-P04": {
+   "baseline_at": "2026-11-03T11:04:35.002000+00:00",
+   "check_at": "2026-11-03T11:07:45.685108+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T11:07:46+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-P05": {
+   "baseline_at": "2026-11-03T11:07:49.415000+00:00",
+   "check_at": "2026-11-03T11:11:56.751675+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T11:11:57+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-P06": {
+   "baseline_at": "2026-11-03T11:12:00.493000+00:00",
+   "check_at": "2026-11-03T11:14:06.345431+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T11:14:07+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "not given by the task: deceasedBoolean"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-P07": {
+   "baseline_at": "2026-11-03T11:14:10.074000+00:00",
+   "check_at": "2026-11-03T11:21:49.172166+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 3,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T11:21:50+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 3 Patient records, not one",
+    "the agent wrote 3 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-P08": {
+   "baseline_at": "2026-11-03T11:21:53.052000+00:00",
+   "check_at": "2026-11-03T11:23:52.930870+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T11:23:53+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Patient records, not one",
+    "the agent wrote 2 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-P09": {
+   "baseline_at": "2026-11-03T11:23:56.849000+00:00",
+   "check_at": "2026-11-03T11:32:58.335413+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T11:32:59+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): Patient",
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-P10": {
+   "baseline_at": "2026-11-03T11:33:02.156000+00:00",
+   "check_at": "2026-11-03T11:33:42.229391+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 2,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T11:33:43+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "2 records were already the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-P11": {
+   "baseline_at": "2026-11-03T11:33:46.064000+00:00",
+   "check_at": "2026-11-03T11:35:23.061361+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T11:35:24+00:00"
+   },
+   "id": "38800e85-7ad0-48ce-a796-62c67c94ced5",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-P12": {
+   "baseline_at": "2026-11-03T11:35:26.823000+00:00",
+   "check_at": "2026-11-03T11:40:30.411601+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T11:40:31+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "claude/runs/r3-P13": {
+   "baseline_at": "2026-11-03T11:40:34.202000+00:00",
+   "check_at": "2026-11-03T11:42:19.651889+00:00",
+   "evidence": {
+    "unreadable": true
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "unreadable: the agent wrote after the window closed"
+   ],
+   "unreadable": true
+  },
+  "openai/runs/r1-A01": {
+   "baseline_at": "2026-11-03T03:07:50.069000+00:00",
+   "check_at": "2026-11-03T03:09:55.208116+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:09:56+00:00"
+   },
+   "id": "bc41b104-1672-4ac6-a2c8-ef01a609d5b1",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-A02": {
+   "baseline_at": "2026-11-03T03:10:03.487000+00:00",
+   "check_at": "2026-11-03T03:11:03.374630+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:11:04+00:00"
+   },
+   "id": "cc378877-b231-4e08-8a68-7683fd8195d7",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-A03": {
+   "baseline_at": "2026-11-03T03:16:26.958000+00:00",
+   "check_at": "2026-11-03T03:18:29.457807+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:18:30+00:00"
+   },
+   "id": "391b3530-55b5-4d48-a0f7-867ba16c9110",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-A04": {
+   "baseline_at": "2026-11-03T03:18:43.205000+00:00",
+   "check_at": "2026-11-03T03:21:39.978862+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:21:40+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-A05": {
+   "baseline_at": "2026-11-03T03:25:57.803000+00:00",
+   "check_at": "2026-11-03T03:28:13.510859+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:28:14+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-A06": {
+   "baseline_at": "2026-11-03T03:33:30.527000+00:00",
+   "check_at": "2026-11-03T03:36:06.387820+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:36:07+00:00",
+    "writes_to_record": 2
+   },
+   "id": "f1a8aed0-b5a2-4f54-82df-64477aeff050",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-A07": {
+   "baseline_at": "2026-11-03T03:36:15.607000+00:00",
+   "check_at": "2026-11-03T03:38:10.211398+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:38:11+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 AllergyIntolerance records, not one",
+    "the agent wrote 2 other resource(s): AllergyIntolerance"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-A08": {
+   "baseline_at": "2026-11-03T03:38:20.386000+00:00",
+   "check_at": "2026-11-03T03:41:00.809389+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance",
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:41:01+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-A09": {
+   "baseline_at": "2026-11-03T03:41:14.089000+00:00",
+   "check_at": "2026-11-03T03:43:30.865729+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 1,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:43:31+00:00"
+   },
+   "id": "9f364b46-bc19-4e26-9111-706b32e5bfdf",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-A10": {
+   "baseline_at": "2026-11-03T03:43:39.816000+00:00",
+   "check_at": "2026-11-03T03:45:19.996693+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:45:20+00:00"
+   },
+   "id": "882b47b0-933a-47cc-8463-a4f0cd831096",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-A11": {
+   "baseline_at": "2026-11-03T03:45:29.666000+00:00",
+   "check_at": "2026-11-03T03:47:30.601448+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:47:31+00:00"
+   },
+   "id": "83a6b676-06b6-4269-bd7c-a4578358150e",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-A12": {
+   "baseline_at": "2026-11-03T03:48:12.506000+00:00",
+   "check_at": "2026-11-03T03:50:34.097411+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 1,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:50:35+00:00"
+   },
+   "id": "7c45272a-e2ce-437b-8969-c63895555ff9",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-AP01": {
+   "baseline_at": "2026-11-03T03:50:45.975000+00:00",
+   "check_at": "2026-11-03T03:53:32.581895+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:53:33+00:00"
+   },
+   "id": "74da3342-2353-41f7-b1a2-3a1b28157aec",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-AP02": {
+   "baseline_at": "2026-11-03T03:54:18.111000+00:00",
+   "check_at": "2026-11-03T03:55:29.286473+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:55:30+00:00"
+   },
+   "id": "79ced059-7fd8-4893-96db-aaf69b6fa210",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-AP03": {
+   "baseline_at": "2026-11-03T05:03:15.196000+00:00",
+   "check_at": "2026-11-03T05:04:08.280433+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T05:04:09+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-AP04": {
+   "baseline_at": "2026-11-03T05:04:18.212000+00:00",
+   "check_at": "2026-11-03T05:06:55.284155+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T05:06:56+00:00",
+    "writes_to_record": 2
+   },
+   "id": "e2496184-e5fc-407c-9cd2-15be34670ce4",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-AP05": {
+   "baseline_at": "2026-11-03T05:07:04.709000+00:00",
+   "check_at": "2026-11-03T05:09:33.379625+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T05:09:34+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Appointment records, not one",
+    "the agent wrote 2 other resource(s): Appointment"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-AP06": {
+   "baseline_at": "2026-11-03T05:09:42.038000+00:00",
+   "check_at": "2026-11-03T05:11:42.537320+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T05:11:43+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Appointment records, not one",
+    "the agent wrote 2 other resource(s): Appointment"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-AP07": {
+   "baseline_at": "2026-11-03T05:11:52.925000+00:00",
+   "check_at": "2026-11-03T05:14:03.528754+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T05:14:04+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): Appointment"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-AP08": {
+   "baseline_at": "2026-11-03T05:14:15.123000+00:00",
+   "check_at": "2026-11-03T05:16:40.711966+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 1,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T05:16:41+00:00"
+   },
+   "id": "6a433b35-1e21-48d5-8611-fc41e308c87b",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-AP09": {
+   "baseline_at": "2026-11-03T05:18:20.461000+00:00",
+   "check_at": "2026-11-03T05:21:17.202393+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T05:21:18+00:00",
+    "writes_to_record": 2
+   },
+   "id": "60c7e07b-8d1e-4bef-80c3-dc10a017438c",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-AP10": {
+   "baseline_at": "2026-11-03T05:21:28.261000+00:00",
+   "check_at": "2026-11-03T05:23:06.489269+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance",
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T05:23:07+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): AllergyIntolerance"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-AP11": {
+   "baseline_at": "2026-11-03T05:23:21.768000+00:00",
+   "check_at": "2026-11-03T05:26:19.967249+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T05:26:20+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-AP12": {
+   "baseline_at": "2026-11-03T05:27:39.335000+00:00",
+   "check_at": "2026-11-03T05:29:59.006578+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T05:30:00+00:00"
+   },
+   "id": "e046b7f5-0f37-45f8-bd19-1e073d9b2ef1",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-P01": {
+   "baseline_at": "2026-11-03T02:34:22.842000+00:00",
+   "check_at": "2026-11-03T02:35:21.954691+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T02:35:22+00:00"
+   },
+   "id": "c3b0f0ac-701c-47ae-8428-8650067ec942",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-P02": {
+   "baseline_at": "2026-11-03T02:35:30.068000+00:00",
+   "check_at": "2026-11-03T02:35:42.680553+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T02:35:43+00:00"
+   },
+   "id": "f6c95241-6fd6-4d4d-8357-0580b5c09a88",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-P03": {
+   "baseline_at": "2026-11-03T02:35:50.837000+00:00",
+   "check_at": "2026-11-03T02:36:04.357580+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T02:36:05+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-P04": {
+   "baseline_at": "2026-11-03T02:36:12.378000+00:00",
+   "check_at": "2026-11-03T02:37:40.083172+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T02:37:41+00:00",
+    "writes_to_record": 2
+   },
+   "id": "8bca3af7-02cc-4ad0-99e1-42ea8216e30a",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-P05": {
+   "baseline_at": "2026-11-03T02:37:48.194000+00:00",
+   "check_at": "2026-11-03T02:38:41.754661+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T02:38:42+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "wrong or missing: phone"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-P06": {
+   "baseline_at": "2026-11-03T02:38:49.845000+00:00",
+   "check_at": "2026-11-03T02:40:18.906058+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T02:40:19+00:00",
+    "writes_to_record": 2
+   },
+   "id": "5dd19483-322b-4f7f-adb7-caf1ed30acc2",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-P07": {
+   "baseline_at": "2026-11-03T02:40:27.011000+00:00",
+   "check_at": "2026-11-03T02:41:22.478435+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T02:41:23+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Patient records, not one",
+    "the agent wrote 2 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-P08": {
+   "baseline_at": "2026-11-03T02:41:31.239000+00:00",
+   "check_at": "2026-11-03T02:53:17.299552+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T02:53:18+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Patient records, not one",
+    "the agent wrote 2 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-P09": {
+   "baseline_at": "2026-11-03T03:00:54.087000+00:00",
+   "check_at": "2026-11-03T03:01:51.746730+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:01:52+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-P10": {
+   "baseline_at": "2026-11-03T03:02:00.190000+00:00",
+   "check_at": "2026-11-03T03:02:32.828914+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 2,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:02:33+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "2 records were already the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-P11": {
+   "baseline_at": "2026-11-03T03:02:41.367000+00:00",
+   "check_at": "2026-11-03T03:03:58.139136+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:03:59+00:00"
+   },
+   "id": "32993e1b-3026-49ab-8f10-c0e88d3d1f4f",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-P12": {
+   "baseline_at": "2026-11-03T03:04:06.962000+00:00",
+   "check_at": "2026-11-03T03:05:01.833611+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:05:02+00:00"
+   },
+   "id": "34622379-1950-4359-8d5a-e42a310bde88",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r1-P13": {
+   "baseline_at": "2026-11-03T03:05:12.872000+00:00",
+   "check_at": "2026-11-03T03:06:41.591453+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:06:42+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-A01": {
+   "baseline_at": "2026-11-03T06:26:08.416000+00:00",
+   "check_at": "2026-11-03T06:28:20.809727+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:28:21+00:00"
+   },
+   "id": "b6284fea-b51e-4300-afb7-21734d8449dd",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-A02": {
+   "baseline_at": "2026-11-03T06:30:25.235000+00:00",
+   "check_at": "2026-11-03T06:31:37.873845+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:31:38+00:00"
+   },
+   "id": "c0ad34a3-0580-458b-80fb-67ec6bc98c5f",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-A03": {
+   "baseline_at": "2026-11-03T06:31:41.728000+00:00",
+   "check_at": "2026-11-03T06:33:10.629266+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:33:11+00:00"
+   },
+   "id": "e70bbe99-ca6f-409c-a96d-3a744c8f073f",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-A04": {
+   "baseline_at": "2026-11-03T06:42:47.973000+00:00",
+   "check_at": "2026-11-03T06:55:22.777605+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:55:23+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-A05": {
+   "baseline_at": "2026-11-03T06:56:56.982000+00:00",
+   "check_at": "2026-11-03T06:59:51.949228+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:59:52+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-A06": {
+   "baseline_at": "2026-11-03T07:02:56.160000+00:00",
+   "check_at": "2026-11-03T07:05:39.955954+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:05:40+00:00",
+    "writes_to_record": 2
+   },
+   "id": "f24c208f-bc57-4605-a37c-102a839cca09",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-A07": {
+   "baseline_at": "2026-11-03T07:07:13.944000+00:00",
+   "check_at": "2026-11-03T07:09:11.706581+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:09:12+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 AllergyIntolerance records, not one",
+    "the agent wrote 2 other resource(s): AllergyIntolerance"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-A08": {
+   "baseline_at": "2026-11-03T07:13:16.210000+00:00",
+   "check_at": "2026-11-03T07:15:24.934120+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance",
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:15:25+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-A09": {
+   "baseline_at": "2026-11-03T07:17:58.940000+00:00",
+   "check_at": "2026-11-03T07:19:45.035141+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 1,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:19:46+00:00"
+   },
+   "id": "662ab4b6-cca0-4dcb-91b5-ad5bb860236a",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-A10": {
+   "baseline_at": "2026-11-03T07:21:19.562000+00:00",
+   "check_at": "2026-11-03T07:23:14.822317+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:23:15+00:00"
+   },
+   "id": "b4579aac-3b1e-45e1-81f9-9e5aca467516",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-A11": {
+   "baseline_at": "2026-11-03T07:25:18.954000+00:00",
+   "check_at": "2026-11-03T07:27:25.881416+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:27:26+00:00"
+   },
+   "id": "f5b4c2c6-e74d-49ee-89ac-269a6fec063f",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-A12": {
+   "baseline_at": "2026-11-03T07:35:29.955000+00:00",
+   "check_at": "2026-11-03T07:37:46.896248+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 1,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:37:47+00:00"
+   },
+   "id": "ed010c99-4657-4c28-884d-99215c02f2f6",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-AP01": {
+   "baseline_at": "2026-11-03T07:40:50.750000+00:00",
+   "check_at": "2026-11-03T07:43:01.394736+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:43:02+00:00"
+   },
+   "id": "931782d3-f78c-4c56-8fe4-f6d35cc97b4b",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-AP02": {
+   "baseline_at": "2026-11-03T07:43:05.439000+00:00",
+   "check_at": "2026-11-03T07:43:54.442933+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:43:55+00:00"
+   },
+   "id": "5a76505b-9548-4f10-a5a0-47b7d45875d2",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-AP03": {
+   "baseline_at": "2026-11-03T07:46:28.387000+00:00",
+   "check_at": "2026-11-03T07:48:19.701958+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:48:20+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-AP04": {
+   "baseline_at": "2026-11-03T07:48:23.538000+00:00",
+   "check_at": "2026-11-03T07:51:22.896053+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:51:23+00:00",
+    "writes_to_record": 2
+   },
+   "id": "7a52090a-3890-401f-b43a-a4d68c6ec1f5",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-AP05": {
+   "baseline_at": "2026-11-03T07:52:26.831000+00:00",
+   "check_at": "2026-11-03T07:54:42.417279+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:54:43+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Appointment records, not one",
+    "the agent wrote 2 other resource(s): Appointment"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-AP06": {
+   "baseline_at": "2026-11-03T07:56:16.409000+00:00",
+   "check_at": "2026-11-03T07:58:31.394444+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:58:32+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Appointment records, not one",
+    "the agent wrote 2 other resource(s): Appointment"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-AP07": {
+   "baseline_at": "2026-11-03T07:59:05.320000+00:00",
+   "check_at": "2026-11-03T08:01:00.099163+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:01:01+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): Appointment"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-AP08": {
+   "baseline_at": "2026-11-03T08:01:03.891000+00:00",
+   "check_at": "2026-11-03T08:03:19.650116+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 1,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:03:20+00:00"
+   },
+   "id": "442cf4cd-8f72-4896-874d-8a10449618b5",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-AP09": {
+   "baseline_at": "2026-11-03T08:04:24.229000+00:00",
+   "check_at": "2026-11-03T08:06:30.775555+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:06:31+00:00",
+    "writes_to_record": 2
+   },
+   "id": "9a873ce8-6302-40b5-82b2-37e307a25e30",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-AP10": {
+   "baseline_at": "2026-11-03T08:08:04.700000+00:00",
+   "check_at": "2026-11-03T08:10:01.928030+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance",
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:10:02+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): AllergyIntolerance"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-AP11": {
+   "baseline_at": "2026-11-03T08:12:36.208000+00:00",
+   "check_at": "2026-11-03T08:14:54.099699+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:14:55+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-AP12": {
+   "baseline_at": "2026-11-03T08:15:57.902000+00:00",
+   "check_at": "2026-11-03T08:17:46.950968+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:17:47+00:00"
+   },
+   "id": "65705ab4-38c9-4c7c-a823-a75b1511c95f",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-P01": {
+   "baseline_at": "2026-11-03T05:49:51.082000+00:00",
+   "check_at": "2026-11-03T06:01:08.626220+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:01:09+00:00"
+   },
+   "id": "7c6b2236-33fd-4051-929b-9f8cf5c9bbff",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-P02": {
+   "baseline_at": "2026-11-03T06:01:17.644000+00:00",
+   "check_at": "2026-11-03T06:01:30.591761+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:01:31+00:00"
+   },
+   "id": "626de3c4-44e9-477f-bac1-5a64ddb7cd5c",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-P03": {
+   "baseline_at": "2026-11-03T06:01:39.606000+00:00",
+   "check_at": "2026-11-03T06:01:58.083024+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:01:59+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-P04": {
+   "baseline_at": "2026-11-03T06:05:37.539000+00:00",
+   "check_at": "2026-11-03T06:07:11.897889+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:07:12+00:00",
+    "writes_to_record": 2
+   },
+   "id": "7f621487-632c-447f-a89f-828eefafee15",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-P05": {
+   "baseline_at": "2026-11-03T06:09:45.914000+00:00",
+   "check_at": "2026-11-03T06:10:54.505045+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:10:55+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "wrong or missing: phone"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-P06": {
+   "baseline_at": "2026-11-03T06:10:58.307000+00:00",
+   "check_at": "2026-11-03T06:12:33.059034+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:12:34+00:00",
+    "writes_to_record": 2
+   },
+   "id": "027a5eb3-3e7c-4059-b7b5-8ae6b9ea0e85",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-P07": {
+   "baseline_at": "2026-11-03T06:13:37.035000+00:00",
+   "check_at": "2026-11-03T06:14:52.339220+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:14:53+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Patient records, not one",
+    "the agent wrote 2 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-P08": {
+   "baseline_at": "2026-11-03T06:14:56.258000+00:00",
+   "check_at": "2026-11-03T06:16:03.287384+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:16:04+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Patient records, not one",
+    "the agent wrote 2 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-P09": {
+   "baseline_at": "2026-11-03T06:16:07.495000+00:00",
+   "check_at": "2026-11-03T06:16:48.402849+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:16:49+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-P10": {
+   "baseline_at": "2026-11-03T06:19:22.585000+00:00",
+   "check_at": "2026-11-03T06:19:55.280182+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 2,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:19:56+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "2 records were already the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-P11": {
+   "baseline_at": "2026-11-03T06:19:59.155000+00:00",
+   "check_at": "2026-11-03T06:21:10.009673+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:21:11+00:00"
+   },
+   "id": "8f117266-4b9d-4b6e-b3cc-e096073ca42b",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-P12": {
+   "baseline_at": "2026-11-03T06:23:44.519000+00:00",
+   "check_at": "2026-11-03T06:24:48.336434+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:24:49+00:00"
+   },
+   "id": "90900f5e-c790-4674-8d24-300986d9b57e",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r2-P13": {
+   "baseline_at": "2026-11-03T06:24:52.383000+00:00",
+   "check_at": "2026-11-03T06:26:04.349534+00:00",
+   "evidence": {
+    "unreadable": true
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "unreadable: the agent wrote after the window closed"
+   ],
+   "unreadable": true
+  },
+  "openai/runs/r3-A01": {
+   "baseline_at": "2026-11-03T08:55:12.974000+00:00",
+   "check_at": "2026-11-03T08:57:54.309343+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:57:55+00:00"
+   },
+   "id": "849dceae-9a81-4ec0-a7e9-843e447df180",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-A02": {
+   "baseline_at": "2026-11-03T08:57:58.674000+00:00",
+   "check_at": "2026-11-03T08:59:08.314596+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:59:09+00:00"
+   },
+   "id": "96ca40e4-5e02-4ad2-ba6c-759ff89fff0a",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-A03": {
+   "baseline_at": "2026-11-03T08:59:12.101000+00:00",
+   "check_at": "2026-11-03T09:01:14.725097+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:01:15+00:00"
+   },
+   "id": "b6fdab26-1655-43c8-a7dd-eba9d45f2356",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-A04": {
+   "baseline_at": "2026-11-03T09:01:18.743000+00:00",
+   "check_at": "2026-11-03T09:04:38.151917+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:04:39+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-A05": {
+   "baseline_at": "2026-11-03T09:04:42.229000+00:00",
+   "check_at": "2026-11-03T09:07:48.664487+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:07:49+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-A06": {
+   "baseline_at": "2026-11-03T09:07:52.435000+00:00",
+   "check_at": "2026-11-03T09:10:07.199511+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:10:08+00:00",
+    "writes_to_record": 2
+   },
+   "id": "2a348a67-9184-4602-8fc7-8ae004ddadc2",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-A07": {
+   "baseline_at": "2026-11-03T09:10:11.001000+00:00",
+   "check_at": "2026-11-03T09:12:11.735369+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:12:12+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 AllergyIntolerance records, not one",
+    "the agent wrote 2 other resource(s): AllergyIntolerance"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-A08": {
+   "baseline_at": "2026-11-03T09:12:15.537000+00:00",
+   "check_at": "2026-11-03T09:14:23.846375+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance",
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:14:24+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-A09": {
+   "baseline_at": "2026-11-03T09:14:27.670000+00:00",
+   "check_at": "2026-11-03T09:16:32.160905+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 1,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:16:33+00:00"
+   },
+   "id": "658a77d1-9e78-44ac-9f0b-75c09a72f392",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-A10": {
+   "baseline_at": "2026-11-03T09:16:36.201000+00:00",
+   "check_at": "2026-11-03T09:18:26.055953+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:18:27+00:00"
+   },
+   "id": "93d0c0a5-9874-42b6-8187-4b4c7a1f9d9e",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-A11": {
+   "baseline_at": "2026-11-03T09:18:29.872000+00:00",
+   "check_at": "2026-11-03T09:20:04.143133+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:20:05+00:00"
+   },
+   "id": "d73cbd89-26a6-4b25-98bb-b6d542760951",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-A12": {
+   "baseline_at": "2026-11-03T09:20:07.941000+00:00",
+   "check_at": "2026-11-03T09:22:16.244399+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 1,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:22:17+00:00"
+   },
+   "id": "e181c2b3-5bac-4c8d-9387-55c9b5c83d0d",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-AP01": {
+   "baseline_at": "2026-11-03T09:22:20.050000+00:00",
+   "check_at": "2026-11-03T09:24:10.018354+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:24:11+00:00"
+   },
+   "id": "10bd3bc0-7ca0-43f9-b9de-b51ef92216b0",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-AP02": {
+   "baseline_at": "2026-11-03T09:24:14.022000+00:00",
+   "check_at": "2026-11-03T09:25:43.052478+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:25:44+00:00"
+   },
+   "id": "cb482df3-3e08-46ab-956c-131d6064a0d7",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-AP03": {
+   "baseline_at": "2026-11-03T09:25:46.867000+00:00",
+   "check_at": "2026-11-03T09:27:49.501538+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:27:50+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-AP04": {
+   "baseline_at": "2026-11-03T09:27:53.709000+00:00",
+   "check_at": "2026-11-03T09:30:19.168507+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:30:20+00:00",
+    "writes_to_record": 2
+   },
+   "id": "2ac68d0c-4f61-422a-951e-5456857382b8",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-AP05": {
+   "baseline_at": "2026-11-03T09:30:23.947000+00:00",
+   "check_at": "2026-11-03T09:32:42.858094+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:32:43+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Appointment records, not one",
+    "the agent wrote 2 other resource(s): Appointment"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-AP06": {
+   "baseline_at": "2026-11-03T09:32:46.698000+00:00",
+   "check_at": "2026-11-03T09:34:38.077178+00:00",
+   "evidence": {
+    "after_matches": 3,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 3,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:34:39+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 3 Appointment records, not one",
+    "the agent wrote 3 other resource(s): Appointment"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-AP07": {
+   "baseline_at": "2026-11-03T09:38:12.225000+00:00",
+   "check_at": "2026-11-03T09:40:12.681865+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:40:13+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): Appointment"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-AP08": {
+   "baseline_at": "2026-11-03T09:44:46.673000+00:00",
+   "check_at": "2026-11-03T09:47:16.517302+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 1,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:47:17+00:00"
+   },
+   "id": "1bcb55ba-3e0f-4f83-bfb1-9765ca845cf9",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-AP09": {
+   "baseline_at": "2026-11-03T09:47:20.513000+00:00",
+   "check_at": "2026-11-03T09:49:54.251516+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:49:55+00:00",
+    "writes_to_record": 2
+   },
+   "id": "77748018-38cb-429d-b3ea-30496b7c10cb",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-AP10": {
+   "baseline_at": "2026-11-03T09:49:59.040000+00:00",
+   "check_at": "2026-11-03T09:52:00.577390+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "AllergyIntolerance",
+     "Appointment"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:52:01+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): AllergyIntolerance"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-AP11": {
+   "baseline_at": "2026-11-03T09:52:04.420000+00:00",
+   "check_at": "2026-11-03T09:55:05.001221+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:55:06+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent changed or deleted the record after creating it, and a version in between was not the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-AP12": {
+   "baseline_at": "2026-11-03T09:55:09.031000+00:00",
+   "check_at": "2026-11-03T09:57:36.460083+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Appointment"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:57:37+00:00"
+   },
+   "id": "1f05ecb2-b233-4dc5-8222-fe6d450d2961",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-P01": {
+   "baseline_at": "2026-11-03T08:19:50.854000+00:00",
+   "check_at": "2026-11-03T08:21:06.810852+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:21:07+00:00"
+   },
+   "id": "e1db064b-2c15-45ea-a290-ba3e737abcf0",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-P02": {
+   "baseline_at": "2026-11-03T08:21:10.723000+00:00",
+   "check_at": "2026-11-03T08:21:23.467159+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:21:24+00:00"
+   },
+   "id": "020a278e-9da5-4a9e-8d22-acc5202df75a",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-P03": {
+   "baseline_at": "2026-11-03T08:23:57.349000+00:00",
+   "check_at": "2026-11-03T08:24:13.130887+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:24:14+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-P04": {
+   "baseline_at": "2026-11-03T08:24:16.825000+00:00",
+   "check_at": "2026-11-03T08:25:55.797589+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:25:56+00:00",
+    "writes_to_record": 2
+   },
+   "id": "62dd5aba-1ddc-4540-a355-dbec1e3a0ce4",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-P05": {
+   "baseline_at": "2026-11-03T08:27:29.580000+00:00",
+   "check_at": "2026-11-03T08:28:35.346518+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:28:36+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "wrong or missing: phone"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-P06": {
+   "baseline_at": "2026-11-03T08:35:39.205000+00:00",
+   "check_at": "2026-11-03T08:37:13.583548+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "corrected": true,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:37:14+00:00",
+    "writes_to_record": 2
+   },
+   "id": "4d6bd92d-4382-4312-b48c-7207c435ee8d",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-P07": {
+   "baseline_at": "2026-11-03T08:37:17.376000+00:00",
+   "check_at": "2026-11-03T08:38:26.819861+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:38:27+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Patient records, not one",
+    "the agent wrote 2 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-P08": {
+   "baseline_at": "2026-11-03T08:38:31.484000+00:00",
+   "check_at": "2026-11-03T08:39:48.109709+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:39:49+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Patient records, not one",
+    "the agent wrote 2 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-P09": {
+   "baseline_at": "2026-11-03T08:39:51.973000+00:00",
+   "check_at": "2026-11-03T08:40:51.463720+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:40:52+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent wrote 1 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-P10": {
+   "baseline_at": "2026-11-03T08:40:55.215000+00:00",
+   "check_at": "2026-11-03T08:41:28.499196+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 2,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:41:29+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "2 records were already the person"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-P11": {
+   "baseline_at": "2026-11-03T08:41:32.227000+00:00",
+   "check_at": "2026-11-03T08:42:36.922827+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:42:37+00:00"
+   },
+   "id": "e4b0b5d6-ddc6-4528-9bb4-32300721822a",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-P12": {
+   "baseline_at": "2026-11-03T08:42:40.649000+00:00",
+   "check_at": "2026-11-03T08:53:43.044706+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:53:44+00:00"
+   },
+   "id": "310e24c4-8184-433e-bf3f-9a180be28ecb",
+   "outcome": "created_verified",
+   "reasons": [
+    "created once, every value read back"
+   ],
+   "unreadable": false
+  },
+  "openai/runs/r3-P13": {
+   "baseline_at": "2026-11-03T08:53:47.227000+00:00",
+   "check_at": "2026-11-03T08:55:09.217512+00:00",
+   "evidence": {
+    "unreadable": true
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "unreadable: the agent wrote after the window closed"
+   ],
+   "unreadable": true
+  }
+ },
+ "schema": "openadapt.leaderboard-rescore/v1"
+}

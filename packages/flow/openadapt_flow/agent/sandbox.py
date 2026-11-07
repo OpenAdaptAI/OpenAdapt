@@ -345,6 +345,8 @@ class SandboxEngine:
         run_id: str,
         inputs: dict[str, str],
         raw: Mapping[str, Any],
+        *,
+        admitted_bundle_sha256: Optional[str] = None,
     ) -> EngineResult:
         case = CASES[str(raw.get("sandbox_case") or "normal")]
         if self.engine == "flow" and not self._ready.wait(PREPARE_TIMEOUT_S):

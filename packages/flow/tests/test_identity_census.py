@@ -147,3 +147,77 @@ def test_ocr_rows_count_every_verifying_row_but_the_target() -> None:
         rows[2:], target_y=198, verifies=lambda text: text == ROW, same_row_px=16
     )
     assert unique == 1
+
+
+def test_a_teach_time_twin_is_one_no_record_id_separates() -> None:
+    from openadapt_flow.recorder import _census_has_twin
+
+    def census(own, other):
+        return {
+            "record_key": own,
+            "candidates": [
+                {"self": True, "record_key": own},
+                {"self": False, "record_key": other},
+            ],
+        }
+
+    assert _census_has_twin(census(None, None))
+    assert _census_has_twin(census("data-id=1001", "data-id=1001"))
+    assert not _census_has_twin(census("data-id=1001", "data-id=1002"))
+    assert not _census_has_twin({"candidates": [{"self": True}]})
+
+
+def test_teach_ambiguity_is_stored_and_left_out_when_unset() -> None:
+    twin = itmpl.build_identity_template(
+        None, structured_identity=ROW, structured_ambiguous=True
+    )
+    plain = itmpl.build_identity_template(None, structured_identity=ROW)
+    assert twin is not None and twin.teach_ambiguous is True
+    assert plain is not None and "teach_ambiguous" not in plain.model_dump()
+
+
+def test_a_teach_time_twin_halt_says_teach_time_saw_it() -> None:
+    from pathlib import Path
+
+    from openadapt_flow.ir import (
+        ActionKind,
+        Anchor,
+        Resolution,
+        Step,
+        StepResult,
+        Workflow,
+    )
+    from openadapt_flow.runtime.replayer import Replayer
+
+    step = Step(
+        id="open",
+        intent="click 'Open'",
+        action=ActionKind.CLICK,
+        anchor=Anchor(
+            template="t.png",
+            region=(0, 0, 10, 10),
+            click_point=(5, 5),
+            identity_template=itmpl.build_identity_template(
+                None, structured_identity=ROW, structured_ambiguous=True
+            ),
+        ),
+    )
+    replayer = Replayer(object(), vision=object(), poll_interval_s=0.01)
+    replayer._verify_identity = lambda *a, **k: IdentityCheck(  # type: ignore[method-assign]
+        status="abstain",
+        mode="structured",
+        ambiguity_halt="identical_candidates",
+        candidate_count=1,
+    )
+    result = StepResult(step_id="open", intent="click 'Open'", ok=False)
+    error = replayer._identity_gate_error(
+        step,
+        Resolution(rung="template", point=(5, 5), confidence=1.0, elapsed_ms=1),
+        b"",
+        {},
+        Workflow(name="wf"),
+        Path("."),
+        result,
+    )
+    assert error is not None and "teach time saw another row" in error
+    assert "1 shown rows" not in error

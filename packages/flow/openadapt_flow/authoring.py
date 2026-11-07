@@ -651,6 +651,11 @@ class AuthoringSession:
         )
         self._actors = {}
 
+    def add_settle_callback(self, callback: Callable[[float], None]) -> None:
+        """Run a capture-side guard while each action settles and is sampled."""
+
+        self._require_recording().add_settle_callback(callback)
+
     def click(
         self,
         x: Optional[int] = None,
@@ -804,7 +809,7 @@ class AuthoringSession:
                 "reason": "unconfirmed_masked_secret",
             }
         if not pause.secret and (text is None or not text):
-            # Non-secret MockMed note: do not persist an empty TYPE/param.
+            # Non-secret field left empty: do not persist an empty TYPE/param.
             return {
                 "recorded": False,
                 "param": pause.param,

@@ -145,6 +145,14 @@ def _structural_payload(content: dict, shape: str) -> dict:
     return content["program"]["states"]["s1"]["step"]["anchor"]["structural"]
 
 
+def _anchor_payload(content: dict, shape: str) -> dict:
+    """Return the exact Anchor JSON object in either IR shape."""
+
+    if shape == "linear":
+        return content["steps"][0]["anchor"]
+    return content["program"]["states"]["s1"]["step"]["anchor"]
+
+
 def _step_payloads(content: dict, shape: str) -> list[dict]:
     """The exact Step JSON objects in either IR shape (linear or program)."""
 
@@ -180,6 +188,8 @@ def _pre_frame_path_content(wf: Workflow, shape: str) -> dict:
     content.pop("interstitials", None)  # pre-existing reviewed v2 omission
     locator = _structural_payload(content, shape)
     assert locator.pop("frame_path") in (None, [])
+    # Reviewed v2 omission: create-form identity postdates these seals.
+    assert _anchor_payload(content, shape).pop("form_identity") is None
     for step in _step_payloads(content, shape):
         # Reviewed v2 omission: field_label evidence postdates these seals.
         assert step.pop("field_label") is None
@@ -255,6 +265,7 @@ def _write_synthetic_pre_field_bundle(
     raw = wf.model_dump(mode="json")
     # The historical workflow JSON itself did not contain the fields either.
     assert _structural_payload(raw, shape).pop("frame_path") in (None, [])
+    assert _anchor_payload(raw, shape).pop("form_identity") is None
     for step in _step_payloads(raw, shape):
         assert step.pop("field_label") is None
         assert step.pop("selection_commit_key") is None
@@ -1081,3 +1092,93 @@ def test_a_read_spec_and_grade_floor_are_sealed_content(tmp_path):
     )
     content = bv._workflow_content(read)
     assert content["steps"][0]["read"]["field"]["name"] == "amount"
+
+
+@pytest.mark.parametrize("shape", ["linear", "program"])
+def test_dialog_row_evidence_preserves_frozen_legacy_seal_and_is_tamper_evident(
+    tmp_path, shape
+):
+    b = _write_bundle_dir(tmp_path)
+    wf = _structural_workflow(shape)
+    old_digest = _write_synthetic_pre_field_bundle(b, wf, shape, encrypted=False)
+    assert old_digest == _SYNTHETIC_LEGACY_DIGESTS[shape]
+    raw = json.loads((b / "workflow.json").read_text())
+    assert "dialog_row" not in _anchor_payload(raw, shape)
+    loaded = Workflow.load(b, verify_integrity=True)
+    anchor = (
+        loaded.steps[0].anchor
+        if shape == "linear"
+        else loaded.program.states["s1"].step.anchor
+    )
+    assert anchor.dialog_row is None
+    for evidence in (True, False):
+        anchor.dialog_row = evidence
+        assert (
+            bv.compute_content_digest(loaded, loaded.manifest.file_hashes) != old_digest
+        )
+        _anchor_payload(raw, shape)["dialog_row"] = evidence
+        (b / "workflow.json").write_text(json.dumps(raw))
+        with pytest.raises(bv.BundleIntegrityError):
+            Workflow.load(b, verify_integrity=True)
+
+
+def test_native_select_contract_preserves_value_and_legacy_serialization():
+    from openadapt_flow.ir import NativeSelectContract
+
+    contract = NativeSelectContract(
+        value="species-17",
+        label="Dog",
+        options=[
+            {"value": "", "label": "Choose", "disabled": False},
+            {"value": "species-17", "label": "Dog", "disabled": False},
+        ],
+    )
+    anchor = click_step().anchor.model_copy(deep=True)
+    anchor.structural = StructuralLocator(selector="#species")
+    step = Step(
+        id="select",
+        intent="select Dog",
+        action=ActionKind.SELECT_OPTION,
+        text="Dog",
+        native_selection=contract,
+        anchor=anchor,
+    )
+    assert Step.model_validate_json(step.model_dump_json()) == step
+    assert step.native_selection.value != step.text
+    assert "native_selection" not in key_step().model_dump(mode="json")
+    old = step.model_dump(mode="json")
+    old.pop("native_selection")
+    with pytest.raises(ValueError, match="SELECT_OPTION requires"):
+        Step.model_validate(old)
+    for patch in (
+        {"action": "type"},
+        {"param": "species"},
+        {"secret": True},
+        {"selection_commit_key": "Enter", "selection_region": [1, 2, 3, 4]},
+        {"text": "d"},
+        {"anchor": None},
+    ):
+        with pytest.raises(ValueError):
+            Step.model_validate({**step.model_dump(mode="json"), **patch})
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"value": "other", "label": " DOG ", "disabled": False},
+        {"value": "species-17", "label": "Another", "disabled": False},
+        {"value": "species-17", "label": "Dog", "disabled": True},
+    ],
+)
+def test_native_select_contract_rejects_ambiguous_or_disabled_options(extra):
+    from openadapt_flow.ir import NativeSelectContract
+
+    with pytest.raises(ValueError, match="unambiguous"):
+        NativeSelectContract(
+            value="species-17",
+            label="Dog",
+            options=[
+                {"value": "species-17", "label": "Dog", "disabled": False},
+                extra,
+            ],
+        )

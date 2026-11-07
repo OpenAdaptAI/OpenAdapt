@@ -15,6 +15,242 @@
 
 <!-- version list -->
 
+## Unreleased
+
+### Changed
+
+- No command falls back to the demo app on its own. `replay` needs a target: `--url`, `backend.url` in `--config`, or `--demo-app` to serve the bundled MockMed (the tutorial and quickstart commands pass it; `--drift` needs it). The variant router's first-screen probe captures nothing without a URL. `qualify accept`'s break-it check no longer runs every workflow's oracle against MockMed: it builds the lie from the workflow itself (a store that did not change, and a screen showing the workflow's own success text and every value the run typed). The reference Execute worker refuses, before running anything, an admission whose `target_url` it cannot drive, instead of resetting and reading that app as if it were the demo.
+
+### Fixes
+
+- The OpenEMR contracts (`benchmark/lifecycle_proof/verify.yaml`, `benchmark/openemr_local/verify.yaml`) now declare how the New Patient form stores what was typed: street and city in capitals, names with each word capitalized. Without it the exact record check refuted 19 of 20 correct saves on the stand-in suites (#1811). A contract value's `stored` form gains `capitalize_words` (OpenEMR's "C" fields); the set stays closed and the check stays exact.
+
+## v2.6.0 (2026-11-04)
+
+Flow adds signed teach authorizations, encrypted local artifacts, durable
+rollback, and more ways to train and evaluate agents. Verification still
+refuses a write when the record or its outcome cannot be established.
+
+### Upgrade notes
+
+- A differing record identifier now counts as a contradiction, even when most
+  of the identity band matches. Runs may refuse some same-record pairs they
+  accepted before. Check the stopped record before retrying.
+- Agent-taught drafts now need a signed teach authorization in every admission
+  mode. The authorization also covers self-repair and approval of an agent's
+  fix. Browser teach no longer teaches or runs write tools. See
+  [Teach authorization](docs/TEACH_AUTHORIZATION.md).
+- Benchmark harnesses and test-only helpers are no longer shipped in the wheel.
+  Replace imports from `openadapt_flow.benchmark` and
+  `openadapt_flow.instrument` with `benchmark.harness` from a source checkout.
+  The `harness2` extra is removed; `openadapt-flow benchmark` needs a checkout.
+- REST verifiers require the app's record path, record key and delete path;
+  FHIR verifiers require its resource type and field map. API-save admission
+  and idempotency-key detection use explicit app configuration. Contracts that
+  pin an app profile must adopt its updated digest before using the revised
+  bookkeeping rules. Existing verifier identities and contract digests stay
+  unchanged when their configuration is unchanged.
+- Re-record macOS bundles whose record identity was captured from a table cell.
+  Identity now uses the whole row; a table with no accessible row falls back
+  to its recorded identity band.
+
+### Features
+
+- A code-as-action agent is now the default for the first run. Every save is
+  read back before that run becomes a replayable program. Form scripts can run
+  before an admitted API save.
+- Teach authorizations bind the task, origins, inputs, permitted write and
+  forbidden actions to a person on the signed approver roster. Create, sign
+  and verify them with `openadapt-flow teach-authorization`.
+- Generated contracts can be admitted through a sandbox without setup answers.
+  They compare their own tables at recheck, support field sets absent from a
+  manifest, and refuse joins or parameter bindings the demonstrations cannot
+  distinguish. Dialog checks can be learned in any language when multiple
+  demonstrations agree; an ambiguous check is refused.
+- Learn an app's per-request bookkeeping writes, then enforce the rules a
+  person approved. See [Learned excuses](docs/LEARNED_EXCUSES.md).
+- Signed write receipts bind each verifier verdict to the stores and time
+  window checked, its strength, and an explicit list of what was not checked.
+  The `receipts` extra supports offline verification and optional transparency
+  log anchoring. See [Write receipts](docs/WRITE_RECEIPTS.md).
+- Encrypt recordings and bundles at rest with a local key. Strict mode refuses
+  unsealed inputs. Compile, compose, route, process, visualize, variant, teach
+  and library paths can read sealed artifacts without a plaintext export.
+  Attended state, checkpoints and the approval journal are encrypted by default;
+  legacy plaintext state is upgraded before use, and raw authority paths are
+  refused in strict mode. See [Encryption at rest](docs/phi_at_rest.md).
+- Roll back durable runs, including after a crash. Desktop and remote-display
+  rollback checks the starting screen through the same step resolver used by
+  a run. The ledger retains owed rechecks across restarts and distinguishes a
+  consumed, missing or incorrectly invoked recheck.
+- Serve record-checked fault environments through OpenEnv and Prime Intellect,
+  with shared observation types and MCP tools. Windows desktop packs cover
+  UI Automation and pixel-only remote display. The `openenv` extra requires
+  Python 3.11 or later; individual environments retain their documented host
+  and qualification requirements.
+- A confirmed write followed by an escalation can earn configurable partial
+  reward credit; the default is 0.5.
+
+### Fixes
+
+- Rollback and qualification read-back distinguish nulls from missing fields
+  and the text `None`. An unresolved parameter mapping cannot establish that
+  an uncertain write landed. An on-screen check with no expected value reports
+  `INDETERMINATE` instead of matching only the record selector. SQL reward
+  read-back compares typed numbers by value.
+- Bookkeeping learning excludes fields the agent sent or read, including
+  bracketed form-field names and requests captured while verification runs.
+  Those fields cannot be proposed as excuses for unrelated database changes.
+- A versions check with an unknown `target_surface` reports `not_checked`
+  with `unknown_surface`. A surface read only by a zero-count guard cannot
+  supply a write target. Generated setup questions now show a missing version
+  check instead of leaving it unnoticed.
+- Typed input must match the complete field value. Native and pixel-only runs
+  stop when delivery cannot be confirmed. Windows input checks the foreground
+  window throughout delivery and reports when focus changes may leave partial
+  input. Native date fields receive ISO dates correctly.
+- Read-back compares exact, typed whole-field values. Generated save checks
+  retain duplicate keys and recognize a copied value even when it also looks
+  like the row's own key. A value is bound to a parameter only when equality
+  distinguishes it from every other candidate.
+- Rechecks hold for review when a later write's frame was not judged. A failed
+  saved state cannot supply a trusted ledger id. Later successful HTTP writes
+  without a known record count as unexplained changes. Volatile FHIR metadata
+  is refused before the first run.
+- Whole-database checks reject ambiguous PostgreSQL table and sequence names
+  and non-PostgreSQL schema wildcards. A column rule cannot excuse a row with
+  no cell hashes. Rollback audit entries identify exactly one snapshot table.
+  API spans re-read checks after writes and preserve an earlier halt reason.
+- Covered or off-viewport targets stop before pixel fallback. Self-repair may
+  dismiss a proved app-owned notice over the identity band, then checks the
+  full identity again. It refuses questions, unrelated windows and incomplete
+  coverage of the obscured band.
+- macOS supports the pinned window's AppKit sheet, Qt field delivery and row
+  identity, and receipts bound to the resolved click target. Remote-display
+  focus checks apply pending workspace updates before reading the active app.
+  Function keys F1–F12 have native key codes.
+- Linux reads editable field values and element identities through AT-SPI;
+  password fields abstain. Physical input accepts an already focused pinned
+  window. Governed self-repair can admit a new click with a unique element
+  identity and a record check.
+- Desktop self-repair can start a fresh app session for each probe when the
+  backend can bind its local window to the configured process. Windows over
+  its agent and FreeRDP still refuse this mode. Probe read-back handles words
+  joined by OCR without weakening single-word checks.
+- Windows qualification observes the executable, machine, OS and live session,
+  including connected remote sessions. Input remains bound to that environment;
+  an old agent without the required fields refuses. Lab profiles choose the
+  test app's interpreter, and headless FreeRDP can request AVC444.
+- Strict no-outbound mode permits child processes only under named containment.
+  Redaction identifies credential names by their parts. Sealed input admission
+  checks named path arguments and refuses a missing deployment key.
+
+### Evaluation and packaging
+
+- The threat model explains which verification layer provides each guarantee.
+  Additional adversarial tests exercise exact read-back and capture ambiguity.
+- Verification benchmarks include operation semantics, model-judge and API
+  read-back baselines, and revised public leaderboard scores. These reports
+  retain their stated task and evaluation scope.
+- Qualification includes Linux AT-SPI, native macOS record/compile/run cases,
+  desktop replay on hosted runners, and backend capability evidence by surface.
+  Published qualification results do not qualify every app or deployment.
+- Benchmark outputs, demo fixtures and restricted reference environments stay
+  outside distributed package artifacts. CI checks application-independent
+  engine code and validates the built wheel and source distribution.
+
+## v2.5.0 (2026-11-02)
+
+Shadow mode checks the writes of an agent you already run against the system of record without blocking any of them, the whole-database frame works on PostgreSQL, a write that lands after the verdict can be caught by a recheck, and several verifier checks that could be unreadable or pass on the wrong value now read and compare exactly.
+
+### Features
+
+- Self-repair's new clicks no longer need a browser. On a backend with an accessibility tree, a click with no record identity under it is admitted when its element (role, name, ancestry, window) is the only one with that locator in the pinned window and a record check covers every save: a system-of-record verifier, a `standard` or `regulated` profile, and confirmed effects and an armed identity check on each save. On a pixel-only backend the record check alone admits it. The new step carries the dialog around it as its identity band, a screen pre-check, and only a person approves such a fix; a signed standard change can't. The browser rule is unchanged. `MacOSBackend.element_identity_at` reads the AX element, the repair hold answers `element_identity`, and agent teach takes the dialog box from it. Design: `docs/REPAIR_ON_EVERY_BACKEND.md` ([#1709](https://github.com/OpenAdaptAI/OpenAdapt/pull/1709)).
+
+- Shadow mode: `openadapt shadow` runs beside an agent you already have, as a loopback pass-through proxy, and checks each write it makes against the system of record (`CONFIRMED`, `REFUTED`, `UNCERTAIN`). It never blocks, changes or resends a write; the only delay is the read before a write, at most `hold_ms`, measured per write. FHIR writes are checked by `ensure_record.verify_ensure` and SQL writes by `verifier.begin_write`/`verify_write` with the whole-database frame. Each `CONFIRMED` is checked again later (`recheck_s`, or the contract's `recheck_after_s`), and a late `REFUTED` gets its own line in `report.html` and `report.json`. `verify_ensure` takes `declared`: resources of other writes the caller saw, judged on their own ([#1678](https://github.com/OpenAdaptAI/OpenAdapt/pull/1678)).
+
+- The whole-database frame (`frame.database`) and its recheck now work on PostgreSQL (`dialect: postgresql`). The snapshot is one read-only repeatable-read transaction over every schema but the system ones. Every column type is read as text by a declared rule, in a session pinned to UTC and exact float output: `numeric` at full precision (with its stored scale when it has no declared one), floats exactly, `bytea` as hex, `json` as stored and `jsonb` canonical, arrays, ranges, enums, domains, `uuid`, network, time, `interval`, `money`, bit, `xml`, text-search and geometric types. A table without a primary key is keyed by the whole row, with duplicates counted. A column type without a rule, a table the account can't read in full (no `SELECT`, row-level security), a foreign table and an unreadable sequence are refused unless the allow-list skips them with a reason. A sequence a column owns is that table's counter, and a counter set back counts as a change; any other sequence is compared as a one-row table. Large objects are read by the SHA-256 of their content. `frame.database.schemas` means the same as on MySQL (each must be visible, and every visible schema is read); a schema is left out only by an `allow_tables` entry `<schema>.*` with `mode: skip` and a reason.
+
+- A lost update now stops the run. `frame.versions` names a read of the target's versions (HAPI's `hfj_res_ver`, a version column, or an app's action-history table) and, where the app records one, the author of each version. The verifier reads them before and after the write; a version of a pre-existing target by anyone other than the agent, or more than one version step when no author is read, refutes the frame. A versions read that fails, a target with no version, or a version with no author leaves the frame not checked. The receipt holds counts and a problem code (`evidence.frame.versions`). Contracts without `frame.versions` keep their digests.
+
+- A write that lands after the verdict can now be caught. With `frame.database.recheck_after_s`, a verified write's receipt says when a recheck is due (`recheck_due_at`), and `openadapt_flow.verifier.recheck` reads the whole database again at or after that time. It judges every change since the post-save read with the frame's rules: the app profile's bookkeeping, other users' writes the audit log attributes, and changes a later write by the same actor under the same contract saw in its own window (`excused_by`, any outcome). Anything else turns the earlier result into `REFUTED` (late). A change that may be what refuted a later write, a database that can't be read, or a saved state that wasn't issued here or doesn't match its receipt gives `UNCERTAIN`. The saved state holds keyed hashes, not values. `frame.database.settle_attempts` lets the reads after a save, and at a recheck, retry within a stated budget until two in a row match; rows added to append-only tables between them don't count as movement. Without these settings, nothing changes ([#1639](https://github.com/OpenAdaptAI/OpenAdapt/pull/1639)).
+
+- A `CONFIRMED` write with a recheck due now says it is provisional (`WriteResult.provisional`, `provisional` in `to_dict()`). MCP clients of `openadapt verify serve` can run the recheck with the new `verify_recheck` tool. A recheck that gives `REFUTED` or `UNCERTAIN` now resolves the write's ledger attempt again for review, so a retry under the same key is held for a person instead of being handed the earlier `CONFIRMED`. A recheck from a saved `recheck.json` finds the attempt by the receipt's `correlation_id`; the result carries its ledger (`WriteResult.ledger`); when no attempt is re-resolved, the recheck's reasons say so. Over MCP, `verify_recheck` excuses the agent's own later writes under the same contract.
+
+### Fixes
+
+- A composite primary key in the whole-database frame is now kept as a JSON array of its values. Before, the values were joined with `|`, so the keys (`x|y`, `z`) and (`x`, `y|z`) were the same, one row hid the other, and deleting it went unseen. This applies to every dialect. A snapshot or recheck state saved by an earlier version keys rows differently, so recheck a write with the version that checked it.
+
+- The read-only SQL guard now reads the query's tokens instead of matching substrings. `REPLACE(phone, '-', '')`, a `;` inside a string literal, and a table quoted as `` `call` `` no longer refuse the query. Every write and multi-statement form it refused before is still refused. It now also refuses a backslash, a dollar-quoted string, an unterminated literal, and a call to `query_to_xml` or `eval`, which run a query passed as text. When the query has parameters, it also refuses a `%` placeholder inside a literal or quoted name (the driver splices the value in as SQL; `%%` is fine). It refuses a dollar quote right after a number, row locks (`FOR SHARE`, `FOR KEY SHARE`, `LOCK IN SHARE MODE`), and `get_lock`, `pg_advisory_*`, `pg_sleep_for`, `pg_sleep_until`, `master_pos_wait`, `source_pos_wait`, `pg_terminate_backend`, `pg_cancel_backend`, `load_file`, `pg_read_file`, `pg_ls_dir` and `pg_notify`.
+
+- The whole-database snapshot reads a SQLite `REAL` with 17 digits, so 0.3 and 0.1+0.2 no longer read the same, and the text `"\x00null"` no longer reads as NULL. A number's plain value, which selectors compare with, is the shortest text that reads back as the stored value (`1.1` for a MySQL `FLOAT`, `1.5` for a `DECIMAL(24,8)`), so a correct write is no longer stopped because a selector stopped matching.
+
+- The whole-database frame (`frame.database`) now reads MySQL and MariaDB schemas with every column type. A `POINT` column (Dolibarr 21) made the read raise `TypeError`; a `BIT` column did the same; `FLOAT` values compared by six printed digits; decimals lost digits past 28. Binary strings, `BIT`, geometries and vectors are read as hex, `FLOAT` is widened to `DOUBLE`, `JSON` is read as its stored text, and numbers parse as `Decimal`. A value that still can't be read exactly makes the database unreadable, never a column dropped, and `begin_write` now says why the frame could not be read.
+
+- A parameter set to `None` no longer makes the record check unreadable. Before, `verify_write` returned `UNCERTAIN` ("could not be read back") whatever was written, because the null could not be turned into text. Now a `None` in an effect's `match`, `new_records` or `value` matches only a field that is present and null. A missing field matches only where the contract declares `absent_is_null: true` on it. A null never matches `""` or any other value, and a stored null no longer matches the text `"None"`. A `None` where a null can't be bound (a query parameter, a key, the frame, a screen read) is refused at `begin_write`. The write ledger keys `None` and `""` as different writes; a null write is held while any attempt stands under its old key (`None` keyed as `""`), and that attempt's result is never handed back. A read that loses information (a FHIR path that never resolves, an outer join that filters rows) can confirm a null, so match a null only on a base column ([#1660](https://github.com/OpenAdaptAI/OpenAdapt/issues/1660)).
+- Behavior change: `field_equals` with an expected `""` no longer passes on a stored `NULL`. A contract that clears a field on an app that stores a cleared field as `NULL` should expect `None`.
+
+- A whole-number float parameter now matches its stored value. Before, `hours: 2.0` reached the check as the text `"2"` and a SQL `float8` column read back as `2.0`, so the two never matched and a correct write was refuted. Now a value the store typed as a number (a SQL numeric column; a JSON number) compares with an expected number by exact decimal value. Text stays byte-exact, and there is no tolerance.
+
+## v2.4.1 (2026-10-28)
+
+Flow runs without its benchmark package and accepts a pinned config with Windows line endings. Several checks now halt or refute where 2.4.0 could act on the wrong row or pass a weaker check, and the frame can compare the whole database.
+
+### Fixes
+
+- On Windows, `--config-sha256` now hashes the config file's exact bytes. A config with CRLF line endings used to be read in text mode, so its hash never matched and the run was refused with `deployment_config_changed` ([#1593](https://github.com/OpenAdaptAI/OpenAdapt/pull/1593)).
+- Product code no longer imports `openadapt_flow.benchmark`. An install or frozen build without the benchmark package, such as Desktop's engine, can now load the JIT adapters, annotation, narration rules and the qualification proposer. The default model, scroll step and API key loader moved to `openadapt_flow.anthropic_defaults`; `openadapt_flow.benchmark.agent_baseline` still exports them ([#1594](https://github.com/OpenAdaptAI/OpenAdapt/pull/1594)).
+- Worklists built from plain `div` rows, CSS grid rows or cards are treated as rows. Teach records each row's identity, and replay halts when rows move or look alike, instead of clicking a button by its position (`#open-0`) on another record. A twin row seen at teach time marks the identity ambiguous, and a row nothing can read halts before a write (`identity_uncounted`) ([#1569](https://github.com/OpenAdaptAI/OpenAdapt/pull/1569)).
+- The fault gate admits a record check only when it catches every fault class it claims. Two new classes write outside the table the check reads (`other_table`, `side_write`), and a check must claim both `delta` and `frame`. A check that reads one table of a larger store is no longer admitted, so VERIFIED is issued less often, never more. The receipt lists each class as killed, missed, untestable, not applicable or missing ([#1539](https://github.com/OpenAdaptAI/OpenAdapt/pull/1539)).
+- The provenance round trip applies a field's declared value map before it compares the record with the source document. A document that prints a label (`Massachusetts`) for a stored code (`MA`) can now be checked, so a misread value is caught instead of saved and verified. A document value the map doesn't name is reported as `not_checked` ([#1572](https://github.com/OpenAdaptAI/OpenAdapt/pull/1572)).
+- A step that leaves the store unchanged, such as dismissing a notice, no longer gets a placeholder `record_written` effect. The store snapshots before the step, after it and before the next action must all be equal, and a write request seen on the network cancels this ([#1616](https://github.com/OpenAdaptAI/OpenAdapt/pull/1616)).
+- On a slow app, the recorder waits for the screen to change after a click that has started a change (the URL or title changed, or the page is busy), for up to 8 seconds (`settle_pending_timeout_s`). Before, the old screen was taken as the result, and certification refused navigation clicks ([#1616](https://github.com/OpenAdaptAI/OpenAdapt/pull/1616)).
+- The interactive recorder waits for writes in flight (any request but GET, HEAD or OPTIONS, for up to 30 seconds) before it takes a click's after-frame or reads the record. A save the agent guard held could be read before it landed and get a placeholder effect ([#1622](https://github.com/OpenAdaptAI/OpenAdapt/pull/1622)).
+- On Python 3.10, Flow's lock pins onnxruntime 1.23.2, the last release with a 3.10 wheel ([#1622](https://github.com/OpenAdaptAI/OpenAdapt/pull/1622)).
+- `verify-run`'s baseline keeps keyed hashes (MACs) of each record's identity and fields instead of the records' values, so no patient data from the read set is written to disk. A baseline that kept values still loads ([#1599](https://github.com/OpenAdaptAI/OpenAdapt/pull/1599)).
+
+### Features
+
+- A key that changes nothing visible, such as a Tab onto an icon button or an ArrowDown that highlights an option, can now be checked: the new `focus_on` postcondition requires the focused element to have the recorded identity and to be the only element with it. The compiler adds it only for an element with a role and a non-empty accessible name; an element without them gets no check and stays unverified ([#1579](https://github.com/OpenAdaptAI/OpenAdapt/pull/1579), [#1595](https://github.com/OpenAdaptAI/OpenAdapt/pull/1595)).
+- A record check can name a duplicate key made of several fields, such as last name, first name and birth date (`Effect.composite_key`; `record.duplicate_key` in `verify.yaml` takes a list; `--idempotency-key` can be repeated). `record_written` is refuted when more than one record carries every key field ([#1618](https://github.com/OpenAdaptAI/OpenAdapt/pull/1618)).
+- Frame checks can key audit entries by a record field (`attribution.record_key`), so another user's edit to the same patient counts as concurrent rather than collateral. `frame.side_records` declares rows a save adds beside its record; a missing or doubled side row refutes the frame ([#1570](https://github.com/OpenAdaptAI/OpenAdapt/pull/1570)).
+- The frame can compare the whole database: with `frame.database`, a row added, removed or changed in any table is collateral unless a declared effect, side record or another actor's write explains it. The baseline holds keyed hashes, not values, and the read runs in one read-only transaction. Tables on a reviewed allow-list are append-only or skipped with a stated reason. After the save, the database is read twice, `settle_s` apart, and when the reads differ the frame is not checked ([#1582](https://github.com/OpenAdaptAI/OpenAdapt/pull/1582), [#1600](https://github.com/OpenAdaptAI/OpenAdapt/pull/1600)).
+- `frame.database.profile: openemr` applies a versioned profile of the bookkeeping OpenEMR writes on its own (`openadapt_flow.app_profiles`). A rule may not excuse a patient-data table, and the receipt names the profile version and the rules it used ([#1604](https://github.com/OpenAdaptAI/OpenAdapt/pull/1604)).
+- `openadapt_flow.verifier` is a stable Python API for checking one write: `capture` reads the baseline before the write, and `verify_write` returns `verified`, `refuted` or `unconfirmed` with the checks and the receipt digest ([#1588](https://github.com/OpenAdaptAI/OpenAdapt/pull/1588)).
+- Skills can be pulled from an attested registry, bound to the user's own instance and qualified there before they run. A shipped SQL read-back runs on a read-only session and may only be a plain `SELECT` ([#1623](https://github.com/OpenAdaptAI/OpenAdapt/pull/1623), [#1624](https://github.com/OpenAdaptAI/OpenAdapt/pull/1624)).
+- A contract value can declare how the store saves what was entered (`stored: upper` or `lower`), so the check expects exactly that stored form, for example a street saved in capitals ([#1586](https://github.com/OpenAdaptAI/OpenAdapt/pull/1586)).
+- A contract value can declare its kind (`phone`, `date` or `email`), and record matching, `field_equals`, the frame and the source round trip compare it in that kind's canonical form. A value that can't be read in its kind, such as a numeric date with no `date_order`, matches nothing ([#1597](https://github.com/OpenAdaptAI/OpenAdapt/pull/1597)).
+
+## v2.4.0 (2026-10-25)
+
+A person's approval counts only when a registered approver key signed it, and the verification, identity and recovery paths below fail closed where they used to pass.
+
+### Features
+
+- A person's approval of a gated save carries an Ed25519 signature from a key registered under the `approvers` role (`jit register --role approver`), made with the route's own method (`desktop_key` for Desktop, `portal_key` for the decision portal). Item approvals, the durable `approve` and `resume`, the console and the agent tools all verify it; an unsigned, claimed or hand-written answer gives no authority. `approve`, `resume`, `run` and `run-case` take `--key-dir` to name the registry ([#1486](https://github.com/OpenAdaptAI/OpenAdapt/pull/1486), [#1501](https://github.com/OpenAdaptAI/OpenAdapt/pull/1501)).
+- Loop induction learns worklists that are not back-to-back repeats: a click names the parameter that identifies its row (`Step.target_param`), and each pass works on, and is checked against, its own row's record ([#1435](https://github.com/OpenAdaptAI/OpenAdapt/pull/1435)).
+- Pipelined read-back runs under durable, Standard and Regulated runs. The deferred check is written into the durable pause before the side thread gets it, and a `problems_only` run decides each item from its settled check ([#1442](https://github.com/OpenAdaptAI/OpenAdapt/pull/1442), [#1460](https://github.com/OpenAdaptAI/OpenAdapt/pull/1460)).
+- An admitted API step runs inside a multi-surface program on its own surface, under a managed dispatch that names it, and under a qualification admission that qualified its path ([#1439](https://github.com/OpenAdaptAI/OpenAdapt/pull/1439), [#1444](https://github.com/OpenAdaptAI/OpenAdapt/pull/1444), [#1451](https://github.com/OpenAdaptAI/OpenAdapt/pull/1451)).
+- `verify-run` judges frame conditions: a record that no effect declares, added, removed or changed, is a collateral change, with optional attribution from an audit log or a modified-by field ([#1443](https://github.com/OpenAdaptAI/OpenAdapt/pull/1443)). A record check is admitted only after it catches its faults on a test copy of the system of record (`fault_gate`, `openadapt.check-coverage/v1`) ([#1445](https://github.com/OpenAdaptAI/OpenAdapt/pull/1445)). A saved record is compared with its source document through a second extraction by a different method (`provenance`) ([#1446](https://github.com/OpenAdaptAI/OpenAdapt/pull/1446)).
+- A pinned bundle can be repaired: the fix is re-qualified on a test copy and re-admitted with signed lineage, and the pin accepts the new version only through that lineage ([#1450](https://github.com/OpenAdaptAI/OpenAdapt/pull/1450)). A renamed save button is repaired when the recorded identity hash proves only the label changed ([#1514](https://github.com/OpenAdaptAI/OpenAdapt/pull/1514)). `qualify` handles a bundle that already has a qualification project, an encrypted bundle and a sealed set ([#1454](https://github.com/OpenAdaptAI/OpenAdapt/pull/1454)).
+- The record check reads a typed label back as its stored code (`ValueExpr` `map`) and can require exactly the new record (`record.exact_new_set`) ([#1456](https://github.com/OpenAdaptAI/OpenAdapt/pull/1456)).
+- Under `problems_only`, problems with an item's own input leave the switch on and send that item to a person; program and environment problems turn it off, and a person re-arms it with one signed tap ([#1517](https://github.com/OpenAdaptAI/OpenAdapt/pull/1517)).
+- Look-alike rows are counted on Windows, macOS, Linux and pixel-only surfaces, so a step that picks a row halts when it cannot tell the target from its twin ([#1504](https://github.com/OpenAdaptAI/OpenAdapt/pull/1504), [#1518](https://github.com/OpenAdaptAI/OpenAdapt/pull/1518), [#1557](https://github.com/OpenAdaptAI/OpenAdapt/pull/1557)).
+- `openadapt-agent serve --teach-browser` lets a coding agent turn a read-only browser task into a named tool it calls again with new values; `openadapt setup` registers it with Claude Code, Cursor, Codex and Gemini CLI ([#1502](https://github.com/OpenAdaptAI/OpenAdapt/pull/1502)).
+- `openadapt_flow.validation.behavioral_generalization` scores each held-out item by running it and checking the record independently. `induce --held-out` prints structural trace coverage ([#1527](https://github.com/OpenAdaptAI/OpenAdapt/pull/1527)).
+
+### Fixes
+
+- A save that was sent but not confirmed never resumes as a plain retry; the pause offers reconcile or an explicit single retry ([#1485](https://github.com/OpenAdaptAI/OpenAdapt/pull/1485)).
+- A value typed whole in one step and inside longer text in another is reported as unlifted, and a canary that reuses run 1's values returns the draft to review ([#1465](https://github.com/OpenAdaptAI/OpenAdapt/pull/1465)).
+- Record identity stays stable across the JSON baseline, so rows read back from UUID, decimal and datetime columns are not counted as new ([#1482](https://github.com/OpenAdaptAI/OpenAdapt/pull/1482)).
+- An empty or not-found page in a separate-session read-back is indeterminate, not proof that a record is absent ([#1515](https://github.com/OpenAdaptAI/OpenAdapt/pull/1515), thanks @yunusarda-sudo).
+- A binary SQL column (such as OpenEMR's `uuid`) is read as hex by `verify-run` and `scaffold-verifier` ([#1503](https://github.com/OpenAdaptAI/OpenAdapt/pull/1503)).
+- Recording and replay follow a window by a stable handle after its title changes ([#1468](https://github.com/OpenAdaptAI/OpenAdapt/pull/1468)).
+- `seal` works on a bundle certified by a qualification campaign ([#1453](https://github.com/OpenAdaptAI/OpenAdapt/pull/1453)); the approval gate classifies saves with the certifying policy, as the run gate does ([#1455](https://github.com/OpenAdaptAI/OpenAdapt/pull/1455)).
+- Process workers always end their child process, even on failure ([#1498](https://github.com/OpenAdaptAI/OpenAdapt/pull/1498)).
+- The `run --profile standard` examples name an execution surface ([#1525](https://github.com/OpenAdaptAI/OpenAdapt/pull/1525)). Synthetic referral last names in the OpenEMR benchmark are unique ([#1420](https://github.com/OpenAdaptAI/OpenAdapt/pull/1420), thanks @xiaofeilovecoding).
+
 ## v2.3.0 (2026-10-20)
 
 The shared contracts are back in `openadapt-types`, which depends only on Pydantic; this package requires `openadapt-types>=0.24.0,<0.25.0`, and `openadapt_flow.contracts` returns the same modules as `openadapt_types` ([#1270](https://github.com/OpenAdaptAI/OpenAdapt/pull/1270)).

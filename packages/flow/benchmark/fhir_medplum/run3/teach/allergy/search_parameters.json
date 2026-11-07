@@ -1,0 +1,935 @@
+[
+ {
+  "resourceType": "SearchParameter",
+  "id": "4e810131-04f4-4c4d-a91d-02615b7f0ca2",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/clinical-patient",
+  "version": "4.0.1",
+  "name": "patient",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Care)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/patientcare/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [AllergyIntolerance](allergyintolerance.html): Who the sensitivity is for\r\n* [CarePlan](careplan.html): Who the care plan is for\r\n* [CareTeam](careteam.html): Who care team is for\r\n* [ClinicalImpression](clinicalimpression.html): Patient or group assessed\r\n* [Composition](composition.html): Who and/or what the composition is about\r\n* [Condition](condition.html): Who has the condition?\r\n* [Consent](consent.html): Who the consent applies to\r\n* [DetectedIssue](detectedissue.html): Associated patient\r\n* [DeviceRequest](devicerequest.html): Individual the service is ordered for\r\n* [DeviceUseStatement](deviceusestatement.html): Search by subject - a patient\r\n* [DiagnosticReport](diagnosticreport.html): The subject of the report if a patient\r\n* [DocumentManifest](documentmanifest.html): The subject of the set of documents\r\n* [DocumentReference](documentreference.html): Who/what is the subject of the document\r\n* [Encounter](encounter.html): The patient or group present at the encounter\r\n* [EpisodeOfCare](episodeofcare.html): The patient who is the focus of this episode of care\r\n* [FamilyMemberHistory](familymemberhistory.html): The identity of a subject to list family member history items for\r\n* [Flag](flag.html): The identity of a subject to list flags for\r\n* [Goal](goal.html): Who this goal is intended for\r\n* [ImagingStudy](imagingstudy.html): Who the study is about\r\n* [Immunization](immunization.html): The patient for the vaccination record\r\n* [List](list.html): If all resources have the same subject\r\n* [MedicationAdministration](medicationadministration.html): The identity of a patient to list administrations  for\r\n* [MedicationDispense](medicationdispense.html): The identity of a patient to list dispenses  for\r\n* [MedicationRequest](medicationrequest.html): Returns prescriptions for a specific patient\r\n* [MedicationStatement](medicationstatement.html): Returns statements for a specific patient.\r\n* [NutritionOrder](nutritionorder.html): The identity of the person who requires the diet, formula or nutritional supplement\r\n* [Observation](observation.html): The subject that the observation is about (if patient)\r\n* [Procedure](procedure.html): Search by subject - a patient\r\n* [RiskAssessment](riskassessment.html): Who/what does assessment apply to?\r\n* [ServiceRequest](servicerequest.html): Search by subject - a patient\r\n* [SupplyDelivery](supplydelivery.html): Patient for whom the item is supplied\r\n* [VisionPrescription](visionprescription.html): The identity of a patient to list dispenses for\r\n",
+  "code": "patient",
+  "base": [
+   "AllergyIntolerance",
+   "CarePlan",
+   "CareTeam",
+   "ClinicalImpression",
+   "Composition",
+   "Condition",
+   "Consent",
+   "DetectedIssue",
+   "DeviceRequest",
+   "DeviceUseStatement",
+   "DiagnosticReport",
+   "DocumentManifest",
+   "DocumentReference",
+   "Encounter",
+   "EpisodeOfCare",
+   "FamilyMemberHistory",
+   "Flag",
+   "Goal",
+   "ImagingStudy",
+   "Immunization",
+   "List",
+   "MedicationAdministration",
+   "MedicationDispense",
+   "MedicationRequest",
+   "MedicationStatement",
+   "NutritionOrder",
+   "Observation",
+   "Procedure",
+   "RiskAssessment",
+   "ServiceRequest",
+   "SupplyDelivery",
+   "VisionPrescription"
+  ],
+  "type": "reference",
+  "expression": "AllergyIntolerance.patient | CarePlan.subject.where(resolve() is Patient) | CareTeam.subject.where(resolve() is Patient) | ClinicalImpression.subject.where(resolve() is Patient) | Composition.subject.where(resolve() is Patient) | Condition.subject.where(resolve() is Patient) | Consent.patient | DetectedIssue.patient | DeviceRequest.subject.where(resolve() is Patient) | DeviceUseStatement.subject | DiagnosticReport.subject.where(resolve() is Patient) | DocumentManifest.subject.where(resolve() is Patient) | DocumentReference.subject.where(resolve() is Patient) | Encounter.subject.where(resolve() is Patient) | EpisodeOfCare.patient | FamilyMemberHistory.patient | Flag.subject.where(resolve() is Patient) | Goal.subject.where(resolve() is Patient) | ImagingStudy.subject.where(resolve() is Patient) | Immunization.patient | List.subject.where(resolve() is Patient) | MedicationAdministration.subject.where(resolve() is Patient) | MedicationDispense.subject.where(resolve() is Patient) | MedicationRequest.subject.where(resolve() is Patient) | MedicationStatement.subject.where(resolve() is Patient) | NutritionOrder.patient | Observation.subject.where(resolve() is Patient) | Procedure.subject.where(resolve() is Patient) | RiskAssessment.subject.where(resolve() is Patient) | ServiceRequest.subject.where(resolve() is Patient) | SupplyDelivery.patient | VisionPrescription.patient",
+  "xpath": "f:AllergyIntolerance/f:patient | f:CarePlan/f:subject | f:CareTeam/f:subject | f:ClinicalImpression/f:subject | f:Composition/f:subject | f:Condition/f:subject | f:Consent/f:patient | f:DetectedIssue/f:patient | f:DeviceRequest/f:subject | f:DeviceUseStatement/f:subject | f:DiagnosticReport/f:subject | f:DocumentManifest/f:subject | f:DocumentReference/f:subject | f:Encounter/f:subject | f:EpisodeOfCare/f:patient | f:FamilyMemberHistory/f:patient | f:Flag/f:subject | f:Goal/f:subject | f:ImagingStudy/f:subject | f:Immunization/f:patient | f:List/f:subject | f:MedicationAdministration/f:subject | f:MedicationDispense/f:subject | f:MedicationRequest/f:subject | f:MedicationStatement/f:subject | f:NutritionOrder/f:patient | f:Observation/f:subject | f:Procedure/f:subject | f:RiskAssessment/f:subject | f:ServiceRequest/f:subject | f:SupplyDelivery/f:patient | f:VisionPrescription/f:patient",
+  "xpathUsage": "normal",
+  "target": [
+   "Patient"
+  ],
+  "meta": {
+   "versionId": "5428147b-f68d-448c-9148-ce8e6d29fd23",
+   "lastUpdated": "2026-10-30T02:05:36.802Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "b2c83c1b-e08c-4af3-90dc-2ae2d5ac39f5",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/AllergyIntolerance-asserter",
+  "version": "4.0.1",
+  "name": "asserter",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Care)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/patientcare/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Source of the information about the allergy",
+  "code": "asserter",
+  "base": [
+   "AllergyIntolerance"
+  ],
+  "type": "reference",
+  "expression": "AllergyIntolerance.asserter",
+  "xpath": "f:AllergyIntolerance/f:asserter",
+  "xpathUsage": "normal",
+  "target": [
+   "Practitioner",
+   "Patient",
+   "PractitionerRole",
+   "RelatedPerson"
+  ],
+  "meta": {
+   "versionId": "c469577a-9211-4914-a99b-83169bad3db5",
+   "lastUpdated": "2026-10-30T02:05:36.793Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "22864560-550c-40c7-89d6-002e153b3838",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/AllergyIntolerance-category",
+  "version": "4.0.1",
+  "name": "category",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Care)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/patientcare/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "food | medication | environment | biologic",
+  "code": "category",
+  "base": [
+   "AllergyIntolerance"
+  ],
+  "type": "token",
+  "expression": "AllergyIntolerance.category",
+  "xpath": "f:AllergyIntolerance/f:category",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "ef6e9d23-db62-4b09-8423-133c86848e05",
+   "lastUpdated": "2026-10-30T02:05:36.794Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "7c32ae9f-43d7-4bfe-86b0-d072a41ace6d",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/AllergyIntolerance-clinical-status",
+  "version": "4.0.1",
+  "name": "clinical-status",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Care)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/patientcare/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "active | inactive | resolved",
+  "code": "clinical-status",
+  "base": [
+   "AllergyIntolerance"
+  ],
+  "type": "token",
+  "expression": "AllergyIntolerance.clinicalStatus",
+  "xpath": "f:AllergyIntolerance/f:clinicalStatus",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "2acca94f-c709-4d77-999b-b62cc1b9633e",
+   "lastUpdated": "2026-10-30T02:05:36.795Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "de39894e-5d58-4612-bd56-b3748c7c4e80",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/clinical-code",
+  "version": "4.0.1",
+  "name": "code",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Care)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/patientcare/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [AllergyIntolerance](allergyintolerance.html): Code that identifies the allergy or intolerance\r\n* [Condition](condition.html): Code for the condition\r\n* [DeviceRequest](devicerequest.html): Code for what is being requested/ordered\r\n* [DiagnosticReport](diagnosticreport.html): The code for the report, as opposed to codes for the atomic results, which are the names on the observation resource referred to from the result\r\n* [FamilyMemberHistory](familymemberhistory.html): A search by a condition code\r\n* [List](list.html): What the purpose of this list is\r\n* [Medication](medication.html): Returns medications for a specific code\r\n* [MedicationAdministration](medicationadministration.html): Return administrations of this medication code\r\n* [MedicationDispense](medicationdispense.html): Returns dispenses of this medicine code\r\n* [MedicationRequest](medicationrequest.html): Return prescriptions of this medication code\r\n* [MedicationStatement](medicationstatement.html): Return statements of this medication code\r\n* [Observation](observation.html): The code of the observation type\r\n* [Procedure](procedure.html): A code to identify a  procedure\r\n* [ServiceRequest](servicerequest.html): What is being requested/ordered\r\n",
+  "code": "code",
+  "base": [
+   "AllergyIntolerance",
+   "Condition",
+   "DeviceRequest",
+   "DiagnosticReport",
+   "FamilyMemberHistory",
+   "List",
+   "Medication",
+   "MedicationAdministration",
+   "MedicationDispense",
+   "MedicationRequest",
+   "MedicationStatement",
+   "Observation",
+   "Procedure",
+   "ServiceRequest"
+  ],
+  "type": "token",
+  "expression": "AllergyIntolerance.code | AllergyIntolerance.reaction.substance | Condition.code | (DeviceRequest.code.ofType(CodeableConcept)) | DiagnosticReport.code | FamilyMemberHistory.condition.code | List.code | Medication.code | (MedicationAdministration.medication.ofType(CodeableConcept)) | (MedicationDispense.medication.ofType(CodeableConcept)) | (MedicationRequest.medication.ofType(CodeableConcept)) | (MedicationStatement.medication.ofType(CodeableConcept)) | Observation.code | Procedure.code | ServiceRequest.code",
+  "xpath": "f:AllergyIntolerance/f:code | f:AllergyIntolerance/f:reaction/f:substance | f:Condition/f:code | f:DeviceRequest/f:codeCodeableConcept | f:DiagnosticReport/f:code | f:FamilyMemberHistory/f:condition/f:code | f:List/f:code | f:Medication/f:code | f:MedicationAdministration/f:medicationCodeableConcept | f:MedicationDispense/f:medicationCodeableConcept | f:MedicationRequest/f:medicationCodeableConcept | f:MedicationStatement/f:medicationCodeableConcept | f:Observation/f:code | f:Procedure/f:code | f:ServiceRequest/f:code",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "d0110a24-f459-4a42-8838-5d92fdb656b6",
+   "lastUpdated": "2026-10-30T02:05:36.796Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "c3e5ed44-b58b-4e7b-962f-44f73cebd79d",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/AllergyIntolerance-criticality",
+  "version": "4.0.1",
+  "name": "criticality",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Care)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/patientcare/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "low | high | unable-to-assess",
+  "code": "criticality",
+  "base": [
+   "AllergyIntolerance"
+  ],
+  "type": "token",
+  "expression": "AllergyIntolerance.criticality",
+  "xpath": "f:AllergyIntolerance/f:criticality",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "cdc45e89-98df-4b54-a020-e8997d4de1d1",
+   "lastUpdated": "2026-10-30T02:05:36.797Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "f02a2689-77f8-4654-8c16-4f30d8b1c4b3",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/clinical-date",
+  "version": "4.0.1",
+  "name": "date",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Care)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/patientcare/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [AllergyIntolerance](allergyintolerance.html): Date first version of the resource instance was recorded\r\n* [CarePlan](careplan.html): Time period plan covers\r\n* [CareTeam](careteam.html): Time period team covers\r\n* [ClinicalImpression](clinicalimpression.html): When the assessment was documented\r\n* [Composition](composition.html): Composition editing time\r\n* [Consent](consent.html): When this Consent was created or indexed\r\n* [DiagnosticReport](diagnosticreport.html): The clinically relevant time of the report\r\n* [Encounter](encounter.html): A date within the period the Encounter lasted\r\n* [EpisodeOfCare](episodeofcare.html): The provided date search value falls within the episode of care's period\r\n* [FamilyMemberHistory](familymemberhistory.html): When history was recorded or last updated\r\n* [Flag](flag.html): Time period when flag is active\r\n* [Immunization](immunization.html): Vaccination  (non)-Administration Date\r\n* [List](list.html): When the list was prepared\r\n* [Observation](observation.html): Obtained date/time. If the obtained element is a period, a date that falls in the period\r\n* [Procedure](procedure.html): When the procedure was performed\r\n* [RiskAssessment](riskassessment.html): When was assessment made?\r\n* [SupplyRequest](supplyrequest.html): When the request was made\r\n",
+  "code": "date",
+  "base": [
+   "AllergyIntolerance",
+   "CarePlan",
+   "CareTeam",
+   "ClinicalImpression",
+   "Composition",
+   "Consent",
+   "DiagnosticReport",
+   "Encounter",
+   "EpisodeOfCare",
+   "FamilyMemberHistory",
+   "Flag",
+   "Immunization",
+   "List",
+   "Observation",
+   "Procedure",
+   "RiskAssessment",
+   "SupplyRequest"
+  ],
+  "type": "date",
+  "expression": "AllergyIntolerance.recordedDate | CarePlan.period | CareTeam.period | ClinicalImpression.date | Composition.date | Consent.dateTime | DiagnosticReport.effective | Encounter.period | EpisodeOfCare.period | FamilyMemberHistory.date | Flag.period | Immunization.occurrence | List.date | Observation.effective | Procedure.performed | (RiskAssessment.occurrence.ofType(dateTime)) | SupplyRequest.authoredOn",
+  "xpath": "f:AllergyIntolerance/f:recordedDate | f:CarePlan/f:period | f:CareTeam/f:period | f:ClinicalImpression/f:date | f:Composition/f:date | f:Consent/f:dateTime | f:DiagnosticReport/f:effectiveDateTime | f:DiagnosticReport/f:effectivePeriod | f:Encounter/f:period | f:EpisodeOfCare/f:period | f:FamilyMemberHistory/f:date | f:Flag/f:period | f:Immunization/f:occurrenceDateTime | f:Immunization/f:occurrenceString | f:List/f:date | f:Observation/f:effectiveDateTime | f:Observation/f:effectivePeriod | f:Observation/f:effectiveTiming | f:Observation/f:effectiveInstant | f:Procedure/f:performedDateTime | f:Procedure/f:performedPeriod | f:Procedure/f:performedString | f:Procedure/f:performedAge | f:Procedure/f:performedRange | f:RiskAssessment/f:occurrenceDateTime | f:SupplyRequest/f:authoredOn",
+  "xpathUsage": "normal",
+  "comparator": [
+   "eq",
+   "ne",
+   "gt",
+   "ge",
+   "lt",
+   "le",
+   "sa",
+   "eb",
+   "ap"
+  ],
+  "meta": {
+   "versionId": "e2c2af36-eb86-438d-9535-0d9285840192",
+   "lastUpdated": "2026-10-30T02:05:36.798Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "23785e26-4986-43aa-a196-066bed3a90de",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/clinical-identifier",
+  "version": "4.0.1",
+  "name": "identifier",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Care)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/patientcare/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [AllergyIntolerance](allergyintolerance.html): External ids for this item\r\n* [CarePlan](careplan.html): External Ids for this plan\r\n* [CareTeam](careteam.html): External Ids for this team\r\n* [Composition](composition.html): Version-independent identifier for the Composition\r\n* [Condition](condition.html): A unique identifier of the condition record\r\n* [Consent](consent.html): Identifier for this record (external references)\r\n* [DetectedIssue](detectedissue.html): Unique id for the detected issue\r\n* [DeviceRequest](devicerequest.html): Business identifier for request/order\r\n* [DiagnosticReport](diagnosticreport.html): An identifier for the report\r\n* [DocumentManifest](documentmanifest.html): Unique Identifier for the set of documents\r\n* [DocumentReference](documentreference.html): Master Version Specific Identifier\r\n* [Encounter](encounter.html): Identifier(s) by which this encounter is known\r\n* [EpisodeOfCare](episodeofcare.html): Business Identifier(s) relevant for this EpisodeOfCare\r\n* [FamilyMemberHistory](familymemberhistory.html): A search by a record identifier\r\n* [Goal](goal.html): External Ids for this goal\r\n* [ImagingStudy](imagingstudy.html): Identifiers for the Study, such as DICOM Study Instance UID and Accession number\r\n* [Immunization](immunization.html): Business identifier\r\n* [List](list.html): Business identifier\r\n* [MedicationAdministration](medicationadministration.html): Return administrations with this external identifier\r\n* [MedicationDispense](medicationdispense.html): Returns dispenses with this external identifier\r\n* [MedicationRequest](medicationrequest.html): Return prescriptions with this external identifier\r\n* [MedicationStatement](medicationstatement.html): Return statements with this external identifier\r\n* [NutritionOrder](nutritionorder.html): Return nutrition orders with this external identifier\r\n* [Observation](observation.html): The unique id for a particular observation\r\n* [Procedure](procedure.html): A unique identifier for a procedure\r\n* [RiskAssessment](riskassessment.html): Unique identifier for the assessment\r\n* [ServiceRequest](servicerequest.html): Identifiers assigned to this order\r\n* [SupplyDelivery](supplydelivery.html): External identifier\r\n* [SupplyRequest](supplyrequest.html): Business Identifier for SupplyRequest\r\n* [VisionPrescription](visionprescription.html): Return prescriptions with this external identifier\r\n",
+  "code": "identifier",
+  "base": [
+   "AllergyIntolerance",
+   "CarePlan",
+   "CareTeam",
+   "Composition",
+   "Condition",
+   "Consent",
+   "DetectedIssue",
+   "DeviceRequest",
+   "DiagnosticReport",
+   "DocumentManifest",
+   "DocumentReference",
+   "Encounter",
+   "EpisodeOfCare",
+   "FamilyMemberHistory",
+   "Goal",
+   "ImagingStudy",
+   "Immunization",
+   "List",
+   "MedicationAdministration",
+   "MedicationDispense",
+   "MedicationRequest",
+   "MedicationStatement",
+   "NutritionOrder",
+   "Observation",
+   "Procedure",
+   "RiskAssessment",
+   "ServiceRequest",
+   "SupplyDelivery",
+   "SupplyRequest",
+   "VisionPrescription"
+  ],
+  "type": "token",
+  "expression": "AllergyIntolerance.identifier | CarePlan.identifier | CareTeam.identifier | Composition.identifier | Condition.identifier | Consent.identifier | DetectedIssue.identifier | DeviceRequest.identifier | DiagnosticReport.identifier | DocumentManifest.masterIdentifier | DocumentManifest.identifier | DocumentReference.masterIdentifier | DocumentReference.identifier | Encounter.identifier | EpisodeOfCare.identifier | FamilyMemberHistory.identifier | Goal.identifier | ImagingStudy.identifier | Immunization.identifier | List.identifier | MedicationAdministration.identifier | MedicationDispense.identifier | MedicationRequest.identifier | MedicationStatement.identifier | NutritionOrder.identifier | Observation.identifier | Procedure.identifier | RiskAssessment.identifier | ServiceRequest.identifier | SupplyDelivery.identifier | SupplyRequest.identifier | VisionPrescription.identifier",
+  "xpath": "f:AllergyIntolerance/f:identifier | f:CarePlan/f:identifier | f:CareTeam/f:identifier | f:Composition/f:identifier | f:Condition/f:identifier | f:Consent/f:identifier | f:DetectedIssue/f:identifier | f:DeviceRequest/f:identifier | f:DiagnosticReport/f:identifier | f:DocumentManifest/f:masterIdentifier | f:DocumentManifest/f:identifier | f:DocumentReference/f:masterIdentifier | f:DocumentReference/f:identifier | f:Encounter/f:identifier | f:EpisodeOfCare/f:identifier | f:FamilyMemberHistory/f:identifier | f:Goal/f:identifier | f:ImagingStudy/f:identifier | f:Immunization/f:identifier | f:List/f:identifier | f:MedicationAdministration/f:identifier | f:MedicationDispense/f:identifier | f:MedicationRequest/f:identifier | f:MedicationStatement/f:identifier | f:NutritionOrder/f:identifier | f:Observation/f:identifier | f:Procedure/f:identifier | f:RiskAssessment/f:identifier | f:ServiceRequest/f:identifier | f:SupplyDelivery/f:identifier | f:SupplyRequest/f:identifier | f:VisionPrescription/f:identifier",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "ba5799d3-8f19-4b29-8cbd-dae4fc180e31",
+   "lastUpdated": "2026-10-30T02:05:36.798Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "6b1c2ebe-f7cc-4761-b149-60bca58e3c68",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/AllergyIntolerance-last-date",
+  "version": "4.0.1",
+  "name": "last-date",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Care)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/patientcare/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Date(/time) of last known occurrence of a reaction",
+  "code": "last-date",
+  "base": [
+   "AllergyIntolerance"
+  ],
+  "type": "date",
+  "expression": "AllergyIntolerance.lastOccurrence",
+  "xpath": "f:AllergyIntolerance/f:lastOccurrence",
+  "xpathUsage": "normal",
+  "comparator": [
+   "eq",
+   "ne",
+   "gt",
+   "ge",
+   "lt",
+   "le",
+   "sa",
+   "eb",
+   "ap"
+  ],
+  "meta": {
+   "versionId": "a490b464-0e43-41a5-92e9-98b7faa844b1",
+   "lastUpdated": "2026-10-30T02:05:36.800Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "e03b2c05-937f-4b3b-96be-693e10f15cf3",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/AllergyIntolerance-manifestation",
+  "version": "4.0.1",
+  "name": "manifestation",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Care)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/patientcare/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Clinical symptoms/signs associated with the Event",
+  "code": "manifestation",
+  "base": [
+   "AllergyIntolerance"
+  ],
+  "type": "token",
+  "expression": "AllergyIntolerance.reaction.manifestation",
+  "xpath": "f:AllergyIntolerance/f:reaction/f:manifestation",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "f1edcc88-e907-4ab0-b5df-9bd2282566cc",
+   "lastUpdated": "2026-10-30T02:05:36.800Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "61bcfd90-9dd1-46f7-989e-d2bf8ef41983",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/AllergyIntolerance-onset",
+  "version": "4.0.1",
+  "name": "onset",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Care)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/patientcare/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Date(/time) when manifestations showed",
+  "code": "onset",
+  "base": [
+   "AllergyIntolerance"
+  ],
+  "type": "date",
+  "expression": "AllergyIntolerance.reaction.onset",
+  "xpath": "f:AllergyIntolerance/f:reaction/f:onset",
+  "xpathUsage": "normal",
+  "comparator": [
+   "eq",
+   "ne",
+   "gt",
+   "ge",
+   "lt",
+   "le",
+   "sa",
+   "eb",
+   "ap"
+  ],
+  "meta": {
+   "versionId": "c5570148-c06f-45a3-a826-1ef056d566d2",
+   "lastUpdated": "2026-10-30T02:05:36.801Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "9cc32f4a-cb84-49de-9fe2-109149d81c10",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/AllergyIntolerance-recorder",
+  "version": "4.0.1",
+  "name": "recorder",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Care)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/patientcare/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Who recorded the sensitivity",
+  "code": "recorder",
+  "base": [
+   "AllergyIntolerance"
+  ],
+  "type": "reference",
+  "expression": "AllergyIntolerance.recorder",
+  "xpath": "f:AllergyIntolerance/f:recorder",
+  "xpathUsage": "normal",
+  "target": [
+   "Practitioner",
+   "Patient",
+   "PractitionerRole",
+   "RelatedPerson"
+  ],
+  "meta": {
+   "versionId": "28b10d14-ec2c-42ed-a17a-d185a0f9a8be",
+   "lastUpdated": "2026-10-30T02:05:36.803Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "1f12fd59-c40c-4e94-8115-f10ae149dda1",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/AllergyIntolerance-route",
+  "version": "4.0.1",
+  "name": "route",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Care)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/patientcare/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "How the subject was exposed to the substance",
+  "code": "route",
+  "base": [
+   "AllergyIntolerance"
+  ],
+  "type": "token",
+  "expression": "AllergyIntolerance.reaction.exposureRoute",
+  "xpath": "f:AllergyIntolerance/f:reaction/f:exposureRoute",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "c18b7fef-a681-481d-b8ea-0cc92a4ccb66",
+   "lastUpdated": "2026-10-30T02:05:36.804Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "d1611bf6-0012-4b3b-96ba-3ac9f66a5cbc",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/AllergyIntolerance-severity",
+  "version": "4.0.1",
+  "name": "severity",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Care)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/patientcare/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "mild | moderate | severe (of event as a whole)",
+  "code": "severity",
+  "base": [
+   "AllergyIntolerance"
+  ],
+  "type": "token",
+  "expression": "AllergyIntolerance.reaction.severity",
+  "xpath": "f:AllergyIntolerance/f:reaction/f:severity",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "97c0a6b8-2df6-425a-b7b1-1d63ee936900",
+   "lastUpdated": "2026-10-30T02:05:36.805Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "bd35b373-fb0c-47dc-ad41-64e9066d47e2",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/clinical-type",
+  "version": "4.0.1",
+  "name": "type",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Care)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/patientcare/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Multiple Resources: \r\n\r\n* [AllergyIntolerance](allergyintolerance.html): allergy | intolerance - Underlying mechanism (if known)\r\n* [Composition](composition.html): Kind of composition (LOINC if possible)\r\n* [DocumentManifest](documentmanifest.html): Kind of document set\r\n* [DocumentReference](documentreference.html): Kind of document (LOINC if possible)\r\n* [Encounter](encounter.html): Specific type of encounter\r\n* [EpisodeOfCare](episodeofcare.html): Type/class  - e.g. specialist referral, disease management\r\n",
+  "code": "type",
+  "base": [
+   "AllergyIntolerance",
+   "Composition",
+   "DocumentManifest",
+   "DocumentReference",
+   "Encounter",
+   "EpisodeOfCare"
+  ],
+  "type": "token",
+  "expression": "AllergyIntolerance.type | Composition.type | DocumentManifest.type | DocumentReference.type | Encounter.type | EpisodeOfCare.type",
+  "xpath": "f:AllergyIntolerance/f:type | f:Composition/f:type | f:DocumentManifest/f:type | f:DocumentReference/f:type | f:Encounter/f:type | f:EpisodeOfCare/f:type",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "eae4dd9c-c9a3-4485-ac6f-d78ab2da2b78",
+   "lastUpdated": "2026-10-30T02:05:36.806Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "90db0009-c1ea-4b6c-9e20-dace5b5b6a5f",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/AllergyIntolerance-verification-status",
+  "version": "4.0.1",
+  "name": "verification-status",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Care)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/patientcare/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "unconfirmed | confirmed | refuted | entered-in-error",
+  "code": "verification-status",
+  "base": [
+   "AllergyIntolerance"
+  ],
+  "type": "token",
+  "expression": "AllergyIntolerance.verificationStatus",
+  "xpath": "f:AllergyIntolerance/f:verificationStatus",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "cdcec3d9-4a6f-45e0-84b2-36e14e363829",
+   "lastUpdated": "2026-10-30T02:05:36.807Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "624c6565-6036-4c23-88df-544c47d2edb8",
+  "url": "https://medplum.com/fhir/SearchParameter/AllergyIntolerance-encounter",
+  "version": "4.0.1",
+  "name": "encounter",
+  "status": "draft",
+  "publisher": "Medplum",
+  "description": "The Encounter this AllergyIntolerance was part of",
+  "code": "encounter",
+  "base": [
+   "AllergyIntolerance"
+  ],
+  "type": "reference",
+  "target": [
+   "Encounter"
+  ],
+  "expression": "AllergyIntolerance.encounter",
+  "meta": {
+   "versionId": "e83ff0c5-1935-4224-be98-62115c2fdfd3",
+   "lastUpdated": "2026-10-30T02:05:38.206Z"
+  }
+ }
+]

@@ -1,0 +1,77 @@
+{
+ "note": "Blind round: 13 cases written by a separate agent from a brief, frozen by sha256 before the run; cases and per-case results are private. 'blind' is the one run against the frozen check (commit c93069d0d); 'post_fix_rerun' is the same file after the contract fix, not blind.",
+ "suite_sha256": "ff402d6af689832f0d4ca3e51a6e8f6dcfdcf07f591689620054f1b7d278c08d",
+ "frozen_at_commit": "c93069d0d",
+ "blind": {
+  "summary": {
+   "cases": 13,
+   "right": 12,
+   "faults_passed_as_verified": 0,
+   "harness_errors": 0,
+   "sandbox_calls": 32,
+   "date": "2026-10-29",
+   "suite_sha256": "ff402d6af689832f0d4ca3e51a6e8f6dcfdcf07f591689620054f1b7d278c08d"
+  },
+  "by_class": {
+   "clean": 4,
+   "wrong_field": 2,
+   "missing_field": 1,
+   "silent_drop": 1,
+   "no_write": 1,
+   "duplicate": 1,
+   "no_new_record": 2,
+   "other": 1
+  },
+  "by_right_answer": {
+   "CONFIRMED": 4,
+   "REFUTED": 5,
+   "UNCERTAIN": 2,
+   "not CONFIRMED": 2
+  },
+  "by_outcome": {
+   "CONFIRMED": 3,
+   "REFUTED": 7,
+   "UNCERTAIN": 3
+  },
+  "wrong": [
+   {
+    "class": "clean",
+    "right_answer": "CONFIRMED",
+    "outcome": "REFUTED"
+   }
+  ]
+ },
+ "post_fix_rerun": {
+  "summary": {
+   "cases": 13,
+   "right": 13,
+   "faults_passed_as_verified": 0,
+   "harness_errors": 0,
+   "sandbox_calls": 32,
+   "date": "2026-10-29",
+   "suite_sha256": "ff402d6af689832f0d4ca3e51a6e8f6dcfdcf07f591689620054f1b7d278c08d"
+  },
+  "by_class": {
+   "clean": 4,
+   "wrong_field": 2,
+   "missing_field": 1,
+   "silent_drop": 1,
+   "no_write": 1,
+   "duplicate": 1,
+   "no_new_record": 2,
+   "other": 1
+  },
+  "by_right_answer": {
+   "CONFIRMED": 4,
+   "REFUTED": 5,
+   "UNCERTAIN": 2,
+   "not CONFIRMED": 2
+  },
+  "by_outcome": {
+   "CONFIRMED": 4,
+   "REFUTED": 5,
+   "UNCERTAIN": 4
+  },
+  "wrong": []
+ }
+}

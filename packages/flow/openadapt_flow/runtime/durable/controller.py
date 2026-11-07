@@ -31,7 +31,7 @@ from __future__ import annotations
 import re
 import secrets
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional, TypeVar
 
 from openadapt_flow.bundle_validation import BundleIntegrityError
 from openadapt_flow.ir import (
@@ -55,6 +55,8 @@ from openadapt_flow.runtime.durable.checkpoint import (
     PendingEscalation,
     RunCheckpoint,
     RunManifest,
+    _now_after,
+    _now_not_before,
 )
 from openadapt_flow.runtime.durable.program_checkpoint import (
     GraphFrame,
@@ -434,6 +436,14 @@ def classify_halt(step: Optional[Step], result: StepResult) -> tuple[str, list[s
             abort,
         ]
 
+    if "is not actionable" in lower:
+        return "resolution", [
+            "The target is on the page but covered or off screen; close what "
+            "covers it (a dialog, banner or toast), then resume",
+            resume,
+            abort,
+        ]
+
     if "could not resolve" in lower or "all resolution rungs failed" in lower:
         return "resolution", [
             "The target could not be located on screen; confirm the app view "
@@ -443,6 +453,9 @@ def classify_halt(step: Optional[Step], result: StepResult) -> tuple[str, list[s
         ]
 
     return "halt", [resume, abort]
+
+
+_CheckpointT = TypeVar("_CheckpointT", RunCheckpoint, ProgramCheckpoint)
 
 
 class DurableRun:
@@ -645,6 +658,47 @@ class DurableRun:
         if current_continuation_token() is None:
             self._sync_authority()
 
+    def _after_active_pause(self, checkpoint: _CheckpointT) -> _CheckpointT:
+        """Stamp a checkpoint written while a pause is active after that pause.
+
+        Resume requires such a checkpoint to be newer than the pause; the wall
+        clock alone can't guarantee it when it steps backward.
+        """
+
+        if self._active_pause_digest == self.store.model_digest(None):
+            return checkpoint
+        active = self.store.read_pending()
+        if active is None:
+            return checkpoint
+        # An exact retry keeps the stamp its first write chose, so the store's
+        # idempotent rewrite still matches; a changed payload is still refused.
+        retained: Optional[RunCheckpoint | ProgramCheckpoint]
+        if isinstance(checkpoint, ProgramCheckpoint):
+            retained = next(
+                (
+                    c
+                    for c in self.store.program_checkpoints()
+                    if c.seq == checkpoint.seq
+                ),
+                None,
+            )
+        else:
+            retained = next(
+                (
+                    c
+                    for c in self.store.checkpoints()
+                    if c.step_index == checkpoint.step_index
+                ),
+                None,
+            )
+        if retained is not None and retained == checkpoint.model_copy(
+            update={"created_at": retained.created_at}
+        ):
+            return checkpoint.model_copy(update={"created_at": retained.created_at})
+        return checkpoint.model_copy(
+            update={"created_at": _now_after(checkpoint.created_at, active.created_at)}
+        )
+
     def record(
         self,
         step_index: int,
@@ -665,20 +719,19 @@ class DurableRun:
         duplicating it.
         """
         if result.ok:
-            self.store.write_checkpoint(
-                verified_checkpoint(
-                    run_id=self.run_id,
-                    workflow_name=self.workflow_name,
-                    bundle_version=self.bundle_version,
-                    step_index=step_index,
-                    step=step,
-                    result=result,
-                    params=params,
-                    governed_authorization=self.governed_authorization,
-                    active_surface=active_surface,
-                    surface_observations=surface_observations,
-                )
+            checkpoint = verified_checkpoint(
+                run_id=self.run_id,
+                workflow_name=self.workflow_name,
+                bundle_version=self.bundle_version,
+                step_index=step_index,
+                step=step,
+                result=result,
+                params=params,
+                governed_authorization=self.governed_authorization,
+                active_surface=active_surface,
+                surface_observations=surface_observations,
             )
+            self.store.write_checkpoint(self._after_active_pause(checkpoint))
             self._sync_authority()
             # Keep an approved/continuing pause as the crash-restart anchor.
             # Terminal completion or a later halt consumes/replaces it by CAS.
@@ -701,7 +754,8 @@ class DurableRun:
 
         # HALT: durably pause instead of just dying. Resume from the last
         # verified checkpoint (0 when nothing verified yet).
-        last = self.store.last_checkpoint()
+        checkpoints = self.store.checkpoints()
+        last = checkpoints[-1] if checkpoints else None
         resume_from = last.next_step_index if last is not None else 0
         pending = PendingEscalation(
             run_id=self.run_id,
@@ -719,6 +773,7 @@ class DurableRun:
             delivery_uncertainty=result.delivery_uncertainty,
             # A person's "Don't save" ends the item for good.
             status="rejected" if category == "item_declined" else "pending",
+            created_at=_now_not_before(*(c.created_at for c in checkpoints)),
         )
         self.store.cas_pending(self._active_pause_digest, pending)
         self._active_pause_digest = self.store.model_digest(pending)
@@ -771,7 +826,8 @@ class DurableRun:
                 "a deferred record check holds record rows, so the durable "
                 "store must be encrypted"
             )
-        last = self.store.last_checkpoint()
+        checkpoints = self.store.checkpoints()
+        last = checkpoints[-1] if checkpoints else None
         resume_from = last.next_step_index if last is not None else 0
         if resume_from != step_index:
             raise StateDiverged(
@@ -810,6 +866,7 @@ class DurableRun:
                 active_surface=active_surface,
                 surface_observations=dict(surface_observations or {}),
             ),
+            created_at=_now_not_before(*(c.created_at for c in checkpoints)),
         )
         self.store.cas_pending(self._active_pause_digest, pending)
         self._active_pause_digest = self.store.model_digest(pending)
@@ -882,7 +939,7 @@ class DurableRun:
             raise StateDiverged(
                 "the program checkpoint does not match the active run identity"
             )
-        self.store.write_program_checkpoint(checkpoint)
+        self.store.write_program_checkpoint(self._after_active_pause(checkpoint))
         self._sync_authority()
         # Keep the old pause as the restart anchor until terminal completion or
         # a replacement halt is durably committed.
@@ -923,7 +980,8 @@ class DurableRun:
         marks the pause as a state-machine pause."""
         if result.failure_category == "continuation_preempted":
             return
-        last = self.store.last_program_checkpoint()
+        program_checkpoints = self.store.program_checkpoints()
+        last = program_checkpoints[-1] if program_checkpoints else None
         category, options = classify_halt(None, result)
         if result.delivery_uncertainty is None:
             # As for a linear step: a sent save that didn't end verified may
@@ -964,6 +1022,7 @@ class DurableRun:
             program_history=list(program_history or []),
             delivery_uncertainty=result.delivery_uncertainty,
             status="rejected" if category == "item_declined" else "pending",
+            created_at=_now_not_before(*(c.created_at for c in program_checkpoints)),
         )
         self.store.cas_pending(self._active_pause_digest, pending)
         self._active_pause_digest = self.store.model_digest(pending)
@@ -1011,6 +1070,29 @@ class DurableRun:
                 # unusable. Preserve the safe halt if a damaged old capability
                 # cannot be archived for display cleanup.
                 pass
+        self._sync_authority()
+
+    def pause_digest(self) -> str:
+        """Digest of the pause on disk now (of None when there is none)."""
+
+        return self.store.model_digest(self.store.read_pending())
+
+    def consume_pause(self, digest: str) -> None:
+        """Remove the pause on disk only if it is exactly ``digest``.
+
+        A durable API span writes a delivery-uncertain pause before its first
+        request (its write-ahead). Once the save's checkpoint is persisted, that
+        pause has done its job. Any other pause (a deferred record check, a
+        person's decision, another leg's) is left alone.
+        """
+
+        current = self.store.read_pending()
+        if current is None or self.store.model_digest(current) != digest:
+            return
+        if self._active_pause_digest != digest:
+            return
+        self.store.cas_pending(digest, None)
+        self._active_pause_digest = self.store.model_digest(None)
         self._sync_authority()
 
     def complete(self) -> None:

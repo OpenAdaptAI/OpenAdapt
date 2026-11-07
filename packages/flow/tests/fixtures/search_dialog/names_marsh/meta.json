@@ -1,0 +1,14 @@
+{
+  "id": "578d12cf67274740be88c2e3665fe83c",
+  "created_at": "2026-11-03T19:50:37.782601+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "coordinate_space": "page",
+  "app_url": "http://records.test/",
+  "params": {
+    "name": "Elena Marsh"
+  },
+  "secret_params": []
+}

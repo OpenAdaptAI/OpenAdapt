@@ -194,7 +194,7 @@ release, never another `openadapt-flow` it finds on your `PATH`, and `doctor`
 says which one it found:
 
 ```bash
-pip install openadapt-desktop "openadapt-flow[browser,console]==2.1.0"
+pip install openadapt-desktop "openadapt-flow[browser,console]==2.4.1"
 openadapt-desktop doctor
 ```
 
@@ -209,6 +209,7 @@ setting.
 | `record`, `list`, `info` | Record a task and inspect recordings |
 | `compile`, `qualify`, `replay`, `run` | Compile a recording, fill in its checks from the recording, replay it, or run it with a deployment settings file |
 | `scrub`, `review`, `approve`, `dismiss` | Remove personal data from a recording and review it before anything leaves the computer |
+| `approver-key setup` | Create the keys that sign your answers to saves in Run it and on the paired phone, and print the command a person runs once to register each one |
 | `login`, `credential`, `rotate`, `push`, `report-break` | Sign in to OpenAdapt Cloud, manage the stored sign-in, send a recording or task, or report a stopped run |
 | `storage`, `health`, `cleanup`, `config` | Inspect and maintain local storage and settings |
 | `upload`, `backends` | Older upload commands. `upload --backend hosted_ingest` runs `push`; upload to your own S3 storage is turned off in this release. |
@@ -278,6 +279,56 @@ Release status, signing, CI evidence, and data handling for security and IT
 reviewers are in
 [docs/COMPLIANCE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/docs/COMPLIANCE.md).
 
+## Usage stats and update checks
+
+**Usage stats are off until you say yes.** On first launch Desktop asks
+once whether to share anonymous usage stats. Nothing is sent before you pick
+**Share**, and **No thanks** is saved the same way. Change it any time in
+**Settings → Usage stats**.
+
+When it's on, Desktop sends these events to PostHog: `app_opened`,
+`recording_started`, `recording_stopped`, `recording_failed`,
+`replay_started`, `replay_stopped`, `replay_failed`, `teach_started`,
+`teach_completed`, and `update_check`. Each one carries only:
+
+- a random install id, made on this computer (not your hostname, username,
+  or hardware)
+- `app_version`, `os`, and `arch`
+- `internal`, true on CI and developer machines
+- short fixed values such as `surface`, `mode`, `outcome`, `error_code`, and
+  `update_available`
+
+It never sends screen content, keystrokes, file paths, task text, workflow
+names, item values, or error messages. PostHog is asked not to create a person
+profile or look up a location. The full list is in
+[`openadapt_desktop/telemetry.py`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/openadapt_desktop/telemetry.py).
+
+**Update checks are on by default.** Once a day Desktop asks GitHub's public
+release list whether a newer `openadapt-desktop-vX.Y.Z` release exists, and
+shows a notice with a download link when one does. The request carries no
+install id, version, or account. Installing stays manual. Turn it off in
+**Settings → Version and updates**.
+
+**Release notes by email are optional and off by default.** The first-launch
+question has a **Get release notes by email** box. Only if you tick it, type an
+address, and press **Subscribe** does Desktop post that address to the
+website's signup form (`https://openadapt.ai/form.html`, form `newsletter`,
+`source=desktop`). Nothing else goes with it, and the address isn't stored on
+this computer.
+
+Both choices are saved in the `[privacy]` table of `~/.openadapt/config.toml`.
+Environment variables win over the file:
+
+| Variable | Effect |
+| --- | --- |
+| `DO_NOT_TRACK=1` | Usage stats off; the first-launch question isn't asked |
+| `OPENADAPT_TELEMETRY=0` | Same as above (established Flow/subprocess opt-out) |
+| `OPENADAPT_TELEMETRY_ENABLED=false` | Same as above |
+| `OPENADAPT_TELEMETRY_ENABLED=true` | Usage stats on without asking (managed installs) |
+| `OPENADAPT_UPDATE_CHECK=false` | Update check off |
+| `OPENADAPT_EMAIL_SIGNUP=false` | The release-notes signup sends nothing |
+| `OPENADAPT_POSTHOG_KEY`, `OPENADAPT_POSTHOG_HOST` | Send usage stats to another PostHog project |
+
 ## More documentation
 
 - [The operator screens](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/docs/OPERATOR_SCREENS.md):
@@ -286,6 +337,7 @@ reviewers are in
   area by area
 - [Which release to download](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/RELEASES.md)
 - [OpenAdapt documentation](https://docs.openadapt.ai)
+- [Get updates](https://openadapt.ai/#updates): release notes and setup tips by email
 
 ## License
 

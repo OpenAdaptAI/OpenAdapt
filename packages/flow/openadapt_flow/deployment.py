@@ -26,7 +26,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Callable, Literal, Mapping, Optional
+from typing import Any, Callable, Final, Literal, Mapping, Optional
 
 from pydantic import (
     BaseModel,
@@ -50,6 +50,7 @@ from openadapt_flow.runtime.effects.auth import AuthRef, ResolvedSecrets
 from openadapt_flow.runtime.effects.deferred_report import DeferredReportSpec
 from openadapt_flow.runtime.effects.desktop_readback import DesktopReadbackSpec
 from openadapt_flow.runtime.effects.effect import Region, ValueExpr
+from openadapt_flow.runtime.effects.frame import FrameAttribution, FrameDatabase
 from openadapt_flow.runtime.effects.fresh_session import FreshSessionSpec
 from openadapt_flow.runtime.effects.smart_auth import SmartBackendConfig
 from openadapt_flow.runtime.effects.ui_readback import UiReadbackSpec
@@ -383,10 +384,21 @@ class EffectsConfig(BaseModel):
     #: ``runtime/effects/fresh_session.py`` and ``docs/READBACK_LADDER.md``.
     fresh_session: Optional[FreshSessionSpec] = None
 
-    # -- rest (JSON REST system of record, e.g. MockMed /api/db) -------------
+    # -- rest (JSON REST system of record) -----------------------------------
     base_url: Optional[str] = None
-    records_path: str = "/api/db"
+    #: ``rest`` only, and required there: the path whose GET returns the
+    #: records. Every app keeps them somewhere else, so there is no default.
+    records_path: Optional[str] = None
     records_key: Optional[str] = "records"
+    #: ``rest`` only: dotted path in the response body to the next page's URL
+    #: (``links.next``). Set, the read follows every page on the same origin
+    #: and reads as unreadable when a page fails or the chain is too long.
+    #: Unset: one response is the whole read, as before.
+    records_next_path: Optional[str] = None
+    #: ``rest`` only: dotted path in the first page's body to the number of
+    #: records the read should return (``meta.total``). Set, a read whose
+    #: count differs reads as unreadable. Unset: the read trusts the chain.
+    records_total_path: Optional[str] = None
     #: Secret-isolated auth headers for the records read (bearer_env /
     #: header+value_env / basic_env). Never a credential literal.
     auth: Optional[AuthRef] = None
@@ -435,8 +447,10 @@ class EffectsConfig(BaseModel):
     #: Allowlist variant: when set, every evidence field NOT named is redacted.
     evidence_keep_fields: Optional[list[str]] = None
 
-    # -- fhir (FHIR R4 search, e.g. OpenEMR) ---------------------------------
-    resource_type: str = "Observation"
+    # -- fhir (FHIR R4 search) -----------------------------------------------
+    #: ``fhir`` only, and required there with ``field_paths``: which resource
+    #: the app keeps the write in, and where each field lives in it.
+    resource_type: Optional[str] = None
     search_params: dict[str, str] = Field(default_factory=dict)
     field_paths: Optional[dict[str, str]] = None
     #: OAuth2 bearer token literal. DEPRECATED for committed configs — prefer
@@ -535,7 +549,7 @@ class EffectsConfig(BaseModel):
             if not isinstance(env_name, str) or not _ENV_VAR_NAME.fullmatch(env_name):
                 raise ValueError(
                     f"effects.secret_env[{slot!r}] must be the NAME of an "
-                    "environment variable (for example OPENEMR_READER_PASSWORD), "
+                    "environment variable (for example APP_READER_PASSWORD), "
                     "never the credential itself"
                 )
         return v
@@ -612,7 +626,14 @@ class EffectsConfig(BaseModel):
         """Keep configs without a desktop read-back byte-identical."""
 
         data: dict[str, Any] = handler(self)
-        for added in ("desktop_readback", "deferred_report"):
+        for added in (
+            "desktop_readback",
+            "deferred_report",
+            "records_next_path",
+            "records_total_path",
+            "records_path",
+            "resource_type",
+        ):
             if data.get(added, "") is None:
                 data.pop(added, None)
         return data
@@ -754,6 +775,13 @@ class RuntimeSection(BaseModel):
     #: grounder / identity-VLM / state-verifier. Off by default => fully local,
     #: zero outbound calls.
     allow_model_grounding: bool = False
+    #: Local grounding model for pixel surfaces (Citrix, RDP, VNC, canvas):
+    #: finds an icon or unlabeled control again after a display-scale, zoom,
+    #: font or theme change, counting look-alikes and halting on a tie. Runs
+    #: in process with no outbound call; the pinned weights (24 MB) are
+    #: fetched once and SHA-256 checked. Off by default. See
+    #: :mod:`openadapt_flow.runtime.local_grounder`.
+    local_grounding: bool = False
     #: Arm the pixel-compare identity tier's VERIFY branch (experimental,
     #: evidence-gated). Off by default => the pixel tier only ever HALTs on a
     #: localized glyph change or ABSTAINs; it never pixel-VERIFIES (a
@@ -990,8 +1018,95 @@ class ProbeCopySection(BaseModel):
     reward_contract: Optional[str] = None
 
 
+class RollbackSection(BaseModel):
+    """Compensating rollback after a stop (docs/ROLLBACK.md).
+
+    Off unless ``enabled``. When on, the run reads the system of record before
+    it starts; after a stop it runs the compensation a person approved for
+    each change, latest first, and reads the store again. It is
+    ``ROLLED_BACK`` only when that read matches the first one.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    #: Read every table but ``allow_tables`` (same shape as
+    #: ``frame.database`` in ``verify.yaml``). Without it, the rollback reads
+    #: the one collection the ``effects`` verifier reads.
+    database: Optional[FrameDatabase] = None
+    #: A compensation that hard-deletes a record runs only when this is true.
+    #: Many record systems forbid deleting a chart for audit or legal reasons:
+    #: prefer a ``void`` compensation there.
+    allow_delete: bool = False
+    #: The app's versioned bookkeeping profile, by name (``openemr``;
+    #: ``openadapt_flow.app_profiles``), shared with the verifier's frame and
+    #: the RL grader: which tables move on their own and how (append-only,
+    #: session state, named columns). Never patient data. Applies to
+    #: ``database`` reads; without it, every changed row counts.
+    profile: Optional[str] = None
+    #: The sign-in names the run acts as, for the profile's own-row rules
+    #: (its own session and login rows). Another user's rows still count.
+    actor_names: list[str] = Field(default_factory=list)
+    #: The deployment's target is a declared test copy (``test_copy``) that
+    #: only this run writes: compensations then run without attribution. Off
+    #: by default; a shared QA copy where testers also write must not set it.
+    exclusive: bool = False
+    #: Who changed a row: the app's audit log (``frame.attribution`` in
+    #: ``verify.yaml``, ``kind: audit_read``). A compensation runs only while
+    #: every changed row is positively the run's own by it. Without it,
+    #: nothing is compensated. A last-writer field (``record_field``) is
+    #: refused: it can't show another user's edit between two of the run's
+    #: writes.
+    attribution: Optional[FrameAttribution] = None
+
+    @model_validator(mode="after")
+    def _audit_log_only(self) -> "RollbackSection":
+        if self.attribution is not None and self.attribution.kind != "audit_read":
+            raise ValueError(
+                "rollback.attribution must be the app's audit log (kind: "
+                "audit_read); a last-writer field can't show which changes are "
+                "the run's own (docs/ROLLBACK.md, Other users)"
+            )
+        return self
+
+
 #: Sentinel written by ``config init`` for fields the operator must fill.
 UNRESOLVED = "UNRESOLVED"
+
+
+class RepairSessionSpec(BaseModel):
+    """How self-repair opens a fresh app session outside a browser.
+
+    A probe, each fault probe and the resumed run each need the app freshly
+    started; the halted session stays as it is. Each command is an argv run
+    on the machine Flow runs on, with no shell. It must keep running while the
+    app is up and own (it, or a process of its group) the one window
+    ``backend:`` binds to; Flow checks that, and ends the group afterwards. A
+    backend whose window is not on this machine (Windows over its agent,
+    FreeRDP) can't show that, so repair there is refused for now.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Starts the app for a probe or the resumed run.
+    command: list[str] = Field(min_length=1)
+    #: Name -> argv that starts the app showing a fault the repaired run must
+    #: stop before the save (another patient's chart, a missing record).
+    fault_commands: dict[str, list[str]] = Field(default_factory=dict)
+    #: Runs after Flow ends the app's process group, to clean up what the app
+    #: left (a lock file, a server-side session). A non-zero exit is refused.
+    close_command: list[str] = Field(default_factory=list)
+    #: Seconds to wait for the window before binding the backend.
+    ready_s: float = Field(default=2.0, ge=0.0, le=120.0)
+
+    @model_validator(mode="after")
+    def _argvs(self) -> "RepairSessionSpec":
+        for name, argv in self.fault_commands.items():
+            if not name or not argv:
+                raise ValueError(
+                    "each repair.session fault command needs a name and an argv"
+                )
+        return self
 
 
 class RepairSection(BaseModel):
@@ -1026,6 +1141,26 @@ class RepairSection(BaseModel):
     #: bundle accepts it (openadapt_flow/repair/readmission.py).
     requalify: Optional[str] = None
     requalify_trials: int = Field(default=1, ge=1, le=10)
+    #: Outside a browser: how each probe, fault probe and the resumed run open
+    #: a fresh app session. Required to repair a desktop, RDP or Citrix run.
+    session: Optional[RepairSessionSpec] = None
+
+
+class ApproversSection(BaseModel):
+    """Who may approve this deployment's saves (approval_mode/approver_roster).
+
+    ``root_public_key`` pins the root approver key (64 hex): a person's answer
+    counts only when its signer is on the signed roster this key vouches
+    for. ``key_dir``, when set, is the only key directory a run accepts.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    root_public_key: str = Field(pattern=r"^[0-9a-f]{64}$")
+    key_dir: Optional[str] = None
+    #: A roster head ``[seq, "sha256:..."]`` recorded outside the key
+    #: directory (Desktop writes its Keychain's): the roster must extend it.
+    head: Optional[tuple[int, str]] = None
 
 
 class DeploymentConfig(BaseModel):
@@ -1058,6 +1193,12 @@ class DeploymentConfig(BaseModel):
     #: Declares the target a resettable test copy (``induce --probe-on``
     #: only). None (and omitted when serialized) otherwise.
     test_copy: Optional[ProbeCopySection] = None
+    #: Compensating rollback after a stop. None (and omitted when serialized)
+    #: otherwise.
+    rollback: Optional[RollbackSection] = None
+    #: The pinned approver root (approval_mode/approver_roster.py). None (and
+    #: omitted when serialized) means the run names it some other way.
+    approvers: Optional[ApproversSection] = None
     #: Automatic repair of stops that wrote nothing. Omitted when serialized
     #: at its defaults (no agent).
     repair: RepairSection = Field(default_factory=RepairSection)
@@ -1090,6 +1231,10 @@ class DeploymentConfig(BaseModel):
             data.pop("worklist", None)
         if self.test_copy is None:
             data.pop("test_copy", None)
+        if self.rollback is None:
+            data.pop("rollback", None)
+        if self.approvers is None:
+            data.pop("approvers", None)
         if self.repair == RepairSection():
             data.pop("repair", None)
         return data
@@ -1239,6 +1384,62 @@ def incomplete_deployment_reasons(cfg: DeploymentConfig) -> list[str]:
     return reasons
 
 
+#: Config bytes read once and checked against the digest the caller passed
+#: (``--config-sha256``), keyed by the path as given (``os.path.abspath``, not
+#: resolved, so a symlink put there later can't redirect a lookup). Every later
+#: load of that path in this process parses these bytes, never the file.
+_PINNED_CONFIG_BYTES: dict[str, bytes] = {}
+
+
+def _config_key(source: str | Path) -> str:
+    import os
+
+    return os.path.abspath(str(source))
+
+
+def pin_deployment_bytes(source: str | Path, sha256: str) -> bytes:
+    """Read ``source`` once, check it against ``sha256``, and keep those bytes.
+
+    The file is opened without following a symlink and must be a regular
+    file. Returns the bytes. Raises ValueError when the digest doesn't match
+    or the path isn't a regular file.
+    """
+
+    import hashlib
+    import os
+    import stat
+
+    try:
+        # O_BINARY: on Windows a plain os.open reads in text mode, turning
+        # CRLF into LF, so the bytes hashed wouldn't be the bytes written.
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+        fd = os.open(str(source), flags)
+    except OSError as exc:
+        raise ValueError(
+            f"deployment config {source} can't be opened as a plain file: {exc}"
+        ) from exc
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError(f"deployment config {source} isn't a regular file")
+        chunks = []
+        while True:
+            chunk = os.read(fd, 1 << 16)
+            if not chunk:
+                break
+            chunks.append(chunk)
+    finally:
+        os.close(fd)
+    data = b"".join(chunks)
+    want = sha256.strip().lower().removeprefix("sha256:")
+    if hashlib.sha256(data).hexdigest() != want:
+        raise ValueError(
+            f"deployment config {source} doesn't match --config-sha256 (it changed "
+            "after it was written)"
+        )
+    _PINNED_CONFIG_BYTES[_config_key(source)] = data
+    return data
+
+
 def load_deployment(
     source: str | Path, *, allow_unresolved: bool = False
 ) -> DeploymentConfig:
@@ -1252,10 +1453,16 @@ def load_deployment(
     import yaml
 
     path = Path(source)
-    if not path.is_file():
+    pinned = _PINNED_CONFIG_BYTES.get(_config_key(path))
+    if pinned is None and not path.is_file():
         raise FileNotFoundError(f"deployment config {source!r} is not an existing file")
     try:
-        data = yaml.safe_load(path.read_text()) or {}
+        text = (
+            pinned.decode("utf-8")
+            if pinned is not None
+            else path.read_text(encoding="utf-8")
+        )
+        data = yaml.safe_load(text) or {}
     except yaml.YAMLError as e:  # pragma: no cover - passthrough
         raise ValueError(f"could not parse deployment YAML {path}: {e}") from e
     if not isinstance(data, dict):
@@ -1576,7 +1783,20 @@ def build_replayer(
     fallback = model_grounder
     if fallback is None and appliance is not None:
         fallback = appliance.grounder
-    grounder = build_grounder(fallback=fallback)
+    local_model: Optional[Any] = None
+    if runtime_config is not None and runtime_config.local_grounding:
+        from openadapt_flow.runtime.local_grounder import LocalGroundingModel
+
+        local_model = LocalGroundingModel.load()
+        print(
+            "Local grounding model active for pixel surfaces "
+            "(in process, no outbound calls)."
+        )
+    grounder = (
+        build_grounder(fallback=fallback, local_model=local_model)
+        if local_model is not None
+        else build_grounder(fallback=fallback)
+    )
     if grounder is not None:
         print(f"Grounding rung active: {type(grounder).__name__}")
     require_settled = (
@@ -1738,7 +1958,10 @@ def plugin_secrets(
 
 
 def build_effect_verifier(
-    cfg: EffectsConfig, params: Optional[Mapping[str, object]] = None
+    cfg: EffectsConfig,
+    params: Optional[Mapping[str, object]] = None,
+    *,
+    session: Any = None,
 ) -> Optional[Any]:
     """Construct the configured ``EffectVerifier`` (or None for ``kind: none``).
 
@@ -1750,6 +1973,11 @@ def build_effect_verifier(
             ``graphql_variables``) are resolved against these AT CONSTRUCTION,
             so the verifier probes the record THIS run writes. A config with
             no references ignores ``params`` entirely (fully back-compatible).
+        session: An authenticated ``requests``-style client the read-back
+            uses instead of building its own, for ``kind: rest``, ``fhir``
+            or ``graphql`` (for example one from a qualify
+            ``verifier.session`` hook that renews an expiring token). Any
+            other kind refuses it rather than read without it.
 
     Resolution order for ``kind``: built-in adapters, then plugin factories registered under the
     ``openadapt_flow.effect_verifiers`` entry-point group or via
@@ -1764,6 +1992,14 @@ def build_effect_verifier(
             unresolved ``{param: ...}`` reference, or a missing secret env var
             (fail loud rather than wire a broken verifier).
     """
+    if session is not None and (
+        cfg.candidates or (cfg.kind or "").strip().lower() not in _SESSION_KINDS
+    ):
+        raise ValueError(
+            "an injected read-back session is supported for kind: "
+            + ", ".join(_SESSION_KINDS)
+            + f", not {cfg.kind!r}"
+        )
     if cfg.candidates:
         built = [
             build_effect_verifier(candidate, params) for candidate in cfg.candidates
@@ -1810,7 +2046,7 @@ def build_effect_verifier(
             return RedactingVerifier(candidate_selector, policy)
         return candidate_selector
 
-    verifier = _build_effect_verifier_unredacted(cfg, params)
+    verifier = _build_effect_verifier_unredacted(cfg, params, session=session)
     if verifier is None:
         return None
     from openadapt_flow.runtime.effects.adapter import set_verifier_identity
@@ -1832,6 +2068,41 @@ def build_effect_verifier(
 
 _PLUGIN_ONLY_FIELDS = ("options", "option_params", "secret_env")
 
+#: The built-in read-backs that can read through an injected client.
+_SESSION_KINDS: Final[tuple[str, ...]] = ("rest", "fhir", "graphql")
+
+
+#: What these fields held when they still had defaults. Verifier identities
+#: and check digests issued before then hashed these values, so for hashing
+#: only, an unset field still reads as its old value. Never used to read a
+#: store: a read without its own records_path or resource_type is refused.
+LEGACY_HASHED_DEFAULTS: Final[dict[str, str]] = {
+    "records_path": "/api/db",
+    "resource_type": "Observation",
+}
+
+
+def legacy_hash_dump(dumped: dict[str, Any], *, defaults_excluded: bool) -> None:
+    """Make a config dump hash as it did when those fields had defaults.
+
+    ``defaults_excluded``: the dump left defaults out (``exclude_defaults``),
+    so a field holding its old default is dropped; otherwise an unset field
+    takes its old default.
+    """
+
+    for name, legacy in LEGACY_HASHED_DEFAULTS.items():
+        if defaults_excluded:
+            if dumped.get(name) == legacy:
+                dumped.pop(name)
+        elif dumped.get(name) is None:
+            dumped[name] = legacy
+    for item in dumped.get("candidates") or []:
+        if isinstance(item, dict):
+            legacy_hash_dump(item, defaults_excluded=defaults_excluded)
+    for item in (dumped.get("surfaces") or {}).values():
+        if isinstance(item, dict):
+            legacy_hash_dump(item, defaults_excluded=defaults_excluded)
+
 
 def _identity_config_dump(cfg: EffectsConfig) -> dict[str, Any]:
     """Serialize ``cfg`` for the verifier identity.
@@ -1841,6 +2112,7 @@ def _identity_config_dump(cfg: EffectsConfig) -> dict[str, Any]:
     """
 
     def prune(dumped: dict[str, Any]) -> dict[str, Any]:
+        legacy_hash_dump(dumped, defaults_excluded=False)
         for name in _PLUGIN_ONLY_FIELDS:
             if not dumped.get(name):
                 dumped.pop(name, None)
@@ -1887,6 +2159,8 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
         "fresh_session",
         "desktop_readback",
         "deferred_report",
+        "records_next_path",
+        "records_total_path",
     ):
         if config.get(added) is None:
             config.pop(added, None)
@@ -1921,7 +2195,10 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
 
 
 def _build_effect_verifier_unredacted(
-    cfg: EffectsConfig, params: Optional[Mapping[str, object]] = None
+    cfg: EffectsConfig,
+    params: Optional[Mapping[str, object]] = None,
+    *,
+    session: Any = None,
 ) -> Optional[Any]:
     """The per-kind construction behind :func:`build_effect_verifier`."""
     kind = (cfg.kind or "none").strip().lower()
@@ -2011,6 +2288,11 @@ def _build_effect_verifier_unredacted(
     if kind == "rest":
         if not cfg.base_url:
             raise ValueError("effects.kind 'rest' requires effects.base_url")
+        if not cfg.records_path:
+            raise ValueError(
+                "effects.kind 'rest' requires effects.records_path (the path "
+                "whose GET returns the app's records)"
+            )
         from openadapt_flow.runtime.effects import RestRecordVerifier
 
         headers = cfg.auth.resolve_headers() if cfg.auth is not None else None
@@ -2035,15 +2317,24 @@ def _build_effect_verifier_unredacted(
             cfg.base_url,
             records_path=records_path,
             records_key=cfg.records_key,
+            session=session,
             headers=headers,
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,
             drop_fields=tuple(cfg.records_drop_fields),
+            next_path=cfg.records_next_path,
+            total_path=cfg.records_total_path,
         )
 
     if kind == "fhir":
         if not cfg.base_url:
             raise ValueError("effects.kind 'fhir' requires effects.base_url")
+        if not cfg.resource_type or not cfg.field_paths:
+            raise ValueError(
+                "effects.kind 'fhir' requires effects.resource_type and "
+                "effects.field_paths (which resource the app keeps the write "
+                "in, and where each field lives in it)"
+            )
         from openadapt_flow.runtime.effects import FhirEffectVerifier
 
         access_token = cfg.access_token
@@ -2074,6 +2365,7 @@ def _build_effect_verifier_unredacted(
             field_paths=cfg.field_paths,
             access_token=access_token,
             token_source=token_source,
+            session=session,
             verify_tls=cfg.verify_tls,
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,
@@ -2084,23 +2376,37 @@ def _build_effect_verifier_unredacted(
         if not cfg.sql_query:
             raise ValueError("effects.kind 'sql' requires effects.sql_query")
         from openadapt_flow.runtime.effects import SqlRecordVerifier
+        from openadapt_flow.runtime.effects.sql import (
+            READ_ONLY_DRIVERS,
+            read_only_connection,
+        )
 
         connect: Callable[[], Any]
         if cfg.sqlite_database:
             import sqlite3
 
             database = cfg.sqlite_database
-            connect = lambda: sqlite3.connect(database)  # noqa: E731
+            connect = lambda: read_only_connection(  # noqa: E731
+                sqlite3.connect(database), "sqlite3"
+            )
         elif cfg.sql_driver:
             import importlib
 
-            module = importlib.import_module(cfg.sql_driver)
+            driver = cfg.sql_driver
+            module = importlib.import_module(driver)
             connect_args = dict(cfg.sql_connect_args)
             if cfg.sql_password_env:
                 connect_args["password"] = _require_env(
                     cfg.sql_password_env, "effects.sql_password_env"
                 )
-            connect = lambda: module.connect(**connect_args)  # noqa: E731
+            # The read-back never writes: where the driver can, its session
+            # is read-only, so a query that would write is refused there.
+            if driver in READ_ONLY_DRIVERS:
+                connect = lambda: read_only_connection(  # noqa: E731
+                    module.connect(**connect_args), driver
+                )
+            else:
+                connect = lambda: module.connect(**connect_args)  # noqa: E731
         else:
             raise ValueError(
                 "effects.kind 'sql' requires effects.sqlite_database or "
@@ -2156,6 +2462,7 @@ def _build_effect_verifier_unredacted(
             query=cfg.graphql_query,
             variables=variables,
             records_path=cfg.graphql_records_path,
+            session=session,
             headers=headers,
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,

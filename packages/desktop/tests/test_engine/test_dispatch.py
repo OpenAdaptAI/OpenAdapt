@@ -1518,7 +1518,15 @@ class TestLibraryCommands:
             def supports_approval_gate(self) -> bool:
                 return True
 
-            def run(self, target_bundle, config, out_dir, approval_mode, approval_wait_s):
+            def run(
+                self,
+                target_bundle,
+                config,
+                out_dir,
+                approval_mode,
+                approval_wait_s,
+                config_sha256=None,
+            ):
                 from openadapt_desktop.flow_bridge import FlowResult
 
                 # Every Desktop run asks Flow to stop before each save.
@@ -2857,6 +2865,7 @@ class TestMisc:
             "shadow_turn_off",
             "shadow_pause",
             "shadow_unpause",
+            "at_rest_status",
         }
         assert expected.issubset(set(disp.commands))
 

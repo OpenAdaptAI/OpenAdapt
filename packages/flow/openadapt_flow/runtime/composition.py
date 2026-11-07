@@ -128,6 +128,9 @@ def execute_composition(
 ) -> CompositionReport:
     """Sequence children fail-closed. Missing handoff evidence HALTs."""
 
+    from openadapt_flow import at_rest as _at_rest
+
+    _at_rest.hold_back_in_strict("a composition report")
     parent = Path(parent_dir)
     root_run = Path(run_dir)
     root_run.mkdir(parents=True, exist_ok=True)
@@ -331,6 +334,9 @@ def _write_parent_report(run_dir: Path, report: CompositionReport) -> None:
             for item in report.children
         ],
     }
+    from openadapt_flow import at_rest as _at_rest
+
+    _at_rest.unsealed_write("a composition report", run_dir, refuse=False)
     (run_dir / "composition-report.json").write_text(
         json.dumps(payload, indent=2), encoding="utf-8"
     )

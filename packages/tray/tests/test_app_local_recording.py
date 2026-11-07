@@ -349,7 +349,13 @@ class FakeProcess:
     def send_signal(self, sig):
         self.signals.append(sig)
         if sig in self.exits_on:
-            self.returncode = -int(sig)
+            self.returncode = 1
+
+    def terminate(self):
+        self.send_signal("terminate")
+
+    def kill(self):
+        self.send_signal("kill")
 
     def wait(self):
         return self.returncode
@@ -384,21 +390,21 @@ class TestBoundedStop:
         assert process.poll() is not None
 
     def test_recorder_ignoring_ctrl_c_is_terminated_and_reported(self, tmp_path):
-        app, process = _app_with_fake_child(tmp_path, FakeProcess({signal.SIGTERM}))
+        app, process = _app_with_fake_child(tmp_path, FakeProcess({"terminate"}))
         app._on_capture_event(TestTrayOwnedRecording()._own(tmp_path, "ready"))
 
         outcome = app._stop_local_run(app.local_recorder.current)
 
         assert outcome == "terminated"
-        assert process.signals == [signal.SIGINT, signal.SIGTERM]
+        assert process.signals == [signal.SIGINT, "terminate"]
         assert app.state.current.state == TrayState.ERROR
         assert "ignored Ctrl-C" in app.state.current.error_message
         assert _titles(app)[-1] == "Error"
 
     def test_recorder_ignoring_everything_but_sigkill_is_killed(self, tmp_path):
-        app, process = _app_with_fake_child(tmp_path, FakeProcess({signal.SIGKILL}))
+        app, process = _app_with_fake_child(tmp_path, FakeProcess({"kill"}))
         app.quit()
-        assert process.signals == [signal.SIGINT, signal.SIGTERM, signal.SIGKILL]
+        assert process.signals == [signal.SIGINT, "terminate", "kill"]
         assert "killed" in app.state.current.error_message
 
     def test_reported_stop_is_enough_while_flow_converts(self, tmp_path):

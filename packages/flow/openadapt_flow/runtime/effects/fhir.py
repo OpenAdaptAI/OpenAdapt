@@ -47,6 +47,13 @@ from __future__ import annotations
 import time
 from typing import Any, Optional, Protocol
 
+from openadapt_flow.fhir_read import (
+    check_search_coverage,
+    check_search_outcome,
+    fhir_read_headers,
+    next_page_url,
+    search_total,
+)
 from openadapt_flow.runtime.effects._common import drop_record_fields, judge_records
 from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
@@ -56,8 +63,9 @@ from openadapt_flow.runtime.effects.effect import (
 )
 from openadapt_flow.verification import VerificationTier
 
-#: OpenEMR's FHIR field paths for the canonical patient-note-as-Observation
-#: write. Callers override for DocumentReference / Encounter / etc.
+#: A field map for a note kept as a FHIR R4 Observation (the note in
+#: ``valueString``). Not a default: a caller whose app stores its writes this
+#: way passes it as ``field_paths``; any other resource or app names its own.
 DEFAULT_OBSERVATION_PATHS: dict[str, str] = {
     "id": "id",
     "patient": "subject.reference",
@@ -65,6 +73,22 @@ DEFAULT_OBSERVATION_PATHS: dict[str, str] = {
     "note": "valueString",
     "code": "code.text",
 }
+
+
+#: A search result longer than this many pages reads as unreadable, never as
+#: the first pages.
+MAX_PAGES = 50
+
+
+def _origin(url: str) -> str:
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+def _same_origin(url: str, base_url: str) -> bool:
+    return _origin(url) == _origin(base_url)
 
 
 class AccessTokenSource(Protocol):
@@ -75,38 +99,102 @@ class AccessTokenSource(Protocol):
     def invalidate(self) -> None: ...
 
 
+def split_path(dotted: str) -> list[str]:
+    """Path segments, keeping a filter's dotted key in its segment."""
+
+    segs: list[str] = []
+    depth = 0
+    cur = ""
+    for ch in dotted:
+        if ch == "." and depth == 0:
+            segs.append(cur)
+            cur = ""
+            continue
+        depth += {"[": 1, "]": -1}.get(ch, 0)
+        cur += ch
+    segs.append(cur)
+    return segs
+
+
+def parse_filter(cond: str) -> Optional[tuple[str, str, bool]]:
+    """``key=value`` or ``key^=value`` as (key, value, prefix); None if neither."""
+
+    key, eq, value = cond.partition("=")
+    if not eq or not key:
+        return None
+    prefix = key.endswith("^")
+    key = key[:-1] if prefix else key
+    return (key, value, prefix) if key else None
+
+
+def filter_matches(item: Any, want: tuple[str, str, bool]) -> bool:
+    """True when ``item`` is an element the filter keeps."""
+
+    if not isinstance(item, dict):
+        return False
+    node: Any = item
+    for part in want[0].split("."):
+        if isinstance(node, list):
+            node = node[0] if node else None
+        if not isinstance(node, dict) or part not in node:
+            return False
+        node = node[part]
+    if node is None or isinstance(node, (dict, list)):
+        return False
+    text = str(node)
+    return text.startswith(want[1]) if want[2] else text == want[1]
+
+
 def extract_path(resource: dict[str, Any], dotted: str) -> Any:
     """Extract ``dotted`` (``a.b.c``) from a nested FHIR resource.
 
     A segment that lands on a list takes the list's first element (the common
     ``component[0]`` / single-coding case), so ``code.coding.code`` reads the
-    first coding's code. Returns ``None`` when any segment is missing.
+    first coding's code. A segment may filter a list first:
+    ``telecom[system=email].value`` reads the first telecom whose ``system``
+    is ``email`` (a Patient keeps its phone and its email in one list). The
+    filter's key may be dotted, and ``^=`` keeps the elements whose value
+    starts with the text: ``participant[actor.reference^=Patient/]`` reads
+    an Appointment's patient participant.
+    Returns ``None`` when any segment is missing or no element matches.
     """
     node: Any = resource
-    for seg in dotted.split("."):
+    for seg in split_path(dotted):
+        name, want = seg, None
+        if seg.endswith("]") and "[" in seg:
+            name, _, cond = seg[:-1].partition("[")
+            want = parse_filter(cond)
+            if want is None:
+                return None
         if isinstance(node, list):
             node = node[0] if node else None
         if not isinstance(node, dict):
             return None
-        node = node.get(seg)
+        node = node.get(name)
+        if want is not None:
+            items = node if isinstance(node, list) else [node]
+            node = next(
+                (item for item in items if filter_matches(item, want)),
+                None,
+            )
     if isinstance(node, list):
         node = node[0] if node else None
     return node
 
 
 class FhirEffectVerifier(VerifierAdapterBase):
-    """Verify effects against an OpenEMR FHIR R4 system of record.
+    """Verify effects against a FHIR R4 system of record.
 
     Args:
-        base_url: FHIR base URL (e.g.
-            ``https://demo.openemr.io/apis/default/fhir/R4``).
+        base_url: FHIR base URL (e.g. ``https://fhir.example.org/R4``).
         resource_type: FHIR resource type to search (``Observation``,
-            ``DocumentReference``, ``Encounter``, ...).
+            ``DocumentReference``, ``Encounter``, ...). Required.
         search_params: Query params identifying the candidate resource set
             (e.g. ``{"patient": "9", "category": "social-history"}``); used
             for both the pre-state snapshot and the post-action read.
         field_paths: Flat Effect key -> dotted FHIRPath-lite for flattening a
-            resource into the dict :func:`judge_records` matches on.
+            resource into the dict :func:`judge_records` matches on. Required:
+            where a field lives depends on the app and the resource.
         access_token: OAuth2 bearer token (``Authorization: Bearer ...``).
         token_source: Gets a token per read instead of ``access_token``
             (mutually exclusive with it).
@@ -125,9 +213,9 @@ class FhirEffectVerifier(VerifierAdapterBase):
         self,
         base_url: str,
         *,
-        resource_type: str = "Observation",
+        resource_type: str,
+        field_paths: dict[str, str],
         search_params: Optional[dict[str, str]] = None,
-        field_paths: Optional[dict[str, str]] = None,
         access_token: Optional[str] = None,
         token_source: Optional[AccessTokenSource] = None,
         session: Any = None,
@@ -140,7 +228,9 @@ class FhirEffectVerifier(VerifierAdapterBase):
         self.drop_fields = tuple(drop_fields)
         self.resource_type = resource_type
         self.search_params = dict(search_params or {})
-        self.field_paths = dict(field_paths or DEFAULT_OBSERVATION_PATHS)
+        if not resource_type or not field_paths:
+            raise ValueError("a FHIR read needs its resource_type and field_paths")
+        self.field_paths = dict(field_paths)
         if access_token and token_source is not None:
             raise ValueError("give access_token or token_source, not both")
         self.access_token = access_token
@@ -155,6 +245,8 @@ class FhirEffectVerifier(VerifierAdapterBase):
         # (``requests``-style) session; flipped only for the httpx fallback
         # client built in :meth:`_get_session`.
         self._verify_per_request = True
+        #: Why the last read was unreadable, for the state and the verdict.
+        self.read_problem: Optional[str] = None
 
     # -- transport ----------------------------------------------------------
 
@@ -187,7 +279,7 @@ class FhirEffectVerifier(VerifierAdapterBase):
 
     def _headers(self) -> Optional[dict[str, str]]:
         """Request headers, or None when the token source has no token."""
-        headers = {"Accept": "application/fhir+json"}
+        headers = fhir_read_headers()
         token = self.access_token
         if self.token_source is not None:
             token = self.token_source.access_token()
@@ -213,61 +305,142 @@ class FhirEffectVerifier(VerifierAdapterBase):
         transport error, non-2xx (incl. auth 401/403), non-Bundle body, or
         malformed entries. Never raises.
         """
+        self.read_problem = None
         url = f"{self.base_url}/{self.resource_type}"
         headers = self._headers()
         if headers is None:
+            self.read_problem = "no access token"
             return None
         session = self._get_session()
         # ``verify`` is passed per request only for a ``requests``-style client;
         # the httpx fallback already bound it at construction (see
-        # ``_get_session``), and passing it again would raise.
-        tls_kwargs = {"verify": self.verify_tls} if self._verify_per_request else {}
-        try:
-            resp = session.get(
-                url,
-                params=self.search_params,
-                headers=headers,
-                timeout=self.timeout_s,
-                **tls_kwargs,
-            )
-        except Exception:  # noqa: BLE001 - transport failure is unreadable
-            return None
-        if resp.status_code == 401 and self.token_source is not None:
-            self.token_source.invalidate()
-        if resp.status_code // 100 != 2:
-            return None
-        try:
-            bundle = resp.json()
-        except Exception:  # noqa: BLE001 - unparseable body is unreadable
-            return None
-        if not isinstance(bundle, dict) or bundle.get("resourceType") != "Bundle":
-            return None
-        entries = bundle.get("entry", [])
-        if not isinstance(entries, list):
+        # ``_get_session``), and passing it again would raise. A ``requests``
+        # session must not follow a redirect with the bearer token.
+        tls_kwargs: dict[str, Any] = (
+            {"verify": self.verify_tls} if self._verify_per_request else {}
+        )
+        if (type(session).__module__ or "").startswith("requests"):
+            tls_kwargs["allow_redirects"] = False
+
+        def get(target: str, params: Optional[dict[str, str]]) -> Any:
+            """One page: the parsed Bundle, or None with ``read_problem``."""
+
+            try:
+                kwargs = dict(tls_kwargs)
+                if params is not None:
+                    kwargs["params"] = params
+                resp = session.get(
+                    target, headers=headers, timeout=self.timeout_s, **kwargs
+                )
+            except Exception as exc:  # noqa: BLE001 - transport failure is unreadable
+                self.read_problem = f"GET {target} failed: {type(exc).__name__}"
+                return None
+            if resp.status_code == 401 and self.token_source is not None:
+                self.token_source.invalidate()
+            if resp.status_code // 100 != 2:
+                self.read_problem = f"GET {target} returned HTTP {resp.status_code}"
+                return None
+            landed = getattr(resp, "url", None)
+            landed = str(landed) if landed is not None else ""
+            if landed and _origin(landed) != _origin(target):
+                self.read_problem = (
+                    f"GET {target} was redirected to origin {_origin(landed)}"
+                )
+                return None
+            try:
+                bundle = resp.json()
+            except Exception:  # noqa: BLE001 - unparseable body is unreadable
+                self.read_problem = f"GET {target} returned a body that is not JSON"
+                return None
+            if not isinstance(bundle, dict) or bundle.get("resourceType") != "Bundle":
+                self.read_problem = f"GET {target} returned no Bundle"
+                return None
+            return bundle
+
+        bundle = get(url, self.search_params)
+        if bundle is None:
             return None
         out: list[dict[str, Any]] = []
-        for entry in entries:
-            if not isinstance(entry, dict):
+        outcomes: list[dict[str, Any]] = []
+        matches = 0
+        total: Optional[int] = None
+        for _page in range(MAX_PAGES):
+            try:
+                total = search_total(bundle, total)
+            except ValueError as exc:
+                self.read_problem = str(exc)
                 return None
-            resource = entry.get("resource")
-            if not isinstance(resource, dict):
+            entries = bundle.get("entry", [])
+            if not isinstance(entries, list):
+                self.read_problem = "a Bundle's entry is not a list"
                 return None
-            out.append(self._flatten(resource))
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    self.read_problem = "a Bundle entry is not an object"
+                    return None
+                resource = entry.get("resource")
+                if not isinstance(resource, dict):
+                    self.read_problem = "a Bundle entry has no resource"
+                    return None
+                mode = (entry.get("search") or {}).get("mode")
+                if (
+                    mode == "outcome"
+                    or resource.get("resourceType") == "OperationOutcome"
+                ):
+                    outcomes.append(resource)
+                    continue
+                if mode != "include":
+                    matches += 1
+                out.append(self._flatten(resource))
+            try:
+                for outcome in outcomes:
+                    check_search_outcome(outcome, has_matches=matches > 0)
+            except ValueError as exc:
+                self.read_problem = str(exc)
+                return None
+            try:
+                next_url = next_page_url(bundle)
+            except ValueError as exc:
+                self.read_problem = str(exc)
+                return None
+            if next_url is None:
+                break
+            if not _same_origin(next_url, self.base_url):
+                # A next page elsewhere is not this system of record.
+                self.read_problem = (
+                    f"next link origin {_origin(next_url)} != base_url "
+                    f"{_origin(self.base_url)}"
+                )
+                return None
+            bundle = get(next_url, None)
+            if bundle is None:
+                return None  # a lost page makes the set partial
+        else:
+            self.read_problem = f"more than {MAX_PAGES} pages"
+            return None  # never a truncated read
+        try:
+            check_search_coverage(total, matches)
+        except ValueError as exc:
+            self.read_problem = str(exc)
+            return None
         return drop_record_fields(out, self.drop_fields)
 
     # -- EffectVerifier protocol --------------------------------------------
 
     def capture_pre_state(self, context: Any = None) -> EffectState:
         records = self._search()
+        detail: dict[str, Any] = {
+            "base_url": self.base_url,
+            "resource_type": self.resource_type,
+            "search_params": self.search_params,
+        }
+        if records is None and self.read_problem:
+            detail["read_problem"] = self.read_problem
         return EffectState(
             substrate=self.substrate,
             reachable=records is not None,
             records=records or [],
-            detail={
-                "base_url": self.base_url,
-                "resource_type": self.resource_type,
-                "search_params": self.search_params,
-            },
+            detail=detail,
         )
 
     def verify(
@@ -278,6 +451,10 @@ class FhirEffectVerifier(VerifierAdapterBase):
         while True:
             current = self._search()
             last = judge_records(expected, before, current, substrate=self.substrate)
+            if current is None and self.read_problem:
+                last = last.model_copy(
+                    update={"reason": f"{last.reason} ({self.read_problem})"}
+                )
             if last.confirmed or time.monotonic() >= deadline:
                 return last
             time.sleep(self.poll_interval_s)

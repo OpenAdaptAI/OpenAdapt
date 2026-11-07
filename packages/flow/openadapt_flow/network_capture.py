@@ -37,11 +37,13 @@ Request and response bodies are cut at :data:`MAX_REQUEST_BYTES` and
 
 from __future__ import annotations
 
+import html
 import json
 import re
 import threading
 import time
 import urllib.parse as up
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
@@ -50,6 +52,18 @@ SCHEMA = "openadapt.network-capture/1"
 
 MAX_REQUEST_BYTES = 256 * 1024
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+
+_READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def _page_of(request: Any) -> Any:
+    """The page a request came from, or None (a service worker has none)."""
+
+    try:
+        return request.frame.page
+    except Exception:  # noqa: BLE001 - service-worker and detached-frame requests
+        return None
+
 
 _SKIP_TYPES = frozenset(
     {"image", "font", "stylesheet", "script", "media", "manifest", "texttrack"}
@@ -63,7 +77,7 @@ TOKEN_NAME = re.compile(
     re.I,
 )
 SECRET_NAME = re.compile(
-    r"pass(word|wd|phrase)?\b|passwd|clearpass|pwd|secret|private[_-]?key|^pin$|^otp$",
+    r"pass(word|wd|phrase)?\b|passwd|pwd|secret|private[_-]?key|^pin$|^otp$",
     re.I,
 )
 SECRET = "<secret>"
@@ -97,9 +111,14 @@ class NetworkCapture:
         self._lines: list[dict[str, Any]] = []
         self._lock = threading.Lock()
         self._attached = False
+        # Writes the browser has sent and not seen finish or fail, with when
+        # they were sent. A save the agent guard holds stays here until the
+        # guard sends or refuses it.
+        self._pending_writes: dict[Any, float] = {}
 
     def start(self) -> "NetworkCapture":
         if not self._attached:
+            self._context.on("request", self._on_request)
             self._context.on("requestfinished", self._on_finished)
             self._context.on("requestfailed", self._on_failed)
             self._attached = True
@@ -108,6 +127,7 @@ class NetworkCapture:
     def stop(self) -> None:
         if self._attached:
             for event, handler in (
+                ("request", self._on_request),
                 ("requestfinished", self._on_finished),
                 ("requestfailed", self._on_failed),
             ):
@@ -122,14 +142,57 @@ class NetworkCapture:
         with self._lock:
             return len(self._lines)
 
+    def pending_writes(
+        self,
+        pages: Optional[Iterable[Any]] = None,
+        *,
+        max_age_s: Optional[float] = None,
+    ) -> list[Any]:
+        """Writes (any method but GET, HEAD or OPTIONS) still in flight.
+
+        ``pages`` keeps only requests from those pages, so another tab's
+        long-poll in an attached browser is never waited for. ``max_age_s``
+        drops requests sent longer ago than that: a request whose finish
+        Playwright never reports (a beacon from a closing popup) must not
+        stall the rest of a recording.
+        """
+
+        now = time.monotonic()
+        with self._lock:
+            pending = list(self._pending_writes.items())
+        wanted = None if pages is None else list(pages)
+        found = []
+        for request, sent in pending:
+            if max_age_s is not None and now - sent > max_age_s:
+                continue
+            if wanted is not None:
+                page = _page_of(request)
+                if page is None or not any(page is p for p in wanted):
+                    continue
+            found.append(request)
+        return found
+
     # -- Playwright callbacks ------------------------------------------------
 
+    def _on_request(self, request: Any) -> None:
+        if request.resource_type in _SKIP_TYPES:
+            return
+        if str(request.method).upper() not in _READ_METHODS:
+            with self._lock:
+                self._pending_writes[request] = time.monotonic()
+
+    def _settled(self, request: Any) -> None:
+        with self._lock:
+            self._pending_writes.pop(request, None)
+
     def _on_failed(self, request: Any) -> None:
+        self._settled(request)
         if request.resource_type in _SKIP_TYPES:
             return
         self._append(self._request_line(request) | {"status": None, "failed": True})
 
     def _on_finished(self, request: Any) -> None:
+        self._settled(request)
         if request.resource_type in _SKIP_TYPES:
             return
         line = self._request_line(request)
@@ -197,7 +260,18 @@ class NetworkCapture:
                     list(p) for p in up.parse_qsl(text, keep_blank_values=True)
                 ]
             elif content_type.startswith("multipart/"):
-                line["body_omitted"] = "multipart"
+                parsed = None
+                if content_type == "multipart/form-data" and not line.get(
+                    "request_truncated"
+                ):
+                    parsed = parse_multipart(raw, headers.get("content-type") or "")
+                if parsed is None:
+                    # An attached file, or a body that isn't plain form data.
+                    line["body_omitted"] = "multipart"
+                else:
+                    line["form"], files = parsed
+                    if files:
+                        line["multipart_files"] = files
             else:
                 line["body"] = text
         return line
@@ -234,6 +308,63 @@ class NetworkCapture:
         # Sealed in memory when the recording is encrypted.
         sealed_set.write_text(path, text)
         return path
+
+
+def parse_multipart(
+    raw: bytes, content_type: str
+) -> Optional[tuple[list[list[str]], list[str]]]:
+    """The fields of a ``multipart/form-data`` body that carries no file.
+
+    Returns ``([[name, value], ...], [file field names])`` in the order sent:
+    a file input left empty is a part with ``filename=""`` and no content,
+    kept as ``[name, ""]`` and named in the second list. ``None`` when a part
+    carries a file, a part has a header other than its disposition and an
+    ``application/octet-stream`` type for an empty file, a value isn't UTF-8,
+    or the body doesn't parse: those bodies aren't kept.
+    """
+
+    m = re.search(r'boundary=(?:"([^"]+)"|([^;\s]+))', content_type, re.I)
+    if not m:
+        return None
+    delimiter = b"--" + (m.group(1) or m.group(2)).encode("latin-1")
+    chunks = raw.split(delimiter)
+    if len(chunks) < 2 or chunks[0].strip() or not chunks[-1].startswith(b"--"):
+        return None
+    pairs: list[list[str]] = []
+    files: list[str] = []
+    for chunk in chunks[1:-1]:
+        if not chunk.startswith(b"\r\n") or not chunk.endswith(b"\r\n"):
+            return None
+        head, sep, value = chunk[2:-2].partition(b"\r\n\r\n")
+        if not sep:
+            return None
+        try:
+            head_lines = head.decode("utf-8").split("\r\n")
+            text = value.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        disposition = head_lines[0]
+        extra = [h.lower() for h in head_lines[1:]]
+        name = re.fullmatch(
+            r'(?i)content-disposition: form-data; name="([^"]*)"(; filename="([^"]*)")?',
+            disposition,
+        )
+        if name is None:
+            return None
+        if name.group(2) is None:
+            if extra:
+                return None
+            pairs.append([name.group(1), text])
+            continue
+        if (
+            name.group(3)
+            or text
+            or extra not in ([], ["content-type: application/octet-stream"])
+        ):
+            return None  # a file was attached
+        pairs.append([name.group(1), ""])
+        files.append(name.group(1))
+    return pairs, files
 
 
 def _frame_url(request: Any) -> Optional[str]:
@@ -286,6 +417,120 @@ def _json_pairs(value: Any) -> Iterable[tuple[str, str]]:
             yield from _json_pairs(item)
 
 
+#: A ``<meta>`` whose role is to name a field or header (Rails'
+#: ``csrf-param``, Spring's ``_csrf_parameter`` and ``_csrf_header``): its
+#: content is a name, not a token.
+_NAMES_A_FIELD = re.compile(r"[-_](param|parameter|header)$", re.I)
+
+#: A start tag's name, then each attribute, as the tolerant HTML parser
+#: reads them. A walk that disagrees with the parser withholds the page.
+_TAG_NAME = re.compile(r"<[a-zA-Z][^\t\n\r\f />\x00]*(?:\s|/(?!>))*")
+_ATTRIBUTE = re.compile(
+    r"((?<=['\"\s/])[^\s/>][^\s/=>]*)(\s*=+\s*"
+    r"('[^']*'|\"[^\"]*\"|(?!['\"])[^>\s]*))?(?:\s|/(?!>))*"
+)
+
+
+class _PageFields(HTMLParser):
+    """A page's token and secret attribute values: each input's ``value``
+    and each named ``<meta>``'s ``content`` whose name says token or secret,
+    with where each copy of that value sits in the raw markup."""
+
+    def __init__(self, text: str, kind: Any) -> None:
+        super().__init__(convert_charrefs=True)
+        self.text = text
+        self.kind = kind
+        self.pairs: list[tuple[str, str]] = []
+        # (start, end, placeholder) of a raw attribute value, quotes included.
+        self.spans: list[tuple[int, int, str]] = []
+        self.unlocated = False
+        self._lines = [0]
+        for i, ch in enumerate(text):
+            if ch == "\n":
+                self._lines.append(i + 1)
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
+        if tag not in ("input", "meta"):
+            return
+        a: dict[str, str] = {}
+        for k, v in attrs:  # the first of a repeated attribute is the one used
+            a.setdefault(k.lower(), v or "")
+        name = a.get("name", "")
+        if not name:
+            return
+        if tag == "meta" and _NAMES_A_FIELD.search(name):
+            return
+        placeholder = self.kind(name)
+        if placeholder is None:
+            return
+        held = "value" if tag == "input" else "content"
+        # Every spelling of every copy of the attribute, as written.
+        for k, v in attrs:
+            if k.lower() == held and v:
+                self.pairs.append((name, v))
+        line, col = self.getpos()
+        start = self._lines[line - 1] + col
+        raw = self.get_starttag_text() or ""
+        if not raw or self.text[start : start + len(raw)] != raw:
+            self.unlocated = True
+            return
+        expected = [v for k, v in attrs if k.lower() == held and v is not None]
+        found: list[tuple[int, int]] = []
+        tm = _TAG_NAME.match(raw)
+        at = tm.end() if tm else len(raw)
+        while at < len(raw):
+            am = _ATTRIBUTE.match(raw, at)
+            if not am or am.end() == at:
+                break
+            if am.group(1).lower() == held and am.group(3) is not None:
+                found.append((am.start(3), am.end(3)))
+            at = am.end()
+        written = [raw[i:j] for i, j in found]
+        read = [html.unescape(w[1:-1] if w[:1] in "'\"" else w) for w in written]
+        if read != expected:
+            self.unlocated = True
+            return
+        for i, j in found:
+            self.spans.append((start + i, start + j, placeholder))
+
+    handle_startendtag = handle_starttag
+
+
+def _page_tokens(text: Any, kind: Any) -> Optional[_PageFields]:
+    """The token and secret attribute values of an HTML page, or None when
+    ``text`` is not markup."""
+
+    if not isinstance(text, str) or "<" not in text:
+        return None
+    parser = _PageFields(text, kind)
+    try:
+        parser.feed(text)
+        parser.close()
+    except Exception:  # noqa: BLE001 - malformed markup: keep what parsed
+        pass
+    return parser
+
+
+def _withhold_attributes(text: str, kind: Any) -> str:
+    """``text`` with every token and secret attribute value replaced in
+    place, whatever its length or spelling (entities, numeric references).
+    A tag that can't be located in the markup withholds the whole page."""
+
+    page = _page_tokens(text, kind)
+    if page is None or (not page.spans and not page.unlocated):
+        return text
+    if page.unlocated:
+        return session_placeholder("unlocatable-page")
+    out, at = [], 0
+    for start, end, placeholder in sorted(page.spans):
+        if start < at:
+            continue
+        out += [text[at:start], '"', placeholder.replace('"', "&quot;"), '"']
+        at = end
+    out.append(text[at:])
+    return "".join(out)
+
+
 def redact(
     lines: list[dict[str, Any]],
     *,
@@ -318,6 +563,7 @@ def redact(
     for v in auth_values:
         if v:
             replace.setdefault(v, session_placeholder("authorization"))
+    pages: list[tuple[str, str]] = []
     for line in lines:
         pairs = list(line.get("form") or []) + up.parse_qsl(
             up.urlsplit(line["url"]).query, keep_blank_values=True
@@ -332,6 +578,24 @@ def redact(
                 replace[value] = SECRET
             elif placeholder is not None and len(value) >= 8:
                 replace.setdefault(value, placeholder)
+        page = _page_tokens(line.get("response_text"), kind)
+        if page is not None:
+            pages += page.pairs
+    # A page's token inputs and token meta tags are withheld in place
+    # (below), whether or not that token was sent: a per-form token the
+    # save did not send is still a live token. Long enough values are also
+    # withheld wherever else they appear.
+    for name, value in pages:
+        if not value or len(value) < 4:
+            continue
+        placeholder = kind(name)
+        if placeholder is None or (placeholder != SECRET and len(value) < 8):
+            continue
+        for form in {value, html.escape(value)}:
+            if placeholder == SECRET:
+                replace[form] = SECRET
+            else:
+                replace.setdefault(form, placeholder)
 
     def scrub_json(value: Any) -> Any:
         # A JSON body's secret and token fields, replaced whatever their
@@ -356,10 +620,19 @@ def redact(
     structured = []
     for line in lines:
         line = dict(line)
+        if line.get("form"):
+            # A declared field is secret regardless of its value's length or
+            # whether another value needs global replacement elsewhere.
+            line["form"] = [
+                [name, (kind(name) or value) if value else value]
+                for name, value in line["form"]
+            ]
         for key in ("body", "response_text"):
             document = _json(line.get(key))
             if document is not None:
                 line[key] = json.dumps(scrub_json(document), separators=(",", ":"))
+            elif key == "response_text" and isinstance(line.get(key), str):
+                line[key] = _withhold_attributes(line[key], kind)
         structured.append(line)
     lines = structured
     if not replace:
@@ -392,9 +665,7 @@ def redact(
             line["form"] = [
                 [
                     name,
-                    SECRET
-                    if (SECRET_NAME.search(name) or name.lower() in declared) and value
-                    else replace.get(value, scrub(value)),
+                    replace.get(value, scrub(value)),
                 ]
                 for name, value in line["form"]
             ]
