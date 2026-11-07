@@ -227,12 +227,14 @@ def test_every_canary_requires_its_own_current_report_join(prepared, mode):
 
 @pytest.mark.parametrize("rows", [[], [{"type": "note", "value": "wrong"}], [{"type": "note", "value": "canary-4"}, {"type": "note", "value": "canary-4"}]])
 def test_adoption_still_refuses_missing_wrong_or_duplicate_current_record(prepared, monkeypatch, rows):
+    from openadapt_flow.agent.repair import RepairError
+
     p = prepared
     # Run real canaries but replace only the final fresh observer read.
     class Observer:
         @property
         def system_of_record(self): return rows
     p.compiler.observer = Observer()
-    with pytest.raises(Exception): complete(p)
+    with pytest.raises(RepairError, match="matching verified cache handoff"): complete(p)
     assert len(p.calls) == p.candidate.canary.max_runs
     assert (p.compiler.dir / "skill-stop.json").is_file()
