@@ -502,13 +502,15 @@ class OpenAIBrowserAgent:
 
         async def run() -> Any:
             try:
-                async with asyncio.timeout(self.max_run_seconds):
-                    return await Runner.run(
+                return await asyncio.wait_for(
+                    Runner.run(
                         agent,
                         f"Task: {request.instruction}",
                         max_turns=self.max_turns,
                         hooks=UsageHooks(),
-                    )
+                    ),
+                    timeout=self.max_run_seconds,
+                )
             finally:
                 await client.close()
 
