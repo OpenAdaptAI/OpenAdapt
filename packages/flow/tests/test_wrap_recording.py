@@ -32,6 +32,9 @@ def task(tmp_path: Path):
 def test_generated_task_uses_normal_observer_proposer_and_closed_loader(task):
     path, _, database = task
     setup = load_task(path)
+    read_path = setup.cache.common["verify"]
+    assert read_path.read_text().startswith("# Generated setup read; no observed effects or approval.\n")
+    assert yaml.safe_load(read_path.read_text())["effects"] == []
     values = {"title": "first", "body": "details"}
     compiler, key = setup.cache._compiler(setup.instruction, values)
     before = compiler.observer.system_of_record

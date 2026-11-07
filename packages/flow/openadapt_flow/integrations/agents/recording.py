@@ -20,7 +20,6 @@ from openadapt_flow.jit.signature import TaskSignature
 from openadapt_flow.record_sor import (
     _write_private,
     observer_from_config,
-    render_contract,
 )
 
 _REQUIRED = frozenset({"instruction", "parameters", "url", "verifier", "expect", "on_screen", "canary_params"})
@@ -155,7 +154,13 @@ def load_task(
         _verifier_keys(task["verifier"])
         # Reuse the normal loader's tier and field validation, before materializing.
         _, raw = observer_from_config(task["verifier"], for_run1=True)
-        body = render_contract(raw, [])
+        import yaml
+
+        body = "# Generated setup read; no observed effects or approval.\n" + yaml.safe_dump(
+            {"schema_version": "openadapt.verify/v1", "verifier": raw, "effects": []},
+            sort_keys=False,
+            allow_unicode=True,
+        )
     except Exception:
         raise TaskSetupError("INVALID_GENERATED_READ") from None
     cache_dir = Path(strings.get("cache_dir", DEFAULT_CACHE_DIR)).expanduser()
