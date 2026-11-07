@@ -7,9 +7,9 @@ the version. This check runs on every pull request that touches
 packages/desktop:
 
 * With no version change, it fails when the pull request has a releasable
-  commit, and prints the bump and the command that makes it.
+  net change, and prints the bump and the command that makes it.
 * With a version change, it requires a strict advance at least as large as the
-  commits need, every engine and native version source on the new version, and
+  surviving commits need, every engine and native version source on the new version, and
   a matching dated section at the top of CHANGELOG.md.
 
     python scripts/check_release_intent.py --base <base-sha> --head <head-sha>
@@ -53,7 +53,7 @@ def check(root: Path, base: str, head: str) -> list[str]:
 
     base_version = version_at(root, base)
     head_version = version_at(root, head)
-    commits = prepare_release.commits_between(root, base, head)
+    commits = prepare_release.commits_for_net_diff(root, base, head)
     needed = prepare_release.required_level(commits, base_version)
     releasable = [
         commit.subject
