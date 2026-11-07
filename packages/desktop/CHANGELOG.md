@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.28.0 (2026-11-06)
+
+### Features
+
+- **desktop**: optional release-notes email in the first-launch question
+
+
+
 ## v0.27.0 (2026-11-05)
 
 ### Features
