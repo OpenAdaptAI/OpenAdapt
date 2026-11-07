@@ -56,7 +56,7 @@ def flow_calls(monkeypatch):
     return calls
 
 
-@pytest.mark.parametrize("verb", ["run", "record", "replay", "compile", "certify"])
+@pytest.mark.parametrize("verb", ["replay", "certify"])
 def test_flow_verb_at_top_level_points_at_openadapt_flow(verb):
     result = CliRunner().invoke(cli_main, [verb, "bundle"])
 
@@ -65,7 +65,7 @@ def test_flow_verb_at_top_level_points_at_openadapt_flow(verb):
     assert "deploy" not in result.output
 
 
-@pytest.mark.parametrize("verb", ["run", "record", "replay"])
+@pytest.mark.parametrize("verb", ["replay", "certify"])
 def test_flow_verb_hint_works_without_a_readable_flow_parser(monkeypatch, verb):
     monkeypatch.setattr("openadapt.cli._flow_subparsers", lambda: None, raising=False)
 
@@ -140,3 +140,69 @@ def test_installed_flow_tutorial_exposes_the_documented_flags():
 
     assert options is not None
     assert {"--break-it", "--guided", "--interactive-record"} <= options
+
+
+@pytest.mark.parametrize("verb", ["record", "compile", "run"])
+@pytest.mark.parametrize("exit_code", [0, 2, 7])
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        [],
+        ["--help"],
+        ["--future-option=value", "a recording", "--param", "x=1", "--param", "x=2"],
+        ["--", "--literal-path", "value with spaces"],
+    ],
+)
+def test_root_alias_preserves_existing_flow_arguments_output_and_exit(
+    monkeypatch, supported_python, verb, exit_code, arguments
+):
+    calls = []
+
+    def engine(argv):
+        calls.append(list(argv))
+        cli.click.echo('{"outcome":"UNCERTAIN","technical":"RECONCILIATION_REQUIRED"}')
+        cli.click.echo("engine diagnostic", err=True)
+        return exit_code
+
+    monkeypatch.setattr(cli, "_invoke_flow", engine)
+    runner = CliRunner()
+    old = runner.invoke(cli_main, ["flow", verb, *arguments])
+    alias = runner.invoke(cli_main, [verb, *arguments])
+
+    assert len(calls) == 2
+    assert calls[0] == calls[1]
+    assert calls[0][0] == verb
+    assert old.exit_code == alias.exit_code == exit_code
+    assert (
+        old.stdout
+        == alias.stdout
+        == ('{"outcome":"UNCERTAIN","technical":"RECONCILIATION_REQUIRED"}\n')
+    )
+    assert old.stderr == alias.stderr == "engine diagnostic\n"
+
+
+def test_root_aliases_and_help_do_not_need_the_engine_parser(
+    monkeypatch, supported_python
+):
+    def unavailable():
+        raise AssertionError("root aliases must not load the engine parser")
+
+    calls = []
+    monkeypatch.setattr(cli, "_flow_subparsers", unavailable)
+    monkeypatch.setattr(cli, "_invoke_flow", lambda argv: calls.append(argv) or 0)
+    runner = CliRunner()
+    help_result = runner.invoke(cli_main, ["--help"])
+    assert help_result.exit_code == 0, help_result.output
+    for verb in ("record", "compile", "run"):
+        assert verb in help_result.output
+        result = runner.invoke(cli_main, [verb, "--future-option"])
+        assert result.exit_code == 0, result.output
+    assert calls == [[verb, "--future-option"] for verb in ("record", "compile", "run")]
+
+
+@pytest.mark.parametrize("verb", ["record", "compile", "run"])
+def test_root_alias_keeps_the_supported_python_guard(monkeypatch, verb):
+    monkeypatch.setattr(cli, "_python_minor", lambda: (3, 13))
+    result = CliRunner().invoke(cli_main, [verb, "--help"])
+    assert result.exit_code == 1
+    assert "uv tool install --python 3.12 openadapt" in result.output
