@@ -66,8 +66,8 @@ def packaged_pack(name: str) -> Path:
     path = Path(
         str(
             resource_files("openadapt_flow.integrations.agents").joinpath(
-                "demo_packs", name + ".json"
-            )
+                "demo_packs"
+            ).joinpath(name + ".json")
         )
     )
     if not path.is_file() or path.is_symlink():

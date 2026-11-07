@@ -750,6 +750,8 @@ class SkillCache:
         )
         status = str(reply.get("status"))
         detail = reply.get("detail") or reply.get("halt_reason")
+        if not isinstance(detail, str):
+            detail = None
         if reply.get("verified") is True and reply.get("receipt_outcome") != "VERIFIED":
             status, detail = (
                 "RECEIPT_NOT_VERIFIED",

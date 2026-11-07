@@ -91,7 +91,10 @@ def build_server(task: WrappedTask) -> Any:
     async def call_v2(context: Any, params: Any) -> Any:
         return await call_tool(params.name, params.arguments)
 
-    return Server(
+    # The selected SDK version defines either the decorator or callback API.
+    # Its installed v1 stub cannot describe v2's constructor keywords.
+    callback_server: Any = Server
+    return callback_server(
         "openadapt-wrap",
         version="1",
         instructions=instructions,

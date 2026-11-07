@@ -67,7 +67,7 @@ def provider_status(
     if provider not in ("claude", "openai"):
         raise ValueError(f"unsupported provider: {provider!r}")
     cap = _valid_cap(max_cost_usd)
-    configured_cap = float(max_cost_usd) if cap else None
+    configured_cap = float(max_cost_usd) if cap and max_cost_usd is not None else None
     if not cap:
         return {
             "provider": provider,
