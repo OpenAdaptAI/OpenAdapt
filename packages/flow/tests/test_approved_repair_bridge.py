@@ -12,7 +12,6 @@ import json
 import shutil
 import sqlite3
 from datetime import datetime, timezone
-from pathlib import Path
 from types import MethodType, SimpleNamespace
 
 import pytest
@@ -29,7 +28,7 @@ from openadapt_flow.repair.lifecycle import RepairStore
 from openadapt_flow.repair.registration import build_candidate
 from openadapt_flow.verify_run import _build_verifier, capture_baseline, load_verify_config
 from tests._teach_authorization_support import repair_authorization
-from tests.test_jit_lifecycle import REVIEWER, _ci, _jit, _policy_passes, _report, _review, _stub_runs
+from tests.test_jit_lifecycle import REVIEWER, _ci, _jit, _policy_passes, _report, _review, _stub_runs  # noqa: F401 -- genuine shared autouse policy fixture
 
 PROMPT = "Create a synthetic note with {value}"
 
@@ -223,6 +222,23 @@ def test_every_canary_requires_its_own_current_report_join(prepared, mode):
     with pytest.raises(bridge.RepairBridgeError): complete(p)
     assert len(p.calls) == 1 and (p.compiler.dir / "skill-stop.json").is_file()
     assert not (p.compiler.dir / "skill-repair.json").exists()
+
+
+@pytest.mark.parametrize("change", ["traversal", "aliased_candidate", "wrong_record_id"])
+def test_candidate_reference_refuses_before_any_canary(prepared, change):
+    p = prepared
+    candidate_id = p.candidate.candidate_id
+    path = p.store.candidate_path(candidate_id)
+    if change == "traversal": candidate_id = "../candidates/" + candidate_id
+    elif change == "aliased_candidate":
+        outside = p.compiler.dir / "outside-candidate.json"
+        path.rename(outside); path.symlink_to(outside)
+    else:
+        document = json.loads(path.read_text()); document["candidate_id"] = "another-candidate"
+        path.write_text(json.dumps(document))
+    with pytest.raises(bridge.RepairBridgeError):
+        p.cache.complete_repair(PROMPT, {"value": "held"}, repair_desk=p.desk, candidate_id=candidate_id, canary_params=p.rows)
+    assert p.calls == [] and (p.compiler.dir / "skill-stop.json").is_file()
 
 
 @pytest.mark.parametrize("rows", [[], [{"type": "note", "value": "wrong"}], [{"type": "note", "value": "canary-4"}, {"type": "note", "value": "canary-4"}]])

@@ -8,6 +8,7 @@ belong to a declared synthetic test record, as in the normal compiler.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -55,6 +56,9 @@ def complete_approved_repair(
     compiler, key = cache._compiler(prompt, params)
     jit = compiler._jit()
     try:
+        # The same closed ID contract used by the existing repair selector.
+        if not isinstance(candidate_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", candidate_id):
+            raise ValueError("invalid candidate")
         prior_bundle = jit.bundle_dir
         prior = Workflow.load(prior_bundle)
         stop = _document(compiler.dir / "skill-stop.json")
@@ -78,12 +82,14 @@ def complete_approved_repair(
         ):
             raise ValueError("prior delivery cannot be repaired")
         store = RepairStore(Path(repair_desk.store_for(prior.name)).resolve(strict=True))
+        _document(_inside(store.root, f"candidates/{candidate_id}.json"))
         candidate = store.load_candidate(candidate_id)
         approval, provenance, metrics = (
             candidate.approval, candidate.provenance, candidate.canary_metrics
         )
         if not (
             candidate.state in {"approved", "staged"}
+            and candidate.candidate_id == candidate_id
             and candidate.campaigns_passed() and not candidate.contract_weakenings
             and candidate.reviewed_by and approval is not None
             and approval.pre_approval_policy_sha256 is None
