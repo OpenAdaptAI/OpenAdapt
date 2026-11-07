@@ -97,13 +97,20 @@ class WrappedTask:
         """
         from openadapt_flow.agent.runs import RunStore
 
-        if not isinstance(request_id, str) or not request_id.strip() or len(request_id) > 128:
+        if (
+            not isinstance(request_id, str)
+            or not request_id.strip()
+            or len(request_id) > 128
+        ):
             raise TaskArgumentsError("request_id must contain 1 to 128 characters")
         values = self._values(arguments)
         identity = self.cache.key(self.instruction, values)
-        workflow = "wrap:" + hashlib.sha256(
-            json.dumps(identity, sort_keys=True).encode("utf-8")
-        ).hexdigest()
+        workflow = (
+            "wrap:"
+            + hashlib.sha256(
+                json.dumps(identity, sort_keys=True).encode("utf-8")
+            ).hexdigest()
+        )
         store = RunStore(self.runs_dir)
         begin = store.begin(
             request_id=request_id, workflow=workflow, inputs=values, mode="skill-cache"
@@ -142,9 +149,13 @@ def _result(run: SkillRun, agent: Any) -> dict[str, Any]:
         from openadapt_flow.compile_agent.agents import PRICES_PER_MTOK
 
         ledger = getattr(agent, "last_ledger", None)
-        if ledger is not None and getattr(ledger, "usage_known", True) and (
-            getattr(ledger, "prices", None)
-            or getattr(ledger, "model", None) in PRICES_PER_MTOK
+        if (
+            ledger is not None
+            and getattr(ledger, "usage_known", True)
+            and (
+                getattr(ledger, "prices", None)
+                or getattr(ledger, "model", None) in PRICES_PER_MTOK
+            )
         ):
             cost = run.cost_usd
     result = {

@@ -11,7 +11,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Optional
 
 from openadapt_flow.compile_agent.pipeline import _PLACEHOLDER_RE
 from openadapt_flow.deployment import EffectsConfig
@@ -22,8 +22,29 @@ from openadapt_flow.record_sor import (
     observer_from_config,
 )
 
-_REQUIRED = frozenset({"instruction", "parameters", "url", "verifier", "expect", "on_screen", "canary_params"})
-_OPTIONAL = frozenset({"schema", "cache_dir", "environment", "policy", "task_id", "constants", "allow_origins", "headless"})
+_REQUIRED = frozenset(
+    {
+        "instruction",
+        "parameters",
+        "url",
+        "verifier",
+        "expect",
+        "on_screen",
+        "canary_params",
+    }
+)
+_OPTIONAL = frozenset(
+    {
+        "schema",
+        "cache_dir",
+        "environment",
+        "policy",
+        "task_id",
+        "constants",
+        "allow_origins",
+        "headless",
+    }
+)
 _MAX_TASK_BYTES = 65_536
 
 
@@ -52,7 +73,9 @@ def _invalid_constant(value: str) -> Any:
 
 
 def _strings(value: Any, *, nonempty: bool = False) -> list[str]:
-    if type(value) is not list or any(type(item) is not str or not item.strip() for item in value):
+    if type(value) is not list or any(
+        type(item) is not str or not item.strip() for item in value
+    ):
         raise TaskSetupError("INVALID_TASK_STRINGS")
     if nonempty and not value:
         raise TaskSetupError("INVALID_TASK_STRINGS")
@@ -60,7 +83,11 @@ def _strings(value: Any, *, nonempty: bool = False) -> list[str]:
 
 
 def _verifier_keys(raw: Any) -> None:
-    if type(raw) is not dict or not raw or not set(raw) <= set(EffectsConfig.model_fields):
+    if (
+        type(raw) is not dict
+        or not raw
+        or not set(raw) <= set(EffectsConfig.model_fields)
+    ):
         raise TaskSetupError("INVALID_GENERATED_READ")
     if raw.get("candidates"):
         # Recording's normal observer does not support choosing read candidates.
@@ -101,26 +128,40 @@ def load_task(
             data = incoming.read(_MAX_TASK_BYTES + 1)
         if len(data) > _MAX_TASK_BYTES:
             raise TaskSetupError("TASK_TOO_LARGE")
-        task = json.loads(data, object_pairs_hook=_object, parse_constant=_invalid_constant)
+        task = json.loads(
+            data, object_pairs_hook=_object, parse_constant=_invalid_constant
+        )
     except TaskSetupError:
         raise
     except (OSError, ValueError, UnicodeError):
         raise TaskSetupError("INVALID_TASK_JSON") from None
-    if type(task) is not dict or not _REQUIRED <= set(task) or not set(task) <= _REQUIRED | _OPTIONAL:
+    if (
+        type(task) is not dict
+        or not _REQUIRED <= set(task)
+        or not set(task) <= _REQUIRED | _OPTIONAL
+    ):
         raise TaskSetupError("INVALID_TASK_KEYS")
     if task.get("schema", "openadapt.wrap-task/v1") != "openadapt.wrap-task/v1":
         raise TaskSetupError("INVALID_TASK_SCHEMA")
     instruction = task["instruction"]
     parameters = _strings(task["parameters"], nonempty=True)
-    if type(instruction) is not str or not instruction.strip() or len(set(parameters)) != len(parameters):
+    if (
+        type(instruction) is not str
+        or not instruction.strip()
+        or len(set(parameters)) != len(parameters)
+    ):
         raise TaskSetupError("INVALID_TASK_PARAMETERS")
-    if set(_PLACEHOLDER_RE.findall(instruction)) != set(parameters) or set(parameters) & {"reset", "task_dir"}:
+    if set(_PLACEHOLDER_RE.findall(instruction)) != set(parameters) or set(
+        parameters
+    ) & {"reset", "task_dir"}:
         raise TaskSetupError("INVALID_TASK_PARAMETERS")
     task_id = task.get("task_id", "skill")
     if type(task_id) is not str:
         raise TaskSetupError("INVALID_TASK_PARAMETERS")
     try:
-        signature = TaskSignature(task_id, instruction, {name: str for name in parameters})
+        signature = TaskSignature(
+            task_id, instruction, {name: str for name in parameters}
+        )
     except (TypeError, ValueError):
         raise TaskSetupError("INVALID_TASK_PARAMETERS") from None
     canaries = task["canary_params"]
@@ -134,7 +175,13 @@ def load_task(
     except (TypeError, ValueError):
         raise TaskSetupError("INVALID_CANARY_PARAMETERS") from None
     expect = task["expect"]
-    if type(expect) is not dict or not expect or any(type(k) is not str or not k or type(v) is not str for k, v in expect.items()):
+    if (
+        type(expect) is not dict
+        or not expect
+        or any(
+            type(k) is not str or not k or type(v) is not str for k, v in expect.items()
+        )
+    ):
         raise TaskSetupError("INVALID_TASK_EXPECT")
     on_screen = _strings(task["on_screen"], nonempty=True)
     strings = {}
@@ -149,6 +196,7 @@ def load_task(
     constants = _strings(task.get("constants", []))
     origins = _strings(task.get("allow_origins", []))
     from openadapt_flow.compile_agent.pipeline import check_target
+
     try:
         check_target(task["url"])
         _verifier_keys(task["verifier"])
@@ -156,10 +204,17 @@ def load_task(
         _, raw = observer_from_config(task["verifier"], for_run1=True)
         import yaml
 
-        body = "# Generated setup read; no observed effects or approval.\n" + yaml.safe_dump(
-            {"schema_version": "openadapt.verify/v1", "verifier": raw, "effects": []},
-            sort_keys=False,
-            allow_unicode=True,
+        body = (
+            "# Generated setup read; no observed effects or approval.\n"
+            + yaml.safe_dump(
+                {
+                    "schema_version": "openadapt.verify/v1",
+                    "verifier": raw,
+                    "effects": [],
+                },
+                sort_keys=False,
+                allow_unicode=True,
+            )
         )
     except Exception:
         raise TaskSetupError("INVALID_GENERATED_READ") from None
@@ -167,7 +222,11 @@ def load_task(
     if not cache_dir.is_absolute():
         cache_dir = source.parent / cache_dir
     cache_dir = cache_dir.resolve()
-    target = cache_dir / "generated-reads" / (hashlib.sha256(body.encode()).hexdigest() + ".yaml")
+    target = (
+        cache_dir
+        / "generated-reads"
+        / (hashlib.sha256(body.encode()).hexdigest() + ".yaml")
+    )
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists() or target.is_symlink():
         if target.is_symlink() or not target.is_file() or target.read_text() != body:
@@ -175,17 +234,36 @@ def load_task(
     else:
         _write_private(target, body)
     options: dict[str, Any] = {
-        "url": task["url"], "verify": target, "expect": expect, "on_screen": on_screen,
+        "url": task["url"],
+        "verify": target,
+        "expect": expect,
+        "on_screen": on_screen,
         "offer": offer if offer is not None else (lambda _proposal: None),
-        "canary_params": canaries, "cache_dir": cache_dir, "key_dir": key_dir,
-        "admitter": admitter, "person": person, "model_key": model_key, "reset": reset,
-        "environment": strings.get("environment", ""), "headless": task.get("headless", True),
-        "constants": constants, "allow_origins": origins,
+        "canary_params": canaries,
+        "cache_dir": cache_dir,
+        "key_dir": key_dir,
+        "admitter": admitter,
+        "person": person,
+        "model_key": model_key,
+        "reset": reset,
+        "environment": strings.get("environment", ""),
+        "headless": task.get("headless", True),
+        "constants": constants,
+        "allow_origins": origins,
     }
     for name in ["policy", "task_id"]:
         if name in task:
             options[name] = task[name]
-    for name, value in [("review", review), ("hold", hold), ("teach_authorization", teach_authorization), ("write_adapter", write_adapter)]:
+    for name, value in [
+        ("review", review),
+        ("hold", hold),
+        ("teach_authorization", teach_authorization),
+        ("write_adapter", write_adapter),
+    ]:
         if value is not None:
             options[name] = value
-    return TaskSetup(cache=SkillCache(**options), instruction=instruction, parameters=tuple(parameters))
+    return TaskSetup(
+        cache=SkillCache(**options),
+        instruction=instruction,
+        parameters=tuple(parameters),
+    )

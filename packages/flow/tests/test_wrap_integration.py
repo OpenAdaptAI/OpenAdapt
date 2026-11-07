@@ -90,8 +90,13 @@ class SqliteComponent:
         self.verify = root / "verify.yaml"
         self.verify.write_text(
             yaml.safe_dump(
-                {"verifier": {"kind": "sql", "sqlite_database": str(self.database),
-                              "sql_query": "SELECT id, owner, note FROM task_records ORDER BY id"}}
+                {
+                    "verifier": {
+                        "kind": "sql",
+                        "sqlite_database": str(self.database),
+                        "sql_query": "SELECT id, owner, note FROM task_records ORDER BY id",
+                    }
+                }
             )
         )
         self.events: list[str] = []
@@ -117,7 +122,9 @@ class SqliteComponent:
 
         def checked(*args: Any, **kwargs: Any) -> Any:
             result = original_check(*args, **kwargs)
-            self.events.append("record-check-pass" if result.passed else "record-check-fail")
+            self.events.append(
+                "record-check-pass" if result.passed else "record-check-fail"
+            )
             return result
 
         def jit(compiler: Any, agent: Any = None) -> CapturedJit:
@@ -146,22 +153,36 @@ class SqliteComponent:
             state = jit(compiler)
             Workflow(name="component-only", steps=[]).save(state.bundle_dir)
             server = compiler.out_dir / "component_server.py"
-            server.write_text("raise RuntimeError('component MCP boundary must be intercepted')\n")
+            server.write_text(
+                "raise RuntimeError('component MCP boundary must be intercepted')\n"
+            )
             result = {"mcp_server": str(server)}
             (compiler.out_dir / "emitted.json").write_text(json.dumps(result))
             return result
 
-        async def call_skill(python: str, server: Path, params: dict[str, Any]) -> dict[str, Any]:
+        async def call_skill(
+            python: str, server: Path, params: dict[str, Any]
+        ) -> dict[str, Any]:
             self.skill_calls.append(dict(params))
             if self.skill_fault == "drift":
                 self.events.append("compiled-prewrite-halt")
-                return {"status": "HALTED", "verified": False, "model_calls": 0,
-                        "receipt_outcome": "HALTED", "halt_reason": "component target drift"}
+                return {
+                    "status": "HALTED",
+                    "verified": False,
+                    "model_calls": 0,
+                    "receipt_outcome": "HALTED",
+                    "halt_reason": "component target drift",
+                }
             self.write(str(params["note"]), self.skill_fault)
             # Deliberately claims success even for fault modes. The genuine
             # cache's independent SQLite read-back must reject this claim.
-            return {"status": "VERIFIED", "verified": True, "model_calls": 0,
-                    "receipt_outcome": "VERIFIED", "receipt": "component-boundary-only"}
+            return {
+                "status": "VERIFIED",
+                "verified": True,
+                "model_calls": 0,
+                "receipt_outcome": "VERIFIED",
+                "receipt": "component-boundary-only",
+            }
 
         monkeypatch.setattr(pipeline, "check_run_record", checked)
         monkeypatch.setattr(pipeline.FirstRunCompiler, "_jit", jit)
@@ -176,17 +197,29 @@ class SqliteComponent:
         owner = "other-scope" if fault == "wrong-scope" else "scope-1"
         value = "wrong-value" if fault == "wrong-value" else note
         with sqlite3.connect(self.database) as con:
-            con.execute("INSERT INTO task_records(owner, note) VALUES (?, ?)", (owner, value))
+            con.execute(
+                "INSERT INTO task_records(owner, note) VALUES (?, ?)", (owner, value)
+            )
             if fault == "extra-write":
-                con.execute("INSERT INTO task_records(owner, note) VALUES (?, ?)", (owner, "extra"))
+                con.execute(
+                    "INSERT INTO task_records(owner, note) VALUES (?, ?)",
+                    (owner, "extra"),
+                )
 
     def rows(self) -> list[tuple[int, str, str]]:
         with sqlite3.connect(self.database) as con:
-            return con.execute("SELECT id, owner, note FROM task_records ORDER BY id").fetchall()
+            return con.execute(
+                "SELECT id, owner, note FROM task_records ORDER BY id"
+            ).fetchall()
 
     def task(self) -> WrappedTask:
-        return WrappedTask(cache=self.cache, agent=self.agent, instruction=PROMPT,
-                           parameters=("note",), runs_dir=self.root / "requests")
+        return WrappedTask(
+            cache=self.cache,
+            agent=self.agent,
+            instruction=PROMPT,
+            parameters=("note",),
+            runs_dir=self.root / "requests",
+        )
 
 
 @pytest.fixture
@@ -201,8 +234,14 @@ def test_miss_checks_sqlite_before_tool_promotion_then_new_values_skip_agent(
     first = task.run({"note": "first value"})
     assert first.path == "agent" and first.verified and first.status == "admitted"
     assert first.record_check["passed"] is True
-    assert component.events == ["read-before", "agent", "record-check-pass",
-                                "component-confirm", "component-admit", "component-emit"]
+    assert component.events == [
+        "read-before",
+        "agent",
+        "record-check-pass",
+        "component-confirm",
+        "component-admit",
+        "component-emit",
+    ]
     assert component.cache.server(PROMPT, {"note": "first value"}) is not None
     for note in ("second value", "third value"):
         result = task.run({"note": note})
@@ -211,12 +250,19 @@ def test_miss_checks_sqlite_before_tool_promotion_then_new_values_skip_agent(
         assert result.record_check["passed"] is True
     assert component.agent.calls == 1
     assert component.skill_calls == [{"note": "second value"}, {"note": "third value"}]
-    assert [row[2] for row in component.rows()] == ["first value", "second value", "third value"]
+    assert [row[2] for row in component.rows()] == [
+        "first value",
+        "second value",
+        "third value",
+    ]
 
 
-@pytest.mark.parametrize("fault", ["no-write", "wrong-value", "wrong-scope", "extra-write"])
+@pytest.mark.parametrize(
+    "fault", ["no-write", "wrong-value", "wrong-scope", "extra-write"]
+)
 def test_saved_summary_cannot_promote_a_miss_without_native_record_check(
-    component: SqliteComponent, fault: str,
+    component: SqliteComponent,
+    fault: str,
 ) -> None:
     component.agent_fault = fault
     result = component.task().run({"note": "intended value"})
@@ -230,9 +276,12 @@ def test_saved_summary_cannot_promote_a_miss_without_native_record_check(
     assert component.skill_calls == []
 
 
-@pytest.mark.parametrize("fault", ["no-write", "wrong-value", "wrong-scope", "extra-write"])
+@pytest.mark.parametrize(
+    "fault", ["no-write", "wrong-value", "wrong-scope", "extra-write"]
+)
 def test_saved_claim_on_hit_is_refuted_and_cannot_fall_back_to_agent(
-    component: SqliteComponent, fault: str,
+    component: SqliteComponent,
+    fault: str,
 ) -> None:
     task = component.task()
     assert task.run({"note": "first"}).verified
@@ -264,10 +313,14 @@ def test_compiled_prewrite_drift_stays_held_across_new_request_and_restart(
     assert component.rows() == before
 
 
-@pytest.mark.parametrize("field", ["instruction", "task", "policy", "verify", "provider", "agent", "cache"])
+@pytest.mark.parametrize(
+    "field", ["instruction", "task", "policy", "verify", "provider", "agent", "cache"]
+)
 @pytest.mark.parametrize("entry", ["run", "call"])
 def test_caller_cannot_replace_operator_task_policy_or_provider(
-    component: SqliteComponent, field: str, entry: str,
+    component: SqliteComponent,
+    field: str,
+    entry: str,
 ) -> None:
     values = {"note": "synthetic", field: "caller replacement"}
     task = component.task()
@@ -309,7 +362,9 @@ async def mcp_session(task: WrappedTask, steps: Any) -> Any:
     server = build_server(task)
     async with create_client_server_memory_streams() as (client, transport):
         async with anyio.create_task_group() as group:
-            group.start_soon(server.run, *transport, server.create_initialization_options())
+            group.start_soon(
+                server.run, *transport, server.create_initialization_options()
+            )
             async with ClientSession(*client) as session:
                 await session.initialize()
                 result = await steps(session)
@@ -334,7 +389,10 @@ def test_real_mcp_schema_rejects_policy_overrides_before_any_action(
         assert schema["properties"]["parameters"]["additionalProperties"] is False
         for field in ("instruction", "policy", "provider", "verify"):
             for nested in (False, True):
-                arguments: dict[str, Any] = {"request_id": "override", "parameters": {"note": "first"}}
+                arguments: dict[str, Any] = {
+                    "request_id": "override",
+                    "parameters": {"note": "first"},
+                }
                 target = arguments["parameters"] if nested else arguments
                 target[field] = "caller replacement"
                 result = await session.call_tool("run_task", arguments)
@@ -348,7 +406,8 @@ def test_real_mcp_schema_rejects_policy_overrides_before_any_action(
 
 @pytest.mark.parametrize("same_parameters", [True, False])
 def test_real_mcp_concurrent_duplicate_never_sends_a_second_action(
-    component: SqliteComponent, same_parameters: bool,
+    component: SqliteComponent,
+    same_parameters: bool,
 ) -> None:
     import anyio
 
@@ -358,9 +417,12 @@ def test_real_mcp_concurrent_duplicate_never_sends_a_second_action(
         out: dict[str, Any] = {}
 
         async def first() -> None:
-            out["first"] = payload(await session.call_tool(
-                "run_task", {"request_id": "concurrent", "parameters": {"note": "first"}}
-            ))
+            out["first"] = payload(
+                await session.call_tool(
+                    "run_task",
+                    {"request_id": "concurrent", "parameters": {"note": "first"}},
+                )
+            )
 
         with anyio.fail_after(10):
             async with anyio.create_task_group() as group:
@@ -370,14 +432,18 @@ def test_real_mcp_concurrent_duplicate_never_sends_a_second_action(
                     note = "first" if same_parameters else "changed"
                     with anyio.fail_after(3):
                         result = await session.call_tool(
-                            "run_task", {"request_id": "concurrent", "parameters": {"note": note}}
+                            "run_task",
+                            {"request_id": "concurrent", "parameters": {"note": note}},
                         )
                     out["duplicate"] = payload(result)
                 finally:
                     component.release.set()
-        out["replay"] = payload(await session.call_tool(
-            "run_task", {"request_id": "concurrent", "parameters": {"note": "first"}}
-        ))
+        out["replay"] = payload(
+            await session.call_tool(
+                "run_task",
+                {"request_id": "concurrent", "parameters": {"note": "first"}},
+            )
+        )
         return out
 
     try:

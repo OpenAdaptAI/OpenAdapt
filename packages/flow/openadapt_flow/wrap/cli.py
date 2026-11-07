@@ -14,20 +14,35 @@ from openadapt_flow.wrap import TaskArgumentsError, WrappedTask
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="openadapt wrap")
-    parser.add_argument("--task", required=True, help="Generated task and read-back configuration")
+    parser.add_argument(
+        "--task", required=True, help="Generated task and read-back configuration"
+    )
     parser.add_argument("--provider", choices=("claude", "openai"), default="claude")
     parser.add_argument("--model")
     parser.add_argument(
-        "--price", action="append", default=[], metavar="KIND=USD_PER_MTOK",
+        "--price",
+        action="append",
+        default=[],
+        metavar="KIND=USD_PER_MTOK",
         help="Explicit input, output, cache_write and cache_read model prices",
     )
     parser.add_argument("--max-turns", type=int, default=40)
-    parser.add_argument("--max-cost-usd", type=float, help="Explicit model spend cap for a cache miss")
+    parser.add_argument(
+        "--max-cost-usd", type=float, help="Explicit model spend cap for a cache miss"
+    )
     parser.add_argument("--param", action="append", default=[], metavar="NAME=VALUE")
-    parser.add_argument("--request-id", help="Reuse this ID when checking the same request")
+    parser.add_argument(
+        "--request-id", help="Reuse this ID when checking the same request"
+    )
     parser.add_argument("--runs-dir", default="~/.openadapt/wrap/runs")
-    parser.add_argument("--person", help="Person attending review and canaries at this terminal")
-    parser.add_argument("--serve", action="store_true", help="Expose this task as a local stdio MCP tool")
+    parser.add_argument(
+        "--person", help="Person attending review and canaries at this terminal"
+    )
+    parser.add_argument(
+        "--serve",
+        action="store_true",
+        help="Expose this task as a local stdio MCP tool",
+    )
     return parser
 
 
@@ -46,11 +61,15 @@ def _prices(rows: Sequence[str]) -> dict[str, float] | None:
         return None
     raw = _params(rows)
     if set(raw) != {"input", "output", "cache_write", "cache_read"}:
-        raise TaskArgumentsError("--price requires input, output, cache_write and cache_read")
+        raise TaskArgumentsError(
+            "--price requires input, output, cache_write and cache_read"
+        )
     try:
         prices = {name: float(value) for name, value in raw.items()}
     except ValueError:
-        raise TaskArgumentsError("model prices must be finite non-negative numbers") from None
+        raise TaskArgumentsError(
+            "model prices must be finite non-negative numbers"
+        ) from None
     if any(not math.isfinite(value) or value < 0 for value in prices.values()):
         raise TaskArgumentsError("model prices must be finite non-negative numbers")
     return prices
@@ -78,9 +97,7 @@ def _task(args: argparse.Namespace, parser: argparse.ArgumentParser) -> WrappedT
     setup = load_task(args.task, **options)
     # The cache key depends on parameter names, not their current values.
     # A healthy hit needs neither a provider SDK nor a model credential.
-    cached = setup.cache.server(
-        setup.instruction, dict.fromkeys(setup.parameters, "")
-    )
+    cached = setup.cache.server(setup.instruction, dict.fromkeys(setup.parameters, ""))
     agent = None
     if cached is None:
         cap = args.max_cost_usd
@@ -131,7 +148,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     except Exception:  # noqa: BLE001 - do not reflect provider or verifier values
         # Provider, storage and verifier exceptions can contain values or
         # credentials. Do not reflect their messages to a calling agent.
-        print("openadapt wrap: local setup or execution failed; check the local run record", file=sys.stderr)
+        print(
+            "openadapt wrap: local setup or execution failed; check the local run record",
+            file=sys.stderr,
+        )
         return 2
     print(json.dumps(result, sort_keys=True))
     return 0 if result.get("verified") is True else 1

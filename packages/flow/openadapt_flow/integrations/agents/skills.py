@@ -375,7 +375,8 @@ class SkillCache:
 
         key = self.key(prompt, params)
         common = {
-            k: v for k, v in self.common.items()
+            k: v
+            for k, v in self.common.items()
             if k not in ("reset", "task_id", "review", "hold")
         }
         compiler = FirstRunCompiler(
@@ -390,7 +391,9 @@ class SkillCache:
         return self._server(compiler, key)
 
     def _server(self, compiler: Any, key: dict[str, Any]) -> Optional[Path]:
-        if (compiler.dir / _STOP_FILE).exists() or (compiler.dir / _STOP_FILE).is_symlink():
+        if (compiler.dir / _STOP_FILE).exists() or (
+            compiler.dir / _STOP_FILE
+        ).is_symlink():
             return None
         stored = compiler.dir / _KEY_FILE
         if not compiler._jit().admitted or not stored.is_file():
@@ -414,7 +417,9 @@ class SkillCache:
     def run(self, prompt: str, params: Mapping[str, Any], agent: Any) -> SkillRun:
         started = time.monotonic()
         compiler, key = self._compiler(prompt, params)
-        if (compiler.dir / _STOP_FILE).exists() or (compiler.dir / _STOP_FILE).is_symlink():
+        if (compiler.dir / _STOP_FILE).exists() or (
+            compiler.dir / _STOP_FILE
+        ).is_symlink():
             return self._held(compiler, started)
         server = self._server(compiler, key)
         if server is not None:
@@ -475,7 +480,9 @@ class SkillCache:
             if report_path.is_symlink():
                 raise ValueError("foreign report")
             workflow = Workflow.load(jit.bundle_dir)
-            admission = lifecycle.verify_admission(jit.bundle_dir, key_dir=compiler.key_dir)
+            admission = lifecycle.verify_admission(
+                jit.bundle_dir, key_dir=compiler.key_dir
+            )
             report = RunReport.model_validate_json(report_path.read_text())
             if not (
                 report.workflow_name == workflow.name
@@ -490,7 +497,9 @@ class SkillCache:
             if isinstance(found, str) or found[1] != "replace" or report.halt is None:
                 raise ValueError("not a one-step target replacement")
         except (OSError, ValueError, KeyError, TypeError, lifecycle.AdmissionError):
-            raise RepairError("This cached attempt has no proved one-step drift repair.") from None
+            raise RepairError(
+                "This cached attempt has no proved one-step drift repair."
+            ) from None
         return repair_desk.open(
             run_id=run_dir.name,
             workflow=workflow.name,
@@ -520,8 +529,12 @@ class SkillCache:
             os.fsync(stream.fileno())
         before = compiler.observer.system_of_record
         if before is None:
-            reply = {"status": "BASELINE_UNAVAILABLE", "verified": False,
-                "model_calls": 0, "detail": "The independent baseline is unavailable; nothing ran."}
+            reply = {
+                "status": "BASELINE_UNAVAILABLE",
+                "verified": False,
+                "model_calls": 0,
+                "detail": "The independent baseline is unavailable; nothing ran.",
+            }
             after = None
         else:
             reply = asyncio.run(_call_skill(self.python, server, dict(params)))
@@ -542,11 +555,17 @@ class SkillCache:
         status = str(reply.get("status"))
         detail = reply.get("detail") or reply.get("halt_reason")
         if reply.get("verified") is True and reply.get("receipt_outcome") != "VERIFIED":
-            status, detail = "RECEIPT_NOT_VERIFIED", "The normal verify-run receipt is not VERIFIED."
+            status, detail = (
+                "RECEIPT_NOT_VERIFIED",
+                "The normal verify-run receipt is not VERIFIED.",
+            )
         elif reply.get("verified") is True and (
             type(reply.get("model_calls")) is not int or reply["model_calls"] != 0
         ):
-            status, detail = "MODEL_CALLS_NOT_ZERO", "The compiled reply did not prove zero model calls."
+            status, detail = (
+                "MODEL_CALLS_NOT_ZERO",
+                "The compiled reply did not prove zero model calls.",
+            )
         if bool(reply.get("verified")) and not check.passed:
             status = "RECORD_CHECK_FAILED"
             detail = "; ".join(check.reasons)
@@ -558,7 +577,10 @@ class SkillCache:
             descriptor, name = tempfile.mkstemp(dir=compiler.dir, prefix=".skill-stop-")
             try:
                 with os.fdopen(descriptor, "w") as stream:
-                    json.dump({"phase": "halted", "bundle_digest": digest, "replay": reply}, stream)
+                    json.dump(
+                        {"phase": "halted", "bundle_digest": digest, "replay": reply},
+                        stream,
+                    )
                     stream.flush()
                     os.fsync(stream.fileno())
                 os.replace(name, stop)

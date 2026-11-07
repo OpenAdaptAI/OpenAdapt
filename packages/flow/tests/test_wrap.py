@@ -78,16 +78,23 @@ def test_new_values_use_the_same_task_and_preserve_actual_result() -> None:
 @pytest.mark.parametrize("names", [("note", "note"), ("bad-name",), "note"])
 def test_invalid_task_declarations_fail_before_execution(names: Any) -> None:
     with pytest.raises(ValueError):
-        WrappedTask(cache=RecordingCache(), agent=None, instruction="Save", parameters=names)
+        WrappedTask(
+            cache=RecordingCache(), agent=None, instruction="Save", parameters=names
+        )
 
 
 def test_transport_retry_reads_original_result_after_restart(tmp_path: Any) -> None:
     cache = RecordingCache()
+
     def open_task() -> WrappedTask:
         return WrappedTask(
-            cache=cache, agent=None, instruction="Save {note}", parameters=("note",),
+            cache=cache,
+            agent=None,
+            instruction="Save {note}",
+            parameters=("note",),
             runs_dir=tmp_path,
         )
+
     first = open_task().call("request-1", {"note": "synthetic value"})
     second = open_task().call("request-1", {"note": "synthetic value"})
     conflict = open_task().call("request-1", {"note": "different value"})
@@ -105,11 +112,16 @@ def test_lost_owner_never_resends_even_after_restart(tmp_path: Any) -> None:
             raise KeyboardInterrupt
 
     cache = InterruptedCache()
+
     def open_task() -> WrappedTask:
         return WrappedTask(
-            cache=cache, agent=None, instruction="Save {note}", parameters=("note",),
+            cache=cache,
+            agent=None,
+            instruction="Save {note}",
+            parameters=("note",),
             runs_dir=tmp_path,
         )
+
     with pytest.raises(KeyboardInterrupt):
         open_task().call("request-1", {"note": "synthetic"})
     retry = open_task().call("request-1", {"note": "synthetic"})
@@ -126,7 +138,10 @@ def test_late_failure_retains_request_without_exception_text(tmp_path: Any) -> N
 
     cache = FailedCache()
     task = WrappedTask(
-        cache=cache, agent=None, instruction="Save {note}", parameters=("note",),
+        cache=cache,
+        agent=None,
+        instruction="Save {note}",
+        parameters=("note",),
         runs_dir=tmp_path,
     )
     result = task.call("request-1", {"note": "synthetic"})
@@ -141,11 +156,15 @@ def test_private_agent_summary_is_not_a_transport_artifact(tmp_path: Any) -> Non
     cache.result.compile = {"run1": {"agent": {"summary": "private-agent-text"}}}
     cache.result.detail = "private-error-text"
     task = WrappedTask(
-        cache=cache, agent=None, instruction="Save {note}", parameters=("note",),
+        cache=cache,
+        agent=None,
+        instruction="Save {note}",
+        parameters=("note",),
         runs_dir=tmp_path,
     )
     result = task.call("request-1", {"note": "private-input-text"})
     import json
+
     assert "private-" not in json.dumps(result)
     for path in (tmp_path / "openadapt-agent" / "runs").glob("*.json"):
         assert "private-" not in path.read_text()

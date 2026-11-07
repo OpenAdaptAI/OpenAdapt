@@ -10,7 +10,9 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlsplit
 
-_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "CONNECT", "TRACE"})
+_METHODS = frozenset(
+    {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "CONNECT", "TRACE"}
+)
 
 
 def _endpoint(value: Any) -> tuple[str, str] | None:
@@ -18,14 +20,21 @@ def _endpoint(value: Any) -> tuple[str, str] | None:
         return None
     try:
         parsed = urlsplit(value)
-        if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username is not None or parsed.password is not None:
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
             return None
         # Validate the port too; malformed URLs are not useful metadata.
         port = parsed.port
         host = parsed.hostname.lower()
         if ":" in host:
             host = "[" + host + "]"
-        origin = parsed.scheme + "://" + host + (":" + str(port) if port is not None else "")
+        origin = (
+            parsed.scheme + "://" + host + (":" + str(port) if port is not None else "")
+        )
         return origin, parsed.path or "/"
     except (TypeError, ValueError):
         return None
@@ -55,10 +64,22 @@ class NetworkMetadata:
         try:
             method = request.method
             endpoint = _endpoint(request.url)
-            item = {"phase": phase, "method": method if type(method) is str and method in _METHODS else None,
-                    "status": status if type(status) is int and 100 <= status <= 599 else None,
-                    "origin": None, "path": None}
-            if endpoint is not None and self.target is not None and endpoint == self.target:
+            item = {
+                "phase": phase,
+                "method": method
+                if type(method) is str and method in _METHODS
+                else None,
+                "status": status
+                if type(status) is int and 100 <= status <= 599
+                else None,
+                "origin": None,
+                "path": None,
+            }
+            if (
+                endpoint is not None
+                and self.target is not None
+                and endpoint == self.target
+            ):
                 item["origin"], item["path"] = self.target
             self.events.append(item)
         except Exception:
@@ -81,7 +102,11 @@ class NetworkMetadata:
         if self.page is None:
             self.losses.add("PAGE_UNAVAILABLE")
             return self
-        for name, callback in [("request", lambda request: self._event("request", request)), ("response", self._response), ("requestfailed", lambda request: self._event("failed", request))]:
+        for name, callback in [
+            ("request", lambda request: self._event("request", request)),
+            ("response", self._response),
+            ("requestfailed", lambda request: self._event("failed", request)),
+        ]:
             # Record before registration, so a partial registration is detached.
             self.listeners.append((name, callback))
             try:
@@ -120,7 +145,13 @@ class NetworkMetadata:
                 raise
 
     def summary(self) -> dict[str, Any]:
-        return {"schema": "openadapt.network-metadata/v1", "mode": "metadata_only",
-                "events": [dict(event) for event in self.events], "losses": sorted(self.losses),
-                "capture_closed": self.closed, "records_complete": None,
-                "causal_attribution": "UNAVAILABLE", "api_binding": "UNAVAILABLE"}
+        return {
+            "schema": "openadapt.network-metadata/v1",
+            "mode": "metadata_only",
+            "events": [dict(event) for event in self.events],
+            "losses": sorted(self.losses),
+            "capture_closed": self.closed,
+            "records_complete": None,
+            "causal_attribution": "UNAVAILABLE",
+            "api_binding": "UNAVAILABLE",
+        }

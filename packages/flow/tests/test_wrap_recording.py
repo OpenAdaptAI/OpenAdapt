@@ -19,11 +19,23 @@ from openadapt_flow.verify_run import VerifyRunError, parse_verify_config
 def task(tmp_path: Path):
     database = tmp_path / "records.sqlite"
     with sqlite3.connect(database) as connection:
-        connection.execute("CREATE TABLE entries (id INTEGER PRIMARY KEY, project TEXT, title TEXT, body TEXT)")
-    document = {"instruction": "Create {title} with {body}", "parameters": ["title", "body"],
-                "url": "http://127.0.0.1:8080/", "verifier": {"kind": "sql", "sqlite_database": str(database), "sql_query": "SELECT id, project, title, body FROM entries"},
-                "expect": {"project": "demo"}, "on_screen": ["Demo"],
-                "canary_params": [{"title": "canary", "body": "independent"}], "cache_dir": "cache"}
+        connection.execute(
+            "CREATE TABLE entries (id INTEGER PRIMARY KEY, project TEXT, title TEXT, body TEXT)"
+        )
+    document = {
+        "instruction": "Create {title} with {body}",
+        "parameters": ["title", "body"],
+        "url": "http://127.0.0.1:8080/",
+        "verifier": {
+            "kind": "sql",
+            "sqlite_database": str(database),
+            "sql_query": "SELECT id, project, title, body FROM entries",
+        },
+        "expect": {"project": "demo"},
+        "on_screen": ["Demo"],
+        "canary_params": [{"title": "canary", "body": "independent"}],
+        "cache_dir": "cache",
+    }
     path = tmp_path / "task.json"
     path.write_text(json.dumps(document))
     return path, document, database
@@ -33,16 +45,23 @@ def test_generated_task_uses_normal_observer_proposer_and_closed_loader(task):
     path, _, database = task
     setup = load_task(path)
     read_path = setup.cache.common["verify"]
-    assert read_path.read_text().startswith("# Generated setup read; no observed effects or approval.\n")
+    assert read_path.read_text().startswith(
+        "# Generated setup read; no observed effects or approval.\n"
+    )
     assert yaml.safe_load(read_path.read_text())["effects"] == []
     values = {"title": "first", "body": "details"}
     compiler, key = setup.cache._compiler(setup.instruction, values)
     before = compiler.observer.system_of_record
     assert before == []
     with sqlite3.connect(database) as connection:
-        connection.execute("INSERT INTO entries(project,title,body) VALUES (?,?,?)", ("demo", "first", "details"))
+        connection.execute(
+            "INSERT INTO entries(project,title,body) VALUES (?,?,?)",
+            ("demo", "first", "details"),
+        )
     after = compiler.observer.system_of_record
-    assert check_run_record(before, after, expect={"project": "demo"}, values=values).passed
+    assert check_run_record(
+        before, after, expect={"project": "demo"}, values=values
+    ).passed
     proposed = yaml.safe_load(compiler._propose(before, after, values).read_text())
     assert proposed["effects"][0]["needs_operator_confirmation"] is True
     assert proposed["effects"][0]["match"]["title"] == {"param": "title"}
@@ -50,7 +69,9 @@ def test_generated_task_uses_normal_observer_proposer_and_closed_loader(task):
         parse_verify_config(proposed)
     assert setup.cache.offer(compiler.proposed()) is None
     assert setup.parameters == ("title", "body")
-    assert setup.cache.key(setup.instruction, {"title": "new", "body": "different"}) == key
+    assert (
+        setup.cache.key(setup.instruction, {"title": "new", "body": "different"}) == key
+    )
 
 
 def test_mapping_and_file_load_share_real_sql_observer(task):
@@ -62,7 +83,20 @@ def test_mapping_and_file_load_share_real_sql_observer(task):
     assert raw == legacy_raw == document["verifier"]
 
 
-@pytest.mark.parametrize("key", ["approved", "admitted", "offer", "admitter", "person", "model_key", "effects", "review", "reset"])
+@pytest.mark.parametrize(
+    "key",
+    [
+        "approved",
+        "admitted",
+        "offer",
+        "admitter",
+        "person",
+        "model_key",
+        "effects",
+        "review",
+        "reset",
+    ],
+)
 def test_operator_json_cannot_supply_authority(task, key):
     path, document, _ = task
     document[key] = True
@@ -71,7 +105,19 @@ def test_operator_json_cannot_supply_authority(task, key):
         load_task(path)
 
 
-@pytest.mark.parametrize("key,value", [("parameters", ["title", "title"]), ("parameters", ["missing"]), ("headless", "false"), ("canary_params", [{}]), ("expect", {}), ("on_screen", []), ("verifier", {"kind": "none"}), ("verifier", {"kind": "sql", "admitted": True})])
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("parameters", ["title", "title"]),
+        ("parameters", ["missing"]),
+        ("headless", "false"),
+        ("canary_params", [{}]),
+        ("expect", {}),
+        ("on_screen", []),
+        ("verifier", {"kind": "none"}),
+        ("verifier", {"kind": "sql", "admitted": True}),
+    ],
+)
 def test_malformed_task_refuses_before_materializing(task, key, value):
     path, document, _ = task
     document[key] = value
@@ -81,7 +127,9 @@ def test_malformed_task_refuses_before_materializing(task, key, value):
     assert not (path.parent / "cache").exists()
 
 
-@pytest.mark.parametrize("data", [b'{"instruction":1,"instruction":2}', b'{"x":NaN}', b'\xff', b' ' * 65537])
+@pytest.mark.parametrize(
+    "data", [b'{"instruction":1,"instruction":2}', b'{"x":NaN}', b"\xff", b" " * 65537]
+)
 def test_bounded_closed_json(task, data):
     path, _, _ = task
     path.write_bytes(data)

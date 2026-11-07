@@ -53,7 +53,9 @@ def build_server(task: WrappedTask) -> Any:
             )
         except (ValidationError, TaskArgumentsError):
             return types.CallToolResult(
-                content=[types.TextContent(type="text", text='{"error":"invalid task call"}')],
+                content=[
+                    types.TextContent(type="text", text='{"error":"invalid task call"}')
+                ],
                 isError=True,
             )
         except Exception:  # noqa: BLE001 - no raw exception values on the protocol
