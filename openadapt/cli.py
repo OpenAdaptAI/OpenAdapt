@@ -1469,6 +1469,26 @@ def shadow(command_ctx: click.Context) -> None:
 
 
 @main.command(
+    "wrap",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def wrap(command_ctx: click.Context) -> None:
+    """Run an agent task once, then reuse its checked compiled tool."""
+    _require_supported_python()
+    try:
+        from openadapt_flow.wrap.cli import main as wrap_main
+    except ImportError:
+        click.echo("Error: this openadapt-flow installation has no wrap command.", err=True)
+        sys.exit(2)
+    sys.exit(int(wrap_main(list(command_ctx.args)) or 0))
+
+
+@main.command(
     "agent",
     context_settings={
         "ignore_unknown_options": True,
