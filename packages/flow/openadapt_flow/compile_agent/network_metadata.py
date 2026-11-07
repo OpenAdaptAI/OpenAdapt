@@ -86,9 +86,15 @@ class NetworkMetadata:
             self.listeners.append((name, callback))
             try:
                 self.page.on(name, callback)
-            except Exception:
+            except BaseException as exc:
                 self.losses.add("ATTACH_UNAVAILABLE")
-                self.close()
+                try:
+                    self.close()
+                except BaseException:
+                    if isinstance(exc, Exception):
+                        raise
+                if not isinstance(exc, Exception):
+                    raise
                 break
         return self
 

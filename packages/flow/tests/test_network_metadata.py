@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import itertools
 import json
+from asyncio import CancelledError
 from types import SimpleNamespace
 
 import pytest
@@ -86,6 +87,25 @@ def test_partial_attach_detaches_every_attempt_without_exporting_error():
     assert not page.callbacks
     assert capture.summary()["losses"] == ["ATTACH_UNAVAILABLE"]
     assert "SECRET" not in json.dumps(capture.summary())
+
+
+@pytest.mark.parametrize("failure", [KeyboardInterrupt("ORIGINAL"), CancelledError("ORIGINAL")])
+@pytest.mark.parametrize("phase", ["request", "response", "requestfailed"])
+def test_registration_cancellation_after_attach_detaches_and_preserves_original(failure, phase):
+    page = Page()
+    original = page.on
+    def attach(name, callback):
+        original(name, callback)
+        if name == phase:
+            raise failure
+    page.on = attach
+    capture = NetworkMetadata(page, target_url=None)
+    with pytest.raises(type(failure)) as raised:
+        capture.__enter__()
+    assert raised.value is failure
+    assert not page.callbacks
+    assert capture.closed
+    assert capture.summary()["losses"] == ["ATTACH_UNAVAILABLE"]
 
 
 @pytest.mark.parametrize("body_error", [ValueError("ORIGINAL"), KeyboardInterrupt("ORIGINAL")])
