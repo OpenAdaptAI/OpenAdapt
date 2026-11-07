@@ -176,13 +176,11 @@ class SqliteComponent:
             self.write(str(params["note"]), self.skill_fault)
             # Deliberately claims success even for fault modes. The genuine
             # cache's independent SQLite read-back must reject this claim.
-            return {
-                "status": "VERIFIED",
-                "verified": True,
-                "model_calls": 0,
-                "receipt_outcome": "VERIFIED",
-                "receipt": "component-boundary-only",
-            }
+            reply = pipeline.ReplayResult(
+                status="VERIFIED", verified=True, model_calls=0, seconds=0, run_dir=None,
+            ).to_dict()
+            reply.update(receipt_outcome="VERIFIED", receipt="component-boundary-only")
+            return reply
 
         monkeypatch.setattr(pipeline, "check_run_record", checked)
         monkeypatch.setattr(pipeline.FirstRunCompiler, "_jit", jit)
