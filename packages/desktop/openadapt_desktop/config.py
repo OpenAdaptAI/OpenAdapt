@@ -17,7 +17,7 @@ from __future__ import annotations
 import os
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
@@ -152,6 +152,31 @@ class EngineConfig(BaseSettings):
     burst_fps: float = Field(
         default=30.0,
         description="Frame rate during burst capture (frames per second).",
+    )
+
+    # --- Optional Chrome extension evidence (OpenAdapt#1872) ---
+    chrome_extension_id: str = Field(
+        default="",
+        description=(
+            "Opt-in: the 32-letter id of the loaded OpenAdapt Chrome extension. "
+            "When set, Desktop registers the native-messaging host for exactly "
+            "this extension while a native recording runs and removes it on stop."
+        ),
+    )
+    chrome_extension_browser: Literal["chrome", "chromium"] = Field(
+        default="chrome",
+        description="Which browser's per-user NativeMessagingHosts folder to use.",
+    )
+    chrome_native_hosts_dir: Path | None = Field(
+        default=None,
+        description=(
+            "Register in this NativeMessagingHosts folder instead (for example "
+            "<profile>/NativeMessagingHosts for one Chromium user data dir)."
+        ),
+    )
+    chrome_extension_host_script: Path | None = Field(
+        default=None,
+        description="Path to openadapt_extension_host.py when not next to openadapt_flow.",
     )
 
     # --- Upload ---
