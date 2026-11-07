@@ -55,6 +55,7 @@ if TYPE_CHECKING:
     # Type-only import for the Step.effects forward reference. The RUNTIME
     # import is at the BOTTOM of this module (see the note there) to avoid a
     # circular import through openadapt_flow.runtime's package init.
+    from openadapt_flow.locale_invariants import LocaleInvariants
     from openadapt_flow.qualification import QualificationProject
     from openadapt_flow.runtime.effects.effect import Effect
 
@@ -1179,6 +1180,11 @@ class ParamSpec(BaseModel):
     required, and enum choices. Additive: ``Workflow.param_specs`` lives
     ALONGSIDE the frozen ``Workflow.params`` dict; a bundle with an empty
     ``param_specs`` behaves exactly as before.
+
+    ``intake_field`` (optional) names the intake document field this tool
+    parameter may come from. When set, the MCP/runtime gate refuses a call
+    whose value does not match the trusted intake provenance for that field
+    (#1890). Unset means the parameter is not intake-bound.
     """
 
     name: str
@@ -1192,6 +1198,23 @@ class ParamSpec(BaseModel):
     choices: list[str] = Field(
         default_factory=list, description="Allowed values for an enum param."
     )
+    intake_field: Optional[str] = Field(
+        default=None,
+        description=(
+            "Intake field name this parameter may be filled from. When set, "
+            "a taught-tool call must match the registered intake provenance "
+            "for that field, or it is refused."
+        ),
+    )
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Omit unset ``intake_field`` so existing bundle digests stay stable."""
+
+        data: dict[str, Any] = handler(self)
+        if self.intake_field is None:
+            data.pop("intake_field", None)
+        return data
 
 
 class PredicateKind(str, Enum):
@@ -3295,6 +3318,9 @@ class Workflow(BaseModel):
     # or a hosted run summary. Empty for browser/native bundles, preserving
     # their serialized form through the compatibility serializer below.
     backend_hints: Optional[BackendHints] = None
+    #: Locale, date order and keyboard layout recorded with the demonstration
+    #: (#1897). Checked before replay; omitted from serialized bytes when unset.
+    locale_invariants: Optional["LocaleInvariants"] = None
     # -- surface binding (roadmap Section 5) --------------------------------
     # The exact execution surface this workflow was recorded/qualified on and
     # the execution mode that surface implies. A bound workflow refuses to run
@@ -3414,6 +3440,8 @@ class Workflow(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.backend_hints is None:
             data.pop("backend_hints", None)
+        if self.locale_invariants is None:
+            data.pop("locale_invariants", None)
         if self.surface is None:
             data.pop("surface", None)
         if self.execution_mode is None:
@@ -6400,6 +6428,7 @@ class RunReport(BaseModel):
 # OCR/cv2/model deps) runtime package loads cleanly and Step's schema can be
 # completed. Effect enters this module's globals so ``model_rebuild`` resolves
 # the forward reference; bundles with no effects are unaffected.
+from openadapt_flow.locale_invariants import LocaleInvariants  # noqa: E402,F401
 from openadapt_flow.qualification import QualificationProject  # noqa: E402,F401
 from openadapt_flow.runtime.effects.effect import Effect  # noqa: E402,F401
 

@@ -17,14 +17,19 @@ source for those gaps. Without it, recording still works.
   before a message leaves the content script.
 - Evidence is sent only while a recording is active; the action badge shows
   `REC`.
+- Every frame (including cross-origin iframes) reports its own targets with
+  frame context: `frame_url` without query/fragment, `frame_origin`,
+  `is_iframe`, `cross_origin_parent`, and a `frame` identity the background
+  stamps from Chrome's sender. The parent emits `frame_focus` with the
+  `<iframe>` element's path when focus enters a child frame.
 - A local native-messaging host stub appends lines to
   `extension_evidence.jsonl` in the recording directory.
 - The Flow engine reads that file through
   `openadapt_flow.extension_evidence` and treats a missing file as empty.
 
 Not in this slice (follow-up PRs): `chrome.debugger` / `webRequest` network
-save capture, full cross-origin iframe DOM reads, compiler use of extension
-paths in identity checks, and Chrome Web Store packaging.
+save capture, compiler use of extension and frame paths in identity checks,
+and Chrome Web Store packaging.
 
 ## Load unpacked (local only)
 
@@ -48,10 +53,13 @@ governed browser recording today
 
 ```bash
 cd packages/flow
-pytest tests/test_extension_evidence.py tests/test_extension_shadow_evidence.py
+pytest tests/test_extension_evidence.py tests/test_extension_shadow_evidence.py \
+  tests/test_extension_content_browser.py tests/test_extension_frame_browser.py
 ```
 
 The shadow tests run the content and background scripts in Node against a fake
-DOM. `tests/test_extension_native_host.py` installs the host into a throwaway
-Chromium profile and drives the real extension → native messaging → host path
-in headless Chromium.
+DOM. The `*_browser.py` tests run `content.js` in headless Chromium (real
+event dispatch, open/closed shadow roots, a cross-origin iframe) with only
+`chrome.runtime` stubbed. `tests/test_extension_native_host.py` installs the
+host into a throwaway Chromium profile and drives the real extension → native
+messaging → host path in headless Chromium.

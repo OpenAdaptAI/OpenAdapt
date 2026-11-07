@@ -2086,6 +2086,28 @@ def _apply_param_overrides(
     return secret_values
 
 
+def _locale_invariants_from_meta(meta: dict[str, Any]) -> Any:
+    """The recording's locale, date order and keyboard layout (#1897).
+
+    Absent stays absent (an older recording is not bound). Present but
+    malformed refuses, so a damaged binding can't silently drop the check.
+    """
+
+    raw = meta.get("locale_invariants")
+    if raw is None:
+        return None
+    from openadapt_flow.locale_invariants import LocaleInvariants
+
+    if not isinstance(raw, dict):
+        raise ValueError("meta.json locale_invariants must be an object")
+    try:
+        return LocaleInvariants.model_validate(raw)
+    except Exception as exc:
+        raise ValueError(
+            "meta.json locale_invariants does not match the locale schema"
+        ) from exc
+
+
 def compile_recording(
     recording_dir: Path | str,
     out_bundle_dir: Path | str,
@@ -2327,6 +2349,7 @@ def _compile_recording(
     surface, execution_mode = _surface_binding_from_meta(
         meta, backend_hints, target_surface
     )
+    locale_invariants = _locale_invariants_from_meta(meta)
     events = _load_events(recording)
     params: dict[str, str] = dict(meta.get("params") or {})
     secret_params: list[str] = list(meta.get("secret_params") or [])
@@ -3615,6 +3638,7 @@ def _compile_recording(
         recording_id=meta.get("id"),
         viewport=tuple(viewport) if viewport else None,
         backend_hints=backend_hints,
+        locale_invariants=locale_invariants,
         surface=surface,
         execution_mode=execution_mode,
         params=params,
