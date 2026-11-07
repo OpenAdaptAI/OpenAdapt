@@ -84,6 +84,16 @@ MOCKMED_RECORDS_READ_CONTRACT: dict[str, Any] = {
     "records_complete": True,
 }
 
+
+def mockmed_rest_read_kwargs() -> dict[str, Any]:
+    """Read contract for this fixture's complete, unpaged store endpoint."""
+    return {
+        key: value
+        for key, value in MOCKMED_RECORDS_READ_CONTRACT.items()
+        if key != "kind"
+    }
+
+
 # How long ``timeout`` mode hangs after committing, in seconds. The app's
 # client-side abort fires well before this, so the app sees a failed write
 # even though the row landed. Kept short so the study runs quickly.

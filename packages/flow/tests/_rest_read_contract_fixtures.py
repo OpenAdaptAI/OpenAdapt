@@ -6,7 +6,12 @@ fixture source/response. They are not inferred from paths or response length.
 
 from typing import Any
 
+import yaml
+
 from openadapt_flow.mockmed.fault_server import MOCKMED_RECORDS_READ_CONTRACT
+from openadapt_flow.mockmed.fault_server import (
+    mockmed_rest_read_kwargs as _mockmed_rest_read_kwargs,
+)
 
 
 def mockmed_effects_config(base_url: str) -> dict[str, Any]:
@@ -14,8 +19,14 @@ def mockmed_effects_config(base_url: str) -> dict[str, Any]:
 
 
 def mockmed_rest_read_kwargs() -> dict[str, Any]:
-    return {
-        key: value
-        for key, value in MOCKMED_RECORDS_READ_CONTRACT.items()
-        if key != "kind"
-    }
+    return _mockmed_rest_read_kwargs()
+
+
+def mockmed_effects_yaml(base_url: str) -> str:
+    """Indented verifier mapping for the owned MockMed HTTP fixture."""
+    return "".join(
+        "  " + line + "\n"
+        for line in yaml.safe_dump(
+            mockmed_effects_config(base_url), sort_keys=False
+        ).splitlines()
+    )
