@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from types import SimpleNamespace
 
@@ -276,6 +277,80 @@ def test_openai_browser_adapter_runs_the_sdk_with_a_scripted_local_model(monkeyp
     assert ledger.total("output_tokens") == 3
     assert agent_usage(agent)["usage_known"] is True
     assert len(clients) == 1 and clients[0].closed is True
+
+
+def test_openai_late_sdk_completion_cannot_run_a_browser_tool(monkeypatch):
+    """A provider that suppresses cancellation still cannot act after deadline."""
+    agents = pytest.importorskip("agents")
+    openai = pytest.importorskip("openai")
+    from openadapt_flow.integrations.agents.providers import OpenAIBrowserAgent
+
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            self.tools = kwargs["tools"]
+            self.model_settings = kwargs["model_settings"]
+
+    class FakeModelSettings:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    class FakeRunner:
+        @staticmethod
+        async def run(agent, *_args, **_kwargs):
+            try:
+                await asyncio.sleep(1)
+            except asyncio.CancelledError:
+                # Model a badly behaved SDK transport that returns after the
+                # caller's deadline instead of honoring cancellation.
+                await asyncio.sleep(0.03)
+                observe = next(
+                    tool for tool in agent.tools if tool.__name__ == "observe"
+                )
+                return observe()
+            raise AssertionError("the short run deadline should expire")
+
+    class FakeClient:
+        async def close(self):
+            return None
+
+    monkeypatch.setattr(agents, "Agent", FakeAgent)
+    monkeypatch.setattr(agents, "ModelSettings", FakeModelSettings)
+    monkeypatch.setattr(agents, "OpenAIResponsesModel", lambda **_kwargs: object())
+    monkeypatch.setattr(agents, "RunHooks", type("RunHooks", (), {}))
+    monkeypatch.setattr(agents, "Runner", FakeRunner)
+    monkeypatch.setattr(agents, "function_tool", lambda function: function)
+    monkeypatch.setattr(openai, "AsyncOpenAI", lambda **_kwargs: FakeClient())
+
+    class Harness:
+        observations = 0
+
+        def observe(self):
+            self.observations += 1
+            return "page"
+
+    harness = Harness()
+    agent = OpenAIBrowserAgent(
+        model="scripted-test-model",
+        max_turns=1,
+        max_cost_usd=1,
+        prices={"input": 1, "output": 1, "cache_write": 1, "cache_read": 1},
+        price_model="scripted-test-model",
+        pricing_source_url="https://developers.openai.com/api/docs/pricing",
+        pricing_verified_at="2026-11-07",
+        max_run_seconds=0.01,
+        request_timeout_seconds=0.01,
+    )
+    request = SimpleNamespace(
+        instruction="inspect",
+        model_key=SimpleNamespace(provider="openai", secret=lambda: "opaque"),
+    )
+
+    with pytest.raises(TimeoutError):
+        agent.drive(request, harness)
+
+    assert harness.observations == 0
+    assert agent.last_ledger is not None
+    assert agent.last_ledger.model_calls == 0
 
 
 def test_openai_provider_requires_reviewed_prices_for_exact_model():
