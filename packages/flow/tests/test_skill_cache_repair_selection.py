@@ -26,8 +26,10 @@ from openadapt_flow.repair.lifecycle import ActivePointer, RepairStore
 from openadapt_flow.repair.registration import build_candidate
 from tests.test_skill_cache_runtime import (
     PROMPT,
-    model as model,  # Explicitly re-export the shared pytest fixture.
     prepare_repair,
+)
+from tests.test_skill_cache_runtime import (
+    model as model,  # Explicitly re-export the shared pytest fixture.
 )
 
 

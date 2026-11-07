@@ -44,7 +44,12 @@ def create_lab_authorities(lab_root: Path) -> LabAuthorities:
             if ancestor.is_symlink() or (ancestor / ".git").exists():
                 raise ValueError("not an independent lab")
         parent = root.parent.stat()
-        if root.parent.resolve(strict=True) != root.parent or not root.parent.is_dir() or parent.st_uid != os.getuid() or parent.st_mode & 0o077:
+        if (
+            root.parent.resolve(strict=True) != root.parent
+            or not root.parent.is_dir()
+            or parent.st_uid != os.getuid()
+            or parent.st_mode & 0o077
+        ):
             raise ValueError("not a private owned parent")
         root.mkdir(mode=0o700)
         key_dir = root / "authority"
@@ -54,7 +59,10 @@ def create_lab_authorities(lab_root: Path) -> LabAuthorities:
         path = key_dir / "admitter.pem"
         public = authority.generate_encrypted_key(path, env=env)
         authority.register_principal(
-            key_dir, role="admitter_key", principal_id="lab-demo:admitter", public_key_hex=public
+            key_dir,
+            role="admitter_key",
+            principal_id="lab-demo:admitter",
+            public_key_hex=public,
         )
         admitter = authority.principal_from_key(
             authority.load_encrypted_key(path, env=env), key_dir
