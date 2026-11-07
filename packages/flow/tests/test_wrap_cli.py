@@ -122,3 +122,31 @@ def test_existing_tool_needs_no_provider_or_credential_configuration(
     parser = cli.build_parser()
     args = parser.parse_args(["--task", str(tmp_path / "task.json")])
     assert cli._task(args, parser).agent is None
+
+
+def test_existing_signed_authority_and_admitter_reach_normal_task_loader(monkeypatch, tmp_path):
+    from openadapt_flow.compile_agent import cli as compile_cli
+
+    authority, admitter = object(), object()
+    seen = {}
+    setup = SimpleNamespace(cache=SimpleNamespace(server=lambda *_: object()), instruction="Save {note}", parameters=("note",))
+    def load(path, **options):
+        seen.update(path=path, **options)
+        return setup
+    monkeypatch.setattr(recording, "load_task", load)
+    monkeypatch.setattr(compile_cli, "_teach_authority", lambda args: authority if args.teach_authorization == "signed.json" and args.approver_root == "pinned" else None)
+    monkeypatch.setattr(compile_cli, "_admitter", lambda args: admitter if args.admit_key == "encrypted.pem" and args.admission_policy == "policy.json" else None)
+    parser = cli.build_parser()
+    args = parser.parse_args(["--task", "task.json", "--key-dir", str(tmp_path), "--teach-authorization", "signed.json", "--approver-root", "pinned", "--admit-key", "encrypted.pem", "--admission-policy", "policy.json"])
+    assert cli._task(args, parser).agent is None
+    assert seen == {"path": "task.json", "key_dir": str(tmp_path), "teach_authorization": authority, "admitter": admitter}
+
+
+def test_admission_policy_without_key_refuses_before_task_load(monkeypatch):
+    calls = []
+    monkeypatch.setattr(recording, "load_task", lambda *_args, **_kwargs: calls.append(True))
+    parser = cli.build_parser()
+    args = parser.parse_args(["--task", "task.json", "--admission-policy", "policy.json"])
+    with pytest.raises(SystemExit):
+        cli._task(args, parser)
+    assert calls == []

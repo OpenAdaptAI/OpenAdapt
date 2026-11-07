@@ -19,6 +19,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--provider", choices=("claude", "openai"), default="claude")
     parser.add_argument("--model")
+    parser.add_argument("--key-dir", help="Existing admission key directory")
+    parser.add_argument("--teach-authorization", help="Signed teaching authorization")
+    parser.add_argument("--approver-root", help="Pinned approver root for that authorization")
+    parser.add_argument("--admit-key", help="Encrypted key of a registered admitter")
+    parser.add_argument("--admission-policy", help="Signed admission policy for --admit-key")
     parser.add_argument(
         "--price",
         action="append",
@@ -84,6 +89,18 @@ def _task(args: argparse.Namespace, parser: argparse.ArgumentParser) -> WrappedT
     from openadapt_flow.integrations.agents.recording import load_task
 
     options: dict[str, Any] = {}
+    if args.admission_policy and not args.admit_key:
+        parser.error("--admission-policy requires --admit-key")
+    if args.key_dir:
+        options["key_dir"] = args.key_dir
+    if args.teach_authorization:
+        from openadapt_flow.compile_agent.cli import _teach_authority
+
+        options["teach_authorization"] = _teach_authority(args)
+    if args.admit_key:
+        from openadapt_flow.compile_agent.cli import _admitter
+
+        options["admitter"] = _admitter(args)
     if args.person:
         if args.serve or not (sys.stdin.isatty() and sys.stderr.isatty()):
             parser.error("--person requires an attended terminal run")
