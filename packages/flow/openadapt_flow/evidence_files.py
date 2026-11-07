@@ -68,9 +68,7 @@ def is_key_material_path(relative: str | os.PathLike[str]) -> bool:
             for suffix in (*_KEY_SUFFIXES, ".pem")
         ):
             return True
-        if any(
-            _name_or_backup(name, store) for store in _KEY_STORES | _PRIVATE_AUTHORITY
-        ):
+        if any(_name_or_backup(name, store) for store in _KEY_STORES):
             return True
         if _DATA_SUFFIX.search(name) and _CREDENTIAL_DATA.search(name):
             return True
@@ -87,8 +85,12 @@ def is_publication_input_path_excluded(relative: str | os.PathLike[str]) -> bool
         return True
     parts = PurePosixPath(os.fspath(relative).replace("\\", "/")).parts
     return any(
-        re.search(re.escape(suffix) + r"(?:$|[.~_-])", part.casefold())
-        for part in parts for suffix in OPAQUE_CONTAINER_SUFFIXES
+        any(_name_or_backup(part.casefold(), authority) for authority in _PRIVATE_AUTHORITY)
+        or any(
+            re.search(re.escape(suffix) + r"(?:$|[.~_-])", part.casefold())
+            for suffix in OPAQUE_CONTAINER_SUFFIXES
+        )
+        for part in parts
     )
 
 

@@ -52,16 +52,16 @@ PRIVATE_NAMES = (
     "seal-keys.json", "signing-key.json", "hmac-key.json", "password.json",
     "credentials.yaml", "credentials.txt", "secret.toml", "token.yml",
     "webauthn_passkey_double.json", "named_person_binding.json",
-    "attended_capability.json", "attended_capability_history.json.enc",
     "id_rsa.bak", "id_ed25519.old", "credentials.backup", ".env", ".env.local",
     "client.p12", "client.pfx", "private.jks", "private.keystore",
     ".ssh/identity", ".aws/config", ".private/config.json",
 )
+AUTHORITY_NAMES = ("attended_capability.json", "attended_capability_history.json.enc")
 OPAQUE_NAMES = tuple("unclassified" + suffix for suffix in OPAQUE_CONTAINER_SUFFIXES)
 
 
 @given(
-    name=st.sampled_from(PRIVATE_NAMES + OPAQUE_NAMES),
+    name=st.sampled_from(PRIVATE_NAMES + AUTHORITY_NAMES + OPAQUE_NAMES),
     parents=st.lists(st.sampled_from(("run", "evidence", "nested")), max_size=4),
     windows=st.booleans(),
 )
@@ -100,7 +100,7 @@ def _forbid_payload_reads(monkeypatch, denied: set[Path]) -> None:
     monkeypatch.setattr(io, "open", checked(original_io))
 
 
-@pytest.mark.parametrize("name", PRIVATE_NAMES + OPAQUE_NAMES)
+@pytest.mark.parametrize("name", PRIVATE_NAMES + AUTHORITY_NAMES + OPAQUE_NAMES)
 def test_actual_export_boundaries_do_not_read_or_copy_private_names(
     tmp_path, monkeypatch, guard, name,
 ):
@@ -157,7 +157,7 @@ def test_actual_export_boundaries_do_not_read_or_copy_private_names(
 
 def test_run_derivative_strips_all_key_families_without_opening(tmp_path, monkeypatch):
     denied = set()
-    for name in PRIVATE_NAMES + OPAQUE_NAMES:
+    for name in PRIVATE_NAMES + AUTHORITY_NAMES + OPAQUE_NAMES:
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("synthetic excluded marker")
@@ -212,6 +212,7 @@ def test_exact_public_registry_exception_requires_closed_schema(tmp_path, guard)
     assert guard["violations"](tmp_path, [relative]) == [relative]
     assert guard["violations"](tmp_path, ["benchmark/other/seal-key.json"]) == ["benchmark/other/seal-key.json"]
     assert guard["violations"](tmp_path, ["Evidence/KEYS.JSON"]) == ["Evidence/KEYS.JSON"]
+    assert guard["tracked_key_path_kind"]("fixtures/webauthn_passkey_double.json") == "excluded"
     assert guard["violations"](tmp_path, ["root.key", "root.key/data.json"]) == ["root.key", "root.key/data.json"]
 
 

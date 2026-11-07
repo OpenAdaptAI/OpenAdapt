@@ -115,22 +115,32 @@ def _is_evidence_path(name: str) -> bool:
     )
 
 
+def tracked_key_path_kind(name: str) -> str | None:
+    """Pure filename classification; a public candidate still needs validation."""
+    key_container = any(
+        re.search(r"\.(?:key|p12|pfx|jks|keystore)(?:$|[.~_-])", part, re.I)
+        for part in Path(name).parts
+    )
+    if not key_container and not _is_evidence_path(name) and name not in PUBLIC_CERTIFICATES:
+        return None
+    if not is_key_material_path(name):
+        return None
+    if name in PUBLIC_REGISTRIES:
+        return "public_registry_candidate"
+    if name in PUBLIC_CERTIFICATES:
+        return "public_certificate_candidate"
+    return "excluded"
+
+
 def violations(root: Path, names: Iterable[str]) -> list[str]:
     denied: list[str] = []
     for name in names:
-        # All key containers are forbidden. Ambiguous data stores are checked
-        # on evidence surfaces; unrelated source templates are not artifacts.
-        key_container = any(
-            re.search(r"\.(?:key|p12|pfx|jks|keystore)(?:$|[.~_-])", part, re.I)
-            for part in Path(name).parts
-        )
-        if not key_container and not _is_evidence_path(name) and name not in PUBLIC_CERTIFICATES:
-            continue
-        if not is_key_material_path(name):
+        kind = tracked_key_path_kind(name)
+        if kind is None:
             continue
         validator = (
-            is_public_registry if name in PUBLIC_REGISTRIES else
-            is_public_certificate if name in PUBLIC_CERTIFICATES else None
+            is_public_registry if kind == "public_registry_candidate" else
+            is_public_certificate if kind == "public_certificate_candidate" else None
         )
         if validator is None:
             denied.append(name)  # Never open or hash a denied candidate.
