@@ -18,10 +18,9 @@ import yaml
 
 pytest.importorskip("mcp")
 
+from benchmark.harness.guard_demo import FakeAgent, verify_yaml  # noqa: E402
 from mcp import ClientSession  # noqa: E402
 from mcp.shared.memory import create_client_server_memory_streams  # noqa: E402
-
-from benchmark.harness.guard_demo import FakeAgent, verify_yaml  # noqa: E402
 from openadapt_flow import verifier  # noqa: E402
 from openadapt_flow.agent.bridge import BridgeError  # noqa: E402
 from openadapt_flow.agent.cli import main as agent_main  # noqa: E402
@@ -359,6 +358,7 @@ def test_an_owed_recheck_is_named_after_a_restart(sqlite_bridge, tmp_path) -> No
     )
     assert retry["ok_to_write"] is False
     assert retry["earlier_result"]["provisional"] is True
+    assert retry["earlier_result"]["final"] is False
     assert "doesn't hold it" in retry["next"] and "ledger list" in retry["next"]
 
 
@@ -411,3 +411,32 @@ def test_the_recheck_tool_says_another_agent_id_is_not_excused(sqlite_bridge) ->
     bridge, _ = sqlite_bridge
     spec = {t.name: t for t in bridge.list_tool_specs()}["verify_recheck"]
     assert "another agent_id" in spec.description
+
+
+def test_verify_check_uncertain_is_not_final(sqlite_bridge) -> None:
+    bridge, _db = sqlite_bridge
+    begun = bridge.dispatch("verify_begin", {"contract": "patient", "values": VALUES})
+    checked = bridge.dispatch("verify_check", {"write_id": begun["write_id"]})
+    assert checked["outcome"] == "UNCERTAIN"
+    assert checked["verified"] is False
+    assert checked["provisional"] is False
+    assert checked["final"] is False
+
+
+def test_verify_recheck_disputed_later_write_is_not_final(
+    sqlite_bridge, monkeypatch
+) -> None:
+    bridge, db = sqlite_bridge
+    first = _provisional(bridge, db)
+    begun = bridge.dispatch("verify_begin", {"contract": "patient", "values": VALUES_3})
+    _sql(db, SAVE_3, "INSERT INTO calendar (pid, title) VALUES (2, 'Unexplained')")
+    second = bridge.dispatch("verify_check", {"write_id": begun["write_id"]})
+    assert second["outcome"] == "REFUTED"
+    assert second["verified"] is False
+    assert second["final"] is True
+    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+    late = bridge.dispatch("verify_recheck", {"write_id": first["write_id"]})
+    assert late["outcome"] == "UNCERTAIN", late["reasons"]
+    assert late["verified"] is False
+    assert late["final"] is False
+    assert "Not a pass" in late["next"]

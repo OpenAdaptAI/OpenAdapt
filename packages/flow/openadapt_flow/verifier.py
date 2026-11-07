@@ -643,9 +643,16 @@ class WriteResult:
 
     @property
     def final(self) -> bool:
-        """Whether this result is free of an owed final recheck."""
+        """Whether this verdict is resolved, with no owed final recheck.
 
-        return not self.provisional
+        An uncertain read does not settle the verdict. A final refutation
+        remains a negative verdict, not verification or permission to retry.
+        """
+
+        return (
+            self.outcome in (Outcome.CONFIRMED, Outcome.REFUTED)
+            and not self.provisional
+        )
 
     @property
     def verdict(self) -> str:
@@ -791,7 +798,11 @@ class RecheckResult:
     def final(self) -> bool:
         """A completed proof through read_at, with no unread history gap."""
 
-        return bool(self.read_at) and self.frame in ("held", "refuted")
+        return (
+            self.outcome in ("CONFIRMED", "REFUTED")
+            and bool(self.read_at)
+            and self.frame in ("held", "refuted")
+        )
 
     @property
     def late(self) -> bool:

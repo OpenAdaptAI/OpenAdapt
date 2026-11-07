@@ -9,7 +9,6 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-
 from openadapt_flow import verifier
 from openadapt_flow.runtime.effects.fhir import FhirEffectVerifier
 from openadapt_flow.runtime.effects.history import (
@@ -347,6 +346,8 @@ def test_sql_incomplete_coverage_prevents_provisional_success(
         con.execute("UPDATE coverage SET event_count=1")
     result = verify_write(pending)
     assert not result.verified and result.outcome.value == "UNCERTAIN"
+    assert not result.final
+    assert result.to_dict()["final"] is False
 
 
 def test_history_contract_requires_every_read_surface(database: Path) -> None:
