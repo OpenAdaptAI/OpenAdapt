@@ -25,6 +25,10 @@
 
 - The OpenEMR contracts (`benchmark/lifecycle_proof/verify.yaml`, `benchmark/openemr_local/verify.yaml`) now declare how the New Patient form stores what was typed: street and city in capitals, names with each word capitalized. Without it the exact record check refuted 19 of 20 correct saves on the stand-in suites (#1811). A contract value's `stored` form gains `capitalize_words` (OpenEMR's "C" fields); the set stays closed and the check stays exact.
 
+### Features
+
+- Verifier audit: `python -m openadapt_flow.verifier_audit run --target module:factory --out DIR` tests an environment's own scorer rather than an agent. It replays a reference trajectory with mechanical faults (an unauthorized side effect, the wrong record, a wrong value, a duplicate write, a partial write, a write after the success claim, a claim with no write) plus an incidental-change positive control. It reads the end state independently and reports, per family, where the scorer accepted a wrong end state or rejected a legitimate one, with counterexamples and Wilson 95% intervals. Adapters for AgentDojo and AppWorld ship as examples; private family sets plug in with `--families-module`. Design: `docs/VERIFIER_AUDIT.md`.
+
 ## v2.6.0 (2026-11-04)
 
 Flow adds signed teach authorizations, encrypted local artifacts, durable
