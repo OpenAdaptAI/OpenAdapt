@@ -71,9 +71,9 @@ class Commit:
 
 
 def _git(root: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", *args], cwd=root, check=True, capture_output=True, text=True
-    ).stdout
+    return subprocess.run(["git", *args], cwd=root, check=True, capture_output=True).stdout.decode(
+        "utf-8"
+    )
 
 
 def parse_version(version: str) -> tuple[int, int, int]:
@@ -116,6 +116,164 @@ def commits_between(root: Path, base: str, head: str = "HEAD") -> list[Commit]:
         paths = tuple(line for line in names.splitlines() if line.strip())
         commits.append(Commit(sha=sha.strip(), subject=subject.strip(), body=body, paths=paths))
     return commits
+
+
+def _nul_paths(raw: str) -> set[str]:
+    """Parse exact Git names, including embedded newlines and tabs."""
+    if not raw:
+        return set()
+    if not raw.endswith("\0"):
+        raise ValueError("Git did not return complete NUL-separated paths")
+    paths = set(raw[:-1].split("\0"))
+    if any(not p or Path(p).is_absolute() or ".." in Path(p).parts for p in paths):
+        raise ValueError("Git returned a path outside Desktop")
+    return paths
+
+
+def _path_state(root: Path, ref: str, path: str) -> tuple[str, str] | None:
+    # Read only tree metadata. A mode change matters even with the same blob.
+    raw = _git(root, "--literal-pathspecs", "ls-tree", "-z", ref, "--", path)
+    if not raw:
+        return None
+    records = raw.split("\0")
+    if len(records) != 2 or records[-1]:
+        raise ValueError("a net Desktop path has ambiguous tree metadata")
+    metadata, name = records[0].split("\t", 1)
+    mode, _kind, oid = metadata.split()
+    if name != path:
+        raise ValueError("Git returned tree metadata for another path")
+    return mode, oid
+
+
+def commits_for_net_diff(root: Path, base: str, head: str) -> list[Commit]:
+    """Classify only changes that remain in the squash-merged tree.
+
+    Exact per-file reversions discard the canceled intent. Copies inherit
+    intent from earlier equal tree versions, whether or when the source is
+    deleted. A content change without an exact source keeps possible current
+    source intent conservatively. No blob contents or similarity heuristics
+    are used. Missing merge intent refuses classification. Historical release
+    preparation stays unchanged.
+    """
+    net = _nul_paths(
+        _git(root, "diff", "--no-renames", "--relative", "--name-only", "-z", base, head, "--", ".")
+    )
+    if not net:
+        return []
+    commits = commits_between(root, base, head)
+    by_sha = {commit.sha: commit for commit in commits}
+    order = _git(
+        root, "rev-list", "--no-merges", "--topo-order", "--reverse", f"{base}..{head}", "--", "."
+    ).splitlines()
+    if len(by_sha) != len(commits) or set(order) != set(by_sha):
+        raise ValueError("net Desktop changes have incomplete commit metadata")
+    changed = {
+        sha: _nul_paths(
+            _git(
+                root,
+                "diff-tree",
+                "--no-commit-id",
+                "--no-renames",
+                "--relative",
+                "--name-only",
+                "-z",
+                "-r",
+                sha,
+                "--",
+                ".",
+            )
+        )
+        for sha in order
+    }
+    states_cache: dict[tuple[str, str], tuple[str, str] | None] = {}
+    memo: dict[tuple[str, int, str], set[str]] = {}
+
+    def state(ref: str, path: str) -> tuple[str, str] | None:
+        key = (ref, path)
+        if key not in states_cache:
+            states_cache[key] = _path_state(root, ref, path)
+        return states_cache[key]
+
+    # All changed paths matter, including a feature's original location that
+    # disappears from the final diff. Version references are ordered before a
+    # consumer, so recursive lineage cannot cycle or depend on a later commit.
+    paths = sorted(set().union(*changed.values()))
+    versions = [
+        (path, index + 1, sha, state(sha, path))
+        for index, sha in enumerate(order)
+        for path in sorted(changed[sha])
+    ]
+
+    def sources(
+        path: str, index: int, sha: str, after: tuple[str, str]
+    ) -> set[tuple[str, int, str]]:
+        current = {
+            (source, index, sha + "^")
+            for source in paths
+            if source != path and state(sha + "^", source) is not None
+        }
+        exact = {
+            (source, stop, ref)
+            for source, stop, ref, version in versions
+            if source != path and stop <= index and version == after
+        }
+        exact.update(source for source in current if state(source[2], source[0]) == after)
+        # A modified copy cannot be distinguished from an independent edit
+        # using tree IDs alone. Retain every possible current source intent;
+        # a source already reverted to its base contributes no canceled intent.
+        return exact or current
+
+    def contributions(path: str, stop: int, final_ref: str) -> set[str]:
+        key = (path, stop, final_ref)
+        if key in memo:
+            return memo[key]
+        initial, final = state(base, path), state(final_ref, path)
+        contributors = [(i, sha) for i, sha in enumerate(order[:stop]) if path in changed[sha]]
+        if not contributors:
+            if initial != final:
+                raise ValueError("a net Desktop change has no non-merge commit metadata")
+            return set()
+        states = [initial]
+        edges: list[set[str]] = []
+        observed = [initial]
+        possible: set[str] = set()
+        ambiguous = False
+        for index, sha in contributors:
+            before, after = state(sha + "^", path), state(sha, path)
+            observed.append(after)
+            # A copy carries earlier shipped intent; it must not promote a
+            # docs/test-only commit into a releasable commit retroactively.
+            intent = {sha} if Commit(sha, "", "", (path,)).ships else set()
+            if after is not None and (before is None or before[1] != after[1]):
+                for source, source_stop, ref in sources(path, index, sha, after):
+                    intent |= contributions(source, source_stop, ref)
+            possible |= intent
+            if before != states[-1]:
+                ambiguous = True
+                continue
+            if after in states:
+                index = states.index(after)
+                states, edges = states[: index + 1], edges[:index]
+            else:
+                states.append(after)
+                edges.append(intent)
+        if (not ambiguous and final != states[-1]) or (ambiguous and final not in observed):
+            raise ValueError("a net Desktop merge resolution has no commit intent")
+        result = possible if ambiguous else set().union(*edges)
+        memo[key] = result
+        return result
+
+    surviving: dict[str, set[str]] = {sha: set() for sha in order}
+    for path in sorted(net):
+        if state(base, path) == state(head, path):
+            raise ValueError("a net Desktop path does not match exact tree metadata")
+        for sha in contributions(path, len(order), head):
+            surviving[sha].add(path)
+    return [
+        Commit(commit.sha, commit.subject, commit.body, tuple(sorted(surviving[commit.sha])))
+        for commit in commits
+        if surviving[commit.sha]
+    ]
 
 
 def required_level(commits: list[Commit], version: str) -> str | None:

@@ -49,6 +49,7 @@ from openadapt_flow import __version__ as FLOW_VERSION
 from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 from openadapt_flow.compiler import compile_recording
 from openadapt_flow.deployment import DeploymentConfig, PolicySection
+from openadapt_flow.evidence_files import is_publication_input_path_excluded
 from openadapt_flow.execution_profiles import (
     ExecutionProfile,
     execution_profile_contract,
@@ -378,6 +379,7 @@ def _source_provenance(*, allow_dirty: bool) -> dict[str, Any]:
 
 
 def _tree_digest(root: Path) -> str:
+    _reject_tree_authority(root)
     rows = []
     for path in sorted(p for p in root.rglob("*") if p.is_file()):
         rows.append(
@@ -1053,19 +1055,30 @@ def _strip_run_authority(run_dir: Path) -> None:
             shutil.rmtree(path)
         elif path.exists():
             path.unlink()
+    # Remove key-shaped names throughout this derivative without reading them.
+    for path in sorted(run_dir.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+        if is_publication_input_path_excluded(path.relative_to(run_dir)):
+            if path.is_dir() and not path.is_symlink():
+                shutil.rmtree(path)
+            else:
+                path.unlink(missing_ok=True)
 
 
 def _reject_run_authority(relative: str) -> None:
     parts = PurePosixPath(relative).parts
-    secret_like = any(
-        part.lower().endswith(".key")
-        or any(marker in part.lower() for marker in ("credential", "secret", "token"))
+    secret_like = is_publication_input_path_excluded(relative) or any(
+        any(marker in part.lower() for marker in ("credential", "secret", "token"))
         for part in parts
     )
     if NON_PUBLIC_RUN_AUTHORITY.intersection(parts) or secret_like:
         raise EvidencePackError(
-            f"public evidence must not contain live run authority: {relative}"
+            f"public evidence must not contain live run authority or unclassified containers: {relative}"
         )
+
+
+def _reject_tree_authority(root: Path) -> None:
+    for path in root.rglob("*"):
+        _reject_run_authority(path.relative_to(root).as_posix())
 
 
 class _PackTrialHooks:
@@ -1555,6 +1568,7 @@ def _role(path: str) -> str:
 
 def _file_ref(root: Path, path: Path) -> dict[str, Any]:
     relative = path.relative_to(root).as_posix()
+    _reject_run_authority(relative)
     return {
         "path": relative,
         "sha256": _sha256(path),
@@ -2023,6 +2037,7 @@ def export_pack(
 
 
 def _safe_file(root: Path, relative: str) -> Path:
+    _reject_run_authority(relative)
     if "\\" in relative:
         raise EvidencePackError(f"non-POSIX file path: {relative}")
     pure = PurePosixPath(relative)
@@ -2363,6 +2378,7 @@ def _validate_execute_transport_artifacts(
 
 def validate_pack(pack_dir: Path | str) -> dict[str, Any]:
     root = Path(pack_dir).resolve(strict=True)
+    _reject_tree_authority(root)
     manifest_path = _safe_file(root, "manifest.json")
     digest_path = _safe_file(root, "manifest.sha256")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))

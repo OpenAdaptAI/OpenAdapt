@@ -46,9 +46,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
+import yaml
+
 from benchmark.agent_guard.agent import ScriptedAgent
 from benchmark.agent_guard.app import App, serve
 from benchmark.effect_e2e import ground_truth
+from benchmark.effect_e2e.record_service import ENCOUNTERS_READ_CONTRACT
 
 __all__ = ["SCENARIOS", "Scenario", "outcome", "run_benchmark"]
 
@@ -139,12 +142,17 @@ def write_setup(
     verify = work / "verify.yaml"
     verify.write_text(
         "schema_version: openadapt.verify/v1\n"
-        "verifier:\n"
-        "  kind: rest\n"
-        f"  base_url: {base}\n"
-        "  records_path: /api/records\n"
-        "  records_key: records\n"
-        "effects:\n"
+        + yaml.safe_dump(
+            {
+                "verifier": {
+                    "kind": "rest",
+                    "base_url": base,
+                    **ENCOUNTERS_READ_CONTRACT,
+                }
+            },
+            sort_keys=False,
+        )
+        + "effects:\n"
         "  - kind: record_written\n"
         "    match:\n"
         "      patient_id: {param: patient_id}\n"

@@ -36,7 +36,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # javascript-typescript and rust cover packages/desktop (React UI, Tauri shell).
+        # javascript-typescript covers packages/desktop and packages/flow/chrome_extension;
+        # rust covers the Tauri shell under packages/desktop.
         language: ["python", "javascript-typescript", "rust"]
     steps:
       - name: Checkout
@@ -65,6 +66,9 @@ jobs:
           changed="$(git diff --name-only "$base" HEAD)"
           case "$LANGUAGE" in
             python) pattern='\.py$|^\.github/codeql/|^\.github/workflows/codeql\.yml$' ;;
+            # Desktop UI/shell plus the optional Flow Chrome extension (MV3 JS).
+            javascript-typescript) pattern='^packages/desktop/|^packages/flow/chrome_extension/|^\.github/codeql/|^\.github/workflows/codeql\.yml$' ;;
+            rust) pattern='^packages/desktop/|^\.github/codeql/|^\.github/workflows/codeql\.yml$' ;;
             *) pattern='^packages/desktop/|^\.github/codeql/|^\.github/workflows/codeql\.yml$' ;;
           esac
           if grep -Eq "$pattern" <<<"$changed"; then run=true; else run=false; fi

@@ -2639,6 +2639,8 @@ def variants(
         for n in range(1, len(changes) + 1):
             for combo in itertools.combinations(changes, n):
                 out.append(Variant(plan.kind, sorted(set(plan.identity) | set(combo))))
+                if len(out) == MAX_VARIANTS:
+                    return out
         return out[:MAX_VARIANTS]
     located = set(plan.locations)
     base_sets = []

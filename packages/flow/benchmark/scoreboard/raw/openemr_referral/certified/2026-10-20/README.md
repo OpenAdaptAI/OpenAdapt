@@ -28,6 +28,11 @@ Before each run the fixture was reset and the existing chart Rosa Delgado (born 
 
 ## Checking the Seals
 
+The r6 run's attended-decision MAC key was published with its evidence and
+has been removed from the current tree. Its attended-decision and checkpoint
+MACs cannot be treated as tamper-evident after that publication. This is a
+separate key from the public verification key used for the Seals below.
+
 Each `engine/report.json` is signed with an offline Seal (`openadapt.local-seal/v1`), key `seal-ed25519-ca08dd7f42a4be01`. The public key is in `seal-key.json`; the private key was never in this repository.
 
 Each Seal names the run authorization in `run-authorization/` and its item (`r3` to `r6`). Each Seal and the authorization are also anchored in Sigstore Rekor and timestamped by the Sigstore timestamp authority:

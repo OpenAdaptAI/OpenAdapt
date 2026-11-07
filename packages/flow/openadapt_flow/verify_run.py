@@ -197,8 +197,57 @@ _SIGNATURE_FIELDS = frozenset(
 )
 
 
+_RECEIPT_VALIDATION_REASONS = frozenset(
+    {
+        "schema_version",
+        "unknown_field",
+        "missing_field",
+        "execute_v1_rules",
+        "issued_at",
+        "executor_kind",
+        "executor_ref_sha256",
+        "effect_verdict",
+        "verification_tier",
+        "remediates",
+        "correlation_id",
+        "recheck_due_at",
+        "checked_how",
+        "checked",
+        "verified_without_every_part",
+        "verified_without_independent_readback",
+        "delivery_uncertain",
+        "evidence_mismatch",
+        "unsalted",
+        "baseline_window",
+        "self_approved",
+        "issued_before_read",
+    }
+)
+
+
 class VerifyRunError(ValueError):
-    """verify-run refused its inputs. Nothing was read or written."""
+    """A refusal with an optional closed receipt-validation diagnostic.
+
+    All existing validator codes are listed above. Other refusals and unknown
+    future codes stay unclassified. This diagnostic grants no authority and
+    does not change the exception's existing arguments or message.
+    """
+
+    def __init__(self, *args: object, validation_reason: object = None) -> None:
+        super().__init__(*args)
+        self._validation_reason = VerifyRunError._closed_reason(validation_reason)
+
+    @staticmethod
+    def _closed_reason(value: object) -> str:
+        return (
+            value
+            if type(value) is str and value in _RECEIPT_VALIDATION_REASONS
+            else "unclassified"
+        )
+
+    @property
+    def validation_reason(self) -> str:
+        return VerifyRunError._closed_reason(self.__dict__.get("_validation_reason"))
 
 
 class VerifyConfig(BaseModel):
@@ -2302,7 +2351,10 @@ def verify_run(
         receipt[RECHECK_RECEIPT_FIELD] = recheck_due_at
     problem = receipt_problem(receipt) or evidence_problem(evidence, receipt)
     if problem is not None:  # pragma: no cover - a producer bug, never input
-        raise VerifyRunError(f"verify-run built an invalid receipt: {problem}")
+        raise VerifyRunError(
+            f"verify-run built an invalid receipt: {problem}",
+            validation_reason=problem,
+        )
     return {
         "schema_version": EFFECT_RECEIPT_SCHEMA,
         "receipt": receipt,
@@ -2521,7 +2573,7 @@ def recheck_run(
     refuted with one in ``excused``, ``excused_by`` holds
     ``LATER_WRITE_UNJUDGED``, since the change may be that write's. The
     database is read twice, ``settle_s`` apart, as after the save. Returns
-    the frame verdict and when the database was read.
+    the frame verdict and a conservative lower bound on when its reads began.
 
     Raises :class:`VerifyRunError` for an excuse that doesn't qualify.
     """
@@ -2558,6 +2610,9 @@ def recheck_run(
         detail[FRAME_AUDIT_DETAIL] = dict(post["audit"])
     before = EffectState(substrate="database", reachable=True, detail=detail)
     verifier = _build_verifier(cfg, params)
+    # A lower bound on every observation in this pass. Completion may be
+    # delayed after the database snapshots were taken, even past due_at.
+    read_started_at = _now()
     verdict = judge_run_frame(
         cfg,
         verifier,
@@ -2574,7 +2629,7 @@ def recheck_run(
         # A later write whose frame wasn't judged excuses nothing, so what
         # refuted this write may be that write's own change.
         verdict.excused_by.add(late_write.LATER_WRITE_UNJUDGED)
-    return verdict, _now()
+    return verdict, read_started_at
 
 
 def write_result(result: Mapping[str, Any], out_dir: Path) -> Path:

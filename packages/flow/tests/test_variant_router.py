@@ -41,6 +41,7 @@ from openadapt_flow.variants import (
     author_variant_set,
     is_variant_set_artifact,
 )
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 from tests.test_admitted_composition_authoring import _envelope_for
 from tests.test_loop_authoring import (
     _encounter_body,
@@ -513,9 +514,7 @@ def test_routed_variant_runs_through_the_replayer_and_its_report_names_it(
             report = Replayer(
                 _RowWritingBackend(url),
                 vision=_vision_confirms_saved(),
-                effect_verifier=RestRecordVerifier(
-                    url, records_path="/api/db", records_key="records"
-                ),
+                effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
                 poll_interval_s=0.01,
             ).run(
                 workflow,

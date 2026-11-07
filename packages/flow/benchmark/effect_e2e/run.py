@@ -73,6 +73,8 @@ from typing import Any, Callable, Optional
 import requests
 from benchmark.effect_e2e import ground_truth
 from benchmark.effect_e2e.record_service import (
+    BANNER_READ_CONTRACT,
+    ENCOUNTERS_READ_CONTRACT,
     TARGET_PATIENT,
     TARGET_TYPE,
     serve,
@@ -324,8 +326,7 @@ def _build_verifier(arm: str, base_url: str, db_path: Path) -> Any:
         # The app's self-reported banner: the weak, vision-style oracle.
         return RestRecordVerifier(
             base_url,
-            records_path="/api/ui/last-save",
-            records_key="records",
+            **BANNER_READ_CONTRACT,
             timeout_s=EFFECT_TIMEOUT_S,
             poll_interval_s=0.02,
         )
@@ -333,8 +334,7 @@ def _build_verifier(arm: str, base_url: str, db_path: Path) -> Any:
         # Out-of-band record oracle over the encounters surface only.
         return RestRecordVerifier(
             base_url,
-            records_path="/api/records",
-            records_key="records",
+            **ENCOUNTERS_READ_CONTRACT,
             timeout_s=EFFECT_TIMEOUT_S,
             poll_interval_s=0.02,
         )

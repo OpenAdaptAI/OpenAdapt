@@ -38,6 +38,7 @@ from openadapt_flow.repair.self_repair import (
     SelfRepair,
     SelfRepairRefused,
 )
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 
 pytest.importorskip("playwright.sync_api")
 
@@ -113,8 +114,7 @@ def _target(base_url: str, drift: Optional[str], init: str = "") -> ReplayTarget
         open_session,
         effect_verifier=RestRecordVerifier(
             base_url,
-            records_path="/api/db",
-            records_key="records",
+            **mockmed_rest_read_kwargs(),
             timeout_s=2.0,
             poll_interval_s=0.05,
         ),

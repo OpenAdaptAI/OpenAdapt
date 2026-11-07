@@ -79,6 +79,7 @@ from openadapt_flow.runtime.effects.late_write import (
     LATER_WRITE_DISPUTED,
     LATER_WRITE_UNJUDGED,
     LateOutcome,
+    parse_time,
     seconds_until,
     state_problem,
 )
@@ -773,6 +774,9 @@ class RecheckResult:
     #: The frame's closed evidence since the post-save read (counts and
     #: names, no values).
     evidence: dict[str, Any] = field(default_factory=dict)
+    #: A held native read did not establish the due time, so this recheck
+    #: remains pending. No completed judgment may be recorded for it.
+    recheck_owed: bool = False
 
     @property
     def verified(self) -> bool:
@@ -1616,13 +1620,24 @@ def _judge(
         )
         path: Optional[str] = str(write_result(doc, pending.workdir))
     except Exception as exc:  # noqa: BLE001 - unreadable store, timeout, used baseline
+        reasons = [
+            "the system of record could not be read back "
+            f"({type(exc).__name__}); the write may still land"
+        ]
+        if isinstance(exc, VerifyRunError):
+            code = (
+                exc.validation_reason if type(exc) is VerifyRunError else "unclassified"
+            )
+            label = (
+                "unclassified"
+                if code == "unclassified"
+                else f"receipt_validation.{code}"
+            )
+            reasons.append(f"verification diagnostic: {label}")
         return WriteResult(
             outcome=Outcome.UNCERTAIN,
             scope=_scope(pending.contract, {}),
-            reasons=[
-                "the system of record could not be read back "
-                f"({type(exc).__name__}); the write may still land"
-            ],
+            reasons=reasons,
             **base,
         )
     receipt = dict(doc["receipt"])
@@ -2252,6 +2267,8 @@ def recheck(
     late, trusted = _judge_recheck(
         contract, write, params=params, actor=actor, excused_by=excused_by, wait=wait
     )
+    if late.recheck_owed:
+        return late
     if late.outcome != "CONFIRMED":
         late = _hold_after_recheck(ledger, write, late, trusted=trusted)
     else:
@@ -2543,6 +2560,19 @@ def _judge_recheck(
             "a change since the verdict may be a later write's whose own "
             "frame was not judged; reconcile both"
         )
+    keep_owed = False
+    if status == "held":
+        try:
+            read_was_due = parse_time(read_at) >= parse_time(state.due_at)
+        except ValueError:
+            read_was_due = False
+        if not read_was_due:
+            status = "not_checked"
+            keep_owed = True
+            reasons.append(
+                "the recheck's read time does not establish that it was due; "
+                "the write remains unrechecked"
+            )
     if status == "refuted":
         kinds = ", ".join(sorted({c.change for c in verdict.collateral}))
         reasons.append(
@@ -2560,6 +2590,7 @@ def _judge_recheck(
             read_at=read_at,
             excused=len(excused),
             evidence=evidence,
+            recheck_owed=keep_owed,
         ),
         True,
     )

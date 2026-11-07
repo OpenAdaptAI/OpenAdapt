@@ -1120,3 +1120,65 @@ def test_dialog_row_evidence_preserves_frozen_legacy_seal_and_is_tamper_evident(
         (b / "workflow.json").write_text(json.dumps(raw))
         with pytest.raises(bv.BundleIntegrityError):
             Workflow.load(b, verify_integrity=True)
+
+
+def test_native_select_contract_preserves_value_and_legacy_serialization():
+    from openadapt_flow.ir import NativeSelectContract
+
+    contract = NativeSelectContract(
+        value="species-17",
+        label="Dog",
+        options=[
+            {"value": "", "label": "Choose", "disabled": False},
+            {"value": "species-17", "label": "Dog", "disabled": False},
+        ],
+    )
+    anchor = click_step().anchor.model_copy(deep=True)
+    anchor.structural = StructuralLocator(selector="#species")
+    step = Step(
+        id="select",
+        intent="select Dog",
+        action=ActionKind.SELECT_OPTION,
+        text="Dog",
+        native_selection=contract,
+        anchor=anchor,
+    )
+    assert Step.model_validate_json(step.model_dump_json()) == step
+    assert step.native_selection.value != step.text
+    assert "native_selection" not in key_step().model_dump(mode="json")
+    old = step.model_dump(mode="json")
+    old.pop("native_selection")
+    with pytest.raises(ValueError, match="SELECT_OPTION requires"):
+        Step.model_validate(old)
+    for patch in (
+        {"action": "type"},
+        {"param": "species"},
+        {"secret": True},
+        {"selection_commit_key": "Enter", "selection_region": [1, 2, 3, 4]},
+        {"text": "d"},
+        {"anchor": None},
+    ):
+        with pytest.raises(ValueError):
+            Step.model_validate({**step.model_dump(mode="json"), **patch})
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"value": "other", "label": " DOG ", "disabled": False},
+        {"value": "species-17", "label": "Another", "disabled": False},
+        {"value": "species-17", "label": "Dog", "disabled": True},
+    ],
+)
+def test_native_select_contract_rejects_ambiguous_or_disabled_options(extra):
+    from openadapt_flow.ir import NativeSelectContract
+
+    with pytest.raises(ValueError, match="unambiguous"):
+        NativeSelectContract(
+            value="species-17",
+            label="Dog",
+            options=[
+                {"value": "species-17", "label": "Dog", "disabled": False},
+                extra,
+            ],
+        )
