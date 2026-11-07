@@ -14,11 +14,11 @@ availability. Cost caps are required explicitly for every constructed agent.
 from __future__ import annotations
 
 import asyncio
-from datetime import date
 import importlib.util
 import math
 import os
 import time
+from datetime import date
 from decimal import Decimal
 from functools import wraps
 from typing import Any, Literal, Mapping, Optional
@@ -314,11 +314,14 @@ class OpenAIBrowserAgent:
             Decimal(str(self.prices[key]))
             for key in ("input", "cache_write", "cache_read")
         )
-        maximum_run_cost = Decimal(self.max_turns) * (
-            Decimal(self.max_input_bytes) * worst_input_rate
-            + Decimal(self.max_output_tokens)
-            * Decimal(str(self.prices["output"]))
-        ) / Decimal(1_000_000)
+        maximum_run_cost = (
+            Decimal(self.max_turns)
+            * (
+                Decimal(self.max_input_bytes) * worst_input_rate
+                + Decimal(self.max_output_tokens) * Decimal(str(self.prices["output"]))
+            )
+            / Decimal(1_000_000)
+        )
         if maximum_run_cost > Decimal(str(self.max_cost_usd)):
             raise ValueError(
                 "configured run cap is below the worst-case token-budget cost"
@@ -376,9 +379,8 @@ class OpenAIBrowserAgent:
                 reserve = _request_reservation_usd(
                     request_size, self.max_output_tokens, self.prices
                 )
-                if (
-                    _exact_ledger_cost(ledger, self.prices) + reserve
-                    > Decimal(str(self.max_cost_usd))
+                if _exact_ledger_cost(ledger, self.prices) + reserve > Decimal(
+                    str(self.max_cost_usd)
                 ):
                     raise BudgetExceeded(
                         "worst-case request reservation exceeds remaining run budget"
@@ -443,7 +445,9 @@ class OpenAIBrowserAgent:
                 try:
                     value = fn(*args, **kwargs)
                     if time.monotonic() >= deadline:
-                        raise TimeoutError("agent run deadline expired during browser tool")
+                        raise TimeoutError(
+                            "agent run deadline expired during browser tool"
+                        )
                     if isinstance(value, str):
                         if value.startswith("Stopped:"):
                             outcome = "refused"
@@ -639,14 +643,18 @@ def _reviewed_openai_prices(
     source_url: Optional[str],
     verified_at: Optional[str],
 ) -> bool:
-    return model is not None and price_model == model and _reviewed_prices(
-        model=model,
-        prices=prices,
-        price_model=price_model,
-        source_url=source_url,
-        verified_at=verified_at,
-        expected_host="developers.openai.com",
-        expected_url=OPENAI_PRICING_URL,
+    return (
+        model is not None
+        and price_model == model
+        and _reviewed_prices(
+            model=model,
+            prices=prices,
+            price_model=price_model,
+            source_url=source_url,
+            verified_at=verified_at,
+            expected_host="developers.openai.com",
+            expected_url=OPENAI_PRICING_URL,
+        )
     )
 
 
@@ -729,8 +737,7 @@ def _request_reservation_usd(
     prices: Mapping[str, float],
 ) -> Decimal:
     input_rate = max(
-        Decimal(str(prices[key]))
-        for key in ("input", "cache_write", "cache_read")
+        Decimal(str(prices[key])) for key in ("input", "cache_write", "cache_read")
     )
     amount = (
         Decimal(input_token_upper_bound) * input_rate

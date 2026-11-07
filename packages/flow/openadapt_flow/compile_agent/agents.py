@@ -613,7 +613,9 @@ class ClaudeAgent:
                         )
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
-                        raise TimeoutError("agent run deadline expired before token count")
+                        raise TimeoutError(
+                            "agent run deadline expired before token count"
+                        )
                     call_timeout = min(self.request_timeout_seconds, remaining)
                     with_options = getattr(client, "with_options", None)
                     if not callable(with_options):
@@ -641,7 +643,9 @@ class ClaudeAgent:
                     self._check_run_deadline(deadline)
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
-                        raise TimeoutError("agent run deadline expired before generation")
+                        raise TimeoutError(
+                            "agent run deadline expired before generation"
+                        )
                     call_timeout = min(self.request_timeout_seconds, remaining)
                     call_client = with_options(timeout=call_timeout, max_retries=0)
                 started = time.monotonic()
@@ -759,7 +763,9 @@ class ClaudeAgent:
         if prices is None:
             raise BudgetExceeded("reviewed pricing is unavailable; generation refused")
         if not isinstance(self.max_tokens, int) or isinstance(self.max_tokens, bool):
-            raise BudgetExceeded("maximum output tokens are invalid; generation refused")
+            raise BudgetExceeded(
+                "maximum output tokens are invalid; generation refused"
+            )
         input_rate = max(
             Decimal(str(prices["input"])),
             Decimal(str(prices["cache_write"])),
@@ -774,6 +780,7 @@ class ClaudeAgent:
             raise BudgetExceeded(
                 "worst-case request reservation exceeds remaining run budget"
             )
+
     def _run_tool(
         self,
         call: Mapping[str, Any],
@@ -857,9 +864,7 @@ class ClaudeAgent:
         return out
 
 
-def _exact_ledger_cost(
-    ledger: AgentLedger, prices: Mapping[str, float]
-) -> Decimal:
+def _exact_ledger_cost(ledger: AgentLedger, prices: Mapping[str, float]) -> Decimal:
     return sum(
         Decimal(ledger.total(field)) * Decimal(str(prices[price_key]))
         for field, price_key in (

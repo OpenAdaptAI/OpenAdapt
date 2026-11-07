@@ -6,8 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from openadapt_flow.compile_agent.agents import AgentLedger, BudgetExceeded, ModelCall
 from openadapt_flow.compile_agent import agents as compile_agent_module
+from openadapt_flow.compile_agent.agents import AgentLedger, BudgetExceeded, ModelCall
 from openadapt_flow.integrations.agents.providers import (
     _openai_usage,
     _request_upper_bound_bytes,
@@ -177,9 +177,12 @@ def test_framework_agent_requires_complete_call_usage_fields():
 
 def test_skill_replay_zero_calls_requires_explicit_usage_receipt():
     assert _skill_usage({"model_calls": 0}) == (0, None, None, False)
-    assert _skill_usage(
-        {"model_calls": 0, "usage": [], "usage_known": True}
-    ) == (0, 0.0, [], True)
+    assert _skill_usage({"model_calls": 0, "usage": [], "usage_known": True}) == (
+        0,
+        0.0,
+        [],
+        True,
+    )
 
 
 def test_skill_path_preserves_fallback_usage_or_unknown_cost():
@@ -223,9 +226,7 @@ def test_openai_browser_adapter_runs_the_sdk_with_a_scripted_local_model(monkeyp
                 role="assistant",
                 status="completed",
                 content=[
-                    ResponseOutputText(
-                        type="output_text", text="done", annotations=[]
-                    )
+                    ResponseOutputText(type="output_text", text="done", annotations=[])
                 ],
             )
             return ModelResponse(output=[message], usage=usage, response_id="r_local")

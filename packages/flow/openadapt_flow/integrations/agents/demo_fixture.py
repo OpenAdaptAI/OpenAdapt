@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import base64
 import json
-from importlib.resources import files as resource_files
 import re
 import sqlite3
 import subprocess
 import time
 import urllib.request
 from dataclasses import dataclass
+from importlib.resources import files as resource_files
 from pathlib import Path
 from typing import Any
 
@@ -55,9 +55,18 @@ class FixtureFiles:
 
 def packaged_pack(name: str) -> Path:
     """Resolve one installed demo DATA pack without a source checkout."""
-    if not isinstance(name, str) or re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", name) is None:
+    if (
+        not isinstance(name, str)
+        or re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", name) is None
+    ):
         raise ValueError("INVALID_DEMO_PACK_NAME")
-    path = Path(str(resource_files("openadapt_flow.integrations.agents").joinpath("demo_packs", name + ".json")))
+    path = Path(
+        str(
+            resource_files("openadapt_flow.integrations.agents").joinpath(
+                "demo_packs", name + ".json"
+            )
+        )
+    )
     if not path.is_file() or path.is_symlink():
         raise ValueError("DEMO_PACK_UNAVAILABLE")
     return path

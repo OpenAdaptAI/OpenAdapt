@@ -463,12 +463,19 @@ class SkillCache:
         except RepairSelectionError:
             compiler.dir.mkdir(parents=True, exist_ok=True)
             try:
-                descriptor = os.open(compiler.dir / _STOP_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                descriptor = os.open(
+                    compiler.dir / _STOP_FILE,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                    0o600,
+                )
             except FileExistsError:
                 pass
             else:
                 with os.fdopen(descriptor, "w") as stream:
-                    json.dump({"phase": "halted", "reason": "repair_selection_unavailable"}, stream)
+                    json.dump(
+                        {"phase": "halted", "reason": "repair_selection_unavailable"},
+                        stream,
+                    )
                     stream.flush()
                     os.fsync(stream.fileno())
             return self._held(compiler, started)
@@ -560,8 +567,14 @@ class SkillCache:
         )
 
     def adopt_repair(
-        self, prompt: str, params: Mapping[str, Any], *, repair_desk: Any,
-        candidate_id: str, verified_run_dir: Union[str, Path], receipt: Union[str, Path],
+        self,
+        prompt: str,
+        params: Mapping[str, Any],
+        *,
+        repair_desk: Any,
+        candidate_id: str,
+        verified_run_dir: Union[str, Path],
+        receipt: Union[str, Path],
     ) -> Path:
         """Select an already promoted, normally admitted one-step repair.
 
@@ -572,7 +585,9 @@ class SkillCache:
         """
         from openadapt_flow.agent.repair import RepairError
         from openadapt_flow.compile_agent.repair_selection import (
-            SELECTION_FILE, RepairSelectionError, validate_selection,
+            SELECTION_FILE,
+            RepairSelectionError,
+            validate_selection,
         )
         from openadapt_flow.ir import Workflow
 
@@ -594,36 +609,65 @@ class SkillCache:
                 raise ValueError("foreign halt")
             from openadapt_flow.ir import RunReport
 
-            halted = RunReport.model_validate_json((halted_run / "report.json").read_text())
+            halted = RunReport.model_validate_json(
+                (halted_run / "report.json").read_text()
+            )
             if halted.halt is None or workflow.manifest is None:
                 raise ValueError("no target halt")
             if workflow.manifest.content_digest != stopped["bundle_digest"]:
                 raise ValueError("another bundle")
             selected = {
                 "version": 1,
-                "store": str(Path(repair_desk.store_for(workflow.name)).resolve(strict=True)),
+                "store": str(
+                    Path(repair_desk.store_for(workflow.name)).resolve(strict=True)
+                ),
                 "candidate_id": candidate_id,
                 "prior_digest": stopped["bundle_digest"],
                 "halted_run": halted_run.name,
                 "step_id": halted.halt.state_id,
-                "verified_run": str(Path(verified_run_dir).resolve(strict=True).relative_to(runs)),
-                "receipt": str(Path(receipt).resolve(strict=True).relative_to((compiler.dir / "receipts").resolve(strict=True))),
+                "verified_run": str(
+                    Path(verified_run_dir).resolve(strict=True).relative_to(runs)
+                ),
+                "receipt": str(
+                    Path(receipt)
+                    .resolve(strict=True)
+                    .relative_to((compiler.dir / "receipts").resolve(strict=True))
+                ),
             }
             target = validate_selection(jit, selected)
-            proof = RunReport.model_validate_json((Path(verified_run_dir) / "report.json").read_text())
-            if {k: str(v) for k, v in proof.params.items()} != {k: str(v) for k, v in params.items()}:
+            proof = RunReport.model_validate_json(
+                (Path(verified_run_dir) / "report.json").read_text()
+            )
+            if {k: str(v) for k, v in proof.params.items()} != {
+                k: str(v) for k, v in params.items()
+            }:
                 raise ValueError("proof used other values")
             # A fresh independent read must still find the synthetic canary's
             # unique task record and all input values. It is a state check,
             # not a new causal write claim; the normal receipt is separate.
             rows = compiler.observer.system_of_record
-            matching = [] if rows is None else [row for row in rows if all(str(row.get(k)) == str(v) for k, v in self.common["expect"].items())]
-            if len(matching) != 1 or not set(map(str, params.values())).issubset({str(v) for v in matching[0].values() if v is not None}):
+            matching = (
+                []
+                if rows is None
+                else [
+                    row
+                    for row in rows
+                    if all(
+                        str(row.get(k)) == str(v)
+                        for k, v in self.common["expect"].items()
+                    )
+                ]
+            )
+            if len(matching) != 1 or not set(map(str, params.values())).issubset(
+                {str(v) for v in matching[0].values() if v is not None}
+            ):
                 raise ValueError("fresh record check failed")
             archive = compiler.dir / f"skill-stop-repaired-{candidate_id}.json"
             if archive.exists() or archive.is_symlink():
                 raise ValueError("repair already consumed")
-            descriptor, name = tempfile.mkstemp(dir=compiler.dir, prefix=".skill-repair-")
+            descriptor, name = tempfile.mkstemp(
+                dir=compiler.dir, prefix=".skill-repair-"
+            )
             try:
                 with os.fdopen(descriptor, "w") as stream:
                     json.dump(selected, stream)
@@ -636,7 +680,9 @@ class SkillCache:
             stop.rename(archive)
             return target
         except (OSError, ValueError, KeyError, TypeError, RepairSelectionError):
-            raise RepairError("This promoted repair has no matching verified cache handoff.") from None
+            raise RepairError(
+                "This promoted repair has no matching verified cache handoff."
+            ) from None
 
     def _skill_run(
         self, compiler: Any, server: Path, params: Mapping[str, Any], started: float
