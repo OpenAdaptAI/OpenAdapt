@@ -575,3 +575,55 @@ def test_unlabelled_field_click_with_write_request_stays_with_a_person():
     steps = [_click(0, "#dob", "textbox", name=None), _type(1, "dob")]
     sent = [{"method": "POST", "t": 0.5, "url": URL + "/check"}]
     assert local_edits(steps, _events(2), network=sent) == []
+
+
+def test_unlabelled_field_click_without_selector_stays_with_a_person():
+    steps = [_click(0, None, "textbox", name=None), _type(1, "dob")]
+    assert local_edits(steps, _events(2), network=[]) == []
+
+
+def test_unlabelled_field_click_followed_by_typing_into_different_field_stays_with_a_person():
+    typing_step = _type(1, "lname")
+    typing_step.anchor = Anchor(
+        template="templates/1.png",
+        region=(0, 0, 10, 10),
+        click_point=(5, 5),
+        structural=StructuralLocator(
+            selector="#lname", frame_path=list(FRAME), role="textbox", name=None
+        ),
+    )
+    steps = [_click(0, "#mystery", "textbox", name=None), typing_step]
+    assert local_edits(steps, _events(2), network=[]) == []
+
+
+def test_unlabelled_field_click_followed_by_typing_in_different_frame_stays_with_a_person():
+    typing_step = _type(1, "dob")
+    typing_step.anchor = Anchor(
+        template="templates/1.png",
+        region=(0, 0, 10, 10),
+        click_point=(5, 5),
+        structural=StructuralLocator(
+            selector="#dob",
+            frame_path=["div > iframe:nth-of-type(2)"],
+            role="textbox",
+            name=None,
+        ),
+    )
+    steps = [_click(0, "#dob", "textbox", name=None), typing_step]
+    assert local_edits(steps, _events(2), network=[]) == []
+
+
+def test_unlabelled_field_click_followed_by_matching_anchored_typing_is_a_local_edit():
+    typing_step = _type(1, "dob")
+    typing_step.anchor = Anchor(
+        template="templates/1.png",
+        region=(0, 0, 10, 10),
+        click_point=(5, 5),
+        structural=StructuralLocator(
+            selector="#dob", frame_path=list(FRAME), role="textbox", name=None
+        ),
+    )
+    steps = [_click(0, "#dob", "textbox", name=None), typing_step]
+    (edit,) = local_edits(steps, _events(2), network=[])
+    assert edit.step_id == "step_000"
+    assert edit.pattern == "focus_field"

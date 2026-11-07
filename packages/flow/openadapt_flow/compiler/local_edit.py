@@ -359,7 +359,11 @@ def _click_edit(step: Step, steps: Sequence[Step], k: int) -> Optional[LocalEdit
             f"and {acting.id} acts in the same frame; {_EVIDENCE}",
             [Postcondition(kind=PostconditionKind.LOCAL_EDIT)],
         )
-    if role in (TEXT_ROLES | CHOICE_ROLES) and not is_meaningful_label(label):
+    if (
+        target.selector
+        and role in (TEXT_ROLES | CHOICE_ROLES)
+        and not is_meaningful_label(label)
+    ):
         acting = next(
             (
                 later
@@ -387,15 +391,18 @@ def _click_edit(step: Step, steps: Sequence[Step], k: int) -> Optional[LocalEdit
                 if after_acting is not None and after_acting.action is ActionKind.TYPE:
                     typing_step = after_acting
 
-        if typing_step is not None and (
-            _frame(typing_step) is None or _frame(typing_step) == _frame(step)
+        typing_target = _structural(typing_step)
+        typing_selector = typing_target.selector if typing_target is not None else None
+        if (
+            typing_step is not None
+            and (typing_selector is None or typing_selector == target.selector)
+            and (_frame(typing_step) is None or _frame(typing_step) == _frame(step))
         ):
             kind = "dropdown" if role in CHOICE_ROLES else "field"
-            desc = target.selector or kind
             return LocalEdit(
                 step.id,
                 "focus_field",
-                f"{LOCAL_EDIT_PREFIX} focuses the {kind} ({desc}) "
+                f"{LOCAL_EDIT_PREFIX} focuses the {kind} ({target.selector}) "
                 f"before {typing_step.id} types into it; {_EVIDENCE}",
                 [
                     Postcondition(
