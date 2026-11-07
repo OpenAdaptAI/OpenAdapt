@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import shutil
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -26,8 +25,8 @@ from openadapt_flow.repair.candidate import (
 from openadapt_flow.repair.lifecycle import ActivePointer, RepairStore
 from openadapt_flow.repair.registration import build_candidate
 from tests.test_skill_cache_runtime import (
-    PROMPT,  # noqa: F401 -- shared component fixture
-    model,
+    PROMPT,
+    model as model,  # Explicitly re-export the shared pytest fixture.
     prepare_repair,
 )
 
@@ -359,16 +358,31 @@ def test_skill_usage_preserves_unknown_and_actual_repair_calls(reply, expected):
     assert _skill_usage(reply) == expected
 
 
-@pytest.mark.parametrize("error", [
-    "integrity", "structure", "crypto", "missing_key", "decryption",
-])
-def test_native_bundle_load_refusals_remain_a_closed_cache_hold(promoted, monkeypatch, error):
-    from openadapt_flow.bundle_validation import BundleIntegrityError, BundleValidationError, ValidationReport
-    from openadapt_flow.crypto import CryptoError, MissingKeyError, DecryptionError
+@pytest.mark.parametrize(
+    "error",
+    [
+        "integrity",
+        "structure",
+        "crypto",
+        "missing_key",
+        "decryption",
+    ],
+)
+def test_native_bundle_load_refusals_remain_a_closed_cache_hold(
+    promoted, monkeypatch, error
+):
+    from openadapt_flow.bundle_validation import (
+        BundleIntegrityError,
+        BundleValidationError,
+        ValidationReport,
+    )
+    from openadapt_flow.crypto import CryptoError, DecryptionError, MissingKeyError
 
     failures = {
         "integrity": BundleIntegrityError("component corruption"),
-        "structure": BundleValidationError(ValidationReport(workflow_name="component"), []),
+        "structure": BundleValidationError(
+            ValidationReport(workflow_name="component"), []
+        ),
         "crypto": CryptoError("component encrypted bundle"),
         "missing_key": MissingKeyError("component missing key"),
         "decryption": DecryptionError("component decryption refusal"),

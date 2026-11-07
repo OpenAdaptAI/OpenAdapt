@@ -228,7 +228,16 @@ def validate_selection(jit: Any, selected: Mapping[str, Any]) -> Path:
             raise ValueError("prior run cannot be repaired")
         _proof(jit, selected, repaired, halted)
         return repaired_path
-    except (OSError, ValueError, KeyError, TypeError, RuntimeError, BundleIntegrityError, BundleValidationError, CryptoError) as exc:
+    except (
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+        RuntimeError,
+        BundleIntegrityError,
+        BundleValidationError,
+        CryptoError,
+    ) as exc:
         raise RepairSelectionError(
             "The selected repair is unavailable or no longer verified."
         ) from exc
