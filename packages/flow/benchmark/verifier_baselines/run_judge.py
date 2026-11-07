@@ -188,7 +188,7 @@ async def effect_e2e(client: Any, parallel: int, views: list[str]) -> None:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("set", choices=["medplum", "effect_e2e"])
     ap.add_argument("--parallel", type=int, default=6)
     ap.add_argument("--views", default="j1_view,j2_view")

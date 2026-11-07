@@ -24,6 +24,7 @@ Usage:
     openadapt doctor
 """
 
+import argparse
 import json
 import os
 import platform
@@ -1540,10 +1541,8 @@ def seal(command_ctx: click.Context) -> None:
     sys.exit(int(agent_main(["seal", *command_ctx.args]) or 0))
 
 
-def _view_sealed_runs(argv: list[str]) -> int:
-    """`openadapt seal view RUN_DIR`: write each sealed run's offline Seal page."""
-    import argparse
-
+def _seal_view_parser() -> argparse.ArgumentParser:
+    """Build the launcher's argparse command without reading or opening runs."""
     parser = argparse.ArgumentParser(
         prog="openadapt seal view",
         description=(
@@ -1553,6 +1552,7 @@ def _view_sealed_runs(argv: list[str]) -> int:
             "network requests. A folder of runs (such as the quickstart's) gets "
             "one page per sealed run."
         ),
+        allow_abbrev=False,
     )
     parser.add_argument(
         "run_dir", type=Path, help="a sealed run folder, or a folder of them"
@@ -1570,7 +1570,12 @@ def _view_sealed_runs(argv: list[str]) -> int:
         help="the run's compiled bundle, for the program map (default: found next to the run)",
     )
     parser.add_argument("--no-open", action="store_true", help="write the page only")
-    options = parser.parse_args(argv)
+    return parser
+
+
+def _view_sealed_runs(argv: list[str]) -> int:
+    """`openadapt seal view RUN_DIR`: write each sealed run's offline Seal page."""
+    options = _seal_view_parser().parse_args(argv)
     folder = options.run_dir
     runs = _sealed_run_dirs(folder) if folder.is_dir() else []
     if not runs:

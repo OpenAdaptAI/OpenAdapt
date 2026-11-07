@@ -159,7 +159,6 @@ def agent_for(chat: Any) -> Any:
     from langchain_core.tools import StructuredTool
     from langgraph.graph import END, START, MessagesState, StateGraph
     from langgraph.prebuilt import ToolNode, tools_condition
-
     from openadapt_flow.compile_agent.agents import PRICES_PER_MTOK
     from openadapt_flow.integrations.agents.skills import FrameworkAgent
 
@@ -251,7 +250,7 @@ def admitter_for(key_dir: Path) -> Any:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--app", choices=sorted(APPS), required=True)
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--work", type=Path, required=True, help="private state")
@@ -264,7 +263,6 @@ def main() -> int:
     import subprocess
 
     from langchain_anthropic import ChatAnthropic
-
     from openadapt_flow.integrations.agents.skills import SkillCache
     from openadapt_flow.jit.keys import load_customer_model_key
 

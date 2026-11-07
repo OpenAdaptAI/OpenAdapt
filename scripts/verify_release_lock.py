@@ -102,7 +102,7 @@ def verify_release_lock(root: Path = ROOT) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument(
         "--write",
         action="store_true",

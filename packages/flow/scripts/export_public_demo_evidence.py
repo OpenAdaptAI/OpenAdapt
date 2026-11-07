@@ -45,9 +45,6 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from jsonschema import Draft202012Validator
-from PIL import Image
-from pydantic import ValidationError
-
 from openadapt_flow import __version__ as FLOW_VERSION
 from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 from openadapt_flow.compiler import compile_recording
@@ -88,6 +85,8 @@ from openadapt_flow.visualize import (
     project_program_graph,
     render_html,
 )
+from PIL import Image
+from pydantic import ValidationError
 
 SCHEMA_VERSION = "openadapt.public-demo-evidence/v1"
 OUTCOME_SCHEMA_VERSION = "openadapt.public-demo-outcome/v1"
@@ -453,11 +452,10 @@ class _PresentationCapture:
     """
 
     def __init__(self, *, mode: str) -> None:
-        from openadapt_types import ControlOverlayMode
-
         from openadapt_flow.runtime.control_overlay import (
             RuntimeControlOverlayEmitter,
         )
+        from openadapt_types import ControlOverlayMode
 
         self.frames: list[Any] = []
         self.screenshots: list[bytes] = []
@@ -609,11 +607,10 @@ def _write_presentation_clip(
 ) -> None:
     """Encode one fresh exact-frame derivative and its canonical V2 timeline."""
 
-    from openadapt_types import ControlOverlayDataClassification
-
     from openadapt_flow.runtime.control_overlay import (
         build_runtime_control_overlay_timeline_v2,
     )
+    from openadapt_types import ControlOverlayDataClassification
 
     if not capture.frames or len(capture.frames) != len(capture.screenshots):
         raise EvidencePackError(f"{clip_id} presentation capture is incomplete")
@@ -2624,7 +2621,7 @@ def validate_pack(pack_dir: Path | str) -> dict[str, Any]:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument(
         "--out",
         type=Path,

@@ -588,7 +588,9 @@ def run_trial(transport: str, out: Path, row: dict[str, Any]) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--transport", choices=("native", "rdp"), required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--evidence", type=Path, required=True)
