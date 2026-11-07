@@ -38,11 +38,20 @@ import os
 import secrets
 import threading
 import time
-from copy import deepcopy
 from contextlib import contextmanager
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, ContextManager, Iterator, Mapping, Optional, Protocol, Sequence
+from typing import (
+    Any,
+    Callable,
+    ContextManager,
+    Iterator,
+    Mapping,
+    Optional,
+    Protocol,
+    Sequence,
+)
 
 __all__ = [
     "Attempt",
@@ -247,7 +256,9 @@ class FileLedger:
                 os.chmod(path, 0o600)
                 fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
                 try:
-                    yield _Journal(lambda: self._events(key), lambda e: self._append(key, e))
+                    yield _Journal(
+                        lambda: self._events(key), lambda e: self._append(key, e)
+                    )
                 finally:
                     fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
         except OSError as exc:
@@ -263,7 +274,9 @@ class FileLedger:
                 torn = size > 0 and os.pread(fd, 1, size - 1) != b"\n"
                 # Preserve a torn tail without making a previously complete
                 # but unterminated JSON object effective on the next append.
-                data = ((" [incomplete]\n" if torn else "") + line + "\n").encode("utf-8")
+                data = ((" [incomplete]\n" if torn else "") + line + "\n").encode(
+                    "utf-8"
+                )
                 while data:
                     written = os.write(fd, data)
                     if written <= 0:
@@ -584,7 +597,9 @@ class Ledger:
             self.backend, "transaction", None
         )
         if not callable(transaction):
-            raise LedgerError("the ledger backend does not support atomic journal updates")
+            raise LedgerError(
+                "the ledger backend does not support atomic journal updates"
+            )
         return transaction(_check_key(key))
 
     def _update(
@@ -613,9 +628,16 @@ class Ledger:
             fresh = expected_revision is None or (
                 type(expected_revision) is int and expected_revision == len(events)
             )
-            refuted = current and prior is not None and (prior.resolved or {}).get("outcome") == "REFUTED"
+            refuted = (
+                current
+                and prior is not None
+                and (prior.resolved or {}).get("outcome") == "REFUTED"
+            )
             tightening = kind == "resolved" and event.get("outcome") == "REFUTED"
             person = kind == "released" or event.get("via") == "person"
+            # A current positive recheck is an observation, not a release.
+            # The fold leaves earlier non-confirmed settlements unchanged.
+            positive_recheck = kind == "rechecked" and event.get("outcome") == "CONFIRMED"
             if kind == "begun":
                 applied = fresh and (prior is None or self.state(prior) == "free")
                 applied = applied and not any(
@@ -626,16 +648,19 @@ class Ledger:
                 applied = bool(current and (fresh or (tightening and not person)))
                 if person and not person_decision:
                     applied = False
-                if refuted and not tightening and not person:
+                if refuted and not tightening and not person and not positive_recheck:
                     applied = False
                 if kind == "rechecked" and (
-                    prior is None or (prior.resolved or {}).get("outcome") != "CONFIRMED"
+                    prior is None
+                    or ((prior.resolved or {}).get("outcome") != "CONFIRMED" and not positive_recheck)
                 ):
                     applied = False
             stored = {
                 **event,
                 "revision": len(events) + 1,
-                "based_on": len(events) if expected_revision is None else expected_revision,
+                "based_on": len(events)
+                if expected_revision is None
+                else expected_revision,
                 "applied": applied,
             }
             journal.append(stored)
@@ -691,7 +716,9 @@ class Ledger:
                 resolved = attempt.resolved
                 if attempt.released and resolved is None:
                     resolved = next(
-                        e for e in reversed(attempt.events) if e.get("event") == "released"
+                        e
+                        for e in reversed(attempt.events)
+                        if e.get("event") == "released"
                         and e.get("applied") is not False
                     )
                 out.append((key, attempt.begun, resolved))
@@ -711,8 +738,13 @@ class Ledger:
         )
 
     def resolved(
-        self, key: str, attempt_id: str, *, expected_revision: Optional[int] = None,
-        cleanup: Optional[Path] = None, **fields: Any,
+        self,
+        key: str,
+        attempt_id: str,
+        *,
+        expected_revision: Optional[int] = None,
+        cleanup: Optional[Path] = None,
+        **fields: Any,
     ) -> Attempt:
         return self._update(
             key,
@@ -728,7 +760,11 @@ class Ledger:
         )
 
     def rechecked(
-        self, key: str, attempt_id: str, *, expected_revision: Optional[int] = None,
+        self,
+        key: str,
+        attempt_id: str,
+        *,
+        expected_revision: Optional[int] = None,
         **fields: Any,
     ) -> Attempt:
         """A recheck confirmed the attempt's provisional result: no
@@ -747,10 +783,15 @@ class Ledger:
         )
 
     def delivered(
-        self, key: str, attempt_id: str, *, expected_revision: Optional[int] = None,
+        self,
+        key: str,
+        attempt_id: str,
+        *,
+        expected_revision: Optional[int] = None,
     ) -> Attempt:
         return self._update(
-            key, {"event": "delivered", "attempt": attempt_id, "at": _now()},
+            key,
+            {"event": "delivered", "attempt": attempt_id, "at": _now()},
             expected_revision=expected_revision,
             require_applied=True,
         )

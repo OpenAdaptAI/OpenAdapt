@@ -1058,7 +1058,9 @@ def _settle(
         # The lifecycle lease does not exclude late rechecks. Linearize the
         # handback against their settlements even if an earlier reply was
         # already delivered, then use that accepted snapshot.
-        attempt = led.delivered(key, attempt.attempt_id, expected_revision=attempt.revision)
+        attempt = led.delivered(
+            key, attempt.attempt_id, expected_revision=attempt.revision
+        )
         assert attempt.resolved is not None
         result = dict(attempt.resolved.get("result") or {})
         result["not_sent_again"] = True
@@ -1333,7 +1335,8 @@ def verify_write(
     try:
         before_judge = (
             pending.ledger.latest(pending.write_key)
-            if holds_lease and pending.ledger is not None else None
+            if holds_lease and pending.ledger is not None
+            else None
         )
         result = _judge(
             pending, write_attempted=write_attempted, source=source, seal=seal
@@ -1357,7 +1360,9 @@ def verify_write(
                 via="verify_write",
                 write_key_bound=pending.write_key_bound,
                 folder=pending.workdir,
-                expected_revision=before_judge.revision if before_judge is not None else -1,
+                expected_revision=before_judge.revision
+                if before_judge is not None
+                else -1,
             )
     finally:
         pending.release()
@@ -1462,7 +1467,9 @@ def _record(
         or not attempt.events
         or attempt.events[-1].get("applied") is False
     ):
-        return _downgrade(result, "the ledger attempt changed while the write was checked")
+        return _downgrade(
+            result, "the ledger attempt changed while the write was checked"
+        )
     return result
 
 
@@ -2283,12 +2290,18 @@ def recheck(
     """
 
     late, trusted, revision = _judge_recheck(
-        contract, write, params=params, actor=actor, excused_by=excused_by, wait=wait,
+        contract,
+        write,
+        params=params,
+        actor=actor,
+        excused_by=excused_by,
+        wait=wait,
         ledger=ledger,
     )
     if late.outcome != "CONFIRMED":
-        late = _hold_after_recheck(ledger, write, late, trusted=trusted,
-                                   expected_revision=revision)
+        late = _hold_after_recheck(
+            ledger, write, late, trusted=trusted, expected_revision=revision
+        )
     else:
         late = _mark_rechecked(ledger, write, late, expected_revision=revision)
     return late
@@ -2316,22 +2329,31 @@ def _recheck_revision(ledger: Any, write: WriteResult | RecheckState) -> Optiona
         else:
             found = led.find_attempt(write_id)
             attempt = found[1] if found is not None else None
-        return attempt.revision if attempt is not None and attempt.attempt_id == write_id else -1
+        return (
+            attempt.revision
+            if attempt is not None and attempt.attempt_id == write_id
+            else -1
+        )
     except Exception:  # noqa: BLE001 - no read can grant permission on failure
         return -1
 
 
 def _mark_rechecked(
-    ledger: Any, write: WriteResult | RecheckState, late: RecheckResult, *,
+    ledger: Any,
+    write: WriteResult | RecheckState,
+    late: RecheckResult,
+    *,
     expected_revision: Optional[int] = None,
 ) -> RecheckResult:
     """Record on the write's ledger attempt that a recheck confirmed it, so
     ``openadapt verify ledger list`` no longer shows a recheck owed and a
     retry is handed a result that is no longer provisional.
 
-    A journal change can invalidate this positive handback. If settlement
-    fails or the attempt is held, return UNCERTAIN rather than handing back
-    a positive that the ledger did not accept. The read facts stay intact.
+    A journal change can invalidate this positive observation. If the
+    revision changed or recording fails, return UNCERTAIN. A fresh read
+    may still confirm while the ledger retains an earlier REFUTED or
+    UNCERTAIN settlement: this observation does not release that hold or
+    grant permission to retry. The read facts stay intact.
     """
 
     try:
@@ -2346,16 +2368,28 @@ def _mark_rechecked(
         if led is None:
             return late
         if not write_id:
-            return _replace(late, outcome="UNCERTAIN", reasons=[*late.reasons,
-                "the write has no ledger attempt identity; hold this write by hand"])
+            return _replace(
+                late,
+                outcome="UNCERTAIN",
+                reasons=[
+                    *late.reasons,
+                    "the write has no ledger attempt identity; hold this write by hand",
+                ],
+            )
         if key:
             attempt = led.latest(key)
         else:
             found = led.find_attempt(write_id)
             key, attempt = found if found is not None else ("", None)
         if attempt is None or attempt.attempt_id != write_id:
-            return _replace(late, outcome="UNCERTAIN", reasons=[*late.reasons,
-                "the ledger no longer has this attempt as its current write"])
+            return _replace(
+                late,
+                outcome="UNCERTAIN",
+                reasons=[
+                    *late.reasons,
+                    "the ledger no longer has this attempt as its current write",
+                ],
+            )
         recorded = led.rechecked(
             key,
             write_id,
@@ -2369,11 +2403,23 @@ def _mark_rechecked(
             or not recorded.events
             or recorded.events[-1].get("applied") is False
         ):
-            return _replace(late, outcome="UNCERTAIN", reasons=[*late.reasons,
-                "the ledger did not accept this recheck; the attempt remains held"])
+            return _replace(
+                late,
+                outcome="UNCERTAIN",
+                reasons=[
+                    *late.reasons,
+                    "the ledger did not accept this recheck; the attempt remains held",
+                ],
+            )
     except Exception:  # noqa: BLE001 - the list keeps showing it owed
-        return _replace(late, outcome="UNCERTAIN", reasons=[*late.reasons,
-            "the ledger could not record the recheck; hold this write by hand"])
+        return _replace(
+            late,
+            outcome="UNCERTAIN",
+            reasons=[
+                *late.reasons,
+                "the ledger could not record the recheck; hold this write by hand",
+            ],
+        )
     return late
 
 
@@ -2472,12 +2518,20 @@ def _hold_after_recheck(
             or not recorded.events
             or recorded.events[-1].get("applied") is False
         ):
-            if recorded.attempt_id == write_id and (
-                recorded.resolved or {}
-            ).get("outcome") == "REFUTED":
-                return _replace(late, reasons=[*late.reasons,
-                    "the ledger already holds this write as REFUTED; the new observation was retained without changing the hold"])
-            return unheld("a concurrent settlement kept the existing hold or changed the attempt")
+            if (
+                recorded.attempt_id == write_id
+                and (recorded.resolved or {}).get("outcome") == "REFUTED"
+            ):
+                return _replace(
+                    late,
+                    reasons=[
+                        *late.reasons,
+                        "the ledger already holds this write as REFUTED; the new observation was retained without changing the hold",
+                    ],
+                )
+            return unheld(
+                "a concurrent settlement kept the existing hold or changed the attempt"
+            )
     except Exception as exc:  # noqa: BLE001 - the verdict stands; say so
         return _replace(
             late,

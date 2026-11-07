@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from openadapt_flow import write_ledger as wl
 
@@ -25,13 +26,18 @@ def _started(backend: wl.LedgerBackend, key: str = KEY) -> wl.Ledger:
 
 @pytest.fixture(params=["memory", "file"])
 def ledger(request: pytest.FixtureRequest, tmp_path: Path) -> wl.Ledger:
-    backend = wl.MemoryLedger(tmp_path) if request.param == "memory" else wl.FileLedger(tmp_path)
+    backend = (
+        wl.MemoryLedger(tmp_path)
+        if request.param == "memory"
+        else wl.FileLedger(tmp_path)
+    )
     return _started(backend)
 
 
 @pytest.mark.parametrize("weak", ["UNCERTAIN", "CONFIRMED", "retry", "rechecked"])
 def test_stale_observation_is_retained_without_clearing_hold(
-    ledger: wl.Ledger, weak: str,
+    ledger: wl.Ledger,
+    weak: str,
 ) -> None:
     before = ledger.latest(KEY)
     assert before is not None
@@ -39,8 +45,13 @@ def test_stale_observation_is_retained_without_clearing_hold(
     if weak == "rechecked":
         ledger.rechecked(KEY, "first", expected_revision=before.revision)
     else:
-        ledger.resolved(KEY, "first", outcome="UNCERTAIN" if weak == "retry" else weak,
-                        retry_safe=weak == "retry", expected_revision=before.revision)
+        ledger.resolved(
+            KEY,
+            "first",
+            outcome="UNCERTAIN" if weak == "retry" else weak,
+            retry_safe=weak == "retry",
+            expected_revision=before.revision,
+        )
     after = ledger.latest(KEY)
     assert after is not None and after.state == "held"
     assert after.resolved is not None and after.resolved["outcome"] == "REFUTED"
@@ -50,8 +61,13 @@ def test_stale_observation_is_retained_without_clearing_hold(
     assert ledger.attempts()[0][2] == after.resolved
 
 
-@given(st.lists(st.sampled_from(["CONFIRMED", "UNCERTAIN", "REFUTED", "retry", "rechecked"]),
-                min_size=1, max_size=20))
+@given(
+    st.lists(
+        st.sampled_from(["CONFIRMED", "UNCERTAIN", "REFUTED", "retry", "rechecked"]),
+        min_size=1,
+        max_size=20,
+    )
+)
 @settings(max_examples=60, deadline=None)
 def test_one_revision_model_for_all_observation_orders(operations: list[str]) -> None:
     # All workers observed the same first revision. Only the first weak
@@ -63,20 +79,29 @@ def test_one_revision_model_for_all_observation_orders(operations: list[str]) ->
         if operation == "REFUTED":
             held = True
         if index == 0:
-            expected = {"CONFIRMED": "undelivered", "retry": "free"}.get(operation, "uncertain")
+            expected = {"CONFIRMED": "undelivered", "retry": "free"}.get(
+                operation, "uncertain"
+            )
             if operation == "rechecked":
                 expected = "open"
         if operation == "rechecked":
             ledger.rechecked(KEY, "first", expected_revision=1)
         else:
-            ledger.resolved(KEY, "first", outcome="UNCERTAIN" if operation == "retry" else operation,
-                            retry_safe=operation == "retry", expected_revision=1)
+            ledger.resolved(
+                KEY,
+                "first",
+                outcome="UNCERTAIN" if operation == "retry" else operation,
+                retry_safe=operation == "retry",
+                expected_revision=1,
+            )
         attempt = ledger.latest(KEY)
         assert attempt is not None
         assert attempt.state == ("held" if held else expected)
         assert len(attempt.events) == index + 2
         assert attempt.revision == index + 2
-        assert [event["revision"] for event in attempt.events] == list(range(1, index + 3))
+        assert [event["revision"] for event in attempt.events] == list(
+            range(1, index + 3)
+        )
 
 
 def test_memory_threads_pause_after_read_before_weak_append(tmp_path: Path) -> None:
@@ -89,8 +114,13 @@ def test_memory_threads_pause_after_read_before_weak_append(tmp_path: Path) -> N
         assert snapshot is not None
         read.set()
         assert resume.wait(10)
-        return ledger.resolved(KEY, "first", outcome="UNCERTAIN", retry_safe=True,
-                               expected_revision=snapshot.revision)
+        return ledger.resolved(
+            KEY,
+            "first",
+            outcome="UNCERTAIN",
+            retry_safe=True,
+            expected_revision=snapshot.revision,
+        )
 
     with ThreadPoolExecutor(max_workers=1) as pool:
         task = pool.submit(weak_worker)
@@ -107,17 +137,26 @@ def _file_worker(root: str, ready: Any, resume: Any, output: Any) -> None:
     assert snapshot is not None
     ready.set()
     assert resume.wait(15)
-    after = ledger.resolved(KEY, "first", outcome="CONFIRMED", retry_safe=False,
-                            expected_revision=snapshot.revision)
+    after = ledger.resolved(
+        KEY,
+        "first",
+        outcome="CONFIRMED",
+        retry_safe=False,
+        expected_revision=snapshot.revision,
+    )
     output.put((after.state, after.events[-1]["applied"]))
 
 
-def test_file_independent_process_and_reopen_preserve_raw_prefix(tmp_path: Path) -> None:
+def test_file_independent_process_and_reopen_preserve_raw_prefix(
+    tmp_path: Path,
+) -> None:
     ledger = _started(wl.FileLedger(tmp_path))
     prefix = ledger.backend.events(KEY)
     context = multiprocessing.get_context("spawn")
     ready, resume, output = context.Event(), context.Event(), context.Queue()
-    worker = context.Process(target=_file_worker, args=(str(tmp_path), ready, resume, output))
+    worker = context.Process(
+        target=_file_worker, args=(str(tmp_path), ready, resume, output)
+    )
     worker.start()
     try:
         assert ready.wait(15)
@@ -133,11 +172,13 @@ def test_file_independent_process_and_reopen_preserve_raw_prefix(tmp_path: Path)
             worker.join(15)
     reopened = wl.Ledger(wl.FileLedger(tmp_path))
     events = reopened.backend.events(KEY)
-    assert events[:len(prefix)] == prefix and len(events) == 3
+    assert events[: len(prefix)] == prefix and len(events) == 3
     assert reopened.latest(KEY).state == "held"  # type: ignore[union-attr]
 
 
-def test_stale_record_cannot_prune_or_mutate_newer_attempt(ledger: wl.Ledger, tmp_path: Path) -> None:
+def test_stale_record_cannot_prune_or_mutate_newer_attempt(
+    ledger: wl.Ledger, tmp_path: Path
+) -> None:
     folder = tmp_path / "saved"
     folder.mkdir()
     values = folder / "attempt.json"
@@ -146,23 +187,35 @@ def test_stale_record_cannot_prune_or_mutate_newer_attempt(ledger: wl.Ledger, tm
     assert first is not None
     ledger.resolved(KEY, "first", outcome="UNCERTAIN", retry_safe=True)
     ledger.begun(KEY, "second")
-    ledger.resolved(KEY, "first", outcome="CONFIRMED", expected_revision=first.revision,
-                    cleanup=folder)
+    ledger.resolved(
+        KEY,
+        "first",
+        outcome="CONFIRMED",
+        expected_revision=first.revision,
+        cleanup=folder,
+    )
     current = ledger.latest(KEY)
-    assert current is not None and current.attempt_id == "second" and current.state == "open"
+    assert (
+        current is not None
+        and current.attempt_id == "second"
+        and current.state == "open"
+    )
     assert values.read_text() == "synthetic"
     assert ledger.backend.events(KEY)[-1]["applied"] is False
 
 
 def test_explicit_release_is_separate_and_stale_release_refuses(
-    ledger: wl.Ledger, monkeypatch: pytest.MonkeyPatch,
+    ledger: wl.Ledger,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     ledger.resolved(KEY, "first", outcome="REFUTED")
     original = ledger._update
 
     def concurrent(key: str, event: Any, **kwargs: Any) -> wl.Attempt:
         if event["event"] == "released":
-            original(key, {"event": "resolved", "attempt": "first", "outcome": "REFUTED"})
+            original(
+                key, {"event": "resolved", "attempt": "first", "outcome": "REFUTED"}
+            )
         return original(key, event, **kwargs)
 
     monkeypatch.setattr(ledger, "_update", concurrent)
@@ -170,20 +223,39 @@ def test_explicit_release_is_separate_and_stale_release_refuses(
         ledger.release(KEY, by="operator", reason="synthetic check", found="absent")
     assert ledger.latest(KEY).state == "held"  # type: ignore[union-attr]
     monkeypatch.setattr(ledger, "_update", original)
-    released = ledger.release(KEY, by="operator", reason="synthetic check", found="absent")
+    released = ledger.release(
+        KEY, by="operator", reason="synthetic check", found="absent"
+    )
     assert released.state == "free" and released.released
     assert released.resolved is not None and released.resolved["outcome"] == "REFUTED"
     assert ledger.attempts()[0][2] == released.resolved
 
 
 def test_raw_fields_cannot_mint_acceptance_or_release(ledger: wl.Ledger) -> None:
-    ledger.backend.append(KEY, {"event": "resolved", "attempt": "first", "outcome": "REFUTED",
-                               "retry_safe": True, "landed": True})
+    ledger.backend.append(
+        KEY,
+        {
+            "event": "resolved",
+            "attempt": "first",
+            "outcome": "REFUTED",
+            "retry_safe": True,
+            "landed": True,
+        },
+    )
     assert ledger.latest(KEY).state == "held"  # type: ignore[union-attr]
     for kind in ("resolved", "released", "rechecked"):
-        ledger.backend.append(KEY, {"event": kind, "attempt": "first", "outcome": "UNCERTAIN",
-                                   "via": "person", "retry_safe": True, "applied": True,
-                                   "based_on": 1})
+        ledger.backend.append(
+            KEY,
+            {
+                "event": kind,
+                "attempt": "first",
+                "outcome": "UNCERTAIN",
+                "via": "person",
+                "retry_safe": True,
+                "applied": True,
+                "based_on": 1,
+            },
+        )
         assert ledger.latest(KEY).state == "held"  # type: ignore[union-attr]
         assert ledger.backend.events(KEY)[-1]["applied"] is False
         assert ledger.backend.events(KEY)[-1]["based_on"] == 1
@@ -194,9 +266,14 @@ def test_nonconflicting_keys_and_current_positive_still_work(ledger: wl.Ledger) 
     before = ledger.latest(KEY)
     assert before is not None
     ledger.resolved(OTHER, "unrelated", outcome="REFUTED")
-    after = ledger.resolved(KEY, "first", outcome="CONFIRMED", delivered=False,
-                            expected_revision=before.revision,
-                            result={"provisional": True, "recheck_due_at": "future"})
+    after = ledger.resolved(
+        KEY,
+        "first",
+        outcome="CONFIRMED",
+        delivered=False,
+        expected_revision=before.revision,
+        result={"provisional": True, "recheck_due_at": "future"},
+    )
     settled = ledger.rechecked(KEY, "first", expected_revision=after.revision)
     assert settled.rechecked is not None and settled.recheck_owed is None
     delivered = ledger.delivered(KEY, "first", expected_revision=settled.revision)
@@ -232,7 +309,9 @@ def test_custom_backend_without_transaction_fails_closed(tmp_path: Path) -> None
 
 @pytest.mark.parametrize("failure", ["write", "fsync"])
 def test_failed_durable_append_never_runs_cleanup(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
 ) -> None:
     ledger = _started(wl.FileLedger(tmp_path / "ledger"))
     saved = tmp_path / "saved"
@@ -254,7 +333,9 @@ def test_failed_durable_append_never_runs_cleanup(
     lease.release()
 
 
-def test_short_writes_complete_one_locked_event(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_short_writes_complete_one_locked_event(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     ledger = _started(wl.FileLedger(tmp_path))
     write = wl.os.write
     with monkeypatch.context() as patch:
@@ -265,7 +346,8 @@ def test_short_writes_complete_one_locked_event(tmp_path: Path, monkeypatch: pyt
 
 
 def test_complete_json_in_torn_append_never_becomes_retry_permission(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     ledger = _started(wl.FileLedger(tmp_path))
     write = wl.os.write
@@ -291,11 +373,43 @@ def test_complete_json_in_torn_append_never_becomes_retry_permission(
 
 
 def test_legacy_explicit_release_is_workflow_not_absence_proof() -> None:
-    raw = [{"event": "begun", "attempt": "legacy"},
-           {"event": "resolved", "attempt": "legacy", "outcome": "REFUTED", "retry_safe": True},
-           {"event": "resolved", "attempt": "legacy", "outcome": "CONFIRMED"}]
+    raw = [
+        {"event": "begun", "attempt": "legacy"},
+        {
+            "event": "resolved",
+            "attempt": "legacy",
+            "outcome": "REFUTED",
+            "retry_safe": True,
+        },
+        {"event": "resolved", "attempt": "legacy", "outcome": "CONFIRMED"},
+    ]
     held = wl.fold(raw)
     assert held is not None and held.state == "held"
-    released = wl.fold([*raw, {"event": "released", "attempt": "legacy", "by": "operator"}])
+    released = wl.fold(
+        [*raw, {"event": "released", "attempt": "legacy", "by": "operator"}]
+    )
     assert released is not None and released.state == "free"
     assert released.resolved is not None and released.resolved["outcome"] == "REFUTED"
+
+
+@pytest.mark.parametrize("outcome", ["REFUTED", "UNCERTAIN"])
+def test_current_positive_observation_does_not_release_prior_settlement(
+    ledger: wl.Ledger, tmp_path: Path, outcome: str,
+) -> None:
+    saved = tmp_path / "retained-baseline"
+    saved.mkdir()
+    baseline = saved / "baseline.json"
+    baseline.write_text("synthetic baseline")
+    ledger.resolved(KEY, "first", outcome=outcome, retry_safe=False, review=True)
+    before = ledger.latest(KEY)
+    assert before is not None
+    after = ledger.rechecked(KEY, "first", outcome="CONFIRMED",
+                             expected_revision=before.revision)
+    assert after.events[-1]["applied"] is True
+    assert after.events[-1]["outcome"] == "CONFIRMED"
+    assert after.resolved == before.resolved
+    assert after.state == before.state and after.state in {"held", "uncertain"}
+    assert after.rechecked is None and not after.resolved["retry_safe"]
+    assert ledger.attempts()[0][2] == before.resolved
+    assert ledger.unresolved()[0][1].state == before.state
+    assert baseline.read_text() == "synthetic baseline"

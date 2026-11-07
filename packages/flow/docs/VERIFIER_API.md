@@ -360,7 +360,10 @@ baseline. Attempt history and the latest attempt use the same fold. A
 recorded refutation holds the workflow until an explicit current-revision
 person decision releases it. This ordering does not establish that a native
 write happened or that its effect is absent. A person's release remains a
-workflow decision, separate from native verification.
+workflow decision, separate from native verification. A fresh, validated
+recheck at the current revision may return its own confirmed read while an
+earlier refuted or uncertain workflow settlement remains held. Recording
+that observation does not grant retry, cleanup or old-result handback.
 
 `ledger=None` turns the ledger off; use it only for a sandbox that resets
 between runs, such as RL episodes.

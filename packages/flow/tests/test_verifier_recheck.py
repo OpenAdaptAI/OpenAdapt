@@ -13,8 +13,8 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-import time
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -22,7 +22,6 @@ from typing import Any
 import pytest
 
 from openadapt_flow import verifier
-from openadapt_flow.write_ledger import FileLedger, Ledger, MemoryLedger
 from openadapt_flow.runtime.effects.frame import FrameSpec
 from openadapt_flow.verifier import (
     Actor,
@@ -36,6 +35,7 @@ from openadapt_flow.verifier import (
     recheck,
     verify_write,
 )
+from openadapt_flow.write_ledger import FileLedger, Ledger, MemoryLedger
 
 BOT = Actor(kind="agent", id="bot")
 
@@ -192,10 +192,17 @@ def _recheck(
 
 @pytest.mark.parametrize("backend", ["memory", "file"])
 def test_concurrent_saved_state_uncertain_cannot_erase_refutation(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, due_now: None, backend: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    due_now: None,
+    backend: str,
 ) -> None:
     """Pause after a real failed read, then commit a real refuting read."""
-    store = MemoryLedger(tmp_path / "memory") if backend == "memory" else FileLedger(tmp_path / "file")
+    store = (
+        MemoryLedger(tmp_path / "memory")
+        if backend == "memory"
+        else FileLedger(tmp_path / "file")
+    )
     ledger = Ledger(store)
     db = _db(tmp_path)
     contract = Contract.from_dict(_doc(db))
@@ -244,7 +251,9 @@ def test_concurrent_saved_state_uncertain_cannot_erase_refutation(
 
 @pytest.mark.parametrize("already_delivered", [False, True])
 def test_handback_cannot_return_positive_after_concurrent_refutation(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, due_now: None,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    due_now: None,
     already_delivered: bool,
 ) -> None:
     db = _db(tmp_path)
@@ -256,6 +265,7 @@ def test_handback_cannot_return_positive_after_concurrent_refutation(
     assert first.ledger is not None
     ledger = first.ledger
     original = ledger.delivered
+
     def refute_then_deliver(key: str, attempt: str, **fields: Any) -> Any:
         _sql(db, "UPDATE patient_data SET phone_cell='unexpected' WHERE id=1")
         late = _recheck(contract, first, ledger=ledger)
@@ -271,7 +281,9 @@ def test_handback_cannot_return_positive_after_concurrent_refutation(
 
 
 def test_positive_recheck_cannot_mark_over_concurrent_refutation(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, due_now: None,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    due_now: None,
 ) -> None:
     contract, db, first = _first(tmp_path)
     assert first.ledger is not None
@@ -306,7 +318,9 @@ def test_positive_recheck_cannot_mark_over_concurrent_refutation(
 
 
 def test_initial_record_cannot_prune_or_return_positive_over_refutation(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, due_now: None,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    due_now: None,
 ) -> None:
     db = _db(tmp_path)
     contract = Contract.from_dict(_doc(db))
@@ -317,7 +331,9 @@ def test_initial_record_cannot_prune_or_return_positive_over_refutation(
     actual_results: list[WriteResult] = []
     original = verifier._record
 
-    def pause(led: Ledger, key: str, attempt: str, result: WriteResult, **fields: Any) -> WriteResult:
+    def pause(
+        led: Ledger, key: str, attempt: str, result: WriteResult, **fields: Any
+    ) -> WriteResult:
         # The real verifier has completed its read. Its exact result/state
         # goes to the independent recheck; no verdict is manufactured.
         assert result.verified and result.recheck is not None
@@ -1276,3 +1292,26 @@ def test_a_later_uncertain_recheck_does_not_replace_a_held_refuted(
     assert attempt is not None and attempt.resolved["outcome"] == "REFUTED"
     with pytest.raises(verifier.WriteHeld):
         begin_write(contract, _params(2), actor=BOT, write_key="k-keep")
+
+
+def test_fresh_excused_recheck_does_not_release_hold_or_retry(
+    tmp_path: Path, due_now: None,
+) -> None:
+    contract, db, first = _first(tmp_path)
+    second = _save(contract, db, 3)
+    assert _recheck(contract, first).outcome == "REFUTED"
+    led = first.ledger
+    assert led is not None
+    before = led.latest(first.write_key)
+    assert before is not None and before.state == "held"
+    files = {str(p): p.read_bytes() for p in before.folder.rglob("*") if p.is_file()}
+    assert files, "the genuine saved attempt must contain retained files"
+    assert _recheck(contract, first, excused_by=[second]).outcome == "CONFIRMED"
+    after = led.latest(first.write_key)
+    assert after is not None and after.state == "held"
+    assert after.resolved == before.resolved and not after.resolved["retry_safe"]
+    assert after.events[-1]["applied"] is True
+    assert after.events[-1]["outcome"] == "CONFIRMED"
+    assert {str(p): p.read_bytes() for p in before.folder.rglob("*") if p.is_file()} == files
+    with pytest.raises(verifier.WriteHeld):
+        begin_write(contract, _params(2), actor=BOT)
