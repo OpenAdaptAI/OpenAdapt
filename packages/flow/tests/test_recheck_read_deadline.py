@@ -59,6 +59,8 @@ def test_actual_early_sqlite_read_keeps_the_issued_recheck_owed(
     assert parse_time(late.read_at) < parse_time(late.due_at)
     assert late.frame == "held" and late.evidence["status"] == "held"
     assert late.outcome == "UNCERTAIN" and not late.verified and late.recheck_owed
+    assert late.status == "unconfirmed" and not late.late
+    assert late.recheck_owed is True
     assert late.read_at and late.due_at == result.recheck_due_at
     assert result.recheck.payload == issued_payload
     after = ledger.latest(result.write_key)
@@ -95,7 +97,8 @@ def test_valid_returned_read_time_can_settle_at_or_after_the_boundary(
 
     assert len(actual_reads) == 1
     assert late.read_at == returned_time and late.outcome == "CONFIRMED"
-    assert not getattr(late, "recheck_owed", False)
+    assert late.verified and late.status == "verified" and not late.late
+    assert late.recheck_owed is False
     ledger = default_ledger()
     attempt = ledger.latest(result.write_key)
     assert attempt is not None and attempt.rechecked is not None
@@ -137,6 +140,8 @@ def test_invalid_read_metadata_cannot_settle_a_real_held_frame(
 
     assert len(actual_reads) == 1
     assert late.outcome == "UNCERTAIN" and not late.verified and late.recheck_owed
+    assert late.status == "unconfirmed" and not late.late
+    assert late.recheck_owed is True
     assert late.read_at == returned_time and late.frame == "held"
     after = ledger.latest(result.write_key)
     assert after is not None and after.events == before.events
@@ -154,7 +159,8 @@ def test_genuine_early_native_collateral_still_refutes_and_holds_the_write(
 
     assert parse_time(late.read_at) < parse_time(late.due_at)
     assert late.outcome == "REFUTED" and late.frame == "refuted"
-    assert not getattr(late, "recheck_owed", False)
+    assert late.recheck_owed is False
+    assert late.late and late.status == "refuted"
     assert late.evidence["collateral_count"] > 0 and not late.verified
     ledger = default_ledger()
     attempt = ledger.latest(result.write_key)
