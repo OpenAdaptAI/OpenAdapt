@@ -419,7 +419,7 @@ class SkillCache:
         from openadapt_flow.compile_agent.repair_selection import RepairSelectionError
 
         try:
-        return self._server(compiler, key)
+            return self._server(compiler, key)
         except RepairSelectionError:
             return None
 
@@ -457,9 +457,9 @@ class SkillCache:
         from openadapt_flow.compile_agent.repair_selection import RepairSelectionError
 
         try:
-        server = self._server(compiler, key)
-        if server is not None:
-            return self._skill_run(compiler, server, params, started)
+            server = self._server(compiler, key)
+            if server is not None:
+                return self._skill_run(compiler, server, params, started)
         except RepairSelectionError:
             compiler.dir.mkdir(parents=True, exist_ok=True)
             try:
