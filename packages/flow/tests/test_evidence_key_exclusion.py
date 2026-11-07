@@ -547,6 +547,103 @@ def _synthetic_assertion_data():
     }
 
 
+@pytest.mark.parametrize(
+    ("location", "field", "value", "expected"),
+    (
+        ("outer", "extra", "private-canary", "OUTER_SCHEMA"),
+        ("outer", "note", "private-canary", "NOTE"),
+        ("outer", "approval_payload_sha256", "private-canary", "APPROVAL_DIGEST"),
+        ("registered_passkey", "extra", "private-canary", "REGISTERED_SCHEMA"),
+        ("registered_passkey", "person_id", "private canary", "PERSON"),
+        ("registered_passkey", "rp_id", "private-canary.example", "RP_DOMAIN"),
+        ("registered_passkey", "public_key_hex", "private-canary", "REGISTERED_BYTES"),
+        ("assertion_hex", "extra", "private-canary", "ASSERTION_SCHEMA"),
+        ("assertion_hex", "credential_id", "ff", "CREDENTIAL"),
+        ("assertion_hex", "signature", "private-canary", "ASSERTION_BYTES"),
+        ("assertion_hex", "client_data_json", {"private-canary": 1}, "CLIENT_ENCODING"),
+        ("client", "extra", "private-canary", "CLIENT_SCHEMA"),
+        ("client", "origin", "https://private-canary.example", "CLIENT_BINDING"),
+        ("binding", "extra", "private-canary", "BINDING_SCHEMA"),
+        ("binding", "person_id", "person:private-canary", "BINDING_RELATION"),
+        ("evidence", "extra", "private-canary", "EVIDENCE_SCHEMA"),
+        ("evidence", "rp_id", "private-canary.test", "EVIDENCE_RELATION"),
+        ("evidence", "signature_sha256", "private-canary", "EVIDENCE_DIGEST"),
+    ),
+)
+def test_synthetic_refusal_projection_is_fixed_and_does_not_admit(
+    guard, location, field, value, expected
+):
+    data = _synthetic_assertion_data()
+    if location == "client":
+        client = json.loads(data["assertion_hex"]["client_data_json"])
+        client[field] = value
+        data["assertion_hex"]["client_data_json"] = json.dumps(client)
+    else:
+        target = data if location == "outer" else _assertion_object(data, location)
+        target[field] = value
+    payload = json.dumps(data)
+    result = guard["synthetic_assertion_refusal"](payload)
+    assert result is guard["SyntheticAssertionRefusal"][expected]
+    assert not guard["is_synthetic_assertion_fixture"](payload)
+    assert "private-canary" not in result.value
+
+
+def test_synthetic_refusal_parse_and_success_are_distinct(guard):
+    assert (
+        guard["synthetic_assertion_refusal"]("not-json-private-canary")
+        is guard["SyntheticAssertionRefusal"].PARSE
+    )
+    assert (
+        guard["synthetic_assertion_refusal"](json.dumps(_synthetic_assertion_data()))
+        is None
+    )
+
+
+def test_actual_ci_command_projects_only_fixed_stage_for_synthetic_candidate(tmp_path):
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    target = tmp_path / ASSERTION_PATH
+    target.parent.mkdir(parents=True)
+    data = _synthetic_assertion_data()
+    data["private-canary-key"] = {"private-canary-value": "private-canary"}
+    target.write_text(json.dumps(data))
+    subprocess.run(["git", "add", "-f", ASSERTION_PATH], cwd=tmp_path, check=True)
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(REPO / "scripts/check_evidence_keys.py"),
+            "--root",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert result.stdout.splitlines() == [
+        "EVIDENCE_KEYS_DENIED",
+        "  " + ASSERTION_PATH,
+        "  SYNTHETIC_ASSERTION_OUTER_SCHEMA",
+    ]
+    assert "private-canary" not in result.stdout + result.stderr
+
+
+def test_synthetic_file_boundary_refusal_never_opens_payload(
+    tmp_path, guard, monkeypatch
+):
+    target = tmp_path / ASSERTION_PATH
+    target.parent.mkdir(parents=True)
+    target.symlink_to(tmp_path / "missing-private-canary")
+    monkeypatch.setattr(
+        Path,
+        "read_text",
+        lambda *_args, **_kwargs: pytest.fail("opened linked candidate"),
+    )
+    reasons = {}
+    assert guard["violations"](
+        tmp_path, [ASSERTION_PATH], assertion_refusals=reasons
+    ) == [ASSERTION_PATH]
+    assert reasons == {ASSERTION_PATH: guard["SyntheticAssertionRefusal"].FILE_BOUNDARY}
+
+
 def _assertion_object(data, level):
     if level == "outer":
         return data

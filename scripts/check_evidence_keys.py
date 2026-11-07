@@ -17,6 +17,7 @@ import re
 import runpy
 import ssl
 import subprocess
+from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -116,7 +117,30 @@ def is_public_certificate(payload: str) -> bool:
         return False
 
 
-def is_synthetic_assertion_fixture(payload: str) -> bool:
+class SyntheticAssertionRefusal(str, Enum):
+    OUTER_SCHEMA = "SYNTHETIC_ASSERTION_OUTER_SCHEMA"
+    NOTE = "SYNTHETIC_ASSERTION_NOTE"
+    APPROVAL_DIGEST = "SYNTHETIC_ASSERTION_APPROVAL_DIGEST"
+    REGISTERED_SCHEMA = "SYNTHETIC_ASSERTION_REGISTERED_SCHEMA"
+    PERSON = "SYNTHETIC_ASSERTION_PERSON"
+    RP_DOMAIN = "SYNTHETIC_ASSERTION_RP_DOMAIN"
+    REGISTERED_BYTES = "SYNTHETIC_ASSERTION_REGISTERED_BYTES"
+    ASSERTION_SCHEMA = "SYNTHETIC_ASSERTION_ASSERTION_SCHEMA"
+    CREDENTIAL = "SYNTHETIC_ASSERTION_CREDENTIAL"
+    ASSERTION_BYTES = "SYNTHETIC_ASSERTION_ASSERTION_BYTES"
+    CLIENT_ENCODING = "SYNTHETIC_ASSERTION_CLIENT_ENCODING"
+    CLIENT_SCHEMA = "SYNTHETIC_ASSERTION_CLIENT_SCHEMA"
+    CLIENT_BINDING = "SYNTHETIC_ASSERTION_CLIENT_BINDING"
+    BINDING_SCHEMA = "SYNTHETIC_ASSERTION_BINDING_SCHEMA"
+    BINDING_RELATION = "SYNTHETIC_ASSERTION_BINDING_RELATION"
+    EVIDENCE_SCHEMA = "SYNTHETIC_ASSERTION_EVIDENCE_SCHEMA"
+    EVIDENCE_RELATION = "SYNTHETIC_ASSERTION_EVIDENCE_RELATION"
+    EVIDENCE_DIGEST = "SYNTHETIC_ASSERTION_EVIDENCE_DIGEST"
+    PARSE = "SYNTHETIC_ASSERTION_PARSE"
+    FILE_BOUNDARY = "SYNTHETIC_ASSERTION_FILE_BOUNDARY"
+
+
+def synthetic_assertion_refusal(payload: str) -> SyntheticAssertionRefusal | None:
     """Closed test-double data shape, never a live authentication admission.
 
     The existing vector is neither regenerated nor used as signing material.
@@ -131,17 +155,17 @@ def is_synthetic_assertion_fixture(payload: str) -> bool:
             "assertion_hex",
             "binding",
         }:
-            return False
+            return SyntheticAssertionRefusal.OUTER_SCHEMA
         note = data["note"]
         if (
             not isinstance(note, str)
             or len(note) > 1000
             or not ("synthetic" in note.casefold() or "not a live" in note.casefold())
         ):
-            return False
+            return SyntheticAssertionRefusal.NOTE
         digest = data["approval_payload_sha256"]
         if not isinstance(digest, str) or _SHA256.fullmatch(digest) is None:
-            return False
+            return SyntheticAssertionRefusal.APPROVAL_DIGEST
         registered = data["registered_passkey"]
         if not isinstance(registered, dict) or set(registered) != {
             "person_id",
@@ -149,19 +173,19 @@ def is_synthetic_assertion_fixture(payload: str) -> bool:
             "public_key_hex",
             "rp_id",
         }:
-            return False
+            return SyntheticAssertionRefusal.REGISTERED_SCHEMA
         person = registered["person_id"]
         rp = registered["rp_id"]
         if (
             not isinstance(person, str)
             or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}", person) is None
         ):
-            return False
+            return SyntheticAssertionRefusal.PERSON
         if (
             not isinstance(rp, str)
             or re.fullmatch(r"[a-z0-9][a-z0-9.-]{0,247}\.test", rp) is None
         ):
-            return False
+            return SyntheticAssertionRefusal.RP_DOMAIN
 
         def is_hex(value: Any, size: int | None = None) -> bool:
             return (
@@ -175,7 +199,7 @@ def is_synthetic_assertion_fixture(payload: str) -> bool:
         if not is_hex(registered["credential_id_hex"]) or not is_hex(
             registered["public_key_hex"], 32
         ):
-            return False
+            return SyntheticAssertionRefusal.REGISTERED_BYTES
         assertion = data["assertion_hex"]
         if not isinstance(assertion, dict) or set(assertion) != {
             "credential_id",
@@ -183,19 +207,19 @@ def is_synthetic_assertion_fixture(payload: str) -> bool:
             "client_data_json",
             "signature",
         }:
-            return False
+            return SyntheticAssertionRefusal.ASSERTION_SCHEMA
         if (
             not is_hex(assertion["credential_id"])
             or assertion["credential_id"].casefold()
             != registered["credential_id_hex"].casefold()
         ):
-            return False
+            return SyntheticAssertionRefusal.CREDENTIAL
         if not is_hex(assertion["authenticator_data"], 37) or not is_hex(
             assertion["signature"], 32
         ):
-            return False
+            return SyntheticAssertionRefusal.ASSERTION_BYTES
         if not isinstance(assertion["client_data_json"], str):
-            return False
+            return SyntheticAssertionRefusal.CLIENT_ENCODING
         client = json.loads(
             assertion["client_data_json"], object_pairs_hook=_unique_object
         )
@@ -205,14 +229,14 @@ def is_synthetic_assertion_fixture(payload: str) -> bool:
             "challenge",
             "fixture",
         }:
-            return False
+            return SyntheticAssertionRefusal.CLIENT_SCHEMA
         if client != {
             "type": "webauthn.get",
             "origin": "https://" + rp,
             "challenge": digest.removeprefix("sha256:"),
             "fixture": "openadapt.named-person.webauthn-double/v1",
         }:
-            return False
+            return SyntheticAssertionRefusal.CLIENT_BINDING
         binding = data["binding"]
         if not isinstance(binding, dict) or set(binding) != {
             "schema_version",
@@ -222,7 +246,7 @@ def is_synthetic_assertion_fixture(payload: str) -> bool:
             "evidence",
             "verified_at",
         }:
-            return False
+            return SyntheticAssertionRefusal.BINDING_SCHEMA
         if (
             binding["schema_version"] != "openadapt.named-person-binding/v1"
             or binding["person_id"] != person
@@ -231,7 +255,7 @@ def is_synthetic_assertion_fixture(payload: str) -> bool:
             or not isinstance(binding["verified_at"], str)
             or _REVOCATION_TIME.fullmatch(binding["verified_at"]) is None
         ):
-            return False
+            return SyntheticAssertionRefusal.BINDING_RELATION
         evidence = binding["evidence"]
         required = {
             "credential_id_sha256",
@@ -246,17 +270,21 @@ def is_synthetic_assertion_fixture(payload: str) -> bool:
             or not required <= evidence.keys()
             or evidence.keys() - required - {"user_handle_sha256"}
         ):
-            return False
+            return SyntheticAssertionRefusal.EVIDENCE_SCHEMA
         if evidence["rp_id"] != rp or evidence["challenge_sha256"] != digest:
-            return False
+            return SyntheticAssertionRefusal.EVIDENCE_RELATION
         for name, value in evidence.items():
             if name == "rp_id" or (name == "user_handle_sha256" and value is None):
                 continue
             if not isinstance(value, str) or _SHA256.fullmatch(value) is None:
-                return False
-        return True
+                return SyntheticAssertionRefusal.EVIDENCE_DIGEST
+        return None
     except (ValueError, TypeError, UnicodeError):
-        return False
+        return SyntheticAssertionRefusal.PARSE
+
+
+def is_synthetic_assertion_fixture(payload: str) -> bool:
+    return synthetic_assertion_refusal(payload) is None
 
 
 def _is_evidence_path(name: str) -> bool:
@@ -296,7 +324,12 @@ def tracked_key_path_kind(name: str) -> str | None:
     return "excluded"
 
 
-def violations(root: Path, names: Iterable[str]) -> list[str]:
+def violations(
+    root: Path,
+    names: Iterable[str],
+    *,
+    assertion_refusals: dict[str, SyntheticAssertionRefusal] | None = None,
+) -> list[str]:
     denied: list[str] = []
     for name in names:
         kind = tracked_key_path_kind(name)
@@ -323,10 +356,28 @@ def violations(root: Path, names: Iterable[str]) -> list[str]:
                 linked = linked or cursor.is_symlink()
             if linked or candidate.stat().st_size > 64 * 1024:
                 denied.append(name)
-            elif not validator(candidate.read_text(encoding="utf-8")):
-                denied.append(name)
+                if (
+                    kind == "synthetic_assertion_candidate"
+                    and assertion_refusals is not None
+                ):
+                    assertion_refusals[name] = SyntheticAssertionRefusal.FILE_BOUNDARY
+            else:
+                payload = candidate.read_text(encoding="utf-8")
+                if kind == "synthetic_assertion_candidate":
+                    refusal = synthetic_assertion_refusal(payload)
+                    if refusal is not None:
+                        denied.append(name)
+                        if assertion_refusals is not None:
+                            assertion_refusals[name] = refusal
+                elif not validator(payload):
+                    denied.append(name)
         except (OSError, UnicodeError):
             denied.append(name)
+            if (
+                kind == "synthetic_assertion_candidate"
+                and assertion_refusals is not None
+            ):
+                assertion_refusals[name] = SyntheticAssertionRefusal.FILE_BOUNDARY
     return sorted(denied)
 
 
@@ -342,7 +393,12 @@ def main() -> int:
             stdout=subprocess.PIPE,
         )
         names = result.stdout.decode("utf-8", errors="strict").split("\0")
-        denied = violations(args.root, (name for name in names if name))
+        assertion_refusals: dict[str, SyntheticAssertionRefusal] = {}
+        denied = violations(
+            args.root,
+            (name for name in names if name),
+            assertion_refusals=assertion_refusals,
+        )
     except (OSError, UnicodeError, subprocess.CalledProcessError):
         print("EVIDENCE_KEYS_ENUMERATION_FAILED")
         return 2
@@ -350,6 +406,8 @@ def main() -> int:
         print("EVIDENCE_KEYS_DENIED")
         for name in denied:
             print(f"  {name}")
+            if name in assertion_refusals:
+                print(f"  {assertion_refusals[name].value}")
         return 1
     print("Tracked evidence key-material check passed")
     return 0
