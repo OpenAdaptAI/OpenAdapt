@@ -14,10 +14,10 @@ from openadapt_flow.bundle_sealing import seal_bundle
 from openadapt_flow.ir import ActionKind, Anchor, Step, Workflow
 
 
-def saved_bundle(tmp_path):
+def saved_bundle(tmp_path, *, template_color="white"):
     bundle = tmp_path / "bundle"
     (bundle / "templates").mkdir(parents=True)
-    Image.new("RGB", (20, 20), "white").save(bundle / "templates/button.png")
+    Image.new("RGB", (20, 20), template_color).save(bundle / "templates/button.png")
     workflow = Workflow(
         name="original",
         steps=[
@@ -236,6 +236,99 @@ def test_verified_template_replacement_saves_plaintext_derivative(tmp_path):
     assert (tmp_path / "derivative/templates/button.png").read_bytes() == replacement
     assert (tmp_path / "unchanged/templates/button.png").read_bytes() == original_asset
     assert Workflow.load(tmp_path / "derivative").manifest.content_digest
+
+
+def test_save_as_refuses_foreign_existing_template_before_writing(tmp_path):
+    source = saved_bundle(tmp_path)
+    source_asset = (source / "templates/button.png").read_bytes()
+    loaded = Workflow.load(source)
+    destination = tmp_path / "preexisting-destination"
+    (destination / "templates").mkdir(parents=True)
+    foreign_asset = b"foreign destination template bytes"
+    target_asset = destination / "templates/button.png"
+    target_asset.write_bytes(foreign_asset)
+
+    with pytest.raises(
+        bundles.BundleIntegrityError,
+        match=r"save-as destination asset.*conflicts with verified source",
+    ):
+        loaded.save(destination)
+
+    assert target_asset.read_bytes() == foreign_asset
+    destination_entries = sorted(
+        path.relative_to(destination).as_posix() for path in destination.rglob("*")
+    )
+    assert destination_entries == ["templates", "templates/button.png"]
+    assert not (destination / "workflow.json").exists()
+    assert not (destination / "manifest.json").exists()
+    assert (source / "templates/button.png").read_bytes() == source_asset
+
+
+def test_save_as_accepts_matching_existing_template(tmp_path):
+    source = saved_bundle(tmp_path)
+    source_asset = (source / "templates/button.png").read_bytes()
+    loaded = Workflow.load(source)
+    destination = tmp_path / "matching-destination"
+    (destination / "templates").mkdir(parents=True)
+    target_asset = destination / "templates/button.png"
+    target_asset.write_bytes(source_asset)
+
+    loaded.save(destination)
+
+    reopened = Workflow.load(destination)
+    bundles.verify_integrity(reopened, destination, reopened.manifest)
+    assert target_asset.read_bytes() == source_asset
+
+
+def test_encrypted_save_as_refuses_foreign_existing_template_before_writing(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv(crypto.ENV_KEY, "correct horse battery staple")
+    source = saved_bundle(tmp_path / "source")
+    encrypted_source = tmp_path / "encrypted-source"
+    seal_bundle(source, encrypted_source)
+    loaded = Workflow.load(encrypted_source, key="correct horse battery staple")
+
+    destination = tmp_path / "foreign-destination"
+    (destination / "templates").mkdir(parents=True)
+    foreign_asset = b"foreign destination template bytes"
+    target_asset = destination / "templates/button.png"
+    target_asset.write_bytes(foreign_asset)
+
+    with pytest.raises(
+        bundles.BundleIntegrityError,
+        match=r"save-as destination asset.*conflicts with verified source",
+    ):
+        loaded.save(destination)
+
+    assert target_asset.read_bytes() == foreign_asset
+    assert not (destination / "workflow.json").exists()
+    assert not (destination / "manifest.json").exists()
+
+
+def test_encrypted_save_as_refuses_foreign_asset_in_sealed_destination(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv(crypto.ENV_KEY, "correct horse battery staple")
+    key = "correct horse battery staple"
+    source = saved_bundle(tmp_path / "source")
+    encrypted_source = tmp_path / "encrypted-source"
+    seal_bundle(source, encrypted_source)
+    loaded = Workflow.load(encrypted_source, key=key)
+
+    # Build a valid, differently hashed asset before its manifest is recorded.
+    foreign_plain = saved_bundle(tmp_path / "foreign-plain", template_color="black")
+    foreign_destination = tmp_path / "foreign-sealed"
+    seal_bundle(foreign_plain, foreign_destination)
+    before = _bundle_files(foreign_destination)
+
+    with pytest.raises(
+        bundles.BundleIntegrityError,
+        match=r"save-as destination asset.*conflicts with verified source",
+    ):
+        loaded.save(foreign_destination, key=key)
+
+    assert _bundle_files(foreign_destination) == before
 
 
 def test_verified_template_replacement_saves_encrypted_derivative(

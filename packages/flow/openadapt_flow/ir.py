@@ -3687,6 +3687,35 @@ class Workflow(BaseModel):
                         )
                     source_assets[rel] = source_asset.read_bytes()
 
+        # A save-as destination may already contain assets. Never let a
+        # destination-owned file silently replace the verified source asset in
+        # the new manifest. Check every collision before creating directories,
+        # writing bundle files, or sealing the derivative.
+        accepted_asset_bytes: dict[str, set[bytes]] = {}
+        for asset_map in (
+            source_assets,
+            self._decrypted_templates,
+            template_replacements,
+        ):
+            for rel, data in asset_map.items():
+                accepted_asset_bytes.setdefault(rel, set()).add(data)
+
+        for rel, expected_bytes in accepted_asset_bytes.items():
+            target_asset = _bv.bundle_asset_path(bundle, rel)
+            if not target_asset.exists():
+                continue
+            try:
+                matches_source = (
+                    target_asset.is_file()
+                    and target_asset.read_bytes() in expected_bytes
+                )
+            except OSError:
+                matches_source = False
+            if not matches_source:
+                raise _bv.BundleIntegrityError(
+                    f"save-as destination asset {rel!r} conflicts with verified source"
+                )
+
         if _sealed.active_writer(bundle) is not None or _sealed.is_sealed(bundle):
             # A sealed bundle stays sealed whatever ``encrypt`` says: many
             # commands re-save a bundle with a bare ``save(bundle)``, and that
@@ -3786,6 +3815,7 @@ class Workflow(BaseModel):
         writer, so no plaintext of this workflow touches the disk. Assets come
         from the in-memory crop map and from crops already sealed in the set.
         """
+        from openadapt_flow import bundle_validation as _bv
         from openadapt_flow import sealed_set as _sealed
 
         writer = _sealed.active_writer(bundle)
@@ -3798,6 +3828,20 @@ class Workflow(BaseModel):
                 )
             writer = _sealed.SealedSetWriter(bundle, "bundle", passphrase, resume=True)
         assets = {rel: writer.read_bytes(rel) for rel in writer.files("templates/")}
+        accepted_asset_bytes: dict[str, set[bytes]] = {}
+        for asset_map in (
+            source_assets or {},
+            self._decrypted_templates,
+            template_replacements or {},
+        ):
+            for rel, data in asset_map.items():
+                accepted_asset_bytes.setdefault(rel, set()).add(data)
+        for rel, existing_bytes in assets.items():
+            expected_bytes = accepted_asset_bytes.get(rel)
+            if expected_bytes is not None and existing_bytes not in expected_bytes:
+                raise _bv.BundleIntegrityError(
+                    f"save-as destination asset {rel!r} conflicts with verified source"
+                )
         for rel, data in (source_assets or {}).items():
             if assets.get(rel) != data:
                 writer.write(rel, data)
