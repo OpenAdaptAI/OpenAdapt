@@ -1,0 +1,3 @@
+# The generated test account holds a password. Never commit it.
+test_account.local.json
+runs/

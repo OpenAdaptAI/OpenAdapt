@@ -1,0 +1,10 @@
+[
+ {
+  "agent": "codex",
+  "style": "approved",
+  "prompt": "plain",
+  "tool_calls": 0,
+  "signed_in": false,
+  "seconds": 15.1
+ }
+]

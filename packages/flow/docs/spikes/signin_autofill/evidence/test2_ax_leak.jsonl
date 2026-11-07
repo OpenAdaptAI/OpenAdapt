@@ -1,0 +1,2 @@
+{"run": 1, "window_title": "Spike Login 47811", "ok": true, "outcome": "filled (not submitted)", "select": "keyboard", "origin_seen": "http://localhost:47811", "popup_seen": true, "popup_layer": 999, "popup_wait_s": 0.0, "auth_prompt_seen": true, "auth_wait_s": 2.04, "username_prefilled": false, "backend_refused_popup_click": null, "elapsed_s": 5.02, "notes": ["post-select backend check: native physical-input target changed after foreground proof;"]}
+{"ax_value_present": true, "ax_value_is_password": false, "ax_number_of_characters": 24}
