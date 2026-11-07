@@ -870,11 +870,11 @@ def _judge_trial(
 
 
 def _evidence_ref(root: Path, path: Path, kind: Any) -> Any:
-    from openadapt_flow.evidence_files import is_key_material_path
+    from openadapt_flow.evidence_files import is_publication_input_path_excluded
     from openadapt_flow.qualification import EvidenceRef
 
-    if is_key_material_path(path.relative_to(root)):
-        raise QualifyError("Local key material cannot be qualification evidence")
+    if is_publication_input_path_excluded(path.relative_to(root)):
+        raise QualifyError("Local key material or unclassified containers cannot be qualification evidence")
     return EvidenceRef(
         kind=kind, sha256=_sha256(path), relative_path=path.relative_to(root).as_posix()
     )
@@ -882,7 +882,7 @@ def _evidence_ref(root: Path, path: Path, kind: Any) -> Any:
 
 def _run_evidence_refs(root: Path, run_dir: Path) -> list[Any]:
     from openadapt_flow import sealed_set
-    from openadapt_flow.evidence_files import is_key_material_path
+    from openadapt_flow.evidence_files import is_publication_input_path_excluded
 
     run_files = (
         sealed_set.list_files(run_dir)
@@ -893,7 +893,7 @@ def _run_evidence_refs(root: Path, run_dir: Path) -> list[Any]:
         _evidence_ref(root, path, "other")
         for path in sorted(run_files)
         if path.name != "report.json"
-        and not is_key_material_path(path.relative_to(root))
+        and not is_publication_input_path_excluded(path.relative_to(root))
     ]
 
 

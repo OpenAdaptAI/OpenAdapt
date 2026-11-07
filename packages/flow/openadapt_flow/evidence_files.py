@@ -15,6 +15,13 @@ from pathlib import Path, PurePosixPath
 from typing import Iterable
 
 _KEY_SUFFIXES = (".key", ".p12", ".pfx", ".jks", ".keystore")
+# Unknown input containers cannot be screened by member filenames without
+# opening them. Publication refuses them; an exporter may still construct its
+# own final archive from an already filtered, frozen source tree.
+OPAQUE_CONTAINER_SUFFIXES = (
+    ".zip", ".tar", ".tgz", ".gz", ".bz2", ".xz", ".zst", ".7z", ".rar",
+    ".whl", ".egg", ".jar", ".war", ".cab", ".iso", ".deb", ".rpm",
+)
 _KEY_STORES = frozenset(
     {"keys.json", "seal-key.json", "seal-keys.json", "site-keys.json"}
 )
@@ -70,9 +77,24 @@ def is_key_material_path(relative: str | os.PathLike[str]) -> bool:
     return False
 
 
+def is_publication_input_path_excluded(relative: str | os.PathLike[str]) -> bool:
+    """Exclude key-shaped names and unclassified containers before any read.
+
+    Container names are not claims that their contents are secret. This is a
+    publication boundary, distinct from CI's tracked-key filename check.
+    """
+    if is_key_material_path(relative):
+        return True
+    parts = PurePosixPath(os.fspath(relative).replace("\\", "/")).parts
+    return any(
+        re.search(re.escape(suffix) + r"(?:$|[.~_-])", part.casefold())
+        for part in parts for suffix in OPAQUE_CONTAINER_SUFFIXES
+    )
+
+
 def evidence_copy_ignore(directory: str, names: Iterable[str]) -> set[str]:
     """``shutil.copytree`` callback: reject names before copying their bytes."""
-    return {name for name in names if is_key_material_path(Path(directory) / name)}
+    return {name for name in names if is_publication_input_path_excluded(Path(directory) / name)}
 
 
 def copy_evidence_tree(source: Path, destination: Path) -> Path:
@@ -87,10 +109,10 @@ def copy_evidence_tree(source: Path, destination: Path) -> Path:
     # Walk names first: do not follow a link while classifying the tree.
     for directory, subdirs, files in os.walk(source, followlinks=False):
         subdirs[:] = [
-            name for name in subdirs if not is_key_material_path(Path(directory) / name)
+            name for name in subdirs if not is_publication_input_path_excluded(Path(directory) / name)
         ]
         for name in [*subdirs, *files]:
             path = Path(directory) / name
-            if not is_key_material_path(path) and path.is_symlink():
+            if not is_publication_input_path_excluded(path) and path.is_symlink():
                 raise ValueError("Evidence cannot contain a symbolic link")
     return Path(shutil.copytree(source, destination, ignore=evidence_copy_ignore))

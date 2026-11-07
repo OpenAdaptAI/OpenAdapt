@@ -159,7 +159,7 @@ def _scrubber_version() -> str:
 
 
 def _source_files(src: Path) -> list[Path]:
-    from openadapt_flow.evidence_files import is_key_material_path
+    from openadapt_flow.evidence_files import is_publication_input_path_excluded
 
     if not src.is_dir():
         raise SanitizationError(f"Artifact is not a directory: {src}")
@@ -167,15 +167,15 @@ def _source_files(src: Path) -> list[Path]:
         # Logical names from the authenticated index; content decrypts later.
         base = Path(os.path.abspath(src))
         sealed_files = [src / p.relative_to(base) for p in artifacts.list_files(base)]
-        if any(is_key_material_path(p.relative_to(src)) for p in sealed_files):
-            raise SanitizationError("Artifact contains local key material")
+        if any(is_publication_input_path_excluded(p.relative_to(src)) for p in sealed_files):
+            raise SanitizationError("Artifact contains local key material or unclassified containers")
         if not sealed_files:
             raise SanitizationError(f"Artifact has no files: {src}")
         return sealed_files
     files: list[Path] = []
     for path in sorted(src.rglob("*")):
-        if is_key_material_path(path.relative_to(src)):
-            raise SanitizationError("Artifact contains local key material")
+        if is_publication_input_path_excluded(path.relative_to(src)):
+            raise SanitizationError("Artifact contains local key material or unclassified containers")
         if path.is_symlink():
             raise SanitizationError(
                 f"Symlink is not reviewable: {path.relative_to(src)}"

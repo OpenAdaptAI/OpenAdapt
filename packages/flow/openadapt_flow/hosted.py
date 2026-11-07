@@ -948,11 +948,11 @@ def _zip_dir(src: Path) -> Path:
 
 def _assert_upload_tree_safe(src: Path) -> None:
     """Refuse filesystem indirection that could escape an upload directory."""
-    from openadapt_flow.evidence_files import is_key_material_path
+    from openadapt_flow.evidence_files import is_publication_input_path_excluded
 
     for path in sorted(src.rglob("*")):
-        if is_key_material_path(path.relative_to(src)):
-            raise HostedError("Refusing to upload local key material")
+        if is_publication_input_path_excluded(path.relative_to(src)):
+            raise HostedError("Refusing to upload local key material or unclassified containers")
         if path.is_symlink():
             raise HostedError(
                 f"Refusing to upload {src}: symlink {path.relative_to(src)} "

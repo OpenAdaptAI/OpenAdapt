@@ -52,7 +52,7 @@ from openadapt_flow import __version__ as FLOW_VERSION
 from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 from openadapt_flow.compiler import compile_recording
 from openadapt_flow.deployment import DeploymentConfig, PolicySection
-from openadapt_flow.evidence_files import is_key_material_path
+from openadapt_flow.evidence_files import is_publication_input_path_excluded
 from openadapt_flow.execution_profiles import (
     ExecutionProfile,
     execution_profile_contract,
@@ -1060,7 +1060,7 @@ def _strip_run_authority(run_dir: Path) -> None:
             path.unlink()
     # Remove key-shaped names throughout this derivative without reading them.
     for path in sorted(run_dir.rglob("*"), key=lambda p: len(p.parts), reverse=True):
-        if is_key_material_path(path.relative_to(run_dir)):
+        if is_publication_input_path_excluded(path.relative_to(run_dir)):
             if path.is_dir() and not path.is_symlink():
                 shutil.rmtree(path)
             else:
@@ -1069,13 +1069,13 @@ def _strip_run_authority(run_dir: Path) -> None:
 
 def _reject_run_authority(relative: str) -> None:
     parts = PurePosixPath(relative).parts
-    secret_like = is_key_material_path(relative) or any(
+    secret_like = is_publication_input_path_excluded(relative) or any(
         any(marker in part.lower() for marker in ("credential", "secret", "token"))
         for part in parts
     )
     if NON_PUBLIC_RUN_AUTHORITY.intersection(parts) or secret_like:
         raise EvidencePackError(
-            f"public evidence must not contain live run authority: {relative}"
+            f"public evidence must not contain live run authority or unclassified containers: {relative}"
         )
 
 

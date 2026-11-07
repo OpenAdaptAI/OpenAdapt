@@ -18,7 +18,12 @@ import pytest
 from hypothesis import given, settings, strategies as st
 
 from openadapt_flow import hosted, sanitized_artifact
-from openadapt_flow.evidence_files import copy_evidence_tree, is_key_material_path
+from openadapt_flow.evidence_files import (
+    OPAQUE_CONTAINER_SUFFIXES,
+    copy_evidence_tree,
+    is_key_material_path,
+    is_publication_input_path_excluded,
+)
 from openadapt_flow.qualify import campaign
 from scripts import export_public_demo_evidence as demo
 
@@ -52,10 +57,11 @@ PRIVATE_NAMES = (
     "client.p12", "client.pfx", "private.jks", "private.keystore",
     ".ssh/identity", ".aws/config", ".private/config.json",
 )
+OPAQUE_NAMES = tuple("unclassified" + suffix for suffix in OPAQUE_CONTAINER_SUFFIXES)
 
 
 @given(
-    name=st.sampled_from(PRIVATE_NAMES),
+    name=st.sampled_from(PRIVATE_NAMES + OPAQUE_NAMES),
     parents=st.lists(st.sampled_from(("run", "evidence", "nested")), max_size=4),
     windows=st.booleans(),
 )
@@ -64,7 +70,8 @@ def test_generated_private_families_are_denied_at_any_depth(name, parents, windo
     relative = "/".join([*parents, name])
     if windows:
         relative = relative.replace("/", "\\")
-    assert is_key_material_path(relative)
+    assert is_publication_input_path_excluded(relative)
+    assert is_key_material_path(relative) == (name in PRIVATE_NAMES)
 
 
 @pytest.mark.parametrize(
@@ -93,7 +100,7 @@ def _forbid_payload_reads(monkeypatch, denied: set[Path]) -> None:
     monkeypatch.setattr(io, "open", checked(original_io))
 
 
-@pytest.mark.parametrize("name", PRIVATE_NAMES)
+@pytest.mark.parametrize("name", PRIVATE_NAMES + OPAQUE_NAMES)
 def test_actual_export_boundaries_do_not_read_or_copy_private_names(
     tmp_path, monkeypatch, guard, name,
 ):
@@ -144,12 +151,13 @@ def test_actual_export_boundaries_do_not_read_or_copy_private_names(
     assert campaign._run_evidence_refs(source, source) == []
 
     # The ordinary tracked-file refusal does not open even an existing file.
-    assert guard["violations"](source, [f"benchmark/{name}"]) == [f"benchmark/{name}"]
+    expected = [f"benchmark/{name}"] if name in PRIVATE_NAMES else []
+    assert guard["violations"](source, [f"benchmark/{name}"]) == expected
 
 
 def test_run_derivative_strips_all_key_families_without_opening(tmp_path, monkeypatch):
     denied = set()
-    for name in PRIVATE_NAMES:
+    for name in PRIVATE_NAMES + OPAQUE_NAMES:
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("synthetic excluded marker")
