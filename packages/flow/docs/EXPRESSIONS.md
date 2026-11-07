@@ -120,7 +120,23 @@ the intended change. An unchanged store can satisfy an allowance by itself.
 `shadow.evaluate_effect_candidate` evaluates a generated `EffectModel` over
 caller-captured observations. The caller supplies independent reader scope,
 complete snapshots and native freshness evidence. The model binds the profile,
-language implementation digest, schema, reader and source identities. The
-candidate result is returned separately from canonical verdicts, ledgers and
-signed receipts. Replay admission checks the complete independently labelled
-history for that exact set of identities.
+language implementation digest, schema, reader and source identities.
+
+The result records actual typed `predicate_outcomes` as `true`, `false` or
+`unknown`, with `prediction_scope="unqualified_model_prediction"`. Predicate
+truth measures the declaration, including when a declaration is tautological
+or describes a different requested value. Syntactic input references establish
+input coverage only. All-true outcomes therefore return an indeterminate
+candidate with `reason="model_unqualified"`. Declared contradictions retain
+conservative refutations, and an existing refutation stays sticky. The
+independent canonical reader decides effect confirmation from its evidence;
+candidate evaluation leaves its verdict, ledger and receipt bytes intact.
+
+`summarize_predictions` compares predictions against the complete independently
+labelled replay history for matching model, language, schema, reader and source
+identities. Its `finite_supplied_history_only` result reports whether the
+predictions match those cases. Missing or duplicate cases, changed dependencies
+and unavailable fault predictions prevent a match. This finite adequacy
+measurement carries no write proof or activation authority.
+`summarize_replays` retains its history checks and refuses admission of generated
+model predictions.

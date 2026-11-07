@@ -16,6 +16,7 @@ from openadapt_flow.runtime.effects.effect_model import (
     ObservationBinding,
     ObservationPath,
     ObservationRequirements,
+    bind_observations,
     evaluate_effect_model,
 )
 from openadapt_flow.shadow import evaluate_effect_candidate
@@ -71,11 +72,20 @@ def candidate_fixture():
     return model, observations, requirements, identity
 
 
-def test_shared_language_confirms_intended_edit_without_mutating_snapshots():
+def test_shared_language_predicts_intended_edit_without_mutating_snapshots():
     args = candidate_fixture()
     before = args[1].model_dump_json()
     result = evaluate_effect_candidate(*args)
-    assert result.verdict == Verdict.CONFIRMED and result.judged
+    model, observations, _, _ = args
+    bindings = bind_observations(
+        model, task=observations.task, before=observations.before, after=observations.after
+    )
+    raw = transforms.evaluate_effect_predicates(model.obligations, bindings)
+    assert tuple(item.outcome for item in raw) == ("true", "true")
+    assert result.predicate_outcomes == ("true", "true")
+    assert result.verdict == Verdict.INDETERMINATE and not result.judged
+    assert result.reason == "model_unqualified"
+    assert result.prediction_scope == "unqualified_model_prediction"
     assert args[1].model_dump_json() == before
 
 
@@ -100,6 +110,8 @@ def test_observed_wrong_effect_is_positively_refuted(after):
     changed = obs.model_copy(update={"after": {"rows": after}})
     result = evaluate_effect_model(model, changed, required, identity)
     assert result.verdict == Verdict.REFUTED and result.judged
+    assert "false" in result.predicate_outcomes
+    assert result.prediction_scope == "unqualified_model_prediction"
 
 
 def test_null_edit_is_exact_and_missing_field_cannot_substitute():
@@ -109,10 +121,14 @@ def test_null_edit_is_exact_and_missing_field_cannot_substitute():
     obs = obs.model_copy(
         update={"task": {"target": {"id": "a"}, "value": None}, "after": after}
     )
-    assert (
-        evaluate_effect_model(model, obs, required, identity).verdict
-        == Verdict.CONFIRMED
+    result = evaluate_effect_model(model, obs, required, identity)
+    raw = transforms.evaluate_effect_predicates(
+        model.obligations,
+        bind_observations(model, task=obs.task, before=obs.before, after=obs.after),
     )
+    assert tuple(item.outcome for item in raw) == ("true", "true")
+    assert result.predicate_outcomes == ("true", "true")
+    assert result.verdict == Verdict.INDETERMINATE and not result.judged
     del after["rows"][0]["value"]
     assert (
         evaluate_effect_model(model, obs, required, identity).verdict == Verdict.REFUTED

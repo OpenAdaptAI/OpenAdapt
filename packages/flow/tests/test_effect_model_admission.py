@@ -8,6 +8,7 @@ from openadapt_flow.generate.effect_model_admission import (
     ReplayLabel,
     ReplayPlan,
     ReplayResult,
+    summarize_predictions,
     summarize_replays,
 )
 from openadapt_flow.runtime.effects.effect import Verdict
@@ -48,32 +49,33 @@ def plan():
     )
 
 
-def result(case_id, verdict, **identity_changes):
-    reasons = {
-        Verdict.CONFIRMED: "satisfied",
-        Verdict.REFUTED: "contradiction",
-        Verdict.INDETERMINATE: "evidence_unavailable",
-    }
+def result(case_id, prediction, **identity_changes):
+    verdict = Verdict.REFUTED if prediction == "false" else Verdict.INDETERMINATE
+    reason = {"true": "model_unqualified", "false": "contradiction", "unknown": "evidence_unavailable"}[prediction]
     return ReplayResult(
         case_id=case_id,
         result=CandidateResult(
             identity=identity(**identity_changes),
             verdict=verdict,
-            judged=verdict != Verdict.INDETERMINATE,
-            reason=reasons[verdict],
+            judged=prediction == "false",
+            reason=reason,
+            predicate_outcomes=(prediction,),
         ),
     )
 
 
 def correct_results():
-    return (result("clean", Verdict.CONFIRMED), result("fault", Verdict.REFUTED))
+    return (result("clean", "true"), result("fault", "false"))
 
 
-def test_complete_history_is_admitted_without_mutation():
+def test_complete_history_matches_finitely_without_admission_or_mutation():
     frozen_plan, results = plan(), correct_results()
     before = frozen_plan.model_dump_json(), tuple(r.model_dump_json() for r in results)
-    summary = summarize_replays(frozen_plan, results)
-    assert summary.admitted
+    summary = summarize_predictions(frozen_plan, results)
+    assert summary.matches_supplied_history
+    assert summary.scope == "finite_supplied_history_only"
+    assert not summarize_replays(frozen_plan, results).admitted
+    assert results[0].result.verdict == Verdict.INDETERMINATE
     assert (summary.clean_cases, summary.fault_cases) == (1, 1)
     assert before == (
         frozen_plan.model_dump_json(),
@@ -82,25 +84,26 @@ def test_complete_history_is_admitted_without_mutation():
 
 
 @pytest.mark.parametrize(
-    "case_id,verdict",
+    "case_id,prediction",
     (
-        ("clean", Verdict.INDETERMINATE),
-        ("clean", Verdict.REFUTED),
-        ("fault", Verdict.CONFIRMED),
-        ("fault", Verdict.INDETERMINATE),
+        ("clean", "unknown"),
+        ("clean", "false"),
+        ("fault", "true"),
+        ("fault", "unknown"),
     ),
 )
-def test_wrong_or_unavailable_case_prevents_admission(case_id, verdict):
+def test_wrong_or_unavailable_case_prevents_finite_match(case_id, prediction):
     results = tuple(
-        result(r.case_id, verdict) if r.case_id == case_id else r
+        result(r.case_id, prediction) if r.case_id == case_id else r
         for r in correct_results()
     )
+    assert not summarize_predictions(plan(), results).matches_supplied_history
     assert not summarize_replays(plan(), results).admitted
 
 
 def test_missing_fault_stays_in_denominator():
-    summary = summarize_replays(plan(), correct_results()[:1])
-    assert not summary.admitted
+    summary = summarize_predictions(plan(), correct_results()[:1])
+    assert not summary.matches_supplied_history
     assert summary.fault_cases == 1
     assert "missing_result" in summary.reasons
 
@@ -112,21 +115,24 @@ def test_missing_fault_stays_in_denominator():
         ("language_sha256", "e" * 64),
         ("schema_sha256", "e" * 64),
         ("reader_sha256", "e" * 64),
+        ("source_sha256", "f" * 64),
         ("language_version", "synthetic/v2"),
         ("operator_profile", "other"),
     ),
 )
 def test_changed_dependency_requires_full_replay(field, value):
-    results = (correct_results()[0], result("fault", Verdict.REFUTED, **{field: value}))
-    assert "identity_mismatch" in summarize_replays(plan(), results).reasons
+    results = (correct_results()[0], result("fault", "false", **{field: value}))
+    summary = summarize_predictions(plan(), results)
+    assert "identity_mismatch" in summary.reasons
+    assert not summary.matches_supplied_history
 
 
 def test_duplicate_and_unexpected_results_cannot_replace_a_missing_case():
     clean = correct_results()[0]
-    summary = summarize_replays(
-        plan(), (clean, clean, result("extra", Verdict.REFUTED))
+    summary = summarize_predictions(
+        plan(), (clean, clean, result("extra", "false"))
     )
-    assert not summary.admitted
+    assert not summary.matches_supplied_history
     expected = {"duplicate_result", "missing_result", "unexpected_result"}
     assert expected <= set(summary.reasons)
 
@@ -138,8 +144,9 @@ def test_new_kind_requires_its_own_clean_and_fault_history():
         + (ReplayKind(kind="create", identity=identity(model_sha256="e" * 64)),),
         labels=original.labels,
     )
-    summary = summarize_replays(extended, correct_results())
+    summary = summarize_predictions(extended, correct_results())
     assert "missing_clean_or_fault_kind" in summary.reasons
+    assert not summary.matches_supplied_history
 
 
 def test_conflicting_labels_are_rejected_before_scoring():

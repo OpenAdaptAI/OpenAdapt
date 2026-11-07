@@ -61,9 +61,23 @@ class ReplayResult(StrictModel):
 
 
 class AdmissionSummary(StrictModel):
-    """A finite-history check. Admission does not activate production use."""
+    """A legacy admission result; generated predictions remain unqualified."""
 
     admitted: bool
+    clean_cases: int
+    fault_cases: int
+    reasons: tuple[str, ...]
+
+
+class ReplayAdequacySummary(StrictModel):
+    """Compare predictions with this supplied finite history, without admission.
+
+    Passing this comparison does not qualify unseen tasks, authenticate labels,
+    activate a model, or establish that a business write was correct.
+    """
+
+    scope: Literal["finite_supplied_history_only"] = "finite_supplied_history_only"
+    matches_supplied_history: bool
     clean_cases: int
     fault_cases: int
     reasons: tuple[str, ...]
@@ -72,13 +86,18 @@ class AdmissionSummary(StrictModel):
 def summarize_replays(
     plan: ReplayPlan, results: tuple[ReplayResult, ...]
 ) -> AdmissionSummary:
-    """Require exact case coverage, matching dependencies and every case correct.
+    """Retain history checks without admitting unqualified model predictions.
 
     All expected cases stay in the denominator, including missing results.
     A changed model/language/reader/schema requires a replay of the whole plan.
+    Predicate truth alone cannot supply effect qualification. A finite history
+    comparison is available separately through summarize_predictions.
     """
 
-    reasons: list[str] = []
+    # This API consumes generated model predictions, never effect authority.
+    # The gate is unconditional: no supplied bool, scope string, model-copy
+    # update, or apparent CONFIRMED field can qualify those predictions.
+    reasons: list[str] = ["unqualified_model_predictions"]
     if len(results) > 10000:
         raise ValueError("too many replay results")
     expected = {label.case_id: label for label in plan.labels}
@@ -114,4 +133,51 @@ def summarize_replays(
         clean_cases=sum(label.label == "clean" for label in plan.labels),
         fault_cases=sum(label.label == "fault" for label in plan.labels),
         reasons=tuple(sorted(set(reasons))),
+    )
+
+
+def summarize_predictions(
+    plan: ReplayPlan, results: tuple[ReplayResult, ...]
+) -> ReplayAdequacySummary:
+    """Score raw predictions against independently supplied finite case labels.
+
+    Reuse the exact history/identity checks, but do not reinterpret an
+    unqualified positive prediction as an effect CONFIRMED. The old admission
+    comparison consequently cannot admit these unqualified clean predictions.
+    """
+
+    history = summarize_replays(plan, results)
+    reasons = set(history.reasons) - {
+        "clean_not_confirmed", "fault_not_judged_refuted",
+        "unqualified_model_predictions",
+    }
+    actual = {replay.case_id: replay.result for replay in results}
+    for label in plan.labels:
+        result = actual.get(label.case_id)
+        if result is None:
+            continue  # The shared history check retained missing_result.
+        outcomes = result.predicate_outcomes
+        if label.label == "clean":
+            if not (
+                result.verdict == Verdict.INDETERMINATE
+                and not result.judged
+                and result.reason == "model_unqualified"
+                and outcomes
+                and all(outcome == "true" for outcome in outcomes)
+            ):
+                reasons.add("clean_prediction_not_satisfied")
+        elif not (
+            result.verdict == Verdict.REFUTED
+            and result.judged
+            and result.reason == "contradiction"
+            and outcomes
+            and "false" in outcomes
+            and "unknown" not in outcomes
+        ):
+            reasons.add("fault_prediction_not_contradicted")
+    return ReplayAdequacySummary(
+        matches_supplied_history=not reasons,
+        clean_cases=history.clean_cases,
+        fault_cases=history.fault_cases,
+        reasons=tuple(sorted(reasons)),
     )

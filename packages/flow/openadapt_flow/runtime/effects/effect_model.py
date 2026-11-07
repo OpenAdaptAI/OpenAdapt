@@ -122,27 +122,41 @@ def bind_observations(
 class CandidateResult(StrictModel):
     """A shadow result, with no canonical episode, ledger or receipt handle.
 
-    ``judged`` means complete authoritative evidence was actually evaluated.
-    An unavailable read or an evaluator failure is never judged. It is not a
-    confidence score and cannot be supplied by a model expression.
+    Predicate truth is a prediction of the generated declaration. It does not
+    establish that the declaration expresses the requested write. In particular,
+    syntactic input references cannot establish that semantic relationship.
+    A positive prediction therefore remains unqualified and indeterminate.
+    A judged contradiction refutes the declared predicates conservatively;
+    this result never modifies the canonical reader's verdict or receipts.
     """
 
     identity: EvaluationIdentity
     verdict: Verdict = Verdict.INDETERMINATE
     judged: bool = False
+    prediction_scope: Literal["unqualified_model_prediction"] = (
+        "unqualified_model_prediction"
+    )
+    predicate_outcomes: Annotated[
+        tuple[Literal["true", "false", "unknown"], ...], Field(max_length=64)
+    ] = ()
     reason: Literal[
         "satisfied",
         "contradiction",
         "evidence_unavailable",
         "language_refused",
         "prior_refutation",
+        "model_unqualified",
     ] = "evidence_unavailable"
 
     @model_validator(mode="after")
     def _consistent_result(self) -> CandidateResult:
+        if self.reason == "model_unqualified" and (
+            not self.predicate_outcomes
+            or any(outcome != "true" for outcome in self.predicate_outcomes)
+        ):
+            raise ValueError("positive prediction requires actual true outcomes")
         if self.verdict == Verdict.CONFIRMED:
-            if not self.judged or self.reason != "satisfied":
-                raise ValueError("confirmation requires judged satisfied obligations")
+            raise ValueError("model prediction cannot confirm an effect")
         elif self.verdict == Verdict.REFUTED:
             if self.reason == "prior_refutation" and not self.judged:
                 return self
@@ -151,6 +165,7 @@ class CandidateResult(StrictModel):
         elif self.judged or self.reason not in (
             "evidence_unavailable",
             "language_refused",
+            "model_unqualified",
         ):
             raise ValueError("an incomplete candidate cannot claim a judged outcome")
         return self
@@ -251,32 +266,38 @@ def evaluate_effect_model(
             after=observations.after,
         )
         results = transforms.evaluate_effect_predicates(model.obligations, bindings)
-        if len(results) != len(model.obligations) or any(
-            result.outcome == "unknown" for result in results
-        ):
+        if len(results) != len(model.obligations):
             return CandidateResult(identity=identity, reason="language_refused")
+        outcomes = tuple(result.outcome for result in results)
+        if "unknown" in outcomes:
+            return CandidateResult(
+                identity=identity, reason="language_refused",
+                predicate_outcomes=outcomes,
+            )
         used = {name for result in results for name in result.inputs}
         used_paths = {
             ObservationPath(source=binding.source, path=binding.path)
             for binding in model.bindings
             if binding.name in used
         }
+        # Retain the observation-input coverage guard. Name occurrence is not
+        # semantic intent use, and cannot qualify a positive model prediction.
         if not required <= used_paths:
-            return unavailable
+            return CandidateResult(identity=identity, predicate_outcomes=outcomes)
         if any(result.outcome == "false" for result in results):
             return CandidateResult(
                 identity=identity,
                 verdict=Verdict.REFUTED,
                 judged=True,
                 reason="contradiction",
+                predicate_outcomes=outcomes,
             )
         if not all(result.outcome == "true" for result in results):
             return CandidateResult(identity=identity, reason="language_refused")
         return CandidateResult(
             identity=identity,
-            verdict=Verdict.CONFIRMED,
-            judged=True,
-            reason="satisfied",
+            reason="model_unqualified",
+            predicate_outcomes=outcomes,
         )
     except Exception:  # noqa: BLE001 - a shadow failure never changes canonical state
         return CandidateResult(identity=identity, reason="language_refused")
