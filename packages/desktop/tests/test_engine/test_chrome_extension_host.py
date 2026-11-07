@@ -868,6 +868,70 @@ class TestStopWaitsForInFlightWrites:
             os.close(writer)
             db.close()
 
+    def test_an_undrained_stop_is_not_reported_completed_or_compiled(
+        self, tmp_path: Path, host_script: Path, linux, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(host, "GATE_DRAIN_SECONDS", 0.2)
+        disp, db, active = self._start(tmp_path, host_script)
+        events: list[str] = []
+        compiled: list[str] = []
+        disp.emit = lambda kind, data=None: events.append(kind)
+        monkeypatch.setattr(
+            disp,
+            "_compile_registered_capture",
+            lambda capture_id, automatic: compiled.append(capture_id) or {},
+        )
+        writer = _hold_shared(host.gate_path(active))  # an authorized write still pending
+        try:
+            result = disp.dispatch("stop_recording", {})
+            assert disp.extension_host.stop_incomplete
+            assert result["completed"] is False
+            assert result["capture_id"] == "cap1"
+            assert "compile" not in result
+            assert compiled == []
+            assert "recording_stopped" not in events
+            assert "recording_error" in events
+        finally:
+            os.close(writer)
+            db.close()
+
+    def test_a_drained_stop_still_completes_and_compiles(
+        self, tmp_path: Path, host_script: Path, linux, monkeypatch
+    ) -> None:
+        disp, db, _active = self._start(tmp_path, host_script)
+        events: list[str] = []
+        compiled: list[str] = []
+        disp.emit = lambda kind, data=None: events.append(kind)
+        monkeypatch.setattr(
+            disp,
+            "_compile_registered_capture",
+            lambda capture_id, automatic: compiled.append(capture_id) or {"ok": True},
+        )
+        try:
+            result = disp.dispatch("stop_recording", {})
+            assert not disp.extension_host.stop_incomplete
+            assert disp.extension_host.revoked
+            assert result.get("completed") is not False
+            assert result["compile"] == {"ok": True}
+            assert compiled == ["cap1"]
+            assert "recording_stopped" in events
+            assert "recording_error" not in events
+        finally:
+            db.close()
+
+    def test_an_earlier_undrained_stop_is_not_attributed_to_a_later_recording(
+        self, tmp_path: Path, host_script: Path, linux, monkeypatch
+    ) -> None:
+        registrar = host.ExtensionHostRegistrar(
+            EngineConfig(data_dir=tmp_path / ".openadapt", log_level="WARNING")
+        )
+        # Left by an earlier recording's stop; this registrar holds no lease now.
+        registrar.undrained = True
+        registrar.unrevoked.add(tmp_path / "gone" / f"{host.ACTIVE_PREFIX}old")
+        registrar.stop()
+        assert registrar.undrained
+        assert not registrar.stop_incomplete
+
     def test_registration_fails_closed_when_the_marker_cannot_be_locked(
         self, tmp_path: Path, host_script: Path, linux, monkeypatch
     ) -> None:

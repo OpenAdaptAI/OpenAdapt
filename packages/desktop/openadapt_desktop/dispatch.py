@@ -783,6 +783,25 @@ class EngineDispatcher:
             metadata = controller.stop()
         finally:
             self.extension_host.stop()
+        if getattr(self.extension_host, "stop_incomplete", False) is True:
+            # A browser-extension write that was already authorized may still
+            # land in the capture after this returns, so the recording is not
+            # reported as completed and is not compiled automatically.
+            message = (
+                "The recording stopped, but a Chrome extension write was still in "
+                "progress, so it was not compiled automatically. The capture was "
+                "retained; compile it after the browser has closed"
+            )
+            self.emit("recording_error", {"error": message})
+            self.emit("status_update", self._status_dict(controller))
+            self.clear_coach()
+            return {
+                "capture_id": metadata.get("id"),
+                **metadata,
+                "recording": False,
+                "completed": False,
+                "error": message,
+            }
         self.emit("recording_stopped", metadata)
         self.emit("status_update", self._status_dict(controller))
         self.clear_coach()

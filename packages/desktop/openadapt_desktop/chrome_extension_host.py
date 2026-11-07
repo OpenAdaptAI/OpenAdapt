@@ -402,6 +402,11 @@ class ExtensionHostRegistrar:
         # Stop could not confirm that no exclusive holder of the marker lock
         # remains (inherited descriptor, close error, unsupported locking).
         self.lock_unreleased = False
+        # The last stop() released this recording's lease but could not confirm
+        # that host persistence is quiescent (``undrained`` or
+        # ``lock_unreleased``). The stop caller must not report a completed
+        # recording or compile it automatically.
+        self.stop_incomplete = False
 
     @property
     def control_dir(self) -> Path:
@@ -459,9 +464,15 @@ class ExtensionHostRegistrar:
     def stop(self) -> list[Path]:
         """End this recording's registration, if one was made. Never raises."""
 
+        self.stop_incomplete = False
         if not self.active and not self.unrevoked:
             return []
-        return self.sweep()
+        # Only a lease this stop releases is measured here; flags left by an
+        # earlier stop are not attributed to this one.
+        held = self._lease_fd is not None or self._gate_fd is not None
+        removed = self.sweep()
+        self.stop_incomplete = held and (self.undrained or self.lock_unreleased)
+        return removed
 
     def sweep(self) -> list[Path]:
         """Remove any Desktop-owned registration and markers. Never raises.
