@@ -431,3 +431,39 @@ def test_owned_driver_stops_on_readiness_refusal_and_cancellation(
     with pytest.raises(error):
         _start_browser(True)
     assert stopped == [True]
+
+
+@pytest.mark.parametrize("failure", ["", "start", "progress", "cancel"])
+def test_ci_browser_models_keep_readiness_before_business_use(failure: str) -> None:
+    from tests.browser_readiness import ReadyBrowserMixin
+
+    events: list[str] = []
+
+    class Model(ReadyBrowserMixin):
+        _readiness_failure = failure
+
+        def _readiness_mark(self, name: str) -> None:
+            events.append(name)
+
+        def close(self) -> None:
+            events.append("browser-close")
+
+    browser = Model()
+    launcher = SimpleNamespace(launch=lambda **_options: browser)
+    if failure:
+        with pytest.raises(readiness.BrowserReadinessError):
+            readiness.launch_rendering_ready(launcher, headless=True)
+        assert events[-1] == "browser-close"
+    else:
+        assert readiness.launch_rendering_ready(launcher, headless=True) is browser
+        events.append("business-use")
+        assert events[-2:] == ["readiness-close", "business-use"]
+    assert events[:3] == ["readiness-context", "readiness-page", "readiness-start"]
+    assert events.count("readiness-close") == 1
+    assert events.count("readiness-dispose") == (
+        0 if failure == "start" else 3 if not failure else 2
+    )
+    if failure == "progress":
+        assert "readiness-cancel" in events
+    if failure:
+        assert "business-use" not in events
