@@ -1159,6 +1159,11 @@ def check_reads(
                         "records_next_path, records_total_path, or validated "
                         "records_complete semantics"
                     )
+                if cfg.records_next_path and not cfg.records_snapshot_path:
+                    problems.append(
+                        f"{name}: a paged REST read needs reviewed immutable "
+                        "snapshot semantics in records_snapshot_path"
+                    )
                 continue
             if configs[name].get("kind") != "sql" or verifier is None:
                 continue

@@ -24,13 +24,18 @@ import time
 from typing import Any, Optional
 from urllib.parse import urljoin, urlsplit
 
-from openadapt_flow.runtime.effects._common import drop_record_fields, judge_records
+from openadapt_flow.runtime.effects._common import (
+    drop_record_fields,
+    judge_records,
+    page_snapshot_token,
+)
 from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
     Effect,
     EffectState,
     EffectVerdict,
     Verdict,
+    stable_id,
 )
 from openadapt_flow.verification import VerificationTier
 
@@ -109,7 +114,7 @@ class RestRecordVerifier(VerifierAdapterBase):
             page on the same origin is read (at most :data:`MAX_PAGES`); a
             failed page or a longer chain reads as unreadable. Unset, one
             response is not assumed to be the whole read.
-        total_path: Dotted path in the first page's body to the number of
+        total_path: Dotted path in every page's body to the number of
             records the server holds for the read. Set, a read whose record
             count differs, or a body without it, reads as unreadable. Unset,
             the read does not gain a completeness guarantee from the total.
@@ -117,6 +122,10 @@ class RestRecordVerifier(VerifierAdapterBase):
             that one response contains the complete matching record set. This
             is for validated, unpaged endpoints; it is never inferred from
             response length.
+        snapshot_path: Dotted body path to the immutable view identifier in a
+            reviewed endpoint contract. Multi-page reads require the same
+            exact token on every page; its observed stability alone does not
+            establish the endpoint's snapshot semantics.
 
     Why the last read was unreadable is in :attr:`read_problem` (and in the
     state's ``detail`` and the verdict's reason).
@@ -139,11 +148,13 @@ class RestRecordVerifier(VerifierAdapterBase):
         next_path: Optional[str] = None,
         total_path: Optional[str] = None,
         records_complete: Optional[bool] = None,
+        snapshot_path: Optional[str] = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.next_path = next_path
         self.total_path = total_path
         self.records_complete = records_complete
+        self.snapshot_path = snapshot_path
         self.readback_complete: Optional[bool] = None
         self.read_problem: Optional[str] = None
         self.drop_fields = tuple(drop_fields)
@@ -240,18 +251,47 @@ class RestRecordVerifier(VerifierAdapterBase):
         collected: list[Any] = []
         total: Any = None
         next_chain_complete = True
+        snapshot: str | int | object = _MISSING
         for page in range(MAX_PAGES):
             body = self._get_json(url)
             if body is _UNREADABLE:
                 self.readback_complete = False
                 return None
+            if self.snapshot_path is not None:
+                try:
+                    current_snapshot = page_snapshot_token(body, self.snapshot_path)
+                except ValueError as error:
+                    self.read_problem = str(error)
+                    self.readback_complete = False
+                    return None
+                if snapshot is not _MISSING and (
+                    type(current_snapshot) is not type(snapshot)
+                    or current_snapshot != snapshot
+                ):
+                    self.read_problem = "the declared snapshot changed across pages"
+                    self.readback_complete = False
+                    return None
+                snapshot = current_snapshot
             records = self._records_of(body)
             if records is None:
                 self.read_problem = f"GET {url}: no records list in the body"
                 self.readback_complete = False
                 return None
-            if page == 0 and self.total_path is not None:
-                total = _dotted(body, self.total_path)
+            if self.total_path is not None:
+                current_total = _dotted(body, self.total_path)
+                if (
+                    isinstance(current_total, bool)
+                    or not isinstance(current_total, int)
+                    or current_total < 0
+                ):
+                    self.read_problem = f"no record total at {self.total_path}"
+                    self.readback_complete = False
+                    return None
+                if page and current_total != total:
+                    self.read_problem = "the declared record total changed across pages"
+                    self.readback_complete = False
+                    return None
+                total = current_total
             collected.extend(records)
             if self.next_path is None:
                 break
@@ -272,6 +312,12 @@ class RestRecordVerifier(VerifierAdapterBase):
                 self.read_problem = (
                     f"next link origin {_origin(following)} != base_url "
                     f"{_origin(self.base_url)}"
+                )
+                self.readback_complete = False
+                return None
+            if self.snapshot_path is None:
+                self.read_problem = (
+                    "multi-page reads require declared immutable snapshot semantics"
                 )
                 self.readback_complete = False
                 return None
@@ -296,6 +342,48 @@ class RestRecordVerifier(VerifierAdapterBase):
             self.read_problem = f"GET {url}: records list contains a non-object"
             self.readback_complete = False
             return None
+        identities: set[Any] = set()
+        identity_domain: type | None = None
+        for record in collected:
+            if "id" not in record and not (page == 0 and self.records_complete is True):
+                self.read_problem = (
+                    "paged or counted reads require a usable record identity"
+                )
+                self.readback_complete = False
+                return None
+            if "id" in record and (
+                not isinstance(record["id"], (str, int))
+                or isinstance(record["id"], bool)
+                or (isinstance(record["id"], str) and not record["id"].strip())
+            ):
+                self.read_problem = "REST read has no usable record identity"
+                self.readback_complete = False
+                return None
+            if "id" in record:
+                domain = type(record["id"])
+                if identity_domain is not None and domain is not identity_domain:
+                    self.read_problem = (
+                        "REST read mixes record identity domains; coverage is ambiguous"
+                    )
+                    self.readback_complete = False
+                    return None
+                identity_domain = domain
+            try:
+                identity = stable_id(record)
+                repeated = identity in identities
+            except TypeError:
+                self.read_problem = "REST read has no usable record identity"
+                self.readback_complete = False
+                return None
+            if repeated:
+                # A repeated representation is not another covered record.
+                # Silently removing it could still hide an omitted record.
+                self.read_problem = (
+                    "REST read repeated a record identity; coverage is ambiguous"
+                )
+                self.readback_complete = False
+                return None
+            identities.add(identity)
         if self.total_path is not None:
             self.readback_complete = True
         elif self.next_path is not None:
@@ -337,7 +425,10 @@ class RestRecordVerifier(VerifierAdapterBase):
             current = self._fetch_records()
             last = judge_records(expected, before, current, substrate=self.substrate)
             current_complete = self.readback_complete
-            if before.readback_complete is not True or current_complete is not True:
+            if current_complete is not True or (
+                before.readback_complete is not True
+                and last.verdict is not Verdict.REFUTED
+            ):
                 read_problem = (
                     "baseline" if before.readback_complete is not True else "current"
                 )

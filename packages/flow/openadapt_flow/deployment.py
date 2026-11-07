@@ -33,6 +33,7 @@ from pydantic import (
     ConfigDict,
     Field,
     StrictBool,
+    StrictStr,
     field_validator,
     model_serializer,
     model_validator,
@@ -405,6 +406,12 @@ class EffectsConfig(BaseModel):
     #: number of returned records. Prefer ``records_next_path`` or
     #: ``records_total_path`` when the endpoint exposes pagination metadata.
     records_complete: Optional[StrictBool] = None
+    #: ``rest`` / ``fhir``: response-body path to a token whose reviewed
+    #: endpoint semantics bind every page to one immutable result snapshot.
+    #: A next link or total alone is not a consistent multi-page read.
+    records_snapshot_path: Optional[StrictStr] = Field(
+        default=None, min_length=1, max_length=256, pattern=r"^[^.\s]+(?:\.[^.\s]+)*$"
+    )
     #: Secret-isolated auth headers for the records read (bearer_env /
     #: header+value_env / basic_env). Never a credential literal.
     auth: Optional[AuthRef] = None
@@ -638,6 +645,7 @@ class EffectsConfig(BaseModel):
             "records_next_path",
             "records_total_path",
             "records_complete",
+            "records_snapshot_path",
             "records_path",
             "resource_type",
         ):
@@ -654,6 +662,10 @@ class EffectsConfig(BaseModel):
             )
         if self.records_complete is not None and kind != "rest":
             raise ValueError("effects.records_complete applies only to kind rest")
+        if self.records_snapshot_path is not None and kind not in ("rest", "fhir"):
+            raise ValueError(
+                "effects.records_snapshot_path applies only to kinds rest and fhir"
+            )
         return self
 
     @model_validator(mode="after")
@@ -2171,6 +2183,7 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
         "records_next_path",
         "records_total_path",
         "records_complete",
+        "records_snapshot_path",
     ):
         if config.get(added) is None:
             config.pop(added, None)
@@ -2335,6 +2348,7 @@ def _build_effect_verifier_unredacted(
             next_path=cfg.records_next_path,
             total_path=cfg.records_total_path,
             records_complete=cfg.records_complete,
+            snapshot_path=cfg.records_snapshot_path,
         )
 
     if kind == "fhir":
@@ -2381,6 +2395,7 @@ def _build_effect_verifier_unredacted(
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,
             drop_fields=tuple(cfg.records_drop_fields),
+            snapshot_path=cfg.records_snapshot_path,
         )
 
     if kind == "sql":

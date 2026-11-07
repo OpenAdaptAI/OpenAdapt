@@ -131,6 +131,7 @@ class AdmissionFixture:
     records_next_path: Optional[str] = None
     records_total_path: Optional[str] = None
     records_complete: Optional[bool] = None
+    records_snapshot_path: Optional[str] = None
 
     def __post_init__(self) -> None:
         from openadapt_flow.deployment import EffectsConfig
@@ -141,6 +142,7 @@ class AdmissionFixture:
             records_next_path=self.records_next_path,
             records_total_path=self.records_total_path,
             records_complete=self.records_complete,
+            records_snapshot_path=self.records_snapshot_path,
         )
 
 
@@ -312,6 +314,7 @@ def admit_rest_binding(
             records_next_path=fixture.records_next_path,
             records_total_path=fixture.records_total_path,
             records_complete=fixture.records_complete,
+            records_snapshot_path=fixture.records_snapshot_path,
         )
     )
     if verifier is None:

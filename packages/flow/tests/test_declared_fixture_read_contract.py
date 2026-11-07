@@ -48,7 +48,12 @@ ROUTES = (
     "admission_read",
     "synthesis_read",
 )
-FIELDS = ("records_next_path", "records_total_path", "records_complete")
+FIELDS = (
+    "records_next_path",
+    "records_total_path",
+    "records_complete",
+    "records_snapshot_path",
+)
 
 
 def _verify_config(section):
@@ -92,6 +97,7 @@ def _read(route, section: dict[str, Any], monkeypatch, tmp_path):
             next_path=cfg.records_next_path,
             total_path=cfg.records_total_path,
             records_complete=cfg.records_complete,
+            snapshot_path=cfg.records_snapshot_path,
         )
     elif route in {"admission_read", "synthesis_read"}:
         # Intercept only the existing constructor boundary and execute its real
@@ -107,6 +113,7 @@ def _read(route, section: dict[str, Any], monkeypatch, tmp_path):
             assert verifier.next_path == cfg.records_next_path
             assert verifier.total_path == cfg.records_total_path
             assert verifier.records_complete is cfg.records_complete
+            assert verifier.snapshot_path == cfg.records_snapshot_path
             try:
                 state = verifier.capture_pre_state()
                 result = (
@@ -137,6 +144,7 @@ def _read(route, section: dict[str, Any], monkeypatch, tmp_path):
                     records_next_path=cfg.records_next_path,
                     records_total_path=cfg.records_total_path,
                     records_complete=cfg.records_complete,
+                    records_snapshot_path=cfg.records_snapshot_path,
                 )
                 proposal = admission.RestWriteProposal(
                     "synthetic-step",
@@ -210,6 +218,7 @@ def _read(route, section: dict[str, Any], monkeypatch, tmp_path):
     assert verifier.next_path == cfg.records_next_path
     assert verifier.total_path == cfg.records_total_path
     assert verifier.records_complete is cfg.records_complete
+    assert verifier.snapshot_path == cfg.records_snapshot_path
     try:
         state = verifier.capture_pre_state()
         return state.reachable, list(state.records) if state.reachable else None
@@ -270,7 +279,7 @@ def test_mockmed_declared_fullset_matches_actual_store(count, monkeypatch, tmp_p
 def test_http_metadata_propagates_across_readers(count, shape, monkeypatch, tmp_path):
     # Only total-only needs a server whose one page really covers every row.
     cap = 512 if shape == "total" else 200
-    with CappedRecordServer(page_size=cap) as server:
+    with CappedRecordServer(page_size=cap, immutable_pages=shape != "total") as server:
         for index in range(count):
             server.append({"id": str(index), "patient_id": "p1"})
         committed = server.snapshot()
@@ -283,6 +292,7 @@ def test_http_metadata_propagates_across_readers(count, shape, monkeypatch, tmp_
                 "records_complete": complete,
                 "records_next_path": "page.next" if shape != "total" else None,
                 "records_total_path": "page.total" if shape != "next" else None,
+                "records_snapshot_path": "page.snapshot" if shape != "total" else None,
             }
             for route in ROUTES:
                 reachable, returned = _read(route, section, monkeypatch, tmp_path)

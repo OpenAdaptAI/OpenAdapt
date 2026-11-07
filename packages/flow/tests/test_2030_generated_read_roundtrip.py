@@ -40,17 +40,18 @@ def test_generated_rest_read_preserves_setup_fields_through_closed_load(
             "records_next_path": "links.next" if paged else None,
             "records_total_path": "meta.total" if paged else None,
             "records_complete": complete,
+            "records_snapshot_path": "meta.snapshot" if paged else None,
         }
         pages = (
             {
                 first_url: {
                     "records": [],
-                    "meta": {"total": 1},
+                    "meta": {"total": 1, "snapshot": "fixed-setup-view"},
                     "links": {"next": next_url},
                 },
                 next_url: {
                     "records": [row],
-                    "meta": {"total": 1},
+                    "meta": {"total": 1, "snapshot": "fixed-setup-view"},
                     "links": {"next": None},
                 },
             }
@@ -81,6 +82,7 @@ def test_generated_rest_read_preserves_setup_fields_through_closed_load(
             assert surface.records_next_path == config["records_next_path"]
             assert surface.records_total_path == config["records_total_path"]
             assert surface.records_complete is complete
+            assert surface.records_snapshot_path == config["records_snapshot_path"]
         # The production closed loader still refuses the generated draft.
         with pytest.raises(VerifyRunError, match="unconfirmed placeholder"):
             parse_verify_config(document)

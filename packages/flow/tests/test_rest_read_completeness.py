@@ -70,6 +70,7 @@ def _verifier(
             poll_interval_s=0,
             total_path=total_path,
             next_path=next_path,
+            snapshot_path="page.snapshot" if mode == "pages" else None,
         )
     section = {
         "kind": "rest",
@@ -80,6 +81,7 @@ def _verifier(
         "poll_interval_s": 0,
         "records_total_path": total_path,
         "records_next_path": next_path,
+        "records_snapshot_path": "page.snapshot" if mode == "pages" else None,
     }
     if entrypoint == "builder":
         built = build_effect_verifier(EffectsConfig.model_validate(section))
@@ -132,7 +134,11 @@ def _read_case(
     with (
         pytest.MonkeyPatch.context() as environment,
         CappedRecordServer(
-            page_size=cap, metadata=metadata, http_status=http_status, rows=rows
+            page_size=cap,
+            metadata=metadata,
+            http_status=http_status,
+            rows=rows,
+            immutable_pages=mode == "pages",
         ) as server,
     ):
         absent_netrc = tmp_path / "absent-netrc"

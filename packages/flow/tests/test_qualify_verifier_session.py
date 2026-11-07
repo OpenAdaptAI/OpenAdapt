@@ -61,7 +61,9 @@ class _Session:
             200,
             {
                 "resourceType": "Bundle",
-                "entry": [{"resource": {"id": "p1", "name": "Ada"}}],
+                "entry": [
+                    {"resource": {"resourceType": "Patient", "id": "p1", "name": "Ada"}}
+                ],
             },
         )
 
@@ -156,12 +158,21 @@ def test_rest_session_hook_uses_shared_paged_parameterized_builder(monkeypatch):
                     200,
                     {
                         "items": [{"id": "a", "secret": "x"}],
-                        "meta": {"total": 2, "next": "?page=2"},
+                        # This closed fixture always returns the same two
+                        # literal pages; the endpoint has no mutable store.
+                        "meta": {
+                            "total": 2,
+                            "next": "?page=2",
+                            "snapshot": "fixed-pair",
+                        },
                     },
                 )
             return _Response(
                 200,
-                {"items": [{"id": "b", "secret": "y"}], "meta": {"total": 2}},
+                {
+                    "items": [{"id": "b", "secret": "y"}],
+                    "meta": {"total": 2, "snapshot": "fixed-pair"},
+                },
             )
 
     session = PagedSession()
@@ -177,6 +188,7 @@ def test_rest_session_hook_uses_shared_paged_parameterized_builder(monkeypatch):
             records_key="items",
             records_next_path="meta.next",
             records_total_path="meta.total",
+            records_snapshot_path="meta.snapshot",
             records_complete=True,
             records_drop_fields=["secret"],
         ),
@@ -198,6 +210,7 @@ def test_rest_session_hook_uses_shared_paged_parameterized_builder(monkeypatch):
     assert verifier.next_path == "meta.next"
     assert verifier.total_path == "meta.total"
     assert verifier.records_complete is True
+    assert verifier.snapshot_path == "meta.snapshot"
 
 
 _REST: dict[str, Any] = {
