@@ -874,7 +874,9 @@ def _evidence_ref(root: Path, path: Path, kind: Any) -> Any:
     from openadapt_flow.qualification import EvidenceRef
 
     if is_publication_input_path_excluded(path.relative_to(root)):
-        raise QualifyError("Local key material or unclassified containers cannot be qualification evidence")
+        raise QualifyError(
+            "Local key material or unclassified containers cannot be qualification evidence"
+        )
     return EvidenceRef(
         kind=kind, sha256=_sha256(path), relative_path=path.relative_to(root).as_posix()
     )

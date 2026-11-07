@@ -15,7 +15,8 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from openadapt_flow import hosted, sanitized_artifact
 from openadapt_flow.evidence_files import (
@@ -47,14 +48,36 @@ def guard():
 # This is the normative family table, independent of implementation constants.
 # No real key/credential or existing artifact payload is used by these tests.
 PRIVATE_NAMES = (
-    ".attended_capability.key", "signer.KEY", "authority.key~", "authority.pem~",
-    "authority.key.bak", "keys.json", "seal-key.json", "site-keys.json",
-    "seal-keys.json", "signing-key.json", "hmac-key.json", "password.json",
-    "credentials.yaml", "credentials.txt", "secret.toml", "token.yml",
-    "webauthn_passkey_double.json", "named_person_binding.json",
-    "id_rsa.bak", "id_ed25519.old", "credentials.backup", ".env", ".env.local",
-    "client.p12", "client.pfx", "private.jks", "private.keystore",
-    ".ssh/identity", ".aws/config", ".private/config.json",
+    ".attended_capability.key",
+    "signer.KEY",
+    "authority.key~",
+    "authority.pem~",
+    "authority.key.bak",
+    "keys.json",
+    "seal-key.json",
+    "site-keys.json",
+    "seal-keys.json",
+    "signing-key.json",
+    "hmac-key.json",
+    "password.json",
+    "credentials.yaml",
+    "credentials.txt",
+    "secret.toml",
+    "token.yml",
+    "webauthn_passkey_double.json",
+    "named_person_binding.json",
+    "id_rsa.bak",
+    "id_ed25519.old",
+    "credentials.backup",
+    ".env",
+    ".env.local",
+    "client.p12",
+    "client.pfx",
+    "private.jks",
+    "private.keystore",
+    ".ssh/identity",
+    ".aws/config",
+    ".private/config.json",
 )
 AUTHORITY_NAMES = ("attended_capability.json", "attended_capability_history.json.enc")
 OPAQUE_NAMES = tuple("unclassified" + suffix for suffix in OPAQUE_CONTAINER_SUFFIXES)
@@ -76,8 +99,16 @@ def test_generated_private_families_are_denied_at_any_depth(name, parents, windo
 
 @pytest.mark.parametrize(
     "relative",
-    ("seal_keys.py", "keys.py", "secret-scan.yml", "tokens.css", "report.json",
-     "public.crt", "public.cer", "nested/checkpoint.json"),
+    (
+        "seal_keys.py",
+        "keys.py",
+        "secret-scan.yml",
+        "tokens.css",
+        "report.json",
+        "public.crt",
+        "public.cer",
+        "nested/checkpoint.json",
+    ),
 )
 def test_source_code_and_public_certificate_names_are_distinct(relative):
     assert not is_key_material_path(relative)
@@ -94,6 +125,7 @@ def _forbid_payload_reads(monkeypatch, denied: set[Path]) -> None:
                 candidate = Path(file)
                 assert candidate not in denied, "excluded payload was opened"
             return opener(file, *args, **kwargs)
+
         return open_checked
 
     monkeypatch.setattr(builtins, "open", checked(original_builtin))
@@ -102,7 +134,10 @@ def _forbid_payload_reads(monkeypatch, denied: set[Path]) -> None:
 
 @pytest.mark.parametrize("name", PRIVATE_NAMES + AUTHORITY_NAMES + OPAQUE_NAMES)
 def test_actual_export_boundaries_do_not_read_or_copy_private_names(
-    tmp_path, monkeypatch, guard, name,
+    tmp_path,
+    monkeypatch,
+    guard,
+    name,
 ):
     source = tmp_path / "run"
     source.mkdir()
@@ -144,7 +179,9 @@ def test_actual_export_boundaries_do_not_read_or_copy_private_names(
         hosted._zip_dir(source)
     with pytest.raises(hosted.HostedError, match="local key material"):
         hosted._scrub_recording_tree(source)
-    with pytest.raises(sanitized_artifact.SanitizationError, match="local key material"):
+    with pytest.raises(
+        sanitized_artifact.SanitizationError, match="local key material"
+    ):
         sanitized_artifact.source_tree_sha256(source)
     with pytest.raises(campaign.QualifyError, match="Local key material"):
         campaign._evidence_ref(source, private, "other")
@@ -165,7 +202,9 @@ def test_run_derivative_strips_all_key_families_without_opening(tmp_path, monkey
     (tmp_path / "report.json").write_text("{}")
     _forbid_payload_reads(monkeypatch, denied)
     demo._strip_run_authority(tmp_path)
-    assert sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*") if p.is_file()) == ["report.json"]
+    assert sorted(
+        p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*") if p.is_file()
+    ) == ["report.json"]
 
 
 def test_qualification_still_binds_nonsecret_run_evidence(tmp_path):
@@ -210,13 +249,25 @@ def test_exact_public_registry_exception_requires_closed_schema(tmp_path, guard)
     entry = {**_public_entry(), "private_key": "synthetic forbidden extra"}
     target.write_text(json.dumps([entry]))
     assert guard["violations"](tmp_path, [relative]) == [relative]
-    assert guard["violations"](tmp_path, ["benchmark/other/seal-key.json"]) == ["benchmark/other/seal-key.json"]
-    assert guard["violations"](tmp_path, ["Evidence/KEYS.JSON"]) == ["Evidence/KEYS.JSON"]
-    assert guard["tracked_key_path_kind"]("fixtures/webauthn_passkey_double.json") == "excluded"
-    assert guard["violations"](tmp_path, ["root.key", "root.key/data.json"]) == ["root.key", "root.key/data.json"]
+    assert guard["violations"](tmp_path, ["benchmark/other/seal-key.json"]) == [
+        "benchmark/other/seal-key.json"
+    ]
+    assert guard["violations"](tmp_path, ["Evidence/KEYS.JSON"]) == [
+        "Evidence/KEYS.JSON"
+    ]
+    assert (
+        guard["tracked_key_path_kind"]("fixtures/webauthn_passkey_double.json")
+        == "excluded"
+    )
+    assert guard["violations"](tmp_path, ["root.key", "root.key/data.json"]) == [
+        "root.key",
+        "root.key/data.json",
+    ]
 
 
-def test_public_registry_exception_refuses_indirect_paths_before_open(tmp_path, guard, monkeypatch):
+def test_public_registry_exception_refuses_indirect_paths_before_open(
+    tmp_path, guard, monkeypatch
+):
     relative = sorted(guard["PUBLIC_REGISTRIES"])[0]
     outer = tmp_path / "outside"
     outer.mkdir()
@@ -229,8 +280,13 @@ def test_public_registry_exception_refuses_indirect_paths_before_open(tmp_path, 
 
 @pytest.mark.parametrize(
     "change",
-    ({"private_key": "synthetic"}, {"seed": "synthetic"}, {"status": "unknown"},
-     {"public_key": "AA=="}, {"key_id": "wrong"}),
+    (
+        {"private_key": "synthetic"},
+        {"seed": "synthetic"},
+        {"status": "unknown"},
+        {"public_key": "AA=="},
+        {"key_id": "wrong"},
+    ),
 )
 def test_public_registry_cannot_hide_unknown_or_private_fields(guard, change):
     assert not guard["is_public_registry"](json.dumps([{**_public_entry(), **change}]))
@@ -240,7 +296,7 @@ def test_public_registry_rejects_duplicate_and_outer_fields(guard):
     entry = json.dumps(_public_entry())
     assert not guard["is_public_registry"](f'{{"keys":[{entry}],"secret":"synthetic"}}')
     assert not guard["is_public_registry"](f'{{"keys":[{entry}],"keys":[{entry}]}}')
-    assert not guard["is_public_registry"](f'[{entry},{entry}]')
+    assert not guard["is_public_registry"](f"[{entry},{entry}]")
     assert guard["is_public_registry"](f'{{"keys":[{entry}]}}')
 
 
@@ -256,16 +312,29 @@ def test_public_certificate_exception_is_not_a_private_key_container(guard):
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Synthetic evidence CA")])
     now = datetime.now(timezone.utc)
     certificate = (
-        x509.CertificateBuilder()
-        .subject_name(name).issuer_name(name).public_key(key.public_key())
-        .serial_number(1).not_valid_before(now - timedelta(days=1))
-        .not_valid_after(now + timedelta(days=1))
-        .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
-        .sign(key, algorithm=None)
-    ).public_bytes(serialization.Encoding.PEM).decode("ascii")
+        (
+            x509.CertificateBuilder()
+            .subject_name(name)
+            .issuer_name(name)
+            .public_key(key.public_key())
+            .serial_number(1)
+            .not_valid_before(now - timedelta(days=1))
+            .not_valid_after(now + timedelta(days=1))
+            .add_extension(
+                x509.BasicConstraints(ca=True, path_length=None), critical=True
+            )
+            .sign(key, algorithm=None)
+        )
+        .public_bytes(serialization.Encoding.PEM)
+        .decode("ascii")
+    )
     assert guard["is_public_certificate"](certificate)
-    assert not guard["is_public_certificate"]("-----BEGIN PRIVATE KEY-----\nAA==\n-----END PRIVATE KEY-----")
-    assert not guard["is_public_certificate"]("-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----")
+    assert not guard["is_public_certificate"](
+        "-----BEGIN PRIVATE KEY-----\nAA==\n-----END PRIVATE KEY-----"
+    )
+    assert not guard["is_public_certificate"](
+        "-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----"
+    )
 
 
 def test_git_ignore_and_ci_use_actual_publication_guard(tmp_path):
@@ -273,7 +342,9 @@ def test_git_ignore_and_ci_use_actual_publication_guard(tmp_path):
     (tmp_path / ".gitignore").write_bytes((REPO / ".gitignore").read_bytes())
     for name in ("run.key", ".attended_capability.key", "nested/key.KEY", "run.key~"):
         result = subprocess.run(
-            ["git", "check-ignore", name], cwd=tmp_path, capture_output=True,
+            ["git", "check-ignore", name],
+            cwd=tmp_path,
+            capture_output=True,
         )
         assert result.returncode == 0
     workflow = (REPO / ".github/workflows/packages.yml").read_text()
@@ -288,23 +359,37 @@ def test_actual_ci_command_rejects_force_added_synthetic_key_without_values(tmp_
     key.write_text(marker)
     subprocess.run(["git", "add", "-f", "benchmark"], cwd=tmp_path, check=True)
     result = subprocess.run(
-        [sys.executable, str(REPO / "scripts/check_evidence_keys.py"), "--root", str(tmp_path)],
-        capture_output=True, text=True,
+        [
+            sys.executable,
+            str(REPO / "scripts/check_evidence_keys.py"),
+            "--root",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
     )
     assert result.returncode == 1
     assert "EVIDENCE_KEYS_DENIED" in result.stdout
     assert "benchmark/run/authority.key" in result.stdout
     assert marker not in result.stdout + result.stderr
     abbreviated = subprocess.run(
-        [sys.executable, str(REPO / "scripts/check_evidence_keys.py"), "--roo", str(tmp_path)],
-        capture_output=True, text=True,
+        [
+            sys.executable,
+            str(REPO / "scripts/check_evidence_keys.py"),
+            "--roo",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
     )
     assert abbreviated.returncode == 2
     assert "unrecognized arguments: --roo" in abbreviated.stderr
     assert marker not in abbreviated.stdout + abbreviated.stderr
 
 
-ASSERTION_PATH = "packages/flow/tests/fixtures/named_person_binding/webauthn_passkey_double.json"
+ASSERTION_PATH = (
+    "packages/flow/tests/fixtures/named_person_binding/webauthn_passkey_double.json"
+)
 
 
 def _synthetic_assertion_data():
@@ -315,26 +400,37 @@ def _synthetic_assertion_data():
         "note": "Synthetic structural sample; not a live authentication assertion",
         "approval_payload_sha256": digest,
         "registered_passkey": {
-            "person_id": "person:synthetic", "credential_id_hex": "01",
-            "public_key_hex": "02" * 32, "rp_id": rp,
+            "person_id": "person:synthetic",
+            "credential_id_hex": "01",
+            "public_key_hex": "02" * 32,
+            "rp_id": rp,
         },
         "assertion_hex": {
-            "credential_id": "01", "authenticator_data": "03" * 37,
+            "credential_id": "01",
+            "authenticator_data": "03" * 37,
             "signature": "04" * 32,
-            "client_data_json": json.dumps({
-                "type": "webauthn.get", "origin": "https://" + rp,
-                "challenge": "a" * 64,
-                "fixture": "openadapt.named-person.webauthn-double/v1",
-            }),
+            "client_data_json": json.dumps(
+                {
+                    "type": "webauthn.get",
+                    "origin": "https://" + rp,
+                    "challenge": "a" * 64,
+                    "fixture": "openadapt.named-person.webauthn-double/v1",
+                }
+            ),
         },
         "binding": {
             "schema_version": "openadapt.named-person-binding/v1",
-            "person_id": "person:synthetic", "method": "webauthn_passkey",
-            "approval_payload_sha256": digest, "verified_at": "2026-11-07T00:00:00Z",
+            "person_id": "person:synthetic",
+            "method": "webauthn_passkey",
+            "approval_payload_sha256": digest,
+            "verified_at": "2026-11-07T00:00:00Z",
             "evidence": {
-                "rp_id": rp, "credential_id_sha256": digest,
-                "authenticator_data_sha256": digest, "client_data_sha256": digest,
-                "signature_sha256": digest, "challenge_sha256": digest,
+                "rp_id": rp,
+                "credential_id_sha256": digest,
+                "authenticator_data_sha256": digest,
+                "client_data_sha256": digest,
+                "signature_sha256": digest,
+                "challenge_sha256": digest,
                 "user_handle_sha256": None,
             },
         },
@@ -356,19 +452,33 @@ def test_closed_synthetic_assertion_is_ci_only_and_exact_path(tmp_path, guard):
     candidate.parent.mkdir(parents=True)
     candidate.write_text(payload)
     assert guard["violations"](tmp_path, [ASSERTION_PATH]) == []
-    assert guard["tracked_key_path_kind"](ASSERTION_PATH) == "synthetic_assertion_candidate"
+    assert (
+        guard["tracked_key_path_kind"](ASSERTION_PATH)
+        == "synthetic_assertion_candidate"
+    )
     other = "evidence/webauthn_passkey_double.json"
     assert guard["violations"](tmp_path, [other]) == [other]
     assert is_publication_input_path_excluded(ASSERTION_PATH)
 
 
 @given(
-    level=st.sampled_from(("outer", "registered_passkey", "assertion_hex", "binding", "evidence", "client")),
+    level=st.sampled_from(
+        (
+            "outer",
+            "registered_passkey",
+            "assertion_hex",
+            "binding",
+            "evidence",
+            "client",
+        )
+    ),
     extra=st.sampled_from(("private_key", "seed", "password", "unknown")),
     value=st.one_of(st.text(max_size=30), st.just({"nested": "unclassified"})),
 )
 @settings(max_examples=40, deadline=None)
-def test_synthetic_assertion_schema_refuses_extra_fields_at_every_level(guard, level, extra, value):
+def test_synthetic_assertion_schema_refuses_extra_fields_at_every_level(
+    guard, level, extra, value
+):
     data = _synthetic_assertion_data()
     if level == "client":
         client = json.loads(data["assertion_hex"]["client_data_json"])
@@ -379,11 +489,23 @@ def test_synthetic_assertion_schema_refuses_extra_fields_at_every_level(guard, l
     assert not guard["is_synthetic_assertion_fixture"](json.dumps(data))
 
 
-@pytest.mark.parametrize("mutation", (
-    "live_rp", "live_origin", "other_origin", "challenge", "public_key_size",
-    "signature_size", "credential", "method", "binding_person", "nested_known",
-    "duplicate_outer", "duplicate_client",
-))
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "live_rp",
+        "live_origin",
+        "other_origin",
+        "challenge",
+        "public_key_size",
+        "signature_size",
+        "credential",
+        "method",
+        "binding_person",
+        "nested_known",
+        "duplicate_outer",
+        "duplicate_client",
+    ),
+)
 def test_synthetic_assertion_schema_refuses_live_or_ambiguous_shapes(guard, mutation):
     data = _synthetic_assertion_data()
     client = json.loads(data["assertion_hex"]["client_data_json"])
@@ -408,10 +530,14 @@ def test_synthetic_assertion_schema_refuses_live_or_ambiguous_shapes(guard, muta
     elif mutation == "binding_person":
         data["binding"]["person_id"] = "person:other"
     elif mutation == "nested_known":
-        data["binding"]["evidence"]["signature_sha256"] = {"private_key": "not a digest"}
+        data["binding"]["evidence"]["signature_sha256"] = {
+            "private_key": "not a digest"
+        }
     data["assertion_hex"]["client_data_json"] = json.dumps(client)
     if mutation == "duplicate_client":
-        data["assertion_hex"]["client_data_json"] = json.dumps(client)[:-1] + ',"origin":"https://approve.synthetic.test"}'
+        data["assertion_hex"]["client_data_json"] = (
+            json.dumps(client)[:-1] + ',"origin":"https://approve.synthetic.test"}'
+        )
     payload = json.dumps(data)
     if mutation == "duplicate_outer":
         payload = payload[:-1] + ',"note":"Synthetic duplicate"}'

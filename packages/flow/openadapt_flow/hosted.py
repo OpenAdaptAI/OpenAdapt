@@ -952,7 +952,9 @@ def _assert_upload_tree_safe(src: Path) -> None:
 
     for path in sorted(src.rglob("*")):
         if is_publication_input_path_excluded(path.relative_to(src)):
-            raise HostedError("Refusing to upload local key material or unclassified containers")
+            raise HostedError(
+                "Refusing to upload local key material or unclassified containers"
+            )
         if path.is_symlink():
             raise HostedError(
                 f"Refusing to upload {src}: symlink {path.relative_to(src)} "
