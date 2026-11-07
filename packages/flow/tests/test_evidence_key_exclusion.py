@@ -12,11 +12,12 @@ import os
 import runpy
 import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from openadapt_flow import hosted, sanitized_artifact
@@ -74,6 +75,22 @@ PRIVATE_NAMES = (
     "credentials.backup",
     ".env",
     ".env.local",
+    ".env~",
+    ".env_backup",
+    ".env-backup",
+    "signing-key.jsonl",
+    "hmac-key.ndjson",
+    "password.csv",
+    "credentials.tsv",
+    "secret.xml",
+    "api-key.ini",
+    "passkey.cfg",
+    "token.conf",
+    "signing-key.config",
+    "password.properties",
+    "hmac-key.env",
+    "secret.text",
+    ".ssh_backup/identity",
     "client.p12",
     "client.pfx",
     "private.jks",
@@ -98,6 +115,62 @@ def test_generated_private_families_are_denied_at_any_depth(name, parents, windo
         relative = relative.replace("/", "\\")
     assert is_publication_input_path_excluded(relative)
     assert is_key_material_path(relative) == (name in PRIVATE_NAMES)
+
+
+@given(
+    protected=st.sampled_from((".env", "id_rsa", "credentials", ".ssh", ".aws")),
+    delimiter=st.sampled_from((".", "~", "_", "-")),
+    backup=st.text(alphabet="abcdefghijklmnopqrstuvwxyz0123456789", max_size=12),
+    parents=st.lists(st.sampled_from(("run", "evidence", "nested")), max_size=4),
+    windows=st.booleans(),
+)
+@settings(max_examples=80, deadline=None)
+def test_protected_name_backup_family_is_closed(
+    protected, delimiter, backup, parents, windows
+):
+    relative = "/".join([*parents, protected + delimiter + backup, "report.json"])
+    if windows:
+        relative = relative.replace("/", "\\")
+    assert is_key_material_path(relative)
+    assert is_publication_input_path_excluded(relative)
+
+
+@given(
+    credential=st.sampled_from(("signing-key", "hmac-key", "password", "api_key")),
+    suffix=st.sampled_from(
+        (
+            ".json",
+            ".jsonl",
+            ".ndjson",
+            ".yaml",
+            ".yml",
+            ".toml",
+            ".txt",
+            ".text",
+            ".csv",
+            ".tsv",
+            ".xml",
+            ".ini",
+            ".cfg",
+            ".conf",
+            ".config",
+            ".properties",
+            ".env",
+        )
+    ),
+    backup=st.sampled_from(("", "~", ".bak", "_backup", "-backup")),
+    parent=st.sampled_from(("", "run/", "run\\nested\\")),
+    uppercase=st.booleans(),
+)
+@settings(max_examples=100, deadline=None)
+def test_credential_data_format_and_backup_family_is_closed(
+    credential, suffix, backup, parent, uppercase
+):
+    relative = parent + credential + suffix + backup
+    if uppercase:
+        relative = relative.upper()
+    assert is_key_material_path(relative)
+    assert is_publication_input_path_excluded(relative)
 
 
 @pytest.mark.parametrize(
@@ -195,8 +268,38 @@ def test_actual_export_boundaries_do_not_read_or_copy_private_names(
     assert campaign._run_evidence_refs(source, source) == []
 
     # The ordinary tracked-file refusal does not open even an existing file.
-    expected = [f"benchmark/{name}"] if name in PRIVATE_NAMES else []
+    expected = [] if name in AUTHORITY_NAMES + OPAQUE_NAMES else [f"benchmark/{name}"]
     assert guard["violations"](source, [f"benchmark/{name}"]) == expected
+
+
+@given(
+    name=st.one_of(
+        st.tuples(
+            st.just(".env"),
+            st.sampled_from((".", "~", "_", "-")),
+            st.sampled_from(("", "backup", "old", "2026")),
+        ).map("".join),
+        st.tuples(
+            st.sampled_from(("signing-key", "hmac-key", "password")),
+            st.sampled_from((".jsonl", ".ndjson", ".csv", ".ini", ".properties")),
+            st.sampled_from(("", "~", ".bak", "_backup", "-backup")),
+        ).map("".join),
+    )
+)
+@settings(
+    max_examples=25,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+def test_generated_backup_and_data_names_close_every_publication_boundary(
+    tmp_path, monkeypatch, guard, name
+):
+    # Every draw owns a fresh synthetic tree. Reuse the same actual-boundary
+    # assertions and fail-on-open observation as the finite family controls.
+    with tempfile.TemporaryDirectory(dir=tmp_path) as directory:
+        test_actual_export_boundaries_do_not_read_or_copy_private_names(
+            Path(directory), monkeypatch, guard, name
+        )
 
 
 def test_run_derivative_strips_all_key_families_without_opening(tmp_path, monkeypatch):

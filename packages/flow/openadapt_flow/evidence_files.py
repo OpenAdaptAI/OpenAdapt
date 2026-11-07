@@ -47,7 +47,32 @@ _PRIVATE_DIRECTORIES = frozenset({".ssh", ".aws", ".gnupg", ".private", ".git"})
 _PRIVATE_AUTHORITY = frozenset(
     {"attended_capability.json", "attended_capability_history.json"}
 )
-_DATA_SUFFIX = re.compile(r"\.(?:json|yaml|yml|toml|txt)(?:$|[.~_-])")
+# Structured, delimited and configuration data can all carry credentials.
+# Match a format before its backup suffix, including JSON Lines spellings.
+CREDENTIAL_DATA_SUFFIXES = (
+    ".json",
+    ".jsonl",
+    ".ndjson",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".txt",
+    ".text",
+    ".csv",
+    ".tsv",
+    ".xml",
+    ".ini",
+    ".cfg",
+    ".conf",
+    ".config",
+    ".properties",
+    ".env",
+)
+_DATA_SUFFIX = re.compile(
+    "(?:"
+    + "|".join(re.escape(suffix) for suffix in CREDENTIAL_DATA_SUFFIXES)
+    + r")(?:$|[.~_-])"
+)
 _CREDENTIAL_DATA = re.compile(
     r"credential|secret|token|password|passphrase|passkey|"
     r"private[_-]?key|signing[_-]?key|hmac[_-]?key|api[_-]?key|key[_-]?store|"
@@ -72,11 +97,10 @@ def is_key_material_path(relative: str | os.PathLike[str]) -> bool:
     parts = PurePosixPath(os.fspath(relative).replace("\\", "/")).parts
     for part in parts:
         name = part.casefold()
-        if name in _PRIVATE_DIRECTORIES or any(
-            _name_or_backup(name, protected) for protected in _PRIVATE_NAMES
+        if any(
+            _name_or_backup(name, protected)
+            for protected in (*_PRIVATE_DIRECTORIES, *_PRIVATE_NAMES, ".env")
         ):
-            return True
-        if name == ".env" or name.startswith(".env."):
             return True
         if any(
             re.search(re.escape(suffix) + r"(?:$|[.~_-])", name)
