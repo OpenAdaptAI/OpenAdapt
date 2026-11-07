@@ -297,6 +297,10 @@ def _capture_modules(monkeypatch, resolve):
     video.require_video_encoder = _forbidden
     monkeypatch.setitem(sys.modules, "openadapt_capture.config", config)
     monkeypatch.setitem(sys.modules, "openadapt_capture.video", video)
+    capture_cli = ModuleType("openadapt_capture.cli")
+    capture_cli.install_ffmpeg = _forbidden
+    capture_cli.main = _forbidden
+    monkeypatch.setitem(sys.modules, "openadapt_capture.cli", capture_cli)
 
 
 def test_recording_resolves_configured_encoder_without_claiming_it_works(monkeypatch):
@@ -364,3 +368,40 @@ def test_recording_on_the_wrong_native_host_does_not_import_capture(monkeypatch)
 
     assert result.exit_code != 0
     assert "[UNSUPPORTED] macos" in result.output
+
+
+@pytest.mark.parametrize("capability", ["absent", "noncallable", "import-failure"])
+def test_recording_older_or_unknown_capture_offers_explicit_upgrade(
+    monkeypatch, capability
+):
+    def resolve(*args):
+        raise MissingFFmpeg("missing")
+
+    _capture_modules(monkeypatch, resolve)
+    monkeypatch.setattr(sys, "executable", "/opt/Python Tools/bin/python")
+    capture_cli = sys.modules["openadapt_capture.cli"]
+    if capability == "absent":
+        del capture_cli.install_ffmpeg
+    elif capability == "noncallable":
+        capture_cli.install_ffmpeg = None
+    else:
+        monkeypatch.setitem(sys.modules, "openadapt_capture.cli", None)
+
+    result = CliRunner().invoke(
+        cli.main, ["doctor", "--backend", "windows", "--recording"]
+    )
+
+    assert result.exit_code != 0
+    assert "[MISSING] FFmpeg" in result.output
+    assert "[FOUND] FFmpeg" not in result.output
+    assert "install-ffmpeg" not in result.output
+    command = result.output.split("upgrade Capture, then rerun doctor: ", 1)[1]
+    command = command.splitlines()[0]
+    assert shlex.split(command) == [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--upgrade",
+        "openadapt-capture>=1.3.0,<2.0.0",
+    ]

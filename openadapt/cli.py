@@ -2270,6 +2270,24 @@ def _doctor_macos_permissions() -> list[str]:
     return failures
 
 
+def _doctor_ffmpeg_remedy() -> str:
+    """Offer the installed Capture capability, or an explicit compatible upgrade."""
+    from importlib import import_module
+
+    try:
+        capture_cli = import_module("openadapt_capture.cli")
+        managed_install = callable(getattr(capture_cli, "install_ffmpeg", None))
+    except Exception:
+        managed_install = False
+    if managed_install:
+        return "install the managed runtime with: " + _doctor_python_command(
+            "-m openadapt_capture.cli install-ffmpeg"
+        )
+    return "upgrade Capture, then rerun doctor: " + _doctor_python_command(
+        '-m pip install --upgrade "openadapt-capture>=1.3.0,<2.0.0"'
+    )
+
+
 def _doctor_recording_prerequisites(backend: str) -> list[str]:
     """Resolve recording dependencies without capturing or testing an encoder."""
     from importlib.util import find_spec
@@ -2298,10 +2316,9 @@ def _doctor_recording_prerequisites(backend: str) -> list[str]:
     try:
         provision = resolve_ffmpeg(config.VIDEO_FFMPEG_PATH, config.VIDEO_FFPROBE_PATH)
     except FFmpegUnavailableError:
-        command = _doctor_python_command("-m openadapt_capture.cli install-ffmpeg")
         click.echo(
             "  [MISSING] FFmpeg: no executable could be resolved. Check any "
-            "configured FFmpeg path, or install the managed runtime with: " + command
+            "configured FFmpeg path, or " + _doctor_ffmpeg_remedy()
         )
         return ["ffmpeg"]
     except Exception:
