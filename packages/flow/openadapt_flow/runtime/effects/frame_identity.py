@@ -3,6 +3,7 @@
 These bindings select rows, not permissions. Column, audit, side-record and
 completeness checks still apply. No record values belong in a binding.
 """
+
 from __future__ import annotations
 
 import hashlib

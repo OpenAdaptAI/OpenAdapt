@@ -71,8 +71,6 @@ from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
-from openadapt_flow.runtime.effects.frame_identity import FrameIdentity
-
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from openadapt_flow.app_profiles import Owner, table_name
@@ -87,6 +85,7 @@ from openadapt_flow.runtime.effects.effect import (
     selector_value,
     stable_id,
 )
+from openadapt_flow.runtime.effects.frame_identity import FrameIdentity
 from openadapt_flow.runtime.effects.learned import (
     NOT_COMPARED,
     LearnedFrame,

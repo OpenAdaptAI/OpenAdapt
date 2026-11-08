@@ -1332,6 +1332,13 @@ def judge_run_frame(
     """
 
     spec = cfg.frame or FrameSpec()
+    if FRAME_IDENTITY_DETAIL in before.detail and (
+        cfg.frame is None or cfg.frame.database is None or not cfg.frame.identities
+    ):
+        return FrameVerdict(
+            status="not_checked",
+            reason="baseline identity evidence belongs to another surface mapping",
+        )
     # The database first, then the surfaces: a row a surface judges
     # (``database.judged_by``) is read by it no earlier than the settled
     # read a recheck compares with, so no change falls between the two.

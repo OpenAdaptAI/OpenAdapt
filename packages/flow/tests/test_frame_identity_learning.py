@@ -1,4 +1,5 @@
 """Learn identity from actual HTTP reads and the frame's own SQLite snapshot."""
+
 from __future__ import annotations
 
 import json
@@ -423,7 +424,7 @@ def test_legacy_selected_read_requires_identity_only_when_nonempty(service, tmp_
         assert not baseline.exists()
 
 
-@pytest.mark.parametrize("drift", ["permuted-column", "canonicaliser", "surface-field", "removed-mapping"])
+@pytest.mark.parametrize("drift", ["permuted-column", "canonicaliser", "surface-field", "removed-mapping", "removed-frame", "removed-database"])
 def test_baseline_authenticates_exact_learned_mapping(service, tmp_path, drift):
     service.protocol = "rest"
     service.transform = lambda rows: [dict(row, alias=row["id"]) for row in rows]
@@ -445,7 +446,11 @@ def test_baseline_authenticates_exact_learned_mapping(service, tmp_path, drift):
                    "canonicaliser": {"canonicaliser": "exact"},
                    "surface-field": {"surface_field": "alias"}}
         binding = cfg.frame.identities[""]
-        if drift == "removed-mapping":
+        if drift == "removed-frame":
+            cfg.frame = None
+        elif drift == "removed-database":
+            cfg.frame.database = None
+        elif drift == "removed-mapping":
             cfg.frame.identities.clear()
         else:
             cfg.frame.identities[""] = binding.model_copy(update=changes[drift])
