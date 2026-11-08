@@ -17,7 +17,9 @@ unreadable store and nothing landed.
 
 from __future__ import annotations
 
+import base64
 import json
+import secrets
 import sqlite3
 from pathlib import Path
 from typing import Any, Optional
@@ -64,6 +66,7 @@ from openadapt_flow.runtime.replayer import Replayer
 from openadapt_flow.transaction import classify_transaction_outcome
 from openadapt_flow.undo_proposal import network_candidates
 from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
+from tests._sealed_markers import assert_sealed_marker_absent
 from tests.test_replayer import FakeBackend, FakeVision, Match
 
 # ---------------------------------------------------------------------------
@@ -2347,6 +2350,43 @@ def _arm(sealed, reader, params=None):
     return before
 
 
+def test_sealed_marker_check_accepts_an_incidental_short_prefix():
+    marker = b"Ada-synthetic-plaintext-marker"
+    raw = json.dumps({"ciphertext": "AdaA"}).encode()
+    assert marker[:3] in raw
+    assert_sealed_marker_absent(raw, marker)
+
+
+@pytest.mark.parametrize(
+    ("location", "reason"),
+    [
+        ("raw", "plaintext marker is visible in sealed bytes"),
+        ("decoded", "plaintext marker is visible in decoded ciphertext"),
+    ],
+)
+def test_sealed_marker_check_refuses_a_plaintext_leak(location, reason):
+    marker = b"synthetic-plaintext-marker-for-check"
+    payload = marker if location == "decoded" else b"sealed content"
+    envelope = {"ciphertext": base64.b64encode(payload).decode("ascii")}
+    if location == "raw":
+        envelope["plaintext"] = marker.decode("ascii")
+    with pytest.raises(AssertionError, match=reason):
+        assert_sealed_marker_absent(json.dumps(envelope).encode(), marker)
+
+
+def test_sealed_marker_check_refuses_malformed_ciphertext():
+    marker = b"synthetic-plaintext-marker-for-check"
+    raw = json.dumps({"ciphertext": "invalid base64!"}).encode()
+    with pytest.raises(ValueError):
+        assert_sealed_marker_absent(raw, marker)
+
+
+def test_sealed_marker_check_requires_a_long_marker():
+    raw = json.dumps({"ciphertext": "AdaA"}).encode()
+    with pytest.raises(AssertionError, match="at least 16 bytes"):
+        assert_sealed_marker_absent(raw, b"Ada")
+
+
 def test_sealed_state_round_trips_only_with_its_key(tmp_path):
     import stat
 
@@ -2357,15 +2397,18 @@ def test_sealed_state_round_trips_only_with_its_key(tmp_path):
     reader = _clinic_reader(db)
     sealed = SealedRollback(tmp_path / "run", _SEAL_KEY)
     assert sealed.load_armed() is None and sealed.finished() is None
-    before = _arm(sealed, reader, {"name": "Ada Synthetic"})
+    marker = secrets.token_hex(16)
+    before = _arm(sealed, reader, {"name": marker})
     rollback_dir = tmp_path / "run" / "rollback"
     for name in ("armed.json.enc", "journal.json.enc"):
         assert stat.S_IMODE((rollback_dir / name).stat().st_mode) == 0o600
         # Nothing readable on disk: no names, no row digests in the clear.
-        assert b"Ada" not in (rollback_dir / name).read_bytes()
+        assert_sealed_marker_absent(
+            (rollback_dir / name).read_bytes(), marker.encode("ascii")
+        )
     armed = sealed.load_armed()
     assert armed["reader_key"] == reader.key
-    assert armed["params"] == {"name": "Ada Synthetic"}
+    assert armed["params"] == {"name": marker}
     assert armed["run_id"] is None and armed["settings"] == _SETTINGS
     sealed.bind_run("run-1")
     assert sealed.load_armed()["run_id"] == "run-1"
