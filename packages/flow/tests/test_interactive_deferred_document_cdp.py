@@ -172,9 +172,10 @@ def test_cross_document_deferred_action_refuses_complete_publication(
         except BrowserAttachError as error:
             refusal = error
         assert len(observed) == 1
-        assert observed[0]["kind"] == {
-            "input": "input", "scroll": "scroll", "click": "double_click"
-        }[kind]
+        assert (
+            observed[0]["kind"]
+            == {"input": "input", "scroll": "scroll", "click": "double_click"}[kind]
+        )
         assert observed[0]["_oaflow_producer_doc"] != first_owner
         if kind == "input":
             assert observed[0]["_oaflow_input_session"] == pending["input_session"]
