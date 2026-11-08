@@ -184,27 +184,25 @@ def verifier_factory(config: VerifyConfig) -> Callable[[Mapping[str, object]], A
 
         return build_with_session
     if sor.session:
-        rest_reference = sor.session
-        hook = load_hook(rest_reference)
-        from openadapt_flow.runtime.effects import RestRecordVerifier
+        reference = sor.session
+        session_hook = load_hook(reference)
+        from openadapt_flow.deployment import build_effect_verifier
 
-        if not cfg.base_url:
-            raise QualifyConfigError("verifier.base_url is required for kind: rest")
-        if not cfg.records_path:
-            raise QualifyConfigError("verifier.records_path is required for kind: rest")
-        records_path = cfg.records_path
-
-        def build_rest(params: Mapping[str, object]) -> Any:
-            return RestRecordVerifier(
-                cfg.base_url.rstrip("/"),  # type: ignore[union-attr]
-                records_path=records_path,
-                records_key=cfg.records_key,
-                session=_hook_client(hook, rest_reference, config),
-                timeout_s=10.0,
-                poll_interval_s=0.2,
+        def build_with_rest_session(params: Mapping[str, object]) -> Any:
+            # Keep the qualification hook's established 10s read timeout and
+            # use the shared constructor so paging, completeness, drop fields,
+            # and parameterized paths cannot drift from other REST entrypoints.
+            rest_cfg = cfg.model_copy(update={"timeout_s": 10.0})
+            verifier = build_effect_verifier(
+                rest_cfg,
+                params,
+                session=_hook_client(session_hook, reference, config),
             )
+            if verifier is None:
+                raise QualifyConfigError("verifier built no verifier")
+            return verifier
 
-        return build_rest
+        return build_with_rest_session
     from openadapt_flow.deployment import build_effect_verifier
 
     def build(params: Mapping[str, object]) -> Any:

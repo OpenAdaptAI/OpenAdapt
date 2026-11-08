@@ -26,6 +26,7 @@ from openadapt_flow.runtime.effects import (
 )
 from openadapt_flow.runtime.effects._common import judge_records
 from openadapt_flow.runtime.effects.compensation import CompensationOutcome
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 
 TARGET = {"patient_id": "p1", "type": "Triage"}
 NOTE = "Follow-up in two weeks"
@@ -156,7 +157,7 @@ def test_record_matches_string_coercion():
 
 def test_rest_verifier_confirms_real_write(sor):
     base, _db = sor
-    verifier = RestRecordVerifier(base, records_path="/api/db", records_key="records")
+    verifier = RestRecordVerifier(base, **mockmed_rest_read_kwargs())
     before = verifier.capture_pre_state()
     assert before.reachable and before.records == []
     _post_encounter(base)
@@ -184,7 +185,7 @@ def test_rest_verifier_indeterminate_when_unreachable():
 
 def test_rest_idempotent_write_is_at_most_once(sor):
     base, _db = sor
-    verifier = RestRecordVerifier(base, records_path="/api/db", records_key="records")
+    verifier = RestRecordVerifier(base, **mockmed_rest_read_kwargs())
     before = verifier.capture_pre_state()
     # Two submissions carrying the SAME idempotency key -> server dedupes.
     _post_encounter(base, fault="idempotent", key="run-42")
@@ -255,7 +256,7 @@ def test_document_hash_indeterminate_when_store_absent(tmp_path):
 
 def test_compensation_reconciles_detected_duplicate(sor):
     base, db = sor
-    verifier = RestRecordVerifier(base, records_path="/api/db", records_key="records")
+    verifier = RestRecordVerifier(base, **mockmed_rest_read_kwargs())
     before = verifier.capture_pre_state()
     _post_encounter(base)  # two non-idempotent submissions -> two rows
     _post_encounter(base)
@@ -281,7 +282,7 @@ def test_compensation_reconciles_detected_duplicate(sor):
 
 def test_compensation_escalates_partial_save(sor):
     base, _db = sor
-    verifier = RestRecordVerifier(base, records_path="/api/db", records_key="records")
+    verifier = RestRecordVerifier(base, **mockmed_rest_read_kwargs())
     before = verifier.capture_pre_state()
     _post_encounter(base, fault="partial")  # row persists, note dropped
     eff = Effect(

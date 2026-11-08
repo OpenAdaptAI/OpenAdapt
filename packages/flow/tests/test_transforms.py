@@ -351,6 +351,15 @@ def test_type_errors_are_refused_before_anything_runs(source: str) -> None:
         "a?b?c?d?e?",
         "a{1,500}",
         "a" * 201,
+        # Repeat counts with four or more digits, or leading zeros, are still
+        # repeats to ``re``: they must hit the same rules, not slip past them.
+        "(a?){1000}b",
+        "(a?){0100}b",
+        "a{1000}",
+        "a{0,9999}",
+        "a{101}",
+        "a{101,}",
+        "(a+){,}",
     ],
 )
 def test_backtracking_prone_patterns_are_refused(pattern: str) -> None:
@@ -454,7 +463,7 @@ def test_random_input_only_ever_returns_or_refuses() -> None:
 #: Pinned on purpose. A change to any function, signature, operator, bound or
 #: refusal code changes this digest, and so needs a reviewed new language
 #: version: a stored transform or generated effect model binds it.
-OPERATOR_SET_SHA256 = "06b615d7529dcf073e94a4b87f28c9d890a40e52f3068475cf9a000fc44cde0e"
+OPERATOR_SET_SHA256 = "e66145859a3b1ee399ef35777744123db92d55ed1683c5f2f0391cf9824e47f2"
 
 
 def test_operator_set_is_pinned_and_matches_the_library() -> None:
@@ -499,3 +508,126 @@ def test_predicate_is_three_valued_and_never_passes_on_refusal() -> None:
         result = evaluate_predicate(src, params)
         assert result.outcome == "unknown", src
         assert result.refusal == code, src
+
+
+# ------------------------------------------------ resource bounds (review fixes)
+
+
+def _fast_predicate(src: str, params: dict[str, str]):
+    from openadapt_flow.transforms import evaluate_predicate
+
+    start = time.monotonic()
+    result = evaluate_predicate(src, params)
+    assert time.monotonic() - start < 2.0, src
+    return result
+
+
+@pytest.mark.parametrize("pattern", ["(a?){1000}b", "(a?){0100}b"])
+def test_long_repeat_counts_cannot_hang_a_predicate(pattern: str) -> None:
+    result = _fast_predicate(f"matches(x, '{pattern}')", {"x": "a" * 16})
+    assert result.outcome == "unknown"
+    assert result.refusal == RefusalCode.UNSAFE_PATTERN
+
+
+def test_fuzzy_bounds_apply_after_nfkc_expansion() -> None:
+    # U+FDFA expands to 18 code points under NFKC: the raw length passes the
+    # bound, the normalized one doesn't, and that is the one difflib sees.
+    options = "[" + ",".join(repr("\ufdfa" * 4 + chr(65 + i)) for i in range(38)) + "]"
+    result = _fast_predicate(
+        f"fuzzy_match(x, {options}, 0.9) == 'A'", {"x": "\ufdfa" * 256}
+    )
+    assert result.outcome == "unknown"
+    assert result.refusal == RefusalCode.BOUNDS
+
+
+def test_fuzzy_total_work_is_bounded() -> None:
+    options = ",".join(("ab" * 128)[:255] + chr(65 + i % 26) for i in range(35))
+    result = _fast_predicate(
+        "fuzzy_match(x, split(y, ','), 0.99) == 'z'",
+        {"x": "ba" * 128, "y": options},
+    )
+    assert result.outcome == "unknown"
+    assert result.refusal == RefusalCode.BOUNDS
+    assert "work" in result.reason
+
+
+def test_lower_is_length_checked_like_upper() -> None:
+    assert refused("lower(x)", x="\u0130" * 10_000) == RefusalCode.BOUNDS
+
+
+def test_lone_surrogates_are_a_typed_refusal_not_a_crash() -> None:
+    with pytest.raises(ExpressionRefused) as info:
+        apply_transforms(
+            {"x": "\udc00"}, [ParamTransform(output_param="y", expression="upper(x)")]
+        )
+    assert info.value.code == RefusalCode.INVALID_VALUE
+    from openadapt_flow.transforms import evaluate_predicate
+
+    result = evaluate_predicate("x == 'a'", {"x": "\udc00"})
+    assert result.outcome == "unknown"
+    assert result.refusal == RefusalCode.INVALID_VALUE
+    assert refused("x == '\udc00'", x="a") == RefusalCode.INVALID_VALUE
+
+
+def test_regex_classes_are_ascii_so_receipts_do_not_depend_on_unicode() -> None:
+    assert value(r"extract(x, '(\d+)', 1)", x="42") == "42"
+    assert refused(r"extract(x, '(\d+)', 1)", x="\u0664\u0662") == RefusalCode.NO_MATCH
+    import unicodedata
+
+    from openadapt_flow.transforms import operator_set
+
+    ops = operator_set()
+    assert ops["unicode_version"] == unicodedata.unidata_version
+    assert ops["regex_flags"] == ["ASCII"]
+
+
+def test_predicate_outcome_has_no_truth_value() -> None:
+    from openadapt_flow.transforms import Outcome, evaluate_predicate
+
+    false = evaluate_predicate("x == 'b'", {"x": "a"})
+    unknown = evaluate_predicate("missing == 'b'", {"x": "a"})
+    true = evaluate_predicate("x == 'a'", {"x": "a"})
+    for result in (false, unknown, true):
+        with pytest.raises(TypeError):
+            bool(result.outcome)
+        with pytest.raises(TypeError):
+            bool(result)
+    assert true.passed is True
+    assert false.passed is False and unknown.passed is False
+    assert false.outcome is Outcome.FALSE and false.outcome == "false"
+
+
+def test_unknown_predicate_keeps_the_inputs_it_read() -> None:
+    from openadapt_flow.transforms import evaluate_predicate
+
+    result = evaluate_predicate("date(x) < date(y)", {"x": "nope", "y": "2026-01-01"})
+    assert result.outcome == "unknown"
+    assert result.inputs == ("x", "y")
+
+
+def test_evaluation_work_budget_refuses(monkeypatch: pytest.MonkeyPatch) -> None:
+    import openadapt_flow.transforms as tr
+
+    monkeypatch.setattr(tr, "MAX_EVAL_WORK", 5)
+    assert refused("upper(x) + upper(x) + upper(x)", x="a") == RefusalCode.BOUNDS
+    result = tr.evaluate_predicate("x == 'a' and x == 'a' and x == 'a'", {"x": "a"})
+    assert result.outcome == "unknown" and result.refusal == RefusalCode.BOUNDS
+
+
+def test_evaluation_time_budget_refuses(monkeypatch: pytest.MonkeyPatch) -> None:
+    import openadapt_flow.transforms as tr
+
+    monkeypatch.setattr(tr, "MAX_EVAL_SECONDS", -1.0)
+    result = tr.evaluate_predicate("x == 'a'", {"x": "a"})
+    assert result.outcome == "unknown" and result.refusal == RefusalCode.BOUNDS
+
+
+def test_results_built_from_strings_store_the_enum() -> None:
+    from openadapt_flow.transforms import Outcome, PredicateResult
+
+    built = PredicateResult("true")  # type: ignore[arg-type]
+    assert built.outcome is Outcome.TRUE and built.passed is True
+    with pytest.raises(TypeError):
+        bool(PredicateResult("false").outcome)  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        PredicateResult("maybe")  # type: ignore[arg-type]

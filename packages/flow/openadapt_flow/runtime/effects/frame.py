@@ -85,6 +85,7 @@ from openadapt_flow.runtime.effects.effect import (
     selector_value,
     stable_id,
 )
+from openadapt_flow.runtime.effects.frame_identity import FrameIdentity
 from openadapt_flow.runtime.effects.learned import (
     NOT_COMPARED,
     LearnedFrame,
@@ -488,6 +489,8 @@ class FrameSpec(BaseModel):
     #: Records are compared by this field. Unset: :func:`stable_id` (``id``
     #: when present, else the whole record).
     identity_field: Optional[str] = None
+    #: Learned per-surface correspondence; omitted for legacy contracts.
+    identities: dict[str, FrameIdentity] = Field(default_factory=dict)
     #: Fields that change on their own on every record (a last-seen time).
     ignore_fields: list[str] = Field(default_factory=list)
     #: Fields of a pre-existing target record the save may change. Unset:
@@ -518,6 +521,8 @@ class FrameSpec(BaseModel):
         # Unset, ``versions`` is left out, so a contract that doesn't use it
         # keeps its digests (``frame_sha256``, the check digest).
         data: dict[str, Any] = handler(self)
+        if not data.get("identities"):
+            data.pop("identities", None)
         if data.get("versions") is None:
             data.pop("versions", None)
         if data.get("learned") is None:
@@ -958,6 +963,8 @@ def judge_frame(
     def identity_of(name: str) -> Optional[str]:
         if identities is not None and name in identities:
             return identities[name]
+        if name in spec.identities:
+            return spec.identities[name].surface_field
         return spec.identity_field
 
     def key_of(record: Mapping[str, Any], name: str = "") -> Any:
@@ -1468,6 +1475,7 @@ def judge_frame(
     #: Table -> the surface that declares its rows (``database.judged_by``).
     judged_of = dict(database.judged_by) if database is not None else {}
     surface_declared = {t: set(k) for t, k in (declared_rows or {}).items()}
+    mapped_tables = {b.table for b in spec.identities.values()}
 
     def may_change_for(name: str) -> set[str]:
         by_surface = spec.target_fields_by_surface
@@ -1551,13 +1559,18 @@ def judge_frame(
                     of_hasher(side.of_field, value) if of_hasher else str(value)
                 ) in taken:
                     continue
-                if any(
-                    record_matches(
-                        dict(record),
-                        s,
-                        text_numbers=before_state.substrate == "sql",
+                if (
+                    key_of(record, side.of_surface)
+                    in surface_declared.get(side.of_surface, ())
+                    if side.of_surface in mapped_tables
+                    else any(
+                        record_matches(
+                            dict(record),
+                            s,
+                            text_numbers=before_state.substrate == "sql",
+                        )
+                        for s in sels
                     )
-                    for s in sels
                 ):
                     links.add(str(value))
                 elif inserted_by_other(
@@ -1586,6 +1599,8 @@ def judge_frame(
         typed = before_state.substrate == "sql"
 
         def declared(record: Mapping[str, Any], hashed: bool = False) -> bool:
+            if name in mapped_tables:
+                return False  # Only the selected surface's mapped row keys declare it.
             if hashed and hasher is not None:
                 return any(
                     all(

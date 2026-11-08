@@ -40,17 +40,38 @@ two or more do, it refuses with `ambiguous`. It never guesses.
 Regex patterns come from a conservative subset. Back-references, look-around,
 inline flags and conditionals are refused. So is a repeated group that repeats
 or alternates inside, and so are more than 2 unbounded or 4 variable
-quantifiers. Input is capped at 512 characters.
+quantifiers. A repeat count above 100 is refused in every form `re` reads as
+a repeat, including `{1000}`, `{0100}` and `{,}`. Patterns compile with
+`re.ASCII`, so `\d`, `\w` and `\s` match ASCII only. Input is capped at 512
+characters.
 
 There is no `today()` or `now()`. The language has no clock, randomness,
 environment, files, network or locale, so the same inputs always give the same
-result.
+result. Case folding and NFKC depend on the Unicode database, so
+`operator_set()` records `unicodedata.unidata_version`.
 
 ## Bounds and refusals
 
 Source length, node count, nesting depth, string length, list length, integer
 size and the number of transforms are all capped. `operator_set()` lists the
 exact numbers. A value that would go past a bound is refused, not truncated.
+
+`fuzzy_match` checks its length bound on the NFKC-normalized text, because
+normalization can turn one character into 18. It also caps total matching
+work, which is the sum over options of the query length times the option
+length. Every evaluation also has a deterministic work budget shared by all
+transforms in a batch. Text validation, Unicode normalization, string operations
+and similarity scoring spend that budget before expensive work. Regex admission
+counts products of repeat choices and alternatives, including nested fixed
+repeats, before calling the matcher; input length times pattern length alone
+does not bound backtracking. Oversized parameter sets and text refuse before
+UTF-8 copies are allocated. The operator-set digest binds this cost model.
+
+A 2-second elapsed-time check runs before and after operations. It is an
+additional refusal check, not an interrupt of a running library call. The
+pre-operation work bounds limit those calls. Running out of either budget is a
+`bounds` refusal. Text that isn't valid Unicode, such as a lone surrogate, is
+refused with `invalid_value`.
 
 Anything outside the language raises `ExpressionRefused` with a closed
 `RefusalCode`: `syntax`, `unknown_name`, `unknown_function`, `type`, `bounds`,
@@ -82,6 +103,12 @@ receipt is the next part of #1891.
 `"unknown"` with its refusal code. It is never `"true"`. A caller that checks a
 write maps `"unknown"` to uncertain and treats `"false"` as an observed
 contradiction.
+
+`PredicateResult.outcome` is an `Outcome` enum, and it equals the strings
+`"true"`, `"false"` and `"unknown"`. Truth-testing an `Outcome`, or the result
+itself, raises `TypeError`, because a non-empty string would pass on `"false"`.
+Use `result.passed`, which is true only for `"true"`. An `"unknown"` result
+still lists the parameters the expression read.
 
 ## One language, versioned
 

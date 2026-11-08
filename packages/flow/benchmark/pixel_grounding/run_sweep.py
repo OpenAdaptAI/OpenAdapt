@@ -301,7 +301,7 @@ def make_grounder(arm: str) -> Optional[Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--arm", choices=("template", "model"), required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--only", nargs="*", help="condition names to run")

@@ -55,6 +55,7 @@ def register_admit_parser(sub: argparse._SubParsersAction) -> None:
             "compile, induce, propose checks, stop once for a decision. "
             "`admit status` reads the release-admission ledger."
         ),
+        allow_abbrev=False,
     )
     verbs = parser.add_subparsers(dest="admit_cmd", required=True)
     run = verbs.add_parser(
@@ -63,6 +64,7 @@ def register_admit_parser(sub: argparse._SubParsersAction) -> None:
             "Compile, induce, propose checks, and stop once for a person's "
             "decision (the default form: `admit <recordings...>`)"
         ),
+        allow_abbrev=False,
     )
     run.add_argument(
         "recordings",
@@ -99,6 +101,7 @@ def register_admit_parser(sub: argparse._SubParsersAction) -> None:
     decide = verbs.add_parser(
         "decide",
         help="Show a stopped admission's summary and decide it (a person, at a terminal)",
+        allow_abbrev=False,
     )
     decide.add_argument("admission", help="Admission directory from `admit`")
     decide.add_argument("--by", default=None, help="Your name for the record")
@@ -109,6 +112,7 @@ def register_admit_parser(sub: argparse._SubParsersAction) -> None:
             "Print admitted vs not-admitted for Flow from the public ledger. "
             "Never mints a signature."
         ),
+        allow_abbrev=False,
     )
     status.add_argument(
         "--ledger",

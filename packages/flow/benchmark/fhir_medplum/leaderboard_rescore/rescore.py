@@ -43,7 +43,6 @@ from types import SimpleNamespace
 from typing import Any, Optional
 
 import yaml
-
 from benchmark.fhir_medplum.leaderboard_rescore.frozen import FrozenMedplum
 from benchmark.fhir_medplum.public.model import WIPED
 from benchmark.fhir_medplum.public.run import CONTRACTS, PRACTITIONER_ID, Bench
@@ -235,7 +234,9 @@ def judge_row(
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     ap.add_argument(
         "--contracts", choices=("main", "operations", "operations-v2"), required=True
     )

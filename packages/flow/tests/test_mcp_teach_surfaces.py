@@ -31,6 +31,7 @@ import pytest
 
 from openadapt_flow.mockmed.fault_server import serve
 from openadapt_flow.tutorial import _http_json, _records
+from tests._rest_read_contract_fixtures import mockmed_effects_yaml
 from tests.surface_kiosk import PageWindowClient
 
 # The MCP SDK is imported inside the tests, never at collection: other tests
@@ -194,9 +195,9 @@ def test_teach_on_a_remote_window(
     section = SECTIONS[kind]
     verify = tmp_path / "verify.yaml"
     verify.write_text(
-        "verifier:\n  kind: rest\n"
-        f"  base_url: {mockmed}\n  records_path: /api/db\n  records_key: records\n"
-        "  timeout_s: 2.0\n  poll_interval_s: 0.05\n"
+        "verifier:\n"
+        + mockmed_effects_yaml(mockmed)
+        + "  timeout_s: 2.0\n  poll_interval_s: 0.05\n"
     )
     runs = tmp_path / "runs"
     runs.mkdir()
