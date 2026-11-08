@@ -38,14 +38,15 @@ def _optional_resolutions(parser, spelling):
 
 
 def test_every_cli_parser_rejects_all_undeclared_long_option_prefixes():
+    from openadapt.cli import _seal_view_parser
     from openadapt_agent.cli import build_parser as compatibility_agent_parser
+
     from openadapt_flow.__main__ import build_parser as flow_parser
     from openadapt_flow.agent.cli import build_parser as agent_parser
-
-    from openadapt.cli import _seal_view_parser
+    from openadapt_flow.wrap.cli import build_parser as wrap_parser
 
     assert compatibility_agent_parser is agent_parser
-    roots = (flow_parser(), agent_parser(), _seal_view_parser())
+    roots = (flow_parser(), agent_parser(), _seal_view_parser(), wrap_parser())
     launcher = roots[2].parse_args(
         ["synthetic-run", "--keys", "keys.json", "--bundle", "bundle", "--no-open"]
     )
