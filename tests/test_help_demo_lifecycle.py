@@ -38,12 +38,16 @@ def _lifecycle_commands() -> list[list[str]]:
 def test_lifecycle_lists_no_step_that_fails_on_the_demo_bundle():
     commands = _lifecycle_commands()
 
-    assert [argv[2] for argv in commands] == [
-        "demo-record",
-        "compile",
-        "lint",
-        "certify",
-        "replay",
+    assert all(argv[0] == "openadapt" for argv in commands)
+    engine_commands = [
+        argv[2:] if argv[:2] == ["openadapt", "flow"] else argv[1:] for argv in commands
+    ]
+    assert engine_commands == [
+        ["demo-record", "--out", "rec"],
+        ["compile", "rec", "--out", "bundle", "--name", "demo"],
+        ["lint", "bundle"],
+        ["certify", "bundle", "--policy", "permissive"],
+        ["replay", "bundle", "--demo-app"],
     ]
     for argv in commands:
         assert "--strict" not in argv, argv

@@ -71,17 +71,34 @@ def rows_for(src: Path, arm: str, run_id: str) -> list[Any]:
         fault = "duplicate_check" if item["duplicate_case"] else "none"
         item_dir = src / "pool" / "items" / f"{item['idx']:05d}"
         common = dict(
-            task=TASK, arm=arm, run_id=run_id, item=int(item["idx"]) + 1,
-            fault=fault, model_calls=0, input_tokens=0, output_tokens=0,
-            cache_read_tokens=0, cache_write_tokens=0, cost_usd=0.0,
+            task=TASK,
+            arm=arm,
+            run_id=run_id,
+            item=int(item["idx"]) + 1,
+            fault=fault,
+            model_calls=0,
+            input_tokens=0,
+            output_tokens=0,
+            cache_read_tokens=0,
+            cache_write_tokens=0,
+            cost_usd=0.0,
             approvals_asked=0,
         )
         if item["state"] == "pending":
-            out.append(schema.Row(
-                **common, attempt=0, reported_success=False, readback="not_checked",
-                outcome="paused", item_s=0.0, wall_s=0.0, host_load_1m=-1.0,
-                timed=False, detail="not started: the worklist stopped first",
-            ))
+            out.append(
+                schema.Row(
+                    **common,
+                    attempt=0,
+                    reported_success=False,
+                    readback="not_checked",
+                    outcome="paused",
+                    item_s=0.0,
+                    wall_s=0.0,
+                    host_load_1m=-1.0,
+                    timed=False,
+                    detail="not started: the worklist stopped first",
+                )
+            )
             continue
         report_path = item_dir / "report.json"
         report = json.loads(report_path.read_text()) if report_path.is_file() else {}
@@ -91,22 +108,35 @@ def rows_for(src: Path, arm: str, run_id: str) -> list[Any]:
         start, end = load.get("start", -1.0), load.get("end")
         readback = _readback(item)
         outcome = schema.classify(ok, readback, fault)
-        out.append(schema.Row(
-            **common, attempt=1, reported_success=ok, readback=readback,
-            outcome=outcome, item_s=engine_s, wall_s=round(float(item["wall_s"] or 0), 3),
-            host_load_1m=start,
-            timed=start >= 0 and end is not None and schema.timed(start, end),
-            detail=(f"worker {item['worker']}; state {item['state']}; " + halt)[:300],
-        ))
+        out.append(
+            schema.Row(
+                **common,
+                attempt=1,
+                reported_success=ok,
+                readback=readback,
+                outcome=outcome,
+                item_s=engine_s,
+                wall_s=round(float(item["wall_s"] or 0), 3),
+                host_load_1m=start,
+                timed=start >= 0 and end is not None and schema.timed(start, end),
+                detail=(f"worker {item['worker']}; state {item['state']}; " + halt)[
+                    :300
+                ],
+            )
+        )
     return out
 
 
 def main() -> int:
     from scoreboard import schema
 
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap = argparse.ArgumentParser(
+        description=__doc__.split("\n\n")[0], allow_abbrev=False
+    )
     ap.add_argument("--src", required=True, type=Path, help="the harness's OUT/TAG")
-    ap.add_argument("--arm", required=True, choices=["program", "program_fast", "parallel"])
+    ap.add_argument(
+        "--arm", required=True, choices=["program", "program_fast", "parallel"]
+    )
     ap.add_argument("--run-id", required=True)
     a = ap.parse_args()
     summary = json.loads((a.src / "summary.json").read_text())
@@ -117,13 +147,22 @@ def main() -> int:
     for row in rows_for(a.src, a.arm, a.run_id):
         schema.append(items_csv, row)
     schema.write_meta(
-        out, task=TASK, arm=a.arm, imported_from=str(a.src),
+        out,
+        task=TASK,
+        arm=a.arm,
+        imported_from=str(a.src),
         source_sha256={p: _sha(a.src / p) for p in ("summary.json", "items.json")},
-        workers=summary["workers"], readback_window=summary["window"],
+        workers=summary["workers"],
+        readback_window=summary["window"],
         processes=summary.get("processes"),
-        speed={k: summary.get(k) for k in ("speed_profile", "native_fill", "page_quiet_ms", "ocr_threads")},
-        harness_engine_sha=summary["engine_sha"], wall_s=summary["wall_s"],
-        sign_in_s=summary["sign_in_s"], stop=summary["stop"],
+        speed={
+            k: summary.get(k)
+            for k in ("speed_profile", "native_fill", "page_quiet_ms", "ocr_threads")
+        },
+        harness_engine_sha=summary["engine_sha"],
+        wall_s=summary["wall_s"],
+        sign_in_s=summary["sign_in_s"],
+        stop=summary["stop"],
         load1_mean=summary.get("load1_mean"),
     )
     print(f"wrote {items_csv}")

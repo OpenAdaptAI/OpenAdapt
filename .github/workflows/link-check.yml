@@ -14,11 +14,15 @@ on:
     paths:
       - "**/*.md"
       - ".github/workflows/link-check.yml"
+      - "scripts/ci/install_checked_tool.py"
+      - "scripts/ci/run_lychee.py"
   push:
     branches: [main]
     paths:
       - "**/*.md"
       - ".github/workflows/link-check.yml"
+      - "scripts/ci/install_checked_tool.py"
+      - "scripts/ci/run_lychee.py"
   schedule:
     - cron: "0 10 * * 1" # Every Monday 10 AM UTC
   workflow_dispatch:
@@ -34,6 +38,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
+  LYCHEE_VERSION: v0.24.2
+  LYCHEE_SHA256: 1f4e0ef7f6554a6ed33dd7ac144fb2e1bbed98598e7af973042fc5cd43951c9a
   LYCHEE_PATHS: >-
     --exclude-path '(^|/)(legacy|node_modules|\.venv|growth-worktrees|\.claude)/'
     --exclude-path 'CHANGELOG\.md$'
@@ -59,7 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$EVENT_NAME" != "pull_request" ] \
-            || git diff --name-only HEAD^1 HEAD | grep -qx '.github/workflows/link-check.yml'; then
+            || git diff --name-only HEAD^1 HEAD | grep -Eq '^(\.github/workflows/link-check\.yml|scripts/ci/(install_checked_tool|run_lychee)\.py)$'; then
             echo "paths=$LYCHEE_PATHS" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -69,17 +75,24 @@ jobs:
           echo "paths=$files" >> "$GITHUB_OUTPUT"
           echo "Checking: ${files:-nothing}"
 
+      - name: Install pinned Lychee
+        if: steps.targets.outputs.paths != ''
+        run: |
+          python3 scripts/ci/install_checked_tool.py \
+            --url "https://github.com/lycheeverse/lychee/releases/download/lychee-${LYCHEE_VERSION}/lychee-x86_64-unknown-linux-gnu.tar.gz" \
+            --sha256 "$LYCHEE_SHA256" \
+            --member lychee-x86_64-unknown-linux-gnu/lychee \
+            --destination "$RUNNER_TEMP/checking-tools/lychee"
+          echo "$RUNNER_TEMP/checking-tools" >> "$GITHUB_PATH"
       - name: Check local links and anchors
         if: steps.targets.outputs.paths != ''
-        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
-        with:
-          args: >-
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          LYCHEE_ARGS: >-
             --offline --include-fragments --no-progress
             ${{ steps.targets.outputs.paths }}
-          jobSummary: false
-          # A pull request whose changed Markdown holds no links has nothing
-          # to check; that is not a failure.
-          failIfEmpty: false
+        # Preserve the upstream action's failIfEmpty:false and jobSummary:false.
+        run: python3 scripts/ci/run_lychee.py
 
   external:
     name: External links
@@ -91,15 +104,24 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install pinned Lychee
+        run: |
+          python3 scripts/ci/install_checked_tool.py \
+            --url "https://github.com/lycheeverse/lychee/releases/download/lychee-${LYCHEE_VERSION}/lychee-x86_64-unknown-linux-gnu.tar.gz" \
+            --sha256 "$LYCHEE_SHA256" \
+            --member lychee-x86_64-unknown-linux-gnu/lychee \
+            --destination "$RUNNER_TEMP/checking-tools/lychee"
+          echo "$RUNNER_TEMP/checking-tools" >> "$GITHUB_PATH"
       # 403 and 429 count as reachable: some sites refuse automated clients,
       # and GitHub rate-limits. app. and api.openadapt.ai need a session.
       - name: Check external links
-        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
-        with:
-          args: >-
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          LYCHEE_ARGS: >-
             --no-progress --max-concurrency 8 --timeout 30 --max-retries 3
             --accept '200..=299,403,429'
             --exclude '^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)'
             --exclude '^https://(app|api)\.openadapt\.ai'
             --exclude 'linkedin\.com'
             ${{ env.LYCHEE_PATHS }}
+        run: python3 scripts/ci/run_lychee.py --fail-if-empty --job-summary

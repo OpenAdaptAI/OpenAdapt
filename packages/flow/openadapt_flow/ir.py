@@ -55,6 +55,7 @@ if TYPE_CHECKING:
     # Type-only import for the Step.effects forward reference. The RUNTIME
     # import is at the BOTTOM of this module (see the note there) to avoid a
     # circular import through openadapt_flow.runtime's package init.
+    from openadapt_flow.locale_invariants import LocaleInvariants
     from openadapt_flow.qualification import QualificationProject
     from openadapt_flow.runtime.effects.effect import Effect
 
@@ -545,6 +546,27 @@ class Anchor(BaseModel):
             " tiers compare like-for-like. Set iff `identifier_crop` is set."
         ),
     )
+    dialog_region: Optional[Region] = Field(
+        default=None,
+        description=(
+            "Box of the active dialog (the topmost modal) that held the target"
+            " in the recorded frame, when it sat in one. The context band was"
+            " cut to it, so text of the page behind the dialog is not identity"
+            " evidence. Replay cuts the live band to the live dialog's box,"
+            " and fails the identity check closed when no dialog holds the"
+            " resolved point. None outside a dialog and on bundles compiled"
+            " before this capability."
+        ),
+    )
+    dialog_row: Optional[bool] = Field(
+        default=None,
+        description=(
+            "True reads the target's own row inside dialog_region. False permits"
+            " the whole dialog when teach time positively found a standalone"
+            " control with no usable row text; replay must confirm no record"
+            " row again. None conservatively uses the target's row."
+        ),
+    )
     form_identity: Optional[FormIdentity] = Field(
         default=None,
         description=(
@@ -563,6 +585,10 @@ class Anchor(BaseModel):
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         """Leave unset census metadata out, so older bundle bytes stay equal."""
         data: dict[str, Any] = handler(self)
+        if self.dialog_region is None:
+            data.pop("dialog_region", None)
+        if self.dialog_row is None:
+            data.pop("dialog_row", None)
         if self.record_key is None:
             data.pop("record_key", None)
         if self.structured_row is None:
@@ -791,13 +817,20 @@ class WebFormField(BaseModel):
     the live form each run). ``session``: a value the server issued to this
     session, such as a CSRF token, read from the live form each run.
     ``form_default``: the form's own default, which must still equal ``value``
-    in the live form or the API step does not run.
+    in the live form or the API step does not run. ``submitter``: the
+    ``name=value`` the browser adds for the submit button the person clicked;
+    the live form must still have exactly one enabled submit button that
+    sends exactly ``value``. ``empty_file``: a file input sent with no file
+    (a multipart save); the live form must still have that file input, and
+    the API step never attaches a file.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1)
-    source: Literal["param", "select_label", "session", "form_default"]
+    source: Literal[
+        "param", "select_label", "session", "form_default", "submitter", "empty_file"
+    ]
     param: Optional[str] = None
     value: Optional[str] = None
 
@@ -805,8 +838,8 @@ class WebFormField(BaseModel):
     def _source_fields(self) -> "WebFormField":
         if self.source in ("param", "select_label") and not self.param:
             raise ValueError(f"{self.source} field {self.name!r} needs a param")
-        if self.source == "form_default" and self.value is None:
-            raise ValueError(f"form_default field {self.name!r} needs its value")
+        if self.source in ("form_default", "submitter") and self.value is None:
+            raise ValueError(f"{self.source} field {self.name!r} needs its value")
         return self
 
 
@@ -882,6 +915,16 @@ class WebFormSpec(BaseModel):
     form_path: str = Field(min_length=1)
     fields: list[WebFormField] = Field(min_length=1)
     controls: list[str] = Field(default_factory=list)
+    #: How the save's body is encoded, as the recorded request was:
+    #: ``urlencoded`` (``application/x-www-form-urlencoded``) or ``multipart``
+    #: (``multipart/form-data`` with no file attached).
+    encoding: Literal["urlencoded", "multipart"] = "urlencoded"
+    #: The path the form's own ``action`` names, when the save goes elsewhere:
+    #: the page's script sent the form's fields to another endpoint (for
+    #: example ``admin-ajax.php``) instead of submitting the form. The runtime
+    #: finds the form by this path, and runs the page's script before every
+    #: save to check that the script sends exactly the body the API step built.
+    form_action: Optional[str] = None
     client_rules: Optional[dict[str, Any]] = None
     #: Page script the browser runs on this save that the API step can't
     #: evaluate by reading the form: the form's ``on*`` handlers, the ``on*``
@@ -928,6 +971,19 @@ class WebFormSpec(BaseModel):
     #: admitted again. Bindings proposed before it covered more than the
     #: on-screen checks need proposing again.
     folded_checks_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+
+    @model_serializer(mode="wrap")
+    def _omit_new_defaults(self, handler: Any) -> Any:
+        # A binding proposed before ``encoding`` and ``form_action`` existed
+        # keeps the admission digest a person admitted: the keys are written
+        # only when they say something.
+        data = handler(self)
+        if isinstance(data, dict):
+            if data.get("encoding") == "urlencoded":
+                data.pop("encoding")
+            if data.get("form_action") is None:
+                data.pop("form_action", None)
+        return data
 
 
 class ApiAdmission(BaseModel):
@@ -1124,6 +1180,11 @@ class ParamSpec(BaseModel):
     required, and enum choices. Additive: ``Workflow.param_specs`` lives
     ALONGSIDE the frozen ``Workflow.params`` dict; a bundle with an empty
     ``param_specs`` behaves exactly as before.
+
+    ``intake_field`` (optional) names the intake document field this tool
+    parameter may come from. When set, the MCP/runtime gate refuses a call
+    whose value does not match the trusted intake provenance for that field
+    (#1890). Unset means the parameter is not intake-bound.
     """
 
     name: str
@@ -1137,6 +1198,23 @@ class ParamSpec(BaseModel):
     choices: list[str] = Field(
         default_factory=list, description="Allowed values for an enum param."
     )
+    intake_field: Optional[str] = Field(
+        default=None,
+        description=(
+            "Intake field name this parameter may be filled from. When set, "
+            "a taught-tool call must match the registered intake provenance "
+            "for that field, or it is refused."
+        ),
+    )
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Omit unset ``intake_field`` so existing bundle digests stay stable."""
+
+        data: dict[str, Any] = handler(self)
+        if self.intake_field is None:
+            data.pop("intake_field", None)
+        return data
 
 
 class PredicateKind(str, Enum):
@@ -1953,6 +2031,45 @@ class HoverEvidence(BaseModel):
     dwell_ms: int = Field(default=800, ge=0, le=5000)
 
 
+class NativeSelectOption(BaseModel):
+    """One option in a bounded, observed native HTML select census."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    value: str = Field(max_length=512, strict=True)
+    label: str = Field(max_length=512, strict=True)
+    disabled: bool = Field(strict=True)
+
+
+class NativeSelectContract(BaseModel):
+    """Exact semantic selection, distinct from remote text-and-key input."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: Literal["html_single_select"] = "html_single_select"
+    value: str = Field(max_length=512, strict=True)
+    label: str = Field(min_length=1, max_length=512, strict=True)
+    options: tuple[NativeSelectOption, ...] = Field(min_length=1, max_length=2048)
+
+    @model_validator(mode="after")
+    def _unique_option(self) -> "NativeSelectContract":
+        chosen = [option for option in self.options if option.value == self.value]
+        normalized = " ".join(self.label.split()).casefold()
+        if (
+            not normalized
+            or len(chosen) != 1
+            or chosen[0].label != self.label
+            or chosen[0].disabled
+            or sum(
+                " ".join(option.label.split()).casefold() == normalized
+                for option in self.options
+            )
+            != 1
+        ):
+            raise ValueError("native selection needs one enabled, unambiguous option")
+        return self
+
+
 class Step(BaseModel):
     id: str
     intent: str = Field(description="Human-readable purpose of the step")
@@ -1987,6 +2104,7 @@ class Step(BaseModel):
             " compiler.annotate.FieldLabelAnnotator)."
         ),
     )
+    native_selection: Optional[NativeSelectContract] = None
     selection_commit_key: Optional[Literal["Enter", "Tab"]] = Field(
         default=None,
         description=(
@@ -2189,6 +2307,8 @@ class Step(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.target_param is None:
             data.pop("target_param", None)
+        if self.native_selection is None:
+            data.pop("native_selection", None)
         return data
 
     @model_validator(mode="after")
@@ -2217,6 +2337,22 @@ class Step(BaseModel):
                 raise ValueError("HOTKEY steps require a key and at least one modifier")
         elif self.modifiers:
             raise ValueError("modifiers are valid only for HOTKEY steps")
+        if self.native_selection is not None:
+            if (
+                self.action is not ActionKind.SELECT_OPTION
+                or self.selection_commit_key is not None
+                or self.selection_region is not None
+                or self.secret
+                or self.param is not None
+                or self.text != self.native_selection.label
+                or self.anchor is None
+                or self.anchor.structural is None
+                or not self.anchor.structural.selector
+            ):
+                raise ValueError(
+                    "native selection requires a literal SELECT_OPTION with an exact "
+                    "structural anchor and no remote selection contract"
+                )
         if (self.selection_commit_key is None) != (self.selection_region is None):
             raise ValueError(
                 "selection_commit_key and selection_region must be set together"
@@ -2233,9 +2369,9 @@ class Step(BaseModel):
                     "option-selection contracts require the demonstrated field "
                     "anchor for fresh pre-commit re-resolution"
                 )
-        elif self.action is ActionKind.SELECT_OPTION:
+        elif self.action is ActionKind.SELECT_OPTION and self.native_selection is None:
             raise ValueError(
-                "SELECT_OPTION requires selection_commit_key and selection_region"
+                "SELECT_OPTION requires a native contract or selection_commit_key and selection_region"
             )
         if self.submit_binding is not None:
             # The binding stands in for a record identity on the visual path
@@ -3240,6 +3376,9 @@ class Workflow(BaseModel):
     # or a hosted run summary. Empty for browser/native bundles, preserving
     # their serialized form through the compatibility serializer below.
     backend_hints: Optional[BackendHints] = None
+    #: Locale, date order and keyboard layout recorded with the demonstration
+    #: (#1897). Checked before replay; omitted from serialized bytes when unset.
+    locale_invariants: Optional["LocaleInvariants"] = None
     # -- surface binding (roadmap Section 5) --------------------------------
     # The exact execution surface this workflow was recorded/qualified on and
     # the execution mode that surface implies. A bound workflow refuses to run
@@ -3359,6 +3498,8 @@ class Workflow(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.backend_hints is None:
             data.pop("backend_hints", None)
+        if self.locale_invariants is None:
+            data.pop("locale_invariants", None)
         if self.surface is None:
             data.pop("surface", None)
         if self.execution_mode is None:
@@ -3638,7 +3779,9 @@ class Workflow(BaseModel):
         if wf.manifest is None:
             sidecar = bundle / "manifest.json"
             if sidecar.is_file():
-                wf.manifest = BundleManifest.model_validate_json(sidecar.read_text())
+                wf.manifest = BundleManifest.model_validate_json(
+                    sidecar.read_text(encoding="utf-8")
+                )
                 persisted = wf.manifest
 
         if sealed_assets is not None:
@@ -3689,6 +3832,13 @@ class Workflow(BaseModel):
             report = _bv.validate_workflow(wf)
             report.raise_if(categories=("structure",))
 
+        if not bundle_encrypted and wf.encrypted:
+            # The flag is authoritative only with an encrypted envelope on
+            # disk: a plaintext copy (for example a decrypted upload) that
+            # still says encrypted is plaintext, and loads as plaintext.
+            wf.encrypted = False
+            if wf.manifest is not None:
+                wf.manifest = wf.manifest.model_copy(update={"encrypted": False})
         return wf
 
     def stamp_certification(
@@ -3851,8 +4001,8 @@ class ActionDeliveryReceipt(BaseModel):
         default=None,
         pattern=r"^[0-9a-f]{64}$",
         description=(
-            "SELECT_OPTION only: SHA-256 of the exact option text dispatched "
-            "without retaining the possibly sensitive value."
+            "SELECT_OPTION only: SHA-256 of the exact native option value, "
+            "or the remote type-ahead text dispatched, without retaining it."
         ),
     )
     selection_commit_key: Optional[Literal["Enter", "Tab"]] = Field(
@@ -4144,11 +4294,13 @@ class IdentityCheck(BaseModel):
             "look-alike identifier (runtime.identity_looks), in order."
         ),
     )
-    look_halt: Optional[Literal["identity_look_changed_screen"]] = Field(
+    look_halt: Optional[
+        Literal["identity_look_changed_screen", "identity_dialog_mask_failed"]
+    ] = Field(
         default=None,
         description=(
             "Set when an extra look changed the screen outside the "
-            "identifier it read. The step halts."
+            "identifier it read, or could not mask its dialog. The step halts."
         ),
     )
     candidate_count: Optional[int] = Field(
@@ -6334,6 +6486,7 @@ class RunReport(BaseModel):
 # OCR/cv2/model deps) runtime package loads cleanly and Step's schema can be
 # completed. Effect enters this module's globals so ``model_rebuild`` resolves
 # the forward reference; bundles with no effects are unaffected.
+from openadapt_flow.locale_invariants import LocaleInvariants  # noqa: E402,F401
 from openadapt_flow.qualification import QualificationProject  # noqa: E402,F401
 from openadapt_flow.runtime.effects.effect import Effect  # noqa: E402,F401
 

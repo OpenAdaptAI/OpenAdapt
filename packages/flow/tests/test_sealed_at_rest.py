@@ -41,6 +41,7 @@ from openadapt_flow.ir import (
     Workflow,
 )
 from openadapt_flow.recorder import Recorder
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 
 KEY = "synthetic-at-rest-key"
 NOTE = "Synthetic follow-up in two weeks"
@@ -547,9 +548,7 @@ def test_halted_sealed_run_is_undone_without_plaintext(
             report = Replayer(
                 MockMedBackend(url),
                 vision=_vision(),
-                effect_verifier=RestRecordVerifier(
-                    url, records_path="/api/db", records_key="records"
-                ),
+                effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
                 poll_interval_s=0.01,
             ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
             assert report.execution_outcome == "HALTED"
@@ -751,5 +750,10 @@ def test_sealed_run_pauses_and_resumes_without_plaintext(
 
 def test_phi_at_rest_doc_lists_every_inventory_entry() -> None:
     doc = (Path(__file__).parents[1] / "docs" / "phi_at_rest.md").read_text()
-    for entry in (*sealed_set.BUNDLE_FILES, *sealed_set.RECORDING_FILES):
+    for entry in (
+        *sealed_set.BUNDLE_FILES,
+        *sealed_set.RECORDING_FILES,
+        *sealed_set.LIBRARY_FILES,
+        *sealed_set.SANITIZED_FILES,
+    ):
         assert f"`{entry.pattern}`" in doc, entry.pattern

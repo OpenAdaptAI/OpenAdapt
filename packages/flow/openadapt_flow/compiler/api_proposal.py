@@ -54,7 +54,7 @@ import re
 import urllib.parse as up
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from openadapt_flow import network_capture as nc
 from openadapt_flow import sealed_set as _sealed
@@ -73,8 +73,10 @@ from openadapt_flow.ir import (
 from openadapt_flow.runtime.actuators.web_form import (
     client_rules,
     folded_checks_digest,
-    form_controls,
+    form_parts,
+    forms_of,
     page_scripts,
+    submitter_button,
     web_form_effects,
 )
 
@@ -271,14 +273,93 @@ def _success_pattern(line: dict[str, Any]) -> Optional[str]:
         target = m.group(1) if m else None
     if not target:
         return None
-    path = up.urlsplit(target).path.rsplit("/", 1)[-1]
-    query = up.urlsplit(target).query
-    pieces = [re.escape(path)]
-    for name, value in up.parse_qsl(query, keep_blank_values=True):
-        pieces.append(
-            re.escape(name) + "=" + (r"\d+" if value.isdigit() else re.escape(value))
-        )
+    path = up.urlsplit(target).path
+    leaf = path.rsplit("/", 1)[-1]
+    if leaf.isdigit() or not leaf:
+        # A record's own address (``/ticket/17``, ``/ipam/ip-addresses/3/``):
+        # the record number alone matches almost anything, so the path is
+        # kept, with each number generalized.
+        pieces = [
+            "/".join(
+                r"\d+" if seg.isdigit() else re.escape(seg) for seg in path.split("/")
+            )
+        ]
+    else:
+        pieces = [re.escape(leaf)]
+    for name, value in up.parse_qsl(up.urlsplit(target).query, keep_blank_values=True):
+        if value.isdigit():
+            pattern = r"\d+"
+        elif _is_token(value):
+            # A value the server makes per record (a hash, a nonce): the
+            # name must be there, the value can't be known in advance.
+            pattern = r"[^&#\s]+"
+        else:
+            pattern = re.escape(value)
+        pieces.append(re.escape(name) + "=" + pattern)
     return r".*?".join(pieces)
+
+
+def _is_token(value: str) -> bool:
+    """A long run of letters and digits mixing both, such as a hash."""
+
+    return (
+        len(value) >= 16
+        and re.fullmatch(r"[A-Za-z0-9_-]+", value) is not None
+        and re.search(r"\d", value) is not None
+        and re.search(r"[A-Za-z]", value) is not None
+    )
+
+
+def _button_selector(button: dict[str, Any]) -> str:
+    """A selector for one submit button of the form being evaluated."""
+
+    if button.get("id"):
+        return "#" + button["id"]
+    sel = f"form[data-openadapt-eval] [name={json.dumps(button['name'])}]"
+    if button.get("value") is not None and button.get("value") != "":
+        sel += f"[value={json.dumps(button['value'])}]"
+    return sel
+
+
+def _script_form(
+    lines: list[dict[str, Any]], post: dict[str, Any]
+) -> tuple[Optional[dict[str, Any]], Optional[dict[str, Any]], Optional[str]]:
+    """The form whose fields a page script sent to another endpoint.
+
+    The last captured page, before the save, whose form names every field the
+    save sent (as a control, an empty file input or a submit button). Two
+    such forms on that page are ambiguous.
+    """
+
+    names = {n for n, _ in post["form"]}
+    best: tuple[Optional[dict[str, Any]], Optional[dict[str, Any]], Optional[str]] = (
+        None,
+        None,
+        None,
+    )
+    for ln in lines:
+        if float(ln["t"]) >= float(post["t"]):
+            break
+        if not (
+            ln["method"] == "GET"
+            and ln.get("status") == 200
+            and ln.get("resource_type") == "document"
+            and "<form" in (ln.get("response_text") or "")
+        ):
+            continue
+        hits = [
+            f
+            for f in forms_of(ln["response_text"])
+            if names
+            <= set(f["controls"])
+            | {x["name"] for x in f["files"]}
+            | {b["name"] for b in f["buttons"] if b.get("name")}
+        ]
+        if len(hits) > 1:
+            best = (None, None, "two forms on the page name every field the save sent")
+        elif hits:
+            best = (ln, hits[0], None)
+    return best
 
 
 def _in_page(selector: str, html: str) -> bool:
@@ -437,7 +518,11 @@ def _span_writes(
         if up.urlsplit(ln["url"]).query:
             problems.append(f"{from_step} also sent {what} with values in its URL")
             continue
-        if ln.get("form") is None:
+        if (
+            ln.get("form") is None
+            or (ln.get("request_type") or "application/x-www-form-urlencoded")
+            != "application/x-www-form-urlencoded"
+        ):
             problems.append(
                 f"{from_step} also sent {what} with a body the API step can't rebuild "
                 f"({ln.get('body_omitted') or ln.get('request_type') or 'not form-encoded'})"
@@ -562,9 +647,18 @@ def propose_api_step(
         return workflow, None, url_problems
     if any(v == nc.SECRET for _, v in post["form"]):
         return workflow, None, ["the save sends a secret field; it stays on the GUI"]
+    request_type = post.get("request_type") or "application/x-www-form-urlencoded"
+    encoding: Literal["urlencoded", "multipart"]
+    if request_type == "multipart/form-data":
+        encoding = "multipart"
+    elif request_type == "application/x-www-form-urlencoded":
+        encoding = "urlencoded"
+    else:
+        return workflow, None, [f"the save is sent as {request_type}"]
+    empty_files = set(post.get("multipart_files") or [])
 
     # The page that served the form: the last captured document with that form.
-    form_line, controls = None, None
+    form_line, form = None, None
     for ln in lines:
         if float(ln["t"]) >= float(post["t"]):
             break
@@ -573,16 +667,43 @@ def propose_api_step(
             and ln.get("status") == 200
             and "<form" in (ln.get("response_text") or "")
         ):
-            found = form_controls(ln["response_text"], _path(post["url"]))
+            found = form_parts(
+                ln["response_text"], _path(post["url"]), _path(ln["url"])
+            )
             if found is not None:
-                form_line, controls = ln, found
-    if form_line is None or controls is None:
+                form_line, form = ln, found
+    form_action: Optional[str] = None
+    if form_line is None and post.get("resource_type") in ("xhr", "fetch"):
+        # The page's script sent the form's fields somewhere other than the
+        # form's action: the form is the one whose controls name every field.
+        form_line, form, problem = _script_form(lines, post)
+        if problem:
+            return workflow, None, [problem]
+        if form is not None and form_line is not None:
+            form_action = up.urlsplit(
+                up.urljoin(form_line["url"], form["action"] or form_line["url"])
+            ).path
+    if form_line is None or form is None:
         return (
             workflow,
             None,
             [
                 "the page that serves the form is not in the capture; start recording before opening it"
+                if post.get("resource_type") not in ("xhr", "fetch")
+                else "the save was sent by a page script, and no captured form has "
+                "every field it sent"
             ],
+        )
+    controls = form["controls"]
+    if (
+        encoding == "multipart"
+        and form_action is None
+        and form.get("enctype") != ("multipart/form-data")
+    ):
+        return (
+            workflow,
+            None,
+            ["the save is multipart, but the form doesn't post as multipart"],
         )
     form_t = float(form_line["t"])
     if _origin(form_line["url"]) != _origin(post["url"]):
@@ -603,10 +724,19 @@ def propose_api_step(
     # scratch page with every write blocked (runtime/actuators/form_eval.py).
     client_scripts = page_scripts(
         form_line["response_text"],
-        _path(post["url"]),
+        form_action or _path(post["url"]),
         [n for n, _ in post["form"]],
         client_rules(form_line["response_text"]),
+        _path(form_line["url"]),
     )
+    if form_action is not None and not client_scripts:
+        return (
+            workflow,
+            None,
+            [
+                "the save went elsewhere than the form's action, and the page has no script"
+            ],
+        )
 
     # Steps the API step stands in for: those recorded on the form page.
     folded: list[Step] = []
@@ -637,8 +767,37 @@ def propose_api_step(
             )
 
     fields: list[WebFormField] = []
+    submitter_pair: Optional[tuple[str, str]] = None
+    file_names = [f["name"] for f in form.get("files") or []]
+    if encoding == "multipart" and form_action is None:
+        if sorted(empty_files) != sorted(file_names):
+            return (
+                workflow,
+                None,
+                [
+                    "the save's file inputs aren't the form's own (a file may have been attached)"
+                ],
+            )
     for name, value in post["form"]:
         ctl = controls.get(name)
+        if name in empty_files:
+            if value or file_names.count(name) != 1 or name in controls:
+                return (
+                    workflow,
+                    None,
+                    [f"field {name!r} is a file input the API step can't send empty"],
+                )
+            fields.append(WebFormField(name=name, source="empty_file", value=""))
+            continue
+        if (
+            ctl is None
+            and submitter_pair is None
+            and submitter_button(form, name, value) is not None
+        ):
+            # The browser adds the clicked submit button's own name=value.
+            submitter_pair = (name, value)
+            fields.append(WebFormField(name=name, source="submitter", value=value))
+            continue
         if name in typed and typed[name] is not None:
             param = typed[name]
             demo = params.get(param, "")
@@ -842,10 +1001,31 @@ def propose_api_step(
     confirm = _selector(save, events) if submitter is not None else None
     if confirm == submitter:
         confirm = None
+    if submitter_pair is not None:
+        button = submitter_button(form, *submitter_pair)
+        assert button is not None
+        own = _button_selector(button)
+        if submitter is None:
+            # The recording names the button only by what it sent: running
+            # the page's script clicks that button, so the page sends it too.
+            submitter = own
+        elif submitter != own and not (
+            button.get("id") and submitter == "#" + button["id"]
+        ):
+            return (
+                workflow,
+                None,
+                [
+                    f"the save sent the {submitter_pair[0]!r} button's value, but the "
+                    f"person clicked {submitter}"
+                ],
+            )
     spec = WebFormSpec(
         form_path=form_path,
         fields=fields,
         controls=sorted(controls),
+        encoding=encoding,
+        form_action=form_action,
         client_rules=client_rules(form_line["response_text"]),
         client_scripts=client_scripts,
         submitter=submitter,

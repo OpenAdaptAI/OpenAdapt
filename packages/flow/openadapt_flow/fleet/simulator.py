@@ -199,6 +199,15 @@ class _Response:
         return self._body
 
 
+# The owned synthetic session returns every row from SystemOfRecord.
+SIMULATED_RECORDS_READ_CONTRACT: dict[str, Any] = {
+    "kind": "rest",
+    "records_path": "/records",
+    "records_key": "records",
+    "records_complete": True,
+}
+
+
 class _RecordSession:
     """The ``requests``-style session ``RestRecordVerifier`` reads through."""
 
@@ -598,7 +607,12 @@ class SimulatedTenant:
         self, bundle_dir: Path, run_dir: Path, *, fault: Optional[str] = None
     ) -> RunReport:
         """One Standard-profile run of ``bundle_dir`` on this tenant's portal."""
-        from openadapt_flow.deployment import DeploymentConfig, PolicySection
+        from openadapt_flow.deployment import (
+            DeploymentConfig,
+            EffectsConfig,
+            PolicySection,
+            build_effect_verifier,
+        )
         from openadapt_flow.execution_profiles import (
             ExecutionProfile,
             execution_profile_contract,
@@ -607,7 +621,6 @@ class SimulatedTenant:
             build_runtime_authorization,
             evaluate_run_gate,
         )
-        from openadapt_flow.runtime.effects import RestRecordVerifier
         from openadapt_flow.runtime.replayer import Replayer
 
         sor = SystemOfRecord()
@@ -620,13 +633,18 @@ class SimulatedTenant:
             fault=fault,
         )
         workflow = Workflow.load(bundle_dir)
-        verifier = RestRecordVerifier(
-            "http://sor.sim",
-            records_path="/records",
-            records_key="records",
+        verifier = build_effect_verifier(
+            EffectsConfig.model_validate(
+                {
+                    **SIMULATED_RECORDS_READ_CONTRACT,
+                    "base_url": "http://sor.sim",
+                    "poll_interval_s": 0.01,
+                }
+            ),
             session=_RecordSession(sor),
-            poll_interval_s=0.01,
         )
+        if verifier is None:
+            raise ValueError("the simulated record contract built no verifier")
         gate = evaluate_run_gate(
             workflow,
             bundle_dir=bundle_dir,
@@ -1067,7 +1085,9 @@ def _run_scenario(root: Path, *, log: Any) -> dict[str, Any]:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.split("\n\n")[0], allow_abbrev=False
+    )
     parser.add_argument(
         "--out", required=True, help="Directory for the simulated fleet"
     )

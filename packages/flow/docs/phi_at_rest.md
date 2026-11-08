@@ -22,11 +22,13 @@ with your other secrets.
 
 | | Default | `OPENADAPT_FLOW_AT_REST=strict` |
 | --- | --- | --- |
-| Durable checkpoints | Encrypted | Encrypted |
+| Durable checkpoints and attended state | Encrypted | Encrypted |
 | Web recordings | Encrypted with a configured key; otherwise logged | Encrypted |
 | Bundles from `compile`, `induce`, `admit` | Encrypted from encrypted input; otherwise logged | Encrypted |
 | Run directories | Encrypted for a sealed bundle; otherwise logged | Encrypted |
-| Desktop recordings, approval requests, `--record-video`, and the output of `visualize`, `explain`, `teach`, `emit-skill`, `push`, `compose`, `process`, `variants`, `route`, `for-each`, `shadow`, `compile-agent`, `guard`, `bench`, `sanitize`, `redact-report`, `jit`, `--save-healed-to`, `--workers` and `induce --report` | Logged | Held back before the command runs |
+| The bundle, skill library and compiled fix of `teach` | Encrypted from encrypted input; otherwise logged | Encrypted |
+| The sanitized review copy and approved archive of `push` | Encrypted from encrypted input; otherwise logged | Encrypted |
+| Desktop recordings, approval requests, `--record-video`, and the output of `visualize`, `explain`, `emit-skill`, `compose`, `process`, `variants`, `route`, `for-each`, `shadow`, `compile-agent`, `guard`, `bench`, `sanitize`, `redact-report`, `jit`, `--save-healed-to`, `--workers` and `induce --report` | Logged | Held back before the command runs |
 
 **Logged** means stderr names the path and one line goes to
 `~/.openadapt/plaintext-at-rest.jsonl`; when that line can't be written, the
@@ -136,8 +138,9 @@ prior certification; certify the sealed destination.
 
 ## Inventory
 
-`openadapt_flow.sealed_set.BUNDLE_FILES` and `RECORDING_FILES` are the source
-of truth; a test keeps this table in step with them.
+`openadapt_flow.sealed_set.BUNDLE_FILES`, `RECORDING_FILES`, `LIBRARY_FILES`
+and `SANITIZED_FILES` are the source of truth; a test keeps these tables in
+step with them.
 
 ### Bundle
 
@@ -169,6 +172,54 @@ of truth; a test keeps this table in step with them.
 | `distill.json`, `.openadapt-approval.json`, `.openadapt-sanitization.json` | Derived reports and approvals | Encrypted |
 | Anything else | Unknown | Refused |
 
+### Skill library
+
+| File | Holds | At rest |
+| --- | --- | --- |
+| `skills.json` | Every learned program version (target labels, typed literals, screen text, crop paths) and the execution traces it was learned from | Encrypted |
+| Anything else | Unknown | Refused |
+
+### Sanitized review copy
+
+| File | Holds | At rest |
+| --- | --- | --- |
+| `.openadapt-sanitization.json` | The redaction manifest: file names, hashes and redaction records | Encrypted |
+| `.openadapt-approval.json` | The reviewer's approval | Encrypted |
+| `*` | The scrubbed copy of each recording or bundle file, before review | Encrypted |
+
+The approved archive beside it (`<name>.approved.zip`) is one AES-256-GCM
+container under the same key.
+
+### Durable checkpoints and attended state
+
+In the default mode, under the configured or local key, the durable store
+writes its checkpoints, pauses and approvals as `<name>.enc` AES-256-GCM
+containers. The attended store does the same for the pause capability and its
+history, the decision log (operator and message), program and reconciliation
+receipts, and program-transition control frames. Each file's associated data
+names its run-relative path, so a file copied over another path does not
+decrypt, and once a run's attended state is encrypted a plaintext file in its
+place is refused. The external attended journal stores each decision-log
+snapshot encrypted and bound to its run and sequence; its hash chain and HMAC
+cover the plaintext. A run whose attended files are plaintext from an earlier
+version still resumes, and its first encrypted write converts them.
+The key is stretched with scrypt once per run, under a random salt kept in the
+run's `.attended_state.encrypted` marker, and each file and journal row gets
+its own nonce under keys derived from it, so the cost doesn't grow with the
+number of files or journal rows. Each file names the salt it was sealed
+under, and a file whose salt is not the one in the run's marker is refused, so
+a file copied in from another run under the same key does not read. If two
+processes convert the same run at once, the one that loses the race to write
+the marker reseals its files under the winner's salt. The replayer classifies
+a run's outcome with its own checkpoint key, so a run whose key was passed in
+code rather than through the environment still reads its sealed evidence.
+Once a run's attended state is encrypted,
+`OPENADAPT_FLOW_PLAINTEXT_AT_REST` does not turn it back to plaintext: a write
+with no key is refused. Containers written by the earlier per-file format
+still read.
+`tests/test_attended_at_rest.py` runs attended decisions under the same disk
+audit hook and checks that no attended file or journal row holds plaintext.
+
 ### Run directory of a sealed bundle
 
 Every file is encrypted except these structural ones: `.durable_run.claim`
@@ -190,9 +241,8 @@ The web recorder seals every frame, event line, the metadata and the network
 capture in memory and writes only ciphertext, from the first frame. The event
 log is resealed whole on each append, so the file on disk is always one
 complete ciphertext. The recording is finalized (indexed) when it finishes.
-`record --verify` keeps its system-of-record reads inside it, encrypted;
-`record --with-check` says it cannot mark a check in an encrypted recording
-yet and marks nothing.
+`record --verify` keeps its system-of-record reads inside it, encrypted, and
+`record --with-check` marks its check inside it, encrypted.
 
 Web recordings are encrypted under a configured key, and under the local key
 in strict mode. `--no-encrypt` records one in plaintext, with a warning and a
@@ -225,9 +275,10 @@ takes tens to hundreds of milliseconds, so encryption adds about 1% or less.
 `scaffold-verifier`, `seal`, `certify`, `qualify`, `admit`, `run`, `replay`,
 `approve`, `resume`, `undo`, `visualize` (including a process contract),
 `explain`, `emit-skill`, `for-each`, `sections`, `check mark`, `compose`,
-`process`, `variants` and `route` read sealed bundles, run directories and
-encrypted recordings in memory, given the key, and keep what they write inside
-a sealed set sealed. Each reads artifact files through one reader,
+`process`, `variants`, `route`, `teach`, `push`, `sanitize`,
+`review-sanitized` and `approve-sanitized` read sealed bundles, run
+directories and encrypted recordings in memory, given the key, and keep what
+they write inside a sealed set sealed. Each reads artifact files through one reader,
 `openadapt_flow.artifacts`:
 
 - `compile` of an encrypted recording writes a sealed bundle, under
@@ -261,6 +312,33 @@ a sealed set sealed. Each reads artifact files through one reader,
   (`composition.json`, `process-contract.json`, `variant-set.json`) holds
   names, digests and pointers; by default it is named on stderr and in the
   ledger, and strict mode refuses the command before it runs.
+- `teach` of a sealed run, fix recording or bundle, and every `teach` in
+  strict mode, writes the taught bundle sealed (crops, program and repair
+  candidate), under the same key rules as `compile`. Its skill library
+  (`<out>.skills`, or `--library`) is a sealed set of its own, and the fix
+  recording compiles into `_teach_compiled`, a sealed bundle inside the
+  recording that the recording's index skips. A library or `--out` directory
+  that already holds plaintext is refused, so nothing learned from encrypted
+  input lands beside plaintext. An `--out` or library that is, contains, or
+  is inside any input (by real path or by inode, so a symlink alias counts)
+  is refused before anything is written.
+- `push` and `sanitize` of an encrypted recording or bundle, and every
+  `push` in strict mode, write the sanitized review copy as a sealed set of
+  kind `sanitized`, staged in a private (0700) directory beside it and removed
+  if anything fails. Scrubbing, the second-pass check and the approval rescan
+  run on the decrypted bytes in memory and are exactly as strict as for
+  plaintext. `review-sanitized` shows the original and the copy from memory
+  and writes a reviewer's redactions back encrypted; `approve-sanitized`
+  encrypts the approved archive; the upload decrypts that archive in memory and
+  sends the exact approved bytes.
+
+Refusals never quote what they read. A validation error's quoted input value
+is dropped from every refusal the CLI prints. With sealed input or in strict
+mode, a `teach` or `push` refusal names only the error's type, unless its text
+was built only from the command line (the paths you passed, such as an `--out`
+that overlaps an input or a run that came from another bundle). An unexpected
+error prints its type instead of a traceback, and a success line names a skill
+or workflow only by a short hash.
 
 Without the key, each of these refuses before it reads anything and names the
 variable to set. Any other command given a sealed path refuses with a message
@@ -291,8 +369,8 @@ marks as logged. Also:
   and no `seal`: only `workflow.json` and `templates/` are encrypted there.
 - The offline Seal of a run (`local-seal`) is not written for an encrypted
   run directory yet; the run says so on stderr.
-- Commands outside the list above, such as `visualize`, `explain`, `teach`,
-  `emit-skill` and `push`, refuse sealed input rather than read it.
+- Commands outside the list above refuse sealed input rather than decrypt it
+  to disk.
 
 ## The identity template is not encryption
 

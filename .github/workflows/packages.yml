@@ -114,6 +114,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       flow: ${{ steps.classify.outputs.flow }}
+      flow_unit_shards: ${{ steps.classify.outputs.flow_unit_shards }}
       types: ${{ steps.classify.outputs.types }}
       agent: ${{ steps.classify.outputs.agent }}
       capture: ${{ steps.classify.outputs.capture }}
@@ -128,6 +129,8 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Reject tracked evidence key material
+        run: python3 scripts/check_evidence_keys.py
       - name: Classify the change
         id: classify
         env:
@@ -136,6 +139,9 @@ jobs:
           GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
         run: |
           set -euo pipefail
+          # Both the matrix and the claims consumer use this exact count.
+          if [ "$EVENT_NAME" = pull_request ]; then unit_shards=3; else unit_shards=2; fi
+          echo "flow_unit_shards=$unit_shards" >> "$GITHUB_OUTPUT"
           all() {
             for pkg in flow types agent capture privacy desktop tray program_graph weight; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
             exit 0
@@ -216,7 +222,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: |
@@ -241,7 +247,7 @@ jobs:
         run: ruff check openadapt_types tests scripts
       - name: Install uv (for the oldest-Python syntax check)
         if: matrix.python-version == '3.12'
-        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - name: Syntax at the oldest supported Python (3.10)
         if: matrix.python-version == '3.12'
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
@@ -285,7 +291,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       # uv installs the locked requirements into the setup-python interpreter,
       # in seconds instead of minutes, from a cache keyed on the locks.
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: |
@@ -309,7 +315,7 @@ jobs:
         run: ruff check src tests scripts
       - name: Install uv (for the oldest-Python syntax check)
         if: matrix.python-version == '3.12'
-        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - name: Syntax at the oldest supported Python (3.10)
         if: matrix.python-version == '3.12'
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
@@ -343,7 +349,7 @@ jobs:
           python-version: "3.12"
       # uv installs the locked requirements into the setup-python interpreter,
       # in seconds instead of minutes, from a cache keyed on the locks.
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: packages/flow/uv.lock
@@ -357,13 +363,13 @@ jobs:
         # every public data/config asset listed in public-artifacts.json.
         run: python scripts/check_release_consistency.py
       - name: Ruff lint
-        run: ruff check openadapt_flow benchmark/harness
+        run: ruff check openadapt_flow benchmark/harness benchmark/phase_latency
       - name: No app-specific code in the engine
         # App knowledge lives in profiles, contracts and fixtures (CONTRIBUTING:
         # "App knowledge lives in data"); the denylist is scripts/generality.toml.
         run: python scripts/check_engine_generality.py
       - name: Install uv (for the oldest-Python syntax check)
-        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - name: Syntax at the oldest supported Python (3.10)
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
         # Python than requires-python allows (a 3.12 f-string, say) passed it
@@ -376,9 +382,11 @@ jobs:
           ruff check --isolated --select E9 --target-version py310 .
           uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Ruff format check
-        run: ruff format --check openadapt_flow tests benchmark/harness
+        run: ruff format --check openadapt_flow tests benchmark/harness benchmark/phase_latency
       - name: Mypy
         run: mypy
+      - name: Phase timing contract types
+        run: mypy --follow-imports=silent --ignore-missing-imports benchmark/phase_latency/collector.py
       - name: Mypy (strict, safety path only)
         run: |
           mypy \
@@ -437,7 +445,7 @@ jobs:
         # together: a pull request's fast lane takes three shards, about five
         # minutes each, to fit `ci` in ten minutes. The full suite on main and
         # nightly takes two.
-        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"shard":1,"of":3},{"shard":2,"of":3},{"shard":3,"of":3}]' || '[{"shard":1,"of":2},{"shard":2,"of":2}]') }}
+        include: ${{ fromJSON(needs.scope.outputs.flow_unit_shards == '3' && '[{"shard":1,"of":3},{"shard":2,"of":3},{"shard":3,"of":3}]' || '[{"shard":1,"of":2},{"shard":2,"of":2}]') }}
     defaults:
       run:
         working-directory: packages/flow
@@ -450,7 +458,7 @@ jobs:
           python-version: "3.12"
       # uv installs the locked requirements into the setup-python interpreter,
       # in seconds instead of minutes, from a cache keyed on the locks.
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: |
@@ -462,7 +470,7 @@ jobs:
         # dependencies than the published one Flow's lock names.
         run: >-
           python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,capture,agent]' --lock packages/capture
-          --editable packages/types --editable packages/capture --editable packages/flow
+          --editable packages/types --editable packages/capture --editable packages/flow --editable packages/agent --editable .
       - name: Install Harness² for the integration tests
         # Not on PyPI. Pinned to the commit benchmark.harness.harness2
         # is written against; it has no runtime dependencies.
@@ -476,6 +484,53 @@ jobs:
           here = pathlib.Path(openadapt_capture.__file__).resolve().as_posix()
           assert "packages/capture/openadapt_capture" in here, here
           print("openadapt_capture from", here)
+          PY
+      - name: Verify the installed Agent shim, launcher and Flow implementation
+        run: |
+          python - <<'PY'
+          import importlib.metadata
+          import importlib.util
+          import json
+          import pathlib
+
+          root = pathlib.Path.cwd().resolve().parents[1]
+          shim = importlib.util.find_spec("openadapt_agent")
+          expected = root / "packages/agent/src/openadapt_agent/__init__.py"
+          assert (
+              shim and shim.origin and pathlib.Path(shim.origin).resolve() == expected
+          ), shim
+          installed = importlib.metadata.distribution("openadapt-agent")
+          direct = json.loads(installed.read_text("direct_url.json") or "{}")
+          assert direct.get("url") == (root / "packages/agent").as_uri(), direct
+          assert direct.get("dir_info", {}).get("editable") is True, direct
+
+          compatibility = importlib.import_module("openadapt_agent")
+          engine = importlib.import_module("openadapt_flow.agent")
+          assert compatibility is engine
+          implementation = pathlib.Path(engine.__file__).resolve()
+          expected_implementation = root / "packages/flow/openadapt_flow/agent/__init__.py"
+          assert implementation == expected_implementation, implementation
+          print("openadapt-agent shim from", expected)
+          print("openadapt_flow.agent from", implementation)
+
+          launcher_spec = importlib.util.find_spec("openadapt")
+          expected_launcher = root / "openadapt/__init__.py"
+          assert (
+              launcher_spec
+              and launcher_spec.origin
+              and pathlib.Path(launcher_spec.origin).resolve() == expected_launcher
+          ), launcher_spec
+          launcher_distribution = importlib.metadata.distribution("openadapt")
+          launcher_direct = json.loads(
+              launcher_distribution.read_text("direct_url.json") or "{}"
+          )
+          assert launcher_direct.get("url") == root.as_uri(), launcher_direct
+          assert (
+              launcher_direct.get("dir_info", {}).get("editable") is True
+          ), launcher_direct
+          launcher = importlib.import_module("openadapt")
+          assert pathlib.Path(launcher.__file__).resolve() == expected_launcher
+          print("openadapt launcher from", expected_launcher)
           PY
       - name: Resolve Playwright version
         id: pw
@@ -526,7 +581,16 @@ jobs:
           set -euo pipefail
           mkdir -p runs
           mapfile -t files < "$RUNNER_TEMP/shard.txt"
-          pytest -n logical --dist loadfile -v --durations=20 --basetemp=runs/ci "${files[@]}"
+          pytest -n logical --dist loadfile -v --durations=20 --basetemp=runs/ci \
+            --junitxml=runs/flow-unit-shard-${{ matrix.shard }}-of-${{ matrix.of }}.xml "${files[@]}"
+      - name: Retain this shard's claims evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flow-unit-junit-${{ matrix.shard }}-of-${{ matrix.of }}
+          path: packages/flow/runs/flow-unit-shard-${{ matrix.shard }}-of-${{ matrix.of }}.xml
+          if-no-files-found: error
+          retention-days: 7
 
   flow-critical:
     name: flow core critical (golden VERIFIED, zero model calls)
@@ -546,7 +610,7 @@ jobs:
           python-version: "3.12"
       # uv installs the locked requirements into the setup-python interpreter,
       # in seconds instead of minutes, from a cache keyed on the locks.
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: packages/flow/uv.lock
@@ -602,13 +666,28 @@ jobs:
             tests/test_admitted_composition_runtime.py \
             tests/test_agent_guard.py \
             --basetemp=runs/ci-critical --junitxml=runs/critical-junit.xml
+      - name: Golden free path with egress blocked (loopback-only network namespace)
+        # Direct IP sockets stay in a loopback-only namespace. The tutorial
+        # must still reach VERIFIED with no Python-hook refusal recorded.
+        # A native-child control measures the hook observation boundary.
+        run: |
+          sudo -n env "PATH=$PATH" "HOME=$HOME" \
+            deploy/on-prem/bin/run-egress-blocked.sh \
+            python -m pytest -v tests/e2e/test_egress_blocked_e2e.py \
+            --basetemp=runs/ci-onprem-egress --junitxml=runs/onprem-egress-junit.xml
+      - name: Network namespace setup and owned Unix broker boundary
+        env:
+          OPENADAPT_TEST_NETNS: "1"
+        run: |
+          python -m pytest -v tests/e2e/test_egress_namespace_e2e.py \
+            --basetemp=runs/ci-onprem-boundary --junitxml=runs/onprem-boundary-junit.xml
       - name: Fail if any critical test was skipped or none ran
         run: |
           python - <<'PY'
           import sys
           import xml.etree.ElementTree as ET
           bad = False
-          for name in ("critical-e2e", "critical"):
+          for name in ("critical-e2e", "critical", "onprem-egress", "onprem-boundary"):
               root = ET.parse(f"runs/{name}-junit.xml").getroot()
               suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
               tests = sum(int(s.get("tests", 0)) for s in suites)
@@ -618,6 +697,51 @@ jobs:
                   bad = True
           sys.exit(1 if bad else 0)
           PY
+
+      - name: Validate passing browser claim evidence
+        run: >-
+          python scripts/validate_claims.py --check --ci-job e2e-browser
+          --junit runs/critical-e2e-junit.xml
+
+  # The on-prem install path for real: build two signed offline releases of
+  # openadapt-flow[privacy] from uv.lock on this connected runner, then, as
+  # root in a network namespace with no route out, install the first from its
+  # wheelhouse, refuse a tampered second, update to the signed second, roll
+  # back, and run the air-gap attestation (egress probe, audit chain). pip has
+  # no index and the machine has no network, so a wheel missing from the
+  # archive fails the install. deploy/on-prem/bin/test-offline-install.sh.
+  # First, bin/test-update.sh: the update state machine's refusal, migration
+  # and recovery paths with a fake venv build, which nothing else runs.
+  flow-onprem-offline:
+    name: flow on-prem offline install, update and rollback (egress blocked)
+    needs: scope
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.flow == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: packages/flow
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+      - name: Signed update and rollback state machine (hermetic, fake build)
+        run: bash deploy/on-prem/bin/test-update.sh
+      - name: Build two signed offline releases from the lock (connected)
+        run: bash deploy/on-prem/bin/test-offline-install.sh stage "$RUNNER_TEMP/offline"
+      - name: Install, update and roll back with egress blocked
+        # env -u SUDO_UID keeps the command root inside the namespace:
+        # install.sh owns the release tree as root.
+        run: >-
+          sudo env -u SUDO_UID -u SUDO_GID "PATH=$PATH"
+          deploy/on-prem/bin/run-egress-blocked.sh
+          bash deploy/on-prem/bin/test-offline-install.sh verify "$RUNNER_TEMP/offline"
 
   # The agent-framework adapters (openadapt_flow.integrations.agents): each
   # framework's own agent loop with a scripted model, writing through a real
@@ -638,7 +762,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/flow/uv.lock"
@@ -704,10 +828,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: packages/flow/uv.lock
@@ -803,7 +927,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: packages/flow/uv.lock
@@ -859,7 +983,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/capture/uv.lock"
@@ -926,7 +1050,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/capture/uv.lock"
@@ -960,7 +1084,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/capture/uv.lock"
@@ -994,7 +1118,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/capture/uv.lock"
@@ -1044,7 +1168,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/privacy/uv.lock"
@@ -1068,7 +1192,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/privacy/uv.lock"
@@ -1095,7 +1219,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/privacy/uv.lock"
@@ -1154,7 +1278,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/tray/uv.lock"
@@ -1182,7 +1306,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/tray/uv.lock"
@@ -1226,7 +1350,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "packages/desktop/uv.lock"
@@ -1295,10 +1419,10 @@ jobs:
       - name: Rebuild the viewer; it must match the launcher's copy and its budget
         working-directory: packages/seal-view
         run: node scripts/build.mjs --check
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
@@ -1342,7 +1466,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: "**/uv.lock"
@@ -1414,6 +1538,7 @@ jobs:
       - flow-lint
       - flow-unit
       - flow-critical
+      - flow-onprem-offline
       - flow-agent-frameworks
       - flow-native-census
       - flow-linux-atspi
@@ -1467,6 +1592,7 @@ jobs:
               "flow-lint": "flow",
               "flow-unit": "flow",
               "flow-critical": "flow",
+              "flow-onprem-offline": "flow",
               "flow-agent-frameworks": "flow",
               "flow-native-census": "flow",
               "flow-linux-atspi": "flow",
@@ -1526,3 +1652,37 @@ jobs:
               print(f"failed: {bad}")
           sys.exit(1 if bad else 0)
           PY
+      # Unit evidence is complete only after every current-run shard passed.
+      # The merge queue deliberately rechecks critical tests, not unit shards.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        with:
+          enable-cache: true
+          cache-dependency-glob: .github/ci-tools/uv.lock
+          cache-suffix: flow-claims
+      - name: Install the locked claims validator dependency
+        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        run: python scripts/ci/locked_install.py --lock .github/ci-tools:claims
+      - name: Download this run's unit claim evidence
+        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: flow-unit-junit-*
+          path: runs/flow-unit-junit
+          merge-multiple: false
+      - name: Require every unit shard and validate all supported unit evidence
+        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        run: |
+          set -euo pipefail
+          python scripts/ci/merge_flow_junit.py --artifacts-dir runs/flow-unit-junit \
+            --shards '${{ needs.scope.outputs.flow_unit_shards }}' --out runs/flow-unit-junit.xml
+          cd packages/flow
+          python scripts/validate_claims.py --check --ci-job test --junit ../../runs/flow-unit-junit.xml

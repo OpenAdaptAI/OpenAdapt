@@ -365,7 +365,53 @@ def test_halt_signal_with_no_effect_is_halted_before_effect(
     assert receipt.scalar_reward == 0.0
 
 
-def test_halt_signal_with_effect_present_is_reconciliation(
+@pytest.mark.parametrize(
+    "signal", ["halted_before_effect", "refused", "rejected_policy"]
+)
+def test_escalation_after_the_effect_landed_is_partial_credit(
+    seeded: dict[str, Any], signal: str
+) -> None:
+    worker = _worker(seeded)
+    envelope = _run(
+        worker,
+        seeded,
+        MOCKMED_HONEST_PATIENT,
+        f"episode_escalated_{signal}",
+        runtime_signal=signal,
+    )
+    receipt = _receipt(envelope)
+    assert receipt.reward_outcome is RewardOutcomeV1.ESCALATED_AFTER_EFFECT
+    assert receipt.uncertainty.value == "none"
+    assert receipt.scalar_reward == 0.5
+    assert receipt.scalar_reward == (
+        worker.contract.scoring.escalated_after_effect_reward
+    )
+    assert sum(receipt.reward_components.values()) == pytest.approx(0.5)
+    assert envelope["unscored"] is False
+
+
+def test_halt_signal_after_a_wrong_write_is_still_reconciliation(
+    seeded: dict[str, Any],
+) -> None:
+    # Two encounters where the contract requires exactly one: an effect is
+    # present but not as declared, so a person settles it. Unscored, never
+    # partial credit.
+    worker = _worker(seeded)
+    envelope = _run(
+        worker,
+        seeded,
+        MOCKMED_HONEST_PATIENT,
+        "episode_halted_dup_01",
+        encounters=2,
+        runtime_signal="halted_before_effect",
+    )
+    receipt = _receipt(envelope)
+    assert receipt.reward_outcome is RewardOutcomeV1.RECONCILIATION_REQUIRED
+    assert receipt.scalar_reward is None
+    assert envelope["unscored"] is True
+
+
+def test_halt_signal_with_a_forbidden_effect_is_wrong_effect(
     seeded: dict[str, Any],
 ) -> None:
     worker = _worker(seeded)
@@ -373,13 +419,13 @@ def test_halt_signal_with_effect_present_is_reconciliation(
         worker,
         seeded,
         MOCKMED_HONEST_PATIENT,
-        "episode_halted_lie_01",
+        "episode_halted_forbidden_01",
+        discharge=True,
         runtime_signal="halted_before_effect",
     )
     receipt = _receipt(envelope)
-    assert receipt.reward_outcome is RewardOutcomeV1.RECONCILIATION_REQUIRED
-    assert receipt.scalar_reward is None
-    assert envelope["unscored"] is True
+    assert receipt.reward_outcome is RewardOutcomeV1.WRONG_EFFECT
+    assert receipt.scalar_reward is not None and receipt.scalar_reward <= 0.0
 
 
 def test_forbidden_effect_is_wrong_effect(seeded: dict[str, Any]) -> None:

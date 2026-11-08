@@ -24,7 +24,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 import yaml
-
 from benchmark.fhir_medplum.fixture import MedplumFixture, _http
 from benchmark.fhir_medplum.public import agents as agent_mod
 from benchmark.fhir_medplum.public.proxy import WRITE_METHODS, FaultProxy
@@ -95,7 +94,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     from openadapt_flow.shadow import Shadow
     from openadapt_flow.shadow_report import write_report
 
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     ap.add_argument("--agent", default="scripted")
     ap.add_argument("--model", default="claude-sonnet-5-5")
     ap.add_argument("--cases", default=str(HERE / "cases.yaml"))
