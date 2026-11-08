@@ -32,7 +32,9 @@ HERE = Path(__file__).resolve().parent
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--bundle", required=True)
     parser.add_argument("--runs-root", required=True)
     parser.add_argument("--out", required=True)

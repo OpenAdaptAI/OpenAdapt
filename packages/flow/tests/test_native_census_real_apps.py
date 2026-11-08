@@ -28,7 +28,11 @@ import pytest
 
 from openadapt_flow.runtime import identity_template as itmpl
 from openadapt_flow.runtime.identity_census import CensusDecision, decide
-from tests._native_app_startup import stop_owned_process, wait_for_rendered_items
+from tests._native_app_startup import (
+    NativeAppStartupError,
+    stop_owned_process,
+    wait_for_rendered_items,
+)
 
 pytestmark = pytest.mark.timeout(180)
 
@@ -112,6 +116,42 @@ try {
 """.replace("__TITLE__", TITLE)
 
 
+def _wpf_points_ready(auto, items: list[Any], pid: int) -> tuple[bool, str]:
+    """Require the points used by the tests to hit their owned rendered rows."""
+    for index, item in enumerate(items):
+        try:
+            children = item.GetChildren()
+            if not children:
+                return False, f"row={index} has no first cell"
+            rect = children[0].BoundingRectangle
+            bounds = (rect.left, rect.top, rect.right, rect.bottom)
+            if rect.right <= rect.left or rect.bottom <= rect.top:
+                return False, f"row={index} has empty cell bounds={bounds}"
+            point = ((rect.left + rect.right) // 2, (rect.top + rect.bottom) // 2)
+            hit = auto.ControlFromPoint(*point)
+            if hit is None:
+                return False, f"row={index} bounds={bounds} point={point} has no hit"
+            hit_pid, hit_type = hit.ProcessId, hit.ControlTypeName
+            detail = (
+                f"row={index} bounds={bounds} point={point} "
+                f"hit_pid={hit_pid} hit_type={hit_type}"
+            )
+            if hit_pid != pid:
+                return False, detail + " is outside the owned process"
+            current = hit
+            for _ in range(16):
+                if auto.ControlsAreSame(current, item):
+                    break
+                current = current.GetParentControl()
+                if current is None:
+                    return False, detail + " is outside the expected row"
+            else:
+                return False, detail + " ancestry did not reach the expected row"
+        except Exception as exc:
+            return False, f"row={index} point discovery failed ({type(exc).__name__})"
+    return True, f"all {len(items)} first-cell points hit their owned rows"
+
+
 @pytest.fixture
 def wpf_worklist(tmp_path: Path):
     if sys.platform != "win32" or os.environ.get("OPENADAPT_TEST_WINDOWS_UIA") != "1":
@@ -153,8 +193,10 @@ def wpf_worklist(tmp_path: Path):
             )
             procs.append(proc)
             owned.callback(stop_owned_process, proc)
+            last_point_state = "point discovery not reached"
 
             def items_from_owned_window(hwnd: int) -> Optional[list[Any]]:
+                nonlocal last_point_state
                 window = auto.ControlFromHandle(hwnd)
                 if window is None:
                     return None
@@ -165,23 +207,33 @@ def wpf_worklist(tmp_path: Path):
                 listing = window.ListControl(searchDepth=3)
                 if not listing.Exists(0, 0):
                     return None
-                return [
+                items = [
                     child
                     for child in listing.GetChildren()
                     if child.ControlTypeName == "ListItemControl"
                 ]
+                if len(items) != len(rows):
+                    last_point_state = f"UIA exposes {len(items)} of {len(rows)} rows"
+                    return None
+                ready, last_point_state = _wpf_points_ready(auto, items, proc.pid)
+                return items if ready else None
 
             # One startup budget inside the existing 180s test limit leaves
             # 60s for the unchanged census assertions and owned cleanup.
-            return wait_for_rendered_items(
-                proc,
-                ready,
-                len(rows),
-                items_from_owned_window,
-                stdout_path,
-                stderr_path,
-                timeout_s=120.0,
-            )
+            try:
+                return wait_for_rendered_items(
+                    proc,
+                    ready,
+                    len(rows),
+                    items_from_owned_window,
+                    stdout_path,
+                    stderr_path,
+                    timeout_s=120.0,
+                )
+            except NativeAppStartupError as exc:
+                raise NativeAppStartupError(
+                    f"{exc}; point_readiness={last_point_state}"
+                ) from exc
 
         yield auto, start
 

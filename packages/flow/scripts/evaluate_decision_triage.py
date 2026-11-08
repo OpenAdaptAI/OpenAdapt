@@ -31,7 +31,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-
 from openadapt_flow.decision.calibration import (
     brier,
     estimate_miss_rate,
@@ -146,7 +145,9 @@ def _oracle_sweep(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--train", type=int, default=8000)
     parser.add_argument("--test", type=int, default=5000)
     parser.add_argument("--list-size", type=int, default=50)

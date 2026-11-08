@@ -12,13 +12,20 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Callable
+from copy import deepcopy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlsplit
+from typing import Any, cast
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 import pytest
 
 from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
 from openadapt_flow.runtime.effects import fhir, rest
+from openadapt_flow.runtime.effects.effect import (
+    Effect,
+    EffectState,
+    Verdict,
+)
 from openadapt_flow.runtime.effects.fhir import FhirEffectVerifier
 from openadapt_flow.runtime.effects.rest import RestRecordVerifier
 
@@ -34,12 +41,56 @@ def serve():
     servers: list[ThreadingHTTPServer] = []
 
     def start(page: Page) -> str:
+        # This test endpoint implements an immutable response view. Every
+        # continuation names the server-side frozen map, not mutable source
+        # rows with a constant version-looking decoration.
+        views: dict[str, dict[int, tuple]] = {}
+        lock = threading.Lock()
+
+        def frozen(path: str, number: int, view: str | None) -> tuple:
+            with lock:
+                if view is None:
+                    view = str(len(views) + 1)
+                    pages: dict[int, tuple] = {}
+                    for n in range(max(rest.MAX_PAGES, fhir.MAX_PAGES) + 1):
+                        status, original, *extra = page(path, n)
+                        body = deepcopy(original)
+                        links = []
+                        if isinstance(body, dict):
+                            body["_snapshot"] = view
+                            if isinstance(body.get("links"), dict):
+                                links.append((body["links"], "next"))
+                            for item in body.get("link", []):
+                                if item.get("relation") == "next":
+                                    links.append((item, "url"))
+                        more = False
+                        for holder, key in links:
+                            following = holder.get(key)
+                            if isinstance(following, str) and following:
+                                more = True
+                                parts = urlsplit(following)
+                                query = (
+                                    parts.query
+                                    + ("&" if parts.query else "")
+                                    + "view="
+                                    + view
+                                )
+                                holder[key] = urlunsplit(parts._replace(query=query))
+                        pages[n] = (status, body, *deepcopy(extra))
+                        if status // 100 != 2 or not more:
+                            break
+                    views[view] = pages
+                return deepcopy(views[view][number])
+
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802 - http.server API
                 parts = urlsplit(self.path)
-                number = int(parse_qs(parts.query).get("page", ["0"])[0])
+                query = parse_qs(parts.query)
+                number = int(query.get("page", ["0"])[0])
                 SEEN.append(dict(self.headers))
-                status, body, *extra = page(parts.path, number)
+                status, body, *extra = frozen(
+                    parts.path, number, query.get("view", [None])[0]
+                )
                 data = json.dumps(body).encode()
                 self.send_response(status)
                 for name, value in (extra[0] if extra else {}).items():
@@ -96,9 +147,10 @@ def _fhir(url: str) -> FhirEffectVerifier:
     return FhirEffectVerifier(
         f"{url}/fhir",
         resource_type="Patient",
-        field_paths={"id": "id", "lname": "name.0.family"},
+        field_paths={"id": "id", "lname": "name.family"},
         access_token="test-token-not-a-secret",
         timeout_s=2.0,
+        snapshot_path="_snapshot",
     )
 
 
@@ -183,7 +235,274 @@ def _rest(url: str, next_path: str | None = "links.next") -> RestRecordVerifier:
         records_key="data",
         timeout_s=2.0,
         next_path=next_path,
+        snapshot_path="_snapshot",
     )
+
+
+@pytest.mark.parametrize(
+    "representation",
+    ["same_row", "same_id_changed", "idless", "one_page", "numeric_id"],
+)
+def test_rest_overlapping_rows_cannot_fill_the_total_and_hide_an_extra_record(
+    serve, representation: str
+) -> None:
+    """Independent HTTP probe for #2041; not the reviewer's unseen probe."""
+    identity = "key" if representation == "idless" else "id"
+    first: dict[str, Any] = {identity: "a", "kind": "wanted"}
+    second = {identity: "b", "kind": "wanted"}
+    hidden = {identity: "hidden", "kind": "unintended"}
+    if representation == "numeric_id":
+        first[identity] = 1
+    actual_store = [first, second, hidden]
+    repeated = dict(first)
+    if representation == "numeric_id":
+        repeated[identity] = 1.0
+    if representation == "same_id_changed":
+        repeated["revision"] = "later"
+    after = False
+
+    def page(_path: str, n: int) -> tuple[int, dict]:
+        if not after:
+            return 200, {"data": [], "total": 0, "links": {"next": None}}
+        if representation == "one_page":
+            rows, following = [first, repeated, second], None
+        else:
+            rows = [first] if n == 0 else [repeated, second]
+            following = "/api/patient?page=1" if n == 0 else None
+        return 200, {
+            "data": rows,
+            "total": len(actual_store),
+            "links": {"next": following},
+        }
+
+    url = serve(page)
+    verifier = RestRecordVerifier(
+        url,
+        records_path="/api/patient",
+        records_key="data",
+        next_path="links.next",
+        total_path="total",
+        timeout_s=1,
+        snapshot_path="_snapshot",
+    )
+    before = verifier.capture_pre_state()
+    assert before.reachable and before.readback_complete is True
+    after = True
+    expected = Effect.model_validate(
+        {
+            "kind": "exact_new_set",
+            "match": {},
+            "new_records": [{"kind": "wanted"}] * 3,
+            "expected_count": 3,
+            "identity_field": identity,
+            "timeout_s": 0,
+        }
+    )
+    assert len(actual_store) == 3
+    assert sum(row["kind"] == "wanted" for row in actual_store) == 2
+    verdict = verifier.verify(expected, before)
+    assert verdict.verdict is Verdict.INDETERMINATE
+    assert verdict.readback_complete is False
+
+
+def test_rest_distinct_identities_with_equal_business_fields_are_not_collapsed(
+    serve,
+) -> None:
+    rows = [{"id": str(index), "kind": "wanted"} for index in range(3)]
+    after = False
+
+    def page(_path: str, n: int) -> tuple[int, dict]:
+        values = rows[n : n + 1] if after else []
+        following = f"/api/patient?page={n + 1}" if after and n < 2 else None
+        return 200, {
+            "data": values,
+            "total": len(rows) if after else 0,
+            "links": {"next": following},
+        }
+
+    verifier = RestRecordVerifier(
+        serve(page),
+        records_path="/api/patient",
+        records_key="data",
+        next_path="links.next",
+        total_path="total",
+        timeout_s=1,
+        snapshot_path="_snapshot",
+    )
+    before = verifier.capture_pre_state()
+    assert before.reachable and before.readback_complete is True
+    after = True
+    effect = Effect.model_validate(
+        {
+            "kind": "exact_new_set",
+            "match": {},
+            "new_records": [{"kind": "wanted"}] * 3,
+            "expected_count": 3,
+            "identity_field": "id",
+            "timeout_s": 0,
+        }
+    )
+    result = verifier.verify(effect, before)
+    assert result.verdict is Verdict.CONFIRMED
+    assert result.observed_count == 3
+    assert result.readback_complete is True
+
+
+@pytest.mark.parametrize("kind", ["field_equals", "record_written"])
+def test_rest_complete_current_presence_refutes_despite_unknown_baseline(
+    serve, kind: str
+) -> None:
+    rows = [{"id": "a", "kind": "wanted", "value": "wrong"}]
+    if kind == "record_written":
+        rows.append({"id": "b", "kind": "wanted", "value": "wrong"})
+    url = serve(lambda _path, _n: (200, {"data": rows, "total": len(rows)}))
+    verifier = RestRecordVerifier(
+        url,
+        records_path="/api/patient",
+        records_key="data",
+        total_path="total",
+        timeout_s=1,
+    )
+    before = EffectState(
+        substrate="rest", reachable=False, records=[], readback_complete=None
+    )
+    spec: dict = {"kind": kind, "match": {"kind": "wanted"}, "timeout_s": 0}
+    if kind == "field_equals":
+        spec.update(field="value", value="expected")
+    result = verifier.verify(Effect.model_validate(spec), before)
+    assert result.verdict is Verdict.REFUTED
+    assert result.readback_complete is True
+    assert result.observed_count == len(rows)
+
+
+def test_rest_unknown_baseline_still_cannot_confirm_a_complete_current_read(
+    serve,
+) -> None:
+    rows = [{"id": "a", "value": "expected"}]
+    url = serve(lambda _path, _n: (200, {"data": rows, "total": len(rows)}))
+    verifier = RestRecordVerifier(
+        url,
+        records_path="/api/patient",
+        records_key="data",
+        total_path="total",
+        timeout_s=1,
+    )
+    before = EffectState(
+        substrate="rest", reachable=False, records=[], readback_complete=None
+    )
+    effect = Effect.model_validate(
+        {
+            "kind": "field_equals",
+            "match": {"id": "a"},
+            "field": "value",
+            "value": "expected",
+            "timeout_s": 0,
+        }
+    )
+    result = verifier.verify(effect, before)
+    assert result.verdict is Verdict.INDETERMINATE
+    assert not result.confirmed
+
+
+@pytest.mark.parametrize("changed_payload", [False, True])
+def test_fhir_overlapping_match_identities_cannot_hide_an_extra_record(
+    serve, changed_payload: bool
+) -> None:
+    """Same coverage obligation as REST, using native FHIR identities."""
+    first: dict[str, Any] = {
+        "resourceType": "Patient",
+        "id": "a",
+        "name": [{"family": "wanted"}],
+    }
+    second = {"resourceType": "Patient", "id": "b", "name": [{"family": "wanted"}]}
+    hidden = {
+        "resourceType": "Patient",
+        "id": "hidden",
+        "name": [{"family": "unintended"}],
+    }
+    actual_store = [first, second, hidden]
+    repeated = dict(first)
+    if changed_payload:
+        repeated["meta"] = {"versionId": "2"}
+    after = False
+
+    def page(_path: str, n: int) -> tuple[int, dict]:
+        rows = ([first] if n == 0 else [repeated, second]) if after else []
+        following = (
+            [{"relation": "next", "url": "/fhir/Patient?page=1"}]
+            if after and n == 0
+            else []
+        )
+        return 200, {
+            "resourceType": "Bundle",
+            "type": "searchset",
+            "total": len(actual_store) if after else 0,
+            "entry": [{"resource": row} for row in rows],
+            "link": following,
+        }
+
+    verifier = _fhir(serve(page))
+    before = verifier.capture_pre_state()
+    assert before.reachable and before.records == []
+    after = True
+    expected = Effect.model_validate(
+        {
+            "kind": "exact_new_set",
+            "match": {},
+            "new_records": [{"lname": "wanted"}] * 3,
+            "expected_count": 3,
+            "identity_field": "id",
+            "timeout_s": 0,
+        }
+    )
+    assert len({(row["resourceType"], row["id"]) for row in actual_store}) == 3
+    result = verifier.verify(expected, before)
+    assert result.verdict is Verdict.INDETERMINATE
+
+
+def test_fhir_distinct_identities_with_equal_business_fields_are_not_collapsed(
+    serve,
+) -> None:
+    rows = [
+        {"resourceType": "Patient", "id": str(index), "name": [{"family": "wanted"}]}
+        for index in range(3)
+    ]
+    after = False
+    holder: dict[str, str] = {}
+
+    def page(_path: str, n: int) -> tuple[int, dict]:
+        values = rows[n : n + 1] if after else []
+        following = (
+            [{"relation": "next", "url": f"{holder['url']}/fhir/Patient?page={n + 1}"}]
+            if after and n < 2
+            else []
+        )
+        return 200, {
+            "resourceType": "Bundle",
+            "type": "searchset",
+            "total": len(rows) if after else 0,
+            "entry": [{"resource": row} for row in values],
+            "link": following,
+        }
+
+    holder["url"] = serve(page)
+    verifier = _fhir(holder["url"])
+    before = verifier.capture_pre_state()
+    assert before.reachable
+    after = True
+    effect = Effect.model_validate(
+        {
+            "kind": "exact_new_set",
+            "match": {},
+            "new_records": [{"lname": "wanted"}] * 3,
+            "expected_count": 3,
+            "identity_field": "id",
+            "timeout_s": 0,
+        }
+    )
+    result = verifier.verify(effect, before)
+    assert result.verdict is Verdict.CONFIRMED
+    assert result.observed_count == 3
 
 
 def test_rest_follows_relative_and_absolute_next_links(serve) -> None:
@@ -205,7 +524,7 @@ def test_rest_follows_relative_and_absolute_next_links(serve) -> None:
     assert records is not None and [r["id"] for r in records] == list("12345")
 
 
-def test_rest_without_next_path_reads_one_response(serve) -> None:
+def test_rest_without_next_path_refuses_one_incomplete_response(serve) -> None:
     holder: dict = {}
     holder["url"] = serve(
         lambda path, n: (
@@ -213,8 +532,86 @@ def test_rest_without_next_path_reads_one_response(serve) -> None:
             _rest_page(n, next_url=lambda m: f"/api/patient?page={m}"),
         )
     )
-    records = _read(_rest(holder["url"], next_path=None))
-    assert records is not None and len(records) == 2
+    request_count = len(SEEN)
+    state = _rest(holder["url"], next_path=None).capture_pre_state()
+    assert not state.reachable
+    assert state.records == []
+    assert state.readback_complete is None
+    assert len(SEEN) - request_count == 1
+
+
+def test_rest_unconfigured_single_page_cannot_confirm_or_refute(serve) -> None:
+    from openadapt_flow.runtime.effects import Effect, EffectKind
+
+    holder: dict = {}
+    holder["url"] = serve(
+        lambda path, n: (
+            200,
+            _rest_page(n, next_url=lambda m: f"/api/patient?page={m}"),
+        )
+    )
+    verifier = _rest(holder["url"], next_path=None)
+    request_count = len(SEEN)
+    before = verifier.capture_pre_state()
+    assert not before.reachable
+    assert before.records == []
+    assert before.readback_complete is None
+    assert len(SEEN) - request_count == 1
+
+    absent = Effect(
+        kind=EffectKind.EXACT_NEW_SET,
+        match={"id": "5"},
+        new_records=[{"id": "5", "fname": "F5", "lname": "L5"}],
+        expected_count=1,
+        identity_field="id",
+        timeout_s=0,
+    )
+    verdict = verifier.verify(absent, before)
+    assert verdict.verdict is rest.Verdict.INDETERMINATE
+    assert verdict.readback_complete is None
+    assert len(SEEN) - request_count == 2
+
+
+def test_rest_explicit_complete_single_response_can_establish_absence(serve) -> None:
+    from openadapt_flow.runtime.effects import Effect, EffectKind
+
+    holder: dict = {}
+    holder["url"] = serve(lambda path, n: (200, {"data": PATIENTS, "links": {}}))
+    verifier = RestRecordVerifier(
+        holder["url"],
+        records_path="/api/patient",
+        records_key="data",
+        records_complete=True,
+        timeout_s=1.0,
+    )
+    before = verifier.capture_pre_state()
+    assert before.readback_complete is True
+    absent = Effect(
+        kind=EffectKind.EXACT_NEW_SET,
+        match={"id": "6"},
+        new_records=[{"id": "6", "fname": "F6", "lname": "L6"}],
+        expected_count=1,
+        identity_field="id",
+        timeout_s=0,
+    )
+    verdict = verifier.verify(absent, before)
+    assert verdict.verdict is rest.Verdict.REFUTED
+    assert verdict.readback_complete is True
+
+
+def test_rest_malformed_record_entry_is_incomplete(serve) -> None:
+    holder: dict = {}
+    holder["url"] = serve(lambda path, n: (200, {"data": [PATIENTS[0], None]}))
+    verifier = RestRecordVerifier(
+        holder["url"],
+        records_path="/api/patient",
+        records_key="data",
+        records_complete=True,
+    )
+    state = verifier.capture_pre_state()
+    assert not state.reachable
+    assert state.readback_complete is False
+    assert "non-object" in state.detail["read_problem"]
 
 
 def test_rest_next_page_on_another_origin_is_unreadable(serve) -> None:
@@ -268,14 +665,46 @@ def test_records_next_path_in_a_config(serve) -> None:
         "records_path": "/api/patient",
         "records_key": "data",
         "records_next_path": "links.next",
+        "records_snapshot_path": "_snapshot",
     }
-    verifier = build_effect_verifier(EffectsConfig.model_validate(section))
+    verifier = cast(
+        rest.RestRecordVerifier,
+        build_effect_verifier(EffectsConfig.model_validate(section)),
+    )
     assert len(_read(verifier) or []) == 5
+    assert verifier.records_complete is None
     # Unset, the config serializes as before, so existing digests hold.
     plain = EffectsConfig.model_validate(
-        {k: v for k, v in section.items() if k != "records_next_path"}
+        {
+            k: v
+            for k, v in section.items()
+            if k not in {"records_next_path", "records_snapshot_path"}
+        }
     )
     assert "records_next_path" not in plain.model_dump(mode="json")
+    assert "records_complete" not in plain.model_dump(mode="json")
+    assert "records_snapshot_path" not in plain.model_dump(mode="json")
+
+
+def test_records_complete_declaration_is_explicit_in_config_identity() -> None:
+    from openadapt_flow.deployment import _effect_verifier_config_identity
+
+    plain = EffectsConfig.model_validate(
+        {"kind": "rest", "base_url": "http://sor", "records_path": "/records"}
+    )
+    declared = EffectsConfig.model_validate(
+        {
+            "kind": "rest",
+            "base_url": "http://sor",
+            "records_path": "/records",
+            "records_complete": True,
+        }
+    )
+    assert "records_complete" not in plain.model_dump(mode="json")
+    assert declared.model_dump(mode="json")["records_complete"] is True
+    assert _effect_verifier_config_identity(plain, object()) != (
+        _effect_verifier_config_identity(declared, object())
+    )
 
 
 # -- review of #1538 ---------------------------------------------------------------
@@ -321,7 +750,16 @@ def _empty_with_outcome(severity: str) -> dict:
             {
                 "resource": {
                     "resourceType": "OperationOutcome",
-                    "issue": [{"severity": severity, "code": "processing"}],
+                    "issue": [
+                        {
+                            "severity": severity,
+                            "code": (
+                                "informational"
+                                if severity in ("warning", "information")
+                                else "processing"
+                            ),
+                        }
+                    ],
                 },
                 "search": {"mode": "outcome"},
             }
@@ -410,6 +848,7 @@ def _rest_total(url: str, path: str = "meta.total") -> RestRecordVerifier:
         timeout_s=2.0,
         next_path="links.next",
         total_path=path,
+        snapshot_path="_snapshot",
     )
 
 
@@ -424,6 +863,7 @@ def test_rest_total_path(serve, total, ok) -> None:
     verifier = _rest_total(serve(page))
     state = verifier.capture_pre_state()
     assert state.reachable is ok
+    assert state.readback_complete is ok
     if not ok:
         assert "total" in state.detail["read_problem"]
 

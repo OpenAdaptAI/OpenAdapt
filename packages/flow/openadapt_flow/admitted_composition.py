@@ -423,7 +423,7 @@ def load_child_envelope(
     path = resolve_pointer(parent_dir, child.envelope)
     if not artifacts.is_file(path):
         raise ProcessContractError(
-            f"child {child.name!r} has no QualificationAdmissionEnvelope at "
+            f"child {child.name!r} has no signed run permission at "
             f"{path}; a compiled recording (including a compose child under "
             "composition.json) is not an independently admitted capability"
         )
@@ -434,7 +434,7 @@ def load_child_envelope(
     except Exception as exc:
         raise ProcessContractError(
             f"child {child.name!r} envelope at {path} is not a valid "
-            "QualificationAdmissionEnvelope"
+            "signed run permission"
         ) from exc
 
 
@@ -569,7 +569,7 @@ def author_process_contract(
         bundle_path = Path(bundle_src)
         if not artifacts.is_file(envelope_path):
             errors.append(
-                f"child {child_name!r} has no QualificationAdmissionEnvelope at "
+                f"child {child_name!r} has no signed run permission at "
                 f"{envelope_path}; a compiled recording (including a compose "
                 "child under composition.json) is not an independently "
                 "admitted capability"
@@ -582,7 +582,7 @@ def author_process_contract(
         except Exception as exc:
             errors.append(
                 f"child {child_name!r} envelope is not a valid "
-                f"QualificationAdmissionEnvelope ({type(exc).__name__})"
+                f"signed run permission ({type(exc).__name__})"
             )
             continue
         try:

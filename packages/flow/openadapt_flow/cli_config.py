@@ -213,11 +213,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "Write a deployment YAML bound to one workflow bundle. "
             "certify and run refuse the draft until unresolved fields are filled."
         ),
+        allow_abbrev=False,
     )
     sub = parser.add_subparsers(dest="command", required=True)
     init = sub.add_parser(
         "init",
         help="Write a draft deploy.yaml for a workflow bundle",
+        allow_abbrev=False,
     )
     init.add_argument("bundle", help="Workflow bundle directory")
     init.add_argument(

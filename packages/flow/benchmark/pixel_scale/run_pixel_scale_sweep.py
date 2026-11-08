@@ -343,7 +343,9 @@ def run(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.split("\n")[0], allow_abbrev=False
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--kiosk", action="append", choices=sorted(SPECS))
     parser.add_argument("--scale", action="append", type=float)

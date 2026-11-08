@@ -1,16 +1,16 @@
 {
   "manifest_kind": "openadapt-platform-release-manifest",
   "schema_version": "2.0.0",
-  "generated_at": "2026-11-04T22:39:52+00:00",
+  "generated_at": "2026-11-07T20:25:21+00:00",
   "generation": {
     "files": [
       {
         "path": "scripts/generate_platform_manifest.py",
-        "sha256": "52d0c84da7304e42b79e9dfb626e4569b17a49b975714db431f65b497d12a32c"
+        "sha256": "94c4f264c83a731c18e416cddf2bb721259949ba40b6b8f73dfddedb8e027019"
       },
       {
         "path": "scripts/render_platform_versions.py",
-        "sha256": "ae3e52b501e6f5fcf497e1aa3973478a333b3fefe6dd8b9b82514e8f570bdd1f"
+        "sha256": "20e210c3b54f4988afdbbc94e28eb49bbf6b92a4e7ec9a2164cebed282461bee"
       }
     ]
   },

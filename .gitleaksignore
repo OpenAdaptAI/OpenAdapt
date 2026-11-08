@@ -101,3 +101,8 @@ e8ec96725c4451aa64cb97230c18d04b55d98503:packages/flow/tests/e2e/test_mcp_teach_
 8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:554
 8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:630
 8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:642
+# OpenAdapt#1872 network-save redaction tests (PR #2014, first commit): synthetic
+# credentials the redactor must withhold. Later commits assemble them at runtime.
+ccc7c617e5cd8082909b455ec6176a5e4c0dd4f0:packages/flow/tests/test_extension_network.py:generic-api-key:44
+ccc7c617e5cd8082909b455ec6176a5e4c0dd4f0:packages/flow/tests/test_extension_network.py:jwt:48
+ccc7c617e5cd8082909b455ec6176a5e4c0dd4f0:packages/flow/tests/test_extension_network_browser.py:generic-api-key:24

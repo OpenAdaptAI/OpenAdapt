@@ -70,7 +70,9 @@ def _eval(base_url: str, model_url: str, out: Path, n: int) -> dict[str, float]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("env_dir", type=Path)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()

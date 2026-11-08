@@ -913,7 +913,7 @@ def run_campaign() -> dict:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     ap.add_argument(
         "--output", type=Path, default=Path("benchmark/citrix_ica_hdx/results.json")
     )

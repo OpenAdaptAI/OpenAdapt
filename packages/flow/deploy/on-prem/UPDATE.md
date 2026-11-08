@@ -42,7 +42,23 @@ all survive across any number of updates.
 ## Build a signed release bundle (off-site, on a connected host)
 
 The bundle is a tarball containing a `VERSION` file and an offline pip
-wheelhouse, plus a required detached signature and an optional checksum:
+wheelhouse, plus a required detached signature and an optional checksum.
+
+`bin/build-release.sh` builds it from a source checkout: it downloads exactly
+the wheels `packages/flow/uv.lock` pins, checks each against the lock's hashes,
+adds the `openadapt-flow` wheel, and writes the archive, its `.sha256`, and an
+openssl `.sig` when given the signing key. Run it on a host with the same OS,
+CPU architecture and Python minor version as the clinic box:
+
+```bash
+deploy/on-prem/bin/build-release.sh --out dist/ --sign-key vendor_priv.pem
+```
+
+CI builds two releases this way and installs, updates and rolls back the real
+engine from them with the network cut off (`bin/test-offline-install.sh`).
+
+To assemble one by hand instead (this resolves the newest matching
+dependencies rather than the locked ones):
 
 ```bash
 # 1. Assemble the payload
