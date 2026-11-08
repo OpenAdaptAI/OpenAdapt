@@ -1864,6 +1864,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         description="Set up verify contracts with no person decisions: answer the "
         "generator's questions by rule, validate them in a sandbox copy with "
         "held-out writes and planted faults, and admit only what validates.",
+        allow_abbrev=False,
     )
     ap.add_argument(
         "--read", required=True, type=Path, help="read-only account (read.yaml)"

@@ -9,7 +9,7 @@ from openadapt_flow.backends.parallels_vm import recover_parallels_vm
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument(
         "--journal",
         required=True,

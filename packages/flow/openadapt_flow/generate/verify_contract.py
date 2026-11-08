@@ -1217,42 +1217,41 @@ def _touched_rows(
         demos_with = {id(d) for d, _, _ in items}
         selector: Optional[dict[str, Any]] = None
         how = ""
-        if (
+        # Reached from the main record by a key column whose target row holds
+        # located values in single columns (the task's project). Tried first:
+        # when every demonstration happened to touch the same such row, its
+        # literal key would excuse that one row for every write, and a
+        # correct write naming another row would stop.
+        for p, loc in plan.locations.items():
+            if not loc.hops or loc.hops[0].kind != "fk" or loc.hops[0].table != table:
+                continue
+            hop = loc.hops[0]
+            if all(
+                (a.after or {}).get(hop.column) == (ch.after or {}).get(pk)
+                for _, a, ch in items
+            ):
+                sel = {
+                    x.columns[0]: {"param": q}
+                    for q, x in plan.locations.items()
+                    if len(x.hops) == 1
+                    and x.hops[0] == hop
+                    and len(x.columns) == 1
+                    and x.rule == "exact"
+                }
+                if sel:
+                    selector = sel
+                    how = f"the {table} row the task's {', '.join(sorted(v['param'] for v in sel.values()))} name"
+                    break
+        if selector is None and (
             len(keys) == 1
             and len(demos_with) == len(plan.demos)
             and len(items) == len(plan.demos)
         ):
+            # The same row (by key) in every demonstration: a counter row.
             key = (items[0][2].after or {}).get(pk)
             if key is not None:
                 selector = {pk: {"literal": key}}
                 how = f"{table} row {pk}={key}"
-        if selector is None:
-            # Reached from the main record by a key column whose target row
-            # holds located values in single columns.
-            for p, loc in plan.locations.items():
-                if (
-                    not loc.hops
-                    or loc.hops[0].kind != "fk"
-                    or loc.hops[0].table != table
-                ):
-                    continue
-                hop = loc.hops[0]
-                if all(
-                    (a.after or {}).get(hop.column) == (ch.after or {}).get(pk)
-                    for _, a, ch in items
-                ):
-                    sel = {
-                        x.columns[0]: {"param": q}
-                        for q, x in plan.locations.items()
-                        if len(x.hops) == 1
-                        and x.hops[0] == hop
-                        and len(x.columns) == 1
-                        and x.rule == "exact"
-                    }
-                    if sel:
-                        selector = sel
-                        how = f"the {table} row the task's {', '.join(sorted(v['param'] for v in sel.values()))} name"
-                        break
         if selector is None or len(items) != len({id(d) for d, _, _ in items}):
             plan.unexcused.setdefault(table, set()).update(cols)
             continue
@@ -2640,6 +2639,8 @@ def variants(
         for n in range(1, len(changes) + 1):
             for combo in itertools.combinations(changes, n):
                 out.append(Variant(plan.kind, sorted(set(plan.identity) | set(combo))))
+                if len(out) == MAX_VARIANTS:
+                    return out
         return out[:MAX_VARIANTS]
     located = set(plan.locations)
     base_sets = []
@@ -4131,10 +4132,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "Guide: packages/flow/docs/GENERATE_CONTRACTS.md. For a FHIR ensure-record "
             "contract use openadapt_flow.generate.ensure_contract instead."
         ),
+        allow_abbrev=False,
     )
     sub = ap.add_subparsers(dest="command", required=True)
     s = sub.add_parser(
-        "schema", help="read the schema and check the account is read-only"
+        "schema",
+        help="read the schema and check the account is read-only",
+        allow_abbrev=False,
     )
     s.add_argument(
         "--read",
@@ -4144,7 +4148,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     s.add_argument("--out", type=Path, help="write schema.json here")
     s = sub.add_parser(
-        "snapshot", help="snapshot every table before a demonstration write"
+        "snapshot",
+        help="snapshot every table before a demonstration write",
+        allow_abbrev=False,
     )
     s.add_argument("--read", required=True, type=Path)
     s.add_argument(
@@ -4154,7 +4160,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="e.g. work/before.json (holds row values: keep it private)",
     )
     s = sub.add_parser(
-        "record", help="snapshot again after the write and save the demonstration"
+        "record",
+        help="snapshot again after the write and save the demonstration",
+        allow_abbrev=False,
     )
     s.add_argument("--read", required=True, type=Path)
     s.add_argument("--before", required=True, type=Path)
@@ -4168,7 +4176,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     s.add_argument(
         "--name", default="", help="file name stem (default: kind and a number)"
     )
-    s = sub.add_parser("propose", help="analyze the demonstrations and write contracts")
+    s = sub.add_parser(
+        "propose",
+        help="analyze the demonstrations and write contracts",
+        allow_abbrev=False,
+    )
     s.add_argument("--read", required=True, type=Path)
     s.add_argument(
         "--kinds",

@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 import requests
 
+from openadapt_flow.mockmed.fault_server import MOCKMED_RECORDS_READ_CONTRACT
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.runtime.effects import Effect, EffectKind, Verdict
 from openadapt_flow.runtime.effects._common import judge_records
@@ -135,7 +136,7 @@ def test_existing_contract_digests_are_unchanged() -> None:
 def _yaml(base: str, effects: list[dict] | None = None, record: bool = False) -> dict:
     doc: dict = {
         "schema_version": "openadapt.verify/v1",
-        "verifier": {"kind": "rest", "base_url": base, "records_path": "/api/db"},
+        "verifier": {"base_url": base, **MOCKMED_RECORDS_READ_CONTRACT},
     }
     if record:
         doc["record"] = {

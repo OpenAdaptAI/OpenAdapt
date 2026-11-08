@@ -494,7 +494,9 @@ def qualify(kind: str, root: Path) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--kind", action="append", choices=("ax", "pixel"))
     parser.add_argument("--keep", action="store_true", help="keep the work folder")
     parser.add_argument(

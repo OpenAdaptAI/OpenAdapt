@@ -8,8 +8,6 @@ build), and byte-for-byte back-compat for pre-kit configs.
 
 from __future__ import annotations
 
-from openadapt_flow.runtime.effects.fhir import DEFAULT_OBSERVATION_PATHS
-
 import sqlite3
 from pathlib import Path
 
@@ -29,6 +27,7 @@ from openadapt_flow.runtime.effects import (
     RestRecordVerifier,
     SqlRecordVerifier,
 )
+from openadapt_flow.runtime.effects.fhir import DEFAULT_OBSERVATION_PATHS
 
 
 class TestAuthRef:
@@ -121,6 +120,8 @@ class TestRestKitConfig:
             records_key="records",
             session=with_auth,
             headers={"Authorization": "Bearer t"},
+            # This owned transport stub returns its complete fixed empty store.
+            records_complete=True,
         ).capture_pre_state()
         assert with_auth.calls == [{"Authorization": "Bearer t"}]
 
@@ -132,7 +133,11 @@ class TestRestKitConfig:
 
         narrow = _NarrowSession()
         state = RestRecordVerifier(
-            "http://x", records_path="/api/db", records_key="records", session=narrow
+            "http://x",
+            records_path="/api/db",
+            records_key="records",
+            session=narrow,
+            records_complete=True,
         ).capture_pre_state()
         assert state.reachable
         assert "narrow" in narrow.calls

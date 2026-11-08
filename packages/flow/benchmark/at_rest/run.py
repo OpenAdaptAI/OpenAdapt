@@ -34,10 +34,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageDraw
-
 from openadapt_flow import crypto, sealed_set
 from openadapt_flow.recorder import Recorder
+from PIL import Image, ImageDraw
 
 KEY = "benchmark-only-synthetic-key"
 
@@ -132,7 +131,9 @@ def record(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--actions", type=int, default=150)
     parser.add_argument("--frames", type=int, default=40, help="distinct screens")
     parser.add_argument("--out", type=Path, default=None)

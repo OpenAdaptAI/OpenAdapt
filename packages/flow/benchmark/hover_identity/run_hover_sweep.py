@@ -282,7 +282,9 @@ def run(work: Path) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.split("\n")[0], allow_abbrev=False
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--work-dir", type=Path)
     args = parser.parse_args()
