@@ -45,9 +45,9 @@ def _events(code=0):
                 "worker": "gw0",
                 "phase": phase,
                 "outcome": "failed" if code and phase == "call" else "passed",
-                "started_at": 2.0 + index,
-                "finished_at": 2.5 + index,
-                "seconds": 0.5,
+                "started_at": 1.02 + index * 0.02,
+                "finished_at": 1.03 + index * 0.02,
+                "seconds": 0.01,
             }
         )
     events.append(
@@ -61,7 +61,7 @@ def _events(code=0):
     events.append(
         {
             "kind": "finish",
-            "finished_at": 6.0,
+            "finished_at": 1.1,
             "exit_code": code,
             "collected": 1,
             "phase_counts": dict(
@@ -264,7 +264,10 @@ def test_phase_accounting_refuses_incomplete_or_malformed_reports(problem):
         rows[2]["kind"] = "invented"
     elif problem == "origin_drift":
         expected_origins = {name: "a" * 64 for name in measurement.ORIGINS}
-        assert measurement._validate_phases(rows, 0, expected_origins)["collected"] == 1
+        assert (
+            measurement._validate_phases(rows, 0, expected_origins, 0.2)["collected"]
+            == 1
+        )
         rows[-2]["origins"]["openadapt_flow"] = {"status": "unexpected_origin"}
     elif problem == "false_success":
         rows = _events(1)
@@ -273,7 +276,7 @@ def test_phase_accounting_refuses_incomplete_or_malformed_reports(problem):
         ValueError,
         match="origin differs from subject" if problem == "origin_drift" else None,
     ):
-        measurement._validate_phases(rows, 0, expected_origins)
+        measurement._validate_phases(rows, 0, expected_origins, 0.2)
 
 
 def _state(parent, start):
@@ -441,6 +444,7 @@ def test_failure():
         OPENADAPT_SHARD_MEASUREMENT_SUBJECT=str(tmp_path),
     )
     # Two workers bound this observer test. The real workflow remains -n logical.
+    started = time.monotonic()
     run = subprocess.run(
         [
             sys.executable,
@@ -465,7 +469,9 @@ def test_failure():
     )
     assert run.returncode == (1 if failure else 0), run.stdout + run.stderr
     events = measurement._records(output / "phases.jsonl")
-    result = measurement._validate_phases(events, run.returncode, {})
+    result = measurement._validate_phases(
+        events, run.returncode, {}, time.monotonic() - started
+    )
     assert result["collected"] == (5 if failure else 3)
     assert result["workers_observed"] == 2
     assert len([row for row in events if row["kind"] == "subtest"]) == 2
@@ -499,7 +505,7 @@ def test_collection_identity_cannot_be_replaced_by_matching_counts():
         rows[1]["nodeids"][0].encode()
     ).hexdigest()
     with pytest.raises(ValueError, match="uncollected node report"):
-        measurement._validate_phases(rows, 0, {})
+        measurement._validate_phases(rows, 0, {}, 0.2)
 
 
 def test_finish_counts_cannot_bless_a_removed_call():
@@ -507,7 +513,7 @@ def test_finish_counts_cannot_bless_a_removed_call():
     rows = [row for row in rows if row.get("phase") != "call"]
     del rows[-1]["phase_counts"]["phase:call:passed"]
     with pytest.raises(ValueError, match="missing or duplicate phase"):
-        measurement._validate_phases(rows, 0, {})
+        measurement._validate_phases(rows, 0, {}, 0.2)
 
 
 def test_workflow_keeps_the_fixed_pair_and_original_test_policy():
@@ -552,3 +558,205 @@ def test_workflow_keeps_the_fixed_pair_and_original_test_policy():
         assert f"--profile {profile}" in invocation["run"]
         assert not any(step.get("continue-on-error") for step in job["steps"])
     assert "always() && !cancelled()" in jobs["current"]["if"]
+
+
+def _with_subtests(rows, count=1):
+    call = next(row for row in rows if row.get("phase") == "call")
+    for index in range(count):
+        report = {
+            **call,
+            "kind": "subtest",
+            "started_at": 1.042,
+            "finished_at": 1.048,
+            "seconds": 0.006,
+        }
+        rows.insert(3 + index, report)
+    rows[-1]["phase_counts"][f"subtest:call:{call['outcome']}"] = count
+    return rows
+
+
+@pytest.mark.parametrize("kind", ["phase", "subtest"])
+@pytest.mark.parametrize(
+    "problem",
+    [
+        "before_session",
+        "after_session",
+        "overlong_duration",
+        "outside_call",
+        "huge_duration",
+    ],
+)
+@pytest.mark.parametrize("code", [0, 1])
+def test_timing_corruption_cannot_qualify_a_complete_measurement(
+    tmp_path, kind, problem, code
+):
+    rows = _with_subtests(_events(code)) if kind == "subtest" else _events(code)
+    identity = {"expected_origins_sha256": {}}
+    _write_records(tmp_path / "resources.jsonl", [_sample()])
+    _write_records(tmp_path / "phases.jsonl", rows)
+    assert (
+        measurement._finalize(
+            tmp_path, code, 0.2, 0.0, identity, lambda: identity, True
+        )
+        == code
+    )
+    assert (
+        json.loads((tmp_path / "result.json").read_text())["measurement_complete"]
+        is True
+    )
+    report = next(
+        row for row in rows if row.get("kind") == kind and row.get("phase") == "call"
+    )
+    if problem == "before_session":
+        report.update(started_at=0.8, finished_at=0.81)
+    elif problem == "after_session":
+        report.update(started_at=1.3, finished_at=1.31)
+    elif problem == "overlong_duration":
+        report["seconds"] = 0.015 if kind == "subtest" else 0.25
+    elif problem == "outside_call":
+        # This stays inside the session. For ordinary calls it runs before
+        # setup finishes; a subtest lies outside its ordinary call interval.
+        report.update(started_at=1.015, finished_at=1.018)
+    elif problem == "huge_duration":
+        report["seconds"] = 1e200
+    _write_records(tmp_path / "phases.jsonl", rows)
+    assert measurement._finalize(
+        tmp_path, code, 0.2, 0.0, identity, lambda: identity, True
+    ) == (code or 2)
+    result = json.loads((tmp_path / "result.json").read_text())
+    assert result["measurement_complete"] is False
+    assert result["pytest_exit_code"] == code
+    assert (
+        json.loads((tmp_path / "pytest-exit.json").read_text())["pytest_exit_code"]
+        == code
+    )
+    assert result["observation_error_type"] == "ValueError"
+
+
+@pytest.mark.parametrize("offset", [0.0, 1e6, 1.8e9])
+@pytest.mark.parametrize("scale", [0.001, 1.0, 1000.0])
+def test_timing_containment_is_translation_and_scale_consistent(offset, scale):
+    rows = _with_subtests(_events())
+    for row in rows:
+        for name in ("started_at", "finished_at"):
+            if name in row:
+                row[name] = offset + (row[name] - 1.0) * scale
+        if "seconds" in row:
+            row["seconds"] *= scale
+    wall = 0.2 * scale
+    assert measurement._validate_phases(rows, 0, {}, wall)["collected"] == 1
+    call = next(
+        row for row in rows if row.get("kind") == "phase" and row.get("phase") == "call"
+    )
+    call["started_at"] = rows[-1]["finished_at"] + wall
+    call["finished_at"] = call["started_at"] + 0.01 * scale
+    with pytest.raises(ValueError, match="outside enclosing interval"):
+        measurement._validate_phases(rows, 0, {}, wall)
+
+
+def test_worker_duration_sum_cannot_exceed_observed_process_wall():
+    rows = _events()
+    assert measurement._validate_phases(rows, 0, {}, 0.2)["collected"] == 1
+    for row in rows:
+        if row.get("kind") == "phase":
+            row["seconds"] = 0.08  # Each fits the run; their sum does not.
+    with pytest.raises(ValueError, match="worker durations exceed"):
+        measurement._validate_phases(rows, 0, {}, 0.2)
+
+
+def test_parallel_workers_are_not_added_into_a_serial_duration():
+    rows = [_events()[0]]
+    ids = [f"test_synthetic.py::test_case_{index}" for index in range(8)]
+    for index, nodeid in enumerate(ids):
+        worker = f"gw{index}"
+        selected = _events()
+        selected[1].update(
+            worker=worker,
+            count=len(ids),
+            nodeids=ids,
+            nodeids_sha256=hashlib.sha256("\n".join(ids).encode()).hexdigest(),
+        )
+        for row in selected[2:-1]:
+            row["worker"] = worker
+            if "nodeid" in row:
+                row["nodeid"] = nodeid
+        rows.extend(selected[1:-1])
+    finish = _events()[-1]
+    finish.update(
+        collected=len(ids),
+        phase_counts={
+            f"phase:{phase}:passed": len(ids) for phase in ("setup", "call", "teardown")
+        },
+    )
+    rows.append(finish)
+    assert sum(row.get("seconds", 0) for row in rows) > 0.2
+    assert measurement._validate_phases(rows, 0, {}, 0.2)["workers_observed"] == 8
+
+
+def test_nested_subtests_are_contained_without_double_counting():
+    rows = _with_subtests(_events(), 4)
+    assert sum(row["seconds"] for row in rows if row.get("kind") == "subtest") > 0.01
+    assert measurement._validate_phases(rows, 0, {}, 0.2)["collected"] == 1
+
+
+@pytest.mark.parametrize("code", [0, 1])
+def test_session_clock_discontinuity_refuses_measurement_without_changing_pytest_exit(
+    tmp_path, code
+):
+    rows = _events(code)
+    assert measurement._validate_phases(rows, code, {}, 0.2)["collected"] == 1
+    rows[-1]["finished_at"] = 2.0
+    _write_records(tmp_path / "phases.jsonl", rows)
+    _write_records(tmp_path / "resources.jsonl", [_sample()])
+    identity = {"expected_origins_sha256": {}}
+    assert measurement._finalize(
+        tmp_path, code, 0.2, 0.0, identity, lambda: identity, True
+    ) == (code or 2)
+    result = json.loads((tmp_path / "result.json").read_text())
+    assert result["measurement_complete"] is False
+    assert result["pytest_exit_code"] == code
+
+
+@pytest.mark.parametrize("wall", [0, -1, True, None, float("nan"), float("inf")])
+def test_temporal_model_requires_a_finite_observed_process_wall(wall):
+    with pytest.raises(ValueError, match="invalid process wall time"):
+        measurement._validate_phases(_events(), 0, {}, wall)
+
+
+def test_epoch_rounding_cannot_create_an_unbounded_duration_allowance():
+    rows = _events()
+    for row in rows:
+        for name in ("started_at", "finished_at"):
+            if name in row:
+                row[name] += 1e100
+    with pytest.raises(ValueError, match="timestamp precision"):
+        measurement._validate_phases(rows, 0, {}, 0.2)
+
+
+def test_distinct_nodes_cannot_overlap_on_the_same_worker():
+    rows = _events()
+    ids = [rows[1]["nodeids"][0], "test_synthetic.py::second_case"]
+    rows[1].update(
+        count=2,
+        nodeids=ids,
+        nodeids_sha256=hashlib.sha256("\n".join(ids).encode()).hexdigest(),
+    )
+    later = copy.deepcopy(rows[2:5])
+    for row in later:
+        row["nodeid"] = ids[1]
+        row["started_at"] += 0.1
+        row["finished_at"] += 0.1
+    rows[5:5] = later
+    rows[-1].update(
+        collected=2,
+        finished_at=1.19,
+        phase_counts={
+            f"phase:{phase}:passed": 2 for phase in ("setup", "call", "teardown")
+        },
+    )
+    assert measurement._validate_phases(rows, 0, {}, 0.2)["collected"] == 2
+    for row in later:
+        row["started_at"] -= 0.095
+        row["finished_at"] -= 0.095
+    with pytest.raises(ValueError, match="ordinary reports overlap"):
+        measurement._validate_phases(rows, 0, {}, 0.2)

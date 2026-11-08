@@ -372,8 +372,98 @@ def _validate_samples(samples: list[dict[str, Any]], wall: float) -> None:
     _require(wall - last_time <= MAX_SAMPLE_GAP, "resource tail is unobserved")
 
 
+def _timing_slack(*values: float) -> float:
+    """Rounding allowance, not a bound on real-time clock skew or scheduling.
+
+    Four units cover the clock readings, subtraction and comparison. Epoch
+    and elapsed values must be passed separately so a large timestamp cannot
+    inflate the allowance for a duration. A material clock discontinuity is
+    an incomplete observation, never evidence of contention or a test pass.
+    """
+    resolution = max(
+        time.get_clock_info(name).resolution
+        for name in ("time", "monotonic", "perf_counter")
+    )
+    return 4 * (resolution + max(math.ulp(float(value)) for value in values))
+
+
+def _validate_timing_envelope(
+    session: dict[str, Any],
+    finish: dict[str, Any],
+    phases: dict[str, list[dict[str, Any]]],
+    subtests: list[dict[str, Any]],
+    wall: float,
+) -> None:
+    """Bind all report intervals to the observed session and process lifetime.
+
+    Pytest uses real-time timestamps and a separate performance-counter
+    duration. We do not demand equality between those clocks. Cross-clock
+    upper bounds are conservative: skew that violates them makes this
+    measurement incomplete while the caller preserves pytest's exit code.
+    """
+    _require(_number(wall) and wall > 0, "invalid process wall time")
+    start, stop = session["started_at"], finish["finished_at"]
+    epoch_slack = _timing_slack(start, stop)
+    _require(epoch_slack < wall, "timestamp precision cannot resolve the run")
+    _require(
+        stop - start <= wall + epoch_slack + _timing_slack(wall),
+        "session exceeds process wall time",
+    )
+
+    def contained(
+        row: dict[str, Any], lower: float, upper: float, duration: float
+    ) -> None:
+        slack = _timing_slack(lower, upper, row["started_at"], row["finished_at"])
+        _require(
+            row["started_at"] >= lower - slack and row["finished_at"] <= upper + slack,
+            "report interval outside enclosing interval",
+        )
+        _require(
+            row["seconds"] <= duration + _timing_slack(duration, row["seconds"]),
+            "report duration exceeds enclosing duration",
+        )
+
+    workers: dict[str, list[dict[str, Any]]] = {}
+    for reports in phases.values():
+        for row in reports:
+            contained(row, start, stop, wall)
+            workers.setdefault(row["worker"], []).append(row)
+        for previous, current in zip(reports, reports[1:]):
+            _require(
+                previous["finished_at"]
+                <= current["started_at"]
+                + _timing_slack(previous["finished_at"], current["started_at"]),
+                "node phases overlap or run backwards",
+            )
+    for reports in workers.values():
+        ordered = sorted(reports, key=lambda row: row["started_at"])
+        for previous, current in zip(ordered, ordered[1:]):
+            _require(
+                previous["finished_at"]
+                <= current["started_at"]
+                + _timing_slack(previous["finished_at"], current["started_at"]),
+                "ordinary reports overlap on one worker",
+            )
+        total = math.fsum(row["seconds"] for row in reports)
+        slack = math.fsum(_timing_slack(row["seconds"]) for row in reports)
+        _require(
+            total <= wall + slack + _timing_slack(total, wall),
+            "worker durations exceed process wall time",
+        )
+    for row in subtests:
+        call = next(
+            report for report in phases[row["nodeid"]] if report["phase"] == "call"
+        )
+        contained(row, call["started_at"], call["finished_at"], call["seconds"])
+        # Subtests may nest. Their durations are contained, never added again
+        # to the ordinary call duration or the worker's total.
+
+
 def _validate_phases(
-    events: list[dict[str, Any]], code: int, expected_origins: dict[str, str]
+    events: list[dict[str, Any]],
+    code: int,
+    expected_origins: dict[str, str],
+    wall: float,
 ) -> dict[str, int]:
     _require(bool(events), "missing phase observations")
     _require(events[0].get("kind") == "session", "missing initial session")
@@ -542,6 +632,7 @@ def _validate_phases(
         code != 0 or not any(key.endswith(":failed") for key in counts),
         "failed phase with success exit",
     )
+    _validate_timing_envelope(sessions[0], finish, phases, subtests, wall)
     return {
         "workers_observed": len(workers),
         "observations": len(events),
@@ -577,6 +668,7 @@ def _finalize(
                 _records(output / "phases.jsonl"),
                 code,
                 before["expected_origins_sha256"],
+                wall,
             )
         )
         result["measurement_complete"] = True
