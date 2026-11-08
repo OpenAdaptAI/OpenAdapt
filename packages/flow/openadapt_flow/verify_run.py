@@ -65,6 +65,7 @@ from openadapt_types.approval import (
 )
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
+from openadapt_flow.complete_read import CompleteReadProvider
 from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
 from openadapt_flow.fault_gate import (
     AdmissionPolicy,
@@ -1589,9 +1590,17 @@ def _new_execution_id() -> str:
 # -- verifier -----------------------------------------------------------------
 
 
-def _build_verifier(cfg: VerifyConfig, params: Mapping[str, object]) -> Any:
+def _build_verifier(
+    cfg: VerifyConfig,
+    params: Mapping[str, object],
+    read_provider: Optional[CompleteReadProvider] = None,
+) -> Any:
     try:
-        verifier = build_effect_verifier(cfg.verifier, params)
+        verifier = (
+            build_effect_verifier(cfg.verifier, params)
+            if read_provider is None
+            else read_provider.resolve(cfg.verifier, params)
+        )
     except ValueError as exc:
         raise VerifyRunError(f"cannot build the verifier: {exc}") from exc
     if verifier is None:
@@ -1627,7 +1636,11 @@ def _tag_reads(verifier: Any, execution_id: str) -> None:
 
 
 def capture_baseline(
-    cfg: VerifyConfig, params: Mapping[str, object], out: Path
+    cfg: VerifyConfig,
+    params: Mapping[str, object],
+    out: Path,
+    *,
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> dict[str, Any]:
     """Read the system of record before the executor starts.
 
@@ -1638,7 +1651,7 @@ def capture_baseline(
     the run: ``execution_id`` is generated here and the read step reuses it.
     """
 
-    verifier = _build_verifier(cfg, params)
+    verifier = _build_verifier(cfg, params, read_provider)
     identity = verifier_identity(verifier)
     execution_id = _new_execution_id()
     _tag_reads(verifier, execution_id)
@@ -1941,6 +1954,7 @@ def verify_run(
     documents: Optional[Mapping[str, Any]] = None,
     second_extractor: Optional[Any] = None,
     post_state_out: Optional[dict[str, Any]] = None,
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> dict[str, Any]:
     """Read the system of record and return ``{"receipt", "evidence"}``.
 
@@ -1983,7 +1997,7 @@ def verify_run(
     approver_doc = _approver(approver)
     executor_kind, executor_ref, build_digest = _executor(run_record)
 
-    verifier = _build_verifier(cfg, params)
+    verifier = _build_verifier(cfg, params, read_provider)
     identity = verifier_identity(verifier)
 
     baseline: Optional[dict[str, Any]] = None
@@ -2401,6 +2415,7 @@ def recheck_problem(
     params: Mapping[str, object],
     run_record: Mapping[str, Any],
     verified: bool = True,
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> Optional[str]:
     """A plain sentence when ``state`` can't be used as this contract's
     write by this executor with these params; None when it can.
@@ -2450,7 +2465,7 @@ def recheck_problem(
             "the contract's recheck_after_s is not the one the receipt was issued under"
         )
     try:
-        verifier = _build_verifier(cfg, params)
+        verifier = _build_verifier(cfg, params, read_provider)
         identity = verifier_identity(verifier)
         executor_kind, executor_ref, _build = _executor(run_record)
     except (VerifyRunError, KeyError, ValueError) as exc:
@@ -2555,6 +2570,7 @@ def recheck_run(
     params: Mapping[str, object],
     run_record: Mapping[str, Any],
     excused: Sequence[tuple[Mapping[str, Any], Mapping[str, object]]] = (),
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> tuple[FrameVerdict, str]:
     """Judge every change since a verified write's post-save read.
 
@@ -2609,7 +2625,7 @@ def recheck_run(
     if post.get("audit") is not None:
         detail[FRAME_AUDIT_DETAIL] = dict(post["audit"])
     before = EffectState(substrate="database", reachable=True, detail=detail)
-    verifier = _build_verifier(cfg, params)
+    verifier = _build_verifier(cfg, params, read_provider)
     # A lower bound on every observation in this pass. Completion may be
     # delayed after the database snapshots were taken, even past due_at.
     read_started_at = _now()
