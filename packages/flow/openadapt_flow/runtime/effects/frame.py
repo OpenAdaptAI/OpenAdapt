@@ -1840,8 +1840,10 @@ def judge_frame(
                 fields = changed(name, before, after)  # type: ignore[arg-type]
                 row_may = may_change_for(name)
                 stray = [
-                    f for f in fields
-                    if f not in row_may and f not in unknown
+                    f
+                    for f in fields
+                    if f not in row_may
+                    and f not in unknown
                     and not (known_compared and f == "(columns not compared)")
                 ]
                 if other_on_target(name, key, before, after):

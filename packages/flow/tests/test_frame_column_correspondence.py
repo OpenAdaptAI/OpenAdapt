@@ -314,7 +314,9 @@ def test_unchanged_storage_cannot_confirm_a_misleading_update_read(
 
 
 @pytest.mark.parametrize("route", ["views", "judged_by"])
-@pytest.mark.parametrize("case", ["correct-update", "unbound-only", "lying-reader", "other-row"])
+@pytest.mark.parametrize(
+    "case", ["correct-update", "unbound-only", "lying-reader", "other-row"]
+)
 def test_compact_baseline_preserves_every_known_target_column(
     service, tmp_path, route, case
 ):
@@ -335,7 +337,9 @@ def test_compact_baseline_preserves_every_known_target_column(
         assert "untouched" not in stored["cell_columns"]
         assert "old0" not in baseline.read_text()
         if case == "unbound-only":
-            service.write("UPDATE objects SET untouched='server-filled' WHERE row_id=10")
+            service.write(
+                "UPDATE objects SET untouched='server-filled' WHERE row_id=10"
+            )
         elif case == "lying-reader":
             service.transform = lambda rows: [
                 dict(record, value="created") if record["id"] == IDS[0] else record
@@ -344,7 +348,9 @@ def test_compact_baseline_preserves_every_known_target_column(
         else:
             mutate(service, operation)
             if case == "other-row":
-                service.write("UPDATE objects SET untouched='unrelated' WHERE row_id=11")
+                service.write(
+                    "UPDATE objects SET untouched='unrelated' WHERE row_id=11"
+                )
         result = checked(cfg, params, provider, baseline)
     assert result["receipt"]["checked"]["delta"] == "held"
     if case in {"lying-reader", "other-row"}:
@@ -375,9 +381,7 @@ def test_a_missing_known_cell_comparison_cannot_be_treated_as_unverified(
         return actual
 
     with httpx.Client() as client:
-        cfg, params, provider = configured(
-            service, client, "update", route, max_rows=1
-        )
+        cfg, params, provider = configured(service, client, "update", route, max_rows=1)
         baseline = tmp_path / "baseline.json"
         capture_baseline(cfg, params, baseline, read_provider=provider)
         mutate(service, "update")
