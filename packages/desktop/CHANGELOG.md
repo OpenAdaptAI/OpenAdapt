@@ -1,6 +1,16 @@
 # CHANGELOG
 
 
+## v0.28.1 (2026-11-07)
+
+### Bug Fixes
+
+- **desktop**: retain removal intent across modified copies
+- **desktop**: trace clean merge and copy contributions
+- **desktop**: trace historical sources from their common ancestor
+
+
+
 ## v0.28.0 (2026-11-06)
 
 ### Features

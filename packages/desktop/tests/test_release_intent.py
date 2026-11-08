@@ -573,3 +573,607 @@ def test_shipped_feature_lineage_survives_a_documentation_transit(
     (repo / "src/final.txt").write_bytes(stage.read_bytes())
     head = _commit(repo, "chore: install staged component")
     assert "--bump minor" in check_release_intent.check(repo, base, head)[0]
+
+
+def _merge_independent_release(repo: Path, main: str, feature: str, number: int) -> str:
+    """A real merge adopts main's independently changed package metadata."""
+    import json
+
+    _git(repo, "checkout", "-q", main)
+    package = repo / "package.json"
+    data = json.loads(package.read_text())
+    data["lineage_fixture"] = f"main-{number}"
+    package.write_text(json.dumps(data) + "\n")
+    base = _commit(repo, f"chore: independently prepare main {number}")
+    _git(repo, "checkout", "-q", feature)
+    merged = subprocess.run(
+        ["git", "merge", "--no-ff", "--no-commit", main],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    assert merged.returncode in {0, 1}, merged.stderr
+    if merged.returncode:
+        assert _git(repo, "diff", "--name-only", "--diff-filter=U") == "package.json"
+        _git(repo, "checkout", "--theirs", "--", "package.json")
+        _git(repo, "add", "package.json")
+    _commit(repo, f"merge: adopt main release metadata {number}")
+    return base
+
+
+@pytest.mark.parametrize("subject,expected", [("feat", "minor"), ("fix", "patch"), ("chore", None)])
+@pytest.mark.parametrize("main_updates", [1, 2])
+@pytest.mark.parametrize("operation", ["keep", "copy-delete", "modified-copy-delete"])
+def test_historical_copy_sources_use_their_own_shared_ancestor(
+    repo: Path,
+    subject: str,
+    expected: str | None,
+    main_updates: int,
+    operation: str,
+) -> None:
+    """Pre-merge file versions are ambient history, not unexplained net edits."""
+    import json
+
+    main = _git(repo, "branch", "--show-current")
+    feature = "feature-history"
+    _git(repo, "checkout", "-q", "-b", feature)
+    origin = _commit(repo, f"{subject}: introduce host", touch="src/original.txt")
+    package = repo / "package.json"
+    data = json.loads(package.read_text())
+    data["lineage_fixture"] = "branch-release"
+    package.write_text(json.dumps(data) + "\n")
+    _commit(repo, "chore: prepare branch release")
+    for number in range(1, main_updates + 1):
+        base = _merge_independent_release(repo, main, feature, number)
+    if operation != "keep":
+        source = repo / "src/original.txt"
+        copied = repo / "src/copied.txt"
+        copied.write_bytes(
+            source.read_bytes() + (b"modified copy\n" if operation.startswith("modified") else b"")
+        )
+        _commit(repo, "chore: copy host to its final path")
+        source.unlink()
+        _commit(repo, "chore: delete previous host location")
+        final_path = "src/copied.txt"
+    else:
+        final_path = "src/original.txt"
+    head = _git(repo, "rev-parse", "HEAD")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) == expected
+    assert any(commit.sha == origin and final_path in commit.paths for commit in commits)
+    assert not any("package.json" in commit.paths for commit in commits)
+
+
+def test_a_merge_only_source_cannot_gain_intent_by_copying_after_a_base_merge(repo: Path) -> None:
+    """Historical baselines cannot turn unclassified merge payload into a chore."""
+    main = _git(repo, "branch", "--show-current")
+    feature = "merge-only-source"
+    _git(repo, "checkout", "-q", "-b", feature)
+    _commit(repo, "docs: branch context", touch="docs/branch.md")
+    _git(repo, "checkout", "-q", main)
+    base = _commit(repo, "docs: main context", touch="docs/main.md")
+    _git(repo, "checkout", "-q", feature)
+    _git(repo, "merge", "--no-ff", "--no-commit", main)
+    _commit(repo, "merge: introduces an unclassified source", touch="src/merge-only.txt")
+    source = repo / "src/merge-only.txt"
+    copied = repo / "src/copy.txt"
+    copied.write_bytes(source.read_bytes())
+    _commit(repo, "chore: copy unclassified payload")
+    source.unlink()
+    head = _commit(repo, "chore: remove original unclassified payload")
+    with pytest.raises(ValueError, match="no non-merge commit metadata"):
+        prepare_release.commits_for_net_diff(repo, base, head)
+
+
+@pytest.mark.parametrize("metadata", ["", "a" * 40 + "\n" + "b" * 40 + "\n"])
+def test_historical_lineage_requires_a_unique_common_ancestor(
+    repo: Path, monkeypatch, metadata: str
+) -> None:
+    base = _git(repo, "rev-parse", "HEAD")
+    head = _commit(repo, "fix: runtime change", touch="src/runtime.txt")
+    original = prepare_release._git
+
+    def incomplete(root: Path, *args: str) -> str:
+        if args[:2] == ("merge-base", "--all"):
+            return metadata
+        return original(root, *args)
+
+    monkeypatch.setattr(prepare_release, "_git", incomplete)
+    with pytest.raises(ValueError, match="unique merge base"):
+        prepare_release.commits_for_net_diff(repo, base, head)
+
+
+def _two_sided_history(repo: Path, subject: str, reverse: bool, *, conflict: bool = False):
+    host = repo / "src/host.txt"
+    host.parent.mkdir(exist_ok=True)
+    baseline = [f"ambient line {index}\n" for index in range(50)]
+    host.write_text("".join(baseline))
+    _commit(repo, "chore: existing host component")
+    main = _git(repo, "branch", "--show-current")
+    _git(repo, "checkout", "-q", "-b", "two-sided-feature")
+    branch_line, main_line = (40, 0) if reverse else (0, 40)
+    branch = list(baseline)
+    branch[branch_line] = "branch-owned behavior\n"
+    host.write_text("".join(branch))
+    origin = _commit(repo, f"{subject}: change host behavior")
+    _git(repo, "checkout", "-q", main)
+    ambient = list(baseline)
+    ambient[branch_line if conflict else main_line] = "ambient main behavior\n"
+    host.write_text("".join(ambient))
+    base = _commit(repo, "feat: independently change main host")
+    _git(repo, "checkout", "-q", "two-sided-feature")
+    merged = subprocess.run(
+        ["git", "merge", "--no-ff", "--no-commit", main], cwd=repo, capture_output=True, text=True
+    )
+    assert merged.returncode == int(conflict), merged.stderr
+    if not conflict:
+        text = host.read_text()
+        assert "branch-owned behavior" in text and "ambient main behavior" in text
+    return base, origin, host
+
+
+def _relocate_after_merge(repo: Path, host: Path, operation: str) -> str:
+    if operation == "keep":
+        return host.relative_to(repo).as_posix()
+    copied = host.with_name("relocated.txt")
+    copied.write_bytes(
+        host.read_bytes()
+        + (b"maintenance copy edit\n" if operation == "modified-copy-delete" else b"")
+    )
+    _commit(repo, "chore: stage merged host relocation")
+    host.unlink()
+    _commit(repo, "chore: remove old merged host path")
+    return copied.relative_to(repo).as_posix()
+
+
+@pytest.mark.parametrize("subject,expected", [("feat", "minor"), ("fix", "patch"), ("chore", None)])
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("later", [False, True])
+@pytest.mark.parametrize("operation", ["keep", "copy-delete", "modified-copy-delete"])
+def test_clean_two_sided_same_file_merges_preserve_only_branch_intent(
+    repo: Path, subject: str, expected: str | None, reverse: bool, later: bool, operation: str
+) -> None:
+    base, origin, host = _two_sided_history(repo, subject, reverse)
+    _commit(repo, "merge: combine independent host edits")
+    if later:
+        _commit(repo, "chore: subsequent branch context", touch="docs/after-merge.md")
+    final_path = _relocate_after_merge(repo, host, operation)
+    head = _git(repo, "rev-parse", "HEAD")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) == expected
+    assert any(c.sha == origin and final_path in c.paths for c in commits)
+    assert all(c.sha != base for c in commits)
+    text = (repo / final_path).read_text()
+    assert "branch-owned behavior" in text and "ambient main behavior" in text
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("operation", ["keep", "copy-delete", "modified-copy-delete"])
+def test_manual_extra_merge_bytes_refuse_even_after_copy_or_a_later_edit(
+    repo: Path, reverse: bool, operation: str
+) -> None:
+    base, _origin, host = _two_sided_history(repo, "feat", reverse)
+    lines = host.read_text().splitlines(keepends=True)
+    lines[20] = "unexplained resolution bytes\n"
+    host.write_text("".join(lines))
+    _commit(repo, "merge: adds unexplained resolution content")
+    final_path = _relocate_after_merge(repo, host, operation)
+    current = repo / final_path
+    current.write_text(current.read_text() + "later ordinary maintenance\n")
+    head = _commit(repo, "fix: maintain resolved host")
+    with pytest.raises(ValueError, match="unexplained content"):
+        prepare_release.commits_for_net_diff(repo, base, head)
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("operation", ["keep", "copy-delete", "modified-copy-delete"])
+def test_conflicted_same_hunk_manual_resolution_stays_unattributable(
+    repo: Path, reverse: bool, operation: str
+) -> None:
+    base, _origin, host = _two_sided_history(repo, "feat", reverse, conflict=True)
+    lines = [f"ambient line {index}\n" for index in range(50)]
+    lines[40 if reverse else 0] = "manual conflict resolution\n"
+    host.write_text("".join(lines))
+    _commit(repo, "merge: manually resolve competing host changes")
+    _relocate_after_merge(repo, host, operation)
+    head = _git(repo, "rev-parse", "HEAD")
+    with pytest.raises(ValueError, match="no clean combination"):
+        prepare_release.commits_for_net_diff(repo, base, head)
+
+
+@pytest.mark.parametrize("subject,expected", [("feat", "minor"), ("fix", "patch"), ("chore", None)])
+def test_same_file_merge_keeps_a_prior_canceled_feature_canceled(
+    repo: Path, subject: str, expected: str | None
+) -> None:
+    host = repo / "src/host.txt"
+    host.parent.mkdir(exist_ok=True)
+    baseline = [f"ambient line {index}\n" for index in range(50)]
+    host.write_text("".join(baseline))
+    _commit(repo, "chore: baseline host")
+    main = _git(repo, "branch", "--show-current")
+    _git(repo, "checkout", "-q", "-b", "canceled-feature")
+    lines = list(baseline)
+    lines[0] = "temporary feature\n"
+    host.write_text("".join(lines))
+    _commit(repo, "feat: temporary host feature")
+    host.write_text("".join(baseline))
+    _commit(repo, "chore: cancel temporary feature")
+    lines[0] = baseline[0]
+    lines[10] = "retained change\n"
+    host.write_text("".join(lines))
+    retained = _commit(repo, f"{subject}: retained host change")
+    _git(repo, "checkout", "-q", main)
+    ambient = list(baseline)
+    ambient[40] = "ambient main update\n"
+    host.write_text("".join(ambient))
+    base = _commit(repo, "feat: ambient host update")
+    _git(repo, "checkout", "-q", "canceled-feature")
+    _git(repo, "merge", "--no-ff", "--no-commit", main)
+    _commit(repo, "merge: combine host changes")
+    commits = prepare_release.commits_for_net_diff(repo, base, _git(repo, "rev-parse", "HEAD"))
+    assert prepare_release.required_level(commits, _version(repo)) == expected
+    assert any(c.sha == retained for c in commits)
+
+
+@pytest.mark.parametrize("subject,expected", [("fix", "patch"), ("chore", None)])
+def test_exact_reversion_after_combination_discards_merged_feature_intent(
+    repo: Path, subject: str, expected: str | None
+) -> None:
+    base, origin, host = _two_sided_history(repo, "feat", False)
+    _commit(repo, "merge: combine independent host edits")
+    host.write_text(_git(repo, "show", base + ":src/host.txt") + "\n")
+    _commit(repo, "chore: restore the exact ambient host")
+    head = _commit(repo, f"{subject}: unrelated retained change", touch="src/retained.txt")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) == expected
+    assert all(c.sha != origin for c in commits)
+
+
+@pytest.mark.parametrize("subject,expected", [("fix", "patch"), ("chore", None)])
+def test_test_merge_keeps_a_canceled_feature_out_of_surviving_intent(
+    repo: Path, subject: str, expected: str | None
+) -> None:
+    base, _origin, host = _two_sided_history(repo, "feat", False)
+    _commit(repo, "merge: combine independent host edits")
+    host.write_text(_git(repo, "show", base + ":src/host.txt") + "\n")
+    _commit(repo, "chore: restore exact ambient host")
+    _commit(repo, f"{subject}: retained change", touch="src/retained.txt")
+    branch = _git(repo, "branch", "--show-current")
+    _git(repo, "checkout", "-q", "-b", "test-merge-base", base)
+    _git(repo, "merge", "--no-ff", "--no-commit", branch)
+    head = _commit(repo, "merge: test branch on main")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) == expected
+    assert all("src/host.txt" not in c.paths for c in commits)
+
+
+@pytest.mark.parametrize("relative", ["docs/merge.txt", "tests/merge.py", "release-notes.md"])
+def test_unshipped_manual_merge_content_does_not_erase_clean_runtime_intent(
+    repo: Path, relative: str
+) -> None:
+    base, origin, _host = _two_sided_history(repo, "feat", False)
+    _commit(repo, "merge: retain non-shipped resolution", touch=relative)
+    head = _git(repo, "rev-parse", "HEAD")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) == "minor"
+    assert any(c.sha == origin and "src/host.txt" in c.paths for c in commits)
+    assert all(relative not in c.paths for c in commits)
+
+
+@pytest.mark.parametrize("relative", ["docs/merge.txt", "tests/merge.py", "release-notes.md"])
+def test_unexplained_unshipped_merge_source_still_refuses_when_copied_into_runtime(
+    repo: Path, relative: str
+) -> None:
+    base, _origin, _host = _two_sided_history(repo, "feat", False)
+    _commit(repo, "merge: retain non-shipped resolution", touch=relative)
+    target = repo / "src/imported.txt"
+    target.write_bytes((repo / relative).read_bytes())
+    head = _commit(repo, "chore: import resolved source into runtime")
+    with pytest.raises(ValueError, match="no non-merge commit metadata"):
+        prepare_release.commits_for_net_diff(repo, base, head)
+
+
+@pytest.mark.parametrize("relative", ["docs/merge.txt", "tests/merge.py", "release-notes.md"])
+def test_deleted_merge_only_source_still_refuses_an_exact_later_runtime_copy(
+    repo: Path, relative: str
+) -> None:
+    base, _origin, _host = _two_sided_history(repo, "feat", False)
+    merge = _commit(repo, "merge: retain non-shipped resolution", touch=relative)
+    raw = (repo / relative).read_bytes()
+    assert len(_git(repo, "rev-list", "--parents", "--max-count=1", merge).split()) == 3
+    (repo / relative).unlink()
+    _commit(repo, "chore: remove the unresolved source")
+    target = repo / "src/imported.txt"
+    target.write_bytes(raw)
+    head = _commit(repo, "chore: install the earlier source bytes")
+    with pytest.raises(ValueError, match="no non-merge commit metadata"):
+        prepare_release.commits_for_net_diff(repo, base, head)
+
+
+@pytest.mark.parametrize("modified", [False, True])
+def test_shipped_intent_survives_multiple_nonshipped_copy_hops(repo: Path, modified: bool) -> None:
+    base = _git(repo, "rev-parse", "HEAD")
+    origin = _commit(repo, "feat: runtime source", touch="src/original.txt")
+    previous = repo / "src/original.txt"
+    for relative in ("docs/first.txt", "tests/staged.py", "release-stage.md"):
+        target = repo / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(previous.read_bytes() + (b"copy maintenance\n" if modified else b""))
+        _commit(repo, "chore: stage component data")
+        previous.unlink()
+        _commit(repo, "chore: remove previous component name")
+        previous = target
+    final = repo / "src/final.txt"
+    final.write_bytes(previous.read_bytes())
+    head = _commit(repo, "chore: ship the staged component")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) == "minor"
+    assert any(c.sha == origin and "src/final.txt" in c.paths for c in commits)
+
+
+@pytest.mark.parametrize("relative", ["docs/merge.txt", "tests/merge.py", "release-notes.md"])
+@pytest.mark.parametrize("modification", ["append", "prefix", "replace-line"])
+def test_modified_runtime_copy_of_unexplained_nonshipped_merge_still_refuses(
+    repo: Path, relative: str, modification: str
+) -> None:
+    base, _origin, _host = _two_sided_history(repo, "feat", False)
+    source = repo / relative
+    source.parent.mkdir(parents=True, exist_ok=True)
+    raw = b"unattributed payload first\nunattributed payload second\nunattributed payload last\n"
+    source.write_bytes(raw)
+    merge = _commit(repo, "merge: introduce unexplained source data")
+    assert len(_git(repo, "rev-list", "--parents", "--max-count=1", merge).split()) == 3
+    changed = {
+        "append": raw + b"ordinary maintenance\n",
+        "prefix": b"ordinary maintenance\n" + raw,
+        "replace-line": raw.replace(b"payload last", b"revised ending"),
+    }[modification]
+    assert changed != raw
+    target = repo / "src/imported.txt"
+    target.write_bytes(changed)
+    head = _commit(repo, "fix: install modified source")
+    with pytest.raises(ValueError, match="no non-merge commit metadata"):
+        prepare_release.commits_for_net_diff(repo, base, head)
+
+
+@pytest.mark.parametrize("relative", ["docs/shared.txt", "tests/shared.py", "shared-notes.md"])
+@pytest.mark.parametrize("shared", ["ordinary shared scaffolding\n", "---------\n"])
+def test_shared_ambient_content_is_not_an_unexplained_merge_source_edge(
+    repo: Path, relative: str, shared: str
+) -> None:
+    data = repo / relative
+    data.parent.mkdir(parents=True, exist_ok=True)
+    data.write_text(shared + "original reference content\n")
+    host = repo / "src/host.txt"
+    host.parent.mkdir(exist_ok=True)
+    baseline = [shared] + [f"existing host line {i}\n" for i in range(50)]
+    host.write_text("".join(baseline))
+    _commit(repo, "chore: baseline runtime and reference material")
+    main = _git(repo, "branch", "--show-current")
+    _git(repo, "checkout", "-q", "-b", "ambient-source-feature")
+    branch = list(baseline)
+    branch[5] = "branch runtime feature\n"
+    host.write_text("".join(branch))
+    origin = _commit(repo, "feat: runtime behavior")
+    _git(repo, "checkout", "-q", main)
+    ambient = list(baseline)
+    ambient[45] = "main runtime behavior\n"
+    host.write_text("".join(ambient))
+    base = _commit(repo, "feat: independent main behavior")
+    _git(repo, "checkout", "-q", "ambient-source-feature")
+    _git(repo, "merge", "--no-ff", "--no-commit", main)
+    # Shared text already exists in both parent files. Only the reference
+    # file gains unexplained merge-only bytes; they do not enter the host.
+    data.write_text(data.read_text() + "unexplained reference merge bytes\n")
+    head = _commit(repo, "merge: retain unrelated reference resolution")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) == "minor"
+    assert any(c.sha == origin and "src/host.txt" in c.paths for c in commits)
+
+
+@pytest.mark.parametrize("relative", ["docs/merge.txt", "tests/merge.py", "release-notes.md"])
+def test_completely_rewritten_move_of_unexplained_merge_source_still_refuses(
+    repo: Path, relative: str
+) -> None:
+    base, _origin, _host = _two_sided_history(repo, "feat", False)
+    source = repo / relative
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text("unexplained original content\n")
+    _commit(repo, "merge: create unexplained source")
+    source.unlink()
+    (repo / "src/replacement.txt").write_text("entirely rewritten destination\n")
+    head = _commit(repo, "fix: move and rewrite source")
+    with pytest.raises(ValueError, match="no non-merge commit metadata"):
+        prepare_release.commits_for_net_diff(repo, base, head)
+
+
+def _edit_existing_component(lines: list[str], edit: str, position: int) -> list[str]:
+    result = list(lines)
+    if edit == "remove":
+        del result[position]
+    elif edit == "add":
+        result.insert(position, "new component behavior\n")
+    else:
+        assert edit == "replace"
+        result[position] = "replacement component behavior\n"
+    return result
+
+
+def _decorate_component(lines: list[str], where: str) -> list[str]:
+    result = list(lines)
+    position = {"prefix": 0, "middle": len(result) // 2, "suffix": len(result)}[where]
+    result.insert(position, "copy maintenance annotation\n")
+    return result
+
+
+@pytest.mark.parametrize("edit", ["add", "remove", "replace"])
+@pytest.mark.parametrize("position", [0, 4, 8])
+@pytest.mark.parametrize("decoration", ["prefix", "middle", "suffix"])
+@pytest.mark.parametrize("existing_destination", [False, True])
+def test_source_edit_lineage_survives_a_modified_copy_and_source_restore(
+    repo: Path, edit: str, position: int, decoration: str, existing_destination: bool
+) -> None:
+    original = [f"component behavior {n}\n" for n in range(9)]
+    source, destination = repo / "src/component.txt", repo / "src/copied-component.txt"
+    source.parent.mkdir(exist_ok=True)
+    source.write_text("".join(original))
+    if existing_destination:
+        destination.write_text("".join(original))
+    base = _commit(repo, "chore: existing component baseline")
+    changed = _edit_existing_component(original, edit, position)
+    source.write_text("".join(changed))
+    feature = _commit(repo, "feat: update existing component behavior")
+    destination.write_text("".join(_decorate_component(changed, decoration)))
+    _commit(repo, "chore: maintain a component copy")
+    source.write_text("".join(original))
+    head = _commit(repo, "chore: restore original component")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) == "minor"
+    assert any(c.sha == feature and "src/copied-component.txt" in c.paths for c in commits)
+    problems = check_release_intent.check(repo, base, head)
+    assert len(problems) == 1
+    assert "--bump minor" in problems[0]
+
+
+@pytest.mark.parametrize("finish", ["keep", "remove-later", "move"])
+@pytest.mark.parametrize("position", [0, 8])
+@pytest.mark.parametrize("decoration", ["prefix", "suffix"])
+def test_removal_intent_reaches_destination_for_copy_and_move_lifetimes(
+    repo: Path, finish: str, position: int, decoration: str
+) -> None:
+    original = [f"lifetime component {n}\n" for n in range(9)]
+    source, destination = repo / "src/lifetime.txt", repo / "src/lifetime-copy.txt"
+    source.parent.mkdir(exist_ok=True)
+    source.write_text("".join(original))
+    base = _commit(repo, "chore: baseline lifetime component")
+    changed = _edit_existing_component(original, "remove", position)
+    source.write_text("".join(changed))
+    feature = _commit(repo, "feat: remove obsolete lifetime behavior")
+    destination.write_text("".join(_decorate_component(changed, decoration)))
+    if finish == "move":
+        source.unlink()
+    _commit(repo, "chore: relocate component with maintenance")
+    if finish == "remove-later":
+        source.unlink()
+        _commit(repo, "chore: retire old component location")
+    head = _git(repo, "rev-parse", "HEAD")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) == "minor"
+    assert any(c.sha == feature and "src/lifetime-copy.txt" in c.paths for c in commits)
+
+
+@pytest.mark.parametrize("relative", ["docs/transit.txt", "tests/transit.py"])
+@pytest.mark.parametrize("decoration", ["prefix", "suffix"])
+def test_removed_behavior_survives_modified_nonshipped_transit(
+    repo: Path, relative: str, decoration: str
+) -> None:
+    original = [f"transit component {n}\n" for n in range(9)]
+    source = repo / "src/transit-source.txt"
+    source.parent.mkdir(exist_ok=True)
+    source.write_text("".join(original))
+    base = _commit(repo, "chore: baseline transit component")
+    changed = _edit_existing_component(original, "remove", 4)
+    source.write_text("".join(changed))
+    feature = _commit(repo, "feat: remove obsolete transit behavior")
+    transit = repo / relative
+    transit.parent.mkdir(parents=True, exist_ok=True)
+    transit.write_text("".join(_decorate_component(changed, decoration)))
+    _commit(repo, "chore: retain an intermediate component copy")
+    destination = repo / "src/transit-destination.txt"
+    destination.write_bytes(transit.read_bytes() + b"second copy maintenance\n")
+    _commit(repo, "chore: install intermediate component")
+    source.write_text("".join(original))
+    transit.unlink()
+    head = _commit(repo, "chore: restore source and remove intermediate")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) == "minor"
+    assert any(c.sha == feature and "src/transit-destination.txt" in c.paths for c in commits)
+
+
+@pytest.mark.parametrize("edit", ["add", "remove", "replace"])
+def test_canceled_source_edit_does_not_promote_a_later_maintenance_copy(
+    repo: Path, edit: str
+) -> None:
+    original = [f"canceled component {n}\n" for n in range(9)]
+    source = repo / "src/canceled-source.txt"
+    source.parent.mkdir(exist_ok=True)
+    source.write_text("".join(original))
+    base = _commit(repo, "chore: canceled component baseline")
+    source.write_text("".join(_edit_existing_component(original, edit, 4)))
+    feature = _commit(repo, "feat: temporary component edit")
+    source.write_text("".join(original))
+    _commit(repo, "chore: cancel component edit")
+    (repo / "src/canceled-copy.txt").write_text("".join(_decorate_component(original, "middle")))
+    head = _commit(repo, "chore: retain only baseline component copy")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) is None
+    assert all(c.sha != feature for c in commits)
+    assert check_release_intent.check(repo, base, head) == []
+
+
+@pytest.mark.parametrize("position", [0, 4, 8])
+def test_a_copy_that_retains_removed_behavior_has_no_negative_edit_witness(
+    repo: Path, position: int
+) -> None:
+    original = [f"retained component {n}\n" for n in range(9)]
+    source = repo / "src/retained-source.txt"
+    source.parent.mkdir(exist_ok=True)
+    source.write_text("".join(original))
+    base = _commit(repo, "chore: baseline retained behavior")
+    source.write_text("".join(_edit_existing_component(original, "remove", position)))
+    feature = _commit(repo, "feat: remove behavior in original location")
+    (repo / "src/retained-copy.txt").write_text("".join(_decorate_component(original, "middle")))
+    _commit(repo, "chore: copy baseline with behavior still present")
+    source.write_text("".join(original))
+    head = _commit(repo, "chore: restore baseline original")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) is None
+    assert all(c.sha != feature for c in commits)
+
+
+@pytest.mark.parametrize("relative", ["docs/removed.txt", "tests/removed.py"])
+@pytest.mark.parametrize("decoration", ["prefix", "suffix"])
+def test_modified_copy_of_unexplained_removal_source_still_refuses(
+    repo: Path, relative: str, decoration: str
+) -> None:
+    source = repo / relative
+    source.parent.mkdir(parents=True, exist_ok=True)
+    original = [f"unexplained removal component {n}\n" for n in range(9)]
+    source.write_text("".join(original))
+    _commit(repo, "chore: reference component baseline")
+    base, _origin, _host = _two_sided_history(repo, "feat", False)
+    source.write_text("".join(_edit_existing_component(original, "remove", 4)))
+    _commit(repo, "merge: unexplained removal from reference component")
+    (repo / "src/unexplained-removal-copy.txt").write_text(
+        "".join(_decorate_component(source.read_text().splitlines(keepends=True), decoration))
+    )
+    head = _commit(repo, "chore: install modified reference copy")
+    with pytest.raises(ValueError, match="no non-merge commit metadata"):
+        prepare_release.commits_for_net_diff(repo, base, head)
+
+
+@pytest.mark.parametrize("position", [0, 4, 8])
+@pytest.mark.parametrize("decoration", ["prefix", "suffix"])
+@pytest.mark.parametrize("existing_destination", [False, True])
+def test_removing_one_duplicate_behavior_keeps_counted_copy_lineage(
+    repo: Path, position: int, decoration: str, existing_destination: bool
+) -> None:
+    original = [f"duplicate component {n}\n" for n in range(9)]
+    original[1] = original[position]
+    source, destination = repo / "src/duplicate-source.txt", repo / "src/duplicate-copy.txt"
+    source.parent.mkdir(exist_ok=True)
+    source.write_text("".join(original))
+    if existing_destination:
+        destination.write_text("".join(original))
+    base = _commit(repo, "chore: repeated behavior baseline")
+    changed = _edit_existing_component(original, "remove", position)
+    source.write_text("".join(changed))
+    feature = _commit(repo, "feat: remove one duplicate behavior")
+    destination.write_text("".join(_decorate_component(changed, decoration)))
+    _commit(repo, "chore: retain repeated-behavior component copy")
+    source.write_text("".join(original))
+    head = _commit(repo, "chore: restore original repeated behavior")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) == "minor"
+    assert any(c.sha == feature and "src/duplicate-copy.txt" in c.paths for c in commits)
+    assert len(check_release_intent.check(repo, base, head)) == 1
