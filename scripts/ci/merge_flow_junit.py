@@ -73,7 +73,7 @@ def merge_reports(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--artifacts-dir", type=Path, required=True)
     parser.add_argument("--shards", type=int, required=True)
     parser.add_argument("--out", type=Path, required=True)
