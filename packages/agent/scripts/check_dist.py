@@ -76,7 +76,7 @@ def check(path: Path) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("artifacts", nargs="+", type=Path)
     args = parser.parse_args()
     for artifact in args.artifacts:

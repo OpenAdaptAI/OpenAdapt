@@ -1,0 +1,64 @@
+name: Flow MCP compatibility
+
+on:
+  pull_request:
+    paths:
+      - 'packages/flow/**'
+      - 'packages/types/**'
+      - 'scripts/ci/**'
+      - '.github/workflows/flow-mcp-compat.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Supplementary SDK boundaries; the existing CI required-job closure is unchanged.
+jobs:
+  flow-mcp-compat:
+    name: flow MCP compatibility (${{ matrix.mcp }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        mcp: ["1.28.0", "2.3.0"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+      - name: Install locked base and hash-pinned genuine SDK
+        run: |
+          uv venv --python 3.12 .venv
+          .venv/bin/python scripts/ci/locked_install.py \
+            --lock 'packages/flow[dev,agent,browser,langgraph]' \
+            --editable packages/types --editable packages/flow
+          uv pip install --python .venv/bin/python --index-url https://pypi.org/simple \
+            --require-hashes --only-binary :all: \
+            --requirement scripts/ci/mcp-${{ matrix.mcp }}-py312-linux.requirements
+          uv pip check --python .venv/bin/python
+          .venv/bin/python -c "import importlib.metadata as m; assert m.version('mcp') == '${{ matrix.mcp }}'; print({n:m.version(n) for n in ('mcp','hypothesis')})"
+          .venv/bin/python -c "from pathlib import Path; import openadapt_flow, openadapt_types; assert Path(openadapt_flow.__file__).resolve().parent == Path('packages/flow/openadapt_flow').resolve(); assert Path(openadapt_types.__file__).resolve().parent == Path('packages/types/openadapt_types').resolve()"
+      - name: Genuine public context, argument binding, refusal and zero-effect controls
+        working-directory: packages/flow
+        run: |
+          mkdir -p runs
+          ../../.venv/bin/python -m pytest -q \
+            tests/test_mcp_sdk_compatibility.py::test_genuine_sdk_registers_and_dispatches_generated_tool \
+            tests/test_mcp_sdk_compatibility.py::test_sdk_argument_validation_refuses_before_any_effect \
+            tests/test_generated_parameter_binding.py::test_actual_compiled_mcp_keeps_fixed_task_and_every_input \
+            tests/test_generated_parameter_binding.py::test_compiled_emitter_preserves_supported_identifier_grammar \
+            tests/test_backend_parity_refusals.py::test_a_desktop_mcp_tool_runs_the_governed_cli_with_every_param_intact \
+            --junitxml=runs/mcp-compat.xml
+          ../../.venv/bin/python - <<'PY'
+          import xml.etree.ElementTree as ET
+          cases = list(ET.parse('runs/mcp-compat.xml').getroot().iter('testcase'))
+          assert len(cases) == 54
+          assert not any(c.find(t) is not None for c in cases for t in ('failure','error','skipped'))
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: flow-mcp-${{ matrix.mcp }}
+          path: packages/flow/runs/mcp-compat.xml
+          if-no-files-found: error

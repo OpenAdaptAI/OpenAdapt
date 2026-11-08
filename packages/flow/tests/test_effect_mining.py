@@ -41,6 +41,7 @@ from openadapt_flow.runtime.effects import (
     Verdict,
 )
 from openadapt_flow.runtime.replayer import Replayer
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 
 # Reuse the scripted fakes + fault-server helpers from the replayer-effects
 # tests (pytest prepend import mode puts tests/ on sys.path).
@@ -229,9 +230,7 @@ def test_dom_field_delta_mines_flagged_field_equals():
 def test_mined_effects_confirmed_by_verifier_on_real_sor():
     base, db, stop = _fault_server()
     try:
-        verifier = RestRecordVerifier(
-            base, records_path="/api/db", records_key="records"
-        )
+        verifier = RestRecordVerifier(base, **mockmed_rest_read_kwargs())
         before = db.snapshot()["records"]
         requests.post(
             f"{base}/api/encounter",
@@ -255,9 +254,7 @@ def test_mined_effects_confirmed_by_verifier_on_real_sor():
 def test_mined_record_written_refutes_a_duplicate_on_the_real_sor():
     base, db, stop = _fault_server()
     try:
-        verifier = RestRecordVerifier(
-            base, records_path="/api/db", records_key="records"
-        )
+        verifier = RestRecordVerifier(base, **mockmed_rest_read_kwargs())
         before = db.snapshot()["records"]
         requests.post(
             f"{base}/api/encounter",
@@ -303,9 +300,7 @@ def test_placeholder_effect_halts_the_run(tmp_path):
         replayer = Replayer(
             backend,
             vision=vision,
-            effect_verifier=RestRecordVerifier(
-                base, records_path="/api/db", records_key="records"
-            ),
+            effect_verifier=RestRecordVerifier(base, **mockmed_rest_read_kwargs()),
             poll_interval_s=0.01,
         )
         report = replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)

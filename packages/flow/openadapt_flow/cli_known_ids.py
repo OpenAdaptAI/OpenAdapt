@@ -107,6 +107,7 @@ def register(sub: Any) -> None:
     p = sub.add_parser(
         "known-ids",
         help="Admit a system-of-record export as the known-ID list, and check it",
+        allow_abbrev=False,
     )
     s = p.add_subparsers(dest="known_ids_cmd", required=True)
 
@@ -120,7 +121,9 @@ def register(sub: Any) -> None:
         )
 
     c = s.add_parser(
-        "confirm", help="Confirm the export's source and completeness (recorded)"
+        "confirm",
+        help="Confirm the export's source and completeness (recorded)",
+        allow_abbrev=False,
     )
     common(c)
     c.add_argument("--source", required=True, help="Which system and export this is")
@@ -133,7 +136,9 @@ def register(sub: Any) -> None:
     c.add_argument("--yes", action="store_true", help="Skip the interactive prompt")
     c.set_defaults(func=_cmd_confirm)
 
-    st = s.add_parser("status", help="Would replay accept this list now?")
+    st = s.add_parser(
+        "status", help="Would replay accept this list now?", allow_abbrev=False
+    )
     common(st)
     st.add_argument("--max-age-hours", type=float, default=24.0)
     st.set_defaults(func=_cmd_status)
