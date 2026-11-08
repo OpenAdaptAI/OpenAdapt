@@ -282,6 +282,23 @@ def test_hook_is_not_part_of_task_identity_or_saved_spec(local_task):
     assert "before_capture" not in json.loads(saved.read_text())
     assert FirstRunCompiler.load(compiler.dir).before_capture is None
 
+    # Component control, not a full recording: normal reset/SQL observation and
+    # final record checking keep preparation writes visible in the compiler's
+    # existing pre-open baseline. This is distinct from Recording's baseline.
+    from openadapt_flow.compile_agent.pipeline import check_run_record
+
+    compiler._on_reset()
+    baseline = compiler._baseline
+    assert baseline == []
+    database = json.loads(path.read_text())["verifier"]["sqlite_database"]
+    with sqlite3.connect(database) as connection:
+        connection.execute("INSERT INTO entries(title) VALUES (?)", ("outside declared record",))
+    assert compiler._baseline is baseline
+    after = compiler.observer.system_of_record
+    check = check_run_record(baseline, after, expect=compiler.expect, values=values)
+    assert not check.passed and check.created == 1
+    assert any("wrong record" in reason for reason in check.reasons)
+
 
 @pytest.mark.parametrize("state", ["candidate", "admitted", "cache_hit"])
 def test_first_capture_hook_is_not_called_by_other_dispatch_paths(
@@ -571,7 +588,7 @@ def test_real_candidate_publication_waits_for_cleanup_and_reload_refuses_failed_
 
 @pytest.mark.parametrize("route", ["direct", "compiler", "reload", "first_run", "cache", "loader"])
 @pytest.mark.parametrize("returned", ["async_function", "async_callable", "sync_coroutine", "custom_awaitable", "suspended_coroutine", "falsey_value"])
-def test_capture_requires_synchronous_none_before_baseline_session_and_actor(
+def test_capture_requires_synchronous_none_before_recording_baseline_session_and_actor(
     local_task, tmp_path, monkeypatch, route, returned
 ):
     from inspect import CORO_CLOSED, CORO_SUSPENDED, getcoroutinestate
@@ -593,7 +610,7 @@ def test_capture_requires_synchronous_none_before_baseline_session_and_actor(
         backend, close = original_open(self, **kwargs)
         opened.append(backend)
         # The ordinary observer is constructed normally; this spy is installed
-        # only after normal guarded opening and detects an early baseline read.
+        # only after normal guarded opening and detects a Recording baseline read.
         monkeypatch.setattr(SystemOfRecordObserver, "system_of_record", property(forbidden_baseline))
 
         def close_owned_backend():

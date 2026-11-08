@@ -229,11 +229,16 @@ confirmed.
 Pass `before_capture=callback` to `compile_agent`, `FirstRunCompiler`,
 `compile_first_run`, `SkillCache` or Python `load_task`. The callback receives
 the exact backend that will be recorded, after its normal guarded opening,
-before the authoring session and actor start. It applies to both web and
-native backends. It must finish synchronously and return `None`; every other
-return value is refused before the baseline, session and actor. The hook is
-never awaited or scheduled. For the web, the normal request guard is installed before
-the initial navigation and remains active during the callback.
+before the guarded Recording baseline, authoring session and actor start.
+It applies to both web and native backends. It must finish synchronously and
+return `None`; every other return value is refused before those stages. The
+hook is never awaited or scheduled. For the web, the normal request guard is
+installed before the initial navigation and remains active during the callback.
+
+The compiler's existing pre-open baseline for save and final record checks
+is unchanged. Preparation writes within its observed projection remain visible
+and can refuse the capture; this hook does not rebase or hide them. Preparation
+should be neutral within that projection.
 
 Use this trusted callback to prepare and check the starting state, then
 reserve the caller's model allowance only after those checks succeed. An
