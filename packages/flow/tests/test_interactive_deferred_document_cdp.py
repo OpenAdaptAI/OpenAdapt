@@ -63,10 +63,15 @@ def document_browser(tmp_path):
         stderr=subprocess.PIPE,
     )
     endpoints = queue.Queue()
+    startup_tail = bytearray()
+    startup_lock = threading.Lock()
 
     def read_endpoint():
         assert process.stderr is not None
-        for raw in iter(process.stderr.readline, b""):
+        for raw in iter(lambda: process.stderr.readline(4096), b""):
+            with startup_lock:
+                startup_tail.extend(raw)
+                del startup_tail[:-8192]
             found = re.search(
                 rb"DevTools listening on (ws://127\.0\.0\.1:[0-9]+/devtools/browser/[A-Za-z0-9-]+)",
                 raw,
@@ -77,7 +82,16 @@ def document_browser(tmp_path):
     reader = threading.Thread(target=read_endpoint, daemon=True)
     reader.start()
     try:
-        yield url, endpoints.get(timeout=10), process
+        try:
+            endpoint = endpoints.get(timeout=10)
+        except queue.Empty:
+            with startup_lock:
+                detail = bytes(startup_tail).decode("utf-8", errors="replace")
+            raise RuntimeError(
+                "owned headless Chromium did not expose its loopback endpoint; "
+                f"exit={process.poll()}; bounded startup stderr:\n{detail}"
+            ) from None
+        yield url, endpoint, process
     finally:
         process.terminate()
         try:
