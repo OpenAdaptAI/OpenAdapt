@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import contextlib
 import sys
-from functools import partial
 from typing import Any, Iterator
 
 from openadapt_flow.backends._owned import close_owned
@@ -29,7 +28,7 @@ def _start_browser(headless: bool) -> tuple[Any, Any]:
         pw = manager.start()
     except BaseException as error:
         close_owned(
-            (partial(manager.__exit__, type(error), error, error.__traceback__),),
+            (lambda primary=error: manager.__exit__(type(primary), primary, primary.__traceback__),),
             primary=error,
         )
         raise

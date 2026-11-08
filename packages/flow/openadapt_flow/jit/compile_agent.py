@@ -34,7 +34,6 @@ import sys
 import time
 import uuid
 from dataclasses import dataclass, field
-from functools import partial
 from pathlib import Path
 from types import TracebackType
 from typing import (
@@ -632,7 +631,7 @@ class Recording:
         except BaseException as error:
             self.result = None
             close_owned(
-                (partial(self._keep_failed_capture, "cleanup", error),), primary=error
+                (lambda primary=error: self._keep_failed_capture("cleanup", primary),), primary=error
             )
             raise
         try:
