@@ -30,7 +30,11 @@ def sdk_modules() -> tuple[Any, Any, Any]:
 
 def registered_server(namespace: Mapping[str, Any] | ModuleType) -> Any:
     server_type, _, _ = sdk_modules()
-    values = vars(namespace).values() if isinstance(namespace, ModuleType) else namespace.values()
+    values = (
+        vars(namespace).values()
+        if isinstance(namespace, ModuleType)
+        else namespace.values()
+    )
     servers = [value for value in values if isinstance(value, server_type)]
     assert len(servers) == 1
     return servers[0]

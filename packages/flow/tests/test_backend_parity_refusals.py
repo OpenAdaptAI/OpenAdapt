@@ -174,7 +174,9 @@ def test_a_desktop_mcp_tool_runs_the_governed_cli_with_every_param_intact(
     tool = registered["run_triage_note"]
     assert type(tool).__module__.startswith("mcp.")
     assert set(tool.parameters["properties"]) == {"kind", "section", "workflow_2"}
-    out = asyncio.run(call_generated_tool(server, {"kind": "REAL", "section": "S", "workflow_2": "W"}))
+    out = asyncio.run(
+        call_generated_tool(server, {"kind": "REAL", "section": "S", "workflow_2": "W"})
+    )
     assert out["success"] is True and out["outcome"] == "VERIFIED"
     assert seen["params"] == {"kind": "REAL", "section": "S", "workflow": "W"}
     assert seen["argv"][1:5] == [

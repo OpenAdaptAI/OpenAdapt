@@ -131,7 +131,9 @@ def test_genuine_sdk_registers_and_dispatches_generated_tool(
     # runpy's returned mapping can differ from a function's globals mapping.
     function.__globals__["DEPLOYMENT"] = namespace["DEPLOYMENT"]
     shapes: list[str] = []
-    result = asyncio.run(call_generated_tool(namespace, supplied, observed_shapes=shapes))
+    result = asyncio.run(
+        call_generated_tool(namespace, supplied, observed_shapes=shapes)
+    )
     server_type, _, _ = sdk_modules()
     expected_shape = "CallToolResult"
     if server_type.__name__ != "MCPServer":
@@ -213,7 +215,9 @@ def test_sdk_selection_does_not_hide_broken_or_unknown_api(
 
 @pytest.mark.parametrize("entry", ENTRY_POINTS)
 @pytest.mark.parametrize("invalid", ["missing", "wrong_type"])
-def test_sdk_argument_validation_refuses_before_any_effect(tmp_path, monkeypatch, entry, invalid):
+def test_sdk_argument_validation_refuses_before_any_effect(
+    tmp_path, monkeypatch, entry, invalid
+):
     path = _emit(tmp_path / entry, entry, ["note"])
     namespace, _ = _load(path)
     effects = []
