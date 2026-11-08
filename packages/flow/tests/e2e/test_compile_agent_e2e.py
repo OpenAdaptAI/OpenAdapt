@@ -38,6 +38,7 @@ from openadapt_flow.compile_agent import (
 from openadapt_flow.jit.keys import CustomerModelKey
 from openadapt_flow.mockmed.fault_server import serve
 from openadapt_flow.tutorial import _http_json, _records
+from tests._rest_read_contract_fixtures import mockmed_effects_yaml
 from tests._teach_authorization_support import mockmed_note
 
 PROMPT = (
@@ -67,10 +68,7 @@ def _verify_yaml(tmp_path: Path, base: str) -> Path:
     path = tmp_path / "verify.yaml"
     path.write_text(
         "verifier:\n"
-        "  kind: rest\n"
-        f"  base_url: {base}\n"
-        "  records_path: /api/db\n"
-        "  records_key: records\n"
+        f"{mockmed_effects_yaml(base)}"
         "  timeout_s: 2.0\n"
         "  poll_interval_s: 0.05\n"
     )

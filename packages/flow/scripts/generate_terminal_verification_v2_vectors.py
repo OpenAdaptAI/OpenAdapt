@@ -10,7 +10,6 @@ from base64 import b64encode
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
-
 from openadapt_flow.qualification_admission_v2 import canonical_json
 from openadapt_flow.runner.hosted_adapter import (
     HostedTerminalEventV2,
@@ -174,7 +173,7 @@ def build_fixture() -> dict[str, object]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--consumer-output", type=Path, default=DEFAULT_CONSUMER_OUTPUT)
     parser.add_argument("--delivery-input", type=Path, default=DELIVERY_INPUT)

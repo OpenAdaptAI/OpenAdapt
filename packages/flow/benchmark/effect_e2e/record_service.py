@@ -65,6 +65,20 @@ from urllib.parse import parse_qs, urlparse
 
 from openadapt_flow.mockmed.chart_pages import ChartPages
 
+# Each endpoint returns every row from its explicitly named SQLite table.
+# Complete banner coverage remains self-report, not persisted-record evidence;
+# complete encounters coverage intentionally excludes the billing table.
+ENCOUNTERS_READ_CONTRACT: dict[str, Any] = {
+    "records_path": "/api/records",
+    "records_key": "records",
+    "records_complete": True,
+}
+BANNER_READ_CONTRACT: dict[str, Any] = {
+    "records_path": "/api/ui/last-save",
+    "records_key": "records",
+    "records_complete": True,
+}
+
 #: How long ``timeout`` mode hangs after committing, in seconds. The API
 #: actuator's per-request timeout fires well before this, so the write is
 #: known-committed server-side while the client sees an unknown outcome and

@@ -39,6 +39,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         ),
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
     )
     p.add_argument(
         "--cdp",

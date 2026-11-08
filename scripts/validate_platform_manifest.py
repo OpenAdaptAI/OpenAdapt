@@ -1133,7 +1133,7 @@ def check_desktop_sidecar_lock(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument(
         "--manifest", type=Path, default=ROOT / "platform-manifest.json"
     )

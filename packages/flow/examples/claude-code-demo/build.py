@@ -333,7 +333,9 @@ def build(url: str, db: Path, layout: Layout, *, by_hand: bool = False) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--url", default="http://127.0.0.1:8642/")
     parser.add_argument("--db", default=str(HERE / "work" / "expenses.db"))
     parser.add_argument(
