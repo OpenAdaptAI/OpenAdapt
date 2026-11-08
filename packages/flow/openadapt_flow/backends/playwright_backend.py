@@ -5607,8 +5607,8 @@ class PlaywrightBackend:
             record_video_dir: OPT-IN. When set, the page is created inside a
                 browser context that records a WebM video of the session into
                 this directory (one file per page, Playwright-named). ``None``
-                (default) records nothing and has zero effect on normal runs —
-                the page is created directly on the browser as before. The
+                (default) records nothing. Each launch owns a fresh context
+                and page, including when it shares a browser process. The
                 finished video is only flushed to disk after ``close()`` (which
                 closes the context); read its path from ``backend.page.video``.
             before_goto: Called with the new page before it opens ``url``, so
@@ -5655,7 +5655,9 @@ class PlaywrightBackend:
                 "service_workers": "block",
             }
             if record_video_dir is not None:
-                options.update(record_video_dir=record_video_dir, record_video_size=viewport)
+                options.update(
+                    record_video_dir=record_video_dir, record_video_size=viewport
+                )
             # Acquire the context explicitly, so page-acquisition failures
             # can close this invocation without closing a shared browser.
             context = browser.new_context(**options)

@@ -73,7 +73,9 @@ def local_task(tmp_path: Path):
     try:
         database = tmp_path / "records.sqlite"
         with sqlite3.connect(database) as connection:
-            connection.execute("CREATE TABLE entries(id INTEGER PRIMARY KEY, title TEXT)")
+            connection.execute(
+                "CREATE TABLE entries(id INTEGER PRIMARY KEY, title TEXT)"
+            )
         task = {
             "instruction": "Create {before_capture}",
             "parameters": ["before_capture"],
@@ -105,7 +107,9 @@ def invoke(route: str, path: Path, hook: Any, actor: Any, tmp_path: Path):
     if route == "direct":
         jit = compile_agent(
             actor,
-            task=TaskSignature("capture.test", "Create {before_capture}", {"before_capture": str}),
+            task=TaskSignature(
+                "capture.test", "Create {before_capture}", {"before_capture": str}
+            ),
             app=WebApp(url=setup.cache.common["url"]),
             verifier=None,
             policy="clinical-write",
@@ -142,9 +146,13 @@ def invoke(route: str, path: Path, hook: Any, actor: Any, tmp_path: Path):
     return setup.cache.run(setup.instruction, values, actor)
 
 
-@pytest.mark.parametrize("route", ["direct", "compiler", "reload", "first_run", "cache", "loader"])
+@pytest.mark.parametrize(
+    "route", ["direct", "compiler", "reload", "first_run", "cache", "loader"]
+)
 @pytest.mark.parametrize("refusal", [None, "preflight", "reservation", "cancel"])
-def test_real_capture_owns_preparation_and_actor_context(local_task, tmp_path, route, refusal):
+def test_real_capture_owns_preparation_and_actor_context(
+    local_task, tmp_path, route, refusal
+):
     path, _ = local_task
     events = []
 
@@ -161,12 +169,20 @@ def test_real_capture_owns_preparation_and_actor_context(local_task, tmp_path, r
         if refusal == "reservation":
             raise ValueError("reservation refusal")
 
-    expected = Observed if refusal is None else Cancelled if refusal == "cancel" else ValueError
+    expected = (
+        Observed
+        if refusal is None
+        else Cancelled
+        if refusal == "cancel"
+        else ValueError
+    )
     with pytest.raises(expected):
         invoke(route, path, prepare, NoModelActor(events), tmp_path)
     assert [e[0] for e in events] == (
-        ["prepare", "reservation", "actor"] if refusal is None
-        else ["prepare", "reservation"] if refusal == "reservation"
+        ["prepare", "reservation", "actor"]
+        if refusal is None
+        else ["prepare", "reservation"]
+        if refusal == "reservation"
         else ["prepare"]
     )
     prepared = events[0]
@@ -183,7 +199,9 @@ def test_loader_does_not_accept_a_callback_from_task_json(local_task):
         load_task(path)
 
 
-@pytest.mark.parametrize("route", ["direct", "compiler", "reload", "first_run", "cache", "loader"])
+@pytest.mark.parametrize(
+    "route", ["direct", "compiler", "reload", "first_run", "cache", "loader"]
+)
 def test_no_hook_keeps_the_normal_capture_path(local_task, tmp_path, route):
     events = []
     with pytest.raises(Observed):
@@ -192,7 +210,9 @@ def test_no_hook_keeps_the_normal_capture_path(local_task, tmp_path, route):
     assert events[0][1].is_closed()
 
 
-def test_normal_request_guard_precedes_navigation_and_hook(local_task, tmp_path, monkeypatch):
+def test_normal_request_guard_precedes_navigation_and_hook(
+    local_task, tmp_path, monkeypatch
+):
     from playwright.sync_api import Page
 
     from openadapt_flow.teach_scope import TeachGuard
@@ -212,7 +232,9 @@ def test_normal_request_guard_precedes_navigation_and_hook(local_task, tmp_path,
 
     def prepare(backend):
         assert backend.page in guarded
-        backend.page.locator("#prepared").evaluate("element => element.textContent = 'ready'")
+        backend.page.locator("#prepared").evaluate(
+            "element => element.textContent = 'ready'"
+        )
 
     monkeypatch.setattr(TeachGuard, "install", guard)
     monkeypatch.setattr(Page, "goto", navigate)
@@ -229,7 +251,9 @@ def test_capture_hook_closes_only_its_context_in_a_shared_process(local_task, tm
 
     def prepare(backend):
         events.append(("prepare", backend.page, backend.page.context))
-        backend.page.locator("#prepared").evaluate("element => element.textContent = 'ready'")
+        backend.page.locator("#prepared").evaluate(
+            "element => element.textContent = 'ready'"
+        )
 
     with shared_browser(headless=True):
         _, browser = _SHARED_BROWSER[True]
@@ -260,7 +284,9 @@ def test_hook_is_not_part_of_task_identity_or_saved_spec(local_task):
 
 
 @pytest.mark.parametrize("state", ["candidate", "admitted", "cache_hit"])
-def test_first_capture_hook_is_not_called_by_other_dispatch_paths(local_task, monkeypatch, tmp_path, state):
+def test_first_capture_hook_is_not_called_by_other_dispatch_paths(
+    local_task, monkeypatch, tmp_path, state
+):
     path, _ = local_task
 
     def forbidden(_):
@@ -290,7 +316,9 @@ def test_first_capture_hook_is_not_called_by_other_dispatch_paths(local_task, mo
 @pytest.mark.parametrize("failure", ["hook", "session", "start", "actor"])
 @pytest.mark.parametrize("cancel", [False, True])
 @pytest.mark.parametrize("cleanup_fails", [False, True])
-def test_native_owned_backend_closes_once_and_preserves_primary(tmp_path, monkeypatch, failure, cancel, cleanup_fails):
+def test_native_owned_backend_closes_once_and_preserves_primary(
+    tmp_path, monkeypatch, failure, cancel, cleanup_fails
+):
     events = []
     primary = Cancelled() if cancel else RuntimeError(failure)
 
@@ -327,7 +355,10 @@ def test_native_owned_backend_closes_once_and_preserves_primary(tmp_path, monkey
     jit = compile_agent(
         NoModelActor(events),
         task=TaskSignature("native.test", "do {x}", {"x": str}),
-        app=SurfaceApp({"kind": "windows", "agent_url": "http://127.0.0.1:1"}, open_backend=lambda _: backend),
+        app=SurfaceApp(
+            {"kind": "windows", "agent_url": "http://127.0.0.1:1"},
+            open_backend=lambda _: backend,
+        ),
         verifier=None,
         policy="clinical-write",
         cache_dir=tmp_path / "native",
@@ -348,7 +379,9 @@ def test_native_owned_backend_closes_once_and_preserves_primary(tmp_path, monkey
     assert ("actor" in events) is (failure == "actor")
 
 
-def test_cleanup_failure_cannot_be_converted_to_a_completed_capture(tmp_path, monkeypatch):
+def test_cleanup_failure_cannot_be_converted_to_a_completed_capture(
+    tmp_path, monkeypatch
+):
     from openadapt_flow.jit.compile_agent import Recording
 
     cleanup = RuntimeError("owned backend close failed")
@@ -366,12 +399,19 @@ def test_cleanup_failure_cannot_be_converted_to_a_completed_capture(tmp_path, mo
     # Only the result conversion boundary is modeled; this is not a draft,
     # recording, verification or admission qualification.
     monkeypatch.setattr(authoring, "AuthoringSession", Session)
-    monkeypatch.setattr(Recording, "_finish", lambda *_: SimpleNamespace(status="draft"))
-    actor = SimpleNamespace(dialect="generic", requires_model_key=False, run=lambda *_: None)
+    monkeypatch.setattr(
+        Recording, "_finish", lambda *_: SimpleNamespace(status="draft")
+    )
+    actor = SimpleNamespace(
+        dialect="generic", requires_model_key=False, run=lambda *_: None
+    )
     jit = compile_agent(
         actor,
         task=TaskSignature("cleanup.test", "do {x}", {"x": str}),
-        app=SurfaceApp({"kind": "windows", "agent_url": "http://127.0.0.1:1"}, open_backend=lambda _: SimpleNamespace(close=close)),
+        app=SurfaceApp(
+            {"kind": "windows", "agent_url": "http://127.0.0.1:1"},
+            open_backend=lambda _: SimpleNamespace(close=close),
+        ),
         verifier=None,
         policy="clinical-write",
         cache_dir=tmp_path,
@@ -382,7 +422,9 @@ def test_cleanup_failure_cannot_be_converted_to_a_completed_capture(tmp_path, mo
 
 
 @pytest.mark.parametrize("cancel", [False, True])
-def test_actor_primary_survives_halt_and_all_cleanup_failures(tmp_path, monkeypatch, cancel):
+def test_actor_primary_survives_halt_and_all_cleanup_failures(
+    tmp_path, monkeypatch, cancel
+):
     events = []
     primary = Cancelled() if cancel else RuntimeError("actor primary")
 
@@ -409,7 +451,10 @@ def test_actor_primary_survives_halt_and_all_cleanup_failures(tmp_path, monkeypa
     jit = compile_agent(
         SimpleNamespace(dialect="generic", requires_model_key=False),
         task=TaskSignature("primary.test", "do {x}", {"x": str}),
-        app=SurfaceApp({"kind": "windows", "agent_url": "http://127.0.0.1:1"}, open_backend=lambda _: SimpleNamespace(close=backend_close)),
+        app=SurfaceApp(
+            {"kind": "windows", "agent_url": "http://127.0.0.1:1"},
+            open_backend=lambda _: SimpleNamespace(close=backend_close),
+        ),
         verifier=None,
         policy="clinical-write",
         cache_dir=tmp_path,
@@ -447,7 +492,14 @@ def test_real_candidate_publication_waits_for_cleanup_and_reload_refuses_failed_
         # parameter lift, recorder signature and candidate writer are real.
         Workflow(
             name="synthetic",
-            steps=[Step(id="step_000", intent="type synthetic", action=ActionKind.TYPE, text="synthetic")],
+            steps=[
+                Step(
+                    id="step_000",
+                    intent="type synthetic",
+                    action=ActionKind.TYPE,
+                    text="synthetic",
+                )
+            ],
         ).save(bundle)
         events.append("compile")
         assert jit.candidate() is None
@@ -489,8 +541,10 @@ def test_real_candidate_publication_waits_for_cleanup_and_reload_refuses_failed_
 
     if failure is None:
         finish()
-        assert recording.result.candidate == jit.candidate()
+        # Candidate persistence uses JSON arrays for LiftedParam tuple fields.
+        assert json.loads(json.dumps(recording.result.candidate)) == jit.candidate()
         assert jit.candidate()["recorder"]
+        assert lifecycle._recorder(jit.program_dir, jit.key_dir) == jit.candidate()["recorder"]
         assert FirstRunCompiler.load(compiler.dir)._jit().candidate() == jit.candidate()
         assert not list(jit.program_dir.glob("candidate-pending-*.json"))
     else:

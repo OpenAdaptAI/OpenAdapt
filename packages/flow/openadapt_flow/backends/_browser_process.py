@@ -27,7 +27,10 @@ def _start_browser(headless: bool) -> tuple[Any, Any]:
     try:
         pw = manager.start()
     except BaseException as error:
-        close_owned((lambda: manager.__exit__(type(error), error, error.__traceback__),), primary=error)
+        close_owned(
+            (lambda: manager.__exit__(type(error), error, error.__traceback__),),
+            primary=error,
+        )
         raise
     try:
         browser = launch_chromium(pw.chromium, headless=headless)

@@ -620,14 +620,19 @@ class Recording:
             if primary is not error:
                 note_failure(primary, error)
             self.result = None
-            close_owned([*callbacks, lambda: self._keep_failed_capture("finish", primary)], primary=primary)
+            close_owned(
+                [*callbacks, lambda: self._keep_failed_capture("finish", primary)],
+                primary=primary,
+            )
             raise primary
         suppress = isinstance(exc, UnsupportedAction)
         try:
             close_owned(callbacks, primary=None if suppress else exc)
         except BaseException as error:
             self.result = None
-            close_owned((lambda: self._keep_failed_capture("cleanup", error),), primary=error)
+            close_owned(
+                (lambda: self._keep_failed_capture("cleanup", error),), primary=error
+            )
             raise
         try:
             # Compilation is staged; only completed owned cleanup permits
@@ -638,7 +643,10 @@ class Recording:
             if primary is not error:
                 note_failure(primary, error)
             self.result = None
-            close_owned((lambda: self._keep_failed_capture("publication", primary),), primary=primary)
+            close_owned(
+                (lambda: self._keep_failed_capture("publication", primary),),
+                primary=primary,
+            )
             raise primary
         return suppress
 
@@ -647,11 +655,15 @@ class Recording:
         if self._owner.program_dir.exists():
             assert self.computer is not None
             self._owner._capture_refused(
-                "capture_failed", f"capture_{stage}_failed:{type(error).__name__}",
-                self.computer, guard=self.guard,
+                "capture_failed",
+                f"capture_{stage}_failed:{type(error).__name__}",
+                self.computer,
+                guard=self.guard,
             )
 
-    def _finish(self, exc: Optional[BaseException]) -> Union[JitResult, Callable[[], JitResult]]:
+    def _finish(
+        self, exc: Optional[BaseException]
+    ) -> Union[JitResult, Callable[[], JitResult]]:
         from openadapt_flow.authoring import AuthoringError
         from openadapt_flow.teach_scope import ScopeViolation
 

@@ -47,7 +47,9 @@ def local_url():
 @pytest.mark.parametrize("stage", ["websocket", "navigation", "construction"])
 @pytest.mark.parametrize("shared", [False, True])
 @pytest.mark.parametrize("cancel", [False, True])
-def test_real_open_failure_closes_only_its_owned_resources(local_url, monkeypatch, stage, shared, cancel):
+def test_real_open_failure_closes_only_its_owned_resources(
+    local_url, monkeypatch, stage, shared, cancel
+):
     primary = Cancelled() if cancel else RuntimeError(stage)
     observed = {}
 
@@ -118,7 +120,9 @@ def test_real_open_failure_closes_only_its_owned_resources(local_url, monkeypatc
                 observed["cleanup"]()
 
 
-@pytest.mark.parametrize("stage", ["context", "page", "guard", "websocket", "navigation", "construction"])
+@pytest.mark.parametrize(
+    "stage", ["context", "page", "guard", "websocket", "navigation", "construction"]
+)
 @pytest.mark.parametrize("shared", [False, True])
 @pytest.mark.parametrize("cancel", [False, True])
 def test_acquisition_cut_points_unwind_once(monkeypatch, stage, shared, cancel):
@@ -152,11 +156,19 @@ def test_acquisition_cut_points_unwind_once(monkeypatch, stage, shared, cancel):
     if shared:
         monkeypatch.setitem(playwright_backend._SHARED_BROWSER, True, (pw, browser))
     else:
-        monkeypatch.setattr(playwright_backend, "_start_browser", lambda _: (pw, browser))
-    monkeypatch.setattr(playwright_backend, "prepare_ws_guard", lambda _: at("websocket"))
-    monkeypatch.setattr(PlaywrightBackend, "__init__", lambda *_a, **_kw: at("construction"))
+        monkeypatch.setattr(
+            playwright_backend, "_start_browser", lambda _: (pw, browser)
+        )
+    monkeypatch.setattr(
+        playwright_backend, "prepare_ws_guard", lambda _: at("websocket")
+    )
+    monkeypatch.setattr(
+        PlaywrightBackend, "__init__", lambda *_a, **_kw: at("construction")
+    )
     with pytest.raises(type(primary)) as caught:
-        PlaywrightBackend.launch("http://127.0.0.1:1/", before_goto=lambda _: at("guard"))
+        PlaywrightBackend.launch(
+            "http://127.0.0.1:1/", before_goto=lambda _: at("guard")
+        )
     assert caught.value is primary
     assert events.count("context-close") == (0 if stage == "context" else 1)
     assert events.count("browser-close") == (0 if shared else 1)
@@ -166,7 +178,9 @@ def test_acquisition_cut_points_unwind_once(monkeypatch, stage, shared, cancel):
 @pytest.mark.parametrize("cancel", [False, True])
 @pytest.mark.parametrize("stage", ["driver-start", "browser-start"])
 @pytest.mark.parametrize("cleanup_fails", [False, True])
-def test_browser_start_preserves_primary_and_stops_owned_driver(monkeypatch, cancel, stage, cleanup_fails):
+def test_browser_start_preserves_primary_and_stops_owned_driver(
+    monkeypatch, cancel, stage, cleanup_fails
+):
     import playwright.sync_api
     from openadapt_flow import _browser_setup
 
@@ -202,7 +216,9 @@ def test_browser_start_preserves_primary_and_stops_owned_driver(monkeypatch, can
 
 @pytest.mark.parametrize("primary_fails", [False, True])
 @pytest.mark.parametrize("cancel_cleanup", [False, True])
-def test_shared_browser_closes_all_process_owners_and_preserves_primary(monkeypatch, primary_fails, cancel_cleanup):
+def test_shared_browser_closes_all_process_owners_and_preserves_primary(
+    monkeypatch, primary_fails, cancel_cleanup
+):
     events = []
     primary = RuntimeError("body")
     cleanup = Cancelled() if cancel_cleanup else ValueError("cleanup")
@@ -211,10 +227,14 @@ def test_shared_browser_closes_all_process_owners_and_preserves_primary(monkeypa
         events.append("browser-close")
         raise cleanup
 
-    monkeypatch.setattr(_browser_process, "_start_browser", lambda _: (
-        SimpleNamespace(stop=lambda: events.append("driver-stop")),
-        SimpleNamespace(close=close),
-    ))
+    monkeypatch.setattr(
+        _browser_process,
+        "_start_browser",
+        lambda _: (
+            SimpleNamespace(stop=lambda: events.append("driver-stop")),
+            SimpleNamespace(close=close),
+        ),
+    )
     with pytest.raises(type(primary if primary_fails else cleanup)) as caught:
         with _browser_process.shared_browser():
             if primary_fails:
@@ -245,7 +265,9 @@ def test_failed_close_is_latched_without_retrying_owners(monkeypatch, shared, ca
     if shared:
         monkeypatch.setitem(playwright_backend._SHARED_BROWSER, True, (pw, browser))
     else:
-        monkeypatch.setattr(playwright_backend, "_start_browser", lambda _: (pw, browser))
+        monkeypatch.setattr(
+            playwright_backend, "_start_browser", lambda _: (pw, browser)
+        )
     monkeypatch.setattr(playwright_backend, "prepare_ws_guard", lambda _: None)
     monkeypatch.setattr(PlaywrightBackend, "__init__", lambda *_a, **_kw: None)
     _, close = PlaywrightBackend.launch("http://127.0.0.1:1/")
@@ -253,7 +275,11 @@ def test_failed_close_is_latched_without_retrying_owners(monkeypatch, shared, ca
         with pytest.raises(type(cleanup)) as caught:
             close()
         assert caught.value is cleanup
-    assert events == (["context-close"] if shared else ["context-close", "browser-close", "driver-stop"])
+    assert events == (
+        ["context-close"]
+        if shared
+        else ["context-close", "browser-close", "driver-stop"]
+    )
 
 
 def test_dispatcher_attempts_remaining_closers_after_cancellation():

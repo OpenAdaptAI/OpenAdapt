@@ -412,8 +412,11 @@ class SkillCache:
             if k not in ("reset", "task_id", "review", "hold")
         }
         compiler = FirstRunCompiler(
-            prompt, params=list(params), task_id=self.task_id(prompt, params),
-            before_capture=self.before_capture, **common
+            prompt,
+            params=list(params),
+            task_id=self.task_id(prompt, params),
+            before_capture=self.before_capture,
+            **common,
         )
         return compiler, key
 
