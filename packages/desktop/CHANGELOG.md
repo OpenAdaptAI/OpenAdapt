@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.30.0 (2026-11-08)
+
+### Features
+
+- Add the prefilled, no-input check path. It refuses engines without
+  `--stop-before-effect`; the current bundled Flow pin still lacks that flag.
+
+
+
 ## v0.29.2 (2026-11-08)
 
 ### Bug Fixes
