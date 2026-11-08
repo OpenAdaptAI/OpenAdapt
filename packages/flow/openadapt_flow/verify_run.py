@@ -1400,6 +1400,32 @@ def _map_frame_rows(
                 for record, row_key in zip(post_records, row_keys)
                 if row_key in keys
             }
+            # The database diff ordinarily carries changed rows only. Cell
+            # verification also needs an unchanged target: a misleading read
+            # must not certify a requested update that never reached storage.
+            from openadapt_flow.runtime.effects.db_snapshot import KEY, ROW, unpack
+
+            table = db.post.tables[binding.table]
+            baseline, now = slices[binding.table]
+            if now is None:
+                raise VerifyRunError("mapped table has no current row slice")
+            present = {record[KEY] for record in now}
+            previous_rows = list(baseline.records)
+            current_rows = list(now)
+            for row_key in column_values[binding.table]:
+                if row_key in present:
+                    continue
+                current_rows.append({
+                    KEY: row_key, ROW: table.rows[row_key][0], **table.values[row_key]
+                })
+                if row_key in old_table.rows:
+                    previous_rows.append({
+                        KEY: row_key, ROW: old_table.rows[row_key][0],
+                        **unpack(old_table.cell_columns, old_table.rows[row_key][1]),
+                    })
+            slices[binding.table] = (
+                baseline.model_copy(update={"records": previous_rows}), current_rows
+            )
 
 
 def judge_run_frame(

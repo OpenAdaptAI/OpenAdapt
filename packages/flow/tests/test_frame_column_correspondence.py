@@ -235,3 +235,31 @@ def test_field_uuid_canonicalisation_uses_the_same_generic_identity_model():
     cell = learn_field_bindings(identity, records, rows)["surface"]
     assert cell.column == "stored" and cell.canonicaliser == "uuid"
     assert canonical_field_value(IDS[0], cell.canonicaliser) == canonical_field_value(UUID(IDS[0]).bytes, cell.canonicaliser)
+
+
+@pytest.mark.parametrize("kind", ["fhir", "rest"])
+@pytest.mark.parametrize("route", ["views", "judged_by"])
+def test_unchanged_storage_cannot_confirm_a_misleading_update_read(
+    service, tmp_path, kind, route
+):
+    with httpx.Client() as client:
+        cfg, params, provider = configured(service, client, "update", route, kind)
+        baseline = tmp_path / "baseline.json"
+        capture_baseline(cfg, params, baseline, read_provider=provider)
+        # No database write at all. The reader alone claims the requested value.
+        if kind == "fhir":
+            service.transform = lambda rows: [
+                dict(record, value="created") if record["id"] == IDS[0] else record
+                for record in rows
+            ]
+        else:
+            service.transform = lambda rows: [
+                {"id": record["id"], "reading": "created" if record["id"] == IDS[0] else record["value"]}
+                for record in rows
+            ]
+        result = checked(cfg, params, provider, baseline)
+    assert service.db.execute("SELECT value FROM objects WHERE row_id=10").fetchone() == ("old0",)
+    assert result["receipt"]["checked"]["delta"] == "held"
+    assert result["receipt"]["checked"]["frame"] == "refuted"
+    assert result["receipt"]["outcome"] != "verified"
+    assert result["evidence"]["frame"]["collateral_fields"] == ["value"]
