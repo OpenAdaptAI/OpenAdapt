@@ -240,9 +240,6 @@ def main() -> None:
     services = EngineServices(config, db=db, storage=storage, audit=audit)
 
     handler = IPCHandler(config=config, services=services)
-    # No recording is active yet: drop a Chrome extension host registration a
-    # crash or a since-disabled opt-in left behind (OpenAdapt#1872).
-    handler.dispatcher.extension_host.sweep()
 
     # Both local wires use one dispatcher. The socket server keeps the Tauri
     # event sink and adds its filtered tray broadcast sink.
@@ -283,7 +280,6 @@ def main() -> None:
             services.runner.stop()
         socket_server.stop()
         monitor.stop()
-        handler.dispatcher.extension_host.sweep()
         try:
             handler.dispatcher.close_shadow()
         except Exception as exc:

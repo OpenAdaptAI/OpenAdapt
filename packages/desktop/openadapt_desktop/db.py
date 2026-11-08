@@ -188,17 +188,6 @@ CREATE TABLE IF NOT EXISTS task_targets (
     updated_at TEXT NOT NULL
 );
 
--- Completion authority for recordings a Chrome extension host could write
--- into. A row is committed as 'pending' before the host is registered. Only a
--- stop that proved extension writes quiescent moves it to 'completed', in one
--- transaction. Any other state, or an unreadable row, means the capture is never
--- compiled, so a failed or unrecorded stop fails closed by construction.
-CREATE TABLE IF NOT EXISTS capture_completions (
-    capture_id TEXT PRIMARY KEY,
-    state TEXT NOT NULL CHECK (state IN ('pending', 'completed', 'stop_failed')),
-    updated_at TEXT NOT NULL
-);
-
 CREATE INDEX IF NOT EXISTS idx_captures_review ON captures(review_status);
 CREATE INDEX IF NOT EXISTS idx_work_items_workflow ON work_items(workflow_id, status);
 CREATE INDEX IF NOT EXISTS idx_captures_tier ON captures(tier);
@@ -486,46 +475,6 @@ class IndexDB:
         vals = list(fields.values()) + [capture_id]
         self.conn.execute(f"UPDATE captures SET {sets} WHERE capture_id = ?", vals)
         self.conn.commit()
-
-    def begin_capture_completion(self, capture_id: str) -> None:
-        """Commit this capture as not yet completed. Raises on failure.
-
-        Called before anything can write into the capture, so its default
-        durable state is "not compilable".
-        """
-        with self.conn:
-            self.conn.execute(
-                "INSERT INTO capture_completions (capture_id, state, updated_at)"
-                " VALUES (?, 'pending', ?)",
-                (capture_id, _now()),
-            )
-
-    def complete_capture(self, capture_id: str) -> None:
-        """Atomically move a pending capture to completed. Raises otherwise."""
-        with self.conn:
-            moved = self.conn.execute(
-                "UPDATE capture_completions SET state = 'completed', updated_at = ?"
-                " WHERE capture_id = ? AND state = 'pending'",
-                (_now(), capture_id),
-            ).rowcount
-            if moved != 1:
-                raise RuntimeError(f"capture {capture_id} has no pending completion record")
-
-    def mark_capture_stop_failed(self, capture_id: str) -> None:
-        """Label a pending capture's failed stop. It stays uncompilable either way."""
-        with self.conn:
-            self.conn.execute(
-                "UPDATE capture_completions SET state = 'stop_failed', updated_at = ?"
-                " WHERE capture_id = ? AND state = 'pending'",
-                (_now(), capture_id),
-            )
-
-    def capture_completion(self, capture_id: str) -> str | None:
-        """This capture's completion state, or None when it has no record."""
-        row = self.conn.execute(
-            "SELECT state FROM capture_completions WHERE capture_id = ?", (capture_id,)
-        ).fetchone()
-        return None if row is None else str(row["state"])
 
     def delete_capture(self, capture_id: str) -> None:
         """Delete a capture record from the database."""
