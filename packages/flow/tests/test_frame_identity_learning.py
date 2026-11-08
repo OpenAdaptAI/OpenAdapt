@@ -334,3 +334,74 @@ def test_snapshot_retention_is_opt_in_and_never_serialized(service):
     assert ordinary.tables["objects"].rows == retained.tables["objects"].rows
     assert IDS[0] not in json.dumps(retained.to_json())
     assert "old0" not in json.dumps(retained.to_json())
+
+
+def deletion_document(service):
+    doc = document(service)
+    del doc["record"]
+    doc["effects"] = [{"kind": "record_written", "match": {"value": "old0"},
+                       "expected_count": 0, "timeout_s": 0}]
+    return doc
+
+
+@pytest.mark.parametrize("also_delete_other", [False, True])
+def test_authenticated_old_selection_handles_deleted_records(service, tmp_path, also_delete_other):
+    with httpx.Client() as client:
+        _, cfg, provider = setup(service, client, doc=deletion_document(service))
+        baseline = tmp_path / "baseline.json"
+        capture_baseline(cfg, PARAMS, baseline, read_provider=provider)
+        assert IDS[0] not in baseline.read_text() and "old0" not in baseline.read_text()
+        service.write("DELETE FROM objects WHERE row_id=10")
+        if also_delete_other:
+            service.write("DELETE FROM objects WHERE row_id=11")
+        result = verify_run(cfg, params=PARAMS, run_record={"executor_kind": "agent", "executor_id": "synthetic"},
+                            authorization_ref="test", baseline_path=baseline, read_provider=provider)
+        assert result["receipt"]["checked"]["frame"] == ("refuted" if also_delete_other else "held")
+        if not also_delete_other:
+            assert result["receipt"]["outcome"] == "verified"
+        else:
+            assert result["receipt"]["outcome"] != "verified"
+
+
+def test_declared_identity_change_uses_real_current_row_and_keeps_column_guard(service, tmp_path):
+    doc = document(service)
+    del doc["record"]
+    doc["effects"] = [{"kind": "field_equals", "match": {"value": "old0"}, "field": "id", "value": IDS[2], "timeout_s": 0}]
+    doc["frame"]["target_fields"] = ["external_key"]
+    with httpx.Client() as client:
+        _, cfg, provider = setup(service, client, doc=doc)
+        baseline = tmp_path / "baseline.json"
+        capture_baseline(cfg, PARAMS, baseline, read_provider=provider)
+        service.write("UPDATE objects SET external_key=? WHERE row_id=10", (IDS[2],))
+        result = verify_run(cfg, params=PARAMS, run_record={"executor_kind": "agent", "executor_id": "synthetic"},
+                            authorization_ref="test", baseline_path=baseline, read_provider=provider)
+        assert result["receipt"]["checked"]["frame"] == "held"
+        assert result["receipt"]["outcome"] == "verified"
+
+
+@pytest.mark.parametrize("drift", ["selected-row", "index", "parameters", "effects"])
+def test_old_selection_is_authenticated_and_bound_to_this_contract(service, tmp_path, drift):
+    from openadapt_flow.verify_run import FRAME_IDENTITY_DETAIL
+
+    with httpx.Client() as client:
+        _, cfg, provider = setup(service, client, doc=deletion_document(service))
+        baseline = tmp_path / "baseline.json"
+        capture_baseline(cfg, PARAMS, baseline, read_provider=provider)
+        payload = json.loads(baseline.read_text())
+        data = payload["state"]["detail"][FRAME_IDENTITY_DETAIL][""]["data"]
+        if drift == "selected-row":
+            data["declared"] = list(data["index"].values())
+        elif drift == "index":
+            data["index"] = {}
+        baseline.write_text(json.dumps(payload))
+        params = {"value": "different"} if drift == "parameters" else PARAMS
+        if drift == "effects":
+            cfg.effects[0] = cfg.effects[0].model_copy(update={"expected_count": 1})
+        if drift == "parameters":
+            provider = CompleteReadProvider(cfg.verifier, params, provider.resolve(cfg.verifier, PARAMS))
+        service.write("DELETE FROM objects WHERE row_id=10")
+        result = verify_run(cfg, params=params, run_record={"executor_kind": "agent", "executor_id": "synthetic"},
+                            authorization_ref="test", baseline_path=baseline, read_provider=provider)
+        assert result["receipt"]["checked"]["frame"] == "not_checked"
+        assert result["receipt"]["outcome"] != "verified"
+        assert "baseline identity evidence" in result["evidence"]["frame"]["reason"]

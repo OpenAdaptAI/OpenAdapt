@@ -1196,11 +1196,68 @@ def _declared_by_surface(
     return keys
 
 
+def _frame_surface_routes(cfg: VerifyConfig, effects: Sequence[Effect]) -> dict[str, list[str]]:
+    """Use the same content-twin routes before and after a write."""
+    from openadapt_flow.runtime.effects.surfaces import surface_of
+
+    if not cfg.verifier.surfaces:
+        return {str(i): [""] for i in range(len(effects))}
+
+    def read_of(name: str) -> str:
+        sub = cfg.verifier.surfaces.get(name)
+        if sub is None:
+            return name
+        shape = sub.model_dump(mode="json", exclude={"records_drop_fields"})
+        return json.dumps(shape, sort_keys=True, default=str)
+
+    views: dict[str, list[str]] = {}
+    for name in cfg.verifier.surfaces:
+        views.setdefault(read_of(name), []).append(name)
+    routes = {}
+    for i, effect in enumerate(effects):
+        own = surface_of(effect) or ""
+        routes[str(i)] = views.get(read_of(own), [own]) if own in cfg.verifier.surfaces else [own]
+    return routes
+
+
+def _identity_evidence_mac(data: Any, key: bytes) -> str:
+    raw = json.dumps(data, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    return hmac.new(key, b"openadapt.frame-identity-evidence/v1\0" + raw, hashlib.sha256).hexdigest()
+
+
+def _identity_effect_binding(effects: Sequence[Effect], params: Mapping[str, object], key: bytes) -> str:
+    return _identity_evidence_mac({"effects": [e.model_dump(mode="json") for e in effects], "params": dict(params)}, key)
+
+
+def _mapped_baseline_evidence(cfg: VerifyConfig, state: EffectState, indexes: Mapping[str, dict[str, str]], params: Mapping[str, object], salt: bytes) -> dict[str, Any]:
+    """Authenticate old selectors before sealing removes the original values."""
+    from openadapt_flow.runtime.effects.effect import record_matches
+    from openadapt_flow.runtime.effects.frame import declared_selectors
+    from openadapt_flow.runtime.effects.frame_identity import match_records
+
+    if cfg.frame is None:
+        return {}
+    effects = [e.resolve(params) for e in cfg.effects]
+    routes = _frame_surface_routes(cfg, effects)
+    key = _mac_key(salt)
+    bound = _identity_effect_binding(effects, params, key)
+    result = {}
+    for surface, binding in cfg.frame.identities.items():
+        records = _surface_records(state, surface)
+        row_keys = match_records(binding, records, indexes[surface], key)
+        selectors = [s for i, e in enumerate(effects) if surface in routes.get(str(i), ()) for s in declared_selectors(e)]
+        typed = _surface_config(cfg, surface).kind == "sql"
+        selected = [row_key for record, row_key in zip(records, row_keys) if any(record_matches(dict(record), sel, text_numbers=typed) for sel in selectors)]
+        data = {"index": indexes[surface], "declared": sorted(selected), "effects": bound, "read_config": binding.read_config_sha256}
+        result[surface] = {"data": data, "mac": _identity_evidence_mac(data, key)}
+    return result
+
+
 def _map_frame_rows(
     cfg: VerifyConfig, before: EffectState, after: Any, db: _DatabaseFrame,
     slices: Mapping[str, tuple[EffectState, Optional[list[dict[str, Any]]]]],
     effects: Sequence[Effect], routes: Mapping[str, Sequence[str]], salt: bytes,
-    declared: dict[str, set[str]],
+    declared: dict[str, set[str]], params: Mapping[str, object],
 ) -> None:
     from openadapt_flow.runtime.effects.effect import record_matches
     from openadapt_flow.runtime.effects.frame import declared_selectors
@@ -1212,23 +1269,37 @@ def _map_frame_rows(
     previous = before.detail.get(FRAME_IDENTITY_DETAIL)
     if not isinstance(previous, dict):
         raise VerifyRunError("baseline has no bound identity index")
+    key = _mac_key(salt)
+    bound = _identity_effect_binding(effects, params, key)
     for surface, binding in cfg.frame.identities.items():
-        prior = previous.get(surface)
+        envelope = previous.get(surface)
+        if not isinstance(envelope, dict) or set(envelope) != {"data", "mac"} or type(envelope["mac"]) is not str:
+            raise VerifyRunError("baseline identity evidence is malformed")
+        data = envelope["data"]
+        if not isinstance(data, dict) or not hmac.compare_digest(envelope["mac"], _identity_evidence_mac(data, key)):
+            raise VerifyRunError("baseline identity evidence authentication failed")
+        if set(data) != {"index", "declared", "effects", "read_config"} or data["effects"] != bound or data["read_config"] != binding.read_config_sha256:
+            raise VerifyRunError("baseline identity evidence belongs to another read or effect contract")
+        prior, selected = data["index"], data["declared"]
         if not isinstance(prior, dict) or any(type(k) is not str or type(v) is not str for k, v in prior.items()):
             raise VerifyRunError("baseline identity index is malformed")
         old_table = db.old.tables.get(binding.table) if db.old is not None else None
         if old_table is None or set(prior.values()) != set(old_table.rows) or len(prior) != len(old_table.rows):
             raise VerifyRunError("baseline identity index does not cover its table")
+        if not isinstance(selected, list) or any(type(k) is not str or k not in prior.values() for k in selected) or len(selected) != len(set(selected)):
+            raise VerifyRunError("baseline selected row keys are malformed")
         old_state, post_records = slices[surface]
-        if post_records is None:
+        if post_records is None or not old_state.reachable:
             raise VerifyRunError("mapped surface is unreadable")
+        # The old selection came from actual pre-write records and is bound
+        # to these exact effects/parameters. Sealed REMOVED/CHANGED markers
+        # are never interpreted as actual application identities or values.
+        keys = set(selected)
         selectors = [s for i, e in enumerate(effects) if surface in routes.get(str(i), ()) for s in declared_selectors(e)]
-        keys = set()
-        for records, index in ((old_state.records, prior), (post_records, current[surface])):
-            row_keys = match_records(binding, records, index, _mac_key(salt))
-            for record, row_key in zip(records, row_keys):
-                if any(record_matches(dict(record), sel, text_numbers=old_state.substrate == "sql") for sel in selectors):
-                    keys.add(row_key)
+        row_keys = match_records(binding, post_records, current[surface], key)
+        for record, row_key in zip(post_records, row_keys):
+            if any(record_matches(dict(record), sel, text_numbers=old_state.substrate == "sql") for sel in selectors):
+                keys.add(row_key)
         declared[binding.table] = keys
 
 
@@ -1253,8 +1324,6 @@ def judge_run_frame(
     (``late_write.LaterWindow``) whose own frames already judged the rows
     and audit entries in them.
     """
-
-    from openadapt_flow.runtime.effects.surfaces import surface_of
 
     spec = cfg.frame or FrameSpec()
     # The database first, then the surfaces: a row a surface judges
@@ -1287,23 +1356,7 @@ def judge_run_frame(
     slices: dict[str, tuple[EffectState, Optional[list[dict[str, Any]]]]] = {}
     routes: Optional[dict[str, list[str]]] = None
     if isinstance(routed, dict) and routed:
-        # Surfaces that differ only in dropped fields (a content twin) are
-        # views of one read: a record an effect declares in one is declared
-        # in each.
-        def read_of(name: str) -> str:
-            sub = cfg.verifier.surfaces.get(name)
-            if sub is None:
-                return name
-            shape = sub.model_dump(mode="json", exclude={"records_drop_fields"})
-            return json.dumps(shape, sort_keys=True, default=str)
-
-        views: dict[str, list[str]] = {}
-        for name in routed:
-            views.setdefault(read_of(name), []).append(name)
-        routes = {}
-        for i, effect in enumerate(bound_effects):
-            own = surface_of(effect) or ""
-            routes[str(i)] = views.get(read_of(own), [own]) if own in routed else [own]
+        routes = _frame_surface_routes(cfg, bound_effects)
         for name in [] if database_only else routed:
             sub = before.detail.get(name, {}) if isinstance(before.detail, dict) else {}
             post = (
@@ -1370,7 +1423,7 @@ def judge_run_frame(
         identities.update({name: KEY for name in db.slices})
         if spec.identities and not database_only:
             try:
-                _map_frame_rows(cfg, before, after, db, slices, bound_effects, routes, salt, declared_rows)
+                _map_frame_rows(cfg, before, after, db, slices, bound_effects, routes, salt, declared_rows, params)
             except (ValueError, TypeError) as exc:
                 return FrameVerdict(status="not_checked", reason=f"frame identity mapping refused: {exc}")
     audit_before: Optional[list[dict[str, Any]]] = None
@@ -1857,7 +1910,7 @@ def capture_baseline(
         state = state.model_copy(update={"detail": {**state.detail, **detail}})
     indexes = _frame_identity_indexes(cfg, state, snapshot, salt)
     if indexes:
-        state = state.model_copy(update={"detail": {**state.detail, FRAME_IDENTITY_DETAIL: indexes}})
+        state = state.model_copy(update={"detail": {**state.detail, FRAME_IDENTITY_DETAIL: _mapped_baseline_evidence(cfg, state, indexes, params, salt)}})
     state = _seal_state(cfg, state, salt)
     payload = {
         "schema_version": BASELINE_SCHEMA,
