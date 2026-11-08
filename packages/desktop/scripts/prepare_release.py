@@ -20,12 +20,16 @@ files, and adds a dated section at the top of CHANGELOG.md.
 from __future__ import annotations
 
 import argparse
+import ast
+import copy
 import datetime
 import difflib
+import json
 import re
 import subprocess
 import sys
 import tempfile
+import tomllib
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -148,7 +152,163 @@ def _path_state(root: Path, ref: str, path: str) -> tuple[str, str] | None:
     return mode, oid
 
 
-def _clean_path_merge(root: Path, path: str, parents: tuple[str, ...]) -> tuple[str, str] | None:
+# These are the fields written by set_engine_version(), not every key named
+# "version" in the same documents. Dependency and plugin versions stay literal.
+RELEASE_VERSION_FIELDS = {
+    "pyproject.toml": (("project", "version"),),
+    "uv.lock": (),  # The unique editable self-package is selected after parsing.
+    "package.json": (("version",),),
+    "package-lock.json": (("version",), ("packages", "", "version")),
+    "src-tauri/tauri.conf.json": (("version",),),
+    "src-tauri/Cargo.toml": (("package", "version"),),
+    "src-tauri/Cargo.lock": (),
+    "openadapt_desktop/__init__.py": (),
+}
+RELEASE_VERSION = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)")
+
+
+def _parsed_release_version_spans(path: str, text: str) -> list[tuple[int, int]]:
+    """Locate literal fields using a parsed-document single-edit witness.
+
+    Replacing a candidate literal must change exactly the typed field we own.
+    This avoids reserializing a document or mistaking a dependency, comment or
+    embedded string for the engine version. Unsupported spelling refuses.
+    """
+    if path == "openadapt_desktop/__init__.py":
+        tree = ast.parse(text)
+        writes = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Name)
+            and node.id == "__version__"
+            and isinstance(node.ctx, ast.Store)
+        ]
+        assignments = [
+            node
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id == "__version__"
+        ]
+        if len(writes) != 1 or len(assignments) != 1:
+            raise ValueError("release module has ambiguous version assignments")
+        value = assignments[0].value
+        if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
+            raise ValueError("release module version is not a literal")
+        # AST columns are UTF-8 byte offsets, whereas all returned spans are
+        # character offsets. Restrict the literal to one source line.
+        if value.lineno != value.end_lineno:
+            raise ValueError("release module version has unsupported spelling")
+        lines = text.splitlines(keepends=True)
+        line = lines[value.lineno - 1]
+        prefix = line.encode("utf-8")[: value.col_offset].decode("utf-8")
+        token = line.encode("utf-8")[value.col_offset : value.end_col_offset].decode("utf-8")
+        if re.fullmatch(r"([\"'])" + RELEASE_VERSION.pattern + r"\1", token) is None:
+            raise ValueError("release module version has unsupported spelling")
+        start = sum(map(len, lines[: value.lineno - 1])) + len(prefix) + 1
+        return [(start, start + len(value.value))]
+
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("release JSON has duplicate object keys")
+            result[key] = value
+        return result
+
+    def invalid_constant(value):
+        raise ValueError(f"release JSON contains a non-JSON constant: {value}")
+
+    def parse(source):
+        if path.endswith(".json"):
+            return json.loads(
+                source, object_pairs_hook=unique_object, parse_constant=invalid_constant
+            )
+        return tomllib.loads(source)
+
+    data = parse(text)
+    fields = RELEASE_VERSION_FIELDS[path]
+    if path in {"package.json", "package-lock.json"}:
+        if data.get("name") != "openadapt-desktop":
+            raise ValueError("release JSON has the wrong package identity")
+        if path == "package-lock.json" and data["packages"][""].get("name") != "openadapt-desktop":
+            raise ValueError("release JSON lock has the wrong self-package identity")
+    elif path in {"pyproject.toml", "src-tauri/Cargo.toml"}:
+        section = "project" if path == "pyproject.toml" else "package"
+        if data.get(section, {}).get("name") != "openadapt-desktop":
+            raise ValueError("release metadata has the wrong package identity")
+    elif path in {"uv.lock", "src-tauri/Cargo.lock"}:
+        packages = data.get("package")
+        if not isinstance(packages, list):
+            raise ValueError("release lock has no package array")
+        indexes = [
+            i
+            for i, item in enumerate(packages)
+            if isinstance(item, dict) and item.get("name") == "openadapt-desktop"
+        ]
+        if len(indexes) != 1:
+            raise ValueError("release lock has ambiguous self-package identities")
+        index = indexes[0]
+        if path == "uv.lock" and packages[index].get("source") != {"editable": "."}:
+            raise ValueError("release lock self-package is not the editable project")
+        fields = (("package", index, "version"),)
+
+    spans = []
+    versions = set()
+    for field in fields:
+        owner = data
+        for key in field[:-1]:
+            owner = owner[key]
+        version = owner[field[-1]]
+        if not isinstance(version, str) or RELEASE_VERSION.fullmatch(version) is None:
+            raise ValueError("release field does not contain a strict version")
+        versions.add(version)
+        marker = "0.0.1" if version == "0.0.0" else "0.0.0"
+        expected = copy.deepcopy(data)
+        target = expected
+        for key in field[:-1]:
+            target = target[key]
+        target[field[-1]] = marker
+        candidates = list(re.finditer(r"([\"'])" + re.escape(version) + r"\1", text))
+        if len(candidates) > 64:
+            raise ValueError("release field exceeds its literal-candidate bound")
+        witnessed = []
+        for match in candidates:
+            start, end = match.start() + 1, match.end() - 1
+            try:
+                changed = parse(text[:start] + marker + text[end:])
+            except (ValueError, TypeError):
+                continue
+            if changed == expected:
+                witnessed.append((start, end))
+        if len(witnessed) != 1:
+            raise ValueError("release field has no unique literal-span witness")
+        spans.extend(witnessed)
+    if len(versions) != 1 or len(set(spans)) != len(fields):
+        raise ValueError("release file has inconsistent or ambiguous version fields")
+    return spans
+
+
+def _release_version_spans(path: str, text: str) -> list[tuple[int, int]]:
+    try:
+        return _parsed_release_version_spans(path, text)
+    except (KeyError, IndexError, TypeError, AttributeError, SyntaxError) as exc:
+        raise ValueError("release document has malformed or missing version fields") from exc
+
+
+def _release_content(path: str, content: bytes, version: str) -> bytes:
+    if RELEASE_VERSION.fullmatch(version) is None:
+        raise ValueError("release normalization requires a strict version")
+    text = content.decode("utf-8")
+    for start, end in sorted(_release_version_spans(path, text), reverse=True):
+        text = text[:start] + version + text[end:]
+    return text.encode("utf-8")
+
+
+def _clean_path_merge(
+    root: Path, path: str, parents: tuple[str, ...], resolution: str
+) -> tuple[str, str] | None:
     """Reconstruct one path using Git's text three-way merge, without attributes."""
     if len(parents) != 2:
         raise ValueError("a net Desktop merge has unsupported parent metadata")
@@ -157,10 +317,13 @@ def _clean_path_merge(root: Path, path: str, parents: tuple[str, ...]) -> tuple[
         raise ValueError("a net Desktop merge has no unique merge base")
     ancestor = _path_state(root, bases[0], path)
     ours, theirs = (_path_state(root, parent, path) for parent in parents)
-    if ours == theirs or theirs == ancestor:
-        return ours
-    if ours == ancestor:
-        return theirs
+    unchanged = (
+        ours if ours == theirs or theirs == ancestor else theirs if ours == ancestor else None
+    )
+    if (ours == theirs or theirs == ancestor or ours == ancestor) and (
+        path not in RELEASE_VERSION_FIELDS or _path_state(root, resolution, path) == unchanged
+    ):
+        return unchanged
     if any(
         value is None or value[0] not in {"100644", "100755"} for value in (ancestor, ours, theirs)
     ):
@@ -175,6 +338,7 @@ def _clean_path_merge(root: Path, path: str, parents: tuple[str, ...]) -> tuple[
         raise ValueError("a net Desktop merge has unexplained file modes")
     with tempfile.TemporaryDirectory(prefix="desktop-release-merge-") as directory:
         files = []
+        contents = []
         for label, value in (("ours", ours), ("base", ancestor), ("theirs", theirs)):
             size = int(_git(root, "cat-file", "-s", value[1]).strip())
             if not 0 <= size <= 8 * 1024 * 1024:
@@ -184,12 +348,40 @@ def _clean_path_merge(root: Path, path: str, parents: tuple[str, ...]) -> tuple[
             ).stdout
             if len(content) != size or b"\0" in content:
                 raise ValueError("a net Desktop merge has non-text or incomplete blob data")
+            contents.append(content)
             target = Path(directory) / label
             target.write_bytes(content)
             files.append(str(target))
         merged = subprocess.run(
             ["git", "merge-file", "--stdout", *files], cwd=root, capture_output=True
         )
+        if path in RELEASE_VERSION_FIELDS:
+            # A merge may select a generated engine version, but it may not
+            # invent any other bytes. Normalize only witnessed literal spans,
+            # then require the same exact three-way reconstruction as runtime.
+            resolved = _path_state(root, resolution, path)
+            if resolved is None or resolved[0] != mode:
+                raise ValueError("release resolution has unexplained file modes")
+            size = int(_git(root, "cat-file", "-s", resolved[1]).strip())
+            if not 0 <= size <= 8 * 1024 * 1024:
+                raise ValueError("release resolution exceeds its content bound")
+            actual = subprocess.run(
+                ["git", "cat-file", "blob", resolved[1]],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            ).stdout
+            if len(actual) != size or b"\0" in actual:
+                raise ValueError("release resolution has incomplete or non-text data")
+            if merged.returncode != 0 or actual != merged.stdout:
+                text = actual.decode("utf-8")
+                spans = _release_version_spans(path, text)
+                version = text[spans[0][0] : spans[0][1]]
+                for target, content in zip(files, contents, strict=True):
+                    Path(target).write_bytes(_release_content(path, content, version))
+                merged = subprocess.run(
+                    ["git", "merge-file", "--stdout", *files], cwd=root, capture_output=True
+                )
         if merged.returncode != 0:
             raise ValueError("a net Desktop merge resolution has no clean combination")
     oid = (
@@ -501,7 +693,7 @@ def commits_for_net_diff(root: Path, base: str, head: str) -> list[Commit]:
                 if after not in parent_states or after not in observed:
                     merge_key = (sha, path)
                     if merge_key not in merge_cache:
-                        merge_cache[merge_key] = _clean_path_merge(root, path, parents)
+                        merge_cache[merge_key] = _clean_path_merge(root, path, parents, sha)
                     if merge_cache[merge_key] != after:
                         raise ValueError("a net Desktop merge resolution has unexplained content")
                 intent = set()
