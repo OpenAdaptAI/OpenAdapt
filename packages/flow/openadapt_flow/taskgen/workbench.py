@@ -1,7 +1,7 @@
 """The task-generation workbench: one synthetic records app per profile.
 
-    python -m openadapt_flow.taskgen.workbench mockmed --port 9771 \\
-        --dsn "host=127.0.0.1 port=9770 user=wb_admin dbname=wb_mockmed"
+    python -m openadapt_flow.taskgen.workbench <app> --port 9771 \\
+        --dsn "host=127.0.0.1 port=9770 user=wb_admin dbname=wb_<app>"
 
 A small server-rendered web app whose tables, screens and operations come
 from a profile (:mod:`openadapt_flow.taskgen.profile`). Its store is a real

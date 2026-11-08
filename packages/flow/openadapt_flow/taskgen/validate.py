@@ -1,6 +1,6 @@
 """Validate a task pack: every task's oracle must tell right from wrong.
 
-    python -m openadapt_flow.taskgen.validate packs/mockmed --profile mockmed \\
+    python -m openadapt_flow.taskgen.validate packs/<app> --profile <app> \\
         --pg "host=127.0.0.1 port=9770 user=wb_admin" --workers 2
 
 For each task, on a fresh copy of the app:
