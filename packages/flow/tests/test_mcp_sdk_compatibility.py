@@ -25,7 +25,7 @@ from openadapt_flow.compile_agent.emit import emit_mcp
 from openadapt_flow.emit.mcp_tool import emit_mcp_server
 from openadapt_flow.ir import ActionKind, Step, Workflow
 
-from tests._mcp_tools import call_generated_tool, sdk_modules
+from tests._mcp_tools import call_generated_tool, registered_server, sdk_modules
 
 ENTRY_POINTS = ("web", "linux", "citrix", "compiled")
 
@@ -133,7 +133,17 @@ def test_genuine_sdk_registers_and_dispatches_generated_tool(
     shapes: list[str] = []
     result = asyncio.run(call_generated_tool(namespace, supplied, observed_shapes=shapes))
     server_type, _, _ = sdk_modules()
-    assert shapes == (["CallToolResult"] if server_type.__name__ == "MCPServer" else ["content_and_structured_tuple"])
+    expected_shape = "CallToolResult"
+    if server_type.__name__ != "MCPServer":
+        public_tools = asyncio.run(registered_server(namespace).list_tools())
+        assert len(public_tools) == 1
+        # FastMCP returns structured content only when it advertises a schema.
+        expected_shape = (
+            "content_list"
+            if public_tools[0].outputSchema is None
+            else "content_and_structured_tuple"
+        )
+    assert shapes == [expected_shape]
     if entry == "web":
         assert result["success"] is False and result["outcome"] == "REFUSED"
         assert result["detail"] == "synthetic admission refusal"
