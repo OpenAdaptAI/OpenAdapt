@@ -759,7 +759,8 @@ def test_sql_duplicate_aliases_are_not_a_lossless_complete_read(service):
 
 
 @pytest.mark.parametrize(
-    "failure", ["connect", "execute", "fetch", "description", "no-columns", "short", "long"]
+    "failure",
+    ["connect", "execute", "fetch", "description", "no-columns", "short", "long"],
 )
 def test_sql_complete_read_requires_successful_lossless_dbapi_result(service, failure):
     from openadapt_flow.runtime.effects import Effect, EffectKind, Verdict
