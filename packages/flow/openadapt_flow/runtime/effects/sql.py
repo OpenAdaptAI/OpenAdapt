@@ -441,7 +441,11 @@ class SqlRecordVerifier(VerifierAdapterBase):
             if description is None:
                 return None  # not a result-set query -> unusable
             columns = [str(col[0]) for col in description]
+            if not columns or len(set(columns)) != len(columns):
+                return None  # A dict cannot preserve duplicate result columns.
             rows = cursor.fetchall()
+            if any(len(row) != len(columns) for row in rows):
+                return None  # zip must not silently drop cells or column names.
             return drop_record_fields(
                 [dict(zip(columns, map(read_cell, row))) for row in rows],
                 self.drop_fields,
@@ -462,6 +466,8 @@ class SqlRecordVerifier(VerifierAdapterBase):
             substrate=self.substrate,
             reachable=records is not None,
             records=records or [],
+            # Complete declared SELECT result, not proof of whole-table scope.
+            readback_complete=records is not None,
             detail={"query": self.query},
         )
 
