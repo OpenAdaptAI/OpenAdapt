@@ -725,7 +725,8 @@ class FrameVerdict:
             **({"database": self.database} if self.database is not None else {}),
             **(
                 {"coverage": {"unverified_columns": self.unverified_columns}}
-                if self.unverified_columns else {}
+                if self.unverified_columns
+                else {}
             ),
             **(
                 {"versions": self.versions.evidence()}
@@ -966,16 +967,21 @@ def judge_frame(
             return fields
         binding = item[1]
         return {
-            cell.column for field, cell in (binding.field_bindings or {}).items()
+            cell.column
+            for field, cell in (binding.field_bindings or {}).items()
             if field in fields
         }
 
     def declared_fields_for(name: str) -> set[str]:
         surface = correspondences[name][0]
-        return declared_fields([
-            effect for i, effect in enumerate(effects)
-            if routes is None or surface in routes.get(str(i), ())
-        ])
+        return declared_fields(
+            [
+                effect
+                for i, effect in enumerate(effects)
+                if routes is None or surface in routes.get(str(i), ())
+            ]
+        )
+
     may_change = set(spec.target_fields) if spec.target_fields is not None else written
     if spec.target_fields_by_surface is not None:
         # Every field any declared row may change, for the attribution check.
@@ -1048,7 +1054,8 @@ def judge_frame(
             return []
         allowed = (
             stored_fields(name, declared_fields_for(name))
-            if name in correspondences else written
+            if name in correspondences
+            else written
         )
         if name in correspondences:
             binding = correspondences[name][1]
@@ -1531,9 +1538,14 @@ def judge_frame(
         by_surface = spec.target_fields_by_surface
         if by_surface is None:
             fields = (
-                set(spec.target_fields) if spec.target_fields is not None
-                else declared_fields_for(name)
-            ) if name in correspondences else may_change
+                (
+                    set(spec.target_fields)
+                    if spec.target_fields is not None
+                    else declared_fields_for(name)
+                )
+                if name in correspondences
+                else may_change
+            )
         elif name in by_surface:
             fields = set(by_surface[name])
         else:
@@ -1735,13 +1747,23 @@ def judge_frame(
             refs[(name, str(key))] = ref_of(name, key, before, after)
             if is_declared:
                 unknown: set[str] = set()
+                known_compared = False
                 if after is not None and name in correspondences:
                     binding = correspondences[name][1]
                     cells = binding.field_bindings or {}
                     reader_values = (column_values or {}).get(name, {}).get(str(key))
                     if reader_values is None:
-                        return _not_checked("declared target has no paired current read", mode)
+                        return _not_checked(
+                            "declared target has no paired current read", mode
+                        )
                     known = {cell.column for cell in cells.values()}
+                    if name not in hashers or (
+                        before is not None and not known.issubset(before)
+                    ):
+                        return _not_checked(
+                            "bound target columns lack baseline cell comparisons", mode
+                        )
+                    known_compared = True
                     unknown = set(after) - known - {KEY, ROW}
                     unverified_columns[name] = sorted(
                         set(unverified_columns.get(name, ())) | unknown
@@ -1751,16 +1773,34 @@ def judge_frame(
                         cell = cells.get(surface_field)
                         if cell is None:
                             continue
-                        if surface_field not in reader_values or cell.column not in after:
-                            return _not_checked("bound target field is unavailable", mode)
+                        if (
+                            surface_field not in reader_values
+                            or cell.column not in after
+                        ):
+                            return _not_checked(
+                                "bound target field is unavailable", mode
+                            )
                         try:
-                            equal = canonical_field_value(after[cell.column], cell.canonicaliser) == canonical_field_value(reader_values[surface_field], cell.canonicaliser)
+                            equal = canonical_field_value(
+                                after[cell.column], cell.canonicaliser
+                            ) == canonical_field_value(
+                                reader_values[surface_field], cell.canonicaliser
+                            )
                         except FrameIdentityError:
                             equal = False
                         if not equal:
                             wrong.append(cell.column)
                     if wrong:
-                        collateral.append(FrameChange(name, "changed" if before else "added", "self", sorted(set(wrong)), on_target=True, key=key))
+                        collateral.append(
+                            FrameChange(
+                                name,
+                                "changed" if before else "added",
+                                "self",
+                                sorted(set(wrong)),
+                                on_target=True,
+                                key=key,
+                            )
+                        )
                 ref = refs[(name, str(key))][0]
                 if ref is None:
                     return _not_checked(
@@ -1799,7 +1839,11 @@ def judge_frame(
                     continue  # a removed target: the delta check's case
                 fields = changed(name, before, after)  # type: ignore[arg-type]
                 row_may = may_change_for(name)
-                stray = [f for f in fields if f not in row_may and f not in unknown]
+                stray = [
+                    f for f in fields
+                    if f not in row_may and f not in unknown
+                    and not (known_compared and f == "(columns not compared)")
+                ]
                 if other_on_target(name, key, before, after):
                     ref, field = ref_of(name, key, before, after)
                     if (

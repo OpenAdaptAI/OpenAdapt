@@ -757,6 +757,11 @@ def _ref_columns(cfg: VerifyConfig) -> list[str]:
         return []
     cols = {frame.identity_field} if frame.identity_field else set()
     cols.update(binding.column for binding in frame.identities.values())
+    cols.update(
+        cell.column
+        for binding in frame.identities.values()
+        for cell in (binding.field_bindings or {}).values()
+    )
     a = frame.attribution
     if a is not None:
         cols |= {a.record_key} if a.record_key else set()
@@ -1415,16 +1420,22 @@ def _map_frame_rows(
             for row_key in column_values[binding.table]:
                 if row_key in present:
                     continue
-                current_rows.append({
-                    KEY: row_key, ROW: table.rows[row_key][0], **table.values[row_key]
-                })
+                current_rows.append(
+                    {KEY: row_key, ROW: table.rows[row_key][0], **table.values[row_key]}
+                )
                 if row_key in old_table.rows:
-                    previous_rows.append({
-                        KEY: row_key, ROW: old_table.rows[row_key][0],
-                        **unpack(old_table.cell_columns, old_table.rows[row_key][1]),
-                    })
+                    previous_rows.append(
+                        {
+                            KEY: row_key,
+                            ROW: old_table.rows[row_key][0],
+                            **unpack(
+                                old_table.cell_columns, old_table.rows[row_key][1]
+                            ),
+                        }
+                    )
             slices[binding.table] = (
-                baseline.model_copy(update={"records": previous_rows}), current_rows
+                baseline.model_copy(update={"records": previous_rows}),
+                current_rows,
             )
 
 

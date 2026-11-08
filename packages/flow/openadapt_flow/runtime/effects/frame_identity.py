@@ -1,7 +1,9 @@
 """Value correspondence between a selected read and the frame's own rows.
 
-These bindings select rows, not permissions. Column, audit, side-record and
-completeness checks still apply. No record values belong in a binding.
+Row bindings select stored records. Optional field bindings identify the
+target columns checked against the selected read; other target columns are
+reported as unverified coverage. Other rows, tables, audit and completeness
+checks remain strict. No record values belong in a binding.
 """
 
 from __future__ import annotations
@@ -58,7 +60,9 @@ class FrameIdentity(BaseModel):
             if len(set(self.field_columns)) != len(self.field_columns) or any(
                 not column for column in self.field_columns
             ):
-                raise ValueError("stored-column inventory must be unique nonempty names")
+                raise ValueError(
+                    "stored-column inventory must be unique nonempty names"
+                )
             if any(
                 binding.column not in self.field_columns
                 for binding in (self.field_bindings or {}).values()
@@ -191,7 +195,9 @@ def learn_field_bindings(
         for row in rows
     }
     paired = [
-        by_identity[canonical_identity(record[binding.surface_field], binding.canonicaliser)]
+        by_identity[
+            canonical_identity(record[binding.surface_field], binding.canonicaliser)
+        ]
         for record in records
     ]
     fields = set.intersection(*(set(record) for record in records))
