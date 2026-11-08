@@ -412,12 +412,11 @@ def test_the_recheck_tool_says_another_agent_id_is_not_excused(sqlite_bridge) ->
 
 
 def test_recheck_reply_identifies_its_validated_receipt_context(
-    sqlite_bridge, monkeypatch
+    sqlite_bridge, due_now
 ) -> None:
     bridge, db = sqlite_bridge
     first = _provisional(bridge, db)
     second = _second(bridge, db)
-    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
     reply = bridge.dispatch("verify_recheck", {"write_id": first["write_id"]})
     assert reply["verified"] is True
     assert reply["excuse_receipt_sha256s"] == [second["receipt_sha256"]]
