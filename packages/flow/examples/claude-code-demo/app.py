@@ -210,7 +210,9 @@ def serve(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Expenses demo app (SQLite).")
+    parser = argparse.ArgumentParser(
+        description="Expenses demo app (SQLite).", allow_abbrev=False
+    )
     parser.add_argument("--db", default="expenses.db")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8642)

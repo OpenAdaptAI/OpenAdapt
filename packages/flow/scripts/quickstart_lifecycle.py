@@ -408,6 +408,7 @@ def run_lifecycle(
                 *cli,
                 "replay",
                 str(bundle),
+                "--demo-app",
                 "--run-dir",
                 str(artifacts / "baseline-run"),
             ],
@@ -420,6 +421,7 @@ def run_lifecycle(
                 *cli,
                 "replay",
                 str(bundle),
+                "--demo-app",
                 "--drift",
                 "theme",
                 "--save-healed-to",
@@ -471,7 +473,7 @@ def run_lifecycle(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument(
         "--wheel", required=True, help="Wheel path or a glob resolving to one wheel"
     )

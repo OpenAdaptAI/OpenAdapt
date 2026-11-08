@@ -137,7 +137,9 @@ class SqlOracle:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.split("\n\n")[0], allow_abbrev=False
+    )
     parser.add_argument("--bundle-src", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--fixture-state", type=Path, required=True)

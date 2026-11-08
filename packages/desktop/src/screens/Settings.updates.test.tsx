@@ -22,7 +22,7 @@ vi.mock("../lib/engine", async (importOriginal) => {
 import { openExternal, updaterAvailable } from "../lib/engine";
 import { Settings } from "./Settings";
 
-const RELEASES = "https://github.com/OpenAdaptAI/openadapt-desktop/releases";
+const RELEASES = "https://github.com/OpenAdaptAI/OpenAdapt/releases";
 
 function renderSettings() {
   return render(

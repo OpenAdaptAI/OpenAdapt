@@ -309,6 +309,41 @@ def _desktop_capture_meta(session: "CaptureSession") -> Optional[dict[str, Any]]
     return None
 
 
+def _capture_locale_meta(session: "CaptureSession") -> Optional[dict[str, Any]]:
+    """The locale facts capture recorded with the session, else None (#1897).
+
+    Reads ``CaptureSession.locale_facts`` and falls back to the recording's
+    ``config`` JSON (key ``capture_locale``), like the scope metadata above.
+    None means a session recorded before capture persisted these facts. A
+    present but malformed value refuses, so a damaged binding can't drop the
+    check. Unknown facts stay ``None``; they are never filled in from this
+    computer.
+    """
+
+    raw = getattr(session, "locale_facts", None)
+    if raw is None:
+        recording = getattr(session, "_recording", None)
+        config = getattr(recording, "config", None)
+        if isinstance(config, dict):
+            raw = config.get("capture_locale")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(
+            "capture session declares malformed locale facts; expected an "
+            "object or null"
+        )
+    from openadapt_flow.locale_invariants import LocaleInvariants
+
+    try:
+        facts = LocaleInvariants.model_validate(raw)
+    except ValueError as exc:
+        raise ValueError(
+            "capture session locale facts do not match the locale schema"
+        ) from exc
+    return facts.model_dump()
+
+
 def _is_viewport(value: Any) -> TypeGuard[Sequence[float]]:
     """True when ``value`` is an exact positive integer pixel pair."""
     return (
@@ -1124,6 +1159,14 @@ def _convert_key_type(
             f"flow equivalent (t={ts:.3f})"
         )
     name = non_mods[0]
+    if name.lower() == "space" and not mods:
+        # The macOS and X11 observers report the space bar as the named key
+        # ``space`` with no text, so a recording made by an openadapt-capture
+        # that does not merge it into the typed text still types a space.
+        if not text_run["chars"]:
+            text_run["ts"] = ts
+        text_run["chars"].append(" ")
+        return
     mapped = _KEY_NAME_MAP.get(name.lower())
     if mapped is None:
         raise ValueError(f"unmapped key {name!r} at t={ts:.3f}; extend _KEY_NAME_MAP")
@@ -1359,6 +1402,16 @@ def convert_capture(
             "source": "openadapt-capture",
             "task_description": session.task_description,
         }
+        # Native replay types by keycode, so the recording computer's locale,
+        # date order and keyboard layout travel with the recording and are
+        # checked before replay (#1897). They are the facts capture persisted
+        # when recording started, copied as they are, unknowns included. This
+        # computer's facts are never read here: conversion can run later or
+        # elsewhere. A session from before capture persisted them stays
+        # unbound.
+        recorded_locale = _capture_locale_meta(session)
+        if recorded_locale is not None:
+            meta["locale_invariants"] = recorded_locale
         # Name the space every recorded x/y is in, so a consumer fails closed
         # instead of assuming. Window and desktop scope are mutually exclusive
         # (a session carrying both is refused above). A session that declares

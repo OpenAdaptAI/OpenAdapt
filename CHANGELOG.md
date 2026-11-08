@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v1.20.0 (2026-11-04)
+
+### Requirements
+
+- Require `openadapt-flow>=2.6.0,<3.0.0` in the base install and every Flow
+  extra. `openadapt doctor` and `openadapt deploy` report older Flow releases
+  as unsupported. This supplies the persistent owed-recheck API used by
+  ledger listing.
+
+### Features
+
+- `openadapt verify ledger list` shows provisional confirmed writes whose
+  rechecks are still owed, with their due time and actor. Owed rechecks remain
+  visible after the server restarts and disappear when the recheck completes.
+  An empty ledger reports that no held writes, open writes or owed rechecks
+  remain.
+- The platform manifest and compatibility report select published component
+  releases, including Desktop 0.25.1.
+
 ## v1.19.0 (2026-11-02)
 
 ### Breaking Changes

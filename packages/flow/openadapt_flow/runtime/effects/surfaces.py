@@ -114,6 +114,8 @@ class SurfaceRoutedVerifier:
                 "reachable": state.reachable,
                 "records": state.records,
             }
+            if state.readback_complete is not None:
+                detail[name]["readback_complete"] = state.readback_complete
             reachable = reachable and state.reachable
         return EffectState(
             substrate=self.substrate, reachable=reachable, records=[], detail=detail
@@ -156,9 +158,13 @@ class SurfaceRoutedVerifier:
                 ),
             )
         sub = before.detail.get(name, {}) if isinstance(before.detail, dict) else {}
+        complete = sub.get("readback_complete")
         sub_before = EffectState(
             substrate=str(sub.get("substrate") or getattr(verifier, "substrate", "")),
             reachable=bool(sub.get("reachable", False)),
             records=list(sub.get("records", [])),
+            # Legacy/malformed snapshots remain unknown; do not coerce truthy
+            # values into evidence that the baseline was complete.
+            readback_complete=complete if isinstance(complete, bool) else None,
         )
         return verifier.verify(expected, sub_before, context)
