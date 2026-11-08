@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import contextlib
 import sys
+from typing import Any, Iterator
 
 from openadapt_flow.backends._owned import close_owned
-from typing import Any, Iterator
 
 #: Browsers kept open by :func:`shared_browser`, keyed by ``headless``.
 _SHARED_BROWSER: dict[bool, tuple[Any, Any]] = {}

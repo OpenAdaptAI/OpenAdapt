@@ -182,6 +182,7 @@ def test_browser_start_preserves_primary_and_stops_owned_driver(
     monkeypatch, cancel, stage, cleanup_fails
 ):
     import playwright.sync_api
+
     from openadapt_flow import _browser_setup
 
     events = []
