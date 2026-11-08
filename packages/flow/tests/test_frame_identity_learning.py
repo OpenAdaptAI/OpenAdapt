@@ -34,6 +34,24 @@ PARAMS = {"value": "created"}
 
 
 @pytest.fixture
+def observed_frame_verdicts(monkeypatch):
+    """Observe the genuine verdict; public evidence intentionally omits reason."""
+    import importlib
+
+    module = importlib.import_module("openadapt_flow.verify_run")
+    original = module.judge_run_frame
+    observed = []
+
+    def observe(*args, **kwargs):
+        verdict = original(*args, **kwargs)
+        observed.append(verdict)
+        return verdict
+
+    monkeypatch.setattr(module, "judge_run_frame", observe)
+    return observed
+
+
+@pytest.fixture
 def service(tmp_path):
     path = tmp_path / "store.sqlite"
     db = sqlite3.connect(path, check_same_thread=False)
@@ -148,7 +166,8 @@ def document(service, kind="fhir"):
         service.protocol = "rest"
         read = {
             "kind": "rest",
-            "records_url": service.url + "/objects",
+            "base_url": service.url,
+            "records_path": "/objects",
             "records_complete": True,
         }
     else:
@@ -585,7 +604,7 @@ def test_declared_identity_change_uses_real_current_row_and_keeps_column_guard(
 
 @pytest.mark.parametrize("drift", ["selected-row", "index", "parameters", "effects"])
 def test_old_selection_is_authenticated_and_bound_to_this_contract(
-    service, tmp_path, drift
+    service, tmp_path, drift, observed_frame_verdicts
 ):
     from openadapt_flow.verify_run import FRAME_IDENTITY_DETAIL
 
@@ -618,7 +637,9 @@ def test_old_selection_is_authenticated_and_bound_to_this_contract(
         )
         assert result["receipt"]["checked"]["frame"] == "not_checked"
         assert result["receipt"]["outcome"] != "verified"
-        assert "baseline identity evidence" in result["evidence"]["frame"]["reason"]
+        assert len(observed_frame_verdicts) == 1
+        assert "baseline identity evidence" in observed_frame_verdicts[0].reason
+        assert "reason" not in result["evidence"]["frame"]
 
 
 @pytest.mark.parametrize("kind", ["rest", "sql"])
@@ -650,7 +671,9 @@ def test_legacy_selected_read_requires_identity_only_when_nonempty(
         "removed-database",
     ],
 )
-def test_baseline_authenticates_exact_learned_mapping(service, tmp_path, drift):
+def test_baseline_authenticates_exact_learned_mapping(
+    service, tmp_path, drift, observed_frame_verdicts
+):
     service.protocol = "rest"
     service.transform = lambda rows: [dict(row, alias=row["id"]) for row in rows]
     with httpx.Client() as client:
@@ -697,7 +720,133 @@ def test_baseline_authenticates_exact_learned_mapping(service, tmp_path, drift):
         )
         assert result["receipt"]["checked"]["frame"] == "not_checked"
         assert result["receipt"]["outcome"] != "verified"
+        assert len(observed_frame_verdicts) == 2
         assert (
             "baseline identity evidence belongs to another"
-            in result["evidence"]["frame"]["reason"]
+            in observed_frame_verdicts[-1].reason
         )
+        assert "reason" not in result["evidence"]["frame"]
+
+
+@pytest.mark.parametrize("scope", ["all", "filtered", "empty"])
+def test_sql_completeness_describes_only_the_declared_query(service, scope):
+    from openadapt_flow.runtime.effects.sql import SqlRecordVerifier
+
+    query = "SELECT row_id, external_key FROM objects"
+    if scope == "filtered":
+        query += " WHERE row_id=10"
+    elif scope == "empty":
+        query += " WHERE row_id=-1"
+    reader = SqlRecordVerifier(lambda: sqlite3.connect(service.path), query)
+    state = reader.capture_pre_state()
+    assert state.reachable and state.readback_complete is True
+    assert len(state.records) == {"all": 2, "filtered": 1, "empty": 0}[scope]
+    assert service.db.execute("SELECT COUNT(*) FROM objects").fetchone()[0] == 2
+    assert state.detail["query"] == query
+
+
+def test_sql_duplicate_aliases_are_not_a_lossless_complete_read(service):
+    from openadapt_flow.runtime.effects.sql import SqlRecordVerifier
+
+    reader = SqlRecordVerifier(
+        lambda: sqlite3.connect(service.path),
+        "SELECT row_id AS duplicate, external_key AS duplicate FROM objects",
+    )
+    state = reader.capture_pre_state()
+    assert state.reachable is False
+    assert state.readback_complete is False
+    assert state.records == []
+
+
+@pytest.mark.parametrize(
+    "failure", ["connect", "execute", "fetch", "description", "no-columns", "short", "long"]
+)
+def test_sql_complete_read_requires_successful_lossless_dbapi_result(service, failure):
+    from openadapt_flow.runtime.effects import Effect, EffectKind, Verdict
+    from openadapt_flow.runtime.effects.sql import SqlRecordVerifier
+
+    active = False
+
+    class Cursor:
+        def __init__(self, cursor):
+            self.cursor = cursor
+
+        def execute(self, *args):
+            if active and failure == "execute":
+                raise sqlite3.OperationalError("synthetic execute failure")
+            return self.cursor.execute(*args)
+
+        @property
+        def description(self):
+            if active and failure == "description":
+                return None
+            if active and failure == "no-columns":
+                return []
+            return self.cursor.description
+
+        def fetchall(self):
+            if active and failure == "fetch":
+                raise sqlite3.OperationalError("synthetic fetch failure")
+            rows = self.cursor.fetchall()
+            if active and failure == "short":
+                return [row[:-1] for row in rows]
+            if active and failure == "long":
+                return [(*row, "extra cell") for row in rows]
+            return rows
+
+    class Connection:
+        def __init__(self):
+            self.connection = sqlite3.connect(service.path)
+
+        def cursor(self):
+            return Cursor(self.connection.cursor())
+
+        def close(self):
+            self.connection.close()
+
+    def connect():
+        if active and failure == "connect":
+            raise sqlite3.OperationalError("synthetic connect failure")
+        return Connection()
+
+    reader = SqlRecordVerifier(connect, "SELECT row_id, external_key FROM objects")
+    before = reader.capture_pre_state()
+    assert before.reachable and before.readback_complete is True
+    assert len(before.records) == 2
+    active = True
+    after = reader.capture_pre_state()
+    assert after.reachable is False and after.readback_complete is False
+    assert after.records == []
+    verdict = reader.verify(
+        Effect(kind=EffectKind.RECORD_WRITTEN, match={"row_id": 10}, timeout_s=0),
+        before,
+    )
+    assert verdict.verdict is Verdict.INDETERMINATE
+    assert verdict.should_halt
+
+
+@pytest.mark.parametrize("complete", [None, False])
+@pytest.mark.parametrize("learned", [False, True])
+def test_legacy_identity_inspection_never_promotes_unknown_completeness(
+    service, tmp_path, monkeypatch, complete, learned
+):
+    doc = document(service, "sql")
+    doc["frame"]["identity_field"] = "id"
+    cfg = parse_verify_config(doc)
+    reader = build_effect_verifier(cfg.verifier, PARAMS)
+    original = reader.capture_pre_state
+
+    def capture(context=None):
+        return original(context).model_copy(update={"readback_complete": complete})
+
+    monkeypatch.setattr(reader, "capture_pre_state", capture)
+    provider = CompleteReadProvider(cfg.verifier, PARAMS, reader)
+    baseline = tmp_path / "baseline.json"
+    if learned:
+        with pytest.raises(VerifyRunError, match="complete reachable"):
+            learn_frame_identities(cfg, PARAMS, read_provider=provider)
+        assert not baseline.exists()
+    else:
+        captured = capture_baseline(cfg, PARAMS, baseline, read_provider=provider)
+        assert captured["state"].get("readback_complete") is complete
+        assert not cfg.frame.identities

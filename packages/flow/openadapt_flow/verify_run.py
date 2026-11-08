@@ -1855,6 +1855,23 @@ def _surface_config(cfg: VerifyConfig, surface: str) -> EffectsConfig:
     return cfg.verifier.surfaces[surface]
 
 
+def _available_surface_records(
+    state: EffectState, surface: str
+) -> Optional[list[dict[str, Any]]]:
+    """Actual readable records, without asserting their scope is complete."""
+    if not state.reachable:
+        return None
+    if not surface:
+        return list(state.records)
+    sub = state.detail.get(surface)
+    if not isinstance(sub, dict) or sub.get("reachable") is not True:
+        return None
+    records = sub.get("records")
+    if not isinstance(records, list) or any(not isinstance(r, dict) for r in records):
+        return None
+    return records
+
+
 def _surface_records(state: EffectState, surface: str) -> list[dict[str, Any]]:
     if not surface:
         if not state.reachable or state.readback_complete is not True:
@@ -1988,7 +2005,11 @@ def _frame_identity_indexes(
                 and surface not in cfg.frame.identities
                 and identity
             ):
-                records = _surface_records(state, surface)
+                records = _available_surface_records(state, surface)
+                if records is None:
+                    # Preserve the existing unreadable-baseline/budget path.
+                    # Available identity is not a new completeness assertion.
+                    continue
                 if any(identity not in record for record in records):
                     raise FrameIdentityError(
                         "frame identity is unavailable on the selected read; learn its row mapping at setup"
