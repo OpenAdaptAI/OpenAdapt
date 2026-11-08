@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Optional, Protocol, runtime_checkable
 if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.ir import (
         ActionDeliveryReceipt,
+        NativeSelectContract,
         Point,
         StructuralHandle,
         StructuralLocator,
@@ -566,6 +567,23 @@ class DisplayedTextBackend(Protocol):
 
     def displayed_text_at(self, x: int, y: int) -> Optional[str]:
         """Return the element's displayed text or value, or None."""
+        ...
+
+
+@runtime_checkable
+class NativeSelectBackend(Protocol):
+    """One exact HTML selection under the existing structural target lease."""
+
+    def select_native_option_guarded(
+        self,
+        contract: "NativeSelectContract",
+        *,
+        locator: "StructuralLocator",
+        handle: "StructuralHandle",
+    ) -> "ActionDeliveryReceipt": ...
+
+    def native_selected_option_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """Read the committed option only while the delivered target is continuous."""
         ...
 
 

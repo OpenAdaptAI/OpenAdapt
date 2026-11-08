@@ -43,7 +43,7 @@ import os
 import re
 import secrets
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator, Literal, Optional
 
@@ -95,6 +95,51 @@ _CLOUD_RUN_UUID_RE = re.compile(
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _now_after(*stamps: str) -> str:
+    """The current time, strictly later than every given durable timestamp.
+
+    Resume orders the durable history by ``created_at``: every checkpoint
+    written before a pause must not be newer than it, and every checkpoint
+    written after it must be newer. The wall clock can step backward (an NTP
+    or WSL clock resync), which would make a correctly ordered history look
+    changed after the pause. Stamping a new record just after the records it
+    follows keeps the written order and the timestamp order the same.
+    Unreadable stamps are ignored here; resume still refuses them.
+    """
+
+    now = datetime.now(timezone.utc)
+    for stamp in stamps:
+        try:
+            prior = datetime.fromisoformat(stamp)
+        except (TypeError, ValueError):
+            continue
+        if prior.tzinfo is not None and prior >= now:
+            now = prior + timedelta(microseconds=1)
+    return now.isoformat()
+
+
+def _now_not_before(*stamps: str) -> str:
+    """The current time, or the latest given durable timestamp if the wall
+    clock reads earlier than it.
+
+    A pause must not be older than the checkpoints written before it, but it
+    need not be strictly newer: resume treats an equal checkpoint as written
+    before the pause. Not moving the pause past the clock keeps an approval
+    issued on a held clock from looking older than the pause it resolves.
+    """
+
+    now = datetime.now(timezone.utc)
+    latest = now
+    for stamp in stamps:
+        try:
+            prior = datetime.fromisoformat(stamp)
+        except (TypeError, ValueError):
+            continue
+        if prior.tzinfo is not None and prior > latest:
+            latest = prior
+    return latest.isoformat()
 
 
 class RunManifest(BaseModel):
@@ -519,6 +564,15 @@ class CheckpointStore:
             return json.loads(path.read_text())  # type: ignore[no-any-return]
         return None
 
+    def _attended_key(self) -> Optional[str]:
+        """The key attended state is read with: this store's key, else the
+        one the attended store resolves by default."""
+        if self.key:
+            return self.key
+        from openadapt_flow import crypto as _crypto
+
+        return _crypto.resolve_key(None)
+
     @staticmethod
     def model_digest(model: Optional[BaseModel]) -> str:
         """Return one stable digest for an exact logical durable artifact."""
@@ -556,18 +610,23 @@ class CheckpointStore:
         except (OSError, ValueError):
             claim = None
 
+        from openadapt_flow.runtime.durable import attended_state as _state
+
         def file_digest(path: Path) -> Optional[str]:
-            if not path.is_file():
+            # Attended state may be encrypted (``<name>.enc``); the digest is
+            # over its plaintext, so it doesn't change when a file is sealed.
+            sealed = _state.enc_path(path).is_file()
+            key = self._attended_key() if sealed else None
+            data = _state.digest_bytes(self.run_dir, path, key)
+            if data is None:
                 return None
-            return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+            return "sha256:" + hashlib.sha256(data).hexdigest()
 
         receipts_dir = self.run_dir / ".attended_program_receipts"
-        receipts = []
-        if receipts_dir.is_dir():
-            receipts = [
-                {"name": path.name, "sha256": file_digest(path)}
-                for path in sorted(receipts_dir.glob("*.json"))
-            ]
+        receipts = [
+            {"name": name, "sha256": file_digest(receipts_dir / name)}
+            for name in sorted(_state.logical_names(receipts_dir))
+        ]
         payload = {
             "manifest": (
                 manifest.model_dump(mode="json") if manifest is not None else None
@@ -663,6 +722,7 @@ class CheckpointStore:
             self.run_dir / ".attended_decisions.lock",
             self.run_dir / ".attended_action.lease",
             self.run_dir / ".attended_program_receipts",
+            self.run_dir / ".attended_state.encrypted",
         )
         for path in candidates:
             if path.exists() or path.with_name(path.name + ENC_SUFFIX).exists():

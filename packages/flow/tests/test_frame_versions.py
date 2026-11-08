@@ -345,3 +345,89 @@ def test_r2_i2_a_target_field_the_write_changes_is_not_a_new_record(
     )
     assert result["receipt"]["outcome"] != "verified"
     assert _versions(result)["problem"] == "missing"
+
+
+@pytest.mark.parametrize("window", [_correct, _lost_update], ids=["correct", "lost"])
+def test_a_target_surface_no_effect_reads_is_not_checked(
+    tmp_path: Path, window: Callable[[sqlite3.Connection], None]
+) -> None:
+    # A misspelt surface would leave no target, and zero targets held: a
+    # lost update was verified.
+    result = _run(tmp_path, window, {"target_surface": "recrod"})
+    assert _versions(result)["status"] == "not_checked"
+    assert _versions(result)["problem"] == "unknown_surface"
+    assert result["receipt"]["checked"]["frame"] == "not_checked"
+    assert result["receipt"]["outcome"] != "verified"
+
+
+def _guarded(doc: dict[str, Any], db: Path) -> dict[str, Any]:
+    """``doc`` read through two surfaces: the target write on ``record``, and
+    a guard ("no row has the bot's phone twice") alone on ``guard``."""
+
+    sql = {"kind": "sql", "sqlite_database": str(db)}
+    doc["verifier"] = {
+        "kind": "surfaces",
+        "surfaces": {
+            "record": {**sql, "sql_query": "SELECT * FROM person"},
+            "guard": {**sql, "sql_query": "SELECT * FROM person WHERE id = 2"},
+        },
+    }
+    [write] = doc["effects"]
+    doc["effects"] = [
+        {**write, "probe": "surface=record|the phone is saved"},
+        {
+            "kind": "record_written",
+            "probe": "surface=guard|the other record keeps its phone",
+            "match": {"id": "2", "phone": {"param": "phone"}},
+            "expected_count": 0,
+        },
+    ]
+    return doc
+
+
+def _run_guarded(
+    tmp_path: Path,
+    window: Callable[[sqlite3.Connection], None],
+    target_surface: str,
+) -> dict[str, Any]:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    db = tmp_path / "app.sqlite"
+    con = sqlite3.connect(db)
+    con.executescript(SCHEMA)
+    con.commit()
+    doc = _guarded(_doc(db, {"target_surface": target_surface, **AUTHORS}), db)
+    cfg = parse_verify_config(doc)
+    capture_baseline(cfg, PARAMS, tmp_path / "baseline.json")
+    window(con)
+    con.commit()
+    con.close()
+    return verify_run(
+        cfg,
+        params=PARAMS,
+        run_record={"executor_kind": "agent", "executor_id": "bot"},
+        authorization_ref="test",
+        baseline_path=tmp_path / "baseline.json",
+    )
+
+
+@pytest.mark.parametrize("window", [_correct, _lost_update], ids=["correct", "lost"])
+def test_a_target_surface_only_a_guard_reads_is_not_checked(
+    tmp_path: Path, window: Callable[[sqlite3.Connection], None]
+) -> None:
+    # A guard's records are never targets, so its surface leaves no target,
+    # and zero targets held: a lost update was verified.
+    result = _run_guarded(tmp_path, window, "guard")
+    assert _versions(result)["status"] == "not_checked"
+    assert _versions(result)["problem"] == "unknown_surface"
+    assert result["receipt"]["checked"]["frame"] == "not_checked"
+    assert result["receipt"]["outcome"] != "verified"
+
+
+def test_the_write_surface_beside_a_guard_is_still_judged(tmp_path: Path) -> None:
+    # Control: the same contract aimed at the write's surface judges the
+    # target, and the other user's save in the window refutes it.
+    lost = _run_guarded(tmp_path / "lost", _lost_update, "record")
+    assert _versions(lost)["status"] == "refuted"
+    assert lost["receipt"]["outcome"] != "verified"
+    correct = _run_guarded(tmp_path / "correct", _correct, "record")
+    assert _versions(correct)["status"] == "held"

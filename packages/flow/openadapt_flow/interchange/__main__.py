@@ -15,13 +15,17 @@ from openadapt_flow.interchange import check_file, json_schema, run_cases
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(prog="python -m openadapt_flow.interchange")
+    p = argparse.ArgumentParser(
+        prog="python -m openadapt_flow.interchange", allow_abbrev=False
+    )
     sub = p.add_subparsers(dest="cmd", required=True)
-    c = sub.add_parser("check", help="check exchange files")
+    c = sub.add_parser("check", help="check exchange files", allow_abbrev=False)
     c.add_argument("files", nargs="+")
-    k = sub.add_parser("cases", help="run a fixture directory with cases.json")
+    k = sub.add_parser(
+        "cases", help="run a fixture directory with cases.json", allow_abbrev=False
+    )
     k.add_argument("dir")
-    sub.add_parser("schema", help="print the JSON Schema")
+    sub.add_parser("schema", help="print the JSON Schema", allow_abbrev=False)
     args = p.parse_args(argv)
 
     if args.cmd == "schema":

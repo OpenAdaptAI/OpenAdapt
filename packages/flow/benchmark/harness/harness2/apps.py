@@ -16,6 +16,7 @@ from typing import Any, Callable, Optional, Protocol, runtime_checkable
 from urllib.parse import urlencode
 
 from benchmark.harness.harness2.tasks import MOCKMED_PATIENTS, GuiTask
+from openadapt_flow.mockmed.fault_server import MOCKMED_RECORDS_READ_CONTRACT
 
 
 @runtime_checkable
@@ -65,10 +66,8 @@ class MockMedSession:
 
     def oracle_recipe(self) -> dict[str, Any]:
         return {
-            "kind": "rest",
             "base_url": self.base_url.rstrip("/"),
-            "records_path": "/api/db",
-            "records_key": "records",
+            **MOCKMED_RECORDS_READ_CONTRACT,
         }
 
     def subject_names(self) -> dict[str, str]:

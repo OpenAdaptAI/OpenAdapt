@@ -54,7 +54,9 @@ from measure_mockmed import (  # noqa: E402
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--bundle", required=True)
     parser.add_argument("--label", required=True)
@@ -66,12 +68,11 @@ def main() -> int:
     parser.add_argument("--model", default="claude-sonnet-5-5")
     args = parser.parse_args()
 
-    from scoreboard.repair_arm import DemoTarget
-    from scoreboard.tasks import openimis as app
-
     from openadapt_flow.jit import load_customer_model_key
     from openadapt_flow.repair.auto_repair import AutoRepair, RepairLedger, summarize
     from openadapt_flow.repair.self_repair import ScreenAccess, SelfRepair
+    from scoreboard.repair_arm import DemoTarget
+    from scoreboard.tasks import openimis as app
 
     name = f"openimis-{args.label}-{args.run_id}"
     out = Path(args.out) if args.out else HERE / "results" / name
