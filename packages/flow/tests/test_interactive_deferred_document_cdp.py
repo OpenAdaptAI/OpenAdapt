@@ -39,7 +39,9 @@ def document_browser(tmp_path):
     worker.start()
     url = f"http://127.0.0.1:{server.server_address[1]}/"
     executable = _chromium_executable()
-    assert executable is not None, "cached Chromium is required; no install is permitted"
+    assert executable is not None, (
+        "cached Chromium is required; no install is permitted"
+    )
     profile = tmp_path / "owned-document-browser"
     profile.mkdir()
     process = subprocess.Popen(
@@ -113,7 +115,11 @@ def _perform(session, kind, value):
 @pytest.mark.timeout(90)
 @pytest.mark.parametrize(
     "kind,attribute",
-    [("input", "_pending_type"), ("scroll", "_pending_scroll"), ("click", "_pending_click")],
+    [
+        ("input", "_pending_type"),
+        ("scroll", "_pending_scroll"),
+        ("click", "_pending_click"),
+    ],
     ids=["input", "scroll", "click"],
 )
 def test_cross_document_deferred_action_refuses_complete_publication(
@@ -180,9 +186,15 @@ def test_same_document_deferred_actions_keep_one_recorded_step(
         _perform(session, kind, "alpha")
         _perform(session, kind, "beta")
         result = session.finish()
-        events = [json.loads(row) for row in (result / "events.jsonl").read_text().splitlines()]
+        events = [
+            json.loads(row)
+            for row in (result / "events.jsonl").read_text().splitlines()
+        ]
         assert len(events) == 1
-        assert events[0]["kind"] == {"input": "type", "scroll": "scroll", "click": "double_click"}[kind]
+        assert (
+            events[0]["kind"]
+            == {"input": "type", "scroll": "scroll", "click": "double_click"}[kind]
+        )
         if kind == "input":
             assert events[0]["text"] == "beta"
         if kind == "scroll":
@@ -204,7 +216,10 @@ def test_first_action_in_a_new_document_needs_no_prior_owner(
         session.page.goto(url + "second")
         _perform(session, "input", "beta")
         result = session.finish()
-        events = [json.loads(row) for row in (result / "events.jsonl").read_text().splitlines()]
+        events = [
+            json.loads(row)
+            for row in (result / "events.jsonl").read_text().splitlines()
+        ]
         assert len(events) == 1
         assert events[0]["kind"] == "type"
         assert events[0]["text"] == "beta"

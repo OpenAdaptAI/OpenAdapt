@@ -6,7 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 
 from openadapt_flow.interactive_recorder import BrowserAttachError, InteractiveRecorder
 from tests.test_interactive_frame_boundary import model as model
