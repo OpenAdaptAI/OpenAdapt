@@ -1,0 +1,146 @@
+{
+  "format": "openadapt.demo-cases/v1",
+  "family": "create-task",
+  "cases": [
+    {
+      "case_id": "task-01",
+      "parameters": {
+        "title": "Wrap demo 01: Planning note",
+        "description": "Check the first draft."
+      }
+    },
+    {
+      "case_id": "task-02",
+      "parameters": {
+        "title": "Wrap demo 02: Inventory review",
+        "description": "Review item counts for the next shipment."
+      }
+    },
+    {
+      "case_id": "task-03",
+      "parameters": {
+        "title": "Wrap demo 03: Release checklist",
+        "description": "Confirm the release checklist is complete."
+      }
+    },
+    {
+      "case_id": "task-04",
+      "parameters": {
+        "title": "Wrap demo 04: Design review",
+        "description": "Review the revised layout."
+      }
+    },
+    {
+      "case_id": "task-05",
+      "parameters": {
+        "title": "Wrap demo 05: Quality check",
+        "description": "Inspect the sample and record the result."
+      }
+    },
+    {
+      "case_id": "task-06",
+      "parameters": {
+        "title": "Wrap demo 06: Follow-up note",
+        "description": "Prepare the next follow-up."
+      }
+    },
+    {
+      "case_id": "task-07",
+      "parameters": {
+        "title": "Wrap demo 07: Meeting summary",
+        "description": "Summarize the decisions from the meeting."
+      }
+    },
+    {
+      "case_id": "task-08",
+      "parameters": {
+        "title": "Wrap demo 08: Document update",
+        "description": "Update the project document."
+      }
+    },
+    {
+      "case_id": "task-09",
+      "parameters": {
+        "title": "Wrap demo 09: Test checklist",
+        "description": "Review the repeatable test checklist."
+      }
+    },
+    {
+      "case_id": "task-10",
+      "parameters": {
+        "title": "Wrap demo 10: Accessibility review",
+        "description": "Check keyboard navigation and labels."
+      }
+    },
+    {
+      "case_id": "task-11",
+      "parameters": {
+        "title": "Wrap demo 11: Translation review",
+        "description": "Review the café label and punctuation."
+      }
+    },
+    {
+      "case_id": "task-12",
+      "parameters": {
+        "title": "Wrap demo 12: Copy review",
+        "description": "Review the phrase: ready, steady, go."
+      }
+    },
+    {
+      "case_id": "task-13",
+      "parameters": {
+        "title": "Wrap demo 13: Budget note",
+        "description": "Summarize the planned work, without any financial account data."
+      }
+    },
+    {
+      "case_id": "task-14",
+      "parameters": {
+        "title": "Wrap demo 14: Packaging check",
+        "description": "Check the label on the sample package."
+      }
+    },
+    {
+      "case_id": "task-15",
+      "parameters": {
+        "title": "Wrap demo 15: Template review",
+        "description": "Review the standard template."
+      }
+    },
+    {
+      "case_id": "task-16",
+      "parameters": {
+        "title": "Wrap demo 16: Schedule note",
+        "description": "Plan the next review session."
+      }
+    },
+    {
+      "case_id": "task-17",
+      "parameters": {
+        "title": "Wrap demo 17: Archive checklist",
+        "description": "Check the document archive index."
+      }
+    },
+    {
+      "case_id": "task-18",
+      "parameters": {
+        "title": "Wrap demo 18: Search review",
+        "description": "Confirm the new search terms are useful."
+      }
+    },
+    {
+      "case_id": "task-19",
+      "parameters": {
+        "title": "Wrap demo 19: Navigation review",
+        "description": "Review the menu ordering."
+      }
+    },
+    {
+      "case_id": "task-20",
+      "parameters": {
+        "title": "Wrap demo 20: Completion note",
+        "description": "Summarize the completed checks."
+      }
+    }
+  ]
+}

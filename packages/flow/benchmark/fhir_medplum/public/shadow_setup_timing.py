@@ -48,7 +48,7 @@ contracts: [contracts/patient.yaml, contracts/allergy.yaml, contracts/appointmen
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--port", type=int, default=9740)
     ap.add_argument("--out", required=True)
     args = ap.parse_args(argv)

@@ -245,7 +245,7 @@ def probe(fixture: OpenIMISFixture) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--port", type=int, default=OpenIMISFixture().http_port)
     parser.add_argument("--out", required=True, help="where to write the JSON result")
     args = parser.parse_args()

@@ -50,6 +50,8 @@ from openadapt_flow.runtime.actuators.api import (
     ApiHaltKind,
 )
 
+URLENCODED = "application/x-www-form-urlencoded"
+
 # -- HTML forms ------------------------------------------------------------------
 
 
@@ -75,7 +77,9 @@ class _FormParser(HTMLParser):
                 return
             self._form = {
                 "action": a.get("action", ""),
+                "enctype": a.get("enctype", "").lower(),
                 "controls": {},
+                "files": [],
                 "handlers": sorted(k for k in a if k.startswith("on")),
                 "handler_src": {k: v for k, v in a.items() if k.startswith("on")},
                 "buttons": [],
@@ -97,11 +101,31 @@ class _FormParser(HTMLParser):
                     "id": a.get("id"),
                     "name": name,
                     "type": kind,
+                    # What the browser sends for it when it submits the form:
+                    # an <input> without a value sends a localized label, so
+                    # it is None (not known); a <button> without one sends "".
+                    "value": a.get("value", "" if tag == "button" else None),
+                    "disabled": "disabled" in a,
+                    "submission_overrides": {
+                        k: a[k]
+                        for k in (
+                            "formaction",
+                            "formmethod",
+                            "formenctype",
+                            "formtarget",
+                        )
+                        if k in a
+                    },
                     "handler_src": {k: v for k, v in a.items() if k.startswith("on")},
                 }
             )
         if tag == "input" and name:
-            if kind in ("submit", "button", "image", "reset", "file"):
+            if kind == "file":
+                self._form["files"].append(
+                    {"name": name, "multiple": "multiple" in a, "id": a.get("id")}
+                )
+                return
+            if kind in ("submit", "button", "image", "reset"):
                 return
             if kind in ("checkbox", "radio") and "checked" not in a:
                 value: Optional[str] = None
@@ -181,22 +205,73 @@ def _native_rules(a: dict[str, str]) -> dict[str, Any]:
     }
 
 
-def _form(html: str, action_path: str) -> Optional[dict[str, Any]]:
+def _form(
+    html: str, action_path: str, page_path: Optional[str] = None
+) -> Optional[dict[str, Any]]:
     parser = _FormParser()
     parser.feed(html)
     leaf = up.urlsplit(action_path).path.rsplit("/", 1)[-1]
     for form in parser.forms:
         action = up.urlsplit(form["action"]).path
+        if not form["action"].strip() and page_path is not None:
+            # No action: the browser posts to the page's own address.
+            action = up.urlsplit(page_path).path
         if action == action_path or (leaf and action.rsplit("/", 1)[-1] == leaf):
             return form
     return None
 
 
-def form_controls(html: str, action_path: str) -> Optional[dict[str, Any]]:
-    """The named controls of the form in ``html`` that posts to ``action_path``."""
+def form_controls(
+    html: str, action_path: str, page_path: Optional[str] = None
+) -> Optional[dict[str, Any]]:
+    """The named controls of the form in ``html`` that posts to ``action_path``.
 
-    form = _form(html, action_path)
+    ``page_path`` is the address of the page itself, for a form with no
+    ``action`` (it posts to that page).
+    """
+
+    form = _form(html, action_path, page_path)
     return form["controls"] if form is not None else None
+
+
+def form_parts(
+    html: str, action_path: str, page_path: Optional[str] = None
+) -> Optional[dict[str, Any]]:
+    """The whole form that posts to ``action_path``: its named controls, its
+    submit buttons (``buttons``, with the value each sends), its file inputs
+    (``files``) and its ``enctype``."""
+
+    return _form(html, action_path, page_path)
+
+
+def forms_of(html: str) -> list[dict[str, Any]]:
+    """Every form in ``html``, parsed as :func:`form_parts` parses one."""
+
+    parser = _FormParser()
+    parser.feed(html)
+    return parser.forms
+
+
+def submitter_button(
+    form: dict[str, Any], name: str, value: str
+) -> Optional[dict[str, Any]]:
+    """The one enabled submit button of ``form`` that sends ``name=value``.
+
+    A browser sends the clicked button's own ``name=value`` with the form. The
+    pair is explained only by exactly one such button whose value is written
+    in the page (an ``<input type=submit>`` without a ``value`` sends a
+    localized label, which the page doesn't state).
+    """
+
+    hits = [
+        b
+        for b in form.get("buttons") or []
+        if b.get("name") == name
+        and b.get("type") == "submit"
+        and b.get("value") == value
+        and not b.get("disabled")
+    ]
+    return hits[0] if len(hits) == 1 else None
 
 
 _SUBMIT_LISTENER = re.compile(
@@ -250,7 +325,11 @@ def _src_digest(source: str) -> str:
 
 
 def page_scripts(
-    html: str, action_path: str, sent: Iterable[str], rules: Optional[dict[str, Any]]
+    html: str,
+    action_path: str,
+    sent: Iterable[str],
+    rules: Optional[dict[str, Any]],
+    page_path: Optional[str] = None,
 ) -> list[str]:
     """Every script the browser may run on this save, fingerprinted, sorted.
 
@@ -265,7 +344,7 @@ def page_scripts(
     """
 
     found: list[str] = []
-    form = _form(html, action_path)
+    form = _form(html, action_path, page_path)
     if form is not None:
         found += [f"form {h} {_src_digest(v)}" for h, v in form["handler_src"].items()]
         sent_names = set(sent)
@@ -507,11 +586,18 @@ class Transport(Protocol):
 
     def get(self, path_and_query: str) -> Response: ...
 
-    def post_form(self, path: str, body: str, *, referer: str) -> Response: ...
+    def post_form(
+        self, path: str, body: str, *, referer: str, content_type: str = ...
+    ) -> Response: ...
 
+    # A save encoded as multipart calls ``post_form(..., content_type=...)``
+    # with the full ``multipart/form-data; boundary=...`` type; a transport
+    # that doesn't take ``content_type`` can't send one (the save fails before
+    # anything leaves, and the GUI steps don't run in its place).
     # Optional: ``evaluate_form(form_path, action_path, fields) -> FormEvaluation``
-    # runs the form's own script on the run's values (form_eval). A transport
-    # without it can't run a form that has script; that save stays on the GUI.
+    # observes native submission and the form's script on the run's values
+    # (form_eval). A transport without it can't run a form that requires this
+    # evidence; that save stays on the GUI.
 
 
 class PlaywrightSessionTransport:
@@ -534,6 +620,8 @@ class PlaywrightSessionTransport:
         submitter_requests: tuple[str, ...] = (),
         confirm: Optional[str] = None,
         step_writes: tuple[str, ...] = (),
+        form_action: Optional[str] = None,
+        encoding: str = URLENCODED,
     ) -> Any:
         from openadapt_flow.runtime.actuators.form_eval import evaluate_form
 
@@ -547,6 +635,8 @@ class PlaywrightSessionTransport:
             submitter_requests=submitter_requests,
             confirm=confirm,
             step_writes=step_writes,
+            form_action=form_action,
+            encoding=encoding,
             timeout_s=self._timeout_ms / 1000.0,
         )
 
@@ -564,13 +654,20 @@ class PlaywrightSessionTransport:
             )
         )
 
-    def post_form(self, path: str, body: str, *, referer: str) -> Response:
+    def post_form(
+        self,
+        path: str,
+        body: str,
+        *,
+        referer: str,
+        content_type: str = URLENCODED,
+    ) -> Response:
         return self._wrap(
             self._request.post(
                 self.base_url + path,
-                data=body,
+                data=body.encode("utf-8"),
                 headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Content-Type": content_type,
                     "Referer": referer,
                     "Origin": self.base_url,
                 },
@@ -581,6 +678,50 @@ class PlaywrightSessionTransport:
 
 
 # -- the prepared save ----------------------------------------------------------
+
+
+def encode_multipart(
+    body: Iterable[tuple[str, str]], empty_files: Iterable[str] = ()
+) -> tuple[str, str]:
+    """A ``multipart/form-data`` body as a browser sends a form with no file.
+
+    Returns ``(body, content type)``. Each field is a part with its
+    disposition and value; a file input left empty is a part with
+    ``filename=""`` and ``application/octet-stream``, as Chromium sends it.
+    The boundary is derived from the fields, so the same request always has
+    the same bytes (and the same approval digest). A name or value holding a
+    quote, CR or LF can't be written unambiguously and raises ``ValueError``.
+    """
+
+    pairs = list(body)
+    files = set(empty_files)
+    seed = json.dumps([pairs, sorted(files)], separators=(",", ":"))
+    boundary = (
+        "----OpenAdaptFormBoundary"
+        + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
+    )
+    out: list[str] = []
+    for name, value in pairs:
+        # A browser sends every line break in a value as CRLF.
+        value = re.sub(r"\r\n|\r|\n", "\r\n", value)
+        if any(c in name for c in '"\r\n'):
+            raise ValueError(f"field name {name!r} can't be sent as multipart")
+        if boundary in value:
+            raise ValueError("a value contains the multipart boundary")
+        out.append(f"--{boundary}\r\n")
+        if name in files:
+            if value:
+                raise ValueError(f"{name}: the API step never attaches a file")
+            out.append(
+                f'Content-Disposition: form-data; name="{name}"; filename=""\r\n'
+                "Content-Type: application/octet-stream\r\n\r\n\r\n"
+            )
+        else:
+            out.append(
+                f'Content-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'
+            )
+    out.append(f"--{boundary}--\r\n")
+    return "".join(out), f"multipart/form-data; boundary={boundary}"
 
 
 @dataclass(frozen=True)
@@ -608,15 +749,26 @@ class PreparedSave:
     #: again after the last write and right before the save, as the GUI
     #: checks its guard after those steps ran. Reads only: not in the digest.
     rechecks: tuple[tuple[str, tuple[str, ...], str], ...] = ()
+    #: ``urlencoded`` or ``multipart`` (no file attached), as recorded.
+    encoding: str = "urlencoded"
+    #: Fields sent as empty file inputs in a multipart body.
+    empty_files: frozenset[str] = frozenset()
 
     def encoded(self) -> str:
+        if self.encoding == "multipart":
+            return encode_multipart(self.body, self.empty_files)[0]
         return up.urlencode(list(self.body))
+
+    def content_type(self) -> str:
+        if self.encoding == "multipart":
+            return encode_multipart(self.body, self.empty_files)[1]
+        return URLENCODED
 
     def payload_sha256(self) -> str:
         payload: dict[str, Any] = {
             "method": self.method.upper(),
             "path": self.path,
-            "content_type": "application/x-www-form-urlencoded",
+            "content_type": self.content_type(),
             "body": self.encoded(),
             "referer": self.referer,
         }
@@ -793,9 +945,21 @@ class WebFormActuator:
                 return unavailable(
                     f"the form page returned HTTP {page.status} (signed out?)"
                 )
-            controls = form_controls(page.text, up.urlsplit(save_path).path)
-            if controls is None:
+            action_path = up.urlsplit(save_path).path
+            page_path = up.urlsplit(form_path).path
+            form = form_parts(page.text, spec.form_action or action_path, page_path)
+            if form is None:
                 return unavailable("the form page no longer has the recorded form")
+            controls = form["controls"]
+            if not spec.submitter and any(
+                b.get("submission_overrides") for b in form.get("buttons") or []
+            ):
+                return unavailable(
+                    "the recording does not identify the submitter whose overrides apply"
+                )
+            problem = _encoding_problem(spec, form)
+            if problem:
+                return unavailable(problem)
             if spec.controls and sorted(controls) != sorted(spec.controls):
                 added = sorted(set(controls) - set(spec.controls))[:5]
                 removed = sorted(set(spec.controls) - set(controls))[:5]
@@ -806,12 +970,12 @@ class WebFormActuator:
                 return unavailable(
                     "the form's validation rules changed since the recording"
                 )
-            action_path = up.urlsplit(save_path).path
             scripts = page_scripts(
                 page.text,
-                action_path,
+                spec.form_action or action_path,
                 [f.name for f in spec.fields],
                 spec.client_rules,
+                page_path,
             )
             if scripts != sorted(set(spec.client_scripts)):
                 if not spec.client_scripts:
@@ -820,7 +984,12 @@ class WebFormActuator:
                         f"({', '.join(scripts[:5])})"
                     )
                 return unavailable("the form's script changed since the recording")
-            body, problem = self.build_body(spec, params, controls)
+            if spec.form_action and not scripts:
+                return unavailable(
+                    "the save is sent by the page's script, and the page no longer "
+                    "has script to check it against"
+                )
+            body, problem = self.build_body(spec, params, controls, form=form)
             if problem:
                 return unavailable(problem)
             writes: list[PreparedWrite] = []
@@ -847,9 +1016,13 @@ class WebFormActuator:
                     "the API step would send writes the page's script sends, but "
                     "the page has no script to check them against"
                 )
-            if scripts:
+            if (
+                scripts
+                or spec.submitter
+                or any(f.source in ("submitter", "empty_file") for f in spec.fields)
+            ):
                 problem = self._run_page_script(
-                    spec, form_path, action_path, body, writes
+                    spec, form_path, save_path, body, writes
                 )
                 if problem:
                     return unavailable(problem)
@@ -882,6 +1055,10 @@ class WebFormActuator:
             ),
             writes=tuple(writes),
             rechecks=tuple(rechecks),
+            encoding=spec.encoding,
+            empty_files=frozenset(
+                f.name for f in spec.fields if f.source == "empty_file"
+            ),
         )
 
     def _precheck(self, read: tuple[str, tuple[str, ...], str]) -> Optional[str]:
@@ -912,7 +1089,7 @@ class WebFormActuator:
         body: list[tuple[str, str]],
         writes: list["PreparedWrite"] = (),  # type: ignore[assignment]
     ) -> Optional[str]:
-        """Run the form's own script on the run's values; why not to send, or None.
+        """Observe the form's native submit and script; why not to send, or None.
 
         The fields the person typed or picked are typed into a scratch copy
         of the form, and the recorded controls are clicked (form_eval). The
@@ -923,7 +1100,7 @@ class WebFormActuator:
 
         evaluate = getattr(self.transport, "evaluate_form", None)
         if evaluate is None:
-            return "the form runs script and this session can't run it"
+            return "the form requires browser evaluation and this session can't run it"
         typed = {f.name for f in spec.fields if f.source in ("param", "select_label")}
         result = evaluate(
             form_path,
@@ -933,6 +1110,12 @@ class WebFormActuator:
             submitter_requests=tuple(spec.submitter_requests),
             confirm=spec.confirm,
             step_writes=tuple(f"{w.method} {up.urlsplit(w.path).path}" for w in writes),
+            **({"form_action": spec.form_action} if spec.form_action else {}),
+            **(
+                {"encoding": "multipart/form-data"}
+                if spec.encoding == "multipart"
+                else {}
+            ),
         )
         self.log.append(
             {
@@ -944,7 +1127,7 @@ class WebFormActuator:
             }
         )
         if not result.valid:
-            return f"{result.reason}; the page's own script decided"
+            return f"{result.reason}; the browser did not reproduce the recorded submit"
         session = {f.name for f in spec.fields if f.source == "session"}
         want = sorted((k, v) for k, v in body if k not in session)
         got = sorted((k, v) for k, v in result.serialized or [] if k not in session)
@@ -1048,9 +1231,17 @@ class WebFormActuator:
                         request_summary=summary,
                     )
         try:
-            resp = self.transport.post_form(
-                prepared.path, prepared.encoded(), referer=prepared.referer
-            )
+            if prepared.encoding == "urlencoded":
+                resp = self.transport.post_form(
+                    prepared.path, prepared.encoded(), referer=prepared.referer
+                )
+            else:
+                resp = self.transport.post_form(
+                    prepared.path,
+                    prepared.encoded(),
+                    referer=prepared.referer,
+                    content_type=prepared.content_type(),
+                )
         except Exception as exc:  # noqa: BLE001 - after dispatch began
             self.log.append({"stage": "save", "error": type(exc).__name__})
             return ApiActuationResult(
@@ -1103,10 +1294,17 @@ class WebFormActuator:
         controls: dict[str, Any],
         *,
         enforce_rules: bool = True,
+        form: Optional[dict[str, Any]] = None,
     ) -> tuple[list[tuple[str, str]], Optional[str]]:
         body: list[tuple[str, str]] = []
         for field in spec.fields:
             control = controls.get(field.name) or {}
+            if field.source in ("submitter", "empty_file"):
+                problem = _form_part_problem(field, form)
+                if problem:
+                    return [], problem
+                body.append((field.name, field.value or ""))
+                continue
             if field.source == "param":
                 body.append((field.name, str(params[field.param])))
             elif field.source == "select_label":
@@ -1133,7 +1331,12 @@ class WebFormActuator:
             sent = dict(body)
             # The browser's own checks before it submits, then the page's
             # validate.js rules: the API step skips neither.
+            unchecked = {
+                f.name for f in spec.fields if f.source in ("submitter", "empty_file")
+            }
             for name, value in body:
+                if name in unchecked:
+                    continue  # a button's or an empty file input's own part
                 problem = native_problem(name, controls.get(name) or {}, value)
                 if problem:
                     return [], problem
@@ -1143,6 +1346,45 @@ class WebFormActuator:
                     if problem:
                         return [], problem
         return body, None
+
+
+def _form_part_problem(field: Any, form: Optional[dict[str, Any]]) -> Optional[str]:
+    """Why the live form can't send ``field`` (a submitter or an empty file)."""
+
+    if form is None:
+        return f"{field.name}: the live form wasn't read"
+    if field.source == "submitter":
+        if submitter_button(form, field.name, field.value or "") is None:
+            return (
+                f"{field.name}: the form no longer has exactly one submit button "
+                f"that sends {field.value!r}"
+            )
+        return None
+    if field.value:
+        return f"{field.name}: the API step never attaches a file"
+    if [f["name"] for f in form.get("files") or []].count(field.name) != 1:
+        return f"{field.name}: the form no longer has that one file input"
+    return None
+
+
+def _encoding_problem(spec: Any, form: dict[str, Any]) -> Optional[str]:
+    """Why the live form would be sent otherwise than the recorded save, or None.
+
+    A form posted as multipart sends every one of its file inputs, so the
+    live form must have exactly the recorded ones, and still post as
+    multipart unless the page's script sends it (``form_action``).
+    """
+
+    files = sorted(f["name"] for f in form.get("files") or [])
+    recorded = sorted(f.name for f in spec.fields if f.source == "empty_file")
+    if spec.encoding == "multipart":
+        if not spec.form_action and form.get("enctype") != "multipart/form-data":
+            return "the form no longer posts as multipart/form-data"
+        if files != recorded:
+            return "the form's file inputs changed since the recording"
+    elif files and not spec.form_action:
+        return "the form has a file input; the API step doesn't send files"
+    return None
 
 
 class _Missing(KeyError):
