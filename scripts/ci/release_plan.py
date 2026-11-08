@@ -190,7 +190,9 @@ def _release_published(repo: str, tag: str) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.split("\n\n")[0], allow_abbrev=False
+    )
     parser.add_argument("--package", default="all", choices=["all", *PACKAGES])
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--dispatch", action="store_true", help="fail instead of warn")

@@ -163,7 +163,7 @@ def _write_outputs(path: Path, *, pypi_exists: bool, release_exists: bool) -> No
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--dist", type=Path, required=True)
     parser.add_argument("--package", required=True)
     parser.add_argument("--version", required=True)

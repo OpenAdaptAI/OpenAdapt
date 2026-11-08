@@ -34,7 +34,7 @@ from openadapt_flow.traversal import iter_workflow_steps
 
 
 @pytest.fixture(scope="module")
-def results() -> dict:
+def results(module_durable_authority) -> dict:
     return run_benchmark(n=1, log=lambda _m: None)
 
 

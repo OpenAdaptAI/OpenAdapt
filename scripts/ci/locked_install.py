@@ -115,7 +115,9 @@ def _run(command: list[str]) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.split("\n\n")[0], allow_abbrev=False
+    )
     parser.add_argument("--lock", action="append", required=True, metavar="SPEC")
     parser.add_argument("--editable", action="append", default=[], metavar="DIR")
     args = parser.parse_args(argv)

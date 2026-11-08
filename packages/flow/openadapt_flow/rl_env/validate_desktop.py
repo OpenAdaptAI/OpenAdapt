@@ -346,7 +346,9 @@ def validate(
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("env_dir", type=Path)
     parser.add_argument("--agents", default=",".join(AGENTS))
     parser.add_argument("--only", action="append")
