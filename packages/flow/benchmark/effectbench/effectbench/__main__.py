@@ -54,23 +54,37 @@ def _print_summary(arm: str, episodes) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="effectbench", description=__doc__)
+    parser = argparse.ArgumentParser(
+        prog="effectbench", description=__doc__, allow_abbrev=False
+    )
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("reference", help="run both baselines and print the headline")
+    sub.add_parser(
+        "reference",
+        help="run both baselines and print the headline",
+        allow_abbrev=False,
+    )
 
-    p_run = sub.add_parser("run", help="run one baseline and print its SWER")
+    p_run = sub.add_parser(
+        "run", help="run one baseline and print its SWER", allow_abbrev=False
+    )
     p_run.add_argument("--baseline", choices=sorted(_BASELINES), required=True)
     p_run.add_argument("--trials", type=int, default=10)
 
-    sub.add_parser("manifest", help="print the task-pack manifest as JSON")
+    sub.add_parser(
+        "manifest", help="print the task-pack manifest as JSON", allow_abbrev=False
+    )
 
-    p_sub = sub.add_parser("submission", help="emit a reproducible submission JSON")
+    p_sub = sub.add_parser(
+        "submission", help="emit a reproducible submission JSON", allow_abbrev=False
+    )
     p_sub.add_argument("--baseline", choices=sorted(_BASELINES), required=True)
     p_sub.add_argument("--trials", type=int, default=10)
 
-    p_score = sub.add_parser("score", help="verify a submission reproduces its numbers")
+    p_score = sub.add_parser(
+        "score", help="verify a submission reproduces its numbers", allow_abbrev=False
+    )
     p_score.add_argument("submission", type=Path)
 
     args = parser.parse_args(argv)

@@ -68,21 +68,69 @@ chmod 0700 "$(dirname "$AUDIT_LOG")" 2>/dev/null || true
 # Serialize the read-last-hash + append transaction. O_APPEND prevents byte
 # interleaving, but without this lock two writers can both chain to the same
 # parent and produce a structurally broken audit log.
+#
+# Ownership is the exclusive creation of the pid file, done by the shell itself
+# with noclobber (open(2) with O_CREAT|O_EXCL). The exit status of mkdir(1) is
+# not trusted for exclusion: the uutils mkdir that Ubuntu 26.04 ships reports
+# success to both callers when two processes race to create one directory.
 lock_dir="${AUDIT_LOG}.lock"
+lock_file="$lock_dir/pid"
+break_file="${AUDIT_LOG}.lock-breaker"
 lock_acquired=0
+
+# Create $1 holding this process's pid; fails if $1 already exists as any
+# kind of file. noclobber alone is not enough: bash opens an existing FIFO or
+# device without O_EXCL, so two writers could both "create" the same FIFO. The
+# pid goes into a fresh staged name and is hard-linked into place; link(2)
+# refuses an existing path of every type. Ownership is then read back from the
+# file itself, not from the exit status of ln(1).
+create_exclusive() {
+  local target="$1" staged="" owner="" linked=1
+  # Refuse any existing path up front, whatever its type.
+  [[ -e "$target" || -L "$target" ]] && return 1
+  staged="$target.$$.$RANDOM$RANDOM"
+  ( set -C; printf '%s\n' "$$" > "$staged" ) 2>/dev/null || return 1
+  [[ -f "$staged" && ! -L "$staged" ]] || return 1
+  ln "$staged" "$target" 2>/dev/null && linked=0
+  rm -f "$staged" 2>/dev/null || true
+  [[ "$linked" -eq 0 && -f "$target" && ! -L "$target" ]] || return 1
+  owner="$(< "$target")" 2>/dev/null || return 1
+  [[ "$owner" == "$$" ]]
+}
+
+# Remove a lock whose owner has exited. Between reading the owner and removing
+# the lock, that owner can release it and another writer can take it, so the
+# removal happens only under a second exclusive lock that serializes breakers,
+# and only if the lock still names the same dead owner. Without this, a breaker
+# could delete a live writer's lock and let two writers chain to the same parent.
+break_stale_lock() {
+  local stale="$1" current=""
+  create_exclusive "$break_file" || return 0
+  current="$(cat "$lock_file" 2>/dev/null || true)"
+  if [[ "$current" == "$stale" ]] && ! kill -0 "$stale" 2>/dev/null; then
+    rm -f "$lock_file" 2>/dev/null || true
+  fi
+  rm -f "$break_file" 2>/dev/null || true
+}
+
 for ((attempt = 0; attempt < 200; attempt++)); do
-  if mkdir "$lock_dir" 2>/dev/null; then
-    printf '%s\n' "$$" > "$lock_dir/pid"
-    lock_acquired=1
-    break
+  if [[ ! -L "$lock_dir" ]]; then
+    mkdir -p "$lock_dir" 2>/dev/null || true
+    if [[ -d "$lock_dir" && ! -L "$lock_dir" ]] && create_exclusive "$lock_file"; then
+      lock_acquired=1
+      break
+    fi
   fi
   owner=""
-  if [[ -d "$lock_dir" && ! -L "$lock_dir" && -r "$lock_dir/pid" ]]; then
-    owner="$(cat "$lock_dir/pid" 2>/dev/null || true)"
+  if [[ -L "$lock_file" ]] || [[ -e "$lock_file" && ! -f "$lock_file" ]]; then
+    echo "audit-log.sh: audit lock $lock_file is not a regular file; refusing" >&2
+    exit 1
+  fi
+  if [[ -d "$lock_dir" && ! -L "$lock_dir" && -f "$lock_file" && ! -L "$lock_file" ]]; then
+    owner="$(cat "$lock_file" 2>/dev/null || true)"
   fi
   if [[ -n "$owner" && "$owner" =~ ^[0-9]+$ ]] && ! kill -0 "$owner" 2>/dev/null; then
-    rm -f "$lock_dir/pid" 2>/dev/null || true
-    rmdir "$lock_dir" 2>/dev/null || true
+    break_stale_lock "$owner"
     continue
   fi
   sleep 0.05
@@ -92,7 +140,7 @@ if [[ "$lock_acquired" -ne 1 ]]; then
   exit 1
 fi
 release_audit_lock() {
-  rm -f "$lock_dir/pid" 2>/dev/null || true
+  rm -f "$lock_file" 2>/dev/null || true
   rmdir "$lock_dir" 2>/dev/null || true
 }
 trap release_audit_lock EXIT

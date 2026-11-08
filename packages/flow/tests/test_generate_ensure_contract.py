@@ -338,3 +338,88 @@ def test_a_date_looking_string_outside_a_date_element_compares_exactly(teach):
     out = generate(teach)
     assert out.admitted, out.refusals
     assert "compare" not in out.contract["fields"]["directive_date"]
+
+
+def _reference_teach(*, with_schema=True):
+    from tests.test_fhir_reference import BASE, schema
+
+    t = _allergy_teach()
+    t.deployment = dict(t.deployment, base_url=BASE)
+    t.confirmed = {"identity"}
+    t.reference_targets = [
+        {"resourceType": "Patient", "id": f"p{i + 1}"} for i in range(len(t.demos))
+    ]
+    if with_schema:
+        t.structure_definition = schema("AllergyIntolerance", "patient")["definition"]
+    for i, d in enumerate(t.demos):
+        d.params["presentation"] = f"Task text {i}"
+        d.after[0]["patient"]["display"] = d.params["presentation"]
+    return t
+
+
+def test_typed_reference_display_is_non_identity_and_other_fields_stay_strict():
+    from openadapt_flow.ensure_record import FhirReader, wrong_fields
+    from tests.test_fhir_reference import Store
+
+    t = _reference_teach()
+    result = generate(t)
+    assert result.admitted, result.refusals
+    c = EnsureContract.model_validate(result.contract)
+    store = Store()
+    store.records = {f"Patient/p{i + 1}": r for i, r in enumerate(t.reference_targets)}
+
+    # Use the fixture's synthetic base, not the Store helper's default base.
+    def get(url, params=None):
+        key = url[len(c.base_url.rstrip("/")) + 1 :]
+        return 200, {}, store.records[key]
+
+    d = t.demos[0]
+    res = copy.deepcopy(d.after[0])
+    res["patient"]["display"] = "Different rendering"
+    evidence = FhirReader(c, get=get).reference_evidence(c, d.params, [res])
+    assert wrong_fields(c, res, d.params, evidence) == []
+    res["patient"]["reference"] = "Patient/p2"
+    res["patient"]["display"] = d.params["presentation"]
+    evidence = FhirReader(c, get=get).reference_evidence(c, d.params, [res])
+    assert "patient" in wrong_fields(c, res, d.params, evidence)
+    res["code"]["text"] = "Wrong scalar"
+    assert "substance" in wrong_fields(c, res, d.params, evidence)
+
+
+def test_reference_like_names_without_schema_keep_display_strict():
+    t = _reference_teach(with_schema=False)
+    result = generate(t)
+    assert result.admitted
+    c = EnsureContract.model_validate(result.contract)
+    from openadapt_flow.ensure_record import wrong_fields
+
+    res = copy.deepcopy(t.demos[0].after[0])
+    res["patient"]["display"] = "Different rendering"
+    assert "presentation" in wrong_fields(c, res, t.demos[0].params)
+
+
+def test_typed_reference_without_captured_target_refuses_generation():
+    t = _reference_teach()
+    t.reference_targets = []
+    result = generate(t)
+    assert not result.admitted
+    assert any("patient" in reason for reason in result.refusals)
+
+
+def test_unbound_typed_reference_display_does_not_become_a_constant_requirement():
+    t = _reference_teach()
+    for d in t.demos:
+        del d.params["presentation"]
+    result = generate(t)
+    assert result.admitted, result.refusals
+    assert not any(
+        entry.startswith("patient.display")
+        for entry in result.contract.get("allow", [])
+    )
+
+
+def test_typed_display_alone_cannot_replace_a_target_binding():
+    t = _reference_teach()
+    for d in t.demos:
+        del d.params["patient"]
+    assert not generate(t).admitted

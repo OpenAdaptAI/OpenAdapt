@@ -257,6 +257,37 @@ row added, changed or removed anywhere is collateral unless a declared
 effect, a declared side record, an attributed concurrent write or an
 allow-listed bookkeeping table explains it.
 
+Each snapshot has a `frame.database.read_row_budget` of 1,000,000 data rows
+by default. It counts all non-skipped tables, including append-only logs,
+and auxiliary audit-query results. If table counts exceed the budget, their
+contents are not fetched. Audit queries have a server-side result limit;
+one row beyond the remaining budget refuses the entire snapshot. A baseline,
+post-save, settling or recheck read over budget makes the frame
+`not_checked` with a `frame too large` reason. It can never verify from a
+partial read. Set a different positive budget in the contract when needed;
+that change is bound by the contract's digest. The default is omitted from
+serialization so existing contract digests stay unchanged.
+
+For a declared append-only table on MySQL or MariaDB with a single
+AUTO_INCREMENT primary key, historical bodies stay on the database server.
+The baseline records each key and a keyed MAC over server-computed SHA-256
+content digests. Later reads check every old key and digest in the same
+consistent transaction, and fetch full values only for keys absent from the
+baseline. The cursor is that key set, so an insertion into an old id gap is
+seen too. An edit or deletion of an old row still refuses the frame. No log
+row is excused by assuming that the database enforces immutability.
+
+Old baselines keep their original full-row encoding. PostgreSQL, SQLite and
+tables without this key shape retain full reads and the row-budget fallback.
+The optimization reduces historical payload transfer; the server still
+reads and hashes historical contents, so its work can grow with log size.
+
+This is a row limit, not a deadline or a byte limit. Counting and reading
+large cells can still be expensive. `max_rows` is a separate setting: it
+limits retained cell hashes, not rows read. Within the read budget, every
+row is still compared, so edits and deletions of old audit rows remain
+visible. Logged agent writes to audit tables still require an explanation.
+
 An app that writes on every request (the acting user's `last_login`, a
 token's `last_seen`) moves rows in every window. `frame.learned` excuses
 exactly those moves on the acting user's own rows (never the written row),

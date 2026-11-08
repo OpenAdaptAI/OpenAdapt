@@ -570,7 +570,7 @@ def main() -> int:
 
     import argparse
 
-    p = argparse.ArgumentParser(description=main.__doc__)
+    p = argparse.ArgumentParser(description=main.__doc__, allow_abbrev=False)
     p.add_argument("command", choices=("up", "status", "down"))
     args = p.parse_args()
     app = OpenEMRApp()
