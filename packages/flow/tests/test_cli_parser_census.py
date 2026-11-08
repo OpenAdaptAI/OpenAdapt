@@ -52,6 +52,11 @@ FORMS = (
         "if condition: Alias = unrelated\nclass Parser(Alias): pass",
         "Parser",
     ),
+    (
+        "conditional_expression_alias",
+        "import argparse as ap\nParser = ap.ArgumentParser if condition else unrelated",
+        "Parser",
+    ),
     ("subparser", "", 'subparsers.add_parser("synthetic", {settings})'),
 )
 SETTINGS = (
@@ -213,5 +218,36 @@ def test_constructor_count_guard_remains(synthetic_inventory):
     ],
 )
 def test_static_bindings_follow_lexical_scopes(inventory_module, source, expected):
+    calls = list(inventory_module["_parser_constructor_calls"](ast.parse(source)))
+    assert len(calls) == expected
+
+
+@pytest.mark.parametrize(
+    "expression",
+    (
+        "[{body} for ap in {iterable}]",
+        "{{{body} for ap in {iterable}}}",
+        "{{ap: {body} for ap in {iterable}}}",
+        "({body} for ap in {iterable})",
+    ),
+    ids=("list", "set", "dict", "generator"),
+)
+@pytest.mark.parametrize(
+    ("body", "iterable", "expected"),
+    (
+        ("ap", "()", 1),
+        ("ap.ArgumentParser()", "()", 1),
+        ("ap", "ap.ArgumentParser()", 2),
+    ),
+    ids=("target-does-not-leak", "target-shadows-body", "first-iterable-is-outer"),
+)
+def test_comprehensions_keep_their_own_bindings(
+    inventory_module, expression, body, iterable, expected
+):
+    comprehension = expression.format(body=body, iterable=iterable)
+    source = (
+        "import argparse as ap\ndef build():\n"
+        f" unused = {comprehension}\n return ap.ArgumentParser()\n"
+    )
     calls = list(inventory_module["_parser_constructor_calls"](ast.parse(source)))
     assert len(calls) == expected

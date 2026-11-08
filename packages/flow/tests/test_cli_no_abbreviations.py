@@ -88,13 +88,18 @@ def test_every_cli_parser_rejects_all_undeclared_long_option_prefixes():
 def _parser_constructor_calls(tree):
     """Resolve static imports and parser bases without executing source code."""
     scopes = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+    comprehensions = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
 
     def scope_nodes(nodes):
         for node in nodes:
             if not isinstance(node, ast.AST):
                 continue
             yield node
-            if isinstance(node, scopes):
+            if isinstance(node, comprehensions):
+                # Only the first iterable is evaluated outside the implicit
+                # comprehension scope; its targets must not shadow this scope.
+                yield from scope_nodes([node.generators[0].iter])
+            elif isinstance(node, scopes):
                 # Defaults, decorators and bases belong to the enclosing scope.
                 children = (
                     value
@@ -110,6 +115,8 @@ def _parser_constructor_calls(tree):
                 yield from scope_nodes(ast.iter_child_nodes(node))
 
     def provenance(node, bindings):
+        if isinstance(node, ast.IfExp):
+            return provenance(node.body, bindings) | provenance(node.orelse, bindings)
         if isinstance(node, ast.Name):
             return bindings.get(node.id, set())
         if (
@@ -194,7 +201,26 @@ def _parser_constructor_calls(tree):
                 and node.func.attr == "add_parser"
             ):
                 yield node
-            if isinstance(node, scopes):
+            if isinstance(node, comprehensions):
+                parameters = [
+                    target.id
+                    for generator in node.generators
+                    for target in ast.walk(generator.target)
+                    if isinstance(target, ast.Name)
+                ]
+                child_body = (
+                    [node.key, node.value]
+                    if isinstance(node, ast.DictComp)
+                    else [node.elt]
+                )
+                child_body += [generator.iter for generator in node.generators[1:]]
+                child_body += [
+                    condition
+                    for generator in node.generators
+                    for condition in generator.ifs
+                ]
+                yield from visit_scope(child_body, bindings, parameters)
+            elif isinstance(node, scopes):
                 parameters = []
                 if not isinstance(node, ast.ClassDef):
                     args = node.args
