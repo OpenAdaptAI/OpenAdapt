@@ -172,7 +172,7 @@ jobs:
         # add macOS (which freezes the PyObjC wheels, whose license notices
         # the build must find) and Windows. Immutable native release tags
         # rebuild every supported OS.
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-22.04"]' || '["ubuntu-22.04", "macos-14", "windows-latest"]') }}
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-22.04"]' || '["ubuntu-22.04", "macos-15", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

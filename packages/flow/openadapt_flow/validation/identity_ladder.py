@@ -704,7 +704,7 @@ def _markdown(summary: dict) -> str:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     ap.add_argument("--out", default="benchmark/identity_ladder", type=Path)
     args = ap.parse_args(argv)
     summary = run(args.out)
