@@ -439,6 +439,8 @@ def test_baseline_authenticates_exact_learned_mapping(service, tmp_path, drift):
         before = verify_run(cfg, params=PARAMS, run_record={"executor_kind": "agent", "executor_id": "synthetic"},
                             authorization_ref="test", baseline_path=baseline, read_provider=provider)
         assert before["receipt"]["checked"]["frame"] == "held"
+        baseline = tmp_path / "drift-baseline.json"
+        capture_baseline(cfg, PARAMS, baseline, read_provider=provider)
         changes = {"permuted-column": {"column": "alternate_key"},
                    "canonicaliser": {"canonicaliser": "exact"},
                    "surface-field": {"surface_field": "alias"}}
