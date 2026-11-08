@@ -96,10 +96,12 @@ def _cmd_remove(args: argparse.Namespace) -> int:
 
 def register(sub: Any) -> None:
     p = sub.add_parser(
-        "no-outbound", help="Strict no-outbound mode: list and edit the allow list"
+        "no-outbound",
+        help="Strict no-outbound mode: list and edit the allow list",
+        allow_abbrev=False,
     )
     s = p.add_subparsers(dest="no_outbound_cmd", required=True)
-    a = s.add_parser("allow", help="The allow-list file")
+    a = s.add_parser("allow", help="The allow-list file", allow_abbrev=False)
     a.add_argument(
         "--file",
         default=None,
@@ -107,22 +109,31 @@ def register(sub: Any) -> None:
     )
     t = a.add_subparsers(dest="allow_cmd", required=True)
 
-    ls = t.add_parser("list", help="Show every allowed address and where it came from")
+    ls = t.add_parser(
+        "list",
+        help="Show every allowed address and where it came from",
+        allow_abbrev=False,
+    )
     ls.add_argument("--json", action="store_true")
     ls.set_defaults(func=_cmd_list)
 
     d = t.add_parser(
         "derive",
         help="Allow only the host(s) a remote-desktop session profile connects to",
+        allow_abbrev=False,
     )
     d.add_argument("profile", help="FreeRDP session JSON or .rdp file")
     d.set_defaults(func=_cmd_derive)
 
-    ad = t.add_parser("add", help="Allow an IP address or private CIDR range by hand")
+    ad = t.add_parser(
+        "add",
+        help="Allow an IP address or private CIDR range by hand",
+        allow_abbrev=False,
+    )
     ad.add_argument("network")
     ad.add_argument("--port", type=int, default=None)
     ad.set_defaults(func=_cmd_add)
 
-    rm = t.add_parser("remove", help="Remove an address or range")
+    rm = t.add_parser("remove", help="Remove an address or range", allow_abbrev=False)
     rm.add_argument("network")
     rm.set_defaults(func=_cmd_remove)

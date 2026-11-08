@@ -36,6 +36,7 @@ from openadapt_flow.runtime.effects.db_snapshot import (
     is_default,
     take_snapshot,
 )
+from tests.test_verifier_recheck import due_now as due_now
 
 # -- rules: no database ---------------------------------------------------------
 
@@ -715,7 +716,7 @@ def test_a_column_default_is_read_from_the_catalog(pg: Pg) -> None:
 
 @live
 def test_the_frame_refutes_a_late_write_and_an_extra_record_on_postgresql(
-    pg: Pg, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    pg: Pg, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, due_now: None
 ) -> None:
     from psycopg2.extensions import parse_dsn
 
@@ -731,7 +732,6 @@ def test_the_frame_refutes_a_late_write_and_an_extra_record_on_postgresql(
     monkeypatch.setenv("OPENADAPT_LEDGER_DIR", str(tmp_path / "ledger"))
     monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
     monkeypatch.setattr(verifier, "USED_DIR", tmp_path / "used")
-    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
     monkeypatch.setenv("PG_READER_PW", pg.password)
     pg.sql(
         "CREATE TABLE contact (id serial PRIMARY KEY, name text, email text)",

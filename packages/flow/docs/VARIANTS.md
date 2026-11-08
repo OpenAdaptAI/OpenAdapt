@@ -1,4 +1,4 @@
-# Variants: one workflow, several admitted programs
+# Workflow variants: one workflow, several programs
 
 In healthcare and insurance, one workflow is often several programs. One
 clinic's EMR has custom fields that another clinic's EMR lacks. Medicare claims
@@ -8,14 +8,14 @@ was recorded on.
 
 When the differences share structure, `induce` folds several recordings into
 one program with guarded branches, and `teach-branch` adds a branch later. When
-they don't, keep each variant as its own bundle with its own admission, and put
+they don't, keep each variant as its own bundle with its own signed run permission, and put
 a variant router in front of them. This page describes that router.
 
 ## How routing works
 
 A *variant set* is a directory with a `variant-set.json` file
 (`openadapt.variant-set/v0`). It points at two or more compiled bundles. Each
-bundle keeps its own `QualificationAdmissionEnvelope`, exactly like a child of a
+bundle keeps its own signed run permission, exactly like a child of a
 process contract. The set doesn't copy bundles.
 
 Each variant has a `when` clause. Before the run, the router evaluates every
@@ -113,14 +113,14 @@ Write a spec. Paths are relative to the spec file.
 ```
 
 ```bash
-openadapt-flow variants author --spec variants.json --out encounter-intake
+openadapt flow variants author --spec variants.json --out encounter-intake
 ```
 
 Authoring refuses a variant whose envelope digest doesn't match its live
 bundle, a bundle that isn't a compiled workflow, duplicate names, mixed
 surfaces, and conditions that aren't separated.
 
-To print a set, run `openadapt-flow variants show encounter-intake`.
+To print a set, run `openadapt flow variants show encounter-intake`.
 
 ## Route and run
 
@@ -128,16 +128,16 @@ To print a set, run `openadapt-flow variants show encounter-intake`.
 it picks a variant and 2 when it halts.
 
 ```bash
-openadapt-flow route encounter-intake --param payer=medicare --first-screen first.png
+openadapt flow route encounter-intake --param payer=medicare --first-screen first.png
 ```
 
 `run` routes, verifies the chosen variant's admission, and runs it:
 
 ```bash
-openadapt-flow run encounter-intake --profile standard --backend web \
+openadapt flow run encounter-intake --profile standard --backend web \
   --url https://app.example.test \
   --param payer=medicare --param patient_id=... \
-  --qualification-trust qualification-trust.json
+  --permission-trust qualification-trust.json
 ```
 
 `run --dry-run` (or `--explain`) routes and verifies the chosen variant's
@@ -145,7 +145,7 @@ admission, records outcome `DRY_RUN`, and executes nothing. Without
 `--run-dir`, each run writes to a new `runs/variants-<UTC timestamp>`
 directory.
 
-The trust registry comes from `--qualification-trust`, the
+The trust registry comes from `--permission-trust`, the
 `OPENADAPT_QUALIFICATION_TRUST` environment variable, or
 `qualification-trust.json` beside `variant-set.json`. Revoked admission IDs in
 `OPENADAPT_REVOKED_ADMISSION_IDS` are honored. Inputs that the chosen bundle
@@ -209,9 +209,9 @@ normal qualification flow so that it gets its own envelope. Then add it to the
 set:
 
 ```bash
-openadapt-flow variants add encounter-intake \
+openadapt flow variants add encounter-intake \
   --variant medicare_v2=bundles/medicare-v2 \
-  --admission bundles/medicare-v2/qualification-admission.json \
+  --permission bundles/medicare-v2/qualification-admission.json \
   --when-theme light --when-input payer=medicare \
   --derived-from light
 ```
@@ -286,3 +286,24 @@ it's Cloud Execute.
   is `false`.
 - The cross-language production receipt projection doesn't carry the
   `variant` block. It binds the block through `source_receipt_sha256`.
+
+## Format and compatibility reference
+
+The artifact remains `openadapt.variant-set/v0`. The JSON authoring spec uses
+`admission`, and each bundle's signed artifact retains its existing
+`QualificationAdmissionEnvelope` schema and canonical class name. Environment
+variables and default filenames, including `OPENADAPT_QUALIFICATION_TRUST` and
+`qualification-trust.json`, keep their existing spellings.
+
+Python callers can use `openadapt_flow.permissions.RunPermissionV1` or
+`RunPermissionV2`. Each is the identical class object exported as
+`QualificationAdmissionEnvelope` by `qualification_admission` or
+`qualification_admission_v2`, respectively. Choose the version explicitly;
+there is no unversioned alias. These names do not change v4 permissions.
+
+`--admission` is deprecated in favor of `--permission` on `process` and
+`variants add`. `--qualification-trust` is deprecated in favor of
+`--permission-trust` on `run`. The old Python imports are deprecated in favor
+of the versioned names above. Old flags and imports remain accepted for at
+least one full release cycle; removal requires a separate compatibility
+decision. Imports and protocol/JSON output emit no deprecation notices.

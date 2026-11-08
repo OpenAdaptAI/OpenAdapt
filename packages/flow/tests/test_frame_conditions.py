@@ -25,6 +25,7 @@ from openadapt_flow.verify_run import (
     receipt_problem,
     verify_run,
 )
+from tests._rest_read_contract_fixtures import mockmed_effects_config
 
 OTHER = {
     "id": 1,
@@ -370,7 +371,7 @@ def sor():
 def _yaml(base: str, **extra: object) -> dict:
     return {
         "schema_version": "openadapt.verify/v1",
-        "verifier": {"kind": "rest", "base_url": base, "records_path": "/api/db"},
+        "verifier": mockmed_effects_config(base),
         "effects": [
             {
                 "kind": "record_written",
@@ -430,15 +431,33 @@ def test_verify_run_clean_save_states_every_part(sor, tmp_path: Path) -> None:
 
 
 def test_verify_run_without_a_baseline_is_not_verified(sor, tmp_path: Path) -> None:
-    base, _db = sor
+    base, db = sor
     cfg = parse_verify_config(_yaml(base))
-    # Absolute count: the delta alone would confirm.
+    # Absolute target count does not prove the default collateral preconditions.
+    # A complete current read cannot supply the missing before-footprint.
     cfg.effects[0] = cfg.effects[0].model_copy(update={"count_new_only": False})
     _save(base)
+    assert len(db.snapshot()["records"]) == 1
     receipt = _verify(cfg, tmp_path, None)["receipt"]
-    assert receipt["effect_verdict"] == "CONFIRMED"
+    assert receipt["effect_verdict"] == "INDETERMINATE"
     assert receipt["checked"]["frame"] == "not_checked"
     assert receipt["outcome"] == "reconciliation_required"
+
+
+def test_verify_run_absolute_count_with_an_actual_baseline_is_verified(
+    sor, tmp_path: Path
+) -> None:
+    base, db = sor
+    db.add("p2", "Consult", "Preserve this prior chart")
+    cfg = parse_verify_config(_yaml(base))
+    cfg.effects[0] = cfg.effects[0].model_copy(update={"count_new_only": False})
+    baseline = tmp_path / "baseline.json"
+    capture_baseline(cfg, PARAMS, baseline)
+    _save(base)
+    receipt = _verify(cfg, tmp_path, baseline)["receipt"]
+    assert receipt["effect_verdict"] == "CONFIRMED"
+    assert receipt["checked"]["frame"] == "held"
+    assert receipt["outcome"] == "verified"
 
 
 def test_verify_run_stray_addition_is_refuted(sor, tmp_path: Path) -> None:

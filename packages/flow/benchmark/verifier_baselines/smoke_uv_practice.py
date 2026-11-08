@@ -74,7 +74,6 @@ def transcript_to_steps(transcript: list, url: str) -> list:
         steps.append(
             {
                 "url": url,
-                "state_description": turn.get("text", ""),
                 "action_name": name,
                 "action_args": args,
             }
@@ -105,7 +104,7 @@ async def main(run_dir: Path, run_json: Path, out_path: Path) -> None:
     # (404 "deprecated" on 2026-11-03), so gpt-5 plays both roles here.
     try:
         res = await uv_judge.judge(
-            task, init_url, steps, claim.get("final_text", ""), shots, gpt5
+            task, init_url, steps, shots, gpt5
         )
     finally:
         await gpt5.close()

@@ -40,6 +40,7 @@ from openadapt_flow.compiler.probing import (
 )
 from openadapt_flow.deployment import DeploymentConfig
 from openadapt_flow.ir import ActionKind, Anchor, StateKind, Step, Workflow
+from openadapt_flow.mockmed.fault_server import MOCKMED_RECORDS_READ_CONTRACT
 from openadapt_flow.mockmed.fault_server import serve as serve_fault
 from openadapt_flow.reward.bundle import write_bundle
 from openadapt_flow.runtime.replayer import Replayer
@@ -273,8 +274,7 @@ def _contract(directory: Path, base_url: str) -> Path:
         directory,
         contract_id="reward_contract_mockmed_probe",
         oracle={
-            "kind": "rest",
-            "records_path": "/api/db",
+            **MOCKMED_RECORDS_READ_CONTRACT,
             "base_url": base_url.rstrip("/"),
         },
         channel="api",
