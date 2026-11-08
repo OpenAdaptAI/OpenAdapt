@@ -136,14 +136,16 @@ def parse_filter(cond: str) -> Optional[tuple[str, str, bool]]:
 
 
 def filter_matches(item: Any, want: tuple[str, str, bool]) -> bool:
-    """True when ``item`` is an element the filter keeps."""
+    """Match scalar strings through objects or unambiguous singleton lists."""
 
     if not isinstance(item, dict):
         return False
     node: Any = item
     for part in want[0].split("."):
         if isinstance(node, list):
-            node = node[0] if node else None
+            if len(node) != 1:
+                return False
+            node = node[0]
         if not isinstance(node, dict) or part not in node:
             return False
         node = node[part]
@@ -159,12 +161,13 @@ def extract_path(resource: dict[str, Any], dotted: str) -> Any:
     A segment that lands on a list takes the list's first element (the common
     ``component[0]`` / single-coding case), so ``code.coding.code`` reads the
     first coding's code. A segment may filter a list first:
-    ``telecom[system=email].value`` reads the first telecom whose ``system``
+    ``telecom[system=email].value`` reads the unique telecom whose ``system``
     is ``email`` (a Patient keeps its phone and its email in one list). The
     filter's key may be dotted, and ``^=`` keeps the elements whose value
     starts with the text: ``participant[actor.reference^=Patient/]`` reads
     an Appointment's patient participant.
-    Returns ``None`` when any segment is missing or no element matches.
+    Returns ``None`` when a segment is missing or a filter has zero or
+    multiple matches. Unfiltered paths retain their first-element behavior.
     """
     node: Any = resource
     for seg in split_path(dotted):
@@ -181,10 +184,10 @@ def extract_path(resource: dict[str, Any], dotted: str) -> Any:
         node = node.get(name)
         if want is not None:
             items = node if isinstance(node, list) else [node]
-            node = next(
-                (item for item in items if filter_matches(item, want)),
-                None,
-            )
+            matches = [item for item in items if filter_matches(item, want)]
+            if len(matches) != 1:
+                return None
+            node = matches[0]
     if isinstance(node, list):
         node = node[0] if node else None
     return node
