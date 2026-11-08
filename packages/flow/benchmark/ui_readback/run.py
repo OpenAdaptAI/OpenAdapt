@@ -374,7 +374,7 @@ def render_markdown(results: dict[str, Any]) -> str:
 def main(argv: Optional[list[str]] = None) -> int:
     from benchmark.ui_readback import api_harness, gui_harness
 
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--gui-n", type=int, default=3, help="repeats per GUI cell")
     parser.add_argument("--api-n", type=int, default=5, help="repeats per API cell")
     parser.add_argument("--skip-gui", action="store_true")

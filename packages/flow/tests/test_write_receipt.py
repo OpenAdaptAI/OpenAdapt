@@ -561,7 +561,7 @@ def test_a_recheck_of_another_write_gets_no_receipt(tmp_path: Path) -> None:
 
 
 def test_recheck_receipt_evidence_binds_the_actual_claim_context(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
 ) -> None:
     from openadapt_flow import verifier
 
@@ -572,8 +572,11 @@ def test_recheck_receipt_evidence_binds_the_actual_claim_context(
     pending = begin_write(contract, params, actor=api_fx.BOT, ledger=MemoryLedger())
     api_fx._write(db, api_fx.SAVE)
     result = verify_write(pending, write_receipt=True)
-    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
-    late = verifier.recheck(contract, result, params=params, actor=api_fx.BOT)
+    # The recheck must read at or after its due time (an early read stays
+    # owed), so wait for the real one-second schedule.
+    late = verifier.recheck(
+        contract, result, params=params, actor=api_fx.BOT, wait=True
+    )
     assert late.verified and late.excuse_receipt_sha256s == ()
     state, path = verifier.issue_recheck_receipt(result, late)
     assert state == "issued" and path is not None

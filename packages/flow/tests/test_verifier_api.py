@@ -340,6 +340,7 @@ def test_the_public_api_is_stable() -> None:
         ("authorization_ref", "KEYWORD_ONLY"),
         ("workdir", "KEYWORD_ONLY"),
         ("declared_by", "KEYWORD_ONLY"),
+        ("read_provider", "KEYWORD_ONLY"),
     ]
     assert params(verify_write) == [
         ("pending", "POSITIONAL_OR_KEYWORD"),
@@ -390,6 +391,7 @@ def test_the_public_api_is_stable() -> None:
         ("excused_by", "KEYWORD_ONLY"),
         ("wait", "KEYWORD_ONLY"),
         ("ledger", "KEYWORD_ONLY"),
+        ("read_provider", "KEYWORD_ONLY"),
     ]
     assert [f for f in RecheckResult.__dataclass_fields__] == [
         "outcome",
@@ -403,7 +405,9 @@ def test_the_public_api_is_stable() -> None:
         "evidence",
         "recheck_claim_sha256",
         "excuse_receipt_sha256s",
+        "recheck_owed",
     ]
+    assert RecheckResult.__dataclass_fields__["recheck_owed"].default is False
     assert list(inspect.signature(RecheckState.load).parameters) == [
         "path",
         "params",
@@ -498,11 +502,11 @@ def test_contract_hashes_do_not_change() -> None:
             },
         },
     }
-    for kind, verifier in verifiers.items():
+    for kind, verifier_config in verifiers.items():
         contract = Contract.from_dict(
             {
                 "schema_version": "openadapt.verify/v1",
-                "verifier": verifier,
+                "verifier": verifier_config,
                 "record": record,
                 "frame": {"identity_field": "id"},
             }

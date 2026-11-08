@@ -39,7 +39,6 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 import requests
-
 from benchmark.multiapp_common import (
     CsvRecordVerifier,
     NullBackend,
@@ -90,6 +89,7 @@ def _build_verifier(
                     ledger.base_url,
                     records_path="/api/ui/banner",
                     records_key="records",
+                    records_complete=True,
                     timeout_s=EFFECT_TIMEOUT_S,
                     poll_interval_s=0.02,
                 ),
@@ -97,6 +97,7 @@ def _build_verifier(
                     billing.base_url,
                     records_path="/api/ui/banner",
                     records_key="records",
+                    records_complete=True,
                     timeout_s=EFFECT_TIMEOUT_S,
                     poll_interval_s=0.02,
                 ),
@@ -349,7 +350,7 @@ def run_benchmark(
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--n", type=int, default=DEFAULT_N)
     parser.add_argument("--out", default=str(HERE))
     parser.add_argument("--print", action="store_true", dest="print_only")

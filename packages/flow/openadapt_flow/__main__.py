@@ -1305,7 +1305,8 @@ def _finish_replay(
     )
     plain = plain_result(getattr(report, "transaction_outcome", None), outcome)
     print(f"Result: {plain.label}. {plain.meaning}")
-    print(f"Replay {outcome}: {report_md}")
+    print(f"Next: {plain.next_step}")
+    print(f"Report: {report_md}")
     if report.screenshots_may_leave_box:
         print(
             "NOTE: a model-grounding component was wired for this run — "
@@ -9184,6 +9185,7 @@ def build_parser() -> argparse.ArgumentParser:
             f"New here? Run '{command('demo')}' to see a checked run and a "
             "stopped run side by side on one page."
         ),
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--version",
@@ -9208,6 +9210,7 @@ def build_parser() -> argparse.ArgumentParser:
             "the second stopped; 1 when the pair didn't show that; 2 when the "
             "demo refused to start or lacked evidence."
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--out",
@@ -9242,6 +9245,7 @@ def build_parser() -> argparse.ArgumentParser:
             "(--backend web --url), or the operator's real local desktop input "
             "through openadapt-capture (--backend windows/macos/linux/rdp/citrix)"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--url",
@@ -9427,6 +9431,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "demo-record",
         help="Serve MockMed and record the canonical triage demo",
+        allow_abbrev=False,
     )
     p.add_argument("--out", required=True, help="Recording output directory")
     p.add_argument(
@@ -9455,6 +9460,7 @@ def build_parser() -> argparse.ArgumentParser:
             "of record: record, compile, certify, govern, and VERIFY the write "
             "out of band, then write a shareable local receipt"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--out",
@@ -9516,7 +9522,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.set_defaults(func=_cmd_tutorial)
 
-    p = sub.add_parser("compile", help="Compile a recording into a workflow bundle")
+    p = sub.add_parser(
+        "compile", help="Compile a recording into a workflow bundle", allow_abbrev=False
+    )
     p.add_argument("recording", help="Recording directory")
     p.add_argument("--out", required=True, help="Output bundle directory")
     p.add_argument("--name", required=True, help="Workflow name")
@@ -9577,6 +9585,7 @@ def build_parser() -> argparse.ArgumentParser:
             "underdetermined, printing a record-next worklist of missing "
             "demonstrations"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "recording",
@@ -9667,6 +9676,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Spoken narration for a recording: transcribe on this machine, "
             "scrub, line up with the steps (narration.json), or show it"
         ),
+        allow_abbrev=False,
     )
     nsub = p.add_subparsers(dest="narration_cmd", required=True)
     pa = nsub.add_parser(
@@ -9675,6 +9685,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Transcribe audio on this machine (or read a transcript), scrub it "
             "with openadapt-privacy, and line it up with the recording's steps"
         ),
+        allow_abbrev=False,
     )
     pa.add_argument("recording", help="Recording directory (events.jsonl)")
     src = pa.add_mutually_exclusive_group(required=True)
@@ -9696,7 +9707,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="On-device backend: auto | faster-whisper | openai-whisper",
     )
     pa.set_defaults(func=_cmd_narration_attach)
-    ps = nsub.add_parser("show", help="Print a recording's narration by step")
+    ps = nsub.add_parser(
+        "show", help="Print a recording's narration by step", allow_abbrev=False
+    )
     ps.add_argument("recording", help="Recording or bundle directory")
     ps.set_defaults(func=_cmd_narration_show)
 
@@ -9709,6 +9722,7 @@ def build_parser() -> argparse.ArgumentParser:
             "the workflow's parameters. Emits a program:true bundle the runtime "
             "executes bounded, $0, identity-gated and effect-verified per record"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "bundle",
@@ -9766,6 +9780,7 @@ def build_parser() -> argparse.ArgumentParser:
             "a handoff contract. Each child stays bound to its recorded "
             "surface. certify/run the output directory."
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--child",
@@ -9811,6 +9826,7 @@ def build_parser() -> argparse.ArgumentParser:
             "capabilities. Each --child needs a --admission envelope. "
             "certify/run the output directory; replay refuses it."
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--child",
@@ -9828,12 +9844,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--permission",
         "--admission",
+        dest="admission",
         action="append",
-        metavar="NAME=ENVELOPE",
+        metavar="NAME=FILE",
         help=(
-            "QualificationAdmissionEnvelope for NAME. A compiled recording "
-            "without an envelope is not an admitted capability."
+            "Signed run permission for NAME. Each child needs its own permission. "
+            "--admission is deprecated; use --permission."
         ),
     )
     p.add_argument(
@@ -9878,9 +9896,12 @@ def build_parser() -> argparse.ArgumentParser:
             "Author or extend a variant set: separately admitted variants of one "
             "workflow, routed deterministically before the run"
         ),
+        allow_abbrev=False,
     )
     vsub = p.add_subparsers(dest="variants_command")
-    q = vsub.add_parser("author", help="Write variant-set.json from a JSON spec")
+    q = vsub.add_parser(
+        "author", help="Write variant-set.json from a JSON spec", allow_abbrev=False
+    )
     q.add_argument(
         "--spec",
         required=True,
@@ -9895,14 +9916,20 @@ def build_parser() -> argparse.ArgumentParser:
     q = vsub.add_parser(
         "add",
         help="Add one admitted variant, for example a repaired case promoted to a variant",
+        allow_abbrev=False,
     )
     q.add_argument("variant_set", help="Variant-set directory")
     q.add_argument("--variant", required=True, metavar="NAME=BUNDLE")
     q.add_argument(
+        "--permission",
         "--admission",
+        dest="admission",
         required=True,
-        metavar="ENVELOPE",
-        help="The bundle's own QualificationAdmissionEnvelope",
+        metavar="FILE",
+        help=(
+            "The bundle's own signed run permission. "
+            "--admission is deprecated; use --permission."
+        ),
     )
     q.add_argument(
         "--when-input",
@@ -9930,7 +9957,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Existing variant this repaired bundle was healed from",
     )
     q.set_defaults(func=_cmd_variants)
-    q = vsub.add_parser("show", help="Print a variant set")
+    q = vsub.add_parser("show", help="Print a variant set", allow_abbrev=False)
     q.add_argument("variant_set", help="Variant-set directory")
     q.set_defaults(func=_cmd_variants)
     p.set_defaults(func=_cmd_variants)
@@ -9941,6 +9968,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Show which admitted variant a variant set would run for one item "
             "(inputs + first screen). Executes nothing."
         ),
+        allow_abbrev=False,
     )
     p.add_argument("variant_set", help="Variant-set directory")
     p.add_argument("--param", action="append", metavar="K=V", help="Item input")
@@ -9961,6 +9989,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Replay a bundle against --url, the config's backend.url, or "
             "with --demo-app the bundled demo app"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument(
@@ -10057,6 +10086,7 @@ def build_parser() -> argparse.ArgumentParser:
             "path wired for a real deployment (backend / effects / actuation / "
             "durable / policy) instead of the demo"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument(
@@ -10205,13 +10235,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--admitted-bundle-sha256", default=None, help=argparse.SUPPRESS)
     p.add_argument("--managed-dispatch-file", default=None, help=argparse.SUPPRESS)
     p.add_argument(
+        "--permission-trust",
         "--qualification-trust",
+        dest="qualification_trust",
         default=None,
         metavar="PATH",
         help=(
-            "Qualification signer trust registry for a process-contract parent. "
+            "Trusted signers for process run permissions. "
             "Also OPENADAPT_QUALIFICATION_TRUST or qualification-trust.json "
-            "beside process-contract.json"
+            "beside process-contract.json. "
+            "--qualification-trust is deprecated; use --permission-trust."
         ),
     )
     p.add_argument(
@@ -10315,6 +10348,7 @@ def build_parser() -> argparse.ArgumentParser:
     sa = sub.add_parser(
         "attach-seal",
         help="Attach Cloud's signed Execute receipt (the Seal) to a VERIFIED run report",
+        allow_abbrev=False,
     )
     sa.add_argument("run_dir", help="Run directory holding a VERIFIED report.json")
     sa.add_argument("--execution-id", required=True, help="Cloud Execute execution id")
@@ -10349,6 +10383,7 @@ def build_parser() -> argparse.ArgumentParser:
             "openadapt.effect-receipt/v1. The executor's own record is "
             "hashed, never trusted"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--verify",
@@ -10458,6 +10493,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Resume a durably-paused run from its last verified checkpoint "
             "(never re-running an already-confirmed write)"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("run_dir", help="The paused run directory (holds checkpoints)")
     p.add_argument("--managed-dispatch-file", default=None, help=argparse.SUPPRESS)
@@ -10545,6 +10581,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Record an authenticated approval (approver / resolution / bundle "
             "version) authorizing a durably-paused run to resume"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("run_dir", help="The paused run directory (holds the escalation)")
     p.add_argument(
@@ -10580,9 +10617,12 @@ def build_parser() -> argparse.ArgumentParser:
             "List, approve or decline the per-item approval requests a run is "
             "waiting on (Desktop's Run it)"
         ),
+        allow_abbrev=False,
     )
     item_sub = p.add_subparsers(dest="item_approval_cmd", required=True)
-    q = item_sub.add_parser("show", help="Print the run's approval requests as JSON")
+    q = item_sub.add_parser(
+        "show", help="Print the run's approval requests as JSON", allow_abbrev=False
+    )
     q.add_argument("run_dir", help="The run directory")
     q.add_argument(
         "--all",
@@ -10594,7 +10634,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("approve", "Approve one save a person checked in Desktop's Run it"),
         ("decline", "Don't save: decline one save with a closed reason"),
     ):
-        q = item_sub.add_parser(verb, help=verb_help)
+        q = item_sub.add_parser(verb, help=verb_help, allow_abbrev=False)
         q.add_argument("run_dir", help="The run directory")
         q.add_argument("--request-id", required=True)
         q.add_argument(
@@ -10689,15 +10729,20 @@ def build_parser() -> argparse.ArgumentParser:
             "Sign or check a grant that lets named agents or systems answer "
             "some saves. Only a registered person signs, at a terminal"
         ),
+        allow_abbrev=False,
     )
     grant_sub = p.add_subparsers(dest="approver_grant_cmd", required=True)
-    q = grant_sub.add_parser("sign", help="Sign a grant with your policy-signer key")
+    q = grant_sub.add_parser(
+        "sign", help="Sign a grant with your policy-signer key", allow_abbrev=False
+    )
     q.add_argument("grant", help="Unsigned openadapt-flow/approver-grant/v1 JSON")
     q.add_argument("--key", required=True, help="Your encrypted policy-signer key")
     q.add_argument("--out", required=True)
     q.add_argument("--key-dir", default=None)
     q.set_defaults(func=_cmd_approver_grant)
-    q = grant_sub.add_parser("verify", help="Check a signed grant against the registry")
+    q = grant_sub.add_parser(
+        "verify", help="Check a signed grant against the registry", allow_abbrev=False
+    )
     q.add_argument("grant", help="Signed grant JSON")
     q.add_argument("--key-dir", default=None)
     q.set_defaults(func=_cmd_approver_grant)
@@ -10708,9 +10753,12 @@ def build_parser() -> argparse.ArgumentParser:
             "Create, sign or check a teach authorization: what a teaching agent "
             "may do, signed by a person with their approver key"
         ),
+        allow_abbrev=False,
     )
     ta_sub = p.add_subparsers(dest="teach_auth_cmd", required=True)
-    q = ta_sub.add_parser("create", help="Write the unsigned statement for a spec")
+    q = ta_sub.add_parser(
+        "create", help="Write the unsigned statement for a spec", allow_abbrev=False
+    )
     q.add_argument(
         "spec", help="JSON: task, purposes, origins, inputs, writes, forbidden"
     )
@@ -10730,7 +10778,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("sign", "Show what the statement allows, then sign it with your approver key"),
         ("verify", "Check a signed statement against the approver roster"),
     ):
-        q = ta_sub.add_parser(verb, help=text)
+        q = ta_sub.add_parser(verb, help=text, allow_abbrev=False)
         q.add_argument("statement", help="teach-authorization.json or its folder")
         q.add_argument("--key-dir", default=None, help="Holds the approver roster")
         q.add_argument(
@@ -10748,7 +10796,9 @@ def build_parser() -> argparse.ArgumentParser:
         q.set_defaults(func=_cmd_teach_authorization)
 
     p = sub.add_parser(
-        "bench", help="Replay a bundle N times against MockMed and aggregate"
+        "bench",
+        help="Replay a bundle N times against MockMed and aggregate",
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument("--n", type=int, default=3, help="Number of iterations")
@@ -10774,6 +10824,7 @@ def build_parser() -> argparse.ArgumentParser:
             "the MockMed triage task (agent arm needs an Anthropic API key "
             "and costs real money)"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--n-compiled",
@@ -10806,6 +10857,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         add_help=False,
         prefix_chars="+",
+        allow_abbrev=False,
     )
     p.add_argument("silent_saves_argv", nargs="*")
     p.set_defaults(func=_cmd_silent_saves)
@@ -10830,6 +10882,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Report a bundle's coverage gaps (unarmed clicks, vacuous "
             "postconditions, under-classified risk); exits nonzero by severity"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument(
@@ -10848,6 +10901,7 @@ def build_parser() -> argparse.ArgumentParser:
             "read, drafts effect_contract.yaml for a person to fill in. Never "
             "approves; refuses demonstrations with no consequential (write) step"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "source",
@@ -10931,6 +10985,7 @@ def build_parser() -> argparse.ArgumentParser:
             "the outcome is the safe one, and the next suggested command "
             "(read-only)"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "run_dir",
@@ -10946,6 +11001,7 @@ def build_parser() -> argparse.ArgumentParser:
             "DAG, effect-bound handoffs) as self-contained HTML, Mermaid, "
             "or the shared JSON graph spec"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "bundle",
@@ -10995,6 +11051,7 @@ def build_parser() -> argparse.ArgumentParser:
             "OPENADAPT_BUNDLE_KEY, bind the whole file set to one sealed "
             "index, verify it, and publish it atomically at a new path"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("source", help="Existing workflow bundle directory")
     p.add_argument(
@@ -11020,6 +11077,7 @@ def build_parser() -> argparse.ArgumentParser:
             "to a compiled program's save step, in a new bundle; reports which "
             "entered fields they compare"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Compiled workflow bundle directory (not modified)")
     p.add_argument(
@@ -11048,6 +11106,7 @@ def build_parser() -> argparse.ArgumentParser:
             "fails); passing means the bundle meets that policy's rules, "
             "not that it is safe to run"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument(
@@ -11078,6 +11137,7 @@ def build_parser() -> argparse.ArgumentParser:
             "       %(prog)s <command> ..."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
     )
     _definition_first(p)
     qsub = p.add_subparsers(dest="qualify_cmd", required=True)
@@ -11090,6 +11150,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         description=QUALIFY_HELP,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
     )
     _definition_first(q)
     q.add_argument("bundle", help="Compiled workflow bundle directory")
@@ -11143,17 +11204,21 @@ def build_parser() -> argparse.ArgumentParser:
     _add_subroutine_library_flags(q)
     q.set_defaults(func=_cmd_qualify_campaign)
 
-    q = qsub.add_parser("schema", help="Print the qualification-project JSON Schema")
+    q = qsub.add_parser(
+        "schema", help="Print the qualification-project JSON Schema", allow_abbrev=False
+    )
     q.set_defaults(func=_cmd_qualify)
 
     q = qsub.add_parser(
         "label",
         help="Optionally set, remove, or list presentation-only entity labels",
+        allow_abbrev=False,
     )
     label_sub = q.add_subparsers(dest="label_cmd", required=True)
     label = label_sub.add_parser(
         "set",
         help="Set an optional presentation label for one qualified step",
+        allow_abbrev=False,
     )
     label.add_argument("bundle", help="Workflow bundle directory")
     label.add_argument("--step", required=True, help="Exact qualified workflow step ID")
@@ -11175,15 +11240,21 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     label.set_defaults(func=_cmd_qualify)
-    label = label_sub.add_parser("remove", help="Remove a step entity label")
+    label = label_sub.add_parser(
+        "remove", help="Remove a step entity label", allow_abbrev=False
+    )
     label.add_argument("bundle", help="Workflow bundle directory")
     label.add_argument("--step", required=True, help="Exact qualified workflow step ID")
     label.set_defaults(func=_cmd_qualify)
-    label = label_sub.add_parser("list", help="List qualification-owned entity labels")
+    label = label_sub.add_parser(
+        "list", help="List qualification-owned entity labels", allow_abbrev=False
+    )
     label.add_argument("bundle", help="Workflow bundle directory")
     label.set_defaults(func=_cmd_qualify)
 
-    q = qsub.add_parser("init", help="Initialize a bundle's qualification project")
+    q = qsub.add_parser(
+        "init", help="Initialize a bundle's qualification project", allow_abbrev=False
+    )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument(
         "--target",
@@ -11210,6 +11281,7 @@ def build_parser() -> argparse.ArgumentParser:
             "the compiled demo. Missing pins HALT; nothing is guessed. "
             "Runs the proposed oracle against a --break-it fault."
         ),
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Compiled workflow bundle directory")
     q.add_argument(
@@ -11241,6 +11313,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Confirm every proposed pin in one command after the proposed "
             "oracle catches a --break-it fault. Refusing a pin HALTs."
         ),
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Compiled workflow bundle directory")
     q.add_argument(
@@ -11267,6 +11340,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Sign a local-dev admission for an accepted proposal. "
             "The signer cannot enter a production trust map."
         ),
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Compiled workflow bundle directory")
     q.add_argument(
@@ -11281,6 +11355,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Propose pins from the demo, accept them, and optionally sign a "
             "local-dev admission. After record and compile."
         ),
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Compiled workflow bundle directory")
     q.add_argument(
@@ -11308,7 +11383,9 @@ def build_parser() -> argparse.ArgumentParser:
     q.set_defaults(func=_cmd_qualify)
 
     for verb in ("inspect", "explain", "report"):
-        q = qsub.add_parser(verb, help=f"{verb.title()} qualification coverage")
+        q = qsub.add_parser(
+            verb, help=f"{verb.title()} qualification coverage", allow_abbrev=False
+        )
         q.add_argument("bundle", help="Workflow bundle directory")
         q.add_argument("--policy", default=None)
         q.add_argument("--evidence-root", default=None)
@@ -11318,6 +11395,7 @@ def build_parser() -> argparse.ArgumentParser:
     q = qsub.add_parser(
         "set-identity",
         help="Set exact/normalized identity fields and their quorum",
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument("--step", required=True)
@@ -11367,6 +11445,7 @@ def build_parser() -> argparse.ArgumentParser:
     q = qsub.add_parser(
         "set-risk",
         help="Confirm an action's reviewed business-risk classification",
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument("--step", required=True)
@@ -11381,6 +11460,7 @@ def build_parser() -> argparse.ArgumentParser:
     q = qsub.add_parser(
         "trust-runner",
         help="Trust an Ed25519 qualification-runner public key",
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument("--key-id", required=True)
@@ -11390,6 +11470,7 @@ def build_parser() -> argparse.ArgumentParser:
     q = qsub.add_parser(
         "set-effect",
         help="Assign verification-strength tier to an existing effect",
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument("--step", required=True)
@@ -11409,6 +11490,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Add, update, or inspect one reviewed finite business decision "
             "without editing the workflow manifest"
         ),
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument(
@@ -11432,6 +11514,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Store or check reviewed local judgment cases; this command never "
             "synthesizes an executable rule from examples"
         ),
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument(
@@ -11446,7 +11529,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     q.set_defaults(func=_cmd_qualify)
 
-    q = qsub.add_parser("add-case", help="Add a representative or fault case")
+    q = qsub.add_parser(
+        "add-case", help="Add a representative or fault case", allow_abbrev=False
+    )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument("--case-id", required=True)
     q.add_argument(
@@ -11483,6 +11568,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Import case results produced by the Desktop/local/customer-controlled "
             "qualification runner"
         ),
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument("--results", required=True, metavar="JSON")
@@ -11495,6 +11581,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Run one current qualification case (the practice item or a "
             "readiness drill) with Flow-owned Standard authorization"
         ),
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Sealed workflow bundle directory")
     q.add_argument(
@@ -11550,6 +11637,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Add the five readiness drills for the practice case's save and "
             "trust this computer's local drill key (a local campaign)"
         ),
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Sealed workflow bundle directory")
     q.add_argument(
@@ -11568,6 +11656,7 @@ def build_parser() -> argparse.ArgumentParser:
     q = qsub.add_parser(
         "add-requalification",
         help="Add a condition that requires this workflow to be requalified",
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument(
@@ -11590,6 +11679,7 @@ def build_parser() -> argparse.ArgumentParser:
     q = qsub.add_parser(
         "certify",
         help="Persist a combined qualification and existing-policy decision",
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument("--policy", default="clinical-write")
@@ -11616,6 +11706,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Draft a production-shaped qualification contract from a compiled "
             "demo. Alias of `qualify propose`."
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Compiled workflow bundle directory")
     p.add_argument(
@@ -11644,6 +11735,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Surface compile-time multiple-choice questions for an ambiguous "
             "demo and apply the answers as guards/params (ask, don't guess)"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument(
@@ -11662,12 +11754,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.set_defaults(func=_cmd_disambiguate)
 
-    p = sub.add_parser("emit-skill", help="Emit an Agent Skills folder for a bundle")
+    p = sub.add_parser(
+        "emit-skill",
+        help="Emit an Agent Skills folder for a bundle",
+        allow_abbrev=False,
+    )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument("--out", required=True, help="Parent directory for the skill folder")
     p.set_defaults(func=_cmd_emit_skill)
 
-    p = sub.add_parser("emit-mcp", help="Emit a standalone MCP server.py for a bundle")
+    p = sub.add_parser(
+        "emit-mcp",
+        help="Emit a standalone MCP server.py for a bundle",
+        allow_abbrev=False,
+    )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument("--out", required=True, help="Path for the generated server.py")
     p.set_defaults(func=_cmd_emit_mcp)
@@ -11680,6 +11780,7 @@ def build_parser() -> argparse.ArgumentParser:
             "branch, gates + validates it, and writes an updated bundle ONLY "
             "if it passes (governed refusal otherwise; nonzero exit)"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "run_dir",
@@ -11731,6 +11832,7 @@ def build_parser() -> argparse.ArgumentParser:
             "an enum parameter when normal runs show that text too) and is "
             "written as a repair candidate that needs approval"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--example",
@@ -11762,6 +11864,7 @@ def build_parser() -> argparse.ArgumentParser:
             "back. A proposed bundle NEVER becomes active without this "
             "lifecycle. See docs/REPAIR_LIFECYCLE.md"
         ),
+        allow_abbrev=False,
     )
     rsub = p.add_subparsers(dest="repair_cmd", required=True)
 
@@ -11782,6 +11885,7 @@ def build_parser() -> argparse.ArgumentParser:
             "refuses (fail closed) any contract weakening without a new "
             "qualification revision"
         ),
+        allow_abbrev=False,
     )
     r.add_argument("proposed", help="The proposed (healed / taught) bundle")
     r.add_argument(
@@ -11810,12 +11914,16 @@ def build_parser() -> argparse.ArgumentParser:
     _repair_store_flag(r)
     r.set_defaults(func=_cmd_repair)
 
-    r = rsub.add_parser("list", help="List candidates and their lifecycle states")
+    r = rsub.add_parser(
+        "list", help="List candidates and their lifecycle states", allow_abbrev=False
+    )
     _repair_store_flag(r)
     r.set_defaults(func=_cmd_repair)
 
     r = rsub.add_parser(
-        "show", help="Show a candidate's reviewable diff, campaigns, and state"
+        "show",
+        help="Show a candidate's reviewable diff, campaigns, and state",
+        allow_abbrev=False,
     )
     r.add_argument("candidate_id")
     r.add_argument(
@@ -11824,7 +11932,11 @@ def build_parser() -> argparse.ArgumentParser:
     _repair_store_flag(r)
     r.set_defaults(func=_cmd_repair)
 
-    r = rsub.add_parser("review", help="Record a human review of the candidate's diff")
+    r = rsub.add_parser(
+        "review",
+        help="Record a human review of the candidate's diff",
+        allow_abbrev=False,
+    )
     r.add_argument("candidate_id")
     r.add_argument(
         "--reviewed-by",
@@ -11842,6 +11954,7 @@ def build_parser() -> argparse.ArgumentParser:
             "wrong-entity / stale-target / dialog / verifier-failure frames "
             "must all be REFUSED)"
         ),
+        allow_abbrev=False,
     )
     r.add_argument("candidate_id")
     r.add_argument("--kind", choices=["replay", "fault"], required=True)
@@ -11854,6 +11967,7 @@ def build_parser() -> argparse.ArgumentParser:
             "HUMAN approval gating promotion; refuses unless the diff was "
             "reviewed and BOTH campaigns passed. Binds the exact bundle hashes"
         ),
+        allow_abbrev=False,
     )
     r.add_argument("candidate_id")
     r.add_argument(
@@ -11881,6 +11995,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Copy BOTH bundles into the store by content hash and re-verify "
             "them byte-exact (prior too, so rollback is always local)"
         ),
+        allow_abbrev=False,
     )
     r.add_argument("candidate_id")
     _repair_store_flag(r)
@@ -11892,6 +12007,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Atomically activate the staged bundle in CANARY mode: a bounded "
             "first-N-runs window with per-run verification before full active"
         ),
+        allow_abbrev=False,
     )
     r.add_argument("candidate_id")
     r.add_argument(
@@ -11910,6 +12026,7 @@ def build_parser() -> argparse.ArgumentParser:
             "silent-incorrect or verification regression auto-reverts to the "
             "prior bundle"
         ),
+        allow_abbrev=False,
     )
     r.add_argument("candidate_id")
     r.add_argument("--run-dir", required=True, help="The completed run directory")
@@ -11921,6 +12038,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "One-command rollback: restore the prior bundle hash as the active pointer"
         ),
+        allow_abbrev=False,
     )
     r.add_argument(
         "--candidate-id",
@@ -11936,7 +12054,9 @@ def build_parser() -> argparse.ArgumentParser:
     r.set_defaults(func=_cmd_repair)
 
     r = rsub.add_parser(
-        "status", help="Show the atomic active-bundle pointer and its lineage"
+        "status",
+        help="Show the atomic active-bundle pointer and its lineage",
+        allow_abbrev=False,
     )
     _repair_store_flag(r)
     r.set_defaults(func=_cmd_repair)
@@ -11947,6 +12067,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Undo a repair that applied without a person: the prior bundle is "
             "active again, and repairs of that step go to a person"
         ),
+        allow_abbrev=False,
     )
     r.add_argument("candidate_id", help="The automatic repair's candidate id")
     r.add_argument("--by", required=True, help="Your name, recorded on the revert")
@@ -11956,6 +12077,7 @@ def build_parser() -> argparse.ArgumentParser:
     r = rsub.add_parser(
         "standard-changes",
         help="List the repairs that applied without a person (the daily digest)",
+        allow_abbrev=False,
     )
     r.add_argument("--day", default=None, help="UTC day, YYYY-MM-DD (default: today)")
     r.add_argument("--json", action="store_true", help="Print the ledger rows as JSON")
@@ -11965,6 +12087,7 @@ def build_parser() -> argparse.ArgumentParser:
     r = rsub.add_parser(
         "clear-hold",
         help="Let repairs of a step apply without a person again after a revert",
+        allow_abbrev=False,
     )
     r.add_argument("--workflow", required=True)
     r.add_argument("--step", required=True)
@@ -11978,6 +12101,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Claim a one-time browser pairing and store the workspace credential "
             "in the OS keychain"
         ),
+        allow_abbrev=False,
     )
     pairing_source = p.add_mutually_exclusive_group(required=True)
     pairing_source.add_argument(
@@ -12020,6 +12144,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Validate an ingest token against the hosted control plane and "
             "store it in the OS keychain"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--token",
@@ -12065,6 +12190,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "sanitize",
         help="Create a verified PHI-scrubbed derivative without modifying the original",
+        allow_abbrev=False,
     )
     p.add_argument("path", help="Original recording or bundle directory")
     p.add_argument("--out", required=True, help="New sanitized derivative directory")
@@ -12086,6 +12212,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "review-sanitized",
         help="Review original vs sanitized content in a loopback-only local viewer",
+        allow_abbrev=False,
     )
     p.add_argument("path", help="Sanitized derivative directory")
     p.add_argument("--original", required=True, help="Original artifact directory")
@@ -12107,6 +12234,7 @@ def build_parser() -> argparse.ArgumentParser:
             "extracted bytes and then runs the unchanged approval gate. It "
             "approves nothing."
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--archive", required=True, help="Approved immutable archive (.approved.zip)"
@@ -12136,6 +12264,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "approve-sanitized",
         help="Approve and freeze the exact reviewed derivative as an immutable archive",
+        allow_abbrev=False,
     )
     p.add_argument("path", help="Sanitized derivative directory")
     p.add_argument("--original", required=True, help="Original artifact directory")
@@ -12152,6 +12281,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Standard and Regulated activation also binds the sealed governed "
             "authorization template."
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--recording",
@@ -12251,6 +12381,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Upload the exact approved sanitized archive to /api/ingest; "
             "raw input is sanitized locally and paused for review"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "path",
@@ -12370,6 +12501,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Emit a PHI-free break diagnostic from a halted run's report.json "
             "to /api/runs/ingest-report (the recording stays local)"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("run_dir", help="The halted run directory (holds report.json)")
     p.add_argument(
@@ -12428,6 +12560,7 @@ def build_parser() -> argparse.ArgumentParser:
             "report.json to /api/runs/ingest-report (bounded counts, duration, "
             "and exact pushed-bundle identity — the recording stays local)"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("run_dir", help="The completed run directory (holds report.json)")
     p.add_argument(
@@ -12520,6 +12653,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Read-only unless --allow-actions; needs `pip install "
             "'openadapt-flow[console]'`"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--bundles",
@@ -12643,6 +12777,7 @@ def build_parser() -> argparse.ArgumentParser:
             "are self-signed with a local key. They are not OpenAdapt "
             "production Seals. Needs `pip install 'openadapt-flow[execute]'`"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--port",
@@ -12679,6 +12814,7 @@ def build_parser() -> argparse.ArgumentParser:
             "an independent oracle. Receipts are self-signed reward receipts, "
             "not Execute Seals. Needs `pip install 'openadapt-flow[reward]'`"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--contract",
@@ -12725,9 +12861,12 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "business-decisions",
         help="Customer-runner typed-decision relay; it never resumes or acts.",
+        allow_abbrev=False,
     )
     bdsub = p.add_subparsers(dest="business_decisions_cmd", required=True)
-    ps = bdsub.add_parser("serve", help="Serve the outbound-only non-actuating relay")
+    ps = bdsub.add_parser(
+        "serve", help="Serve the outbound-only non-actuating relay", allow_abbrev=False
+    )
     ps.add_argument("--runs", required=True, help="Customer-local durable run root")
     ps.add_argument(
         "--runner-config", default=None, help="Operator-authored runner.toml"
@@ -12758,12 +12897,14 @@ def build_parser() -> argparse.ArgumentParser:
             "governed jobs LOCALLY (customer owns the data boundary; PHI stays "
             "on this side)"
         ),
+        allow_abbrev=False,
     )
     csub = p.add_subparsers(dest="connector_cmd", required=True)
 
     pe = csub.add_parser(
         "enroll",
         help="Enroll against a mock/development control plane and persist its token",
+        allow_abbrev=False,
     )
     pe.add_argument(
         "--control-plane-url", help="Control plane base URL (or CONTROL_PLANE_URL)"
@@ -12789,6 +12930,7 @@ def build_parser() -> argparse.ArgumentParser:
     pr = csub.add_parser(
         "run",
         help="Poll the control plane and run governed jobs until interrupted",
+        allow_abbrev=False,
     )
     pr.add_argument(
         "--control-plane-url", help="Control plane base URL (or CONTROL_PLANE_URL)"

@@ -634,6 +634,8 @@
     "openadapt_flow/console/static/console.js",
     "openadapt_flow/console/static/index.html",
     "openadapt_flow/eligibility/payer_routes.yaml",
+    "openadapt_flow/integrations/agents/demo_packs/kanboard-cases.json",
+    "openadapt_flow/integrations/agents/demo_packs/kanboard.json",
     "openadapt_flow/mockloan/static/app.js",
     "openadapt_flow/mockloan/static/index.html",
     "openadapt_flow/mockloan/static/styles.css",

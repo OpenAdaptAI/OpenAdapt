@@ -437,10 +437,16 @@ class VerifyBridge:
                 f"the recheck couldn't run: {exc}; it is still owed, so call "
                 "verify_recheck again once that is fixed"
             ) from exc
-        with self._lock:
-            self._rechecks.pop(write_id, None)
-            self._spent[write_id] = late.outcome
-        if late.verified:
+        if not late.recheck_owed:
+            with self._lock:
+                self._rechecks.pop(write_id, None)
+                self._spent[write_id] = late.outcome
+        if late.recheck_owed:
+            nxt = (
+                "The recheck remains owed: call verify_recheck again at or "
+                "after recheck_due_at. Don't retry the write."
+            )
+        elif late.verified:
             nxt = "The verdict stands. A write after read_at is not seen."
         elif late.late:
             nxt = (
@@ -463,5 +469,6 @@ class VerifyBridge:
             "excuse_receipt_sha256s": list(late.excuse_receipt_sha256s)
             if late.excuse_receipt_sha256s is not None
             else None,
+            "recheck_owed": late.recheck_owed,
             "next": nxt,
         }
