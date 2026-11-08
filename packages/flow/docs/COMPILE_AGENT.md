@@ -240,6 +240,11 @@ also closes it and never calls the actor. The pipeline neither retries nor
 refunds the caller's reservation. Capture uses the same backend without
 adopting an unrelated page or opening another context after the callback.
 
+A completed capture is compiled first, then its owned controllers and backend
+are closed. Only successful cleanup permits signing and publishing a normal
+candidate. Failed finalization, closing or publication retains the staged
+capture as refused evidence; a reload cannot confirm or admit it as a draft.
+
 The callback is process-local Python configuration. It is excluded from
 task JSON, task identity, saved specifications, bundles and admission
 records. `FirstRunCompiler.load(..., before_capture=callback)` can supply it

@@ -28,6 +28,7 @@ What it never does:
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 import time
@@ -606,28 +607,51 @@ class Recording:
         exc: Optional[BaseException],
         tb: Optional[TracebackType],
     ) -> bool:
-        from openadapt_flow.backends._owned import close_owned
+        from openadapt_flow.backends._owned import close_owned, note_failure
 
         assert self.computer is not None and self._close is not None
         callbacks = [self._close]
         if self.dispatcher is not None:
             callbacks.insert(0, self.dispatcher.close)
         try:
-            self.result = self._finish(exc)
+            pending = self._finish(exc)
         except BaseException as error:
-            close_owned(callbacks, primary=error)
-            raise
+            primary = exc if exc is not None else error
+            if primary is not error:
+                note_failure(primary, error)
+            self.result = None
+            close_owned([*callbacks, lambda: self._keep_failed_capture("finish", primary)], primary=primary)
+            raise primary
         suppress = isinstance(exc, UnsupportedAction)
         try:
             close_owned(callbacks, primary=None if suppress else exc)
-        except BaseException:
-            # _explore must not convert a cleanup failure into a completed
-            # draft merely because _finish returned before closing.
+        except BaseException as error:
             self.result = None
+            close_owned((lambda: self._keep_failed_capture("cleanup", error),), primary=error)
             raise
+        try:
+            # Compilation is staged; only completed owned cleanup permits
+            # signing and publication as a discoverable normal candidate.
+            self.result = pending() if callable(pending) else pending
+        except BaseException as error:
+            primary = exc if exc is not None else error
+            if primary is not error:
+                note_failure(primary, error)
+            self.result = None
+            close_owned((lambda: self._keep_failed_capture("publication", primary),), primary=primary)
+            raise primary
         return suppress
 
-    def _finish(self, exc: Optional[BaseException]) -> JitResult:
+    def _keep_failed_capture(self, stage: str, error: BaseException) -> None:
+        """Retain failed staged/publication data outside normal discovery."""
+        if self._owner.program_dir.exists():
+            assert self.computer is not None
+            self._owner._capture_refused(
+                "capture_failed", f"capture_{stage}_failed:{type(error).__name__}",
+                self.computer, guard=self.guard,
+            )
+
+    def _finish(self, exc: Optional[BaseException]) -> Union[JitResult, Callable[[], JitResult]]:
         from openadapt_flow.authoring import AuthoringError
         from openadapt_flow.teach_scope import ScopeViolation
 
@@ -717,7 +741,7 @@ class Recording:
             for line in lines:
                 if owner.on_warning is not None:
                     owner.on_warning(line)
-        return owner._write_draft(
+        return lambda: owner._write_draft(
             session,
             compiled,
             computer,
@@ -1132,15 +1156,25 @@ class CompiledAgent:
         # candidate.json can't turn the recorder into someone else.
         candidate = lifecycle.sign_recorder(program, candidate, key_dir=self.key_dir)
         (program / "capture.json").write_text(json.dumps(computer.log, indent=2) + "\n")
-        (program / CANDIDATE_FILE).write_text(json.dumps(candidate, indent=2) + "\n")
-        lifecycle._event(program, "draft", recorded_by=candidate["recorded_by"])
-        return JitResult(
+        # Stage the signed record, then finish fallible retention before the
+        # one atomic publication. A failed event never exposes a candidate.
+        staged = program / f"candidate-pending-{uuid.uuid4().hex}.json"
+        descriptor = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w") as stream:
+            json.dump(candidate, stream, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        result = JitResult(
             status=NEEDS_HUMAN_ADMIT,
             task_key=self.task.key,
             cache="miss",
             agent_called=self.agent is not None,
             candidate=candidate,
         )
+        lifecycle._event(program, "draft", recorded_by=candidate["recorded_by"])
+        staged.replace(program / CANDIDATE_FILE)
+        return result
 
     def _capture_refused(
         self,

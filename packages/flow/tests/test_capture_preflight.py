@@ -222,6 +222,30 @@ def test_normal_request_guard_precedes_navigation_and_hook(local_task, tmp_path,
     assert guarded[0].is_closed()
 
 
+def test_capture_hook_closes_only_its_context_in_a_shared_process(local_task, tmp_path):
+    from openadapt_flow.backends._browser_process import _SHARED_BROWSER, shared_browser
+
+    events = []
+
+    def prepare(backend):
+        events.append(("prepare", backend.page, backend.page.context))
+        backend.page.locator("#prepared").evaluate("element => element.textContent = 'ready'")
+
+    with shared_browser(headless=True):
+        _, browser = _SHARED_BROWSER[True]
+        sentinel = browser.new_context()
+        unrelated = sentinel.new_page()
+        try:
+            with pytest.raises(Observed):
+                invoke("loader", local_task[0], prepare, NoModelActor(events), tmp_path)
+            assert events[0][1] is events[1][1] and events[0][2] is events[1][2]
+            assert events[0][1].is_closed()
+            assert browser.is_connected() and not unrelated.is_closed()
+            assert browser.contexts == [sentinel]
+        finally:
+            sentinel.close()
+
+
 def test_hook_is_not_part_of_task_identity_or_saved_spec(local_task):
     path, _ = local_task
     a = load_task(path)
@@ -355,3 +379,134 @@ def test_cleanup_failure_cannot_be_converted_to_a_completed_capture(tmp_path, mo
     with pytest.raises(RuntimeError) as caught:
         jit.run(x="synthetic")
     assert caught.value is cleanup
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+def test_actor_primary_survives_halt_and_all_cleanup_failures(tmp_path, monkeypatch, cancel):
+    events = []
+    primary = Cancelled() if cancel else RuntimeError("actor primary")
+
+    class Session:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start_record(self):
+            pass
+
+        def halt(self):
+            events.append("halt")
+            raise ValueError("secondary halt failure")
+
+    def backend_close():
+        events.append("backend-close")
+        raise ValueError("secondary backend failure")
+
+    def dispatcher_close():
+        events.append("dispatcher-close")
+        raise Cancelled()
+
+    monkeypatch.setattr(authoring, "AuthoringSession", Session)
+    jit = compile_agent(
+        SimpleNamespace(dialect="generic", requires_model_key=False),
+        task=TaskSignature("primary.test", "do {x}", {"x": str}),
+        app=SurfaceApp({"kind": "windows", "agent_url": "http://127.0.0.1:1"}, open_backend=lambda _: SimpleNamespace(close=backend_close)),
+        verifier=None,
+        policy="clinical-write",
+        cache_dir=tmp_path,
+    )
+    recording = jit.recording(x="synthetic")
+    with pytest.raises(type(primary)) as caught:
+        with recording:
+            recording.dispatcher.on_close(dispatcher_close)
+            raise primary
+    assert caught.value is primary
+    assert events == ["halt", "dispatcher-close", "backend-close"]
+    assert recording.result is None
+
+
+@pytest.mark.parametrize("failure", [None, "dispatcher", "backend", "publication"])
+def test_real_candidate_publication_waits_for_cleanup_and_reload_refuses_failed_capture(
+    local_task, tmp_path, monkeypatch, failure
+):
+    from contextlib import ExitStack
+
+    from openadapt_flow.ir import ActionKind, Step, Workflow
+    from openadapt_flow.jit import AdmissionError, lifecycle
+    from openadapt_flow.jit.compile_agent import Recording, RecordingDispatcher
+
+    setup = load_task(local_task[0], key_dir=tmp_path / "synthetic-signing")
+    values = {"before_capture": "synthetic"}
+    compiler, _ = setup.cache._compiler(setup.instruction, values)
+    compiler.save_spec()
+    jit = compiler._jit()
+    events = []
+    primary = RuntimeError(failure)
+
+    def compile_staged(bundle, **kwargs):
+        # Capture compilation is modeled; the actual Workflow writer,
+        # parameter lift, recorder signature and candidate writer are real.
+        Workflow(
+            name="synthetic",
+            steps=[Step(id="step_000", intent="type synthetic", action=ActionKind.TYPE, text="synthetic")],
+        ).save(bundle)
+        events.append("compile")
+        assert jit.candidate() is None
+        return {"workflow_id": "synthetic"}
+
+    def close(stage):
+        assert jit.candidate() is None
+        assert (jit.bundle_dir / "workflow.json").exists()
+        events.append(stage)
+        if failure == stage:
+            raise primary
+
+    recording = Recording(jit, values, values, "generic")
+    recording._session = SimpleNamespace(
+        compile=compile_staged,
+        compiled_recording_dir=None,
+        recording_dir=None,
+    )
+    recording.computer = SimpleNamespace(actions=1, log=[])
+    recording._close = lambda: close("backend")
+    recording.dispatcher = RecordingDispatcher(recording)
+    recording.dispatcher.on_close(lambda: close("dispatcher"))
+    original_event = lifecycle._event
+
+    def persist_event(program, kind, **fields):
+        if kind == "draft":
+            assert events == ["compile", "dispatcher", "backend"]
+            assert jit.candidate() is None
+            assert list(program.glob("candidate-pending-*.json"))
+            if failure == "publication":
+                raise primary
+        return original_event(program, kind, **fields)
+
+    monkeypatch.setattr(lifecycle, "_event", persist_event)
+
+    def finish():
+        with ExitStack() as stack:
+            stack.push(recording)
+
+    if failure is None:
+        finish()
+        assert recording.result.candidate == jit.candidate()
+        assert jit.candidate()["recorder"]
+        assert FirstRunCompiler.load(compiler.dir)._jit().candidate() == jit.candidate()
+        assert not list(jit.program_dir.glob("candidate-pending-*.json"))
+    else:
+        with pytest.raises(RuntimeError) as caught:
+            finish()
+        assert caught.value is primary
+        assert recording.result is None and jit.candidate() is None
+        reloaded = FirstRunCompiler.load(compiler.dir)._jit()
+        assert reloaded.candidate() is None and not reloaded.admitted
+        with pytest.raises(AdmissionError, match="no draft"):
+            reloaded.confirm_params(principal_id="synthetic-reviewer", accept_params=[])
+        with pytest.raises(AdmissionError, match="no draft"):
+            reloaded.admit(principal_id="synthetic-reviewer")
+        kept = list(jit.task_dir.glob("refused-*"))
+        assert len(kept) == 1 and (kept[0] / "refused.json").exists()
+        assert (kept[0] / "bundle" / "workflow.json").exists()
+        if failure == "publication":
+            assert list(kept[0].glob("candidate-pending-*.json"))
+    assert events == ["compile", "dispatcher", "backend"]

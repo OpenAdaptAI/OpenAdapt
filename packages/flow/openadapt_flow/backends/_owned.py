@@ -5,6 +5,16 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 
 
+def note_failure(primary: BaseException, secondary: BaseException) -> None:
+    """Retain secondary diagnostics without replacing primary, also on 3.10."""
+    try:
+        note = getattr(primary, "add_note", None)
+        if callable(note):
+            note(f"owned cleanup also raised {type(secondary).__name__}")
+    except BaseException:
+        pass
+
+
 def close_owned(
     callbacks: Iterable[Callable[[], None]],
     *,
@@ -24,11 +34,6 @@ def close_owned(
             if first is None:
                 first = error
             else:
-                try:
-                    note = getattr(first, "add_note", None)
-                    if callable(note):
-                        note(f"owned cleanup also raised {type(error).__name__}")
-                except BaseException:
-                    pass
+                note_failure(first, error)
     if primary is None and first is not None:
         raise first
