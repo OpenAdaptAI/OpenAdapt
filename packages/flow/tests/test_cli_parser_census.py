@@ -81,6 +81,30 @@ FORMS = (
         "def build():\n unused = list((Parser := ap.ArgumentParser) for _ in (1,))\n"
         " return Parser({settings})",
     ),
+    (
+        "list_walrus_free_alias",
+        "import argparse as ap",
+        "def build():\n Parser = ap.ArgumentParser\n"
+        " return [Parser({settings}) for _ in (1,) if (Parser := Parser)]",
+    ),
+    (
+        "set_walrus_free_alias",
+        "import argparse as ap",
+        "def build():\n Parser = ap.ArgumentParser\n"
+        " return {{Parser({settings}) for _ in (1,) if (Parser := Parser)}}",
+    ),
+    (
+        "dict_walrus_free_alias",
+        "import argparse as ap",
+        "def build():\n Parser = ap.ArgumentParser\n"
+        " return {{_: Parser({settings}) for _ in (1,) if (Parser := Parser)}}",
+    ),
+    (
+        "generator_walrus_free_alias",
+        "import argparse as ap",
+        "def build():\n Parser = ap.ArgumentParser\n"
+        " return list(Parser({settings}) for _ in (1,) if (Parser := Parser))",
+    ),
     ("subparser", "", 'subparsers.add_parser("synthetic", {settings})'),
 )
 SETTINGS = (

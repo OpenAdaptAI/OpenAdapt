@@ -151,7 +151,9 @@ def _parser_constructor_calls(tree):
                 body, _ = comprehension_parts(node)
                 yield from enclosing_assignments(body)
 
-    def scope_bindings(body, inherited, parameters=(), class_scope=False):
+    def scope_bindings(
+        body, inherited, parameters=(), class_scope=False, comprehension_scope=False
+    ):
         nodes = list(scope_nodes(body))
         local_names = set(parameters) | set(enclosing_assignments(body))
         for node in nodes:
@@ -163,6 +165,10 @@ def _parser_constructor_calls(tree):
                 local_names.update(
                     name.asname or name.name.split(".")[0] for name in node.names
                 )
+        if comprehension_scope:
+            # A walrus target is free in this implicit scope and belongs to
+            # the enclosing function/module; only iteration targets shadow it.
+            local_names.difference_update(set(enclosing_assignments(body)) - set(parameters))
         for node in nodes:
             if isinstance(node, (ast.Global, ast.Nonlocal)):
                 local_names.difference_update(node.names)
@@ -221,7 +227,9 @@ def _parser_constructor_calls(tree):
                 if not isinstance(node, comprehensions):
                     continue
                 child_body, child_parameters = comprehension_parts(node)
-                _, child_bindings = scope_bindings(child_body, bindings, child_parameters)
+                _, child_bindings = scope_bindings(
+                    child_body, bindings, child_parameters, comprehension_scope=True
+                )
                 for name in enclosing_assignments(child_body):
                     kinds = child_bindings.get(name, set())
                     previous = bindings.setdefault(name, set())
@@ -230,8 +238,12 @@ def _parser_constructor_calls(tree):
                         changed = True
         return nodes, bindings
 
-    def visit_scope(body, inherited, parameters=(), class_scope=False):
-        nodes, bindings = scope_bindings(body, inherited, parameters, class_scope)
+    def visit_scope(
+        body, inherited, parameters=(), class_scope=False, comprehension_scope=False
+    ):
+        nodes, bindings = scope_bindings(
+            body, inherited, parameters, class_scope, comprehension_scope
+        )
         for node in nodes:
             if isinstance(node, ast.Call) and (
                 "parser" in provenance(node.func, bindings)
@@ -241,7 +253,9 @@ def _parser_constructor_calls(tree):
                 yield node
             if isinstance(node, comprehensions):
                 child_body, parameters = comprehension_parts(node)
-                yield from visit_scope(child_body, bindings, parameters)
+                yield from visit_scope(
+                    child_body, bindings, parameters, comprehension_scope=True
+                )
             elif isinstance(node, scopes):
                 parameters = []
                 if not isinstance(node, ast.ClassDef):
