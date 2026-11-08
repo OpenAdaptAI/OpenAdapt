@@ -401,6 +401,8 @@ def test_the_public_api_is_stable() -> None:
         "read_at",
         "excused",
         "evidence",
+        "recheck_claim_sha256",
+        "excuse_receipt_sha256s",
     ]
     assert list(inspect.signature(RecheckState.load).parameters) == [
         "path",
