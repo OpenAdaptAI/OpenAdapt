@@ -146,7 +146,12 @@ def test_coverage_digest_binds_the_explicit_completeness_declaration(complete):
         "schema_version": "openadapt.verify/v1",
         "verifier": config,
         "effects": [
-            {"kind": "field_equals", "match": {"id": 1}, "field": "value", "value": "new"}
+            {
+                "kind": "field_equals",
+                "match": {"id": {"literal": "1"}},
+                "field": "value",
+                "value": "new",
+            }
         ],
     }
     original = parse_verify_config(doc)
