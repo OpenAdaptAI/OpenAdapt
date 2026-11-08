@@ -630,9 +630,12 @@ class Recording:
             close_owned(callbacks, primary=None if suppress else exc)
         except BaseException as error:
             self.result = None
-            close_owned(
-                (lambda primary=error: self._keep_failed_capture("cleanup", primary),), primary=error
-            )
+            cleanup_error = error
+
+            def keep_failed_cleanup() -> None:
+                self._keep_failed_capture("cleanup", cleanup_error)
+
+            close_owned((keep_failed_cleanup,), primary=cleanup_error)
             raise
         try:
             # Compilation is staged; only completed owned cleanup permits
