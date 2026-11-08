@@ -2402,10 +2402,6 @@ def test_sealed_state_round_trips_only_with_its_key(tmp_path):
     rollback_dir = tmp_path / "run" / "rollback"
     for name in ("armed.json.enc", "journal.json.enc"):
         assert stat.S_IMODE((rollback_dir / name).stat().st_mode) == 0o600
-        # Nothing readable on disk: no names, no row digests in the clear.
-        assert_sealed_marker_absent(
-            (rollback_dir / name).read_bytes(), marker.encode("ascii")
-        )
     armed = sealed.load_armed()
     assert armed["reader_key"] == reader.key
     assert armed["params"] == {"name": marker}
@@ -2426,6 +2422,21 @@ def test_sealed_state_round_trips_only_with_its_key(tmp_path):
     sealed.step("create_patient", "compensated")
     assert sealed.started_steps() == frozenset()
     assert sealed.compensated_steps() == {"create_patient"}
+    # The marker must be real plaintext in each file whose ciphertext we check.
+    sealed.step(marker, "started")
+    assert sealed.started_steps() == {marker}
+    assert sealed.compensated_steps() == {"create_patient"}
+    assert sealed.load_armed()["params"] == {"name": marker}
+    for name in ("armed.json.enc", "journal.json.enc"):
+        assert stat.S_IMODE((rollback_dir / name).stat().st_mode) == 0o600
+        assert_sealed_marker_absent(
+            (rollback_dir / name).read_bytes(), marker.encode("ascii")
+        )
+    with pytest.raises(SealedStateError):
+        SealedRollback(tmp_path / "run", "another key").started_steps()
+    sealed.step(marker, "compensated")
+    assert sealed.started_steps() == frozenset()
+    assert sealed.compensated_steps() == {"create_patient", marker}
     sealed.mark_finished("rolled_back")
     assert sealed.finished() == "rolled_back"
     assert sealed.load_armed() is None
