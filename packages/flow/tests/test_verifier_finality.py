@@ -10,6 +10,7 @@ import json
 from typing import Literal
 
 import pytest
+
 from openadapt_flow.verifier import Outcome, RecheckResult, Scope, Window, WriteResult
 from openadapt_flow.verify import result_json
 

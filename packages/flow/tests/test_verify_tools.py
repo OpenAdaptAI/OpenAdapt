@@ -19,9 +19,10 @@ import yaml
 
 pytest.importorskip("mcp")
 
-from benchmark.harness.guard_demo import FakeAgent, verify_yaml  # noqa: E402
 from mcp import ClientSession  # noqa: E402
 from mcp.shared.memory import create_client_server_memory_streams  # noqa: E402
+
+from benchmark.harness.guard_demo import FakeAgent, verify_yaml  # noqa: E402
 from openadapt_flow import verifier  # noqa: E402
 from openadapt_flow.agent.bridge import BridgeError  # noqa: E402
 from openadapt_flow.agent.cli import main as agent_main  # noqa: E402
@@ -438,6 +439,8 @@ def test_verify_recheck_disputed_later_write_is_not_final(
     assert late["verified"] is False
     assert late["final"] is False
     assert "Not a pass" in late["next"]
+
+
 # -- a native read before the bound deadline has not completed the recheck ----
 
 
