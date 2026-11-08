@@ -168,6 +168,7 @@ def document(service, kind="fhir"):
             "kind": "rest",
             "base_url": service.url,
             "records_path": "/objects",
+            "records_key": None,
             "records_complete": True,
         }
     else:
@@ -356,7 +357,9 @@ def test_existing_shared_identity_needs_no_new_binding(service, tmp_path, kind):
     # Existing shared-field behavior, with no alternate mapping requested.
     cfg = parse_verify_config(doc)
     assert "identities" not in cfg.frame.model_dump(mode="json")
-    capture_baseline(cfg, PARAMS, tmp_path / "baseline.json")
+    captured = capture_baseline(cfg, PARAMS, tmp_path / "baseline.json")
+    assert captured["state"]["reachable"] is True
+    assert captured["state"]["readback_complete"] is True
     assert (tmp_path / "baseline.json").exists()
 
 
@@ -652,7 +655,9 @@ def test_legacy_selected_read_requires_identity_only_when_nonempty(
     cfg = parse_verify_config(document(service, kind))
     baseline = tmp_path / "baseline.json"
     if empty:
-        capture_baseline(cfg, PARAMS, baseline)
+        captured = capture_baseline(cfg, PARAMS, baseline)
+        assert captured["state"]["reachable"] is True
+        assert captured["state"]["readback_complete"] is True
         assert baseline.exists()
     else:
         with pytest.raises(VerifyRunError, match="identity is unavailable"):
@@ -814,14 +819,17 @@ def test_sql_complete_read_requires_successful_lossless_dbapi_result(service, fa
     before = reader.capture_pre_state()
     assert before.reachable and before.readback_complete is True
     assert len(before.records) == 2
+    expected = Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match={"row_id": {"literal": "10", "number": True}},
+        timeout_s=0,
+    )
+    assert reader.verify(expected, before).verdict is Verdict.CONFIRMED
     active = True
     after = reader.capture_pre_state()
     assert after.reachable is False and after.readback_complete is False
     assert after.records == []
-    verdict = reader.verify(
-        Effect(kind=EffectKind.RECORD_WRITTEN, match={"row_id": 10}, timeout_s=0),
-        before,
-    )
+    verdict = reader.verify(expected, before)
     assert verdict.verdict is Verdict.INDETERMINATE
     assert verdict.should_halt
 
