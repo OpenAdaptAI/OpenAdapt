@@ -1300,7 +1300,7 @@ def _map_frame_rows(
     before: EffectState,
     after: Any,
     db: _DatabaseFrame,
-    slices: Mapping[str, tuple[EffectState, Optional[list[dict[str, Any]]]]],
+    slices: dict[str, tuple[EffectState, Optional[list[dict[str, Any]]]]],
     effects: Sequence[Effect],
     routes: Mapping[str, Sequence[str]],
     salt: bytes,

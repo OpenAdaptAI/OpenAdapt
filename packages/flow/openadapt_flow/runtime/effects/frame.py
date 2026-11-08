@@ -1747,14 +1747,14 @@ def judge_frame(
                         set(unverified_columns.get(name, ())) | unknown
                     )
                     wrong = []
-                    for field in declared_fields_for(name):
-                        cell = cells.get(field)
+                    for surface_field in declared_fields_for(name):
+                        cell = cells.get(surface_field)
                         if cell is None:
                             continue
-                        if field not in reader_values or cell.column not in after:
+                        if surface_field not in reader_values or cell.column not in after:
                             return _not_checked("bound target field is unavailable", mode)
                         try:
-                            equal = canonical_field_value(after[cell.column], cell.canonicaliser) == canonical_field_value(reader_values[field], cell.canonicaliser)
+                            equal = canonical_field_value(after[cell.column], cell.canonicaliser) == canonical_field_value(reader_values[surface_field], cell.canonicaliser)
                         except FrameIdentityError:
                             equal = False
                         if not equal:
