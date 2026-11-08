@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.29.1 (2026-11-08)
+
+### Bug Fixes
+
+- **desktop**: revert extension host integration
+
+
+
 ## v0.29.0 (2026-11-08)
 
 ### Features
