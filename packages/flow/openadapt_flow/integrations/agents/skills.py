@@ -347,8 +347,12 @@ class SkillCache:
         reset: Optional[Callable[[], None]] = None,
         environment: str = "",
         python: str = sys.executable,
+        before_capture: Optional[Callable[[Any], None]] = None,
         **compile_options: Any,
     ) -> None:
+        if before_capture is not None and not callable(before_capture):
+            raise TypeError("before_capture must be callable")
+        self.before_capture = before_capture
         self.common: dict[str, Any] = dict(
             url=url,
             verify=verify,
@@ -408,7 +412,8 @@ class SkillCache:
             if k not in ("reset", "task_id", "review", "hold")
         }
         compiler = FirstRunCompiler(
-            prompt, params=list(params), task_id=self.task_id(prompt, params), **common
+            prompt, params=list(params), task_id=self.task_id(prompt, params),
+            before_capture=self.before_capture, **common
         )
         return compiler, key
 
@@ -822,6 +827,7 @@ class SkillCache:
             person=self.person,
             canary_params=self.canary_params,
             model_key=self.model_key,
+            before_capture=self.before_capture,
             **common,
         )
         if result.admitted:

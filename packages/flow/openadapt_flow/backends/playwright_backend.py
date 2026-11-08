@@ -5623,56 +5623,54 @@ class PlaywrightBackend:
             pw, browser = shared
         else:
             pw, browser = _start_browser(headless)
-        viewport = {"width": VIEWPORT[0], "height": VIEWPORT[1]}
+        from openadapt_flow.backends._owned import close_owned
+
         context = None
-        if record_video_dir is not None:
-            # Opt-in session video: the page must live in a context so
-            # Playwright can attach the recorder; the video finalizes on
-            # context.close().
-            context = browser.new_context(
-                viewport=viewport,
-                device_scale_factor=1,
-                record_video_dir=record_video_dir,
-                record_video_size=viewport,
-                service_workers="block",
-            )
-            page = context.new_page()
-        else:
-            # No service workers: their requests would skip the wire check.
-            page = browser.new_page(
-                viewport=viewport, device_scale_factor=1, service_workers="block"
-            )
+        closed = False
+        close_error: Optional[BaseException] = None
 
         def close() -> None:
-            if shared is not None:
-                # A shared browser outlives this page; closing the page's own
-                # context discards its cookies, storage, and cache.
-                if context is not None:
-                    context.close()
-                else:
-                    page.context.close()
+            nonlocal closed, close_error
+            if closed:
+                if close_error is not None:
+                    raise close_error
                 return
+            closed = True
+            callbacks: list[Callable[[], None]] = []
+            if context is not None:
+                callbacks.append(context.close)
+            if shared is None:
+                callbacks.extend((browser.close, pw.stop))
             try:
-                if context is not None:
-                    context.close()  # flush the recorded video to disk
-                browser.close()
-            finally:
-                pw.stop()
-
-        if before_goto is not None:
-            try:
-                before_goto(page)
-            except BaseException:
-                close()
+                close_owned(callbacks)
+            except BaseException as error:
+                close_error = error
                 raise
-        # Guard WebSockets before the first document loads, so no page
-        # script can keep a reference to an unguarded constructor.
-        ws_guard = prepare_ws_guard(page)
-        page.goto(url)
-        backend = cls(page, ws_guard=ws_guard)
-        # Read by the generic web environment observer: the environment
-        # digest of a headless and a headed browser differ.
-        backend.headless = headless
+
+        try:
+            viewport = {"width": VIEWPORT[0], "height": VIEWPORT[1]}
+            options: dict[str, Any] = {
+                "viewport": viewport,
+                "device_scale_factor": 1,
+                "service_workers": "block",
+            }
+            if record_video_dir is not None:
+                options.update(record_video_dir=record_video_dir, record_video_size=viewport)
+            # Acquire the context explicitly, so page-acquisition failures
+            # can close this invocation without closing a shared browser.
+            context = browser.new_context(**options)
+            page = context.new_page()
+            if before_goto is not None:
+                before_goto(page)
+            # Install request and WebSocket guards before the first load.
+            ws_guard = prepare_ws_guard(page)
+            page.goto(url)
+            backend = cls(page, ws_guard=ws_guard)
+            backend.headless = headless
+        except BaseException as error:
+            close_owned((close,), primary=error)
+            raise
+
         return backend, close
 
 

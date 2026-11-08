@@ -394,9 +394,13 @@ class FirstRunCompiler:
         constants: Sequence[str] = (),
         write_adapter: Optional[Any] = None,
         teach_authorization: Optional[Any] = None,
+        before_capture: Optional[Callable[[Any], None]] = None,
     ) -> None:
         from openadapt_flow.record_sor import load_observer
 
+        if before_capture is not None and not callable(before_capture):
+            raise TypeError("before_capture must be callable")
+        self.before_capture = before_capture
         self.surface: Optional[Any] = None
         if surface is not None:
             # A deployment ``backend:`` section for a native or remote app.
@@ -510,6 +514,7 @@ class FirstRunCompiler:
             if self.teach_authorization is not None
             else self.teach_scope,
             teach_authorization=self.teach_authorization,
+            before_capture=self.before_capture,
         )
 
         # Resolve only the fixed task-local promoted-repair pointer.
@@ -591,6 +596,7 @@ class FirstRunCompiler:
         *,
         reset: Optional[Callable[[], None]] = None,
         open_backend: Optional[Callable[[Any], Any]] = None,
+        before_capture: Optional[Callable[[Any], None]] = None,
     ) -> "FirstRunCompiler":
         spec = json.loads((Path(task_dir) / SPEC_FILE).read_text())
         if spec.get("schema") != SPEC_SCHEMA:
@@ -602,6 +608,7 @@ class FirstRunCompiler:
             url=spec.get("url"),
             surface=spec.get("surface"),
             open_backend=open_backend,
+            before_capture=before_capture,
             verify=spec["verify"],
             expect=spec["expect"],
             on_screen=spec["on_screen"],
@@ -1348,6 +1355,7 @@ def compile_first_run(
     constants: Sequence[str] = (),
     write_adapter: Optional[Any] = None,
     teach_authorization: Optional[Any] = None,
+    before_capture: Optional[Callable[[Any], None]] = None,
 ) -> CompileResult:
     """Turn an agent's first verified run of ``prompt`` into an admitted program.
 
@@ -1379,6 +1387,9 @@ def compile_first_run(
             task names, so choose values that are safe there. Required.
         model_key: The customer's own model key, for a model-driven agent.
         reset: Called before every run to reset a test app. Tests only.
+        before_capture: Trusted Python preparation/preflight on the exact
+            owned backend, before recording or actor entry. Reserve a model
+            operation only after preflight succeeds. Not a canary/replay hook.
         allow_origins: More origins run 1's browser may reach besides the
             app's (a sign-in host, a CDN). Every other origin is refused.
         constants: More text the agent may type besides the inputs, the
@@ -1413,6 +1424,7 @@ def compile_first_run(
         constants=constants,
         write_adapter=write_adapter,
         teach_authorization=teach_authorization,
+        before_capture=before_capture,
     )
     jit = compiler._jit()
     first: Optional[CompileResult] = None

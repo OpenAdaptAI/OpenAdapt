@@ -207,8 +207,10 @@ class WebApp:
         if self.setup is not None:
             try:
                 self.setup(backend.page)
-            except BaseException:
-                close()
+            except BaseException as error:
+                from openadapt_flow.backends._owned import close_owned
+
+                close_owned((close,), primary=error)
                 raise
         return backend, close
 
@@ -521,6 +523,7 @@ class Recording:
 
     def __enter__(self) -> "Recording":
         from openadapt_flow.authoring import AuthoringSession
+        from openadapt_flow.backends._owned import close_owned
 
         owner = self._owner
         if owner.admitted or owner.candidate() is not None:
@@ -563,6 +566,8 @@ class Recording:
         else:
             backend, self._close = owner.app.open()
         try:
+            if owner.before_capture is not None:
+                owner.before_capture(backend)
             if self.guard is not None and owner.app.record_reader is not None:
                 self._baseline = owner.app.record_reader()
             self._session = AuthoringSession(
@@ -587,8 +592,11 @@ class Recording:
             self.dispatcher = RecordingDispatcher(self)
             self.computer.dispatcher = self.dispatcher
             self._session.start_record()
-        except BaseException:
-            self._close()
+        except BaseException as error:
+            callbacks = [self._close]
+            if self.dispatcher is not None:
+                callbacks.insert(0, self.dispatcher.close)
+            close_owned(callbacks, primary=error)
             raise
         return self
 
@@ -598,14 +606,26 @@ class Recording:
         exc: Optional[BaseException],
         tb: Optional[TracebackType],
     ) -> bool:
+        from openadapt_flow.backends._owned import close_owned
+
         assert self.computer is not None and self._close is not None
+        callbacks = [self._close]
+        if self.dispatcher is not None:
+            callbacks.insert(0, self.dispatcher.close)
         try:
             self.result = self._finish(exc)
-        finally:
-            if self.dispatcher is not None:
-                self.dispatcher.close()
-            self._close()
-        return isinstance(exc, UnsupportedAction)
+        except BaseException as error:
+            close_owned(callbacks, primary=error)
+            raise
+        suppress = isinstance(exc, UnsupportedAction)
+        try:
+            close_owned(callbacks, primary=None if suppress else exc)
+        except BaseException:
+            # _explore must not convert a cleanup failure into a completed
+            # draft merely because _finish returned before closing.
+            self.result = None
+            raise
+        return suppress
 
     def _finish(self, exc: Optional[BaseException]) -> JitResult:
         from openadapt_flow.authoring import AuthoringError
@@ -729,6 +749,7 @@ class RecordingDispatcher:
         self._closers: list[Callable[[], None]] = []
         self._finish_state: Literal["open", "running", "complete", "failed"] = "open"
         self._finish_error: Optional[BaseException] = None
+        self._close_error: Optional[BaseException] = None
         self._closed = False
 
     @property
@@ -821,16 +842,17 @@ class RecordingDispatcher:
 
     def close(self) -> None:
         if self._closed:
+            if self._close_error is not None:
+                raise self._close_error
             return
         self._closed = True
-        errors: list[Exception] = []
-        for callback in reversed(self._closers):
-            try:
-                callback()
-            except Exception as exc:  # noqa: BLE001 - close remaining resources
-                errors.append(exc)
-        if errors and self._recording.result is None:
-            raise errors[0]
+        from openadapt_flow.backends._owned import close_owned
+
+        try:
+            close_owned(reversed(self._closers))
+        except BaseException as error:
+            self._close_error = error
+            raise
 
 
 @dataclass
@@ -855,6 +877,9 @@ class CompiledAgent:
     #: one, the recording's scope is bound from it; ``teach_scope`` may only
     #: narrow it. Without one the draft can't be admitted.
     teach_authorization: Any = None
+    #: Trusted process-local preparation/preflight on the capture backend.
+    #: Not a canary/replay hook, an approval or a serialized task option.
+    before_capture: Optional[Callable[[Any], None]] = field(default=None, repr=False)
     _sleep: Callable[[float], None] = field(default=time.sleep, repr=False)
 
     # Enabled only by the compile-agent task loader, never a raw bundle path.
@@ -1590,6 +1615,7 @@ def compile_agent(
     require_distinct_reviewer_and_admitter: bool = False,
     teach_scope: Optional[TeachScopeSource] = None,
     teach_authorization: Any = None,
+    before_capture: Optional[Callable[[Any], None]] = None,
 ) -> CompiledAgent:
     """Wrap ``agent`` so a task is explored once and then run as a program.
 
@@ -1621,6 +1647,11 @@ def compile_agent(
             warning is printed to stderr either way.
         require_distinct_reviewer_and_admitter: Refuse an admission by the
             principal who reviewed the draft. Off by default.
+        before_capture: Trusted Python callback receiving the exact owned
+            backend after guarded opening and before recording or actor entry.
+            Prepare and check the state before reserving a model operation.
+            A failure closes the backend. This capture-only callback is not
+            persisted and does not run on canaries, replay or cache hits.
         teach_scope: What the recording run may do, declared before the agent
             reads any page: a :class:`~openadapt_flow.teach_scope.TeachScope`,
             or a function from the run's inputs to one. Typed text, links,
@@ -1635,6 +1666,8 @@ def compile_agent(
             one.
     """
 
+    if before_capture is not None and not callable(before_capture):
+        raise TypeError("before_capture must be callable")
     if agent is not None:
         dialect = getattr(agent, "dialect", None)
         if dialect is None:
@@ -1663,4 +1696,5 @@ def compile_agent(
         require_distinct_reviewer_and_admitter=require_distinct_reviewer_and_admitter,
         teach_scope=teach_scope,
         teach_authorization=teach_authorization,
+        before_capture=before_capture,
     )

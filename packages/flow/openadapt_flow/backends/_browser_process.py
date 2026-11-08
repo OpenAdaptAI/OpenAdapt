@@ -7,6 +7,9 @@ the browser while those load on another thread.
 from __future__ import annotations
 
 import contextlib
+import sys
+
+from openadapt_flow.backends._owned import close_owned
 from typing import Any, Iterator
 
 #: Browsers kept open by :func:`shared_browser`, keyed by ``headless``.
@@ -20,11 +23,16 @@ def _start_browser(headless: bool) -> tuple[Any, Any]:
     require_browser_support()
     from playwright.sync_api import sync_playwright
 
-    pw = sync_playwright().start()
+    manager = sync_playwright()
+    try:
+        pw = manager.start()
+    except BaseException as error:
+        close_owned((lambda: manager.__exit__(type(error), error, error.__traceback__),), primary=error)
+        raise
     try:
         browser = launch_chromium(pw.chromium, headless=headless)
-    except Exception:
-        pw.stop()
+    except BaseException as error:
+        close_owned((pw.stop,), primary=error)
         raise
     return pw, browser
 
@@ -47,7 +55,4 @@ def shared_browser(headless: bool = True) -> Iterator[None]:
         yield
     finally:
         _SHARED_BROWSER.pop(headless, None)
-        try:
-            browser.close()
-        finally:
-            pw.stop()
+        close_owned((browser.close, pw.stop), primary=sys.exc_info()[1])
