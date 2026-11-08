@@ -255,14 +255,31 @@ def test_wpf_fixture_uses_signalled_handle_and_owned_window(
     from tests import test_native_census_real_apps as native
 
     calls = []
-    items = [SimpleNamespace(ControlTypeName="ListItemControl") for _ in range(2)]
+    items = []
+    points = {}
+    for index in range(2):
+        rect = SimpleNamespace(
+            left=10, top=20 * index, right=100, bottom=20 * index + 10
+        )
+        cell = SimpleNamespace(BoundingRectangle=rect)
+        item = SimpleNamespace(
+            ControlTypeName="ListItemControl",
+            ProcessId=1234,
+            GetChildren=lambda cell=cell: [cell],
+        )
+        items.append(item)
+        points[(55, 20 * index + 5)] = item
     listing = SimpleNamespace(Exists=lambda *args: True, GetChildren=lambda: items)
     window = SimpleNamespace(
         ProcessId=1234 if identity != "other_pid" else 999,
         Name=native.TITLE if identity != "other_title" else "other window",
         ListControl=lambda **kwargs: listing,
     )
-    auto = SimpleNamespace(ControlFromHandle=lambda hwnd: calls.append(hwnd) or window)
+    auto = SimpleNamespace(
+        ControlFromHandle=lambda hwnd: calls.append(hwnd) or window,
+        ControlFromPoint=lambda x, y: points[(x, y)],
+        ControlsAreSame=lambda left, right: left is right,
+    )
 
     class Owned(Process):
         def terminate(self):
@@ -296,3 +313,79 @@ def test_wpf_fixture_uses_signalled_handle_and_owned_window(
     finally:
         fixture.close()
     assert proc.poll() == -15
+
+
+@pytest.mark.parametrize("fault", ["empty", "missing", "other_pid", "other_row"])
+def test_wpf_points_are_not_ready_when_the_physical_target_is_unproven(fault):
+    from tests import test_native_census_real_apps as native
+
+    rect = SimpleNamespace(
+        left=10, top=20, right=10 if fault == "empty" else 100, bottom=30
+    )
+    item = SimpleNamespace(
+        GetChildren=lambda: [SimpleNamespace(BoundingRectangle=rect)]
+    )
+    hit = SimpleNamespace(
+        ProcessId=999 if fault == "other_pid" else 1234,
+        ControlTypeName="TextControl",
+        GetParentControl=lambda: None,
+    )
+    auto = SimpleNamespace(
+        ControlFromPoint=lambda *point: None if fault == "missing" else hit,
+        ControlsAreSame=lambda left, right: left is right,
+    )
+    ready, detail = native._wpf_points_ready(auto, [item], 1234)
+    assert ready is False
+    assert "row=0" in detail
+
+
+def test_wpf_points_accept_the_owned_row_ancestor_only():
+    from tests import test_native_census_real_apps as native
+
+    rect = SimpleNamespace(left=10, top=20, right=100, bottom=30)
+    item = SimpleNamespace(
+        GetChildren=lambda: [SimpleNamespace(BoundingRectangle=rect)]
+    )
+    hit = SimpleNamespace(
+        ProcessId=1234,
+        ControlTypeName="TextControl",
+        GetParentControl=lambda: item,
+    )
+    auto = SimpleNamespace(
+        ControlFromPoint=lambda *point: hit,
+        ControlsAreSame=lambda left, right: left is right,
+    )
+    assert native._wpf_points_ready(auto, [item], 1234)[0] is True
+
+
+def test_wpf_readiness_waits_for_the_point_before_returning_items(fixture_state):
+    from tests import test_native_census_real_apps as native
+
+    clock, _, ready_path, _, _ = fixture_state
+    _signal(ready_path)
+    rect = SimpleNamespace(left=10, top=20, right=100, bottom=30)
+    item = SimpleNamespace(
+        GetChildren=lambda: [SimpleNamespace(BoundingRectangle=rect)]
+    )
+    outside = SimpleNamespace(
+        ProcessId=999, ControlTypeName="PaneControl", GetParentControl=lambda: None
+    )
+    inside = SimpleNamespace(
+        ProcessId=1234, ControlTypeName="TextControl", GetParentControl=lambda: item
+    )
+    hits = iter([outside, inside, inside])
+    auto = SimpleNamespace(
+        ControlFromPoint=lambda *point: next(hits),
+        ControlsAreSame=lambda left, right: left is right,
+    )
+
+    def find_items(hwnd):
+        assert hwnd == 5678
+        return (
+            [item, item]
+            if native._wpf_points_ready(auto, [item, item], 1234)[0]
+            else None
+        )
+
+    assert _wait(fixture_state, find_items) == [item, item]
+    assert 0.1 <= clock.now < 0.2

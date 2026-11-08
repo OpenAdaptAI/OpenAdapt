@@ -635,7 +635,7 @@ def render_markdown(
     else:
         lines.append(
             "- JUnit pass check: **not embedded in this generated registry view** "
-            "(required CI jobs enforce pass evidence)"
+            "(see the current CI run for file-level pass evidence)"
         )
     lines.append(
         "- Structure gate: `python scripts/validate_claims.py --check "
@@ -643,9 +643,10 @@ def render_markdown(
         "evidence fails CI)."
     )
     lines.append(
-        "- Pass gates: required `test` and `e2e-browser` jobs supply their own "
-        "JUnit files; an absent, all-skipped, or failed supported evidence file "
-        "fails that required job."
+        "- File-level pass check: the validator requires each supported backing "
+        "file to appear in its job's JUnit result, with at least one passing "
+        "case and no failed or errored cases. This generated report does not "
+        "itself prove a CI run passed."
     )
     lines.append(
         "- Scoped validating refreshes name each selected evidence file; each "

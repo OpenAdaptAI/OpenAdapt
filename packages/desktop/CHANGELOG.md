@@ -1,6 +1,41 @@
 # CHANGELOG
 
 
+## v0.29.2 (2026-11-08)
+
+### Bug Fixes
+
+- **desktop**: select explicit release comparison history
+- **desktop**: attribute generated version-only merges
+
+
+
+## v0.29.1 (2026-11-08)
+
+### Bug Fixes
+
+- **desktop**: revert extension host integration
+
+
+
+## v0.29.0 (2026-11-08)
+
+### Features
+
+- **desktop**: register the Chrome extension host per recording
+
+
+
+## v0.28.1 (2026-11-07)
+
+### Bug Fixes
+
+- **desktop**: retain removal intent across modified copies
+- **desktop**: trace clean merge and copy contributions
+- **desktop**: trace historical sources from their common ancestor
+
+
+
 ## v0.28.0 (2026-11-06)
 
 ### Features
