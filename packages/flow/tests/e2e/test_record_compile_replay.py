@@ -460,13 +460,14 @@ class TestCliSmoke:
         assert NOTE_TEXT not in content
         assert "mockmed-demo-pass" not in content
 
-        # README quickstart contract: `replay` with no --url self-serves
-        # MockMed, and --drift demonstrates healing in one command.
+        # README quickstart contract: `replay --demo-app` serves MockMed,
+        # and --drift demonstrates healing in one command.
         selfserve_run = tmp_path / "run-selfserve"
         healed = tmp_path / "healed"
         proc = cli(
             "replay",
             str(bundle),
+            "--demo-app",
             "--drift",
             "theme",
             "--run-dir",

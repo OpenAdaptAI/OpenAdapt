@@ -247,12 +247,8 @@ def _build_master(
     for idx, ov in enumerate(overlays):
         inputs += ["-i", str(ov.png)]
         label = f"o{idx}"
-        enable = (
-            ":enable='lt(mod(t,1),0.55)'" if ov.blink else ""
-        )
-        parts.append(
-            f"[{last}][{idx + 1}:v]overlay={ov.x}:{ov.y}{enable}[{label}]"
-        )
+        enable = ":enable='lt(mod(t,1),0.55)'" if ov.blink else ""
+        parts.append(f"[{last}][{idx + 1}:v]overlay={ov.x}:{ov.y}{enable}[{label}]")
         last = label
     filtergraph = ";".join(parts)
     _run(
@@ -590,13 +586,12 @@ def _replay_with_video(
 
     Returns the raw ``.webm``. Mirrors ``__main__._cmd_replay`` wiring.
     """
-    from playwright.sync_api import sync_playwright
-
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
     from openadapt_flow.ir import Workflow
     from openadapt_flow.report import render_run_report
     from openadapt_flow.runtime import Replayer
     from openadapt_flow.runtime.grounder import build_grounder
+    from playwright.sync_api import sync_playwright
 
     vid_dir.mkdir(parents=True, exist_ok=True)
     workflow = Workflow.load(bundle)
@@ -705,9 +700,7 @@ def _diff_card(patch: dict, heal: dict, base_frame: Path, card: Path) -> None:
     # Diff panel
     px, py, pw, ph = 80, 190, W - 160, 250
     d.rounded_rectangle((px, py, px + pw, py + ph), radius=16, fill=CARD)
-    d.rounded_rectangle(
-        (px, py, px + pw, py + ph), radius=16, outline=LINE, width=1
-    )
+    d.rounded_rectangle((px, py, px + pw, py + ph), radius=16, outline=LINE, width=1)
     y = py + 26
     changes = patch.get("changes", [])
     for ch in changes:
@@ -733,7 +726,9 @@ def _diff_card(patch: dict, heal: dict, base_frame: Path, card: Path) -> None:
             continue
         d.text((px + 30, y), f"- {field_name}: {old!r}", font=f_mono, fill=DIFF_DEL)
         y += 42
-        d.text((px + 30, y), f"+ {field_name}: {new!r}{ident}", font=f_mono, fill=DIFF_ADD)
+        d.text(
+            (px + 30, y), f"+ {field_name}: {new!r}{ident}", font=f_mono, fill=DIFF_ADD
+        )
         y += 52
 
     d.text(
@@ -815,8 +810,7 @@ def build_heal(work: Path, out: Path, bundle: Path, *, headed: bool) -> Path:
             "-i",
             str(card),
             "-vf",
-            f"scale={OUT_W}:-2:flags=lanczos,fps={FPS},"
-            "fade=t=in:st=0:d=0.3",
+            f"scale={OUT_W}:-2:flags=lanczos,fps={FPS},fade=t=in:st=0:d=0.3",
             "-c:v",
             "libx264",
             "-profile:v",
@@ -914,7 +908,9 @@ def _label(
     d.rounded_rectangle(
         (x, y, x + ww + 24, y + h), radius=10, outline=color + (255,), width=2
     )
-    d.rounded_rectangle((x + 10, y + 9, x + 10 + tw, y + h - 9), radius=6, fill=color + (255,))
+    d.rounded_rectangle(
+        (x + 10, y + 9, x + 10 + tw, y + h - 9), radius=6, fill=color + (255,)
+    )
     d.text((x + 20, y + 12), tag, font=f_tag, fill=(10, 13, 20, 255))
     d.text((x + 22 + tw, y + 10), text, font=f_txt, fill=(232, 236, 244, 255))
 
@@ -925,7 +921,12 @@ def _anchor_box(size, region, color, alpha_line) -> Image.Image:
     x, y, w, h = region
     d.rectangle((x - 3, y - 3, x + w + 3, y + h + 3), outline=color + (255,), width=4)
     # corner ticks
-    for cx, cy in ((x - 3, y - 3), (x + w + 3, y - 3), (x - 3, y + h + 3), (x + w + 3, y + h + 3)):
+    for cx, cy in (
+        (x - 3, y - 3),
+        (x + w + 3, y - 3),
+        (x - 3, y + h + 3),
+        (x + w + 3, y + h + 3),
+    ):
         d.rectangle((cx - 5, cy - 5, cx + 5, cy + 5), fill=color + (255,))
     return layer
 
@@ -939,9 +940,7 @@ def build_compile(work: Path, out: Path, bundle: Path, base_frame: Path) -> None
     save_region = save["anchor"]["region"]
     note_region = note_click["anchor"]["region"]
     save_sel = save["anchor"]["structural"]["selector"]
-    assertion = next(
-        (e for e in save["expect"] if e["kind"] == "text_present"), None
-    )
+    assertion = next((e for e in save["expect"] if e["kind"] == "text_present"), None)
     assert_text = assertion["text"] if assertion else "Encounter saved-"
     risk = save["risk"]
 
@@ -954,21 +953,41 @@ def build_compile(work: Path, out: Path, bundle: Path, base_frame: Path) -> None
     box_save = _anchor_box((1280, 800), save_region, ACCENT, 255)
 
     lbl_anchor = Image.new("RGBA", (1280, 800), (0, 0, 0, 0))
-    _label(lbl_anchor, (save_region[0] + save_region[2] + 24, save_region[1] - 6),
-           "anchor", save_sel, ACCENT)
+    _label(
+        lbl_anchor,
+        (save_region[0] + save_region[2] + 24, save_region[1] - 6),
+        "anchor",
+        save_sel,
+        ACCENT,
+    )
 
     lbl_assert = Image.new("RGBA", (1280, 800), (0, 0, 0, 0))
-    _label(lbl_assert, (save_region[0] + save_region[2] + 24, save_region[1] + 54),
-           "assert", f'text_present "{assert_text}"', WARN)
+    _label(
+        lbl_assert,
+        (save_region[0] + save_region[2] + 24, save_region[1] + 54),
+        "assert",
+        f'text_present "{assert_text}"',
+        WARN,
+    )
     # risk pill under the assert
     dr = ImageDraw.Draw(lbl_assert)
     rx, ry = save_region[0] + save_region[2] + 24, save_region[1] + 110
     dr.rounded_rectangle((rx, ry, rx + 210, ry + 40), radius=20, fill=BAD + (255,))
-    dr.text((rx + 18, ry + 8), f"risk · {risk}", font=_font(_FONT_SANS_B, 22), fill=(10, 13, 20, 255))
+    dr.text(
+        (rx + 18, ry + 8),
+        f"risk · {risk}",
+        font=_font(_FONT_SANS_B, 22),
+        fill=(10, 13, 20, 255),
+    )
 
     lbl_param = Image.new("RGBA", (1280, 800), (0, 0, 0, 0))
-    _label(lbl_param, (note_region[0], note_region[1] - 58),
-           "param", f'note = "{param_val}"', GOOD)
+    _label(
+        lbl_param,
+        (note_region[0], note_region[1] - 58),
+        "param",
+        f'note = "{param_val}"',
+        GOOD,
+    )
 
     # Code panel (real workflow.py step_010 excerpt), wrapped to fit.
     cp = tuple(save["anchor"]["click_point"])
@@ -987,7 +1006,7 @@ def build_compile(work: Path, out: Path, bundle: Path, base_frame: Path) -> None
     panel = _code_panel(code_lines, width=548, height=560)
 
     title_f = _font(_FONT_SANS_B, 40)
-    sub_f = _font(_FONT_SANS, 24)
+    _font(_FONT_SANS, 24)
 
     frames_dir = work / "compile_frames"
     if frames_dir.exists():
@@ -1005,8 +1024,12 @@ def build_compile(work: Path, out: Path, bundle: Path, base_frame: Path) -> None
         head = Image.new("RGBA", (1280, 800), (0, 0, 0, 0))
         hd = ImageDraw.Draw(head)
         hd.rectangle((0, 0, 1280, 96), fill=(10, 13, 20, 210))
-        hd.text((40, 24), "The demonstration becomes an editable script",
-                font=title_f, fill=(232, 236, 244, 255))
+        hd.text(
+            (40, 24),
+            "The demonstration becomes an editable script",
+            font=title_f,
+            fill=(232, 236, 244, 255),
+        )
         _paste_alpha(img, head, _ramp(t, 0.1, 0.5))
 
         pulse = 0.55 + 0.45 * abs(((t * 1.6) % 1.0) - 0.5) * 2
@@ -1019,7 +1042,9 @@ def build_compile(work: Path, out: Path, bundle: Path, base_frame: Path) -> None
         slide = _ramp(t, 4.6, 0.9)
         if slide > 0:
             shade = Image.new("RGBA", (1280, 800), (0, 0, 0, 0))
-            ImageDraw.Draw(shade).rectangle((0, 96, 1280, 800), fill=(8, 11, 18, int(150 * slide)))
+            ImageDraw.Draw(shade).rectangle(
+                (0, 96, 1280, 800), fill=(8, 11, 18, int(150 * slide))
+            )
             _paste_alpha(img, shade, 1.0)
             px = int(1280 - (560 + 60) * slide)
             img.alpha_composite(panel, (px, 150))
@@ -1037,8 +1062,12 @@ def build_compile(work: Path, out: Path, bundle: Path, base_frame: Path) -> None
 def _code_panel(lines: Sequence[str], width: int, height: int) -> Image.Image:
     panel = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     d = ImageDraw.Draw(panel)
-    d.rounded_rectangle((0, 0, width - 1, height - 1), radius=18, fill=(18, 22, 32, 255))
-    d.rounded_rectangle((0, 0, width - 1, height - 1), radius=18, outline=LINE + (255,), width=1)
+    d.rounded_rectangle(
+        (0, 0, width - 1, height - 1), radius=18, fill=(18, 22, 32, 255)
+    )
+    d.rounded_rectangle(
+        (0, 0, width - 1, height - 1), radius=18, outline=LINE + (255,), width=1
+    )
     # title bar dots
     for k, col in enumerate(((248, 113, 113), (251, 191, 36), (52, 211, 153))):
         d.ellipse((22 + k * 26, 20, 36 + k * 26, 34), fill=col + (255,))
@@ -1093,8 +1122,10 @@ def build_audit(work: Path, out: Path, run_dir: Path, *, headed: bool) -> None:
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=not headed)
         context = browser.new_context(
-            viewport=view, device_scale_factor=1,
-            record_video_dir=str(vid_dir), record_video_size=view,
+            viewport=view,
+            device_scale_factor=1,
+            record_video_dir=str(vid_dir),
+            record_video_size=view,
         )
         page = context.new_page()
         page.goto(file_url)
@@ -1117,7 +1148,10 @@ def build_audit(work: Path, out: Path, run_dir: Path, *, headed: bool) -> None:
     _badge_png(badge, "illustrated run report", dot=ACCENT)
     master = work / "audit_master.mp4"
     _build_master(
-        raw, master, trim_start=0.5, speed=1.0,
+        raw,
+        master,
+        trim_start=0.5,
+        speed=1.0,
         overlays=[Overlay(badge, x="W-w-28", y="26")],
     )
     # The audit clip is long and text-dense; bound the GIF fallback hard
@@ -1131,9 +1165,19 @@ def build_audit(work: Path, out: Path, run_dir: Path, *, headed: bool) -> None:
         gif_max_s=3.0,
     )
     # Prefer the crisp full-res top-of-report screenshot as the poster.
-    _run(["ffmpeg", "-y", "-i", str(poster_png), "-vf",
-          f"scale={OUT_W}:-2:flags=lanczos", "-q:v", "3",
-          str((out / "audit.jpg"))])
+    _run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(poster_png),
+            "-vf",
+            f"scale={OUT_W}:-2:flags=lanczos",
+            "-q:v",
+            "3",
+            str((out / "audit.jpg")),
+        ]
+    )
     sizes["jpg"] = (out / "audit.jpg").stat().st_size
     sizes["app"] = "mockmed"
     _update_manifest(out, "audit", sizes, "real")
@@ -1144,7 +1188,7 @@ def build_audit(work: Path, out: Path, run_dir: Path, *, headed: bool) -> None:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     ap.add_argument("--out", required=True, help="Web asset output directory")
     ap.add_argument("--work", default=None, help="Scratch dir (default: temp)")
     ap.add_argument(
@@ -1226,9 +1270,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 # Everything else falls back to MockMed. No real PHI: the stock docker install
 # ships throwaway admin/pass creds and zero patient data.
 
-OPENEMR_LOGIN = (
-    "https://localhost:9390/interface/login/login.php?site=default"
-)
+OPENEMR_LOGIN = "https://localhost:9390/interface/login/login.php?site=default"
 
 
 def capture_record_openemr(work: Path, *, headed: bool) -> Optional[Path]:
@@ -1236,10 +1278,9 @@ def capture_record_openemr(work: Path, *, headed: bool) -> Optional[Path]:
 
     Returns the raw ``.webm`` (or None if OpenEMR could not be driven cleanly).
     """
-    from playwright.sync_api import sync_playwright
-
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
     from openadapt_flow.recorder import Recorder
+    from playwright.sync_api import sync_playwright
 
     vid_dir = work / "openemr_record_video"
     vid_dir.mkdir(parents=True, exist_ok=True)
@@ -1290,9 +1331,7 @@ def capture_record_openemr(work: Path, *, headed: bool) -> Optional[Path]:
                 page.wait_for_timeout(1200)
 
             # Open the Patient workflow via the real top nav.
-            rec.click(
-                *center(lambda: page.get_by_text("Patient", exact=True).first)
-            )
+            rec.click(*center(lambda: page.get_by_text("Patient", exact=True).first))
             page.wait_for_timeout(700)
             ns = page.get_by_text("New/Search", exact=False)
             if ns.count():
@@ -1340,13 +1379,12 @@ def _replay_openemr_with_video(
     bundle: Path, run_dir: Path, vid_dir: Path, *, headed: bool
 ) -> tuple[Path, bool]:
     """Replay a bundle against the live OpenEMR, filming it. (raw, success)."""
-    from playwright.sync_api import sync_playwright
-
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
     from openadapt_flow.ir import Workflow
     from openadapt_flow.report import render_run_report
     from openadapt_flow.runtime import Replayer
     from openadapt_flow.runtime.grounder import build_grounder
+    from playwright.sync_api import sync_playwright
 
     vid_dir.mkdir(parents=True, exist_ok=True)
     workflow = Workflow.load(bundle)
@@ -1412,7 +1450,10 @@ def build_run_openemr(work: Path, out: Path, *, headed: bool) -> bool:
     # would double up the indicator). See openadapt-web ReplayHero + PR #246.
     master = work / "run_openemr_master.mp4"
     _build_master(
-        raw, master, trim_start=0.6, speed=1.4,
+        raw,
+        master,
+        trim_start=0.6,
+        speed=1.4,
         overlays=[],
     )
     sizes = _finalize(master, out / "run_openemr", poster_at=1.0)

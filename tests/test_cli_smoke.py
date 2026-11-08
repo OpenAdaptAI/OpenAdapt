@@ -169,43 +169,53 @@ def test_quickstart_forwards_the_break_it_option_and_names_the_evidence(
     assert "unchanged" not in result.output
     # vocab-allow: no-change-claim -- asserts that the claim is absent
     assert "nothing was written" not in result.output
-    assert (
-        "Result: check the record (transaction outcome RECONCILIATION_REQUIRED)"
-        in result.output
-    )
+    assert "Result: Check the record." in result.output
     assert "nothing is retried until a person checks the record" in result.output
 
 
 @pytest.mark.parametrize(
-    ("report_text", "expected"),
+    ("report_text", "expected", "reported_outcome"),
     [
         (
             '{"transaction_outcome": "HALTED_BEFORE_EFFECT"}',
-            "Result: stopped before saving (transaction outcome "
-            "HALTED_BEFORE_EFFECT). The engine proved nothing was written.",
+            "Result: Stopped before saving. The engine proved nothing was written.",
+            "HALTED_BEFORE_EFFECT",
         ),
         (
             '{"transaction_outcome": "RECONCILIATION_REQUIRED"}',
-            "Result: check the record (transaction outcome RECONCILIATION_REQUIRED)",
+            "Result: Check the record.",
+            "RECONCILIATION_REQUIRED",
+        ),
+        (
+            '{"transaction_outcome": "ROLLED_BACK"}',
+            "Result: Check the record.",
+            "ROLLED_BACK",
+        ),
+        (
+            '{"transaction_outcome": "SAVED_AWAITING_CHECK"}',
+            "Result: Check the record.",
+            "SAVED_AWAITING_CHECK",
         ),
         # A value this launcher doesn't know, a coarse HALTED with no
         # transaction outcome, an unreadable report, or no report at all
         # can't prove that nothing was written.
         (
             '{"transaction_outcome": "SOMETHING_NEW"}',
-            "Result: check the record (transaction outcome SOMETHING_NEW)",
+            "Result: Check the record.",
+            "SOMETHING_NEW",
         ),
         (
             '{"execution_outcome": "HALTED"}',
-            "Result: check the record (transaction outcome unknown)",
+            "Result: Check the record.",
+            "unknown",
         ),
-        ("not json", "Result: check the record (transaction outcome unknown)"),
-        ("[]", "Result: check the record (transaction outcome unknown)"),
-        (None, "Result: check the record (transaction outcome unknown)"),
+        ("not json", "Result: Check the record.", "unknown"),
+        ("[]", "Result: Check the record.", "unknown"),
+        (None, "Result: Check the record.", "unknown"),
     ],
 )
 def test_quickstart_derives_the_halted_rerun_result_from_its_report(
-    engine_tutorial, monkeypatch, report_text, expected
+    engine_tutorial, monkeypatch, report_text, expected, reported_outcome
 ):
     calls = []
     monkeypatch.setattr(
@@ -221,7 +231,8 @@ def test_quickstart_derives_the_halted_rerun_result_from_its_report(
 
     assert result.exit_code == 0, result.output
     assert expected in result.output
-    if "HALTED_BEFORE_EFFECT" not in expected:
+    assert f"Transaction outcome: {reported_outcome}." in result.output
+    if expected.startswith("Result: Check the record"):
         assert "nothing was written" not in result.output
         assert "A save may have gone through" in result.output
 
@@ -380,29 +391,29 @@ def test_launcher_flow_and_substrate_extras_metadata():
 
     assert (
         metadata["dependencies"].count(
-            f"openadapt-flow[browser,hosted]>=2.5.0,<3.0.0; {supported}"
+            f"openadapt-flow[browser,hosted]>=2.6.0,<3.0.0; {supported}"
         )
         == 1
     )
     assert (
         metadata["dependencies"].count(f"openadapt-agent>=2.1.0,<3; {supported}") == 1
     )
-    assert extras["flow"] == [f"openadapt-flow>=2.5.0,<3.0.0; {supported}"]
+    assert extras["flow"] == [f"openadapt-flow>=2.6.0,<3.0.0; {supported}"]
     assert extras["agent"] == [f"openadapt-agent>=2.1.0,<3; {supported}"]
-    assert extras["browser"] == [f"openadapt-flow[browser]>=2.5.0,<3.0.0; {supported}"]
-    assert extras["privacy"] == [f"openadapt-flow[privacy]>=2.5.0,<3.0.0; {supported}"]
+    assert extras["browser"] == [f"openadapt-flow[browser]>=2.6.0,<3.0.0; {supported}"]
+    assert extras["privacy"] == [f"openadapt-flow[privacy]>=2.6.0,<3.0.0; {supported}"]
     assert extras["capture"] == [
         "openadapt-capture>=1.2.0,<2.0.0",
-        f"openadapt-flow[capture]>=2.5.0,<3.0.0; {supported}",
+        f"openadapt-flow[capture]>=2.6.0,<3.0.0; {supported}",
     ]
-    assert extras["windows"] == [f"openadapt-flow[windows]>=2.5.0,<3.0.0; {supported}"]
+    assert extras["windows"] == [f"openadapt-flow[windows]>=2.6.0,<3.0.0; {supported}"]
     assert extras["macos"] == [
-        f"openadapt-flow[macos]>=2.5.0,<3.0.0; sys_platform == 'darwin' and {supported}"
+        f"openadapt-flow[macos]>=2.6.0,<3.0.0; sys_platform == 'darwin' and {supported}"
     ]
     assert extras["linux"] == [
-        f"openadapt-flow[linux]>=2.5.0,<3.0.0; sys_platform == 'linux' and {supported}"
+        f"openadapt-flow[linux]>=2.6.0,<3.0.0; sys_platform == 'linux' and {supported}"
     ]
-    assert extras["rdp"] == [f"openadapt-flow[rdp]>=2.5.0,<3.0.0; {supported}"]
+    assert extras["rdp"] == [f"openadapt-flow[rdp]>=2.6.0,<3.0.0; {supported}"]
     assert extras["all"] == [
         "openadapt[browser,core,grounding,retrieval,privacy,flow,windows,rdp,agent]",
         "openadapt[macos]; sys_platform == 'darwin'",
@@ -433,7 +444,7 @@ def test_released_flow_x11_sonames_are_case_corrected(monkeypatch):
     )
 
 
-@pytest.mark.parametrize("version", ["2.5.0", "2.5.1", "2.99.0"])
+@pytest.mark.parametrize("version", ["2.6.0", "2.6.1", "2.99.0"])
 def test_launcher_accepts_flow_versions_in_the_supported_range(version):
     assert _supported_flow_version(version)
 
@@ -503,6 +514,15 @@ def test_doctor_native_backend_ok_when_its_platform_extra_is_installed(
     monkeypatch, backend, host, modules, install
 ):
     _host(monkeypatch, host, CORE_PACKAGES | modules)
+    if backend == "macos":
+        from types import SimpleNamespace
+
+        monkeypatch.setattr(
+            "openadapt_flow.backends.remote_display.MacWindowClient",
+            lambda: SimpleNamespace(
+                input_trusted=lambda: True, capture_trusted=lambda: True
+            ),
+        )
 
     result = CliRunner().invoke(cli_main, ["doctor", "--backend", backend])
 
@@ -533,7 +553,7 @@ def test_deploy_native_backend_fails_without_its_platform_extra(
     monkeypatch, backend, host, modules, install
 ):
     _host(monkeypatch, host, {"openadapt_flow"})
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.5.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.6.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", backend])
 
@@ -550,7 +570,7 @@ def test_deploy_native_backend_passes_with_its_platform_extra(
     monkeypatch, backend, host, modules, install
 ):
     _host(monkeypatch, host, {"openadapt_flow"} | modules)
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.5.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.6.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", backend])
 
@@ -690,7 +710,7 @@ def test_deploy_preflight_composes_existing_flow_interfaces_without_secrets(
             else None
         ),
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.5.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.6.0")
     monkeypatch.setenv("BYOC_CONNECTOR_TOKEN", "connector-token-value")
     result = CliRunner().invoke(
         cli_main,
@@ -715,13 +735,13 @@ def test_deploy_base_hosted_install_gives_conditional_console_setup(monkeypatch)
         "importlib.util.find_spec",
         lambda name: object() if name in {"openadapt_flow", "aardwolf"} else None,
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.5.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.6.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", "rdp"])
 
     assert result.exit_code == 0, result.output
     assert "optional local operator console is not installed" in result.output
-    assert 'python -m pip install "openadapt-flow[console]==2.5.0"' in result.output
+    assert 'python -m pip install "openadapt-flow[console]==2.6.0"' in result.output
     assert "openadapt flow console --bundles" not in result.output
     assert "Re-run this preflight" in result.output
 
@@ -736,13 +756,13 @@ def test_deploy_console_requires_openadapt_types(monkeypatch):
             else None
         ),
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.5.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.6.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", "rdp"])
 
     assert result.exit_code == 0, result.output
     assert "optional local operator console is not installed" in result.output
-    assert 'python -m pip install "openadapt-flow[console]==2.5.0"' in result.output
+    assert 'python -m pip install "openadapt-flow[console]==2.6.0"' in result.output
     assert "openadapt flow console --bundles" not in result.output
 
 
@@ -767,7 +787,7 @@ def test_deploy_preflight_fails_without_web_runtime(monkeypatch):
         "importlib.util.find_spec",
         lambda name: object() if name == "openadapt_flow" else None,
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.5.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.6.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", "web"])
 
@@ -785,7 +805,7 @@ def test_deploy_preflight_fails_without_rdp_transport(monkeypatch):
         "importlib.util.find_spec",
         lambda name: object() if name == "openadapt_flow" else None,
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.5.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.6.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", "rdp"])
 
@@ -807,7 +827,7 @@ def test_deploy_preflight_fails_for_unsupported_flow(monkeypatch, flow_version):
 
     assert result.exit_code != 0
     assert "[UNSUPPORTED]" in result.output
-    assert ">=2.5.0,<3.0.0" in result.output
+    assert ">=2.6.0,<3.0.0" in result.output
     assert "Preflight passed" not in result.output
 
 
@@ -1018,7 +1038,10 @@ def test_flow_record_web_invocation_forwards_verbatim(monkeypatch):
     ]
 
 
-def test_flow_missing_shows_install_hint(monkeypatch):
+@pytest.mark.parametrize(
+    "command", [["flow", "compile"], ["compile"], ["record"], ["run"]]
+)
+def test_flow_missing_shows_install_hint(monkeypatch, command):
     """When openadapt-flow isn't installed, `openadapt flow <verb>` exits
     nonzero with a pip install hint instead of a traceback."""
     import builtins
@@ -1035,12 +1058,10 @@ def test_flow_missing_shows_install_hint(monkeypatch):
     monkeypatch.delitem(sys.modules, "openadapt_flow.__main__", raising=False)
 
     runner = CliRunner()
-    result = runner.invoke(
-        cli_main, ["flow", "compile", "rec", "--out", "b", "--name", "x"]
-    )
+    result = runner.invoke(cli_main, [*command, "rec", "--out", "b", "--name", "x"])
     assert result.exit_code != 0
     assert "pip install --upgrade openadapt" in result.output
-    assert "pip install openadapt-flow" in result.output
+    assert "pip install openadapt-flow" not in result.output
 
 
 def _require_openadapt_flow():
