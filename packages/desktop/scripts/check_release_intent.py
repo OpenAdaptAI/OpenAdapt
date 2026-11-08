@@ -87,7 +87,8 @@ def check(root: Path, base: str, head: str) -> list[str]:
             f"This pull request changes Desktop in a way that should ship:\n{listed}\n"
             f"but keeps version {base_version}, so nothing would be released. Bump to "
             f"{suggested} ({needed}) with:\n"
-            f"  cd packages/desktop && python scripts/prepare_release.py --bump {needed} --base {base}"
+            f"  cd packages/desktop && python scripts/prepare_release.py "
+            f"--bump {needed} --base {base}"
         ]
 
     if prepare_release.parse_version(head_version) <= prepare_release.parse_version(base_version):

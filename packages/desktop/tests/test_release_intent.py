@@ -1616,7 +1616,9 @@ def _equal_version_history(
     _boundary_merge(repo, tips[other], published, "merge: combine equal versions")
     if merges == 2:
         _git(repo, "checkout", "-q", "boundary-" + published_side)
-        published = _commit(repo, "docs: retain published release metadata", touch="docs/release.txt")
+        published = _commit(
+            repo, "docs: retain published release metadata", touch="docs/release.txt"
+        )
         _git(repo, "checkout", "-q", "boundary-integration")
         _commit(repo, "fix: retain an additional unshipped correction", touch="src/additional.txt")
         _boundary_merge(repo, published, published, "merge: combine equal versions again")
@@ -1664,12 +1666,21 @@ def test_equal_version_history_requires_explicit_comparison_base(
 @pytest.mark.parametrize(
     "shape",
     [
-        "missing-full-oid", "abbreviated-oid", "symbolic-ref", "nonancestor-commit",
-        "unrelated-root", "pyproject-absent", "pyproject-nonregular",
-        "wrong-project-identity", "duplicate-or-malformed-version", "base-current-version-mismatch",
+        "missing-full-oid",
+        "abbreviated-oid",
+        "symbolic-ref",
+        "nonancestor-commit",
+        "unrelated-root",
+        "pyproject-absent",
+        "pyproject-nonregular",
+        "wrong-project-identity",
+        "duplicate-or-malformed-version",
+        "base-current-version-mismatch",
     ],
 )
-def test_explicit_release_base_refuses_invalid_history_before_writing(repo: Path, shape: str) -> None:
+def test_explicit_release_base_refuses_invalid_history_before_writing(
+    repo: Path, shape: str
+) -> None:
     start = _git(repo, "rev-parse", "HEAD")
     original = (repo / "pyproject.toml").read_bytes()
     _git(repo, "checkout", "-q", "-b", "base-candidate")
@@ -1719,10 +1730,15 @@ def test_explicit_release_base_refuses_invalid_history_before_writing(repo: Path
 @pytest.mark.parametrize(
     "shape",
     [
-        "ordinary-linear-feature", "ordinary-linear-fix", "ordinary-docs-only-refusal",
-        "ordinary-explicit-level-existing-semantics", "ordinary-explicit-version-existing-semantics",
-        "linear-clock-skew-ancestry-maximal-origin", "explicit-base-cancelled-fix-no-surviving-bump",
-        "explicit-base-unexplained-merge-refusal", "dependency-version-text-not-engine-origin",
+        "ordinary-linear-feature",
+        "ordinary-linear-fix",
+        "ordinary-docs-only-refusal",
+        "ordinary-explicit-level-existing-semantics",
+        "ordinary-explicit-version-existing-semantics",
+        "linear-clock-skew-ancestry-maximal-origin",
+        "explicit-base-cancelled-fix-no-surviving-bump",
+        "explicit-base-unexplained-merge-refusal",
+        "dependency-version-text-not-engine-origin",
     ],
 )
 def test_release_boundary_preserves_ordinary_calls_and_lineage_guards(
@@ -1737,7 +1753,9 @@ def test_release_boundary_preserves_ordinary_calls_and_lineage_guards(
         _commit(repo, "docs: only explain", touch="docs/words.md")
     elif shape.startswith("ordinary-explicit-"):
         _commit(repo, "docs: only explain", touch="docs/words.md")
-        options = {"level": "patch"} if "-level-" in shape else {"version": _boundary_patch(current)}
+        options = (
+            {"level": "patch"} if "-level-" in shape else {"version": _boundary_patch(current)}
+        )
     elif shape == "explicit-base-cancelled-fix-no-surviving-bump":
         _commit(repo, "fix: a cancelled feature", touch="src/cancelled.txt")
         _git(repo, "rm", "-q", "src/cancelled.txt")
@@ -1752,7 +1770,9 @@ def test_release_boundary_preserves_ordinary_calls_and_lineage_guards(
         left = _git(repo, "rev-parse", "HEAD")
         _git(repo, "checkout", "-q", "-b", "unexplained-right", start)
         base = _commit(repo, "fix: right change", touch="src/shared.txt")
-        result = subprocess.run(["git", "merge", "--no-ff", "--no-commit", left], cwd=repo, capture_output=True)
+        result = subprocess.run(
+            ["git", "merge", "--no-ff", "--no-commit", left], cwd=repo, capture_output=True
+        )
         assert result.returncode == 1
         (repo / "src/shared.txt").write_text("unexplained manual bytes\n")
         _commit(repo, "merge: invent an unexplained resolution")
@@ -1769,7 +1789,8 @@ def test_release_boundary_preserves_ordinary_calls_and_lineage_guards(
         _commit(repo, "fix: retain a normal correction", touch="src/correction.txt")
     before = _boundary_outputs(repo)
     if shape in {
-        "ordinary-docs-only-refusal", "explicit-base-cancelled-fix-no-surviving-bump",
+        "ordinary-docs-only-refusal",
+        "explicit-base-cancelled-fix-no-surviving-bump",
         "explicit-base-unexplained-merge-refusal",
     }:
         with pytest.raises(ValueError):
@@ -1778,7 +1799,9 @@ def test_release_boundary_preserves_ordinary_calls_and_lineage_guards(
         return
     actual = prepare_release.prepare(repo, today=datetime.date(2026, 11, 8), **options)
     major, minor, _patch = map(int, current.split("."))
-    expected = f"{major}.{minor + 1}.0" if shape == "ordinary-linear-feature" else _boundary_patch(current)
+    expected = (
+        f"{major}.{minor + 1}.0" if shape == "ordinary-linear-feature" else _boundary_patch(current)
+    )
     assert actual == expected
     version_commit = _commit(repo, "chore: prepare a normal engine version")
     assert prepare_release.last_version_change(repo) == version_commit

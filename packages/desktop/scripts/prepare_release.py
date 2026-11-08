@@ -828,14 +828,17 @@ def last_version_change(root: Path) -> str:
         for other in origins - {candidate}:
             result = subprocess.run(
                 ["git", "merge-base", "--is-ancestor", candidate, other],
-                cwd=root, capture_output=True,
+                cwd=root,
+                capture_output=True,
             )
             if result.returncode == 0:
                 maximal.discard(candidate)
             elif result.returncode != 1:
                 raise ValueError("release history ancestry is unavailable")
     if len(maximal) != 1:
-        raise ValueError("ambiguous engine-version history; pass --base with a full commit identity")
+        raise ValueError(
+            "ambiguous engine-version history; pass --base with a full commit identity"
+        )
     return maximal.pop()
 
 
