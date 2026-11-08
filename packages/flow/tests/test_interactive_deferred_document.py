@@ -12,7 +12,6 @@ from hypothesis import strategies as st
 from openadapt_flow.interactive_recorder import BrowserAttachError, InteractiveRecorder
 from tests.test_interactive_frame_boundary import model as model
 
-
 _DEFERRED = (
     ("input", "input", "_pending_type"),
     ("scroll", "scroll", "_pending_scroll"),
