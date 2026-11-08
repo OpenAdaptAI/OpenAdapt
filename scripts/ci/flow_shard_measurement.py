@@ -387,6 +387,18 @@ def _timing_slack(*values: float) -> float:
     return 4 * (resolution + max(math.ulp(float(value)) for value in values))
 
 
+def _untimed_subtest(row: dict[str, Any]) -> bool:
+    """Pytest's unittest adapter emits three numeric zeros for unavailable timing.
+
+    This sentinel is specific to subtests. It does not describe an interval
+    at the Unix epoch or a measured zero duration. Raw records stay unchanged.
+    """
+    return row.get("kind") == "subtest" and all(
+        type(row.get(name)) in (int, float) and row[name] == 0
+        for name in ("started_at", "finished_at", "seconds")
+    )
+
+
 def _validate_timing_envelope(
     session: dict[str, Any],
     finish: dict[str, Any],
@@ -454,7 +466,10 @@ def _validate_timing_envelope(
         call = next(
             report for report in phases[row["nodeid"]] if report["phase"] == "call"
         )
-        contained(row, call["started_at"], call["finished_at"], call["seconds"])
+        if not _untimed_subtest(row):
+            contained(row, call["started_at"], call["finished_at"], call["seconds"])
+        # Untimed subtests are bound by the report stream to this validated
+        # parent call. No interval or duration is inferred for those records.
         # Subtests may nest. Their durations are contained, never added again
         # to the ordinary call duration or the worker's total.
 
@@ -496,6 +511,8 @@ def _validate_phases(
     workers: dict[str, dict[str, Any]] = {}
     phases: dict[str, list[dict[str, Any]]] = {}
     subtests: list[dict[str, Any]] = []
+    last_phase: dict[str, dict[str, Any]] = {}
+    untimed_parent: dict[str, str] = {}
     counts: Counter[str] = Counter()
     for event in events[1:-1]:
         kind = event.get("kind")
@@ -586,9 +603,28 @@ def _validate_phases(
             counts[f"{kind}:{event['phase']}:{event['outcome']}"] += 1
             if kind == "subtest":
                 _require(event["phase"] == "call", "invalid subtest phase")
+                if _untimed_subtest(event):
+                    preceding = phases.get(event["nodeid"], [])
+                    _require(
+                        len(preceding) == 1
+                        and preceding[0]["phase"] == "setup"
+                        and preceding[0]["outcome"] == "passed"
+                        and preceding[0]["worker"] == worker
+                        and last_phase.get(worker) is preceding[0],
+                        "untimed subtest outside active parent call",
+                    )
+                    untimed_parent[worker] = event["nodeid"]
                 subtests.append(event)
             else:
+                if worker in untimed_parent:
+                    _require(
+                        event["phase"] == "call"
+                        and event["nodeid"] == untimed_parent[worker],
+                        "untimed subtest missing its next parent call",
+                    )
+                    del untimed_parent[worker]
                 phases.setdefault(event["nodeid"], []).append(event)
+                last_phase[worker] = event
         else:
             raise ValueError("unknown observation kind")
     _require(
@@ -637,6 +673,7 @@ def _validate_phases(
         "workers_observed": len(workers),
         "observations": len(events),
         "collected": len(ids),
+        "subtests_timing_unavailable": sum(_untimed_subtest(row) for row in subtests),
     }
 
 

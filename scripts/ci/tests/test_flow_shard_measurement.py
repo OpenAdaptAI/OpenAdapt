@@ -524,7 +524,18 @@ def test_workflow_keeps_the_fixed_pair_and_original_test_policy():
         (root / ".github/workflows/flow-shard-measurement.yml").read_text()
     )
     trigger = workflow.get("on", workflow.get(True))
-    assert set(trigger) == {"pull_request"}
+    assert trigger == {
+        "workflow_dispatch": {
+            "inputs": {
+                "run_comparison": {
+                    "description": "Run the fixed-reference six-job comparison",
+                    "type": "boolean",
+                    "required": True,
+                    "default": False,
+                }
+            }
+        }
+    }
     assert workflow["permissions"] == {"contents": "read"}
     jobs = workflow["jobs"]
     assert set(jobs) == {"parent", "current"}
@@ -537,12 +548,23 @@ def test_workflow_keeps_the_fixed_pair_and_original_test_policy():
             "max-parallel": 3,
             "matrix": {"shard": [1, 2, 3]},
         }
-        assert "github.event.pull_request.draft == false" in job["if"]
-        assert "github.head_ref == 'agent/2078'" in job["if"]
-        assert (
-            "github.event.pull_request.head.repo.full_name == github.repository"
-            in job["if"]
+        activation = (
+            "github.event_name == 'workflow_dispatch' && "
+            "inputs.run_comparison == true && "
+            "github.repository == 'OpenAdaptAI/OpenAdapt' && "
+            "github.ref == 'refs/heads/agent/2078'"
         )
+        assert job["if"].strip() == (
+            ("always() && !cancelled() && " if profile == "current" else "")
+            + activation
+        )
+        observer = next(
+            step
+            for step in job["steps"]
+            if step.get("name") == "Check out the reviewed observer"
+        )
+        assert observer["with"]["ref"] == "${{ github.sha }}"
+        assert observer["with"]["persist-credentials"] is False
         subject = next(
             step
             for step in job["steps"]
@@ -760,3 +782,269 @@ def test_distinct_nodes_cannot_overlap_on_the_same_worker():
         row["finished_at"] -= 0.095
     with pytest.raises(ValueError, match="ordinary reports overlap"):
         measurement._validate_phases(rows, 0, {}, 0.2)
+
+
+def _untimed_events(code=0):
+    rows = _with_subtests(_events(code))
+    subtest = next(row for row in rows if row["kind"] == "subtest")
+    subtest.update(started_at=0, finished_at=0, seconds=0)
+    return rows
+
+
+def _recount(rows):
+    rows[-1]["phase_counts"] = dict(
+        Counter(
+            f"{row['kind']}:{row['phase']}:{row['outcome']}"
+            for row in rows
+            if row["kind"] in ("phase", "subtest")
+        )
+    )
+
+
+@pytest.mark.parametrize("numeric_type", [int, float])
+@pytest.mark.parametrize("outcome", ["passed", "failed", "skipped"])
+def test_untimed_subtests_preserve_raw_records_and_original_exit(
+    tmp_path, numeric_type, outcome
+):
+    code = int(outcome == "failed")
+    rows = _untimed_events(code)
+    subtest = next(row for row in rows if row["kind"] == "subtest")
+    subtest.update(
+        started_at=numeric_type(0),
+        finished_at=numeric_type(0),
+        seconds=numeric_type(0),
+        outcome=outcome,
+    )
+    _recount(rows)
+    original = copy.deepcopy(rows)
+    _write_records(tmp_path / "phases.jsonl", rows)
+    raw = (tmp_path / "phases.jsonl").read_bytes()
+    _write_records(tmp_path / "resources.jsonl", [_sample()])
+    identity = {"expected_origins_sha256": {}}
+    assert (
+        measurement._finalize(
+            tmp_path, code, 0.2, 0.0, identity, lambda: identity, True
+        )
+        == code
+    )
+    result = json.loads((tmp_path / "result.json").read_text())
+    assert result["measurement_complete"] is True
+    assert result["pytest_exit_code"] == code
+    assert result["subtests_timing_unavailable"] == 1
+    assert (tmp_path / "phases.jsonl").read_bytes() == raw
+    assert rows == original
+
+
+@pytest.mark.parametrize("field", ["started_at", "finished_at", "seconds"])
+@pytest.mark.parametrize("value", [False, "0", None, -1, float("nan"), float("inf")])
+def test_untimed_subtest_sentinel_requires_finite_numeric_zeros(field, value):
+    rows = _untimed_events()
+    assert (
+        measurement._validate_phases(rows, 0, {}, 0.2)["subtests_timing_unavailable"]
+        == 1
+    )
+    next(row for row in rows if row["kind"] == "subtest")[field] = value
+    with pytest.raises(ValueError, match="invalid phase timing"):
+        measurement._validate_phases(rows, 0, {}, 0.2)
+
+
+@pytest.mark.parametrize(
+    "values", [(0, 0, 0.001), (0, 1.045, 0), (1.045, 0, 0), (0, 0, 1000)]
+)
+def test_partial_zero_subtest_is_not_an_untimed_sentinel(values):
+    rows = _untimed_events()
+    assert (
+        measurement._validate_phases(rows, 0, {}, 0.2)["subtests_timing_unavailable"]
+        == 1
+    )
+    row = next(row for row in rows if row["kind"] == "subtest")
+    row.update(zip(("started_at", "finished_at", "seconds"), values))
+    assert measurement._untimed_subtest(row) is False
+    with pytest.raises(ValueError, match="invalid phase timing|outside enclosing"):
+        measurement._validate_phases(rows, 0, {}, 0.2)
+
+
+@pytest.mark.parametrize(
+    "placement",
+    [
+        "before_setup",
+        "after_call",
+        "after_teardown",
+        "other_active_node",
+        "different_next_node",
+    ],
+)
+def test_untimed_subtest_requires_its_active_parent_in_the_worker_stream(placement):
+    rows = _untimed_events()
+    assert (
+        measurement._validate_phases(rows, 0, {}, 0.2)["subtests_timing_unavailable"]
+        == 1
+    )
+    report = rows.pop(3)
+    if placement in ("other_active_node", "different_next_node"):
+        other = "test_synthetic.py::test_other"
+        rows[1]["nodeids"].append(other)
+        rows[1]["count"] = 2
+        rows[1]["nodeids_sha256"] = hashlib.sha256(
+            "\n".join(rows[1]["nodeids"]).encode()
+        ).hexdigest()
+        if placement == "other_active_node":
+            rows.insert(3, {**rows[2], "nodeid": other})
+            rows.insert(4, report)
+        else:
+            rows.insert(3, report)
+            rows.insert(4, {**rows[2], "nodeid": other})
+    else:
+        position = {"before_setup": 2, "after_call": 4, "after_teardown": 5}[placement]
+        rows.insert(position, report)
+    expected = (
+        "untimed subtest missing its next parent call"
+        if placement == "different_next_node"
+        else "untimed subtest outside active parent call"
+    )
+    with pytest.raises(ValueError, match=expected):
+        measurement._validate_phases(rows, 0, {}, 0.2)
+
+
+@pytest.mark.parametrize("problem", ["wrong_worker", "failed_setup", "missing_call"])
+def test_untimed_subtest_requires_a_valid_same_scope_parent(problem):
+    rows = _untimed_events()
+    assert (
+        measurement._validate_phases(rows, 0, {}, 0.2)["subtests_timing_unavailable"]
+        == 1
+    )
+    if problem == "wrong_worker":
+        rows.insert(2, {**copy.deepcopy(rows[1]), "worker": "gw1"})
+        next(row for row in rows if row["kind"] == "subtest")["worker"] = "gw1"
+        expected = "untimed subtest outside active parent call"
+    elif problem == "failed_setup":
+        rows[2]["outcome"] = "failed"
+        expected = "untimed subtest outside active parent call"
+    else:
+        rows = [
+            row
+            for row in rows
+            if not (row["kind"] == "phase" and row.get("phase") == "call")
+        ]
+        _recount(rows)
+        expected = "untimed subtest missing its next parent call"
+    with pytest.raises(ValueError, match=expected):
+        measurement._validate_phases(rows, 0, {}, 0.2)
+
+
+@pytest.mark.parametrize("phase", ["setup", "call", "teardown"])
+def test_zero_timing_ordinary_phase_is_still_impossible(phase):
+    rows = _events()
+    assert measurement._validate_phases(rows, 0, {}, 0.2)["collected"] == 1
+    report = next(row for row in rows if row.get("phase") == phase)
+    report.update(started_at=0, finished_at=0, seconds=0)
+    assert measurement._untimed_subtest(report) is False
+    with pytest.raises(ValueError, match="outside enclosing"):
+        measurement._validate_phases(rows, 0, {}, 0.2)
+
+
+def test_real_epoch_zero_duration_subtest_remains_timed():
+    rows = _with_subtests(_events())
+    report = next(row for row in rows if row["kind"] == "subtest")
+    report.update(started_at=1.045, finished_at=1.045, seconds=0)
+    assert (
+        measurement._validate_phases(rows, 0, {}, 0.2)["subtests_timing_unavailable"]
+        == 0
+    )
+
+
+@pytest.mark.parametrize("failure", [False, True])
+def test_genuine_unittest_subtests_under_xdist_have_unavailable_timing(
+    tmp_path, failure
+):
+    source = """
+import unittest
+
+class TestSynthetic(unittest.TestCase):
+    def test_subtests(self):
+        for index in range(2):
+            with self.subTest(index=index):
+                self.assertTrue(index != 1 or not FAIL)
+""".replace("FAIL", repr(failure))
+    (tmp_path / "test_synthetic.py").write_text(source)
+    output = tmp_path / "observations"
+    output.mkdir()
+    env = os.environ.copy()
+    env.update(
+        PYTHONPATH=str(Path(measurement.__file__).parent),
+        PYTEST_DISABLE_PLUGIN_AUTOLOAD="1",
+        OPENADAPT_SHARD_MEASUREMENT_OUTPUT=str(output),
+        OPENADAPT_SHARD_MEASUREMENT_SUBJECT=str(tmp_path),
+    )
+    started = time.monotonic()
+    run = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-p",
+            "xdist.plugin",
+            "-p",
+            "flow_shard_measurement",
+            "-n",
+            "2",
+            "--dist",
+            "loadfile",
+            "-q",
+            "test_synthetic.py",
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=45,
+    )
+    assert run.returncode == int(failure), run.stdout + run.stderr
+    events = measurement._records(output / "phases.jsonl")
+    result = measurement._validate_phases(
+        events, run.returncode, {}, time.monotonic() - started
+    )
+    reports = [row for row in events if row["kind"] == "subtest"]
+    assert len(reports) == 2
+    assert all(
+        (row["started_at"], row["finished_at"], row["seconds"]) == (0, 0, 0)
+        for row in reports
+    )
+    assert sum(row["outcome"] == "failed" for row in reports) == int(failure)
+    assert result["collected"] == 1
+    assert result["workers_observed"] == 2
+    assert result["subtests_timing_unavailable"] == 2
+
+
+@pytest.mark.parametrize("code", [0, 1])
+@pytest.mark.parametrize(
+    "problem", ["before_setup_end", "after_session", "duration", "missing_call"]
+)
+def test_untimed_subtest_does_not_bless_an_invalid_parent(tmp_path, code, problem):
+    rows = _untimed_events(code)
+    assert (
+        measurement._validate_phases(rows, code, {}, 0.2)["subtests_timing_unavailable"]
+        == 1
+    )
+    call = next(
+        row for row in rows if row["kind"] == "phase" and row["phase"] == "call"
+    )
+    if problem == "before_setup_end":
+        call["started_at"] = 1.025
+    elif problem == "after_session":
+        call["finished_at"] = 1.2
+    elif problem == "duration":
+        call["seconds"] = 1000
+    else:
+        rows.remove(call)
+        _recount(rows)
+    _write_records(tmp_path / "phases.jsonl", rows)
+    _write_records(tmp_path / "resources.jsonl", [_sample()])
+    identity = {"expected_origins_sha256": {}}
+    assert measurement._finalize(
+        tmp_path, code, 0.2, 0.0, identity, lambda: identity, True
+    ) == (code or 2)
+    result = json.loads((tmp_path / "result.json").read_text())
+    assert result["measurement_complete"] is False
+    assert result["pytest_exit_code"] == code
+    assert result["observation_error_type"] == "ValueError"

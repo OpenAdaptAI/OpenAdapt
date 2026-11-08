@@ -2,12 +2,13 @@
 name: Flow shard measurement
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - .github/workflows/flow-shard-measurement.yml
-      - scripts/ci/flow_shard_measurement.py
-      - scripts/ci/tests/test_flow_shard_measurement.py
+  workflow_dispatch:
+    inputs:
+      run_comparison:
+        description: Run the fixed-reference six-job comparison
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
@@ -21,9 +22,10 @@ jobs:
   parent:
     name: parent fast shard ${{ matrix.shard }}/3
     if: >-
-      github.event.pull_request.draft == false &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.head_ref == 'agent/2078'
+      github.event_name == 'workflow_dispatch' &&
+      inputs.run_comparison == true &&
+      github.repository == 'OpenAdaptAI/OpenAdapt' &&
+      github.ref == 'refs/heads/agent/2078'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
@@ -38,7 +40,7 @@ jobs:
       - name: Check out the reviewed observer
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.sha }}
           path: measurement
           persist-credentials: false
       - name: Check out the fixed subject
@@ -128,9 +130,10 @@ jobs:
     needs: parent
     if: >-
       always() && !cancelled() &&
-      github.event.pull_request.draft == false &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.head_ref == 'agent/2078'
+      github.event_name == 'workflow_dispatch' &&
+      inputs.run_comparison == true &&
+      github.repository == 'OpenAdaptAI/OpenAdapt' &&
+      github.ref == 'refs/heads/agent/2078'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
@@ -145,7 +148,7 @@ jobs:
       - name: Check out the reviewed observer
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.sha }}
           path: measurement
           persist-credentials: false
       - name: Check out the fixed subject
