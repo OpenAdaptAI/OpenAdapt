@@ -103,3 +103,30 @@ def test_verify_ledger_lists_and_releases_a_held_write(tmp_path) -> None:
     assert released.exit_code == 0, released.output
     listed = runner.invoke(main, ["verify", "ledger", "list", "--ledger", str(folder)])
     assert "No held or open writes." in listed.output
+
+
+def test_verify_ledger_lists_a_recheck_owed_until_it_runs(tmp_path) -> None:
+    ledger_mod = pytest.importorskip("openadapt_flow.write_ledger")
+    folder = tmp_path / "ledger"
+    ledger = ledger_mod.Ledger(ledger_mod.FileLedger(folder))
+    key = "d" * 64
+    due = "2026-01-01T00:02:00Z"
+    ledger.begun(key, "write-2", contract="c" * 64, actor_kind="agent", actor_id="bot")
+    ledger.resolved(
+        key,
+        "write-2",
+        outcome="CONFIRMED",
+        retry_safe=False,
+        delivered=True,
+        result={"outcome": "CONFIRMED", "provisional": True, "recheck_due_at": due},
+    )
+    runner = CliRunner()
+    listed = runner.invoke(main, ["verify", "ledger", "list", "--ledger", str(folder)])
+    assert listed.exit_code == 0, listed.output
+    assert key in listed.output and "recheck-owed" in listed.output
+    assert f"due {due}" in listed.output
+
+    ledger.rechecked(key, "write-2", outcome="CONFIRMED")
+    listed = runner.invoke(main, ["verify", "ledger", "list", "--ledger", str(folder)])
+    assert "recheck-owed" not in listed.output
+    assert "No rechecks owed." in listed.output

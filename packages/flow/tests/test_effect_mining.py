@@ -41,6 +41,7 @@ from openadapt_flow.runtime.effects import (
     Verdict,
 )
 from openadapt_flow.runtime.replayer import Replayer
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 
 # Reuse the scripted fakes + fault-server helpers from the replayer-effects
 # tests (pytest prepend import mode puts tests/ on sys.path).
@@ -112,20 +113,53 @@ def test_mines_record_written_and_field_equals_from_delta():
     assert "note" not in field.match
 
 
-def test_mines_idempotency_key_only_when_observed():
+def test_mines_idempotency_key_only_from_the_named_field_when_observed():
+    # MockMed keeps its at-most-once key in "key".
     with_key = mine_step_effects(
         {SOR_BEFORE_KEY: [], SOR_AFTER_KEY: [_record(key="idem-abc")]},
         _key_step(),
         exclude_texts=(NOTE,),
+        idempotency_key_field="key",
     )
     written = next(e for e in with_key.effects if e.kind is EffectKind.RECORD_WRITTEN)
     assert written.idempotency_key == "idem-abc"
     assert written.key_field == "key"
 
+    # Another app names another field (a client request id, say).
+    other = mine_step_effects(
+        {SOR_BEFORE_KEY: [], SOR_AFTER_KEY: [_record(client_request_id="req-7")]},
+        _key_step(),
+        exclude_texts=(NOTE,),
+        idempotency_key_field="client_request_id",
+    )
+    written3 = next(e for e in other.effects if e.kind is EffectKind.RECORD_WRITTEN)
+    assert written3.idempotency_key == "req-7"
+    assert written3.key_field == "client_request_id"
+
+    # No field named: the "key" convention, the default of Effect.key_field.
+    unnamed = mine_step_effects(
+        {SOR_BEFORE_KEY: [], SOR_AFTER_KEY: [_record(key="idem-abc")]},
+        _key_step(),
+        exclude_texts=(NOTE,),
+    )
+    written4 = next(e for e in unnamed.effects if e.kind is EffectKind.RECORD_WRITTEN)
+    assert written4.idempotency_key == "idem-abc"
+
+    # None: no key mined, whatever the record holds.
+    none = mine_step_effects(
+        {SOR_BEFORE_KEY: [], SOR_AFTER_KEY: [_record(key="idem-abc")]},
+        _key_step(),
+        exclude_texts=(NOTE,),
+        idempotency_key_field=None,
+    )
+    written5 = next(e for e in none.effects if e.kind is EffectKind.RECORD_WRITTEN)
+    assert written5.idempotency_key is None
+
     without = mine_step_effects(
         {SOR_BEFORE_KEY: [], SOR_AFTER_KEY: [_record()]},
         _key_step(),
         exclude_texts=(NOTE,),
+        idempotency_key_field="key",
     )
     written2 = next(e for e in without.effects if e.kind is EffectKind.RECORD_WRITTEN)
     # Never invented: §7 names the idempotency key as app-specific.
@@ -196,7 +230,7 @@ def test_dom_field_delta_mines_flagged_field_equals():
 def test_mined_effects_confirmed_by_verifier_on_real_sor():
     base, db, stop = _fault_server()
     try:
-        verifier = RestRecordVerifier(base)
+        verifier = RestRecordVerifier(base, **mockmed_rest_read_kwargs())
         before = db.snapshot()["records"]
         requests.post(
             f"{base}/api/encounter",
@@ -220,7 +254,7 @@ def test_mined_effects_confirmed_by_verifier_on_real_sor():
 def test_mined_record_written_refutes_a_duplicate_on_the_real_sor():
     base, db, stop = _fault_server()
     try:
-        verifier = RestRecordVerifier(base)
+        verifier = RestRecordVerifier(base, **mockmed_rest_read_kwargs())
         before = db.snapshot()["records"]
         requests.post(
             f"{base}/api/encounter",
@@ -266,7 +300,7 @@ def test_placeholder_effect_halts_the_run(tmp_path):
         replayer = Replayer(
             backend,
             vision=vision,
-            effect_verifier=RestRecordVerifier(base),
+            effect_verifier=RestRecordVerifier(base, **mockmed_rest_read_kwargs()),
             poll_interval_s=0.01,
         )
         report = replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)

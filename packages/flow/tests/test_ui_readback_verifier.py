@@ -432,8 +432,10 @@ def test_existing_verifier_identities_do_not_change() -> None:
     # Digests computed with origin/main (before ``ui_readback`` existed). The
     # new optional field must not enter the identity of any verifier that
     # does not use it, or every issued admission bound to one would break.
-    rest = RestRecordVerifier("http://sor.test")
-    cfg = EffectsConfig(kind="rest", base_url="http://sor.test")
+    rest = RestRecordVerifier(
+        "http://sor.test", records_path="/api/db", records_key="records"
+    )
+    cfg = EffectsConfig(kind="rest", records_path="/api/db", base_url="http://sor.test")
     assert _effect_verifier_config_identity(cfg, rest) == (
         "sha256:9f288a5b15b66001565c6d5bbd0f0a09bf92485280fe5de37b421802c3e0e663"
     )

@@ -19,6 +19,40 @@ it.
 
 All data in the tests on this page is synthetic.
 
+## Which layer guarantees what
+
+Safety rests on three layers. Each threat has one owner, and the other
+checks only reduce how often that owner has to act.
+
+| Layer | Guarantees | Where it applies |
+| --- | --- | --- |
+| **1. The record check** | A write is reported as saved only if the system of record shows exactly the declared effect and nothing else the run caused. Anything else is a stop. | Every surface: browser, desktop, Citrix and RDP |
+| **2. The wire check** | Only declared writes leave: the method, the path and the body must match before the request is sent. Anything else is refused. | Wherever requests can be intercepted, the browser today |
+| **3. Undo or a person** | A wrong write the record check catches is undone and the undo verified, or it goes to a person with the exact difference. A write that cannot be undone needs a person's approval first. | Every surface |
+
+Everything else, including the identity checks before a click, look-alike
+row counting, focus and form checks and pixel grounding, is a **pre-check**.
+A pre-check avoids bad writes and wasted runs. It must fail closed when
+unsure, but it is never the thing that makes a run safe: if a pre-check is
+fooled, layer 1 catches the result and layer 3 handles it.
+
+What each attacker can do, and which layer stops it:
+
+| Threat | Owner |
+| --- | --- |
+| The app changed: a new layout, a renamed button, look-alike rows | Pre-checks stop most cases; layer 1 catches the rest |
+| The agent is wrong, hijacked or tries to cheat | Layer 2 refuses undeclared writes; layer 1 checks the outcome through a channel the agent cannot write |
+| The app's own page scripts change what is sent | Layer 2 compares what is actually sent; layer 1 checks what was stored |
+| The app's server says "saved" and writes nothing, or writes elsewhere | Layer 1 reads the store directly |
+| A bug in OpenAdapt | Layer 1, and blind fault suites that measure it |
+
+**Rule for reviews.** A finding that a pre-check can be fooled is a
+blocking bug only if it also gets past layers 1 to 3 and ends as a write
+reported as verified, or if it makes a pre-check pass when it should halt in
+a realistic app. A finding that needs the customer's app to attack its own
+pages is out of scope for pre-checks: name the layer that covers it, and
+test that layer instead.
+
 ## Phases
 
 | Phase | Who acts | What it reads | Model calls |

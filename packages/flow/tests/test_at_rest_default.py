@@ -276,7 +276,9 @@ def _mockmed_run(tmp_path: Path, bundle: Path, run_dir: Path, **kw):
         return Replayer(
             MockMedBackend(url),
             vision=_vision(),
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             poll_interval_s=0.01,
         ).run(Workflow.load(bundle), bundle_dir=bundle, run_dir=run_dir, **kw)
     finally:

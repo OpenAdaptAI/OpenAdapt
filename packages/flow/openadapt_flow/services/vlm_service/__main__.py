@@ -29,7 +29,9 @@ logger = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="openadapt-flow on-prem VLM service")
+    parser = argparse.ArgumentParser(
+        description="openadapt-flow on-prem VLM service", allow_abbrev=False
+    )
     # Loopback by default: the service must not land on the network without an
     # explicit --host 0.0.0.0. Non-loopback binds (and empty tokens) warn loudly
     # below so an unauthenticated PHI endpoint can never happen unknowingly.

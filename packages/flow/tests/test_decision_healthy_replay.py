@@ -17,6 +17,7 @@ import pytest
 from openadapt_flow.decision import feature_model, provider
 from openadapt_flow.runtime.effects import Effect, EffectKind, RestRecordVerifier
 from openadapt_flow.runtime.replayer import Replayer
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 from tests.test_replayer_effects import (
     TARGET,
     WritingBackend,
@@ -54,7 +55,7 @@ def _replay(tmp_path: Path):
         replayer = Replayer(
             WritingBackend(url),
             vision=_vision_that_confirms_saved(),
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
             poll_interval_s=0.01,
         )
         return replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)

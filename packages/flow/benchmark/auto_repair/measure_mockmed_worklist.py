@@ -104,7 +104,9 @@ def _target(base_url: str, vendor: dict, on_open: Any = None) -> Any:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--items", type=int, default=5)
     parser.add_argument("--modes", default="relink,redesign")

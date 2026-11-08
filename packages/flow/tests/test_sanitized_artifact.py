@@ -129,6 +129,7 @@ def _recording(tmp_path: Path) -> Path:
 class _RuntimeBackend:
     def __init__(self):
         self.actions: list[tuple[str, str]] = []
+        self.value = ""
 
     @property
     def viewport(self):
@@ -139,6 +140,10 @@ class _RuntimeBackend:
 
     def type_text(self, value):
         self.actions.append(("type", value))
+        self.value += value
+
+    def focused_text_value(self):
+        return self.value
 
     def click(self, x, y, *, double=False):
         raise AssertionError("type-only parameter test must not click")

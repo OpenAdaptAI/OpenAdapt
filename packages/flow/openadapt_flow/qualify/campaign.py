@@ -68,6 +68,7 @@ from openadapt_flow.qualify.environment import (
 )
 from openadapt_flow.qualify.faults import WebFaultDriver
 from openadapt_flow.qualify.keys import LocalTestKey, new_local_test_key
+from openadapt_flow.subroutines import SubroutineLibrary, uses_subroutines
 from openadapt_flow.verification import VerificationTier
 
 #: (case id, expected outcome, oracle kind), in run order.
@@ -560,6 +561,21 @@ def _records_reader(
     return None
 
 
+def _same_field(record: Mapping[str, Any], key: str, want: Any) -> bool:
+    """Whether ``record[key]`` equals ``want``, by text.
+
+    A null equals only a field that is there and null: ``str(None)`` is
+    ``"None"``, which would match the text ``"None"`` or a missing field.
+    """
+
+    if key not in record:
+        return False
+    have = record[key]
+    if have is None or want is None:
+        return have is None and want is None
+    return str(have) == str(want)
+
+
 def _canon(record: Mapping[str, Any]) -> str:
     return json.dumps(record, sort_keys=True, default=str)
 
@@ -623,7 +639,7 @@ class RecordReadback:
         }
 
         def matches(rec: Mapping[str, Any], sel: Mapping[str, Any]) -> bool:
-            return all(str(rec.get(k)) == str(v) for k, v in sel.items())
+            return all(_same_field(rec, k, v) for k, v in sel.items())
 
         matched = [rec for rec in after if selector and matches(rec, selector)]
         after_set = {_canon(rec) for rec in after}
@@ -633,7 +649,7 @@ class RecordReadback:
             if effect.kind.value != "field_equals" or effect.field is None:
                 continue
             want = effect.value.literal if effect.value is not None else None
-            ok = len(matched) == 1 and str(matched[0].get(effect.field)) == str(want)
+            ok = len(matched) == 1 and _same_field(matched[0], effect.field, want)
             field_checks.append({"field": effect.field, "match": ok})
         expected = written.expected_count if written else 1
         exact = (
@@ -854,11 +870,33 @@ def _judge_trial(
 
 
 def _evidence_ref(root: Path, path: Path, kind: Any) -> Any:
+    from openadapt_flow.evidence_files import is_publication_input_path_excluded
     from openadapt_flow.qualification import EvidenceRef
 
+    if is_publication_input_path_excluded(path.relative_to(root)):
+        raise QualifyError(
+            "Local key material or unclassified containers cannot be qualification evidence"
+        )
     return EvidenceRef(
         kind=kind, sha256=_sha256(path), relative_path=path.relative_to(root).as_posix()
     )
+
+
+def _run_evidence_refs(root: Path, run_dir: Path) -> list[Any]:
+    from openadapt_flow import sealed_set
+    from openadapt_flow.evidence_files import is_publication_input_path_excluded
+
+    run_files = (
+        sealed_set.list_files(run_dir)
+        if sealed_set.is_sealed_path(run_dir)
+        else [path for path in run_dir.rglob("*") if path.is_file()]
+    )
+    return [
+        _evidence_ref(root, path, "other")
+        for path in sorted(run_files)
+        if path.name != "report.json"
+        and not is_publication_input_path_excluded(path.relative_to(root))
+    ]
 
 
 def case_result(
@@ -890,20 +928,10 @@ def case_result(
     if project is None:
         raise QualifyError("the workflow's qualification project disappeared")
     run_dir = trial_dir / "run"
-    from openadapt_flow import sealed_set
 
     # A sealed bundle's run directory is a sealed set: its files are bound by
     # their logical names and plaintext digests, as the run report names them.
-    run_files = (
-        sealed_set.list_files(run_dir)
-        if sealed_set.is_sealed_path(run_dir)
-        else [path for path in run_dir.rglob("*") if path.is_file()]
-    )
-    run_artifacts = [
-        _evidence_ref(root, path, "other")
-        for path in sorted(run_files)
-        if path.name != "report.json"
-    ]
+    run_artifacts = _run_evidence_refs(root, run_dir)
     faults = (
         [
             _evidence_ref(root, trial_dir / "fault-receipt.json", "fault_receipt"),
@@ -1233,6 +1261,8 @@ def qualify(
     in_place: bool = False,
     write_campaign_files: bool = True,
     log: Callable[[str], None] = print,
+    subroutine_library: Optional[SubroutineLibrary] = None,
+    persist_subroutine_registration: Optional[Callable[[], None]] = None,
 ) -> QualifyResult:
     """Run the campaign; certify under ``certify`` (a policy name) if given.
 
@@ -1245,6 +1275,12 @@ def qualify(
     ``evidence_root`` (default ``out``) is the root case evidence is relative
     to. ``write_campaign_files=False`` leaves out the campaign summary,
     timing, notes and ``QUALIFICATION.md`` (for packs that list every file).
+    ``subroutine_library`` is the library certification admits embedded
+    subroutines against (and registers this workflow with); a bundle that
+    embeds one is refused before any run when certifying without it.
+    ``persist_subroutine_registration`` writes that library; it runs right
+    after certification, before the certified bundle is saved, and when it
+    raises the certification is withdrawn and the bundle saved uncertified.
     """
 
     from openadapt_flow.policy import load_policy
@@ -1252,6 +1288,7 @@ def qualify(
         QualificationCaseKind,
         certify_project,
         evaluate_qualification,
+        persist_registration_before_certificate,
         record_case_results,
         save_qualified_workflow,
     )
@@ -1295,6 +1332,15 @@ def qualify(
     )
 
     workflow = Workflow.load(bundle_src)
+    if (
+        certify is not None
+        and subroutine_library is None
+        and uses_subroutines(workflow)
+    ):
+        raise QualifyConfigError(
+            "the bundle embeds subroutines; --certify needs --subroutine-library "
+            "to admit them"
+        )
     save, notes = apply_verify_config(workflow, config)
     params = resolve_inputs(workflow, config, campaign_id=campaign_id)
     problems = check_ready(workflow, config, save, params)
@@ -1636,7 +1682,15 @@ def qualify(
     )
     if certify is not None:
         qreport = certify_project(
-            workflow, policy=load_policy(certify), evidence_root=root
+            workflow,
+            policy=load_policy(certify),
+            evidence_root=root,
+            subroutine_library=subroutine_library,
+        )
+        # The registration is durable before any certified save below
+        # (business rules, the admission envelope, the final bundle).
+        persist_registration_before_certificate(
+            workflow, bundle_dir, persist_subroutine_registration
         )
     else:
         qreport = evaluate_qualification(workflow, evidence_root=root)
@@ -1792,6 +1846,47 @@ def qualify(
     return result
 
 
+def _all_steps(workflow: Workflow) -> list[Any]:
+    """The linear steps and every program-graph step."""
+
+    graphs = [
+        *([workflow.program] if workflow.program is not None else []),
+        *workflow.subflows.values(),
+    ]
+    return [
+        *workflow.steps,
+        *(
+            state.step
+            for graph in graphs
+            for state in graph.states.values()
+            if state.step is not None
+        ),
+    ]
+
+
+def _dialog_guard_texts(workflow: Workflow) -> dict[str, str]:
+    """``{confirm step id: text key}`` of each exact halt guard on a Confirm
+    click of a confirmation dialog (the checks ``empty_result_guard`` mines)."""
+
+    from openadapt_flow.ir import PredicateKind
+    from openadapt_flow.risk import is_confirm_click
+    from openadapt_flow.vision.ocr import text_key
+
+    out: dict[str, str] = {}
+    for step in _all_steps(workflow):
+        guard = step.guard
+        if (
+            guard is not None
+            and guard.on_unmet == "halt"
+            and guard.predicate.kind is PredicateKind.TEXT_PRESENT
+            and guard.predicate.exact
+            and guard.predicate.text
+            and is_confirm_click(step)
+        ):
+            out[step.id] = text_key(guard.predicate.text)
+    return out
+
+
 def rule_halt_steps(
     workflow: Workflow, rule: BusinessRuleCase, save_id: str
 ) -> set[str]:
@@ -1799,24 +1894,26 @@ def rule_halt_steps(
 
     from openadapt_flow.compiler.empty_result_guard import is_empty_result_statement
     from openadapt_flow.ir import PostconditionKind
+    from openadapt_flow.vision.ocr import text_key
 
     ids = [step.id for step in workflow.steps]
     if rule.halt_at == "empty_result_guard":
-        # The compiler's exact checks, and an empty-result text check a bundle
-        # compiled before them carries (added by hand after compiling).
+        # The compiler's exact checks on a confirmation dialog (in any
+        # language), and an empty-result text check a bundle compiled before
+        # them carries (added by hand after compiling).
+        guards = _dialog_guard_texts(workflow)
         return {
             step.id
-            for step in workflow.steps
-            if any(
+            for step in _all_steps(workflow)
+            if step.id in guards
+            or any(
                 pc.kind is PostconditionKind.TEXT_PRESENT
-                and is_empty_result_statement(pc.text or "")
+                and bool(pc.text)
+                and (
+                    is_empty_result_statement(pc.text or "")
+                    or (pc.exact and text_key(pc.text or "") in guards.values())
+                )
                 for pc in step.expect
-            )
-            or (
-                step.guard is not None
-                and step.guard.on_unmet == "halt"
-                and step.guard.predicate.exact
-                and is_empty_result_statement(step.guard.predicate.text or "")
             )
         }
     if rule.halt_at == "before_save":
@@ -1831,7 +1928,28 @@ def business_rule_problems(
 ) -> list[str]:
     """What keeps the business-rule cases from running, found before any run."""
 
+    from openadapt_flow.compiler.empty_result_guard import is_empty_result_statement
+
     problems: list[str] = []
+    # A dialog check in other words than the English vocabulary was mined
+    # because every demonstration showed it, not because of what it says. A
+    # run on a record the search finds must halt at it before it counts.
+    dialog_guards = _dialog_guard_texts(workflow)
+    unworded = sorted(
+        step.id
+        for step in _all_steps(workflow)
+        if step.id in dialog_guards
+        and step.guard is not None
+        and not is_empty_result_statement(step.guard.predicate.text or "")
+    )
+    if unworded and not any(
+        rule.halt_at == "empty_result_guard" for rule in config.business_rules
+    ):
+        problems.append(
+            f"steps {unworded} check a dialog line the demonstrations agreed "
+            "on; add a business_rules case (halt_at: empty_result_guard) whose "
+            "search finds a record, so a run proves the check halts"
+        )
     for rule in config.business_rules:
         unknown = sorted(set(rule.params) - set(params))
         if unknown:

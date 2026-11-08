@@ -186,7 +186,9 @@ def _after_save(bundle: Path, out: Path) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--bundle", required=True, type=Path)
     parser.add_argument("--from-state", required=True, type=Path)
     parser.add_argument(
@@ -205,8 +207,6 @@ def main(argv: list[str] | None = None) -> int:
     if not os.environ.get("DOCKER_HOST"):
         raise SystemExit("set DOCKER_HOST to the fixtures' podman socket first")
 
-    from playwright.sync_api import sync_playwright
-
     from benchmark.scoreboard.tasks import openemr as task
     from openadapt_flow._browser_setup import launch_chromium
     from openadapt_flow.after_stop import records_reader
@@ -217,6 +217,7 @@ def main(argv: list[str] | None = None) -> int:
     from openadapt_flow.rollback_state import DatabaseReader
     from openadapt_flow.runtime.effects.frame import FrameAttribution
     from openadapt_flow.runtime.effects.sql import SqlRecordVerifier
+    from playwright.sync_api import sync_playwright
 
     root = args.root
     _clone_state(args.from_state, root)

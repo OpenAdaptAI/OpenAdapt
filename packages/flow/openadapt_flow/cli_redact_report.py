@@ -67,6 +67,7 @@ def register(sub: Any) -> None:
             "Remove session tokens and credentials from an existing run's "
             "report.json, keeping the original locally, so it can be sealed again"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("run_dir", help="Run directory holding report.json")
     p.add_argument(

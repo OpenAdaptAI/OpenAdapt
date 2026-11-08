@@ -250,7 +250,9 @@ def test_changed_options_change_the_verifier_identity(pack):
 
 def test_identity_of_configs_without_plugin_fields_is_unchanged():
     """Existing deployments keep a byte-identical verifier identity."""
-    cfg = EffectsConfig(kind="rest", base_url="http://127.0.0.1:9")
+    cfg = EffectsConfig(
+        kind="rest", records_path="/api/db", base_url="http://127.0.0.1:9"
+    )
     verifier = build_effect_verifier(cfg)
     legacy_config = cfg.model_dump(mode="json")
     # Neither the plugin fields, ui_readback, smart_backend, surfaces,
@@ -268,6 +270,8 @@ def test_identity_of_configs_without_plugin_fields_is_unchanged():
     ):
         legacy_config.pop(name, None)
     legacy_config["candidates"] = []
+    # resource_type had a default then and was always in the dump.
+    legacy_config.setdefault("resource_type", "Observation")
 
     def sanitized(value, *, key=""):  # the identity's own redaction, verbatim
         lowered = key.lower()

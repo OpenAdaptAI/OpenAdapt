@@ -23,8 +23,9 @@ sealed set:
 The ``set_digest`` is the SHA-256 of the canonical index. It names the exact
 file set, and ``seal`` prints it.
 
-Every file kind is classified in :data:`BUNDLE_FILES` and
-:data:`RECORDING_FILES`. Writing into a sealed set refuses a file the
+Every file kind is classified in :data:`BUNDLE_FILES`,
+:data:`RECORDING_FILES`, :data:`RUN_FILES`, :data:`LIBRARY_FILES` and
+:data:`SANITIZED_FILES`. Writing into a sealed set refuses a file the
 inventory does not know, rather than passing it through. ``structural`` files
 hold only hashes, counts and format markers and stay readable without the key;
 every other file is encrypted.
@@ -63,7 +64,7 @@ FORMAT: Final[str] = "openadapt-flow-sealed-set"
 FORMAT_VERSION: Final[int] = 1
 SEALED_SUFFIX: Final[str] = ".enc"
 
-Kind = Literal["bundle", "recording", "run"]
+Kind = Literal["bundle", "recording", "run", "library", "sanitized"]
 Codec = Literal["set", "plain", "external"]
 Classification = Literal["phi", "structural"]
 
@@ -269,12 +270,44 @@ RUN_FILES: Final[tuple[FileKind, ...]] = (
 )
 
 
+#: A skill library written by ``teach`` (:mod:`openadapt_flow.learning.library`).
+LIBRARY_FILES: Final[tuple[FileKind, ...]] = (
+    FileKind(
+        "skills.json",
+        "phi",
+        "every learned program version (target labels, typed literals, screen "
+        "text, crop paths) and the execution traces it was learned from",
+    ),
+)
+
+#: The sanitized review copy ``push`` makes of a sealed source
+#: (:mod:`openadapt_flow.sanitized_artifact`). Scrubbing is best effort until a
+#: person approves it, so every file stays encrypted.
+SANITIZED_FILES: Final[tuple[FileKind, ...]] = (
+    FileKind(
+        ".openadapt-sanitization.json",
+        "phi",
+        "the redaction manifest: file names, hashes and redaction records",
+    ),
+    FileKind(".openadapt-approval.json", "phi", "the reviewer's approval"),
+    FileKind(
+        "*",
+        "phi",
+        "the scrubbed copy of each recording or bundle file, before review",
+    ),
+)
+
+_INVENTORIES: Final[dict[str, tuple[FileKind, ...]]] = {
+    "bundle": BUNDLE_FILES,
+    "recording": RECORDING_FILES,
+    "run": RUN_FILES,
+    "library": LIBRARY_FILES,
+    "sanitized": SANITIZED_FILES,
+}
+
+
 def inventory(kind: Kind) -> tuple[FileKind, ...]:
-    if kind == "bundle":
-        return BUNDLE_FILES
-    if kind == "recording":
-        return RECORDING_FILES
-    return RUN_FILES
+    return _INVENTORIES[kind]
 
 
 def classify(kind: Kind, rel: str) -> Optional[FileKind]:
@@ -420,7 +453,7 @@ def read_header(root: Path | str) -> dict[str, object]:
         raise SealedSetError(
             f"sealed-set format version {header.get('version')!r} is not supported"
         )
-    if header.get("kind") not in ("bundle", "recording", "run"):
+    if header.get("kind") not in _INVENTORIES:
         raise SealedSetError("sealed-set header has no valid kind")
     return header
 
@@ -1103,8 +1136,10 @@ def require_readable(path: Path | str, what: str) -> None:
 __all__ = [
     "BUNDLE_FILES",
     "HEADER",
+    "LIBRARY_FILES",
     "RECORDING_ENV_KEY",
     "RECORDING_FILES",
+    "SANITIZED_FILES",
     "SealedSet",
     "SealedSetError",
     "SealedSetKeyError",

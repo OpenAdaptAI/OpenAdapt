@@ -211,8 +211,58 @@ def test_pre_state_capture_degrades_to_one_line_when_not_installed(
 # --- (d) sidecar raising -> warning only, exit-code mapping untouched --------
 
 
+@pytest.mark.parametrize(
+    "transaction,execution,profile,success,label,next_step,exit_code",
+    [
+        (
+            None,
+            None,
+            None,
+            True,
+            "Check the record",
+            "Check the record before anyone runs this again.",
+            0,
+        ),
+        (
+            "VERIFIED",
+            "VERIFIED",
+            "standard",
+            True,
+            "Done and checked",
+            "Nothing to do.",
+            0,
+        ),
+        (
+            "HALTED_BEFORE_EFFECT",
+            "HALTED",
+            "standard",
+            False,
+            "Stopped before saving",
+            "Fix what didn't match, then run it again.",
+            1,
+        ),
+        (
+            "RECONCILIATION_REQUIRED",
+            "HALTED",
+            "standard",
+            False,
+            "Check the record",
+            "Check the record before anyone runs this again.",
+            1,
+        ),
+    ],
+)
 def test_attest_failure_is_swallowed_and_exit_code_unchanged(
-    tmp_path, monkeypatch, capsys
+    tmp_path,
+    monkeypatch,
+    capsys,
+    transaction,
+    execution,
+    profile,
+    success,
+    label,
+    next_step,
+    exit_code,
 ):
     from openadapt_flow.__main__ import _finish_replay
 
@@ -222,6 +272,12 @@ def test_attest_failure_is_swallowed_and_exit_code_unchanged(
     _inject_fake_attest(monkeypatch, check_flow_run=exploding_check_flow_run)
     run_dir = tmp_path / "run"
     report = _successful_report(run_dir)
+    report.transaction_outcome = transaction
+    report.execution_outcome = execution
+    report.execution_profile = profile
+    report.success = success
+    report.save(run_dir)
+    original_report = (run_dir / "report.json").read_bytes()
     args = argparse.Namespace(attest_contract=str(tmp_path / "contract.yaml"))
 
     # Must never raise: the hook cannot change the run's outcome.
@@ -230,11 +286,27 @@ def test_attest_failure_is_swallowed_and_exit_code_unchanged(
         capsys.readouterr().out
     )
 
-    # The full replay tail still maps the SUCCESSFUL report to exit code 0.
-    assert _finish_replay(run_dir, report, args) == 0
+    # Sidecar failure preserves the engine outcome and its existing exit policy.
+    assert _finish_replay(run_dir, report, args) == exit_code
     out = capsys.readouterr().out
-    assert "Replay success" in out
+    assert out.startswith(f"Result: {label}.")
+    assert f"Next: {next_step}" in out
+    assert f"Report: {run_dir / 'REPORT.md'}" in out
+    assert "Replay success" not in out
     assert "attest receipt skipped: system of record unreachable" in out
+    assert "attest: verdict confirmed" not in out
+    assert not (run_dir / RECEIPT_FILENAME).exists()
+    assert (run_dir / "report.json").read_bytes() == original_report
+    if transaction == "VERIFIED":
+        assert "read the record back to confirm it" in out
+    elif transaction == "HALTED_BEFORE_EFFECT":
+        assert "Nothing was written." in out
+    else:
+        assert "Nothing was written" not in out
+        assert "then run it again." not in out
+    if transaction is None:
+        assert "This report doesn't say whether anything was saved." in out
+        assert "Exit code 0 here means the steps finished" in out
 
 
 def test_finish_replay_without_attest_config_never_touches_the_sidecar(

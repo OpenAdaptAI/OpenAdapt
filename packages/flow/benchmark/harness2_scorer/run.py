@@ -31,24 +31,23 @@ import time
 from pathlib import Path
 from typing import Any
 
-from harness2.core.spec import ChannelSpec
-from harness2.core.tree import write_tree
-
-from openadapt_flow import privacy
-from openadapt_flow.integrations.harness2.adapter import (
+from benchmark.harness.harness2.adapter import (
     GUI_SURFACE,
     OpenAdaptGuiAdapter,
 )
-from openadapt_flow.integrations.harness2.agent import ModelGuiAgent
-from openadapt_flow.integrations.harness2.llm import (
+from benchmark.harness.harness2.agent import ModelGuiAgent
+from benchmark.harness.harness2.llm import (
     BudgetExceeded,
     CostLedger,
     HttpChatModel,
     Price,
 )
-from openadapt_flow.integrations.harness2.proposers import ModelProposer
-from openadapt_flow.integrations.harness2.selection import run_task
-from openadapt_flow.integrations.harness2.tasks import mockmed_tasks
+from benchmark.harness.harness2.proposers import ModelProposer
+from benchmark.harness.harness2.selection import run_task
+from benchmark.harness.harness2.tasks import mockmed_tasks
+from harness2.core.spec import ChannelSpec
+from harness2.core.tree import write_tree
+from openadapt_flow import privacy
 
 HERE = Path(__file__).resolve().parent
 
@@ -110,7 +109,7 @@ def rerun(
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--env-file", type=Path)
     ap.add_argument(
         "--provider", default="auto", choices=["auto", "openai", "anthropic", "google"]
