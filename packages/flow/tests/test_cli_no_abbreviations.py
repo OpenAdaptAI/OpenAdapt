@@ -102,9 +102,7 @@ def _parser_constructor_calls(tree):
             elif isinstance(node, scopes):
                 # Defaults, decorators and bases belong to the enclosing scope.
                 children = (
-                    value
-                    for field, value in ast.iter_fields(node)
-                    if field != "body"
+                    value for field, value in ast.iter_fields(node) if field != "body"
                 )
                 for value in children:
                     if isinstance(value, ast.AST):
@@ -140,7 +138,9 @@ def _parser_constructor_calls(tree):
         ]
         body = [node.key, node.value] if isinstance(node, ast.DictComp) else [node.elt]
         body += [generator.iter for generator in node.generators[1:]]
-        body += [condition for generator in node.generators for condition in generator.ifs]
+        body += [
+            condition for generator in node.generators for condition in generator.ifs
+        ]
         return body, parameters
 
     def enclosing_assignments(nodes):
@@ -168,7 +168,9 @@ def _parser_constructor_calls(tree):
         if comprehension_scope:
             # A walrus target is free in this implicit scope and belongs to
             # the enclosing function/module; only iteration targets shadow it.
-            local_names.difference_update(set(enclosing_assignments(body)) - set(parameters))
+            local_names.difference_update(
+                set(enclosing_assignments(body)) - set(parameters)
+            )
         for node in nodes:
             if isinstance(node, (ast.Global, ast.Nonlocal)):
                 local_names.difference_update(node.names)
@@ -183,7 +185,9 @@ def _parser_constructor_calls(tree):
             if isinstance(node, ast.Import):
                 for name in node.names:
                     if name.name == "argparse":
-                        bindings.setdefault(name.asname or name.name, set()).add("module")
+                        bindings.setdefault(name.asname or name.name, set()).add(
+                            "module"
+                        )
             elif (
                 isinstance(node, ast.ImportFrom)
                 and node.module == "argparse"
@@ -191,7 +195,9 @@ def _parser_constructor_calls(tree):
             ):
                 for name in node.names:
                     if name.name == "ArgumentParser":
-                        bindings.setdefault(name.asname or name.name, set()).add("parser")
+                        bindings.setdefault(name.asname or name.name, set()).add(
+                            "parser"
+                        )
         # A source census cannot decide which runtime branch rebinds a name.
         # Retain every possible static parser provenance instead of letting an
         # ambiguous assignment erase coverage. No application code is executed.

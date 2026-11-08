@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-
 # Each form uses the same policy matrix and the same existing inventory entry
 # point. None of these sources is imported or run as an application.
 FORMS = (
@@ -140,7 +139,9 @@ def synthetic_inventory(tmp_path, monkeypatch, inventory_module):
         (tmp_path / relative).mkdir(parents=True)
     location = tmp_path / "packages/flow/tests/test_inventory.py"
     monkeypatch.setitem(inventory.__globals__, "__file__", str(location))
-    baseline = "import argparse\n" + "argparse.ArgumentParser(allow_abbrev=False)\n" * 501
+    baseline = (
+        "import argparse\n" + "argparse.ArgumentParser(allow_abbrev=False)\n" * 501
+    )
     (tmp_path / "scripts/canonical.py").write_text(baseline, encoding="utf-8")
 
     def check(source, relative="scripts/synthetic.py"):
