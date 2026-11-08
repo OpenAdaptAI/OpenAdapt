@@ -112,7 +112,9 @@ def _perform(session, kind, value):
 
 @pytest.mark.timeout(90)
 @pytest.mark.parametrize(
-    "kind,attribute", [("input", "_pending_type"), ("scroll", "_pending_scroll"), ("click", "_pending_click")]
+    "kind,attribute",
+    [("input", "_pending_type"), ("scroll", "_pending_scroll"), ("click", "_pending_click")],
+    ids=["input", "scroll", "click"],
 )
 def test_cross_document_deferred_action_refuses_complete_publication(
     document_browser, tmp_path, monkeypatch, kind, attribute
