@@ -423,7 +423,7 @@ def test_legacy_selected_read_requires_identity_only_when_nonempty(service, tmp_
         assert not baseline.exists()
 
 
-@pytest.mark.parametrize("drift", ["permuted-column", "canonicaliser", "surface-field"])
+@pytest.mark.parametrize("drift", ["permuted-column", "canonicaliser", "surface-field", "removed-mapping"])
 def test_baseline_authenticates_exact_learned_mapping(service, tmp_path, drift):
     service.protocol = "rest"
     service.transform = lambda rows: [dict(row, alias=row["id"]) for row in rows]
@@ -445,7 +445,10 @@ def test_baseline_authenticates_exact_learned_mapping(service, tmp_path, drift):
                    "canonicaliser": {"canonicaliser": "exact"},
                    "surface-field": {"surface_field": "alias"}}
         binding = cfg.frame.identities[""]
-        cfg.frame.identities[""] = binding.model_copy(update=changes[drift])
+        if drift == "removed-mapping":
+            cfg.frame.identities.clear()
+        else:
+            cfg.frame.identities[""] = binding.model_copy(update=changes[drift])
         result = verify_run(cfg, params=PARAMS, run_record={"executor_kind": "agent", "executor_id": "synthetic"},
                             authorization_ref="test", baseline_path=baseline, read_provider=provider)
         assert result["receipt"]["checked"]["frame"] == "not_checked"

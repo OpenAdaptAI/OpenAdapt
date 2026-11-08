@@ -1268,6 +1268,8 @@ def _map_frame_rows(
     previous = before.detail.get(FRAME_IDENTITY_DETAIL)
     if not isinstance(previous, dict):
         raise VerifyRunError("baseline has no bound identity index")
+    if set(previous) != set(cfg.frame.identities):
+        raise VerifyRunError("baseline identity evidence belongs to another surface mapping")
     key = _mac_key(salt)
     bound = _identity_effect_binding(effects, params, key)
     authenticated = {}
@@ -1425,7 +1427,7 @@ def judge_run_frame(
                         table, surface, slices[surface], bound_effects, routes, db
                     )
         identities.update({name: KEY for name in db.slices})
-        if spec.identities and not database_only:
+        if (spec.identities or FRAME_IDENTITY_DETAIL in before.detail) and not database_only:
             try:
                 _map_frame_rows(cfg, before, after, db, slices, bound_effects, routes, salt, declared_rows, params)
             except (ValueError, TypeError) as exc:
