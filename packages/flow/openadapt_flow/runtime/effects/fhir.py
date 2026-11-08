@@ -48,6 +48,7 @@ import time
 from typing import Any, Optional, Protocol
 
 from openadapt_flow.fhir_read import (
+    check_collection_search,
     check_search_coverage,
     check_search_outcome,
     fhir_read_headers,
@@ -66,6 +67,9 @@ from openadapt_flow.runtime.effects.effect import (
     EffectVerdict,
 )
 from openadapt_flow.verification import VerificationTier
+
+COLLECTION_DIAGNOSTIC = "search_bundle_type_nonconformant: collection"
+
 
 #: A field map for a note kept as a FHIR R4 Observation (the note in
 #: ``valueString``). Not a default: a caller whose app stores its writes this
@@ -262,6 +266,7 @@ class FhirEffectVerifier(VerifierAdapterBase):
         self._verify_per_request = True
         #: Why the last read was unreadable, for the state and the verdict.
         self.read_problem: Optional[str] = None
+        self.read_diagnostics: list[str] = []
 
     # -- transport ----------------------------------------------------------
 
@@ -318,6 +323,16 @@ class FhirEffectVerifier(VerifierAdapterBase):
             return self._search_pass()
         from openadapt_flow.runtime.effects.quiescence import two_pass_read
 
+        diagnostics: list[str] = []
+        self.read_diagnostics = []
+
+        def read_once(check: Any) -> Optional[list[dict[str, Any]]]:
+            records = self._search_pass(check)
+            for diagnostic in self.read_diagnostics:
+                if diagnostic not in diagnostics:
+                    diagnostics.append(diagnostic)
+            return records
+
         try:
             records = two_pass_read(
                 self.quiescence,
@@ -328,11 +343,13 @@ class FhirEffectVerifier(VerifierAdapterBase):
                     "search_params": self.search_params,
                     "field_paths": self.field_paths,
                 },
-                self._search_pass,
+                read_once,
             )
         except Exception:  # noqa: BLE001 - failed exclusion/coverage cannot confirm
             self.read_problem = "quiescent complete-read validation failed"
             return None
+        finally:
+            self.read_diagnostics = diagnostics
         return drop_record_fields(records, self.drop_fields)
 
     def _search_pass(
@@ -345,6 +362,7 @@ class FhirEffectVerifier(VerifierAdapterBase):
         malformed entries. Never raises.
         """
         self.read_problem = None
+        self.read_diagnostics = []
         url = f"{self.base_url}/{self.resource_type}"
         headers = self._headers()
         if headers is None:
@@ -361,8 +379,11 @@ class FhirEffectVerifier(VerifierAdapterBase):
         if (type(session).__module__ or "").startswith("requests"):
             tls_kwargs["allow_redirects"] = False
 
+        collection_seen = False
+
         def get(target: str, params: Optional[dict[str, str]]) -> Any:
             """One page: the parsed Bundle, or None with ``read_problem``."""
+            nonlocal collection_seen
 
             try:
                 if check_quiescence is not None:
@@ -404,7 +425,14 @@ class FhirEffectVerifier(VerifierAdapterBase):
             if not isinstance(bundle, dict) or bundle.get("resourceType") != "Bundle":
                 self.read_problem = f"GET {target} returned no Bundle"
                 return None
-            if check_quiescence is not None and (
+            if bundle.get("type") == "collection":
+                try:
+                    check_collection_search(bundle, self.resource_type)
+                except ValueError as error:
+                    self.read_problem = str(error)
+                    return None
+                collection_seen = True
+            elif check_quiescence is not None and (
                 bundle.get("type") != "searchset" or "total" not in bundle
             ):
                 self.read_problem = (
@@ -529,6 +557,8 @@ class FhirEffectVerifier(VerifierAdapterBase):
         except ValueError as exc:
             self.read_problem = str(exc)
             return None
+        if collection_seen:
+            self.read_diagnostics.append(COLLECTION_DIAGNOSTIC)
         return (
             out
             if check_quiescence is not None
@@ -546,6 +576,8 @@ class FhirEffectVerifier(VerifierAdapterBase):
         }
         if records is None and self.read_problem:
             detail["read_problem"] = self.read_problem
+        if self.read_diagnostics:
+            detail["read_diagnostics"] = list(self.read_diagnostics)
         if self.consistency:
             detail["consistency"] = self.consistency
         return EffectState(
@@ -567,6 +599,12 @@ class FhirEffectVerifier(VerifierAdapterBase):
             if current is None and self.read_problem:
                 last = last.model_copy(
                     update={"reason": f"{last.reason} ({self.read_problem})"}
+                )
+            if self.read_diagnostics:
+                last = last.model_copy(
+                    update={
+                        "reason": f"{last.reason} ({'; '.join(self.read_diagnostics)})"
+                    }
                 )
             if last.confirmed or time.monotonic() >= deadline:
                 return last

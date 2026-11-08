@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 
 def fhir_read_headers(
@@ -74,6 +75,52 @@ def search_total(bundle: Mapping[str, Any], previous: Optional[int]) -> Optional
     if previous is not None and total != previous:
         raise ValueError("a search Bundle's total changed across pages")
     return total
+
+
+def check_collection_search(bundle: Mapping[str, Any], resource_type: str) -> None:
+    """Validate the unpaged collection exception without granting read authority.
+
+    FHIR omits an empty entry array. An explicit zero total is still required;
+    an absent total or a paging link cannot prove that no matches exist.
+    """
+    total = search_total(bundle, None)
+    if total is None:
+        raise ValueError("a collection search Bundle requires a total")
+    entries = bundle.get("entry", [])
+    if not isinstance(entries, list):
+        raise ValueError("a collection Bundle's entry is not a list")
+    if total != len(entries):
+        raise ValueError("a collection Bundle's total differs from its entry count")
+    links = bundle.get("link", [])
+    if not isinstance(links, list):
+        raise ValueError("a collection Bundle's link is not a list")
+    for link in links:
+        if (
+            not isinstance(link, dict)
+            or link.get("relation") != "self"
+            or not isinstance(link.get("url"), str)
+            or not link["url"]
+            or any(character.isspace() for character in link["url"])
+        ):
+            raise ValueError("a collection search Bundle permits only valid self links")
+        try:
+            urlsplit(link["url"])
+        except ValueError as error:
+            raise ValueError("a collection self link has a malformed URL") from error
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ValueError("a collection Bundle entry is not an object")
+        resource = entry.get("resource")
+        if (
+            not isinstance(resource, dict)
+            or resource.get("resourceType") != resource_type
+            or resource.get("resourceType") == "OperationOutcome"
+        ):
+            raise ValueError("a collection entry is not the requested resource type")
+        if "search" in entry:
+            search = entry["search"]
+            if not isinstance(search, dict) or search.get("mode", "match") != "match":
+                raise ValueError("a collection search entry is not a matching resource")
 
 
 def check_search_coverage(total: Optional[int], matches: int) -> None:
