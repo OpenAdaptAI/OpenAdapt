@@ -692,6 +692,18 @@ def _regions_method(name: str) -> Callable[..., Any]:
     return method
 
 
+def _dialog_method(name: str) -> Callable[..., Any]:
+    """Probe the live dialog at the live point; return its box in the view."""
+
+    def method(self: RenderScaledBackend, x: int, y: int) -> Any:
+        status, box = getattr(self._inner, name)(*self._transform.to_live(x, y))
+        if status != "dialog" or box is None:
+            return status, None
+        return status, self._transform.region_to_recorded(box)
+
+    return method
+
+
 def _passthrough(name: str) -> property:
     return property(lambda self: getattr(self._inner, name))
 
@@ -718,6 +730,7 @@ _MEMBERS: dict[str, Callable[[str], Any]] = {
     "select_option": _hash_method,
     "select_option_guarded": _hash_method,
     "arm_remote_frame_contract": _regions_method,
+    "dialog_region_at": _dialog_method,
     "take_dialogs": _passthrough,
     "arm_dialog": _passthrough,
     "transport": _passthrough,

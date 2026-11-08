@@ -74,7 +74,6 @@ def _summary(values: list[float]) -> dict[str, float]:
 
 def _session(provider: str, threads: int):
     import onnxruntime as ort
-
     from openadapt_flow.runtime.local_grounder import (
         LocalGroundingModel,
         ensure_weights,
@@ -101,7 +100,7 @@ def _ms(started: float) -> float:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--repeats", type=int, default=REPEATS)
     parser.add_argument("--threads", type=int, default=min(4, os.cpu_count() or 1))
@@ -109,10 +108,9 @@ def main() -> int:
 
     import numpy as np
     import onnxruntime as ort
+    from openadapt_flow.runtime import local_grounder as lg
     from PIL import Image
     from playwright.sync_api import sync_playwright
-
-    from openadapt_flow.runtime import local_grounder as lg
 
     providers = [
         p

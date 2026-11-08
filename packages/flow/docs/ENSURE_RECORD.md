@@ -24,6 +24,23 @@ The outcome is one of three:
 The agent's own report is not evidence. A save that landed while the agent
 reported a timeout is judged like any other save.
 
+### The read-back is the last version written
+
+When `_history` is read, the record judged must be the newest version in the
+window, matched by `meta.versionId`. It is `needs_review` when the read-back
+is an older version, or a version saved after the window closed (by anyone),
+or carries no `versionId`; when any version in the window has no
+`versionId` or time; or when two versions share the newest time. Without
+`_history` there is nothing to bind to, and the other checks decide as
+before.
+
+The evidence lists each version in the window as `versions`: its id and its
+author, oldest first, and never its body. The author is `meta.author` where
+the server returns it. Where it doesn't (Medplum 5.2), and the audit trail
+logged exactly one timed create or update per version, the n-th logged write
+names the n-th version. Otherwise the author is `null`: unknown, not
+guessed.
+
 ### When the agent corrects its own record
 
 An agent that reads its create back may find a wrong value (a tool changed
@@ -227,3 +244,45 @@ Measured on Medplum 5.2.8 (`benchmark/fhir_medplum/readpath/probe.json`):
   server serves (`MedplumFixture.restrict_agent`).
 - The verifier's own client reads Patient and AuditEvent, and writes
   nothing.
+
+### Reference identity
+
+A contract can supply `reference_schema: {definition, sha256}`. `definition`
+is a FHIR resource StructureDefinition snapshot; `sha256` pins its canonical
+JSON (`sort_keys=True`, separators `,` and `:`). The schema's resource type
+must match the contract. Only elements explicitly typed `Reference` receive
+reference comparisons. Sliced paths, choice types and custom target profiles
+need additional resolution support and are refused.
+
+Bind the task's target to the Reference element or its `.reference` member.
+The reader resolves each supplied and stored target before judging. Relative
+and absolute references to the same configured FHIR base identify the same
+logical resource, including references to its historical versions. Resource
+types and bases remain separate. A requested version is read and its version
+ID checked separately; duplicate identity does not depend on that version.
+An explicitly requested reference version still constrains the stored field,
+and the written record keeps its separate last-version binding. Identifier
+references need a system and value and a complete search that resolves exactly
+one target. A reference carrying both a literal and an
+identifier must resolve consistently through both. Failed reads, ambiguous
+identifiers and unsupported external or contained references stay uncertain.
+The judge reads only the collected evidence. Identity searches send local
+`Type/id` values. A search that omits a freshly read, known matching record
+is unreadable; callers of `find_matches` can supply those resource IDs through
+`expected_ids`. An initial search can be empty when no match is yet known.
+
+Within a schema-proven Reference, `display` is optional presentation text.
+It may differ only when the contract independently binds that Reference's
+target identity. The verifier does not certify that this text describes the
+target, even on a closed contract. A field named `display` elsewhere keeps its
+existing scalar comparison. Other undeclared elements remain subject to the
+closed-record check. Contracts without `reference_schema` retain their previous behavior
+and serialization.
+
+The FHIR generator accepts optional `structure_definition.json` and
+`reference_targets.json` files in its teach directory. The latter contains
+the target resources captured for its demonstration checks; runtime
+verification reads the targets again. Metadata and captured targets must be
+supplied before the generator can use reference identity. SQL generation
+continues to use declared foreign keys and unique target matches. OpenAPI
+metadata and denormalized SQL label relationships are not inferred.

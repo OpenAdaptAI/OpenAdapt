@@ -1568,7 +1568,7 @@ def run_qualification(
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     ap.add_argument(
         "--container",
         default=os.environ.get("OAFLOW_RDP_LADDER_CONTAINER", "oaflow-rdp-ladder"),

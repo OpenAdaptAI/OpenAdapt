@@ -243,3 +243,42 @@ def test_finalize_failure_after_delivered_effect_requires_reconciliation(
     receipt = store.get_receipt(accepted.execution_id)
     assert receipt.outcome is ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED
     assert receipt.delivery_uncertain is True
+
+
+def test_live_replay_refuses_a_target_it_cannot_drive(tmp_path: Path) -> None:
+    """The reference worker never resets or reads someone else's app."""
+    from openadapt_flow.execute.dispatch import DispatchError, live_replay
+    from openadapt_flow.execute.models import AdmittedBundle
+
+    admission = AdmittedBundle(
+        qualification_id="q",
+        workflow_version="v1",
+        workflow_digest="sha256:" + "0" * 64,
+        environment_id="env",
+        minimum_effect_strength="independent_system_of_record",
+        bundle_dir=str(tmp_path),
+        target_url="https://app.example/emr",
+    )
+    with pytest.raises(
+        DispatchError, match="replays only on its bundled demo app"
+    ) as err:
+        live_replay(admission, None, tmp_path / "run")  # type: ignore[arg-type]
+    assert err.value.pre_effect
+
+
+def test_a_synthetic_admission_cannot_name_a_target(tmp_path: Path) -> None:
+    from openadapt_flow.execute.dispatch import DispatchError, default_runner
+    from openadapt_flow.execute.models import AdmittedBundle
+
+    admission = AdmittedBundle(
+        qualification_id="q",
+        workflow_version="v1",
+        workflow_digest="sha256:" + "0" * 64,
+        environment_id="env",
+        minimum_effect_strength="independent_system_of_record",
+        synthetic=True,
+        target_url="https://app.example/emr",
+    )
+    with pytest.raises(DispatchError, match="synthetic admission") as err:
+        default_runner(admission, None, tmp_path / "run")  # type: ignore[arg-type]
+    assert err.value.pre_effect
