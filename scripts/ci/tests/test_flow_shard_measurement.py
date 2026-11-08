@@ -516,70 +516,11 @@ def test_finish_counts_cannot_bless_a_removed_call():
         measurement._validate_phases(rows, 0, {}, 0.2)
 
 
-def test_workflow_keeps_the_fixed_pair_and_original_test_policy():
-    import yaml
-
+def test_stopped_comparison_workflow_is_absent():
     root = Path(__file__).resolve().parents[3]
-    workflow = yaml.safe_load(
-        (root / ".github/workflows/flow-shard-measurement.yml").read_text()
-    )
-    trigger = workflow.get("on", workflow.get(True))
-    assert trigger == {
-        "workflow_dispatch": {
-            "inputs": {
-                "run_comparison": {
-                    "description": "Run the fixed-reference six-job comparison",
-                    "type": "boolean",
-                    "required": True,
-                    "default": False,
-                }
-            }
-        }
-    }
-    assert workflow["permissions"] == {"contents": "read"}
-    jobs = workflow["jobs"]
-    assert set(jobs) == {"parent", "current"}
-    assert "needs" not in jobs["parent"]
-    assert jobs["current"]["needs"] == "parent"
-    for profile, job in jobs.items():
-        assert job["timeout-minutes"] == 40
-        assert job["strategy"] == {
-            "fail-fast": False,
-            "max-parallel": 3,
-            "matrix": {"shard": [1, 2, 3]},
-        }
-        activation = (
-            "github.event_name == 'workflow_dispatch' && "
-            "inputs.run_comparison == true && "
-            "github.repository == 'OpenAdaptAI/OpenAdapt' && "
-            "github.ref == 'refs/heads/agent/2078'"
-        )
-        assert job["if"].strip() == (
-            ("always() && !cancelled() && " if profile == "current" else "")
-            + activation
-        )
-        observer = next(
-            step
-            for step in job["steps"]
-            if step.get("name") == "Check out the reviewed observer"
-        )
-        assert observer["with"]["ref"] == "${{ github.sha }}"
-        assert observer["with"]["persist-credentials"] is False
-        subject = next(
-            step
-            for step in job["steps"]
-            if step.get("name") == "Check out the fixed subject"
-        )
-        assert subject["with"]["ref"] == measurement.REFS[profile]
-        invocation = next(
-            step
-            for step in job["steps"]
-            if step.get("name") == "Measure the unchanged pytest command"
-        )
-        assert invocation["env"]["OPENADAPT_TEST_LANE"] == "fast"
-        assert f"--profile {profile}" in invocation["run"]
-        assert not any(step.get("continue-on-error") for step in job["steps"])
-    assert "always() && !cancelled()" in jobs["current"]["if"]
+    workflow = root / ".github/workflows/flow-shard-measurement.yml"
+    assert not workflow.exists()
+    assert not workflow.is_symlink()
 
 
 def _with_subtests(rows, count=1):
