@@ -162,7 +162,7 @@ class MockEmr:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser()
+    p = argparse.ArgumentParser(allow_abbrev=False)
     p.add_argument("--db", type=Path, required=True)
     p.add_argument("--seed", action="store_true")
     p.add_argument("--drop-save", action="store_true")

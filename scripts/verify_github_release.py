@@ -169,7 +169,7 @@ def verify_release(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--metadata", type=Path, required=True)
     parser.add_argument("--tag", required=True)
     parser.add_argument("--author", required=True)

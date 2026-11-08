@@ -34,7 +34,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 import yaml
-
 from benchmark.fhir_medplum.fixture import FixtureError, MedplumFixture, _http
 from benchmark.fhir_medplum.public import agents as agent_mod
 from benchmark.fhir_medplum.public.model import (
@@ -472,7 +471,9 @@ def bring_up(fx: MedplumFixture, wait_s: float = 900.0) -> float:
 
 def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(
-        prog="openadapt bench medplum", description=__doc__.splitlines()[0]
+        prog="openadapt bench medplum",
+        description=__doc__.splitlines()[0],
+        allow_abbrev=False,
     )
     ap.add_argument(
         "--agent",

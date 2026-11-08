@@ -480,7 +480,9 @@ def _decline(
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    p = argparse.ArgumentParser(
+        description=__doc__.split("\n\n")[0], allow_abbrev=False
+    )
     p.add_argument("--inbox", type=Path, required=True)
     p.add_argument("--run-dir", type=Path, required=True)
     p.add_argument("--l1-dir", type=Path, required=True)

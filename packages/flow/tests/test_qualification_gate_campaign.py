@@ -47,7 +47,7 @@ def _write_mutated_contract(tmp_path: Path, mutate) -> Path:
 
 
 @pytest.fixture(scope="module")
-def results(tmp_path_factory: pytest.TempPathFactory) -> dict:
+def results(tmp_path_factory: pytest.TempPathFactory, module_durable_authority) -> dict:
     root = tmp_path_factory.mktemp("gate-campaign")
     output = root / "results.json"
     work_root = root / "run"

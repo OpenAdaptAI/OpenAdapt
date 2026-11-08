@@ -69,7 +69,6 @@ def check_shipped_contract(item: dict) -> None:
     if not item.get("contract"):
         return
     import yaml
-
     from openadapt_flow.skills import shipped_contract_problems
 
     path = ROOT / "registry" / item["path"] / item["contract"]
@@ -83,7 +82,9 @@ def check_shipped_contract(item: dict) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--archives", type=Path)
     parser.add_argument("--asset-base")
