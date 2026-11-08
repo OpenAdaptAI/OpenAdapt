@@ -79,7 +79,9 @@ class HaltEngine:
         self.tmp = tmp
         self.reason = reason
 
-    def execute(self, entry, run_id, inputs, raw) -> EngineResult:
+    def execute(
+        self, entry, run_id, inputs, raw, *, admitted_bundle_sha256=None
+    ) -> EngineResult:
         run_dir = self.tmp / "runs" / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         return EngineResult(

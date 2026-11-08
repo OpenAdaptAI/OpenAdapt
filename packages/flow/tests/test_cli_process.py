@@ -41,7 +41,18 @@ def test_parser_dispatches_process() -> None:
     assert args.admission == ["intake=./a.json", "posting=./b.json"]
 
 
-def test_cli_process_writes_artifact(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "permission_flags",
+    [
+        ("--admission", "--admission"),
+        ("--permission", "--permission"),
+        ("--admission", "--permission"),
+        ("--permission", "--admission"),
+    ],
+)
+def test_cli_process_writes_artifact(
+    tmp_path: Path, permission_flags: tuple[str, str]
+) -> None:
     intake, intake_env, posting, posting_env = _two_admitted(tmp_path)
     out = tmp_path / "process"
     rc = main(
@@ -49,11 +60,11 @@ def test_cli_process_writes_artifact(tmp_path: Path) -> None:
             "process",
             "--child",
             f"intake={intake}",
-            "--admission",
+            permission_flags[0],
             f"intake={intake_env}",
             "--child",
             f"posting={posting}",
-            "--admission",
+            permission_flags[1],
             f"posting={posting_env}",
             "--handoff",
             "intake.patient_id=posting.patient_id",

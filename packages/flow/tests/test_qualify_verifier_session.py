@@ -61,7 +61,9 @@ class _Session:
             200,
             {
                 "resourceType": "Bundle",
-                "entry": [{"resource": {"id": "p1", "name": "Ada"}}],
+                "entry": [
+                    {"resource": {"resourceType": "Patient", "id": "p1", "name": "Ada"}}
+                ],
             },
         )
 
@@ -84,7 +86,7 @@ def authority(monkeypatch) -> _Authority:
     return authority
 
 
-_VERIFIERS = {
+_VERIFIERS: dict[str, dict[str, Any]] = {
     "fhir": {
         "kind": "fhir",
         "base_url": "https://sor.invalid/fhir",
@@ -142,7 +144,76 @@ def test_build_effect_verifier_refuses_a_session_it_would_ignore():
         )
 
 
-_REST = {
+def test_rest_session_hook_uses_shared_paged_parameterized_builder(monkeypatch):
+    module = types.ModuleType("fake_paged_sor_auth")
+
+    class PagedSession:
+        def __init__(self) -> None:
+            self.urls: list[str] = []
+
+        def get(self, url: str, **_kwargs: Any) -> _Response:
+            self.urls.append(url)
+            if url.endswith("/records/a%20b"):
+                return _Response(
+                    200,
+                    {
+                        "items": [{"id": "a", "secret": "x"}],
+                        # This closed fixture always returns the same two
+                        # literal pages; the endpoint has no mutable store.
+                        "meta": {
+                            "total": 2,
+                            "next": "?page=2",
+                            "snapshot": "fixed-pair",
+                        },
+                    },
+                )
+            return _Response(
+                200,
+                {
+                    "items": [{"id": "b", "secret": "y"}],
+                    "meta": {"total": 2, "snapshot": "fixed-pair"},
+                },
+            )
+
+    session = PagedSession()
+    module.open_session = lambda _config: session  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "fake_paged_sor_auth", module)
+    sor = SystemOfRecordConfig(
+        session="fake_paged_sor_auth:open_session",
+        verifier=EffectsConfig(
+            kind="rest",
+            base_url="https://sor.invalid/api",
+            records_path="/records/{record}",
+            path_params={"record": {"param": "record_id"}},
+            records_key="items",
+            records_next_path="meta.next",
+            records_total_path="meta.total",
+            records_snapshot_path="meta.snapshot",
+            records_complete=True,
+            records_drop_fields=["secret"],
+        ),
+    )
+
+    verifier = verifier_factory(SimpleNamespace(system_of_record=sor))(
+        {"record_id": "a b"}
+    )
+    before = verifier.capture_pre_state()
+
+    assert before.reachable is True
+    assert [record["id"] for record in before.records] == ["a", "b"]
+    assert all("secret" not in record for record in before.records)
+    assert session.urls == [
+        "https://sor.invalid/api/records/a%20b",
+        "https://sor.invalid/api/records/a%20b?page=2",
+    ]
+    assert verifier.timeout_s == 10.0
+    assert verifier.next_path == "meta.next"
+    assert verifier.total_path == "meta.total"
+    assert verifier.records_complete is True
+    assert verifier.snapshot_path == "meta.snapshot"
+
+
+_REST: dict[str, Any] = {
     "kind": "rest",
     "base_url": "https://sor.invalid/api",
     "records_path": "/patients",

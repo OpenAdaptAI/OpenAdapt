@@ -18,6 +18,7 @@ def register(sub: argparse._SubParsersAction) -> None:
     parser = sub.add_parser(
         "cleanup",
         help="A clean screen after a halted item: qualify the halt cleanup",
+        allow_abbrev=False,
     )
     verbs = parser.add_subparsers(dest="cleanup_cmd", required=True)
     p = verbs.add_parser(
@@ -26,6 +27,7 @@ def register(sub: argparse._SubParsersAction) -> None:
             "Stop the run after every step on a declared test copy, clean up, "
             "and check the start screen comes back"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument(

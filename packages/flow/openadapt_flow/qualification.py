@@ -3211,6 +3211,13 @@ def _case_run_report_integrity_error(
                 ("physical_press", False),
             },
         }.get((item.actuation, step.action), set())
+        if (
+            step.action is ActionKind.SELECT_OPTION
+            and step.native_selection is not None
+        ):
+            allowed_receipts = (
+                {("guarded_dom_select", False)} if item.actuation == "dom" else set()
+            )
         if (receipt.operation, receipt.native) not in allowed_receipts:
             return "delivery receipt operation conflicts with the compiled action"
 
@@ -3221,6 +3228,7 @@ def _case_run_report_integrity_error(
         )
         if (
             step.action is not ActionKind.DRAG
+            and step.native_selection is None
             and item.actuation in {"uia", "dom"}
             and source_handle is not None
         ):
@@ -3321,15 +3329,29 @@ def _case_run_report_integrity_error(
         ):
             return "non-selection delivery receipt contains selection metadata"
         if step.action is ActionKind.SELECT_OPTION:
-            scoped = scoped_case_params(item)
-            if scoped is None:
-                return "selection delivery receipt lacks exact parameter scope"
-            selected_value = (
-                scoped.get(step.param) if step.param is not None else step.text
-            )
-            if selected_value is None or step.selection_commit_key is None:
-                return "selection delivery receipt lacks its compiled input contract"
-            selected_text = runtime_param_text(selected_value)
+            if step.native_selection is not None:
+                if (
+                    step.param is not None
+                    or step.selection_commit_key is not None
+                    or step.selection_region is not None
+                    or step.text != step.native_selection.label
+                ):
+                    return (
+                        "native selection delivery receipt has a mixed input contract"
+                    )
+                selected_text = step.native_selection.value
+            else:
+                scoped = scoped_case_params(item)
+                if scoped is None:
+                    return "selection delivery receipt lacks exact parameter scope"
+                selected_value = (
+                    scoped.get(step.param) if step.param is not None else step.text
+                )
+                if selected_value is None or step.selection_commit_key is None:
+                    return (
+                        "selection delivery receipt lacks its compiled input contract"
+                    )
+                selected_text = runtime_param_text(selected_value)
             if (
                 receipt.selection_value_sha256
                 != hashlib.sha256(selected_text.encode("utf-8")).hexdigest()
@@ -3342,7 +3364,14 @@ def _case_run_report_integrity_error(
             if selection_resolution.rung == "structural":
                 selection_handle = selection_resolution.structural_handle
                 selection_locator = step.anchor.structural
-                if selection_handle is None or selection_locator is None:
+                if (
+                    selection_handle is None
+                    or selection_locator is None
+                    or (
+                        step.native_selection is not None
+                        and selection_handle.target_fingerprint is None
+                    )
+                ):
                     return "selection delivery receipt lacks structural target proof"
                 from openadapt_flow.runtime.resolver import (
                     structural_resolution_fingerprint,
@@ -3353,6 +3382,8 @@ def _case_run_report_integrity_error(
                     selection_handle,
                 )
             else:
+                if step.native_selection is not None:
+                    return "native selection delivery receipt lacks structural target proof"
                 selection_visual = selection_resolution.visual_evidence
                 if selection_visual is None:
                     return "selection delivery receipt lacks visual target proof"

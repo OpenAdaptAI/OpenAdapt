@@ -158,7 +158,15 @@ class SyntheticReferralApp:
     def refresh(self, entry: Any, run_id: str) -> None:
         return None
 
-    def execute(self, entry: Any, run_id: str, inputs: dict[str, str], raw: Any) -> Any:
+    def execute(
+        self,
+        entry: Any,
+        run_id: str,
+        inputs: dict[str, str],
+        raw: Any,
+        *,
+        admitted_bundle_sha256: str | None = None,
+    ) -> Any:
         from openadapt_flow.agent.service import EngineResult
 
         sandbox = {"engine": "simulated", "case": "worklist"}

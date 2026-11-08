@@ -263,6 +263,15 @@ class _BreakItBannerVision:
         return [_BannerLine(self._text)]
 
 
+# The closed break-it fixture always returns the complete empty record set.
+UNCHANGED_RECORDS_READ_CONTRACT: dict[str, Any] = {
+    "kind": "rest",
+    "records_path": "/records",
+    "records_key": "records",
+    "records_complete": True,
+}
+
+
 class _UnchangedStore:
     """A records read that returns the same empty store before and after:
     the write the screen claims never landed."""
@@ -387,14 +396,21 @@ def evaluate_oracle_gate(
 
     banner_text = _banner_text(workflow)
     verdicts: list[EffectVerdict] = []
-    verifier = RestRecordVerifier(
-        _BREAK_IT_STORE,
-        records_path="/records",
-        records_key="records",
+    from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
+
+    verifier = build_effect_verifier(
+        EffectsConfig.model_validate(
+            {
+                **UNCHANGED_RECORDS_READ_CONTRACT,
+                "base_url": _BREAK_IT_STORE,
+                "timeout_s": 2.0,
+                "poll_interval_s": 0.05,
+            }
+        ),
         session=_UnchangedStore(),
-        timeout_s=2.0,
-        poll_interval_s=0.05,
     )
+    if verifier is None:
+        raise ValueError("the unchanged-store contract built no verifier")
     before = verifier.capture_pre_state()
     records = list(before.records or [])
     store_unchanged = before.reachable and not records

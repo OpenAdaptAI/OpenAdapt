@@ -279,7 +279,9 @@ def _token_env() -> dict[str, str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--per-fault", type=int, default=5)
     parser.add_argument("--max-cost", type=float, default=0.50)

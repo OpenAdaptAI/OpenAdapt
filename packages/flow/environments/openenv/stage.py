@@ -67,7 +67,9 @@ def stage(name: str, out: Path, *, wheels: list[Path], flow_requirement: str) ->
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("name")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--wheel", type=Path, action="append", default=[])
