@@ -405,3 +405,47 @@ def test_old_selection_is_authenticated_and_bound_to_this_contract(service, tmp_
         assert result["receipt"]["checked"]["frame"] == "not_checked"
         assert result["receipt"]["outcome"] != "verified"
         assert "baseline identity evidence" in result["evidence"]["frame"]["reason"]
+
+
+@pytest.mark.parametrize("kind", ["rest", "sql"])
+@pytest.mark.parametrize("empty", [False, True])
+def test_legacy_selected_read_requires_identity_only_when_nonempty(service, tmp_path, kind, empty):
+    if empty:
+        service.write("DELETE FROM objects")
+    cfg = parse_verify_config(document(service, kind))
+    baseline = tmp_path / "baseline.json"
+    if empty:
+        capture_baseline(cfg, PARAMS, baseline)
+        assert baseline.exists()
+    else:
+        with pytest.raises(VerifyRunError, match="identity is unavailable"):
+            capture_baseline(cfg, PARAMS, baseline)
+        assert not baseline.exists()
+
+
+@pytest.mark.parametrize("drift", ["permuted-column", "canonicaliser", "surface-field"])
+def test_baseline_authenticates_exact_learned_mapping(service, tmp_path, drift):
+    service.protocol = "rest"
+    service.transform = lambda rows: [dict(row, alias=row["id"]) for row in rows]
+    with httpx.Client() as client:
+        _, cfg, provider = setup(service, client, kind="rest")
+        # This is an existing, unique alternative column at baseline time.
+        # Its values map the same reader identities to the opposite rows.
+        service.write("ALTER TABLE objects ADD COLUMN alternate_key TEXT")
+        service.write("UPDATE objects SET alternate_key=? WHERE row_id=10", (IDS[1],))
+        service.write("UPDATE objects SET alternate_key=? WHERE row_id=11", (IDS[0],))
+        baseline = tmp_path / "baseline.json"
+        capture_baseline(cfg, PARAMS, baseline, read_provider=provider)
+        before = verify_run(cfg, params=PARAMS, run_record={"executor_kind": "agent", "executor_id": "synthetic"},
+                            authorization_ref="test", baseline_path=baseline, read_provider=provider)
+        assert before["receipt"]["checked"]["frame"] == "held"
+        changes = {"permuted-column": {"column": "alternate_key"},
+                   "canonicaliser": {"canonicaliser": "exact"},
+                   "surface-field": {"surface_field": "alias"}}
+        binding = cfg.frame.identities[""]
+        cfg.frame.identities[""] = binding.model_copy(update=changes[drift])
+        result = verify_run(cfg, params=PARAMS, run_record={"executor_kind": "agent", "executor_id": "synthetic"},
+                            authorization_ref="test", baseline_path=baseline, read_provider=provider)
+        assert result["receipt"]["checked"]["frame"] == "not_checked"
+        assert result["receipt"]["outcome"] != "verified"
+        assert "baseline identity evidence belongs to another" in result["evidence"]["frame"]["reason"]

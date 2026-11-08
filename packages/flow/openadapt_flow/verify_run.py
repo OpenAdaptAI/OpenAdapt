@@ -1248,7 +1248,7 @@ def _mapped_baseline_evidence(cfg: VerifyConfig, state: EffectState, indexes: Ma
         selectors = [s for i, e in enumerate(effects) if surface in routes.get(str(i), ()) for s in declared_selectors(e)]
         typed = _surface_config(cfg, surface).kind == "sql"
         selected = [row_key for record, row_key in zip(records, row_keys) if any(record_matches(dict(record), sel, text_numbers=typed) for sel in selectors)]
-        data = {"index": indexes[surface], "declared": sorted(selected), "effects": bound, "read_config": binding.read_config_sha256}
+        data = {"index": indexes[surface], "declared": sorted(selected), "effects": bound, "read_config": binding.read_config_sha256, "binding": binding.model_dump(mode="json")}
         result[surface] = {"data": data, "mac": _identity_evidence_mac(data, key)}
     return result
 
@@ -1265,12 +1265,12 @@ def _map_frame_rows(
 
     if cfg.frame is None or not isinstance(after, EffectState):
         raise VerifyRunError("no current mapped surface read")
-    current = _frame_identity_indexes(cfg, after, db.post, salt)
     previous = before.detail.get(FRAME_IDENTITY_DETAIL)
     if not isinstance(previous, dict):
         raise VerifyRunError("baseline has no bound identity index")
     key = _mac_key(salt)
     bound = _identity_effect_binding(effects, params, key)
+    authenticated = {}
     for surface, binding in cfg.frame.identities.items():
         envelope = previous.get(surface)
         if not isinstance(envelope, dict) or set(envelope) != {"data", "mac"} or type(envelope["mac"]) is not str:
@@ -1278,8 +1278,12 @@ def _map_frame_rows(
         data = envelope["data"]
         if not isinstance(data, dict) or not hmac.compare_digest(envelope["mac"], _identity_evidence_mac(data, key)):
             raise VerifyRunError("baseline identity evidence authentication failed")
-        if set(data) != {"index", "declared", "effects", "read_config"} or data["effects"] != bound or data["read_config"] != binding.read_config_sha256:
+        if set(data) != {"index", "declared", "effects", "read_config", "binding"} or data["effects"] != bound or data["read_config"] != binding.read_config_sha256 or data["binding"] != binding.model_dump(mode="json"):
             raise VerifyRunError("baseline identity evidence belongs to another read or effect contract")
+        authenticated[surface] = data
+    current = _frame_identity_indexes(cfg, after, db.post, salt)
+    for surface, binding in cfg.frame.identities.items():
+        data = authenticated[surface]
         prior, selected = data["index"], data["declared"]
         if not isinstance(prior, dict) or any(type(k) is not str or type(v) is not str for k, v in prior.items()):
             raise VerifyRunError("baseline identity index is malformed")
@@ -1827,17 +1831,18 @@ def _frame_identity_indexes(cfg: VerifyConfig, state: EffectState, snapshot: Any
             index = snapshot_index(binding, table, _mac_key(salt))
             match_records(binding, _surface_records(state, surface), index, _mac_key(salt))
             indexes[surface] = index
-        # A legacy identity absent from a selected FHIR resource is a setup
-        # error, never evidence that its own newly created row is collateral.
+        # A nonempty selected read must expose its declared legacy identity.
+        # Empty create baselines do not invent correspondence evidence.
         reads = cfg.verifier.surfaces or {"": cfg.verifier}
         for surface, read in reads.items():
             identity = cfg.frame.identity_field
-            if read.kind == "fhir" and surface not in cfg.frame.identities and identity:
-                if identity not in {"id", *(read.field_paths or {})}:
+            if read.kind in {"fhir", "rest", "sql"} and surface not in cfg.frame.identities and identity:
+                records = _surface_records(state, surface)
+                if any(identity not in record for record in records):
                     raise FrameIdentityError("frame identity is unavailable on the selected read; learn its row mapping at setup")
                 from openadapt_flow.runtime.effects.frame_identity import canonical_identity
 
-                values = [canonical_identity(record.get(identity), "exact") for record in _surface_records(state, surface)]
+                values = [canonical_identity(record.get(identity), "exact") for record in records]
                 if len(set(values)) != len(values):
                     raise FrameIdentityError("frame identity is not unique on the selected read")
     except FrameIdentityError as exc:
