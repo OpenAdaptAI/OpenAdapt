@@ -34,8 +34,9 @@ import sys
 import time
 import uuid
 from dataclasses import dataclass, field
+from inspect import CORO_CREATED, getcoroutinestate
 from pathlib import Path
-from types import TracebackType
+from types import CoroutineType, TracebackType
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -568,7 +569,26 @@ class Recording:
             backend, self._close = owner.app.open()
         try:
             if owner.before_capture is not None:
-                owner.before_capture(backend)
+                # The public callback returns None. Widen only this runtime
+                # view so Python callers cannot silently return an awaitable.
+                callback: Callable[[Any], object] = owner.before_capture
+                prepared = callback(backend)
+                if prepared is not None:
+                    invalid_return = TypeError(
+                        "before_capture must return None synchronously"
+                    )
+
+                    def discard_unstarted_coroutine() -> None:
+                        # Never await/schedule, call an arbitrary .close, or
+                        # run a suspended coroutine's finally as hygiene.
+                        if (
+                            isinstance(prepared, CoroutineType)
+                            and getcoroutinestate(prepared) == CORO_CREATED
+                        ):
+                            prepared.close()
+
+                    close_owned((discard_unstarted_coroutine,), primary=invalid_return)
+                    raise invalid_return
             if self.guard is not None and owner.app.record_reader is not None:
                 self._baseline = owner.app.record_reader()
             self._session = AuthoringSession(

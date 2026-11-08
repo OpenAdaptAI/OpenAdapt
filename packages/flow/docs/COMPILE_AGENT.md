@@ -230,7 +230,9 @@ Pass `before_capture=callback` to `compile_agent`, `FirstRunCompiler`,
 `compile_first_run`, `SkillCache` or Python `load_task`. The callback receives
 the exact backend that will be recorded, after its normal guarded opening,
 before the authoring session and actor start. It applies to both web and
-native backends. For the web, the normal request guard is installed before
+native backends. It must finish synchronously and return `None`; every other
+return value is refused before the baseline, session and actor. The hook is
+never awaited or scheduled. For the web, the normal request guard is installed before
 the initial navigation and remains active during the callback.
 
 Use this trusted callback to prepare and check the starting state, then
@@ -251,6 +253,9 @@ records. `FirstRunCompiler.load(..., before_capture=callback)` can supply it
 again explicitly. A task parameter named `before_capture` remains valid.
 The hook grants no authorization or admission and leaves the runtime save
 gate, record checks and human confirmation unchanged.
+
+The synchronous-return check applies to this new hook. Legacy `WebApp.setup`
+and backend `before_goto` callbacks retain their existing return behavior.
 
 This hook runs only for a new first capture. Existing candidates, admitted
 programs and cache hits do not invoke it. Canaries and replay retain their

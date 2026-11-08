@@ -567,3 +567,99 @@ def test_real_candidate_publication_waits_for_cleanup_and_reload_refuses_failed_
         if failure == "publication":
             assert list(kept[0].glob("candidate-pending-*.json"))
     assert events == ["compile", "dispatcher", "backend"]
+
+
+@pytest.mark.parametrize("route", ["direct", "compiler", "reload", "first_run", "cache", "loader"])
+@pytest.mark.parametrize("returned", ["async_function", "async_callable", "sync_coroutine", "custom_awaitable", "suspended_coroutine", "falsey_value"])
+def test_capture_requires_synchronous_none_before_baseline_session_and_actor(
+    local_task, tmp_path, monkeypatch, route, returned
+):
+    from inspect import CORO_CLOSED, CORO_SUSPENDED, getcoroutinestate
+
+    from openadapt_flow.record_sor import SystemOfRecordObserver
+
+    events, opened, closes, coroutines = [], [], [], []
+    original_open = WebApp.open
+
+    def forbidden_baseline(_observer):
+        events.append("baseline")
+        raise AssertionError("invalid preparation reached baseline")
+
+    def forbidden_session(*args, **kwargs):
+        events.append("session")
+        raise AssertionError("invalid preparation reached authoring")
+
+    def open_owned(self, **kwargs):
+        backend, close = original_open(self, **kwargs)
+        opened.append(backend)
+        # The ordinary observer is constructed normally; this spy is installed
+        # only after normal guarded opening and detects an early baseline read.
+        monkeypatch.setattr(SystemOfRecordObserver, "system_of_record", property(forbidden_baseline))
+
+        def close_owned_backend():
+            closes.append(backend)
+            close()
+
+        return backend, close_owned_backend
+
+    monkeypatch.setattr(WebApp, "open", open_owned)
+    monkeypatch.setattr(authoring, "AuthoringSession", forbidden_session)
+
+    async def async_prepare(backend):
+        events.append("async-body")
+        raise AssertionError("preparation must never be awaited or scheduled")
+
+    class AsyncPrepare:
+        async def __call__(self, backend):
+            events.append("async-body")
+            raise AssertionError("preparation must never be awaited or scheduled")
+
+    class Awaitable:
+        def __await__(self):
+            events.append("awaited")
+            yield None
+
+        def close(self):
+            events.append("foreign-close")
+            raise AssertionError("a custom awaitable must not be closed")
+
+    class Suspend:
+        def __await__(self):
+            yield None
+
+    async def suspend():
+        try:
+            events.append("started-by-caller")
+            await Suspend()
+        finally:
+            events.append("suspended-finally")
+
+    def sync_prepare(backend):
+        events.append("sync-hook")
+        if returned == "custom_awaitable":
+            return Awaitable()
+        if returned == "falsey_value":
+            return False
+        coroutine = suspend() if returned == "suspended_coroutine" else async_prepare(backend)
+        coroutines.append(coroutine)
+        if returned == "suspended_coroutine":
+            coroutine.send(None)  # Deliberately started by this synthetic caller.
+        return coroutine
+
+    callback = async_prepare if returned == "async_function" else AsyncPrepare() if returned == "async_callable" else sync_prepare
+    try:
+        with pytest.raises(TypeError, match="before_capture must return None synchronously"):
+            invoke(route, local_task[0], callback, NoModelActor(events), tmp_path)
+        assert len(opened) == 1 and closes == opened
+        assert opened[0].page.is_closed()
+        assert not {"baseline", "session", "actor", "async-body", "awaited", "foreign-close", "suspended-finally"} & set(events)
+        if returned == "sync_coroutine":
+            assert getcoroutinestate(coroutines[0]) == CORO_CLOSED
+        if returned == "suspended_coroutine":
+            assert getcoroutinestate(coroutines[0]) == CORO_SUSPENDED
+            assert events == ["sync-hook", "started-by-caller"]
+    finally:
+        # Test ownership only: production must not close an already-started
+        # coroutine, whose finally can execute user code without a model budget.
+        for coroutine in coroutines:
+            coroutine.close()
