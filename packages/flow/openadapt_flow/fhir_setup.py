@@ -8,6 +8,8 @@ Synthetic setup projections are supplied by the harness, never the acting arm.
 
 from __future__ import annotations
 
+import json
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping
@@ -24,6 +26,8 @@ from openadapt_flow.rest_setup import (
 )
 from openadapt_flow.runtime.effects.quiescence import QuiescenceAuthority
 
+_LOG = logging.getLogger(__name__)
+
 PROTOCOL_SOURCES = (
     "https://hl7.org/fhir/R4/capabilitystatement-definitions.html",
     "https://hl7.org/fhir/R4/search.html",
@@ -32,8 +36,18 @@ PROTOCOL_SOURCES = (
 )
 
 
-def search_resources(capability: Mapping[str, Any], base_url: str) -> list[str]:
-    """Enumerate declarations, never infer an application endpoint from its name."""
+def search_resources(
+    capability: Mapping[str, Any],
+    base_url: str,
+    *,
+    diagnostics: list[dict[str, str]] | None = None,
+) -> list[str]:
+    """Enumerate clean declarations, recording duplicate interaction decisions.
+
+    Compare complete JSON entries, including metadata and value types. Object
+    key order is not significant; differing content for one code excludes that
+    resource. Neither duplicate handling nor a diagnostic qualifies a read.
+    """
     base = urlsplit(base_url)
     if (
         base.scheme not in ("http", "https")
@@ -56,13 +70,20 @@ def search_resources(capability: Mapping[str, Any], base_url: str) -> list[str]:
     ) != base_url.rstrip("/"):
         raise ValueError("capability does not bind the authorized service base")
     rest = capability.get("rest")
-    if not isinstance(rest, list) or len(rest) != 1 or rest[0].get("mode") != "server":
+    if (
+        not isinstance(rest, list)
+        or len(rest) != 1
+        or not isinstance(rest[0], dict)
+        or rest[0].get("mode") != "server"
+    ):
         raise ValueError("ambiguous FHIR REST capability")
     resources = rest[0].get("resource")
     if not isinstance(resources, list) or not 1 <= len(resources) <= 128:
         raise ValueError("bounded resource declarations required")
     names, selected = set(), []
     for resource in resources:
+        if not isinstance(resource, dict):
+            raise ValueError("invalid resource declaration")
         name = resource.get("type")
         if (
             not isinstance(name, str)
@@ -77,10 +98,32 @@ def search_resources(capability: Mapping[str, Any], base_url: str) -> list[str]:
             for i in interactions
         ):
             raise ValueError("invalid interaction declaration")
-        codes = [i["code"] for i in interactions]
-        if len(set(codes)) != len(codes):
-            raise ValueError("duplicate interaction declaration")
-        if {"read", "search-type"} <= set(codes):
+        declarations: dict[str, str] = {}
+        duplicate, conflict = False, False
+        for interaction in interactions:
+            try:
+                content = json.dumps(
+                    interaction, sort_keys=True, separators=(",", ":"), allow_nan=False
+                )
+            except (TypeError, ValueError) as exc:
+                raise ValueError("invalid interaction declaration") from exc
+            code = interaction["code"]
+            if code in declarations:
+                duplicate = True
+                conflict = conflict or declarations[code] != content
+            else:
+                declarations[code] = content
+        if duplicate:
+            reason = (
+                "conflicting_interactions_resource_refused"
+                if conflict
+                else "identical_interactions_collapsed"
+            )
+            diagnostic = {"resource_type": name, "reason": reason}
+            if diagnostics is not None:
+                diagnostics.append(diagnostic)
+            _LOG.warning("FHIR interaction declaration: %s (%s)", name, reason)
+        if not conflict and {"read", "search-type"} <= declarations.keys():
             selected.append(name)
     if not selected:
         raise ValueError("no declared readable search resource")
@@ -105,8 +148,10 @@ def learn_fhir_read(
     two equal HTTP passes alone do not supply one.
     """
     result = RestReadSetup()
+    diagnostics: list[dict[str, str]] = []
+    result.evidence["discovery_diagnostics"] = diagnostics
     try:
-        names = search_resources(capability, base_url)
+        names = search_resources(capability, base_url, diagnostics=diagnostics)
         if not isinstance(quiescence, QuiescenceAuthority) or session is None:
             raise ValueError("current authorized read and writer exclusion required")
         if (
@@ -162,6 +207,7 @@ def learn_fhir_read(
             "protocol_sources": list(PROTOCOL_SOURCES),
             "specification_sha256": _digest(capability),
             "candidate_resources": names,
+            "discovery_diagnostics": diagnostics,
             "observations": observations,
             "status": "draft",
             "read_context": "revalidation-required",
