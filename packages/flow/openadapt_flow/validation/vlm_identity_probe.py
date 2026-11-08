@@ -698,7 +698,7 @@ def _write_markdown(path: Path, payload: dict[str, Any], trials: list[Trial]) ->
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     ap.add_argument("--model", default="mlx-community/Qwen3-VL-4B-Instruct-4bit")
     ap.add_argument("--out", default="benchmark/vlm_identity", type=Path)
     ap.add_argument("--quick", action="store_true", help="smaller corpus (smoke)")

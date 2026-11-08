@@ -56,6 +56,7 @@ from openadapt_flow.ir import (
     ExecutionTargetKind,
     HoverEvidence,
     Landmark,
+    NativeSelectContract,
     ParamKind,
     ParamSpec,
     Point,
@@ -68,6 +69,7 @@ from openadapt_flow.ir import (
     Workflow,
     structural_locator_is_locatable,
 )
+from openadapt_flow.native_selection_capture import demonstrated_native_choice
 from openadapt_flow.risk import (
     PRESUMED_COMMIT_EXPLANATION,
     confirmation_opener_step_ids,
@@ -108,6 +110,154 @@ MIN_TEMPLATE_STD = 5.0
 
 # Minimum OCR confidence for a line to be used as ocr_text / landmark text.
 MIN_OCR_CONFIDENCE = 0.5
+
+
+def _native_selection_event(
+    click_event: dict, type_event: dict, key_event: dict
+) -> dict:
+    """Keep the original click baseline and committed Enter outcome."""
+    merged = {
+        name: value
+        for name, value in type_event.items()
+        if not name.endswith(("_before", "_after"))
+    }
+    merged.update(
+        (name, value) for name, value in click_event.items() if name.endswith("_before")
+    )
+    merged.update(
+        (name, value) for name, value in key_event.items() if name.endswith("_after")
+    )
+    return merged
+
+
+def _native_focus_click(click: Step, click_event: dict, type_event: dict) -> bool:
+    """Refuse a click with an independent recorded action or semantic delta."""
+    if (
+        click.effects
+        or click.expect
+        or click.dialog
+        or click.opens
+        or click.closes_surface
+        or click.submit_binding is not None
+        or click.api_binding is not None
+        or click.risk == "irreversible"
+        or click_event.get("effects")
+    ):
+        return False
+    raw_binding = click_event.get("submit_binding")
+    if raw_binding is not None:
+        from openadapt_flow.submit_binding import (
+            decide_form_identity,
+            decide_submit_binding,
+            observation_from_page,
+        )
+
+        try:
+            observation = observation_from_page(raw_binding)
+        except ValueError:
+            return False
+        # The recorder observes all form controls, including selects. This
+        # diagnostic census is not a submission contract. Keep actual submit
+        # authority and anything other than the retained native select explicit.
+        if (
+            observation.tag != "select"
+            or observation.type != "select-one"
+            or observation.role not in (None, "combobox")
+            or observation.submit_role not in (None, "form_control", "detached")
+            or observation.action_sha256 is not None
+            or observation.form_method is not None
+            or observation.controls_sha256 is not None
+            or decide_submit_binding(observation)[0] is not None
+            or decide_form_identity(observation)[0] is not None
+        ):
+            return False
+    for name in ("url", "title", "pages", "sor", "dom_fields", "viewport"):
+        before, after = f"{name}_before", f"{name}_after"
+        if before in click_event or after in click_event:
+            if (
+                before not in click_event
+                or after not in click_event
+                or before not in type_event
+                or click_event[before] != click_event[after]
+                or click_event[after] != type_event[before]
+            ):
+                return False
+    return True
+
+
+def _native_selection_contract(
+    click: Step,
+    typed: Step,
+    committed: Step,
+    click_event: dict,
+    type_event: dict,
+    key_event: dict,
+) -> Optional[NativeSelectContract]:
+    """Bind committed native evidence to one literal, uninterrupted gesture."""
+    raw = key_event.get("native_selection")
+    structural = click.anchor.structural if click.anchor is not None else None
+    if (
+        not isinstance(raw, dict)
+        or click.action is not ActionKind.CLICK
+        or not _native_focus_click(click, click_event, type_event)
+        or raw.get("click_focus_only") is not True
+        or typed.action is not ActionKind.TYPE
+        or committed.action is not ActionKind.KEY
+        or committed.key != "Enter"
+        or typed.param is not None
+        or typed.secret
+        or not typed.text
+        or structural is None
+        or not structural.selector
+        or raw.get("selector") != structural.selector
+        or not isinstance(raw.get("frame_path"), list)
+        or raw["frame_path"] != (structural.frame_path or [])
+        or click.surface != typed.surface
+        or typed.surface != committed.surface
+        or any(
+            event.get("opens") or event.get("closes_surface") or event.get("dialog")
+            for event in (click_event, type_event, key_event)
+        )
+    ):
+        return None
+    click_index, type_index, key_index = (
+        event.get("i") for event in (click_event, type_event, key_event)
+    )
+    if type(click_index) is not int:
+        return None
+    if type(type_index) is not int:
+        return None
+    if type(key_index) is not int:
+        return None
+    if (
+        type_index != click_index + 1
+        or key_index != type_index + 1
+        or type(raw.get("source_click_index")) is not int
+        or raw["source_click_index"] != click_index
+        or type(raw.get("source_type_index")) is not int
+        or raw["source_type_index"] != type_index
+        or raw.get("source_type_text") != typed.text
+    ):
+        return None
+    try:
+        contract = NativeSelectContract.model_validate(
+            {
+                "kind": raw.get("kind", "html_single_select"),
+                "value": raw.get("value"),
+                "label": raw.get("label"),
+                "options": raw.get("options"),
+            }
+        )
+    except ValueError:
+        return None
+    if not demonstrated_native_choice(
+        contract,
+        value_before=raw.get("value_before"),
+        label_before=raw.get("label_before"),
+        typed_text=typed.text,
+    ):
+        return None
+    return contract
 
 
 def _exact_ocr_value_present(png: bytes, text: str, region: Region) -> bool:
@@ -2351,6 +2501,35 @@ def _compile_recording(
     )
     locale_invariants = _locale_invariants_from_meta(meta)
     events = _load_events(recording)
+    # Keep the original actions as evidence, but never admit an unproved native
+    # choice through ordinary TYPE when the guarded recording refused it.
+    for index, event in enumerate(events):
+        if "control_refusal" in event:
+            raise ValueError("recording refused an unproved native selection")
+        if "native_selection" not in event:
+            continue
+        raw = event["native_selection"]
+        if not isinstance(raw, dict):
+            raise ValueError("native selection lacks demonstrated choice evidence")
+        try:
+            choice = NativeSelectContract.model_validate(
+                {
+                    "kind": raw.get("kind", "html_single_select"),
+                    **{key: raw.get(key) for key in ("value", "label", "options")},
+                }
+            )
+        except ValueError as exc:
+            raise ValueError(
+                "native selection lacks demonstrated choice evidence"
+            ) from exc
+        typed_event = events[index - 1] if index else {}
+        if typed_event.get("kind") != "type" or not demonstrated_native_choice(
+            choice,
+            value_before=raw.get("value_before"),
+            label_before=raw.get("label_before"),
+            typed_text=typed_event.get("text"),
+        ):
+            raise ValueError("native selection lacks demonstrated choice evidence")
     params: dict[str, str] = dict(meta.get("params") or {})
     secret_params: list[str] = list(meta.get("secret_params") or [])
     # Operator-CONFIRMED parameter decisions (the one-shot confirm pass):
@@ -3028,6 +3207,81 @@ def _compile_recording(
             if event.get("closes_surface") is True:
                 stamped.closes_surface = True
 
+    # Native HTML evidence binds the whole focus-only CLICK + TYPE + Enter
+    # gesture. Replaying the popup-opening click separately would leave it open.
+    absorbed_step_aliases: dict[str, str] = {}
+    native_selection_notes: list[dict[str, Any]] = []
+    if surface in (None, "web"):
+        native_pending: list[tuple[Step, Optional[bytes], Optional[bytes], dict]] = []
+        index = 0
+        while index < len(pending):
+            step, before, after, event = pending[index]
+            if native_pending and index + 1 < len(pending):
+                native_click, click_before, _click_after, click_event = native_pending[
+                    -1
+                ]
+                key, _key_before, key_after, key_event = pending[index + 1]
+                contract = _native_selection_contract(
+                    native_click, step, key, click_event, event, key_event
+                )
+                if (
+                    contract is not None
+                    and native_click.anchor is not None
+                    and click_before is not None
+                    and key_after is not None
+                ):
+                    selected = step.model_copy(
+                        update={
+                            "action": ActionKind.SELECT_OPTION,
+                            "text": contract.label,
+                            "intent": f"select '{_text_preview(contract.label)}'",
+                            "native_selection": contract,
+                            "anchor": native_click.anchor.model_copy(deep=True),
+                            "identity_armed": native_click.identity_armed,
+                            "identity_unarmed_reason": native_click.identity_unarmed_reason,
+                            "identifier_crop_missing_reason": native_click.identifier_crop_missing_reason,
+                        }
+                    )
+                    merged_event = _native_selection_event(
+                        click_event, event, key_event
+                    )
+                    # Derive checks from the entire gesture, not popup pixels.
+                    ocr_cache.pop((int(event["i"]), "before"), None)
+                    ocr_cache.pop((int(event["i"]), "after"), None)
+                    absorbed_step_aliases[native_click.id] = selected.id
+                    absorbed_step_aliases[key.id] = selected.id
+                    native_selection_notes.append(
+                        {
+                            "change": "native_selection_gesture",
+                            "step": selected.id,
+                            "source_events": [
+                                {"i": click_event["i"], "kind": "click"},
+                                {
+                                    "i": event["i"],
+                                    "kind": "type",
+                                    "text": event["text"],
+                                },
+                                {
+                                    "i": key_event["i"],
+                                    "kind": "key",
+                                    "key": key_event["key"],
+                                },
+                            ],
+                            "absorbed_step_aliases": {
+                                native_click.id: selected.id,
+                                key.id: selected.id,
+                            },
+                        }
+                    )
+                    native_pending.pop()
+                    native_pending.append(
+                        (selected, click_before, key_after, merged_event)
+                    )
+                    index += 2
+                    continue
+            native_pending.append((step, before, after, event))
+            index += 1
+        pending = native_pending
     # Collapse a demonstrated native/pixel option selection into one explicit
     # SELECT_OPTION contract. This is deliberately evidence-gated and remote-only:
     # the prior click names an exact field region; typing produces a provisional
@@ -3038,7 +3292,6 @@ def _compile_recording(
     # in a qualified readback band mapped from the freshly resolved target,
     # rather than falsely requiring an uncommitted native select to expose the
     # value after TYPE alone.
-    absorbed_step_aliases: dict[str, str] = {}
     if surface in ("rdp", "citrix"):
         collapsed: list[tuple[Step, Optional[bytes], Optional[bytes], dict]] = []
         index = 0
@@ -3623,7 +3876,7 @@ def _compile_recording(
         pixel_verify_enabled=pixel_verify_enabled,
         drop_redundant_keys=drop_redundant_keys,
     )
-    compile_notes = [*compile_notes, *guard_notes]
+    compile_notes = [*compile_notes, *guard_notes, *native_selection_notes]
     for note in compile_notes:
         logger.info("compile-pass %s: %s", note["step"], note["change"])
 
@@ -3929,6 +4182,16 @@ def _compile_recording(
     # replayer refuses that click). Runs after every risk decision, model
     # annotation included, so the binding covers exactly the final writes.
     _attach_submit_bindings(workflow.steps, binding_observations, form_values)
+
+    for native_step in workflow.steps:
+        if native_step.native_selection is not None and (
+            native_step.param is not None
+            or native_step.secret
+            or native_step.text != native_step.native_selection.label
+        ):
+            raise ValueError(
+                "a native selection must remain the demonstrated literal option"
+            )
 
     # PHI-at-rest remediation (audit REM-2): replace the plaintext identity
     # band (``anchor.context_text``) and structured identity on every anchor

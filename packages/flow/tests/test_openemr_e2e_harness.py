@@ -28,6 +28,7 @@ from benchmark.openemr_e2e.harness import (
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.runtime.effects import RestRecordVerifier
 from openadapt_flow.runtime.replayer import Replayer
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 
 NOTE = "Renal panel ordered ahead of the next quarterly visit."
 
@@ -41,7 +42,7 @@ def _replay(workflow, *, bundle_dir, run_dir, note, fault="", modal=None):
             backend,
             vision=vision,
             effect_verifier=RestRecordVerifier(
-                url.rstrip("/"), records_path="/api/db", records_key="records"
+                url.rstrip("/"), **mockmed_rest_read_kwargs()
             ),
             poll_interval_s=0.01,
         )

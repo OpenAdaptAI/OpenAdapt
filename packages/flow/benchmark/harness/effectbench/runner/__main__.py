@@ -130,6 +130,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m benchmark.harness.effectbench.runner",
         description="EffectBench multi-baseline runner — MockMed dry-run.",
+        allow_abbrev=False,
     )
     parser.add_argument("--trials", type=int, default=3)
     parser.add_argument("--arms", type=str, default=None)

@@ -33,11 +33,11 @@ from openadapt_flow.ir import RunReport
 from openadapt_flow.tutorial import TutorialResult, run_tutorial
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def break_it_path(
     tmp_path_factory: pytest.TempPathFactory, module_durable_authority
 ) -> Iterator[TutorialResult]:
-    """Keep the encrypted tutorial readable throughout the module."""
+    """Keep each isolated test's encrypted tutorial readable through its proof."""
 
     # Function isolation changes the at-rest home and plaintext opt-out.
     # This synthetic key keeps setup and the later proof reader consistent.

@@ -70,7 +70,7 @@ DEMO_COST_SOURCE = "benchmark/openemr/BENCHMARK.md + benchmark/BENCHMARK.md (pro
 
 @dataclass
 class Arm:
-    name: str          # "compiled" | "agent"
+    name: str  # "compiled" | "agent"
     n: int
     success_count: int
     success_rate: float
@@ -96,9 +96,9 @@ class Arm:
 class Benchmark:
     key: str
     label: str
-    kind: str          # "field" | "reproducible"
+    kind: str  # "field" | "reproducible"
     reproducible: bool
-    source_file: str   # repo-relative path to the results.json
+    source_file: str  # repo-relative path to the results.json
     task: str
     model: str
     workflow_steps: Optional[int]
@@ -115,7 +115,10 @@ class Benchmark:
             "task": self.task,
             "model": self.model,
             "workflow_steps": self.workflow_steps,
-            "arms": {"compiled": self.compiled.to_json(), "agent": self.agent.to_json()},
+            "arms": {
+                "compiled": self.compiled.to_json(),
+                "agent": self.agent.to_json(),
+            },
             "extras": self.extras,
         }
 
@@ -260,21 +263,21 @@ def nice_axis(vmax: float, target_ticks: int = 4) -> tuple[float, float]:
 # ---------------------------------------------------------------------------
 
 _SVG_W = 680
-_GUTTER = 150       # left label column
-_RIGHT_PAD = 78     # room for the value label past the bar end
+_GUTTER = 150  # left label column
+_RIGHT_PAD = 78  # room for the value label past the bar end
 _BAR_H = 26
 _BAR_GAP = 12
 _GROUP_GAP = 10
 _TOP = 14
-_AXIS_H = 34        # space under the bars for the axis + ticks
+_AXIS_H = 34  # space under the bars for the axis + ticks
 
 
 @dataclass
 class BarRow:
     label: str
     value: float
-    text: str          # value label drawn at the bar end
-    cls: str           # "c" (compiled) | "a" (agent)
+    text: str  # value label drawn at the bar end
+    cls: str  # "c" (compiled) | "a" (agent)
     emphasize: bool = False
     group_break: bool = False  # extra gap above this row (separates arms)
 
@@ -376,7 +379,7 @@ def bar_chart_svg(
     return (
         f'<figure class="chart-fig">'
         f'<figcaption class="chart-title">{_e(title)}</figcaption>'
-        f'{"".join(parts)}{cap}</figure>'
+        f"{''.join(parts)}{cap}</figure>"
     )
 
 
@@ -387,10 +390,19 @@ def bar_chart_svg(
 
 def _cost_chart(b: Benchmark) -> str:
     rows = [
-        BarRow("compiled replay", b.compiled.cost_per_run, fmt_usd(b.compiled.cost_per_run),
-               "c", emphasize=True),
-        BarRow("computer-use agent", b.agent.cost_per_run, fmt_usd(b.agent.cost_per_run),
-               "a"),
+        BarRow(
+            "compiled replay",
+            b.compiled.cost_per_run,
+            fmt_usd(b.compiled.cost_per_run),
+            "c",
+            emphasize=True,
+        ),
+        BarRow(
+            "computer-use agent",
+            b.agent.cost_per_run,
+            fmt_usd(b.agent.cost_per_run),
+            "a",
+        ),
     ]
     return bar_chart_svg(
         "Model cost per run",
@@ -406,7 +418,13 @@ def _cost_chart(b: Benchmark) -> str:
 
 def _latency_chart(b: Benchmark) -> str:
     rows = [
-        BarRow("compiled p50", b.compiled.p50_s, fmt_s(b.compiled.p50_s), "c", emphasize=True),
+        BarRow(
+            "compiled p50",
+            b.compiled.p50_s,
+            fmt_s(b.compiled.p50_s),
+            "c",
+            emphasize=True,
+        ),
         BarRow("compiled p95", b.compiled.p95_s, fmt_s(b.compiled.p95_s), "c"),
         BarRow("agent p50", b.agent.p50_s, fmt_s(b.agent.p50_s), "a", group_break=True),
         BarRow("agent p95", b.agent.p95_s, fmt_s(b.agent.p95_s), "a"),
@@ -469,17 +487,17 @@ def _projected_cost_panel(b: Benchmark) -> str:
         '<div class="forever">'
         '<div class="forever-h">Illustrative repeat-run model cost '
         '<span class="derived">(measured model $/run &times; N; not new runs)</span>'
-        '</div>'
+        "</div>"
         '<table class="forever-t"><thead><tr>'
-        '<th>modeled runs</th><th>compiled model API</th><th>agent model API</th></tr></thead>'
-        f'<tbody>{rows}</tbody></table>'
+        "<th>modeled runs</th><th>compiled model API</th><th>agent model API</th></tr></thead>"
+        f"<tbody>{rows}</tbody></table>"
         f'<p class="forever-note">Agent values multiply the measured per-run '
-        f'model charge ({fmt_usd(per)}) at {_e(note)}. The compiled column '
-        f'projects the sample\'s zero model calls only. It excludes authoring, '
-        f'maintenance, compute, storage, review, and exception-handling cost and '
-        f'assumes the measured task and rates remain unchanged. The one-time '
-        f'demonstration was {_e(DEMO_COST_TEXT)}.</p>'
-        '</div>'
+        f"model charge ({fmt_usd(per)}) at {_e(note)}. The compiled column "
+        f"projects the sample's zero model calls only. It excludes authoring, "
+        f"maintenance, compute, storage, review, and exception-handling cost and "
+        f"assumes the measured task and rates remain unchanged. The one-time "
+        f"demonstration was {_e(DEMO_COST_TEXT)}.</p>"
+        "</div>"
     )
 
 
@@ -491,16 +509,16 @@ def _self_flag_note(b: Benchmark) -> str:
     if sf.get("success") is False:
         return (
             '<p class="honest-inline">One compiled run (#{i}) self-flagged '
-            'expected-screen drift at <code>{step}</code> and aborted. The '
-            'corrected saved-row OCR check also rejects it: the retained final '
-            'frame shows the note in the unsaved entry form, not in a saved '
-            'message row. It counts as a failure.</p>'
+            "expected-screen drift at <code>{step}</code> and aborted. The "
+            "corrected saved-row OCR check also rejects it: the retained final "
+            "frame shows the note in the unsaved entry form, not in a saved "
+            "message row. It counts as a failure.</p>"
         ).format(i=_e(run_number), step=_e(sf.get("first_failure_step")))
     return (
         '<p class="honest-inline">One compiled run (#{i}) self-flagged '
-        'expected-screen drift at <code>{step}</code> and aborted, while the '
-        'saved-row OCR check accepted its final frame. It counts according to '
-        'that shared screen contract.</p>'
+        "expected-screen drift at <code>{step}</code> and aborted, while the "
+        "saved-row OCR check accepted its final frame. It counts according to "
+        "that shared screen contract.</p>"
     ).format(i=_e(run_number), step=_e(sf.get("first_failure_step")))
 
 
@@ -510,13 +528,13 @@ def _drift_note(b: Benchmark) -> str:
         return ""
     return (
         '<p class="honest-inline">Under a hostile theme swap '
-        '(<code>?drift=theme</code>, which invalidates every recorded template '
-        'crop), compiled still succeeded in '
-        f'{fmt_s(float(d["compiled_wall_s"]))} with {d["compiled_heal_count"]} '
-        'self-heals; the agent succeeded in '
-        f'{fmt_s(float(d["agent_wall_s"]))} at {fmt_usd(float(d["agent_cost_usd"]), 4)}. '
-        'This drift row is <strong>n=1 per arm</strong> — an existence result, '
-        'not a rate.</p>'
+        "(<code>?drift=theme</code>, which invalidates every recorded template "
+        "crop), compiled still succeeded in "
+        f"{fmt_s(float(d['compiled_wall_s']))} with {d['compiled_heal_count']} "
+        "self-heals; the agent succeeded in "
+        f"{fmt_s(float(d['agent_wall_s']))} at {fmt_usd(float(d['agent_cost_usd']), 4)}. "
+        "This drift row is <strong>n=1 per arm</strong> — an existence result, "
+        "not a rate.</p>"
     )
 
 
@@ -527,9 +545,7 @@ def _bench_section(b: Benchmark, *, lead: bool) -> str:
         else '<span class="tag repro">CI-reproducible anchor</span>'
     )
     lead_tag = '<span class="tag lead">LEAD</span>' if lead else ""
-    steps = (
-        f' &middot; {b.workflow_steps} compiled steps' if b.workflow_steps else ""
-    )
+    steps = f" &middot; {b.workflow_steps} compiled steps" if b.workflow_steps else ""
     repro_line = (
         "Not CI-reproducible: a single shared public instance that every "
         "internet visitor mutates and that resets daily. Treat as a field result."
@@ -538,7 +554,7 @@ def _bench_section(b: Benchmark, *, lead: bool) -> str:
         "agent harness, same style of OCR success check, on a local app."
     )
     return f"""
-    <section class="bench {'lead' if lead else ''}">
+    <section class="bench {"lead" if lead else ""}">
       <header class="bench-head">
         <div class="bench-titles">
           <div class="bench-tags">{lead_tag}{badge}</div>
@@ -632,7 +648,7 @@ def render_html(oe: Benchmark, mm: Benchmark) -> str:
         f"than the {oe.model} agent"
     )
     caveats = "\n".join(
-        f'<li><strong>{_e(t)}</strong><p>{b}</p></li>' for t, b in _caveats(oe, mm)
+        f"<li><strong>{_e(t)}</strong><p>{b}</p></li>" for t, b in _caveats(oe, mm)
     )
     return f"""<!doctype html>
 <html lang="en">
@@ -896,9 +912,12 @@ def build(outdir: Path = HERE) -> dict:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", default=str(HERE),
-                        help="output directory (default: this module's directory)")
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
+    parser.add_argument(
+        "--out",
+        default=str(HERE),
+        help="output directory (default: this module's directory)",
+    )
     args = parser.parse_args(argv)
 
     payload = build(Path(args.out))
