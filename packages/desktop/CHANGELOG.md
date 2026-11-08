@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.29.0 (2026-11-08)
+
+### Features
+
+- **desktop**: register the Chrome extension host per recording
+
+
+
 ## v0.28.1 (2026-11-07)
 
 ### Bug Fixes
