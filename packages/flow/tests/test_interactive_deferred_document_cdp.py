@@ -118,11 +118,14 @@ def _perform(session, kind, value):
     else:
         box = session.page.locator("#point").bounding_box()
         assert box is not None
-        session.page.mouse.click(
+        session.page.mouse.move(
             box["x"] + box["width"] / 2,
             box["y"] + box["height"] / 2,
-            click_count=2 if value == "beta" else 1,
         )
+        # Deliver exactly this pair, rather than click(count=2)'s two pairs.
+        click_count = 2 if value == "beta" else 1
+        session.page.mouse.down(click_count=click_count)
+        session.page.mouse.up(click_count=click_count)
     assert session.pump()
 
 
@@ -168,14 +171,17 @@ def test_cross_document_deferred_action_refuses_complete_publication(
             _perform(session, kind, "beta")
         except BrowserAttachError as error:
             refusal = error
-        assert refusal is not None, "a different document replaced a deferred action"
-        assert "producer ownership" in str(refusal)
-        assert session._listener_error is refusal
         assert len(observed) == 1
+        assert observed[0]["kind"] == {
+            "input": "input", "scroll": "scroll", "click": "double_click"
+        }[kind]
         assert observed[0]["_oaflow_producer_doc"] != first_owner
         if kind == "input":
             assert observed[0]["_oaflow_input_session"] == pending["input_session"]
             assert observed[0]["field"] == pending["field"]
+        assert refusal is not None, "a different document replaced a deferred action"
+        assert "producer ownership" in str(refusal)
+        assert session._listener_error is refusal
         assert getattr(session, attribute) is pending
         assert pending == original
         assert first_owner is not None
