@@ -1564,3 +1564,225 @@ def test_generated_version_resolution_never_absorbs_a_file_mode_change(
     )
     with pytest.raises(ValueError, match="file modes|unexplained content|no clean combination"):
         prepare_release.commits_for_net_diff(repo, main, head)
+
+
+# Release-history selection oracle: equal generated versions are not evidence
+# that either merge side was published. The explicit base is only a comparison.
+def _boundary_outputs(repo: Path) -> dict[str, bytes]:
+    return {name: (repo / name).read_bytes() for name in VERSION_FILES}
+
+
+def _boundary_patch(version: str) -> str:
+    major, minor, patch = map(int, version.split("."))
+    return f"{major}.{minor}.{patch + 1}"
+
+
+def _boundary_merge(repo: Path, other: str, published: str, name: str) -> str:
+    result = subprocess.run(
+        ["git", "merge", "--no-ff", "--no-commit", other], cwd=repo, capture_output=True
+    )
+    assert result.returncode in {0, 1}, result.stderr
+    assert set(_git(repo, "diff", "--name-only", "--diff-filter=U").splitlines()) <= {
+        "CHANGELOG.md"
+    }
+    # Both sides prepared the same version. Keep the declared comparison
+    # side's existing notes; the next normal preparation creates new notes.
+    notes = subprocess.check_output(["git", "show", f"{published}:./CHANGELOG.md"], cwd=repo)
+    (repo / "CHANGELOG.md").write_bytes(notes)
+    return _commit(repo, name)
+
+
+def _equal_version_history(
+    repo: Path, monkeypatch, published_side: str, first: str, clock: str, merges: int
+) -> tuple[str, str, str]:
+    start = _git(repo, "rev-parse", "HEAD")
+    dates = {
+        "left-newer": {"left": "2040-01-01T00:00:00Z", "right": "2001-01-01T00:00:00Z"},
+        "right-newer": {"left": "2001-01-01T00:00:00Z", "right": "2040-01-01T00:00:00Z"},
+        "equal": {"left": "2026-01-01T00:00:00Z", "right": "2026-01-01T00:00:00Z"},
+    }
+    tips = {}
+    for side in ("left", "right"):
+        _git(repo, "checkout", "-q", "-b", "boundary-" + side, start)
+        monkeypatch.setenv("GIT_AUTHOR_DATE", dates[clock][side])
+        monkeypatch.setenv("GIT_COMMITTER_DATE", dates[clock][side])
+        message = "already shipped rollback" if side == published_side else "retain unshipped fix"
+        _commit(repo, f"fix({side}): {message}", touch=f"src/{side}.txt")
+        prepare_release.prepare(repo, today=datetime.date(2026, 11, 1))
+        tips[side] = _commit(repo, "chore: prepare equal engine version")
+    other = "right" if first == "left" else "left"
+    _git(repo, "checkout", "-q", "-b", "boundary-integration", tips[first])
+    published = tips[published_side]
+    _boundary_merge(repo, tips[other], published, "merge: combine equal versions")
+    if merges == 2:
+        _git(repo, "checkout", "-q", "boundary-" + published_side)
+        published = _commit(repo, "docs: retain published release metadata", touch="docs/release.txt")
+        _git(repo, "checkout", "-q", "boundary-integration")
+        _commit(repo, "fix: retain an additional unshipped correction", touch="src/additional.txt")
+        _boundary_merge(repo, published, published, "merge: combine equal versions again")
+    return published, "right" if published_side == "left" else "left", _version(repo)
+
+
+@pytest.mark.parametrize("published_side", ["left", "right"])
+@pytest.mark.parametrize("first", ["left", "right"])
+@pytest.mark.parametrize("clock", ["left-newer", "right-newer", "equal"])
+@pytest.mark.parametrize("merges", [1, 2])
+def test_equal_version_history_requires_explicit_comparison_base(
+    repo: Path, monkeypatch, published_side: str, first: str, clock: str, merges: int
+) -> None:
+    base, unshipped_side, current = _equal_version_history(
+        repo, monkeypatch, published_side, first, clock, merges
+    )
+    before = _boundary_outputs(repo)
+    for options in ({}, {"level": "patch"}, {"version": _boundary_patch(current)}):
+        with pytest.raises(ValueError, match="ambiguous.*--base"):
+            prepare_release.prepare(repo, **options)
+        assert _boundary_outputs(repo) == before
+    selected = prepare_release._release_commits(repo, base, current)
+    assert f"fix({unshipped_side}): retain unshipped fix" in {c.subject for c in selected}
+    assert not any("already shipped rollback" in c.subject for c in selected)
+    problems = check_release_intent.check(repo, base, _git(repo, "rev-parse", "HEAD"))
+    assert len(problems) == 1 and f"--base {base}" in problems[0]
+    assert "--bump patch" in problems[0]
+    if (published_side, first, clock, merges) == ("left", "left", "left-newer", 1):
+        monkeypatch.setattr(prepare_release, "ROOT", repo)
+        assert prepare_release.main(["--base", base]) == 0
+        actual = _version(repo)
+    else:
+        actual = prepare_release.prepare(repo, base=base, today=datetime.date(2026, 11, 8))
+    assert actual == _boundary_patch(current)
+    notes = (repo / "CHANGELOG.md").read_text()
+    new_section = notes.split("## v", 2)[1]
+    assert f"**{unshipped_side}**: retain unshipped fix" in new_section
+    assert "already shipped rollback" not in new_section
+    if merges == 2:
+        assert "retain an additional unshipped correction" in new_section
+    head = _commit(repo, "chore: prepare the next engine patch")
+    assert check_release_intent.check(repo, base, head) == []
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [
+        "missing-full-oid", "abbreviated-oid", "symbolic-ref", "nonancestor-commit",
+        "unrelated-root", "pyproject-absent", "pyproject-nonregular",
+        "wrong-project-identity", "duplicate-or-malformed-version", "base-current-version-mismatch",
+    ],
+)
+def test_explicit_release_base_refuses_invalid_history_before_writing(repo: Path, shape: str) -> None:
+    start = _git(repo, "rev-parse", "HEAD")
+    original = (repo / "pyproject.toml").read_bytes()
+    _git(repo, "checkout", "-q", "-b", "base-candidate")
+    base = start
+    if shape == "nonancestor-commit":
+        _git(repo, "checkout", "-q", "-b", "unmerged-base", start)
+        base = _commit(repo, "fix: unmerged side", touch="src/side.txt")
+        _git(repo, "checkout", "-q", "base-candidate")
+    elif shape == "unrelated-root":
+        _git(repo, "checkout", "-q", "--orphan", "unrelated-base")
+        base = _commit(repo, "chore: unrelated root")
+        _git(repo, "checkout", "-q", "base-candidate")
+    elif shape in {"pyproject-absent", "pyproject-nonregular"}:
+        _git(repo, "rm", "-q", "pyproject.toml")
+        if shape == "pyproject-nonregular":
+            (repo / "project-target.toml").write_bytes(original)
+            (repo / "pyproject.toml").symlink_to("project-target.toml")
+        base = _commit(repo, "chore: invalid historical project path")
+        if shape == "pyproject-nonregular":
+            _git(repo, "rm", "-q", "pyproject.toml")
+        (repo / "pyproject.toml").write_bytes(original)
+    elif shape in {"wrong-project-identity", "duplicate-or-malformed-version"}:
+        text = original.decode()
+        if shape == "wrong-project-identity":
+            text = text.replace('name = "openadapt-desktop"', 'name = "different-project"', 1)
+        else:
+            text = text.replace(f'version = "{_version(repo)}"', 'version = "01.2.3"', 1)
+        (repo / "pyproject.toml").write_text(text)
+        base = _commit(repo, "chore: invalid historical project metadata")
+        (repo / "pyproject.toml").write_bytes(original)
+    elif shape == "base-current-version-mismatch":
+        prepare_release.set_engine_version(repo, _boundary_patch(_version(repo)))
+    _commit(repo, "fix: a genuine pending correction", touch="src/pending.txt")
+    if shape == "missing-full-oid":
+        base = "f" * 40
+    elif shape == "abbreviated-oid":
+        base = start[:12]
+    elif shape == "symbolic-ref":
+        base = "HEAD"
+    before = _boundary_outputs(repo)
+    for options in ({}, {"level": "patch"}, {"version": _boundary_patch(_version(repo))}):
+        with pytest.raises(ValueError):
+            prepare_release.prepare(repo, base=base, **options)
+        assert _boundary_outputs(repo) == before
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [
+        "ordinary-linear-feature", "ordinary-linear-fix", "ordinary-docs-only-refusal",
+        "ordinary-explicit-level-existing-semantics", "ordinary-explicit-version-existing-semantics",
+        "linear-clock-skew-ancestry-maximal-origin", "explicit-base-cancelled-fix-no-surviving-bump",
+        "explicit-base-unexplained-merge-refusal", "dependency-version-text-not-engine-origin",
+    ],
+)
+def test_release_boundary_preserves_ordinary_calls_and_lineage_guards(
+    repo: Path, monkeypatch, shape: str
+) -> None:
+    base = _git(repo, "rev-parse", "HEAD")
+    current = _version(repo)
+    options = {}
+    if shape == "ordinary-linear-feature":
+        _commit(repo, "feat: retain a normal feature", touch="src/feature.txt")
+    elif shape == "ordinary-docs-only-refusal":
+        _commit(repo, "docs: only explain", touch="docs/words.md")
+    elif shape.startswith("ordinary-explicit-"):
+        _commit(repo, "docs: only explain", touch="docs/words.md")
+        options = {"level": "patch"} if "-level-" in shape else {"version": _boundary_patch(current)}
+    elif shape == "explicit-base-cancelled-fix-no-surviving-bump":
+        _commit(repo, "fix: a cancelled feature", touch="src/cancelled.txt")
+        _git(repo, "rm", "-q", "src/cancelled.txt")
+        _commit(repo, "fix: remove the cancelled feature")
+        options = {"base": base}
+    elif shape == "explicit-base-unexplained-merge-refusal":
+        (repo / "src").mkdir(exist_ok=True)
+        (repo / "src/shared.txt").write_text("baseline\n")
+        start = _commit(repo, "chore: establish a merge source")
+        _git(repo, "checkout", "-q", "-b", "unexplained-left")
+        _commit(repo, "fix: left change", touch="src/shared.txt")
+        left = _git(repo, "rev-parse", "HEAD")
+        _git(repo, "checkout", "-q", "-b", "unexplained-right", start)
+        base = _commit(repo, "fix: right change", touch="src/shared.txt")
+        result = subprocess.run(["git", "merge", "--no-ff", "--no-commit", left], cwd=repo, capture_output=True)
+        assert result.returncode == 1
+        (repo / "src/shared.txt").write_text("unexplained manual bytes\n")
+        _commit(repo, "merge: invent an unexplained resolution")
+        options = {"base": base}
+    elif shape == "dependency-version-text-not-engine-origin":
+        path = repo / "pyproject.toml"
+        path.write_text(path.read_text() + '\n[tool.synthetic]\nversion = "8.9.0"\n')
+        _commit(repo, "fix: update dependency metadata")
+        assert prepare_release.last_version_change(repo) == base
+    else:
+        if shape == "linear-clock-skew-ancestry-maximal-origin":
+            monkeypatch.setenv("GIT_AUTHOR_DATE", "2001-01-01T00:00:00Z")
+            monkeypatch.setenv("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        _commit(repo, "fix: retain a normal correction", touch="src/correction.txt")
+    before = _boundary_outputs(repo)
+    if shape in {
+        "ordinary-docs-only-refusal", "explicit-base-cancelled-fix-no-surviving-bump",
+        "explicit-base-unexplained-merge-refusal",
+    }:
+        with pytest.raises(ValueError):
+            prepare_release.prepare(repo, **options)
+        assert _boundary_outputs(repo) == before
+        return
+    actual = prepare_release.prepare(repo, today=datetime.date(2026, 11, 8), **options)
+    major, minor, _patch = map(int, current.split("."))
+    expected = f"{major}.{minor + 1}.0" if shape == "ordinary-linear-feature" else _boundary_patch(current)
+    assert actual == expected
+    version_commit = _commit(repo, "chore: prepare a normal engine version")
+    assert prepare_release.last_version_change(repo) == version_commit
+    if shape == "dependency-version-text-not-engine-origin":
+        assert '[tool.synthetic]\nversion = "8.9.0"' in (repo / "pyproject.toml").read_text()
+    if not shape.startswith("ordinary-explicit-"):
+        assert check_release_intent.check(repo, base, version_commit) == []

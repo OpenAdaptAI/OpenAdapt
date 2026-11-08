@@ -6,7 +6,8 @@ that should ship sets the version and the changelog itself, and
 .github/workflows/desktop-release.yml publishes that version once it merges.
 This script makes that one step:
 
-    python scripts/prepare_release.py            # bump from the commits
+    python scripts/prepare_release.py            # bump from an unambiguous history
+    python scripts/prepare_release.py --base <full-commit-oid>  # comparison after a merge
     python scripts/prepare_release.py --bump minor
     python scripts/prepare_release.py --version 0.21.0
 
@@ -756,14 +757,107 @@ def required_level(commits: list[Commit], version: str) -> str | None:
     return level
 
 
-def last_version_change(root: Path) -> str:
-    """Return the newest commit that changed the project version."""
+def _commit_identity(root: Path, ref: str) -> str:
+    try:
+        oid = _git(root, "rev-parse", "--verify", "--end-of-options", ref + "^{commit}").strip()
+    except subprocess.CalledProcessError as exc:
+        raise ValueError("release history commit is unavailable") from exc
+    if re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", oid) is None:
+        raise ValueError("release history has an unsupported commit identity")
+    return oid
 
-    sha = _git(root, "log", "-1", "--format=%H", "-G", r'^version = "', "--", "pyproject.toml")
-    sha = sha.strip()
-    if not sha:
-        raise ValueError("no commit changed the version in pyproject.toml")
-    return sha
+
+def _complete_release_history(root: Path) -> None:
+    if _git(root, "rev-parse", "--is-shallow-repository").strip() != "false":
+        raise ValueError("release preparation requires complete commit ancestry")
+
+
+def _project_version_at(root: Path, ref: str) -> str | None:
+    state = _path_state(root, ref, "pyproject.toml")
+    if state is None:
+        return None
+    if state[0] not in {"100644", "100755"}:
+        raise ValueError("release history project metadata is not a regular file")
+    size = int(_git(root, "cat-file", "-s", state[1]).strip())
+    if not 0 <= size <= 8 * 1024 * 1024:
+        raise ValueError("release history project metadata exceeds its content bound")
+    text = _git(root, "cat-file", "blob", state[1])
+    if len(text.encode("utf-8")) != size:
+        raise ValueError("release history project metadata is incomplete")
+    spans = _release_version_spans("pyproject.toml", text)
+    start, end = spans[0]
+    return text[start:end]
+
+
+def last_version_change(root: Path) -> str:
+    """Find the unique ancestry-maximal origin of HEAD's engine version.
+
+    Walk actual parents while the canonical version stays the same. Path-log
+    simplification can discard an equal-version merge parent, and timestamps
+    cannot establish which of two incomparable origins is a release boundary.
+    """
+    _complete_release_history(root)
+    head = _commit_identity(root, "HEAD")
+    versions = {head: _project_version_at(root, head)}
+    current = versions[head]
+    if current is None:
+        raise ValueError("release history has no project version")
+    pending, seen, origins = [head], set(), set()
+    while pending:
+        commit = pending.pop()
+        if commit in seen:
+            continue
+        seen.add(commit)
+        row = _git(root, "rev-list", "--parents", "-n", "1", commit).split()
+        if not row or row[0] != commit:
+            raise ValueError("release history has incomplete parent metadata")
+        same = []
+        for parent in row[1:]:
+            if parent not in versions:
+                versions[parent] = _project_version_at(root, parent)
+            if versions[parent] == current:
+                same.append(parent)
+        if same:
+            pending.extend(same)
+        else:
+            origins.add(commit)
+    # Reusing a version later on one lineage does not make its older origin
+    # another current boundary. Incomparable origins remain ambiguous.
+    maximal = set(origins)
+    for candidate in origins:
+        for other in origins - {candidate}:
+            result = subprocess.run(
+                ["git", "merge-base", "--is-ancestor", candidate, other],
+                cwd=root, capture_output=True,
+            )
+            if result.returncode == 0:
+                maximal.discard(candidate)
+            elif result.returncode != 1:
+                raise ValueError("release history ancestry is unavailable")
+    if len(maximal) != 1:
+        raise ValueError("ambiguous engine-version history; pass --base with a full commit identity")
+    return maximal.pop()
+
+
+def _release_commits(root: Path, base: str | None, current: str) -> list[Commit]:
+    if base is None:
+        return commits_between(root, last_version_change(root))
+    # This is a caller-selected comparison boundary, not publication proof.
+    if re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", base) is None:
+        raise ValueError("--base requires a full immutable commit identity")
+    _complete_release_history(root)
+    if _commit_identity(root, base) != base:
+        raise ValueError("--base does not identify the declared commit")
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", base, "HEAD"], cwd=root, capture_output=True
+    )
+    if result.returncode != 0:
+        raise ValueError("--base must be an available ancestor of HEAD")
+    text = (root / "pyproject.toml").read_text(encoding="utf-8")
+    start, end = _release_version_spans("pyproject.toml", text)[0]
+    if text[start:end] != current or _project_version_at(root, base) != current:
+        raise ValueError("--base project version must match the current engine version")
+    return commits_for_net_diff(root, base, "HEAD")
 
 
 def changelog_section(version: str, commits: list[Commit], today: datetime.date) -> str:
@@ -826,12 +920,13 @@ def set_engine_version(root: Path, version: str) -> None:
 def prepare(
     root: Path,
     *,
+    base: str | None = None,
     level: str | None = None,
     version: str | None = None,
     today: datetime.date | None = None,
 ) -> str:
     current = check_release_consistency.release_versions(root)["pyproject.toml"]
-    commits = commits_between(root, last_version_change(root))
+    commits = _release_commits(root, base, current)
     if version is None:
         level = level or required_level(commits, current)
         if level is None:
@@ -849,12 +944,15 @@ def prepare(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--base", help="full caller-selected comparison commit; not publication proof"
+    )
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--bump", choices=LEVELS)
     group.add_argument("--version")
     args = parser.parse_args(argv)
     try:
-        version = prepare(ROOT, level=args.bump, version=args.version)
+        version = prepare(ROOT, base=args.base, level=args.bump, version=args.version)
     except ValueError as exc:
         parser.exit(1, f"error: {exc}\n")
     print(f"Prepared openadapt-desktop {version}. Review CHANGELOG.md, then commit.")

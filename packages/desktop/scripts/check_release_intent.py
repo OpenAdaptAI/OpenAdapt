@@ -51,6 +51,7 @@ def version_at(root: Path, ref: str) -> str:
 def check(root: Path, base: str, head: str) -> list[str]:
     """Return the problems with this change; empty means it may merge."""
 
+    base = prepare_release._commit_identity(root, base)
     base_version = version_at(root, base)
     head_version = version_at(root, head)
     commits = prepare_release.commits_for_net_diff(root, base, head)
@@ -74,7 +75,7 @@ def check(root: Path, base: str, head: str) -> list[str]:
     if stale:
         problems.append(
             f"version sources disagree with {head_version}: {stale}; "
-            "run scripts/prepare_release.py --version " + head_version
+            "run scripts/prepare_release.py --version " + head_version + " --base " + base
         )
 
     if head_version == base_version:
@@ -86,7 +87,7 @@ def check(root: Path, base: str, head: str) -> list[str]:
             f"This pull request changes Desktop in a way that should ship:\n{listed}\n"
             f"but keeps version {base_version}, so nothing would be released. Bump to "
             f"{suggested} ({needed}) with:\n"
-            f"  cd packages/desktop && python scripts/prepare_release.py --bump {needed}"
+            f"  cd packages/desktop && python scripts/prepare_release.py --bump {needed} --base {base}"
         ]
 
     if prepare_release.parse_version(head_version) <= prepare_release.parse_version(base_version):
