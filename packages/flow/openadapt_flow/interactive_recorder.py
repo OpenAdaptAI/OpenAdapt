@@ -4200,6 +4200,23 @@ class InteractiveRecorder:
         if pending is not None:
             self._record_pointer(pending)
 
+    @staticmethod
+    def _require_deferred_document(
+        pending: Optional[dict[str, Any]], ev: dict[str, Any]
+    ) -> None:
+        """A retained action can merge only with its known producer document."""
+
+        if pending is None:
+            return
+        previous = pending.get("_oaflow_producer_doc")
+        current = ev.get("_oaflow_producer_doc")
+        if not isinstance(previous, str) or not previous or previous != current:
+            raise BrowserAttachError(
+                "a deferred browser action crossed document boundaries or "
+                "lost its producer ownership; recording stopped without "
+                "complete metadata"
+            )
+
     def _absorb_pending_click(self, ev: dict[str, Any]) -> None:
         """Discard the held first click of this double-click gesture.
 
@@ -4207,6 +4224,7 @@ class InteractiveRecorder:
         its demonstrated order instead."""
 
         pending = self._pending_click
+        self._require_deferred_document(pending, ev)
         self._pending_click = None
         if pending is None:
             return
@@ -4220,6 +4238,7 @@ class InteractiveRecorder:
     # -- accumulation / flush ------------------------------------------------
 
     def _accumulate_input(self, ev: dict[str, Any]) -> None:
+        self._require_deferred_document(self._pending_type, ev)
         field = ev.get("field")
         input_session = ev.get("_oaflow_input_session")
         if self._pending_type is not None and (
@@ -4229,6 +4248,7 @@ class InteractiveRecorder:
             self._flush_type()  # focus moved to a different field
         if self._pending_type is None:
             self._pending_type = {
+                "_oaflow_producer_doc": ev.get("_oaflow_producer_doc"),
                 "field": field,
                 "input_session": input_session,
                 "label": ev.get("label"),
@@ -4321,8 +4341,10 @@ class InteractiveRecorder:
         self._set_last(after_png, structural_after)
 
     def _accumulate_scroll(self, ev: dict[str, Any]) -> None:
+        self._require_deferred_document(self._pending_scroll, ev)
         if self._pending_scroll is None:
             self._pending_scroll = {
+                "_oaflow_producer_doc": ev.get("_oaflow_producer_doc"),
                 "dx": 0,
                 "dy": 0,
                 "structural_before": dict(self._last_structural),
