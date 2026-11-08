@@ -2,13 +2,14 @@
   "manifest_version": 3,
   "name": "OpenAdapt Extension Evidence (optional)",
   "version": "0.1.0",
-  "description": "Optional everyday-Chrome evidence for OpenAdapt recordings: open shadow DOM targets while a recording is active. Not required; accessibility recording still works without it.",
+  "description": "Optional everyday-Chrome evidence for OpenAdapt recordings: open shadow DOM targets and iframe context (including cross-origin frames) while a recording is active. Not required; accessibility recording still works without it.",
   "permissions": [
     "activeTab",
     "tabs",
     "scripting",
     "storage",
-    "nativeMessaging"
+    "nativeMessaging",
+    "webRequest"
   ],
   "host_permissions": [
     "<all_urls>"

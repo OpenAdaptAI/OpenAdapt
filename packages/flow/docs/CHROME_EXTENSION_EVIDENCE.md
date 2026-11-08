@@ -36,6 +36,32 @@ shadow root reports the inner element (`host >>> inner`). Closed shadow roots
 are opaque to page and content-script JS: evidence stops at their host, and no
 value from inside them is sent.
 
+## Frames, including cross-origin iframes
+
+Accessibility sees a cross-origin iframe as an opaque web area, and page JS in
+the parent cannot read it. The content script runs in every frame
+(`all_frames: true`), so each child frame reports its own targets. Every line
+carries frame context:
+
+- `frame_url`: the frame's URL with query, fragment and credentials removed
+  (they often carry tokens). `data:`/`blob:` URLs keep only the scheme.
+- `frame_origin`, `is_iframe`, and `cross_origin_parent` (the parent's
+  location is unreadable).
+- `frame`: `{tab_id, frame_id, document_id, origin}`, stamped by the
+  extension background from Chrome's `MessageSender`. The page cannot spoof
+  it; any page-supplied `frame` block is replaced. `sender.url` is not copied.
+
+When focus enters a child frame, the parent emits a `frame_focus` line that
+describes the `<iframe>` element from the parent side: its shadow-piercing
+`path`, stripped `frame_src`, `child_origin` and `cross_origin_child`.
+
+Engine helpers: `strip_url`, `frame_key`, `group_by_frame`,
+`cross_origin_frame_targets`, and `link_frame_targets`, which attaches
+`parent_frame_path`/`parent_frame_url` to child targets whose `frame_url`
+matches the latest `frame_focus` `frame_src`. The link is extra evidence; an
+unmatched child target is returned unchanged. Ingest strips frame URLs and
+keeps only typed `frame` keys again (defense in depth).
+
 ## Safety
 
 - Capture only while recording is active (visible `REC` badge).
@@ -49,5 +75,8 @@ value from inside them is sent.
 
 ## Deferred
 
-Network save capture, cross-origin iframe traversal, compiler identity use,
-and store listing.
+Compiler identity use (including frame paths) and store listing. Network
+saves are covered in [CHROME_EXTENSION_NETWORK.md](CHROME_EXTENSION_NETWORK.md).
+Frame linking is by stripped URL and arrival order, so two same-URL frames
+focused in turn can be confused; a later slice can use `chrome.webNavigation`
+parent frame ids instead.

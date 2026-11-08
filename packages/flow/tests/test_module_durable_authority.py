@@ -75,11 +75,16 @@ def test_module_setup_isolated_and_restored(
                 child_code = (
                     "import sys, uuid; from pathlib import Path; "
                     "from tests.test_durable_authority_v13 import _fresh_run; "
+                    "from openadapt_flow.at_rest import default_key, record_plaintext; "
+                    "from openadapt_flow.runtime.effects.db_snapshot import _host_secret; "
                     "_, _, manifest, authority = _fresh_run("
                     "Path(sys.argv[1]), run_id=str(uuid.uuid4()), "
                     "namespace_id=uuid.uuid4().hex); "
                     "assert authority.db_path == Path(sys.argv[2]); "
-                    "assert authority.validate(manifest).phase == 'active'"
+                    "assert authority.validate(manifest).phase == 'active'; "
+                    "_host_secret(); "
+                    "default_key(); "
+                    "record_plaintext('probe', 'test')"
                 )
                 child = subprocess.run(
                     [sys.executable, "-c", child_code,
@@ -103,6 +108,16 @@ def test_module_setup_isolated_and_restored(
     env = dict(os.environ)
     env["HOME"] = str(home)
     env["PYTHONPATH"] = str(FLOW)
+    for var in (
+        "OPENADAPT_SEAL_HOME",
+        "OPENADAPT_FRAME_SECRET",
+        "OPENADAPT_FRAME_SECRET_FILE",
+        "OPENADAPT_LEDGER_DIR",
+        "OPENADAPT_FLOW_PLAINTEXT_AT_REST",
+        "OPENADAPT_FLOW_AT_REST_HOME",
+        "OPENADAPT_FLOW_AT_REST",
+    ):
+        env.pop(var, None)
     if prior_set:
         env[AUTHORITY_ENV] = str(external)
     else:
@@ -145,6 +160,12 @@ def test_module_setup_isolated_and_restored(
         "restored": str(external) if prior_set else None,
         "exitstatus": 1 if setup_fails else 0,
     }
+    leaked = [
+        str(p.relative_to(home))
+        for p in home.rglob("*")
+        if p.is_file() and p != default
+    ]
+    assert not leaked, f"test leaked state into HOME: {leaked}"
 
 
 def test_a_locked_owned_authority_still_refuses(tmp_path: Path) -> None:

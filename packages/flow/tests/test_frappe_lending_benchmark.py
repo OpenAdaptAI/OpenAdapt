@@ -8,6 +8,7 @@ import stat
 import subprocess
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -105,6 +106,23 @@ class FakeSession:
     def get(self, url: str, *, timeout: float) -> FakeResponse:
         self.urls.append(url)
         return FakeResponse(self.body)
+
+
+def _complete_array_oracle(*args: Any, **kwargs: Any) -> FrappeLoanApplicationOracle:
+    """The FakeSession above returns its entire literal array in one response."""
+    oracle = FrappeLoanApplicationOracle(*args, **kwargs)
+    oracle.verifier.records_complete = True
+    return oracle
+
+
+def test_bounded_live_oracle_has_no_implicit_completeness_declaration() -> None:
+    oracle = FrappeLoanApplicationOracle(
+        "http://fixture", FakeSession({"data": []}), timeout_s=0.1
+    )
+    state = oracle.capture()
+    assert state.reachable is False
+    assert state.readback_complete is None
+    assert state.records == []
 
 
 def test_lock_contains_exact_source_and_oci_pins() -> None:
@@ -751,7 +769,7 @@ def test_typed_effects_and_api_binding_share_all_task_fields() -> None:
 
 def test_oracle_uses_filtered_read_only_rest_record_shape() -> None:
     session = FakeSession({"data": [exact_record()]})
-    oracle = FrappeLoanApplicationOracle("http://fixture", session, timeout_s=0.1)
+    oracle = _complete_array_oracle("http://fixture", session, timeout_s=0.1)
     state = oracle.capture()
     assert state.reachable
     assert state.records == [exact_record()]

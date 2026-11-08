@@ -11,8 +11,6 @@ through both registration paths.
 
 from __future__ import annotations
 
-from openadapt_flow.runtime.effects.fhir import DEFAULT_OBSERVATION_PATHS
-
 import importlib.metadata
 from datetime import datetime, timedelta, timezone
 
@@ -51,6 +49,7 @@ from openadapt_flow.runtime.effects import (
 )
 from openadapt_flow.runtime.effects import adapter as adapter_mod
 from openadapt_flow.runtime.effects.adapter import parse_timestamp
+from openadapt_flow.runtime.effects.fhir import DEFAULT_OBSERVATION_PATHS
 from openadapt_flow.runtime.effects.onscreen import OnScreenReadbackVerifier
 from openadapt_flow.transaction import TransactionOutcome
 from openadapt_flow.verification import VerificationTier
@@ -154,7 +153,12 @@ class TestAdapterInterface:
     def test_test_connection_ok(self):
         session = FakeSession([FakeResponse(200, {"records": []})])
         verifier = RestRecordVerifier(
-            "http://sor", records_path="/api/db", records_key="records", session=session
+            "http://sor",
+            records_path="/api/db",
+            records_key="records",
+            session=session,
+            # The test-owned scripted response is the entire fixture snapshot.
+            records_complete=True,
         )
         probe = verifier.test_connection()
         assert isinstance(probe, ConnectionProbe)
@@ -187,7 +191,12 @@ class TestAdapterInterface:
             ]
         )
         verifier = RestRecordVerifier(
-            "http://sor", records_path="/api/db", records_key="records", session=session
+            "http://sor",
+            records_path="/api/db",
+            records_key="records",
+            session=session,
+            # The test-owned scripted response is the entire fixture snapshot.
+            records_complete=True,
         )
         before = verifier.capture_pre_state()
         after = verifier.capture_post_state()

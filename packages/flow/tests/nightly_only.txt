@@ -18,8 +18,6 @@ tests/test_desktop_check_it_cli_mockmed.py  # 126s
 tests/test_effectbench_task_pack.py  # 34s
 tests/test_ap_invoice_benchmark.py  # 12s
 tests/test_o2c_recon_benchmark.py  # 9s
-tests/test_ui_readback_benchmark.py  # 24s
-tests/test_silent_wrong_action_benchmark.py  # 31s
 
 tests/test_agent_teach_branch.py::test_two_demonstrations_become_one_approved_branch  # 5s
 tests/test_agent_teach_repair.py::test_dismiss_without_a_dialog_box_stays_unarmed  # 8s

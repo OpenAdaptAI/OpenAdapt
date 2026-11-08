@@ -20,6 +20,9 @@ import json
 import re
 from pathlib import Path
 from typing import Any, Iterable, Mapping, MutableMapping, Optional
+from urllib.parse import urlsplit
+
+from openadapt_flow.extension_network import NETWORK_SAVE_KIND, redact_network_save
 
 EVIDENCE_FILE = "extension_evidence.jsonl"
 SCHEMA = "openadapt.extension-evidence/1"
@@ -29,6 +32,62 @@ SECRET_NAME = re.compile(
     r"pass(word|wd|phrase)?\b|passwd|pwd|secret|private[_-]?key|^pin$|^otp$",
     re.I,
 )
+
+
+EVIDENCE_KINDS = frozenset({"target", "frame_focus"})
+URL_FIELDS = ("frame_url", "frame_src")
+_FRAME_INT_KEYS = ("tab_id", "frame_id")
+_FRAME_STR_KEYS = ("document_id", "origin")
+
+
+def strip_url(url: Any) -> Optional[str]:
+    """A URL without credentials, query or fragment (those often carry tokens).
+
+    ``http``/``https`` keep scheme, host and path. ``about:`` keeps its path
+    (``about:srcdoc``). Every other scheme (``data:``, ``blob:``, ...) keeps
+    only the scheme, since the rest can be page content.
+    """
+
+    if not isinstance(url, str) or not url:
+        return None
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return None
+    scheme = parts.scheme.lower()
+    if scheme in ("http", "https"):
+        host = parts.hostname or ""
+        if ":" in host:
+            # IPv6 literal: keep the brackets, or the result is not a URL and
+            # the next pass (ingest re-redacts on load) can't parse it.
+            host = f"[{host}]"
+        try:
+            port = parts.port
+        except ValueError:
+            return None
+        if port is not None:
+            host = f"{host}:{port}"
+        return f"{scheme}://{host}{parts.path}"
+    if scheme == "about":
+        return f"about:{parts.path}"
+    return f"{scheme}:" if scheme else None
+
+
+def _clean_frame(frame: Any) -> Optional[dict[str, Any]]:
+    """Keep only the typed frame identity keys the extension background stamps."""
+
+    if not isinstance(frame, Mapping):
+        return None
+    out: dict[str, Any] = {}
+    for key in _FRAME_INT_KEYS:
+        value = frame.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            out[key] = value
+    for key in _FRAME_STR_KEYS:
+        value = frame.get(key)
+        if isinstance(value, str) and value:
+            out[key] = strip_url(value) if key == "origin" else value
+    return out or None
 
 
 def is_secret_field(
@@ -80,6 +139,17 @@ def redact_evidence(
     )
     # Rebuild without carrying a live secret value forward.
     out: dict[str, Any] = {k: v for k, v in line.items() if k != "value"}
+    # Frame URLs lose query/fragment/credentials; frame identity keeps only
+    # typed keys. Defense in depth: the extension already strips both.
+    for key in URL_FIELDS:
+        if key in out:
+            out[key] = strip_url(out[key])
+    if "frame" in out:
+        frame = _clean_frame(out["frame"])
+        if frame is None:
+            del out["frame"]
+        else:
+            out["frame"] = frame
     if secret:
         out["secret_field"] = True
         if "value" in line:
@@ -106,9 +176,19 @@ class ExtensionEvidenceBuffer:
         return len(self._lines)
 
     def append(self, line: Mapping[str, Any]) -> dict[str, Any]:
-        """Redact and keep one evidence line. Returns the stored copy."""
+        """Redact and keep one evidence line. Returns the stored copy.
 
-        stored = redact_evidence(line, secret_names=self._secret_names)
+        A ``network_save`` line goes through the fail-closed network redactor;
+        one it cannot redact is refused (``ValueError``) and nothing is kept.
+        """
+
+        if line.get("kind") == NETWORK_SAVE_KIND:
+            network = redact_network_save(line)
+            if network is None:
+                raise ValueError("network_save evidence could not be redacted")
+            stored = network
+        else:
+            stored = redact_evidence(line, secret_names=self._secret_names)
         stored.setdefault("schema", SCHEMA)
         if "seq" not in stored:
             stored["seq"] = len(self._lines)
@@ -132,6 +212,11 @@ class ExtensionEvidenceBuffer:
         chunks = [json.dumps(header, sort_keys=True)]
         for line in lines:
             row = dict(line)
+            if row.get("kind") == NETWORK_SAVE_KIND:
+                network = redact_network_save(row)
+                if network is None:
+                    continue
+                row = network
             if row.get("secret_field") and "value" in row:
                 row["value"] = "<secret>"
             chunks.append(json.dumps(row, sort_keys=True))
@@ -155,7 +240,16 @@ def load_extension_evidence(recording_dir: Path | str) -> list[dict[str, Any]]:
     header = rows[0]
     if header.get("schema") != SCHEMA:
         raise ValueError(f"{path} is not a {SCHEMA} capture")
-    return [redact_evidence(row) for row in rows[1:]]
+    out: list[dict[str, Any]] = []
+    for row in rows[1:]:
+        if row.get("kind") == NETWORK_SAVE_KIND:
+            # Re-redact on load; a line that cannot be redacted is dropped.
+            network = redact_network_save(row)
+            if network is not None:
+                out.append(network)
+            continue
+        out.append(redact_evidence(row))
+    return out
 
 
 def shadow_targets(lines: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -197,6 +291,89 @@ def validate_native_message(message: Mapping[str, Any]) -> MutableMapping[str, A
     evidence = message.get("evidence")
     if not isinstance(evidence, Mapping):
         raise ValueError("evidence object required")
-    if evidence.get("kind") != "target":
-        raise ValueError("this slice accepts kind=target evidence only")
+    if evidence.get("kind") == NETWORK_SAVE_KIND:
+        network = redact_network_save(evidence)
+        if network is None:
+            raise ValueError("network_save evidence could not be redacted")
+        return network
+    if evidence.get("kind") not in EVIDENCE_KINDS:
+        raise ValueError(
+            "evidence kind must be one of: " + ", ".join(sorted(EVIDENCE_KINDS))
+        )
     return redact_evidence(evidence)
+
+
+def frame_key(line: Mapping[str, Any]) -> tuple[Any, ...]:
+    """Stable key for the frame a line came from.
+
+    Prefer Chrome's (tab, frame, document) identity stamped by the extension
+    background; fall back to the stripped frame URL for older lines.
+    """
+
+    frame = line.get("frame")
+    if isinstance(frame, Mapping) and "frame_id" in frame:
+        return (
+            "frame",
+            frame.get("tab_id"),
+            frame.get("frame_id"),
+            frame.get("document_id"),
+        )
+    return ("url", strip_url(line.get("frame_url")))
+
+
+def group_by_frame(
+    lines: Iterable[Mapping[str, Any]],
+) -> dict[tuple[Any, ...], list[dict[str, Any]]]:
+    """Evidence lines grouped by source frame, in arrival order."""
+
+    groups: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+    for line in lines:
+        groups.setdefault(frame_key(line), []).append(dict(line))
+    return groups
+
+
+def cross_origin_frame_targets(
+    lines: Iterable[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Target lines from a child frame whose parent is a different origin.
+
+    Accessibility sees these frames as opaque web areas; the extension's copy
+    of the content script running inside the frame supplies the DOM detail.
+    """
+
+    return [
+        dict(line)
+        for line in lines
+        if line.get("kind") == "target"
+        and line.get("is_iframe")
+        and line.get("cross_origin_parent")
+    ]
+
+
+def link_frame_targets(
+    lines: Iterable[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Attach the parent-side ``<iframe>`` path to child-frame targets.
+
+    A parent frame emits ``frame_focus`` when focus enters a child frame
+    (``frame_src`` = stripped child URL). Each later child target whose
+    stripped ``frame_url`` matches the most recent ``frame_focus`` gets
+    ``parent_frame_path``. Unmatched targets are returned unchanged: the link
+    is extra evidence, never required.
+    """
+
+    rows = [dict(line) for line in lines]
+    last_focus: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if row.get("kind") == "frame_focus":
+            src = strip_url(row.get("frame_src"))
+            if src:
+                last_focus[src] = row
+            continue
+        if row.get("kind") != "target" or not row.get("is_iframe"):
+            continue
+        focus = last_focus.get(strip_url(row.get("frame_url")) or "")
+        if focus is not None:
+            row["parent_frame_path"] = focus.get("path")
+            row["parent_frame_url"] = strip_url(focus.get("frame_url"))
+    return rows

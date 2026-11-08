@@ -1339,6 +1339,22 @@ class CaptureSession:
             return config.get("capture_desktop")
         return None
 
+    @property
+    def locale_facts(self) -> dict | None:
+        """Locale, date order and keyboard layout read when recording began.
+
+        ``{"locale", "date_order", "keyboard_layout"}``, each a normalized
+        string or None when the OS didn't report it (see
+        ``locale_facts.py``). None for a recording made before capture
+        persisted them. Converters carry this as it is and never replace it
+        with the converting computer's settings.
+        """
+
+        config = getattr(self._recording, "config", None)
+        if isinstance(config, dict):
+            return config.get("capture_locale")
+        return None
+
     def narration(self) -> list | None:
         """Scrubbed spoken narration as timed sentences, or None.
 

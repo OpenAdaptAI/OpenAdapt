@@ -68,6 +68,7 @@ from openadapt_flow.qualify.environment import (
 )
 from openadapt_flow.qualify.faults import WebFaultDriver
 from openadapt_flow.qualify.keys import LocalTestKey, new_local_test_key
+from openadapt_flow.subroutines import SubroutineLibrary, uses_subroutines
 from openadapt_flow.verification import VerificationTier
 
 #: (case id, expected outcome, oracle kind), in run order.
@@ -869,11 +870,33 @@ def _judge_trial(
 
 
 def _evidence_ref(root: Path, path: Path, kind: Any) -> Any:
+    from openadapt_flow.evidence_files import is_publication_input_path_excluded
     from openadapt_flow.qualification import EvidenceRef
 
+    if is_publication_input_path_excluded(path.relative_to(root)):
+        raise QualifyError(
+            "Local key material or unclassified containers cannot be qualification evidence"
+        )
     return EvidenceRef(
         kind=kind, sha256=_sha256(path), relative_path=path.relative_to(root).as_posix()
     )
+
+
+def _run_evidence_refs(root: Path, run_dir: Path) -> list[Any]:
+    from openadapt_flow import sealed_set
+    from openadapt_flow.evidence_files import is_publication_input_path_excluded
+
+    run_files = (
+        sealed_set.list_files(run_dir)
+        if sealed_set.is_sealed_path(run_dir)
+        else [path for path in run_dir.rglob("*") if path.is_file()]
+    )
+    return [
+        _evidence_ref(root, path, "other")
+        for path in sorted(run_files)
+        if path.name != "report.json"
+        and not is_publication_input_path_excluded(path.relative_to(root))
+    ]
 
 
 def case_result(
@@ -905,20 +928,10 @@ def case_result(
     if project is None:
         raise QualifyError("the workflow's qualification project disappeared")
     run_dir = trial_dir / "run"
-    from openadapt_flow import sealed_set
 
     # A sealed bundle's run directory is a sealed set: its files are bound by
     # their logical names and plaintext digests, as the run report names them.
-    run_files = (
-        sealed_set.list_files(run_dir)
-        if sealed_set.is_sealed_path(run_dir)
-        else [path for path in run_dir.rglob("*") if path.is_file()]
-    )
-    run_artifacts = [
-        _evidence_ref(root, path, "other")
-        for path in sorted(run_files)
-        if path.name != "report.json"
-    ]
+    run_artifacts = _run_evidence_refs(root, run_dir)
     faults = (
         [
             _evidence_ref(root, trial_dir / "fault-receipt.json", "fault_receipt"),
@@ -1248,6 +1261,8 @@ def qualify(
     in_place: bool = False,
     write_campaign_files: bool = True,
     log: Callable[[str], None] = print,
+    subroutine_library: Optional[SubroutineLibrary] = None,
+    persist_subroutine_registration: Optional[Callable[[], None]] = None,
 ) -> QualifyResult:
     """Run the campaign; certify under ``certify`` (a policy name) if given.
 
@@ -1260,6 +1275,12 @@ def qualify(
     ``evidence_root`` (default ``out``) is the root case evidence is relative
     to. ``write_campaign_files=False`` leaves out the campaign summary,
     timing, notes and ``QUALIFICATION.md`` (for packs that list every file).
+    ``subroutine_library`` is the library certification admits embedded
+    subroutines against (and registers this workflow with); a bundle that
+    embeds one is refused before any run when certifying without it.
+    ``persist_subroutine_registration`` writes that library; it runs right
+    after certification, before the certified bundle is saved, and when it
+    raises the certification is withdrawn and the bundle saved uncertified.
     """
 
     from openadapt_flow.policy import load_policy
@@ -1267,6 +1288,7 @@ def qualify(
         QualificationCaseKind,
         certify_project,
         evaluate_qualification,
+        persist_registration_before_certificate,
         record_case_results,
         save_qualified_workflow,
     )
@@ -1310,6 +1332,15 @@ def qualify(
     )
 
     workflow = Workflow.load(bundle_src)
+    if (
+        certify is not None
+        and subroutine_library is None
+        and uses_subroutines(workflow)
+    ):
+        raise QualifyConfigError(
+            "the bundle embeds subroutines; --certify needs --subroutine-library "
+            "to admit them"
+        )
     save, notes = apply_verify_config(workflow, config)
     params = resolve_inputs(workflow, config, campaign_id=campaign_id)
     problems = check_ready(workflow, config, save, params)
@@ -1651,7 +1682,15 @@ def qualify(
     )
     if certify is not None:
         qreport = certify_project(
-            workflow, policy=load_policy(certify), evidence_root=root
+            workflow,
+            policy=load_policy(certify),
+            evidence_root=root,
+            subroutine_library=subroutine_library,
+        )
+        # The registration is durable before any certified save below
+        # (business rules, the admission envelope, the final bundle).
+        persist_registration_before_certificate(
+            workflow, bundle_dir, persist_subroutine_registration
         )
     else:
         qreport = evaluate_qualification(workflow, evidence_root=root)

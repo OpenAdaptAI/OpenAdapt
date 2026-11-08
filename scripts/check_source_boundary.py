@@ -507,7 +507,7 @@ def scan_built_artifacts(dist: Path, policy: SourcePolicy) -> list[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument(
         "--root",
         type=Path,

@@ -198,7 +198,7 @@ def _sha256(path: Path) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("dist_dir", nargs="?", type=Path, default=ROOT / "dist")
     args = parser.parse_args()
     try:
