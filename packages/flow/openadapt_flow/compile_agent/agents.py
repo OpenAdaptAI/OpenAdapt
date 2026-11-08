@@ -31,8 +31,10 @@ with a ``dialect`` and ``drive(request, harness)`` works.
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Any, ClassVar, Mapping, Optional, Sequence
 
 from openadapt_flow.compile_agent.harness import GateRefused, Harness, StaleRef
@@ -47,6 +49,7 @@ __all__ = [
     "ClaudeAgent",
     "DEFAULT_MODEL",
     "ModelCall",
+    "ToolInvocation",
     "PRICES_PER_MTOK",
     "ScriptedAgent",
 ]
@@ -105,6 +108,15 @@ class ModelCall:
 
 
 @dataclass
+class ToolInvocation:
+    """One actual tool invocation, without its arguments or returned data."""
+
+    name: str
+    seconds: float
+    outcome: str
+
+
+@dataclass
 class AgentLedger:
     """What one agent run cost: model calls, tokens, time, and screenshots."""
 
@@ -119,10 +131,19 @@ class AgentLedger:
     summary: Optional[str] = None
     tool_errors: int = 0
     prices: Optional[dict[str, float]] = None
+    tool_invocations: list[ToolInvocation] = field(default_factory=list)
+    usage_known: bool = True
+    model_requests_started: int = 0
+    pricing_model: Optional[str] = None
+    pricing_source_url: Optional[str] = None
+    pricing_verified_at: Optional[str] = None
+    pricing_tier: Optional[str] = None
 
     @property
     def model_calls(self) -> int:
-        return len(self.calls)
+        # Count observed request starts even when a provider failed before
+        # returning usage. Such a prefix is not a zero-call run.
+        return max(self.model_requests_started, len(self.calls))
 
     def total(self, name: str) -> int:
         return sum(int(getattr(call, name)) for call in self.calls)
@@ -139,7 +160,12 @@ class AgentLedger:
         ) / 1_000_000
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        price_known = (
+            self.prices is not None
+            or self.model in PRICES_PER_MTOK
+            or self.model_calls == 0
+        )
+        result = {
             "agent": self.agent,
             "model": self.model,
             "vision": self.vision,
@@ -150,14 +176,29 @@ class AgentLedger:
             "cache_read_input_tokens": self.total("cache_read_input_tokens"),
             "prompt_tokens": sum(call.prompt_tokens for call in self.calls),
             "images_in_requests": sum(call.images_in_request for call in self.calls),
-            "cost_usd": round(self.cost_usd(), 6),
+            "cost_usd": (
+                round(self.cost_usd(), 6) if self.usage_known and price_known else None
+            ),
             "wall_seconds": round(self.wall_seconds, 3),
             "model_seconds": round(self.model_seconds, 3),
             "finished": self.finished,
             "summary": self.summary,
             "tool_errors": self.tool_errors,
             "calls": [dict(call.__dict__) for call in self.calls],
+            "tool_invocations": [dict(call.__dict__) for call in self.tool_invocations],
+            "usage_known": self.usage_known,
+            "model_requests_started": self.model_calls,
         }
+        if self.pricing_model is not None:
+            result.update(
+                {
+                    "pricing_model": self.pricing_model,
+                    "pricing_source_url": self.pricing_source_url,
+                    "pricing_verified_at": self.pricing_verified_at,
+                    "pricing_tier": self.pricing_tier,
+                }
+            )
+        return result
 
 
 # -- scripted ----------------------------------------------------------------------
@@ -398,6 +439,37 @@ def _count_images(messages: Sequence[Mapping[str, Any]]) -> int:
     return count
 
 
+def _request_size_bytes(system: Any, tools: Any, messages: Any, extra: Any) -> int:
+    """Return a conservative serialized request size before provider I/O."""
+
+    def json_value(value: Any) -> Any:
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, Mapping):
+            return {str(key): json_value(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [json_value(item) for item in value]
+        dump = getattr(value, "model_dump", None)
+        if callable(dump):
+            return json_value(dump(exclude_none=True))
+        raise TypeError("request contains an unsupported value")
+
+    body = json.dumps(
+        json_value(
+            {
+                "system": system,
+                "tools": tools,
+                "messages": messages,
+                "extra": extra,
+            }
+        ),
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    )
+    return len(body.encode("utf-8"))
+
+
 @dataclass
 class ClaudeAgent:
     """A live Claude computer-use loop on the customer's own key.
@@ -427,7 +499,16 @@ class ClaudeAgent:
     #: USD per million tokens (input, output, cache_write, cache_read) for a
     #: model not in :data:`PRICES_PER_MTOK`. The cost cap needs a price.
     prices: Optional[dict[str, float]] = None
+    pricing_source_url: Optional[str] = None
+    pricing_verified_at: Optional[str] = None
+    #: The provider adapter enables token-count and per-request reservation
+    #: before generation. Older direct callers retain their legacy behavior.
+    preflight_required: bool = False
+    max_input_bytes: int = 65536
+    request_timeout_seconds: float = 25.0
+    max_run_seconds: float = 110.0
     requires_model_key: ClassVar[bool] = True
+    model_key_provider: ClassVar[str] = "anthropic"
 
     def __post_init__(self) -> None:
         if self.vision not in VISION_MODES:
@@ -461,12 +542,27 @@ class ClaudeAgent:
             raise RuntimeError("ClaudeAgent needs the customer's model key")
         import anthropic
 
-        return anthropic.Anthropic(api_key=request.model_key.secret(), max_retries=4)
+        return anthropic.Anthropic(
+            api_key=request.model_key.secret(),
+            max_retries=0 if self.preflight_required else 4,
+            timeout=self.request_timeout_seconds if self.preflight_required else 600.0,
+        )
 
     def drive(self, request: TaskRequest, harness: Harness) -> AgentLedger:
+        deadline = time.monotonic() + self.max_run_seconds
         client = self._client(request)
         ledger = AgentLedger(
-            agent="claude", model=self.model, vision=self.vision, prices=self.prices
+            agent="claude",
+            model=self.model,
+            vision=self.vision,
+            prices=self.prices,
+            pricing_model=self.model if self.preflight_required else None,
+            pricing_source_url=(
+                self.pricing_source_url if self.preflight_required else None
+            ),
+            pricing_verified_at=(
+                self.pricing_verified_at if self.preflight_required else None
+            ),
         )
         #: Kept so a run that raises still reports what it spent.
         self.last_ledger = ledger
@@ -515,35 +611,117 @@ class ClaudeAgent:
             extra["output_config"] = {"effort": self.effort}
         try:
             for turn in range(1, self.max_turns + 1):
+                self._check_run_deadline(deadline)
+                call_client = client
+                input_token_bound: Optional[int] = None
+                if self.preflight_required:
+                    request_size = _request_size_bytes(system, tools, messages, extra)
+                    if request_size > self.max_input_bytes:
+                        raise BudgetExceeded(
+                            "rendered request exceeds the configured input-byte ceiling"
+                        )
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError(
+                            "agent run deadline expired before token count"
+                        )
+                    call_timeout = min(self.request_timeout_seconds, remaining)
+                    with_options = getattr(client, "with_options", None)
+                    if not callable(with_options):
+                        raise RuntimeError(
+                            "preflight client must support bounded no-retry request options"
+                        )
+                    call_client = with_options(timeout=call_timeout, max_retries=0)
+                    count_response = call_client.messages.count_tokens(
+                        model=self.model,
+                        system=system,
+                        tools=tools,
+                        messages=messages,
+                    )
+                    counted_tokens = _get(count_response, "input_tokens")
+                    if (
+                        isinstance(counted_tokens, bool)
+                        or not isinstance(counted_tokens, int)
+                        or counted_tokens < 0
+                    ):
+                        raise RuntimeError(
+                            "Claude token count was missing or invalid; generation refused"
+                        )
+                    input_token_bound = counted_tokens
+                    self._reserve_claude_call(ledger, counted_tokens)
+                    self._check_run_deadline(deadline)
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError(
+                            "agent run deadline expired before generation"
+                        )
+                    call_timeout = min(self.request_timeout_seconds, remaining)
+                    call_client = with_options(timeout=call_timeout, max_retries=0)
                 started = time.monotonic()
-                response = client.messages.create(
-                    model=self.model,
-                    max_tokens=self.max_tokens,
-                    system=system,
-                    tools=tools,
-                    messages=messages,
-                    extra_body=extra,
-                )
+                ledger.model_requests_started += 1
+                ledger.usage_known = False
+                try:
+                    response = call_client.messages.create(
+                        model=self.model,
+                        max_tokens=self.max_tokens,
+                        system=system,
+                        tools=tools,
+                        messages=messages,
+                        extra_body=extra,
+                    )
+                except BaseException:
+                    # A failed request may have reached the provider, so its
+                    # usage cannot be reported as a measured zero.
+                    raise
                 elapsed = time.monotonic() - started
+                self._check_run_deadline(deadline)
                 usage = _get(response, "usage")
+                usage_fields = (
+                    "input_tokens",
+                    "output_tokens",
+                    "cache_creation_input_tokens",
+                    "cache_read_input_tokens",
+                )
+                token_values = [_get(usage, field) for field in usage_fields]
+                if any(
+                    isinstance(value, bool) or not isinstance(value, int) or value < 0
+                    for value in token_values
+                ):
+                    raise RuntimeError(
+                        "Claude returned incomplete per-call token usage"
+                    )
                 ledger.calls.append(
                     ModelCall(
                         turn=turn,
-                        input_tokens=int(_get(usage, "input_tokens", 0) or 0),
-                        output_tokens=int(_get(usage, "output_tokens", 0) or 0),
-                        cache_creation_input_tokens=int(
-                            _get(usage, "cache_creation_input_tokens", 0) or 0
-                        ),
-                        cache_read_input_tokens=int(
-                            _get(usage, "cache_read_input_tokens", 0) or 0
-                        ),
+                        input_tokens=token_values[0],
+                        output_tokens=token_values[1],
+                        cache_creation_input_tokens=token_values[2],
+                        cache_read_input_tokens=token_values[3],
                         seconds=round(elapsed, 3),
                         stop_reason=_get(response, "stop_reason"),
                         images_in_request=_count_images(messages),
                     )
                 )
+                ledger.usage_known = True
                 ledger.model_seconds += elapsed
-                if ledger.cost_usd() > self.max_cost_usd:
+                observed_input_tokens = (
+                    token_values[0] + token_values[2] + token_values[3]
+                )
+                if (
+                    input_token_bound is not None
+                    and observed_input_tokens > input_token_bound
+                ):
+                    raise BudgetExceeded(
+                        "Claude usage exceeded the reserved token-count bound"
+                    )
+                if token_values[1] > self.max_tokens:
+                    raise BudgetExceeded(
+                        "Claude response exceeded the configured output-token ceiling"
+                    )
+                active_prices = self.prices or PRICES_PER_MTOK[self.model]
+                if _exact_ledger_cost(ledger, active_prices) > Decimal(
+                    str(self.max_cost_usd)
+                ):
                     raise BudgetExceeded(
                         f"estimated spend ${ledger.cost_usd():.2f} passed the cap "
                         f"${self.max_cost_usd:.2f}"
@@ -569,6 +747,7 @@ class ClaudeAgent:
                     return ledger
                 results: list[dict[str, Any]] = []
                 for call in calls:
+                    self._check_run_deadline(deadline)
                     if call.get("name") == "finish":
                         ledger.finished = True
                         ledger.summary = str(
@@ -578,10 +757,38 @@ class ClaudeAgent:
                     results.append(
                         self._run_tool(call, harness, ledger, selective=selective)
                     )
+                    self._check_run_deadline(deadline)
                 messages.append({"role": "user", "content": results})
             raise RuntimeError(f"the agent did not finish in {self.max_turns} turns")
         finally:
             ledger.wall_seconds = time.monotonic() - ledger.started_at
+
+    def _check_run_deadline(self, deadline: float) -> None:
+        if self.preflight_required and time.monotonic() >= deadline:
+            raise TimeoutError("agent run exceeded its configured deadline")
+
+    def _reserve_claude_call(self, ledger: AgentLedger, input_tokens: int) -> None:
+        prices = self.prices or PRICES_PER_MTOK.get(self.model)
+        if prices is None:
+            raise BudgetExceeded("reviewed pricing is unavailable; generation refused")
+        if not isinstance(self.max_tokens, int) or isinstance(self.max_tokens, bool):
+            raise BudgetExceeded(
+                "maximum output tokens are invalid; generation refused"
+            )
+        input_rate = max(
+            Decimal(str(prices["input"])),
+            Decimal(str(prices["cache_write"])),
+            Decimal(str(prices["cache_read"])),
+        )
+        reserve = (
+            Decimal(input_tokens) * input_rate
+            + Decimal(self.max_tokens) * Decimal(str(prices["output"]))
+        ) / Decimal(1_000_000)
+        spent = _exact_ledger_cost(ledger, prices)
+        if spent + reserve > Decimal(str(self.max_cost_usd)):
+            raise BudgetExceeded(
+                "worst-case request reservation exceeds remaining run budget"
+            )
 
     def _run_tool(
         self,
@@ -597,6 +804,8 @@ class ClaudeAgent:
         toolset = call.get("toolset_name")
         if toolset:
             result["toolset_name"] = toolset
+        started = time.monotonic()
+        outcome = "returned"
         try:
             if self._tool is not None:
                 if name != "run":
@@ -609,12 +818,25 @@ class ClaudeAgent:
         except (GateRefused, ScopeViolation):
             # A refused save, or an action outside the task's declared scope:
             # run 1 ends here with no draft.
+            outcome = "refused"
             raise
         except (StaleRef, UnsupportedAction, LookupError, ValueError) as exc:
             # Nothing in the action was performed; the model can try another.
             ledger.tool_errors += 1
+            outcome = "retryable_error"
             result["content"] = [{"type": "text", "text": f"Not done: {exc}"}]
             result["is_error"] = True
+        except BaseException:
+            outcome = "failed"
+            raise
+        finally:
+            ledger.tool_invocations.append(
+                ToolInvocation(
+                    name=name,
+                    seconds=round(time.monotonic() - started, 6),
+                    outcome=outcome,
+                )
+            )
         return result
 
     def _selective(
@@ -649,3 +871,15 @@ class ClaudeAgent:
         if obs.notes:
             out.insert(0, {"type": "text", "text": "; ".join(obs.notes)})
         return out
+
+
+def _exact_ledger_cost(ledger: AgentLedger, prices: Mapping[str, float]) -> Decimal:
+    return sum(
+        Decimal(ledger.total(field)) * Decimal(str(prices[price_key]))
+        for field, price_key in (
+            ("input_tokens", "input"),
+            ("output_tokens", "output"),
+            ("cache_creation_input_tokens", "cache_write"),
+            ("cache_read_input_tokens", "cache_read"),
+        )
+    ) / Decimal(1_000_000)

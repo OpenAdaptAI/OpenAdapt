@@ -109,6 +109,15 @@ export const CMD = {
   // config / settings (lane, phi_mode, hosted host)
   GET_CONFIG: "get_config",
   SET_CONFIG: "set_config",
+  // Usage-stats consent and the update check (openadapt_desktop/privacy_settings.py).
+  // Nothing is sent before SET_USAGE_STATS {share: true}.
+  GET_PRIVACY_SETTINGS: "get_privacy_settings",
+  SET_USAGE_STATS: "set_usage_stats",
+  SUBSCRIBE_RELEASE_NOTES: "subscribe_release_notes",
+  SET_UPDATE_CHECK: "set_update_check",
+  // Returns the last result at once; a due (or forced) check answers with
+  // the UPDATE_STATUS event.
+  GET_UPDATE_STATUS: "get_update_status",
   // governed policy (Tier-2/3) resolved by the cloud control plane and fetched +
   // cached fail-closed by the engine (openadapt_desktop/policy.py, docs/POLICY_SYNC.md).
   // The desktop consumes it read-only; the canonical write path is the cloud API.
@@ -190,6 +199,8 @@ export const EVT = {
   SHADOW_STATE: "shadow_state",
   // {motif_id, count, title, body, actions}: generic text only.
   SHADOW_PROMPT: "shadow_prompt",
+  // UpdateStatus: the result of a background update check.
+  UPDATE_STATUS: "update_status",
 } as const;
 
 export type EngineEvent = (typeof EVT)[keyof typeof EVT];

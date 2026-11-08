@@ -29,12 +29,11 @@ from email.parser import BytesParser
 from pathlib import Path
 from typing import Any, Optional
 
-from PIL import Image, ImageEnhance, ImageOps
-
 from benchmark.multiapp_common import CsvRecordVerifier, SurfaceRoutedVerifier
 from benchmark.rdp_ladder.run_rdp_ladder_qualification import (
     DockerX11RdpTransport,
 )
+from PIL import Image, ImageEnhance, ImageOps
 
 VIEWPORT = (1280, 800)
 TARGET_REQUEST = "REQ-LIVE-2048"
@@ -1545,7 +1544,7 @@ def run(container: str, root: Path, out: Path, work: Path) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--container", default="oaflow-rdp-multiapp")
     parser.add_argument("--oracle-root", type=Path, required=True)
     parser.add_argument(

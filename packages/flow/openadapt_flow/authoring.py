@@ -708,6 +708,11 @@ class AuthoringSession:
         )
         self._actors = {}
 
+    def add_settle_callback(self, callback: Callable[[float], None]) -> None:
+        """Run a capture-side guard while each action settles and is sampled."""
+
+        self._require_recording().add_settle_callback(callback)
+
     def click(
         self,
         x: Optional[int] = None,

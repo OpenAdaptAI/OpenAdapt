@@ -37,9 +37,12 @@ def register_api_parser(sub: argparse._SubParsersAction) -> None:
             "Show or admit API steps compiled from a recording's network "
             "capture. None runs until a person admits it."
         ),
+        allow_abbrev=False,
     )
     verbs = parser.add_subparsers(dest="api_cmd", required=True)
-    show = verbs.add_parser("show", help="List a bundle's proposed API steps")
+    show = verbs.add_parser(
+        "show", help="List a bundle's proposed API steps", allow_abbrev=False
+    )
     show.add_argument("bundle", help="Bundle directory")
     show.add_argument("--json", action="store_true", dest="as_json")
     show.set_defaults(func=cmd_api_show)
@@ -49,6 +52,7 @@ def register_api_parser(sub: argparse._SubParsersAction) -> None:
             "Propose the API step again from the recording (after editing the "
             "program's checks); drops any earlier admission"
         ),
+        allow_abbrev=False,
     )
     propose.add_argument("bundle", help="Bundle directory")
     propose.add_argument(
@@ -56,7 +60,9 @@ def register_api_parser(sub: argparse._SubParsersAction) -> None:
     )
     propose.set_defaults(func=cmd_api_propose)
     admit = verbs.add_parser(
-        "admit", help="Admit a bundle's API steps (a person, at a terminal)"
+        "admit",
+        help="Admit a bundle's API steps (a person, at a terminal)",
+        allow_abbrev=False,
     )
     admit.add_argument("bundle", help="Bundle directory")
     admit.add_argument("--step", default=None, help="Admit only this save step")
@@ -84,7 +90,7 @@ def cmd_api_show(args: argparse.Namespace) -> int:
     reasons: list[str] = []
     sidecar = bundle / "api_proposal.json"
     if sidecar.is_file():
-        reasons = json.loads(sidecar.read_text()).get("reasons") or []
+        reasons = json.loads(sidecar.read_text(encoding="utf-8")).get("reasons") or []
     if args.as_json:
         rows = []
         for s in found:
@@ -144,7 +150,8 @@ def cmd_api_propose(args: argparse.Namespace) -> int:
             },
             indent=2,
         )
-        + "\n"
+        + "\n",
+        encoding="utf-8",
     )
     if step is None:
         print(f"No API step proposed: {'; '.join(reasons)}.")

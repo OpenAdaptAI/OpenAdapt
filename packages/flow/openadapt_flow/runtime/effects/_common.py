@@ -37,6 +37,62 @@ from openadapt_flow.runtime.effects.effect import (
 #: worker's name for its SQL channel (a read through ``SqlRecordVerifier``).
 TYPED_SUBSTRATES = frozenset({"sql", "db"})
 
+# These readers expose JSON-native identities. Driver-specific JSON baseline
+# normalization for SQL remains in stable_id; no integer/string equivalence is
+# guessed for a network read's identity field.
+_JSON_ID_SUBSTRATES = frozenset({"rest", "fhir", "graphql"})
+
+
+def _identity_pair_problem(
+    before: list[dict[str, Any]], current: list[dict[str, Any]], field: str
+) -> Optional[str]:
+    """Refuse an unbound identity-domain change before comparing row sets.
+
+    Each side may be homogeneous yet use a different native JSON domain. An
+    empty side has no observed domain; all-idless records keep the existing
+    content-identity mode. Mixed identity modes or unsupported values cannot
+    establish which records appeared, disappeared or changed.
+    """
+    pair_domains: set[str] = set()
+    for records in (before, current):
+        read_domains: set[str] = set()
+        for record in records:
+            if field not in record:
+                domain = "content"
+            elif type(record[field]) is int:
+                domain = "integer"
+            elif type(record[field]) is str and record[field].strip():
+                domain = "string"
+            else:
+                return "record identity has an unsupported native JSON domain"
+            read_domains.add(domain)
+        if len(read_domains) > 1:
+            return "read mixes record identity domains; delta accounting is ambiguous"
+        pair_domains.update(read_domains)
+    if len(pair_domains) > 1:
+        return "record identity domain changed between baseline and current read"
+    return None
+
+
+def page_snapshot_token(body: Any, path: str) -> str | int:
+    """Read a declared immutable-snapshot token, without logging its value.
+
+    A matching token is useful only under the endpoint's reviewed snapshot
+    semantics. It is not freshness, attribution or qualification authority.
+    """
+    if not isinstance(path, str) or not path or len(path) > 256:
+        raise ValueError("invalid declared snapshot path")
+    node = body
+    for part in path.split("."):
+        if not part or part.isspace() or not isinstance(node, dict) or part not in node:
+            raise ValueError("declared page snapshot token is missing")
+        node = node[part]
+    if isinstance(node, str) and node.strip() and len(node) <= 4096:
+        return node
+    if type(node) is int and node >= 0:
+        return node
+    raise ValueError("declared page snapshot token has an unsupported value")
+
 
 def drop_record_fields(
     records: Optional[list[dict[str, Any]]], fields: Iterable[str]
@@ -104,6 +160,27 @@ def judge_records(
             "the declared outcome/effect; HALT (never assume success)",
             unavailable=True,
         )
+
+    compares_baseline = effect.kind is EffectKind.EXACT_NEW_SET or (
+        effect.kind is EffectKind.RECORD_WRITTEN
+        and (
+            effect.count_new_only
+            or effect.forbid_collateral_loss
+            or effect.forbid_collateral_change
+        )
+    )
+    if substrate in _JSON_ID_SUBSTRATES and before.reachable and compares_baseline:
+        identity = (
+            effect.identity_field if effect.kind is EffectKind.EXACT_NEW_SET else "id"
+        )
+        problem = _identity_pair_problem(before.records, current, identity)
+        if problem is not None:
+            return _indeterminate(
+                effect,
+                substrate,
+                problem + "; cannot compare the read pair; HALT",
+                unavailable=True,
+            )
 
     # A field declared ``absent_is_null`` must appear in some record of the
     # read. If it appears in none, the key is likely misspelled (or the read

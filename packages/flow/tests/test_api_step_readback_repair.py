@@ -25,6 +25,7 @@ from openadapt_flow.runtime.actuators import ActuationStatus
 from openadapt_flow.runtime.effects import RestRecordVerifier
 from openadapt_flow.runtime.readback_pipeline import ReadbackPipeline
 from openadapt_flow.runtime.replayer import Replayer
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 from tests.test_api_tier_web_form import (
     EnterWritesBackend,
     ScriptedActuator,
@@ -44,7 +45,7 @@ def _run(tmp_path, *, pipeline, durable=False, verifier_url=None):
             EnterWritesBackend(url),
             vision=FakeVision(),
             effect_verifier=RestRecordVerifier(
-                verifier_url or url, records_path="/api/db", records_key="records"
+                verifier_url or url, **mockmed_rest_read_kwargs()
             ),
             web_form_actuator=actuator,
             poll_interval_s=0.01,
@@ -114,9 +115,7 @@ def test_a_probe_or_resumed_run_never_sends_the_api_step(tmp_path):
         backend = EnterWritesBackend(url)
         target = ReplayTarget(
             lambda _fault: _Session(backend),
-            effect_verifier=RestRecordVerifier(
-                url, records_path="/api/db", records_key="records"
-            ),
+            effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
             policy="permissive",
             profile="demo",
             replayer_kwargs={
@@ -150,9 +149,7 @@ def test_a_standard_change_test_record_run_is_gui_only(tmp_path):
         backend = EnterWritesBackend(url)
         target = ReplayTarget(
             lambda _fault: _Session(backend),
-            effect_verifier=RestRecordVerifier(
-                url, records_path="/api/db", records_key="records"
-            ),
+            effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
             policy="permissive",
             profile="demo",
             replayer_kwargs={

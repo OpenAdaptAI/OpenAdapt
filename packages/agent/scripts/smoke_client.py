@@ -35,7 +35,7 @@ def _structured(result):
 
 
 async def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--bundles")
     parser.add_argument("--allow-run", action="store_true")
     parser.add_argument("command", nargs=argparse.REMAINDER)

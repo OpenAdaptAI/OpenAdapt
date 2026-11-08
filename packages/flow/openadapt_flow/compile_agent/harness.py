@@ -610,7 +610,12 @@ class Harness:
             self._check_gate(*commit)
             _before_write(self, commit[0])
         try:
-            obs = self.computer.execute(native)
+            dispatcher = getattr(self.computer, "dispatcher", None)
+            obs = (
+                dispatcher.execute(native)
+                if dispatcher is not None
+                else self.computer.execute(native)
+            )
         except BaseException as exc:
             if commit is not None:
                 _expect_write(self, 0.0)

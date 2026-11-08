@@ -72,6 +72,12 @@ def default_runner(
     bundle recorded off the web runs under when its admission names none.
     """
 
+    if admission.synthetic and admission.target_url:
+        # A synthetic outcome describes the demo app, never another target.
+        raise DispatchError(
+            "a synthetic admission can't name a target_url; nothing was executed",
+            pre_effect=True,
+        )
     if admission.synthetic or not admission.bundle_dir:
         return synthetic_mockmed(admission, request)
     return live_replay(admission, request, run_dir, deployment=deployment)
@@ -131,8 +137,22 @@ def live_replay(
     ``openadapt-flow run BUNDLE --config DEPLOYMENT`` path, which builds the
     deployment's backend, in a child process; its run report is projected
     the same way.
+
+    In this process the reference worker replays only on the demo app it
+    serves itself: its runner resets and reads that app's store. An admission
+    naming another target is refused before anything runs; such a bundle runs
+    through ``openadapt-flow run BUNDLE --config deploy.yaml``, which reads the
+    app's own deployment config.
     """
 
+    if admission.target_url:
+        raise DispatchError(
+            "the reference Execute worker replays only on its bundled demo app; "
+            f"it does not drive {admission.target_url!r}. Run this bundle with "
+            "`openadapt-flow run BUNDLE --config deploy.yaml` or `openadapt-flow "
+            "connector run`. Nothing was executed.",
+            pre_effect=True,
+        )
     bundle = Path(admission.bundle_dir or "")
     if not bundle.is_dir():
         raise DispatchError(
@@ -178,36 +198,18 @@ def live_replay(
         )
     stop: Optional[Callable[[], None]] = None
     try:
-        if admission.target_url:
-            base_url = admission.target_url
-            entry_query = (
-                TUTORIAL_BREAK_ENTRY_QUERY
-                if admission.break_it
-                else TUTORIAL_ENTRY_QUERY
-            )
-            report = run_tutorial_workflow(
-                base_url=base_url,
-                workflow=workflow,
-                bundle_dir=bundle,
-                run_dir=run_dir,
-                headed=False,
-                entry_query=entry_query,
-            )
-        else:
-            base_url, _db, stop = serve_mockmed(port=0)
-            entry_query = (
-                TUTORIAL_BREAK_ENTRY_QUERY
-                if admission.break_it
-                else TUTORIAL_ENTRY_QUERY
-            )
-            report = run_tutorial_workflow(
-                base_url=base_url,
-                workflow=workflow,
-                bundle_dir=bundle,
-                run_dir=run_dir,
-                headed=False,
-                entry_query=entry_query,
-            )
+        base_url, _db, stop = serve_mockmed(port=0)
+        entry_query = (
+            TUTORIAL_BREAK_ENTRY_QUERY if admission.break_it else TUTORIAL_ENTRY_QUERY
+        )
+        report = run_tutorial_workflow(
+            base_url=base_url,
+            workflow=workflow,
+            bundle_dir=bundle,
+            run_dir=run_dir,
+            headed=False,
+            entry_query=entry_query,
+        )
     except Exception as exc:
         # The replay may have dispatched a write before it failed.
         raise DispatchError(f"local replay failed: {exc}", pre_effect=False) from exc
