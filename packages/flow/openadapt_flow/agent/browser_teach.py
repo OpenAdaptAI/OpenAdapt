@@ -2022,7 +2022,7 @@ class BrowserTeachBridge:
             "writes_sent": len(run.writes_sent),
         }
         if run.stopped is not None and not run.writes_sent:
-            verify_write(pending, write_attempted=False)  # releases the ledger
+            verify_write(pending, write_attempted=False)  # records the held result
             return {
                 **base,
                 "outcome": "stopped",

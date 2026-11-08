@@ -414,8 +414,8 @@ class Attempt:
             return "open"
         if r.get("outcome") == "REFUTED":
             return "held"
-        if r.get("retry_safe"):
-            return "free"
+        # Legacy retry_safe flags are observations, not a complete
+        # dispatch/channel proof. They cannot release an unresolved attempt.
         if r.get("outcome") == "CONFIRMED" or r.get("landed"):
             if (
                 r.get("write_key_bound")
@@ -570,10 +570,9 @@ def _canonical(value: Any) -> bytes:
 class Ledger:
     """The ledger's logic over a :class:`LedgerBackend`.
 
-    ``settle_s``: how long after an attempt began a read-back that shows
-    nothing proves the write never landed. Default None: such an attempt
-    stays held until a person releases it, because a queued write can land
-    late.
+    ``settle_s`` is retained for constructor compatibility but grants no
+    retry permission. Elapsed time and an absent read cannot exclude a
+    queued write or another delivery channel. Unresolved attempts stay held.
 
     ``repeat_s``: how long a landed write without a write key is handed
     back to an identical call instead of being sent again (an agent's retry

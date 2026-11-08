@@ -1069,6 +1069,8 @@ def _settle(
         )
         assert attempt.resolved is not None
         result = dict(attempt.resolved.get("result") or {})
+        # A legacy saved projection is not proof of retry permission.
+        result["retry_safe"] = False
         result["not_sent_again"] = True
         if attempt.rechecked is not None:
             # A recheck confirmed it since: no longer provisional, and no
@@ -1224,29 +1226,17 @@ def _reconcile(
         float(attempt.begun.get("t0") or 0.0),
         result,
     )
-    if (
+    # Preserve the fresh reconciliation observation at the configured age,
+    # but elapsed time and absence grant no dispatch or retry permission.
+    settled_observation = (
         result.outcome is Outcome.UNCERTAIN
         and result.observed == "absent"
         and led.settle_s is not None
         and _age_s(attempt) >= led.settle_s
-    ):
-        led.resolved(
-            key,
-            attempt.attempt_id,
-            outcome=Outcome.UNCERTAIN.value,
-            retry_safe=True,
-            delivered=True,
-            via="settled",
-            expected_revision=attempt.revision,
-            landed=result.landed,
-            review=result.review,
-            write_key_bound=bool(attempt.begun.get("write_key_bound")),
-            receipt_sha256=result.receipt_sha256 or None,
-            result=result.to_dict(),
-            reason=f"the store showed nothing {int(led.settle_s)}s after the attempt",
-        )
-    elif (
-        result.outcome is not Outcome.UNCERTAIN
+    )
+    if (
+        settled_observation
+        or result.outcome is not Outcome.UNCERTAIN
         or attempt.resolved is None
         or _landed(result)
     ):
@@ -1293,11 +1283,11 @@ def verify_write(
 
     Args:
         pending: From :func:`begin_write`. Single use.
-        write_attempted: False only when the caller knows the write was
-            never sent (a stop before the save); then a store that shows
-            nothing makes the result ``retry_safe``. When it can't know (a
-            tool raised before or while acting), leave it True: a store
-            that shows nothing is then ``UNCERTAIN``, never retry_safe.
+        write_attempted: False records the caller's claim that the write
+            was never sent (a stop before the save). It does not establish
+            retry safety: the attempt stays held without complete dispatch
+            and channel evidence. When delivery is unknown, leave it True;
+            an absent read then remains ``UNCERTAIN``.
         source: The written values' provenance and documents, to compare the
             saved record with its source.
         seal: Sign a confirmed receipt with this computer's Seal key.
@@ -1726,8 +1716,9 @@ def classify(
     if receipt_outcome == "verified":
         return Outcome.CONFIRMED, False
     if receipt_outcome == "halted_before_effect":
-        # The caller never sent it, and the store shows nothing landed.
-        return Outcome.REFUTED, True
+        # The receipt preserves the caller's no-send observation. It does
+        # not supply durable dispatch facts or complete channel coverage.
+        return Outcome.REFUTED, False
     if receipt_outcome == "rejected_policy":
         return Outcome.REFUTED, False  # landed, but approved by its own executor
     if receipt_outcome != "reconciliation_required":

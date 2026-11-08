@@ -79,7 +79,7 @@ def test_one_revision_model_for_all_observation_orders(operations: list[str]) ->
         if operation == "REFUTED":
             held = True
         if index == 0:
-            expected = {"CONFIRMED": "undelivered", "retry": "free"}.get(
+            expected = {"CONFIRMED": "undelivered", "retry": "uncertain"}.get(
                 operation, "uncertain"
             )
             if operation == "rechecked":
@@ -186,6 +186,8 @@ def test_stale_record_cannot_prune_or_mutate_newer_attempt(
     first = ledger.latest(KEY)
     assert first is not None
     ledger.resolved(KEY, "first", outcome="UNCERTAIN", retry_safe=True)
+    assert ledger.latest(KEY).state == "uncertain"  # type: ignore[union-attr]
+    ledger.release(KEY, by="operator", reason="synthetic check", found="absent")
     ledger.begun(KEY, "second")
     ledger.resolved(
         KEY,
@@ -416,3 +418,24 @@ def test_current_positive_observation_does_not_release_prior_settlement(
     assert ledger.attempts()[0][2] == before.resolved
     assert ledger.unresolved()[0][1].state == before.state
     assert baseline.read_text() == "synthetic baseline"
+
+
+@pytest.mark.parametrize("outcome", ["UNCERTAIN", "REFUTED"])
+def test_legacy_retry_flag_cannot_release_a_retained_attempt(
+    ledger: wl.Ledger, tmp_path: Path, outcome: str
+) -> None:
+    ledger.resolved(KEY, "first", outcome=outcome, retry_safe=True, via="settled")
+    before = ledger.latest(KEY)
+    assert before is not None and before.resolved is not None
+    assert before.resolved["retry_safe"] is True  # raw historical fact retained
+    expected = "held" if outcome == "REFUTED" else "uncertain"
+    assert ledger.state(before) == expected
+    if isinstance(ledger.backend, wl.FileLedger):
+        ledger = wl.Ledger(wl.FileLedger(tmp_path), settle_s=0)
+        assert ledger.state(ledger.latest(KEY)) == expected
+    with pytest.raises(wl.LedgerError, match="attempt changed"):
+        ledger.begun(KEY, "second")
+    after = ledger.latest(KEY)
+    assert after is not None and after.attempt_id == "first"
+    assert after.resolved == before.resolved
+    assert after.events == before.events
