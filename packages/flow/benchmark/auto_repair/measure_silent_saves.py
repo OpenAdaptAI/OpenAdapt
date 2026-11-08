@@ -50,15 +50,13 @@ PORT = 18765
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--blocks", default=",".join(BLOCKS))
     parser.add_argument("--model", default="claude-sonnet-5-5")
     args = parser.parse_args()
-
-    from silent_saves import judge, protocol
-    from silent_saves.app import MockMed
-    from silent_saves.repair_arm import DEFAULT_BUNDLE, SelfRepairProgram
 
     from openadapt_flow.backends._browser_process import shared_browser
     from openadapt_flow.jit import load_customer_model_key
@@ -69,6 +67,9 @@ def main() -> int:
         SelfRepair,
     )
     from openadapt_flow.runtime.effects import RestRecordVerifier
+    from silent_saves import judge, protocol
+    from silent_saves.app import MockMed
+    from silent_saves.repair_arm import DEFAULT_BUNDLE, SelfRepairProgram
 
     blocks = [b for b in args.blocks.split(",") if b]
     wanted = {i for b in blocks for i in BLOCKS[b]}

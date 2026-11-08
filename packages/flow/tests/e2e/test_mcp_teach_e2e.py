@@ -34,6 +34,8 @@ from typing import Any, Iterator, Optional
 import anyio
 import pytest
 
+from tests._rest_read_contract_fixtures import mockmed_effects_yaml
+
 pytest.importorskip("mcp")
 
 import mcp.types as types  # noqa: E402
@@ -73,10 +75,7 @@ def _verify_yaml(tmp_path: Path, base: str) -> Path:
     path = tmp_path / "verify.yaml"
     path.write_text(
         "verifier:\n"
-        "  kind: rest\n"
-        f"  base_url: {base}\n"
-        "  records_path: /api/db\n"
-        "  records_key: records\n"
+        f"{mockmed_effects_yaml(base)}"
         "  timeout_s: 2.0\n"
         "  poll_interval_s: 0.05\n"
     )

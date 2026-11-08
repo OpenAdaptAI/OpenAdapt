@@ -117,10 +117,14 @@ def _param_types(workflow: Any) -> dict[str, dict[str, Any]]:
             getattr(spec, "type", None), "value", getattr(spec, "type", None)
         )
         choices = [str(choice) for choice in (getattr(spec, "choices", None) or [])]
-        types[str(name)] = {
+        entry: dict[str, Any] = {
             "type": str(kind) if kind else "string",
             "choices": choices,
         }
+        intake_field = getattr(spec, "intake_field", None)
+        if intake_field:
+            entry["intake_field"] = str(intake_field)
+        types[str(name)] = entry
     return types
 
 
