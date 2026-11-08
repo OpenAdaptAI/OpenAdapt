@@ -520,6 +520,8 @@ def test_heal_keeps_a_dialog_target_band_inside_the_dialog():
     step = ocr_anchored_step()
     assert step.anchor is not None
     step.anchor.dialog_region = (60, 40, 180, 120)
+    # A recorded band: a step without one keeps none after a heal.
+    step.anchor.context_text = "Save Encounter"
     old_click = step.anchor.click_point
     frames: list[bytes] = []
 
