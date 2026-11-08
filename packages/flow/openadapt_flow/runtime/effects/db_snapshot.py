@@ -66,13 +66,19 @@ import re
 import secrets
 import struct
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Context, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Literal, Optional
 
 Dialect = Literal["sqlite", "mysql", "postgresql"]
 TableMode = Literal["compare", "append_only", "skip"]
+
+#: Maximum data rows per snapshot, including auxiliary audit reads.
+DEFAULT_READ_ROW_BUDGET = 1_000_000
+
+#: Stored content encoding for server-digested append-only rows.
+_MYSQL_ROW_DIGEST = "mysql-json-sha256/v1"
 
 #: Columns per JSON object call: SQLite caps a function at 127 arguments.
 _CHUNK = 50
@@ -91,6 +97,13 @@ MAC_HEX = 32
 
 class SnapshotError(RuntimeError):
     """The database can't be snapshotted as the frame needs."""
+
+
+class SnapshotTooLarge(SnapshotError):
+    """The read exceeded its budget. No partial snapshot may be used."""
+
+    def __init__(self, budget: int) -> None:
+        super().__init__(f"frame too large: row read budget of {budget} exceeded")
 
 
 # -- keys and MACs ------------------------------------------------------------
@@ -334,6 +347,9 @@ class Table:
     #: two runs' snapshots can tell they hold the same row (a removal one of
     #: them saw) without values. Empty otherwise.
     links: dict[str, str] = field(default_factory=dict)
+    #: Empty for legacy full-row MACs; persisted so old baselines keep their
+    #: original read and encoding after an engine upgrade.
+    row_hash_format: str = ""
     #: In memory only: PostgreSQL's actual (schema, relation, OID), binding a
     #: captured SQL read to this physical table without guessing search_path.
     source_relation: Optional[tuple[str, str, int]] = field(default=None, repr=False)
@@ -384,6 +400,11 @@ class Snapshot:
                     "rows": t.rows,
                     "non_transactional": t.non_transactional,
                     **({"links": t.links} if t.links else {}),
+                    **(
+                        {"row_hash_format": t.row_hash_format}
+                        if t.row_hash_format
+                        else {}
+                    ),
                 }
                 for name, t in self.tables.items()
             },
@@ -414,6 +435,7 @@ class Snapshot:
                     rows={k: list(v) for k, v in (t.get("rows") or {}).items()},
                     non_transactional=bool(t.get("non_transactional")),
                     links={str(k): str(v) for k, v in (t.get("links") or {}).items()},
+                    row_hash_format=str(t.get("row_hash_format", "")),
                 )
                 for name, t in data["tables"].items()
             },
@@ -570,8 +592,17 @@ class _Session:
         else:
             self.cur.execute("BEGIN")
 
-    def rows(self, sql: str) -> list[tuple[Any, ...]]:
-        self.cur.execute(sql)
+    @staticmethod
+    def _limited(sql: str, limit: Optional[int]) -> str:
+        if limit is None:
+            return sql
+        # Bound the result on the server: DB-API drivers can buffer it during
+        # execute(), before fetchmany() could enforce a client-side limit.
+        query = sql.strip().removesuffix(";")
+        return f"SELECT * FROM ({query}) AS frame_read_rows LIMIT {limit}"
+
+    def rows(self, sql: str, *, limit: Optional[int] = None) -> list[tuple[Any, ...]]:
+        self.cur.execute(self._limited(sql, limit))
         # A dict cursor (``pymysql.cursors.DictCursor``) yields mappings in
         # column order; a plain one yields tuples.
         return [
@@ -579,8 +610,8 @@ class _Session:
             for r in self.cur.fetchall()
         ]
 
-    def dicts(self, sql: str) -> list[dict[str, Any]]:
-        self.cur.execute(sql)
+    def dicts(self, sql: str, *, limit: Optional[int] = None) -> list[dict[str, Any]]:
+        self.cur.execute(self._limited(sql, limit))
         names = [d[0] for d in self.cur.description or []]
         return [
             dict(r) if isinstance(r, Mapping) else dict(zip(names, r))
@@ -799,18 +830,91 @@ def _row_json(dialect: Dialect, d: _Def) -> list[str]:
 
 
 def _read_rows(
-    s: _Session, name: str, d: _Def, where: str = ""
+    s: _Session, name: str, d: _Def, where: str = "", *, limit: Optional[int] = None
 ) -> list[dict[str, Any]]:
     parts = _row_json(s.dialect, d)
     cells = ", ".join(f"{c} AS r{i}" for i, c in enumerate(parts))
     out = []
-    for chunks in s.rows(f"SELECT {cells} FROM {_quote(s.dialect, name)} {where}"):
+    for chunks in s.rows(
+        f"SELECT {cells} FROM {_quote(s.dialect, name)} {where}", limit=limit
+    ):
         row: dict[str, Any] = {}
         for chunk in chunks:
             if chunk is not None:
                 row.update(_row_part(name, chunk))
         out.append(_plain_numbers(s.dialect, d, row))
     return out
+
+
+def _read_append_only_mysql(
+    s: _Session,
+    name: str,
+    d: _Def,
+    table: Table,
+    old: Optional[Table],
+    key: bytes,
+    skip: Sequence[str],
+    limit: int,
+) -> int:
+    """Read keys and content digests for every row; bodies only for new keys.
+
+    The baseline's keyed row set is the cursor, rather than MAX(id): an
+    explicit insertion into an old id gap is still a new row. SHA-256 runs
+    over the same exact JSON projections as the full read, inside the same
+    consistent transaction. Every old key and contents MAC is still checked.
+    """
+    assert d.generated_key is not None and d.primary_key == [d.generated_key]
+    key_def = replace(d, columns=list(d.primary_key))
+    key_json = _row_json("mysql", key_def)[0]
+    ignored = set(skip)
+    columns = replace(d, columns=[c for c in d.columns if c not in ignored])
+    chunks = _row_json("mysql", columns)
+    selects = [f"CAST({key_json} AS BINARY) AS frame_key"]
+    selects += [
+        f"SHA2(CAST({part} AS BINARY), 256) AS frame_digest{i}"
+        for i, part in enumerate(chunks)
+    ]
+    records = s.rows(
+        f"SELECT {', '.join(selects)} FROM {_quote('mysql', name)}", limit=limit
+    )
+    if len(records) >= limit:
+        return len(records)  # the caller refuses before fetching any bodies
+    fresh: list[int] = []
+    for values in records:
+        row = _plain_numbers("mysql", key_def, _row_part(name, values[0]))
+        hashes = []
+        for value in values[1:]:
+            text = value.decode("ascii") if isinstance(value, bytes) else value
+            if (
+                not isinstance(text, str)
+                or re.fullmatch(r"[a-fA-F0-9]{64}", text) is None
+            ):
+                raise SnapshotError(
+                    "an append-only row's server digest could not be read"
+                )
+            hashes.append(text.lower())
+        k = row_key_hash(key, key_text(d.primary_key, row), name)
+        body = json.dumps([_MYSQL_ROW_DIGEST, name, hashes], separators=(",", ":"))
+        table.rows[k] = [_mac(key, body), ""]
+        if old is not None and k not in old.rows:
+            value = row[d.generated_key]
+            ident = int(value)
+            if Decimal(str(value)) != ident:
+                raise SnapshotError(
+                    "an append-only generated key is not a whole number"
+                )
+            fresh.append(ident)
+    # No baseline: every row is historical; its body need not cross the wire.
+    # With a baseline: only keys not in its cursor need values. Chunking the
+    # integer keys bounds each SELECT without relying on monotonic ids.
+    for start in range(0, len(fresh), 128):
+        ids = ", ".join(str(v) for v in fresh[start : start + 128])
+        where = f"WHERE {_quote('mysql', d.generated_key)} IN ({ids})"
+        for row in _read_rows(s, name, d, where, limit=limit):
+            k = row_key_hash(key, key_text(d.primary_key, row), name)
+            table.values[k] = dict(row)
+    table.row_hash_format = _MYSQL_ROW_DIGEST
+    return len(records)
 
 
 def _float32_text(value: Decimal) -> Decimal:
@@ -1329,9 +1433,27 @@ def _pg_definitions(
             "JOIN pg_language l ON l.oid = p.prolang "
             f"WHERE n.nspname IN {within} ORDER BY 1, 2, 3"
         ),
+        # pg_rules has no enabled state, so ALTER TABLE ... DISABLE RULE
+        # would not show; pg_rewrite.ev_enabled has it. A view's own
+        # _RETURN rule is left out, as pg_rules does (the view is read above).
         s.rows(
-            "SELECT schemaname, tablename, rulename, definition FROM pg_rules "
-            f"WHERE schemaname IN {within} ORDER BY 1, 2, 3"
+            "SELECT n.nspname, c.relname, r.rulename, r.ev_enabled, "
+            "pg_get_ruledef(r.oid) FROM pg_rewrite r "
+            "JOIN pg_class c ON c.oid = r.ev_class "
+            "JOIN pg_namespace n ON n.oid = c.relnamespace "
+            f"WHERE r.rulename <> '_RETURN' AND n.nspname IN {within} "
+            "ORDER BY 1, 2, 3"
+        ),
+        # A unique index decides which writes the database accepts, and one
+        # made with CREATE UNIQUE INDEX is not a constraint, so dropping it
+        # would not show in a table's definition.
+        s.rows(
+            "SELECT n.nspname, c.relname, i.relname, x.indisvalid, "
+            "pg_get_indexdef(x.indexrelid) FROM pg_index x "
+            "JOIN pg_class i ON i.oid = x.indexrelid "
+            "JOIN pg_class c ON c.oid = x.indrelid "
+            "JOIN pg_namespace n ON n.oid = c.relnamespace "
+            f"WHERE x.indisunique AND n.nspname IN {within} ORDER BY 1, 2, 3"
         ),
         s.rows(
             "SELECT schemaname, tablename, policyname, permissive, roles::text, cmd, "
@@ -1439,10 +1561,12 @@ def _pg_large_objects() -> _Def:
     )
 
 
-def _read_rows_pg(s: _Session, d: _Def) -> list[dict[str, Any]]:
+def _read_rows_pg(
+    s: _Session, d: _Def, *, limit: Optional[int] = None
+) -> list[dict[str, Any]]:
     if d.select:
         try:
-            rows = s.rows(d.select)
+            rows = s.rows(d.select, limit=limit)
         except Exception as exc:  # noqa: BLE001 - e.g. no SELECT on an object
             raise SnapshotError(
                 f"large objects can't be read ({exc}); grant the read account "
@@ -1453,7 +1577,7 @@ def _read_rows_pg(s: _Session, d: _Def) -> list[dict[str, Any]]:
     cells = ", ".join(_pg_cell(c, d.encode[c]) for c in d.columns) or "NULL"
     return [
         {c: _pg_value(d.encode[c], v) for c, v in zip(d.columns, r)}
-        for r in s.rows(f"SELECT {cells} FROM ONLY {d.relation}")
+        for r in s.rows(f"SELECT {cells} FROM ONLY {d.relation}", limit=limit)
     ]
 
 
@@ -1507,6 +1631,7 @@ def take_snapshot(
     key: bytes,
     modes: Mapping[str, TableMode] = {},
     max_rows: int = 2000,
+    read_row_budget: int = DEFAULT_READ_ROW_BUDGET,
     before: Optional[Snapshot] = None,
     extra_queries: Mapping[str, str] = {},
     ignore: Mapping[str, Sequence[str]] = {},
@@ -1514,6 +1639,7 @@ def take_snapshot(
     schemas: Sequence[str] = (),
     optional_modes: Mapping[str, TableMode] = {},
     links: bool = False,
+    retain_values: Sequence[str] = (),
 ) -> Snapshot:
     """Read every table in one read-only transaction.
 
@@ -1524,6 +1650,10 @@ def take_snapshot(
             every other table is compared.
         max_rows: Over this many rows, a table keeps cell MACs only for
             ``ref_columns`` (and a contents MAC for every row).
+        read_row_budget: Maximum data rows across non-skipped tables and
+            auxiliary queries combined. Refuse before fetching table contents
+            when counts exceed it; never return a truncated snapshot. This
+            bounds rows, not query time or the size of an individual cell.
         before: The baseline, when this is a read after the save: plain
             values are kept for the rows that differ from it.
         extra_queries: Name -> a SELECT to run in the same transaction (the
@@ -1538,11 +1668,15 @@ def take_snapshot(
             this database may not have (a profile covers several versions).
             ``ignore`` may name ``*`` for every table.
         links: Keep each keyed row's link MAC (:attr:`Table.links`).
+        retain_values: Tables whose complete raw rows are needed in memory
+            for identity learning/validation. Never serialized by Snapshot.
 
     Raises:
         SnapshotError: the database can't be read as the frame needs it.
     """
 
+    if read_row_budget < 1:
+        raise SnapshotError("read_row_budget must be at least 1")
     if dialect != "postgresql":
         # Before any connection: only PostgreSQL has schemas to skip.
         wildcards = sorted(t for t in (*modes, *optional_modes) if t.endswith(".*"))
@@ -1567,6 +1701,8 @@ def take_snapshot(
             schemas,
             optional_modes,
             link_key() if links else None,
+            read_row_budget,
+            retain_values,
         )
     except SnapshotError:
         raise
@@ -1588,6 +1724,8 @@ def _snapshot(
     schemas: Sequence[str],
     optional_modes: Mapping[str, TableMode] = {},
     links: Optional[bytes] = None,
+    read_row_budget: int = DEFAULT_READ_ROW_BUDGET,
+    retain_values: Sequence[str] = (),
 ) -> Snapshot:
     dialect = s.dialect
     counters: dict[str, int] = {}
@@ -1658,8 +1796,6 @@ def _snapshot(
                 str(n): int(v)
                 for n, v in s.rows("SELECT name, seq FROM sqlite_sequence")
             }
-    for name, sql in extra_queries.items():
-        snap.extra[name] = s.dicts(sql)
     unknown = sorted(set(modes) - set(defs))
     modes = {**{t: m for t, m in optional_modes.items() if t in defs}, **modes}
     if unknown:
@@ -1677,8 +1813,6 @@ def _snapshot(
             + "; ".join(refused)
             + ". Skip a table only by allow-listing it with mode skip and a reason"
         )
-    if not names:
-        return snap
 
     def rel(t: str) -> str:
         return defs[t].relation or _quote(dialect, t)
@@ -1694,6 +1828,17 @@ def _snapshot(
                 )
             )
         )
+    counted = sum(counts.values())
+    if counted > read_row_budget:
+        raise SnapshotTooLarge(read_row_budget)
+    extra_count = 0
+    for name, sql in extra_queries.items():
+        remaining = read_row_budget - counted - extra_count
+        rows = s.dicts(sql, limit=remaining + 1)
+        if len(rows) > remaining:
+            raise SnapshotTooLarge(read_row_budget)
+        extra_count += len(rows)
+        snap.extra[name] = rows
     numbered = [t for t in names if defs[t].auto_column]
     maxes = (
         {
@@ -1710,6 +1855,7 @@ def _snapshot(
         else {}
     )
     refs = set(ref_columns)
+    read_count = extra_count
     for t in names:
         d = defs[t]
         mode: TableMode = "append_only" if modes.get(t) == "append_only" else "compare"
@@ -1741,14 +1887,32 @@ def _snapshot(
             table.cell_columns = list(d.columns)
         skip = [*ignore.get(t, ()), *ignore.get("*", ())]
         seen_keys: dict[str, int] = {}
+        if old is not None and old.row_hash_format not in ("", _MYSQL_ROW_DIGEST):
+            raise SnapshotError("the baseline uses an unknown row hash format")
+        if (
+            dialect == "mysql"
+            and mode == "append_only"
+            and d.generated_key is not None
+            and (old is None or old.row_hash_format == _MYSQL_ROW_DIGEST)
+        ):
+            read_count += _read_append_only_mysql(
+                s, t, d, table, old, key, skip, read_row_budget - read_count + 1
+            )
+            if read_count > read_row_budget:
+                raise SnapshotTooLarge(read_row_budget)
+            snap.tables[t] = table
+            continue
         if d.fixed is not None:
             read = d.fixed
         elif not table.count:
             read = []
         elif dialect == "postgresql":
-            read = _read_rows_pg(s, d)
+            read = _read_rows_pg(s, d, limit=read_row_budget - read_count + 1)
         else:
-            read = _read_rows(s, t, d)
+            read = _read_rows(s, t, d, limit=read_row_budget - read_count + 1)
+        read_count += len(read)
+        if read_count > read_row_budget:
+            raise SnapshotTooLarge(read_row_budget)
         for row in read:
             text = _row_key(d, row, seen_keys, skip)
             k = row_key_hash(key, text, t)
@@ -1759,7 +1923,9 @@ def _snapshot(
                 mac,
                 "".join(cell_hash(key, row.get(c), t, c) for c in table.cell_columns),
             ]
-            if old is not None and (k not in old.rows or old.rows[k][0] != mac):
+            if t in retain_values or (
+                old is not None and (k not in old.rows or old.rows[k][0] != mac)
+            ):
                 table.values[k] = dict(row)
         snap.tables[t] = table
     return snap
@@ -1796,6 +1962,8 @@ def unread_reasons(
         return []
     if old.schema != new.schema or old.columns != new.columns:
         return ["definition changed"]
+    if old.row_hash_format != new.row_hash_format:
+        return ["row hash format changed"]
     reasons = []
     if old.mode == "append_only" and any(
         k not in new.rows or new.rows[k][0] != v[0] for k, v in old.rows.items()
@@ -1839,6 +2007,8 @@ def diff(
         a, b = before.tables.get(name), after.tables.get(name)
         moved = TableDiff(unread=unread_reasons(a, b, after.dialect))
         if a is not None and b is not None and a.mode == "compare" == b.mode:
+            if a.cell_columns != b.cell_columns:
+                moved.unread.append("compared differently")
             if a.columns == b.columns and a.cell_columns == b.cell_columns:
                 moved.added = len(b.rows.keys() - a.rows.keys())
                 moved.removed = len(a.rows.keys() - b.rows.keys())
@@ -1869,7 +2039,11 @@ def settled_state(a: Snapshot, b: Snapshot) -> bool:
         return False
     for name, x in a.tables.items():
         y = b.tables[name]
-        if (x.mode, x.schema) != (y.mode, y.schema):
+        if (x.mode, x.schema, x.row_hash_format) != (
+            y.mode,
+            y.schema,
+            y.row_hash_format,
+        ):
             return False
         if x.mode == "append_only":
             if any(y.rows.get(k) != v for k, v in x.rows.items()):
@@ -1893,7 +2067,7 @@ def same_state(a: Snapshot, b: Snapshot) -> bool:
     if set(a.tables) != set(b.tables):
         return False
     return all(
-        (x.mode, x.schema, x.count, x.counter, x.max_auto, x.rows)
-        == (y.mode, y.schema, y.count, y.counter, y.max_auto, y.rows)
+        (x.mode, x.schema, x.row_hash_format, x.count, x.counter, x.max_auto, x.rows)
+        == (y.mode, y.schema, y.row_hash_format, y.count, y.counter, y.max_auto, y.rows)
         for x, y in ((a.tables[n], b.tables[n]) for n in a.tables)
     )

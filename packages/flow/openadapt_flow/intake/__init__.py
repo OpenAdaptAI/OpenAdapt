@@ -30,8 +30,20 @@ from openadapt_flow.intake.extract import (
     build_agent_request,
     extract_fields,
 )
+from openadapt_flow.intake.param_gate import (
+    IntakeParamGateRefusal,
+    IntakeParamGateResult,
+    bound_param_names,
+    check_tool_params,
+    requires_intake_provenance,
+)
 
 __all__ = [
+    "IntakeParamGateRefusal",
+    "IntakeParamGateResult",
+    "bound_param_names",
+    "check_tool_params",
+    "requires_intake_provenance",
     "DEFAULT_CONFIRM_THRESHOLD",
     "ExtractedField",
     "IntakeDocument",

@@ -9,6 +9,61 @@ This document outlines the design for adding optional telemetry to all OpenAdapt
 - **Developer-aware** (internal usage tagged for filtering)
 - **Unified** (shared module across all packages)
 
+## Implemented: OpenAdapt Desktop usage stats
+
+The rest of this document is the original cross-package proposal. OpenAdapt
+Desktop ships a smaller, consent-first implementation that differs from it in
+three ways:
+
+1. **Consent before anything is sent.** Desktop asks on first launch:
+   "Help improve OpenAdapt. Share anonymous usage stats, like which features
+   are used and whether they work. No screen content, keystrokes, file paths,
+   or task text." The buttons are **Share** and **No thanks**. The answer is
+   stored as `[privacy].usage_stats = "share" | "off"` in
+   `~/.openadapt/config.toml`, and **Settings → Usage stats** changes it.
+   Until there is an answer, nothing is sent. `DO_NOT_TRACK=1` or
+   `OPENADAPT_TELEMETRY_ENABLED=false` turns it off and skips the question;
+   `OPENADAPT_TELEMETRY_ENABLED=true` turns it on without asking, for managed
+   installs.
+2. **PostHog product events, not error reports.** Events go to PostHog's
+   capture API with a public, write-only project key embedded in
+   `openadapt_desktop/telemetry.py` (`POSTHOG_PROJECT_KEY`, the same key the
+   website ships to browsers). It can't read data. `OPENADAPT_POSTHOG_KEY` and
+   `OPENADAPT_POSTHOG_HOST` override it.
+3. **Closed schema.** Events are limited to `app_opened`,
+   `recording_started|stopped|failed`, `replay_started|stopped|failed`,
+   `teach_started|completed`, and `update_check`. Every event carries
+   `app_version`, `os`, `arch`, `internal`, and `package`. Callers may add only
+   `surface`, `mode`, `outcome`, `error_code` (short `[A-Za-z0-9_.-]` tokens)
+   and `update_available` (bool). Anything else is dropped. The distinct id is
+   a random UUID in `~/.openadapt/telemetry_id`. Events set
+   `$process_person_profile: false` and `$geoip_disable: true`.
+
+Sends run on a daemon thread with a 3-second timeout and fail silently.
+
+### Update check
+
+Desktop releases are `openadapt-desktop-vX.Y.Z` in the OpenAdapt monorepo.
+GitHub's `/releases/latest` names the launcher's `vX.Y.Z` release there, so
+`openadapt_desktop/updates.py` reads
+`GET https://api.github.com/repos/OpenAdaptAI/OpenAdapt/releases?per_page=50`
+and takes the newest release that isn't a draft or prerelease and whose tag
+starts with `openadapt-desktop-v`. When that's newer than the installed
+version, the window shows "OpenAdapt X.Y.Z is available" with a link to the
+release page. Installing stays manual until the signed Tauri updater feed
+exists (see RELEASES.md and `src-tauri/src/main.rs`).
+
+- At most once a day (`~/.openadapt/update_check.json` records the last
+  attempt), in the background, with a 5-second timeout. Failures are silent.
+- The request sends only `Accept` and a fixed `User-Agent`: no install id,
+  version, token, or account. GitHub sees what any HTTP client shows it.
+- On by default. `[privacy].update_check = false`, the Settings switch, or
+  `OPENADAPT_UPDATE_CHECK=false` turns it off. `DO_NOT_TRACK` doesn't, since
+  the check sends nothing about the person.
+- GitHub doesn't report per-request counts, so a completed check also sends an
+  `update_check` usage event (`update_available` plus the base properties),
+  but only when usage stats are on.
+
 ## Table of Contents
 
 1. [Service Recommendation](#service-recommendation)

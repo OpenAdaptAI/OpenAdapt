@@ -3,8 +3,9 @@
 Reads the scored rows listed in ``inputs/medplum_rows.manifest`` from the
 leaderboard results at commit 04e76283a (``git show``, so no checkout of that
 branch is needed) and yields, per run: the task text the agent got, one step
-per agent turn, the start and end screenshots, and the agent's final reply.
-See PROTOCOL.md.
+per agent turn and the start and end screenshots. Agent replies are omitted.
+See JUDGE_INPUTS.md for the current input boundary and PROTOCOL.md for
+the historical population.
 """
 
 from __future__ import annotations
@@ -55,6 +56,8 @@ def _action_name(action: dict[str, Any]) -> str:
 
 
 def steps(transcript: list[dict[str, Any]], end_url: str) -> list[dict[str, Any]]:
+    # At COMMIT, claude_cu records model response text blocks as turn.text;
+    # openai_cu records output_text messages there. Neither is observed state.
     out = []
     for turn in transcript:
         actions = [a for a in turn.get("actions") or [] if a]
@@ -66,7 +69,6 @@ def steps(transcript: list[dict[str, Any]], end_url: str) -> list[dict[str, Any]
         out.append(
             {
                 "url": end_url or "",
-                "state_description": (turn.get("text") or "").strip(),
                 "action_name": name,
                 "action_args": {"actions": actions} if actions else {},
             }
@@ -90,7 +92,6 @@ def runs() -> Iterator[dict[str, Any]]:
                 "task": tasks[row["id"]],
                 "init_url": "",
                 "steps": steps(transcript, ""),
-                "predicted_output": claim.get("final_text") or claim.get("note") or "",
                 "screenshots": [
                     _show(f"{folder}/start.png"),
                     _show(f"{folder}/end.png"),

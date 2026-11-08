@@ -18,7 +18,7 @@ def test_api_record_compile_replay_on_mockmed(
 
     assert main(["demo-record", "--out", "rec"]) == 0
     bundle = api.compile("rec", out="bundle", name="api-test")
-    report = api.replay(bundle, params={"note": "from the API"})
+    report = api.replay(bundle, params={"note": "from the API"}, demo_app=True)
     # replay is a rehearsal: it never reads the record back.
     assert report.transaction_outcome == "COMPLETED_UNVERIFIED"
 
