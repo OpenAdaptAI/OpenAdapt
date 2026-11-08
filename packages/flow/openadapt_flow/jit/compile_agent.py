@@ -582,7 +582,7 @@ class Recording:
                         # Never await/schedule, call an arbitrary .close, or
                         # run a suspended coroutine's finally as hygiene.
                         if (
-                            isinstance(prepared, CoroutineType)
+                            type(prepared) is CoroutineType
                             and getcoroutinestate(prepared) == CORO_CREATED
                         ):
                             prepared.close()

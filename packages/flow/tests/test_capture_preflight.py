@@ -292,7 +292,9 @@ def test_hook_is_not_part_of_task_identity_or_saved_spec(local_task):
     assert baseline == []
     database = json.loads(path.read_text())["verifier"]["sqlite_database"]
     with sqlite3.connect(database) as connection:
-        connection.execute("INSERT INTO entries(title) VALUES (?)", ("outside declared record",))
+        connection.execute(
+            "INSERT INTO entries(title) VALUES (?)", ("outside declared record",)
+        )
     assert compiler._baseline is baseline
     after = compiler.observer.system_of_record
     check = check_run_record(baseline, after, expect=compiler.expect, values=values)
@@ -586,12 +588,26 @@ def test_real_candidate_publication_waits_for_cleanup_and_reload_refuses_failed_
     assert events == ["compile", "dispatcher", "backend"]
 
 
-@pytest.mark.parametrize("route", ["direct", "compiler", "reload", "first_run", "cache", "loader"])
-@pytest.mark.parametrize("returned", ["async_function", "async_callable", "sync_coroutine", "custom_awaitable", "suspended_coroutine", "falsey_value"])
+@pytest.mark.parametrize(
+    "route", ["direct", "compiler", "reload", "first_run", "cache", "loader"]
+)
+@pytest.mark.parametrize(
+    "returned",
+    [
+        "async_function",
+        "async_callable",
+        "sync_coroutine",
+        "custom_awaitable",
+        "spoof_coroutine",
+        "suspended_coroutine",
+        "falsey_value",
+    ],
+)
 def test_capture_requires_synchronous_none_before_recording_baseline_session_and_actor(
     local_task, tmp_path, monkeypatch, route, returned
 ):
     from inspect import CORO_CLOSED, CORO_SUSPENDED, getcoroutinestate
+    from types import CoroutineType
 
     from openadapt_flow.record_sor import SystemOfRecordObserver
 
@@ -611,7 +627,9 @@ def test_capture_requires_synchronous_none_before_recording_baseline_session_and
         opened.append(backend)
         # The ordinary observer is constructed normally; this spy is installed
         # only after normal guarded opening and detects a Recording baseline read.
-        monkeypatch.setattr(SystemOfRecordObserver, "system_of_record", property(forbidden_baseline))
+        monkeypatch.setattr(
+            SystemOfRecordObserver, "system_of_record", property(forbidden_baseline)
+        )
 
         def close_owned_backend():
             closes.append(backend)
@@ -640,6 +658,17 @@ def test_capture_requires_synchronous_none_before_recording_baseline_session_and
             events.append("foreign-close")
             raise AssertionError("a custom awaitable must not be closed")
 
+    class SpoofAwaitable(Awaitable):
+        # isinstance can honor __class__; no native-coroutine introspection
+        # or close is permitted on this user-controlled lookalike.
+        @property
+        def __class__(self):
+            return CoroutineType
+
+        cr_running = False
+        cr_suspended = False
+        cr_frame = SimpleNamespace(f_lasti=-1)
+
     class Suspend:
         def __await__(self):
             yield None
@@ -655,21 +684,41 @@ def test_capture_requires_synchronous_none_before_recording_baseline_session_and
         events.append("sync-hook")
         if returned == "custom_awaitable":
             return Awaitable()
+        if returned == "spoof_coroutine":
+            return SpoofAwaitable()
         if returned == "falsey_value":
             return False
-        coroutine = suspend() if returned == "suspended_coroutine" else async_prepare(backend)
+        coroutine = (
+            suspend() if returned == "suspended_coroutine" else async_prepare(backend)
+        )
         coroutines.append(coroutine)
         if returned == "suspended_coroutine":
             coroutine.send(None)  # Deliberately started by this synthetic caller.
         return coroutine
 
-    callback = async_prepare if returned == "async_function" else AsyncPrepare() if returned == "async_callable" else sync_prepare
+    callback = (
+        async_prepare
+        if returned == "async_function"
+        else AsyncPrepare()
+        if returned == "async_callable"
+        else sync_prepare
+    )
     try:
-        with pytest.raises(TypeError, match="before_capture must return None synchronously"):
+        with pytest.raises(
+            TypeError, match="before_capture must return None synchronously"
+        ):
             invoke(route, local_task[0], callback, NoModelActor(events), tmp_path)
         assert len(opened) == 1 and closes == opened
         assert opened[0].page.is_closed()
-        assert not {"baseline", "session", "actor", "async-body", "awaited", "foreign-close", "suspended-finally"} & set(events)
+        assert not {
+            "baseline",
+            "session",
+            "actor",
+            "async-body",
+            "awaited",
+            "foreign-close",
+            "suspended-finally",
+        } & set(events)
         if returned == "sync_coroutine":
             assert getcoroutinestate(coroutines[0]) == CORO_CLOSED
         if returned == "suspended_coroutine":
