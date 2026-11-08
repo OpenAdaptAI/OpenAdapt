@@ -8,6 +8,7 @@ from itertools import permutations
 from typing import Any
 
 import pytest
+
 from openadapt_flow.fhir_setup import learn_fhir_read, search_resources
 
 BASE = "https://example.test/fhir"
