@@ -24,7 +24,6 @@ import statistics
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Optional
 
 # --- shipped production wiring (the path under test) -----------------------
 from openadapt_flow.runtime.remote_vlm import (
@@ -32,8 +31,12 @@ from openadapt_flow.runtime.remote_vlm import (
     RemoteGrounder,
     RemoteIdentityVLM,
     RemoteStateVerifier,
-    RemoteVLMClient,
     appliance_from_env,
+)
+from openadapt_flow.validation.dense_surface import (
+    RECORD_CONDITION,
+    build_dense_table,
+    render_frame,
 )
 
 # --- validation-only rendering (reused, not modified) ----------------------
@@ -44,12 +47,6 @@ from openadapt_flow.validation.vlm_identity_probe import (
     SAME_VALUES,
     render_crop,
 )
-from openadapt_flow.validation.dense_surface import (
-    RECORD_CONDITION,
-    build_dense_table,
-    render_frame,
-)
-
 from service_manager import start_service
 from state_fixtures import FIXTURES
 
@@ -74,8 +71,9 @@ def crop(value: str, cond) -> bytes:
     return _crop_cache[key]
 
 
-def render_screen(html: str, *, device_scale_factor: int = 2,
-                  width: int = 900, height: int = 600) -> bytes:
+def render_screen(
+    html: str, *, device_scale_factor: int = 2, width: int = 900, height: int = 600
+) -> bytes:
     """Render a full app-like screen to PNG (drift-oracle fixtures)."""
     from playwright.sync_api import sync_playwright
 
@@ -132,15 +130,37 @@ def run_identity(identity: RemoteIdentityVLM) -> dict:
     for val in SAME_VALUES:
         pa, pb = crop(val, RECORD_COND), crop(val, RECORD_COND)
         v, sod, dt = call(pa, pb)
-        rows.append(IdRow("same_clean", "identical", val, val, "same", v, sod, dt,
-                          "same value, clean re-render"))
+        rows.append(
+            IdRow(
+                "same_clean",
+                "identical",
+                val,
+                val,
+                "same",
+                v,
+                sod,
+                dt,
+                "same value, clean re-render",
+            )
+        )
 
     # --- SAME-patient, the exact confusable target vs itself (over-veto stress)
     for cls, a, b, note in COLLAPSE_PAIRS:
         pa = crop(a, RECORD_COND)
         v, sod, dt = call(pa, pa)
-        rows.append(IdRow("same_confusable", cls, a, a, "same", v, sod, dt,
-                          "confusable target vs identical re-render"))
+        rows.append(
+            IdRow(
+                "same_confusable",
+                cls,
+                a,
+                a,
+                "same",
+                v,
+                sod,
+                dt,
+                "confusable target vs identical re-render",
+            )
+        )
 
     # --- SAME-patient under render drift (theme/font/scale) (truth same)
     for val in SAME_VALUES:
@@ -148,8 +168,19 @@ def run_identity(identity: RemoteIdentityVLM) -> dict:
         for cond in DRIFT_CONDS:
             pb = crop(val, cond)
             v, sod, dt = call(pa, pb)
-            rows.append(IdRow("same_drift", cond.name, val, val, "same", v, sod, dt,
-                              f"same value under {cond.name}"))
+            rows.append(
+                IdRow(
+                    "same_drift",
+                    cond.name,
+                    val,
+                    val,
+                    "same",
+                    v,
+                    sod,
+                    dt,
+                    f"same value under {cond.name}",
+                )
+            )
 
     wrong = [r for r in rows if r.truth == "different"]
     same = [r for r in rows if r.truth == "same"]
@@ -188,22 +219,31 @@ def run_state(verifier: RemoteStateVerifier) -> dict:
         t0 = time.time()
         ans = verifier.verify(png, fx.expected_state)  # "yes"/"no"/"uncertain"
         dt = time.time() - t0
-        rows.append({
-            "fid": fx.fid, "kind": fx.kind, "truth": fx.truth,
-            "expected_state": fx.expected_state, "answer": ans,
-            "holds": ans == "yes", "latency_s": dt, "note": fx.note,
-        })
+        rows.append(
+            {
+                "fid": fx.fid,
+                "kind": fx.kind,
+                "truth": fx.truth,
+                "expected_state": fx.expected_state,
+                "answer": ans,
+                "holds": ans == "yes",
+                "latency_s": dt,
+                "note": fx.note,
+            }
+        )
 
     true_cases = [r for r in rows if r["truth"] == "yes"]
     false_cases = [r for r in rows if r["truth"] == "no"]
-    true_rescue = [r for r in true_cases if r["holds"]]        # correct "yes"
-    false_rescue = [r for r in false_cases if r["holds"]]      # WRONG "yes" (risk)
+    true_rescue = [r for r in true_cases if r["holds"]]  # correct "yes"
+    false_rescue = [r for r in false_cases if r["holds"]]  # WRONG "yes" (risk)
     lat = [r["latency_s"] for r in rows]
     return {
         "n_true_cases": len(true_cases),
         "n_false_cases": len(false_cases),
         "true_rescue_rate": len(true_rescue) / len(true_cases) if true_cases else None,
-        "false_rescue_rate": len(false_rescue) / len(false_cases) if false_cases else None,
+        "false_rescue_rate": len(false_rescue) / len(false_cases)
+        if false_cases
+        else None,
         "false_rescue_cases": [r for r in false_cases if r["holds"]],
         "latency_s": {
             "median": statistics.median(lat),
@@ -216,8 +256,9 @@ def run_state(verifier: RemoteStateVerifier) -> dict:
 # ---------------------------------------------------------------------------
 # Validation 3 -- grounder availability
 # ---------------------------------------------------------------------------
-def run_grounder(grounder: RemoteGrounder, *, tol_px: int = 60,
-                 n_targets: int = 6) -> dict:
+def run_grounder(
+    grounder: RemoteGrounder, *, tol_px: int = 60, n_targets: int = 6
+) -> dict:
     table = build_dense_table(seed=1, n_rows=18)
     frame = render_frame(table, RECORD_CONDITION, top_offset_px=12)
     vw, vh = frame.viewport
@@ -233,23 +274,42 @@ def run_grounder(grounder: RemoteGrounder, *, tol_px: int = 60,
         name_point, open_point, _, _ = frame.points[i]
         row = table.rows[i]
         intent = (
-            f"the blue 'Open' button in the row for patient {row.name} "
-            f"(MRN {row.mrn})"
+            f"the blue 'Open' button in the row for patient {row.name} (MRN {row.mrn})"
         )
         t0 = time.time()
         match = grounder.locate(frame.png, intent)
         dt = time.time() - t0
         if match is None:
-            rows.append({"row": i, "name": row.name, "mrn": row.mrn,
-                         "intent": intent, "proposed": None, "truth": open_point,
-                         "error_px": None, "hit": False, "latency_s": dt})
+            rows.append(
+                {
+                    "row": i,
+                    "name": row.name,
+                    "mrn": row.mrn,
+                    "intent": intent,
+                    "proposed": None,
+                    "truth": open_point,
+                    "error_px": None,
+                    "hit": False,
+                    "latency_s": dt,
+                }
+            )
             continue
         px, py = match.point
         tx, ty = open_point
         err = ((px - tx) ** 2 + (py - ty) ** 2) ** 0.5
-        rows.append({"row": i, "name": row.name, "mrn": row.mrn, "intent": intent,
-                     "proposed": [px, py], "truth": [tx, ty],
-                     "error_px": err, "hit": err <= tol_px, "latency_s": dt})
+        rows.append(
+            {
+                "row": i,
+                "name": row.name,
+                "mrn": row.mrn,
+                "intent": intent,
+                "proposed": [px, py],
+                "truth": [tx, ty],
+                "error_px": err,
+                "hit": err <= tol_px,
+                "latency_s": dt,
+            }
+        )
 
     hits = [r for r in rows if r["hit"]]
     errs = [r["error_px"] for r in rows if r["error_px"] is not None]
@@ -268,7 +328,7 @@ def run_grounder(grounder: RemoteGrounder, *, tol_px: int = 60,
 
 # ---------------------------------------------------------------------------
 def main() -> None:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--port", type=int, default=8077)
     ap.add_argument("--out", default="benchmark/appliance_validation/results.json")
     ap.add_argument("--log", default="benchmark/appliance_validation/service.log")
@@ -293,6 +353,7 @@ def main() -> None:
     try:
         # Health/readiness sanity through plain HTTP (the client's transport).
         import httpx
+
         h = httpx.get(f"{handle.base_url}/health", timeout=5).json()
         rdy = httpx.get(f"{handle.base_url}/ready", timeout=5).json()
         results["health"] = h
@@ -301,6 +362,7 @@ def main() -> None:
 
         # Build the appliance through the SAME env path production uses.
         import os
+
         os.environ["OPENADAPT_FLOW_VLM_URL"] = handle.base_url
         os.environ["OPENADAPT_FLOW_VLM_TOKEN"] = handle.token
         os.environ["OPENADAPT_FLOW_VLM_TIMEOUT"] = str(CALL_TIMEOUT_S)
@@ -310,23 +372,28 @@ def main() -> None:
         print("[1] identity veto (safety-critical) ...")
         results["identity"] = run_identity(appliance.identity_vlm)
         idr = results["identity"]
-        print(f"    false-accepts={idr['false_accepts']}/{idr['n_wrong_patient']} "
-              f"(rate {idr['false_accept_rate']}); "
-              f"detection={idr['detection_rate']}; "
-              f"over-veto={idr['over_veto']}/{idr['n_same_patient']}")
+        print(
+            f"    false-accepts={idr['false_accepts']}/{idr['n_wrong_patient']} "
+            f"(rate {idr['false_accept_rate']}); "
+            f"detection={idr['detection_rate']}; "
+            f"over-veto={idr['over_veto']}/{idr['n_same_patient']}"
+        )
 
         print("[2] drift-oracle state verifier ...")
         results["state"] = run_state(appliance.state_verifier)
         st = results["state"]
-        print(f"    true-rescue={st['true_rescue_rate']}  "
-              f"false-rescue={st['false_rescue_rate']}")
+        print(
+            f"    true-rescue={st['true_rescue_rate']}  "
+            f"false-rescue={st['false_rescue_rate']}"
+        )
 
         if not args.skip_grounder:
             print("[3] grounder availability ...")
             results["grounder"] = run_grounder(appliance.grounder)
             gr = results["grounder"]
-            print(f"    hit-rate={gr['hit_rate']}  "
-                  f"median-err-px={gr['median_error_px']}")
+            print(
+                f"    hit-rate={gr['hit_rate']}  median-err-px={gr['median_error_px']}"
+            )
 
         results["peak_rss_mb"] = handle.rss_mb()
         print(f"[*] service RSS after run = {results['peak_rss_mb']} MiB")

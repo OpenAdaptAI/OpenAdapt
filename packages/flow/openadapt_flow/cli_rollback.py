@@ -23,6 +23,7 @@ def register(sub: argparse._SubParsersAction) -> None:
             "Compensating rollback after a stop: qualify it on a test copy "
             "(a stop before and after every save)"
         ),
+        allow_abbrev=False,
     )
     verbs = parser.add_subparsers(dest="rollback_cmd", required=True)
     p = verbs.add_parser(
@@ -31,6 +32,7 @@ def register(sub: argparse._SubParsersAction) -> None:
             "Stop the run before and after every save on a declared test copy, "
             "roll back, and keep the compensations that restore the whole store"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument(

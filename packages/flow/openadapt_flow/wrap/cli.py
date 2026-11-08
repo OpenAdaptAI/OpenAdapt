@@ -13,7 +13,7 @@ from openadapt_flow.wrap import TaskArgumentsError, WrappedTask
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="openadapt wrap")
+    parser = argparse.ArgumentParser(prog="openadapt wrap", allow_abbrev=False)
     parser.add_argument(
         "--task", required=True, help="Generated task and read-back configuration"
     )

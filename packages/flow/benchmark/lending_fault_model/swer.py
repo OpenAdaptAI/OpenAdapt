@@ -70,7 +70,6 @@ from pathlib import Path
 from typing import Callable, Iterator, Optional
 
 import requests
-
 from benchmark.harness.effectbench import (
     AgentReport,
     DivergenceCategory,
@@ -732,7 +731,7 @@ def to_markdown(result: dict) -> str:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--trials", type=int, default=3, help="trials per task per arm")
     parser.add_argument(
         "--print", action="store_true", help="print results, do not write files"

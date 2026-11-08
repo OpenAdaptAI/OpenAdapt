@@ -470,7 +470,7 @@ jobs:
         # dependencies than the published one Flow's lock names.
         run: >-
           python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,capture,agent]' --lock packages/capture
-          --editable packages/types --editable packages/capture --editable packages/flow
+          --editable packages/types --editable packages/capture --editable packages/flow --editable packages/agent --editable .
       - name: Install Harness² for the integration tests
         # Not on PyPI. Pinned to the commit benchmark.harness.harness2
         # is written against; it has no runtime dependencies.
@@ -484,6 +484,53 @@ jobs:
           here = pathlib.Path(openadapt_capture.__file__).resolve().as_posix()
           assert "packages/capture/openadapt_capture" in here, here
           print("openadapt_capture from", here)
+          PY
+      - name: Verify the installed Agent shim, launcher and Flow implementation
+        run: |
+          python - <<'PY'
+          import importlib.metadata
+          import importlib.util
+          import json
+          import pathlib
+
+          root = pathlib.Path.cwd().resolve().parents[1]
+          shim = importlib.util.find_spec("openadapt_agent")
+          expected = root / "packages/agent/src/openadapt_agent/__init__.py"
+          assert (
+              shim and shim.origin and pathlib.Path(shim.origin).resolve() == expected
+          ), shim
+          installed = importlib.metadata.distribution("openadapt-agent")
+          direct = json.loads(installed.read_text("direct_url.json") or "{}")
+          assert direct.get("url") == (root / "packages/agent").as_uri(), direct
+          assert direct.get("dir_info", {}).get("editable") is True, direct
+
+          compatibility = importlib.import_module("openadapt_agent")
+          engine = importlib.import_module("openadapt_flow.agent")
+          assert compatibility is engine
+          implementation = pathlib.Path(engine.__file__).resolve()
+          expected_implementation = root / "packages/flow/openadapt_flow/agent/__init__.py"
+          assert implementation == expected_implementation, implementation
+          print("openadapt-agent shim from", expected)
+          print("openadapt_flow.agent from", implementation)
+
+          launcher_spec = importlib.util.find_spec("openadapt")
+          expected_launcher = root / "openadapt/__init__.py"
+          assert (
+              launcher_spec
+              and launcher_spec.origin
+              and pathlib.Path(launcher_spec.origin).resolve() == expected_launcher
+          ), launcher_spec
+          launcher_distribution = importlib.metadata.distribution("openadapt")
+          launcher_direct = json.loads(
+              launcher_distribution.read_text("direct_url.json") or "{}"
+          )
+          assert launcher_direct.get("url") == root.as_uri(), launcher_direct
+          assert (
+              launcher_direct.get("dir_info", {}).get("editable") is True
+          ), launcher_direct
+          launcher = importlib.import_module("openadapt")
+          assert pathlib.Path(launcher.__file__).resolve() == expected_launcher
+          print("openadapt launcher from", expected_launcher)
           PY
       - name: Resolve Playwright version
         id: pw

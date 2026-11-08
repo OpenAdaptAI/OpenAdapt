@@ -225,7 +225,7 @@ def {func_name}({param_sig_first}) -> dict:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument(
         "--config",
         default=DEPLOYMENT,

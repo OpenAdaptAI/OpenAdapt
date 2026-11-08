@@ -71,7 +71,6 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 import requests
-
 from benchmark.effect_e2e import ground_truth
 from benchmark.effect_e2e.record_service import (
     BANNER_READ_CONTRACT,
@@ -833,7 +832,7 @@ def write_outputs(results: dict[str, Any], out_dir: Path) -> None:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--n", type=int, default=DEFAULT_N, help="trials per fault/arm")
     parser.add_argument("--out", default=str(DEFAULT_OUT_DIR), help="output directory")
     parser.add_argument(

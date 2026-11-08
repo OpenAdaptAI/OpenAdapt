@@ -153,7 +153,9 @@ def uninstall(manifest_dir: Path | str) -> list[Path]:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.split("\n\n")[0], allow_abbrev=False
+    )
     where = parser.add_mutually_exclusive_group(required=True)
     where.add_argument("--user-data-dir", help="Chromium profile directory")
     where.add_argument("--browser", choices=("chrome", "chromium"))

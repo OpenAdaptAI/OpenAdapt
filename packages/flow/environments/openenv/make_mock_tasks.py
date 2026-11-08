@@ -239,7 +239,9 @@ PACKS = {
 def main() -> None:
     import argparse
 
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument(
         "--cases",
         type=Path,

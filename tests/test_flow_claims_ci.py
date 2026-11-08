@@ -302,3 +302,54 @@ def test_workflow_uses_only_the_small_locked_yaml_group() -> None:
         install["run"]
         == "python scripts/ci/locked_install.py --lock .github/ci-tools:claims"
     )
+
+
+@pytest.mark.parametrize("flag", ["--artifacts-dir", "--shards", "--out", "--help"])
+def test_junit_cli_rejects_every_undeclared_option_prefix_before_writing(
+    tmp_path: Path, flag: str
+) -> None:
+    artifacts, out = tmp_path / "artifacts", tmp_path / "merged.xml"
+    _report(artifacts, 1, 2, _case("test_replayer"))
+    _report(artifacts, 2, 2, _case("test_effect_verifier"))
+    canonical = [
+        "--artifacts-dir",
+        str(artifacts),
+        "--shards",
+        "2",
+        "--out",
+        str(out),
+    ]
+    before = {path: path.read_bytes() for path in artifacts.rglob("*.xml")}
+    for length in range(3, len(flag)):
+        prefix = flag[:length]
+        if flag == "--help":
+            candidates = [canonical + [prefix]]
+        else:
+            index = canonical.index(flag)
+            value = canonical[index + 1]
+            candidates = [
+                canonical[:index] + [prefix, value] + canonical[index + 2 :],
+                canonical[:index] + [prefix + "=" + value] + canonical[index + 2 :],
+            ]
+        for argv in candidates:
+            with pytest.raises(SystemExit) as refused:
+                merge.main(argv)
+            assert refused.value.code == 2
+            assert not out.exists()
+    assert {path: path.read_bytes() for path in artifacts.rglob("*.xml")} == before
+
+
+def test_junit_cli_keeps_full_option_spellings_and_complete_validation(
+    tmp_path: Path,
+) -> None:
+    artifacts, out = tmp_path / "artifacts", tmp_path / "merged.xml"
+    _report(artifacts, 1, 2, _case("test_replayer"))
+    _report(artifacts, 2, 2, _case("test_effect_verifier"))
+    assert (
+        merge.main(
+            ["--artifacts-dir", str(artifacts), "--shards", "2", "--out", str(out)]
+        )
+        == 0
+    )
+    assert out.is_file()
+    assert _check(out, _registry(tmp_path / "claims.yaml")) == 0

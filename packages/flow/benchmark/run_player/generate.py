@@ -85,8 +85,7 @@ RUN_SPECS = [
     RunSpec(
         id="halt",
         label="Surprise modal — halts",
-        tagline="An unexpected pop-up blocks the save. Watch it STOP instead"
-        " of lying.",
+        tagline="An unexpected pop-up blocks the save. Watch it STOP instead of lying.",
         run_dir=HALT_RUN_DIR,
         drift="modal",
     ),
@@ -97,6 +96,7 @@ RUN_SPECS = [
 # Real replay: regenerate the HALT run (model-free) against bundled MockMed
 # --------------------------------------------------------------------------
 
+
 def regenerate_halt_run(out_dir: Path) -> None:
     """Produce the surprise-modal HALT run with a real, model-free replay.
 
@@ -105,12 +105,11 @@ def regenerate_halt_run(out_dir: Path) -> None:
     final step's postcondition legitimately fail so the run halts. No model
     calls; the only injected imports are Playwright and the local app.
     """
-    from playwright.sync_api import sync_playwright
-
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
     from openadapt_flow.ir import Workflow
     from openadapt_flow.mockmed.server import serve
     from openadapt_flow.runtime import Replayer
+    from playwright.sync_api import sync_playwright
 
     if out_dir.exists():
         shutil.rmtree(out_dir)
@@ -144,6 +143,7 @@ def regenerate_halt_run(out_dir: Path) -> None:
 # --------------------------------------------------------------------------
 # Frame encoding
 # --------------------------------------------------------------------------
+
 
 def _data_uri(png_path: Path, width: int = FRAME_WIDTH) -> Optional[str]:
     """Downscaled PNG data URI of a real captured frame, or None if missing."""
@@ -306,9 +306,7 @@ def extract_run(spec: RunSpec) -> dict[str, Any]:
             else None
         )
         after = (
-            _data_uri(spec.run_dir / res["after_png"])
-            if res.get("after_png")
-            else None
+            _data_uri(spec.run_dir / res["after_png"]) if res.get("after_png") else None
         )
 
         steps.append(
@@ -319,9 +317,7 @@ def extract_run(spec: RunSpec) -> dict[str, Any]:
                 "action": action,
                 "ok": ok,
                 "headline": _headline(error, rung, healed, action),
-                "caption": _step_caption(
-                    error, action, res["intent"], rung, verified
-                ),
+                "caption": _step_caption(error, action, res["intent"], rung, verified),
                 "rung": rung,
                 "rung_label": RUNG_LABEL.get(rung, rung) if rung else None,
                 "rung_class": (
@@ -329,9 +325,7 @@ def extract_run(spec: RunSpec) -> dict[str, Any]:
                     if rung
                     else ("rung-key" if action in ("type", "key") else "rung-other")
                 ),
-                "confidence": (
-                    resolution["confidence"] if resolution else None
-                ),
+                "confidence": (resolution["confidence"] if resolution else None),
                 "elapsed_ms": res.get("elapsed_ms"),
                 "identity": _identity_summary(res.get("identity")),
                 "postconditions_ok": res.get("postconditions_ok"),
@@ -371,6 +365,7 @@ def extract_run(spec: RunSpec) -> dict[str, Any]:
 # HTML player
 # --------------------------------------------------------------------------
 
+
 def _strip_images(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Copy of the run records with image data URIs removed (for the JSON)."""
     out = []
@@ -409,9 +404,7 @@ def generate(regen_halt: bool = False) -> dict[str, Any]:
     size_kb = (HERE / "player.html").stat().st_size / 1024
     for run in runs:
         s = run["summary"]
-        state = (
-            f"HALTED at {s['halted_at']}" if not s["success"] else "succeeded"
-        )
+        state = f"HALTED at {s['halted_at']}" if not s["success"] else "succeeded"
         print(
             f"  {run['id']:9s} {s['steps']} steps, {s['ok_steps']} ok, "
             f"{s['heals']} heals, rungs={s['rungs']}, "
@@ -423,7 +416,7 @@ def generate(regen_halt: bool = False) -> dict[str, Any]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     ap.add_argument(
         "--regen-halt",
         action="store_true",
