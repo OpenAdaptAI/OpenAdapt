@@ -1628,6 +1628,7 @@ def take_snapshot(
     schemas: Sequence[str] = (),
     optional_modes: Mapping[str, TableMode] = {},
     links: bool = False,
+    retain_values: Sequence[str] = (),
 ) -> Snapshot:
     """Read every table in one read-only transaction.
 
@@ -1656,6 +1657,8 @@ def take_snapshot(
             this database may not have (a profile covers several versions).
             ``ignore`` may name ``*`` for every table.
         links: Keep each keyed row's link MAC (:attr:`Table.links`).
+        retain_values: Tables whose complete raw rows are needed in memory
+            for identity learning/validation. Never serialized by Snapshot.
 
     Raises:
         SnapshotError: the database can't be read as the frame needs it.
@@ -1688,6 +1691,7 @@ def take_snapshot(
             optional_modes,
             link_key() if links else None,
             read_row_budget,
+            retain_values,
         )
     except SnapshotError:
         raise
@@ -1710,6 +1714,7 @@ def _snapshot(
     optional_modes: Mapping[str, TableMode] = {},
     links: Optional[bytes] = None,
     read_row_budget: int = DEFAULT_READ_ROW_BUDGET,
+    retain_values: Sequence[str] = (),
 ) -> Snapshot:
     dialect = s.dialect
     counters: dict[str, int] = {}
@@ -1906,7 +1911,7 @@ def _snapshot(
                 mac,
                 "".join(cell_hash(key, row.get(c), t, c) for c in table.cell_columns),
             ]
-            if old is not None and (k not in old.rows or old.rows[k][0] != mac):
+            if t in retain_values or (old is not None and (k not in old.rows or old.rows[k][0] != mac)):
                 table.values[k] = dict(row)
         snap.tables[t] = table
     return snap

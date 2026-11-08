@@ -151,6 +151,7 @@ _STRENGTH_RANK = {
 FRAME_AUDIT_DETAIL = "openadapt:frame_audit"
 #: Where the baseline keeps the whole-database snapshot (``frame.database``).
 FRAME_DB_DETAIL = "openadapt:frame_database"
+FRAME_IDENTITY_DETAIL = "openadapt:frame_identity_indexes"
 #: Why the whole-database snapshot couldn't be read, when it couldn't.
 FRAME_DB_ERROR = "openadapt:frame_database_error"
 #: Where the baseline keeps the target versions read (``frame.versions``), as
@@ -755,6 +756,7 @@ def _ref_columns(cfg: VerifyConfig) -> list[str]:
     if frame is None:
         return []
     cols = {frame.identity_field} if frame.identity_field else set()
+    cols.update(binding.column for binding in frame.identities.values())
     a = frame.attribution
     if a is not None:
         cols |= {a.record_key} if a.record_key else set()
@@ -776,6 +778,7 @@ def _read_database(
     salt: bytes,
     before: Optional[Any] = None,
     errors: Optional[list[str]] = None,
+    retain_values: Sequence[str] = (),
 ) -> Optional[Any]:
     """The whole-database snapshot, or None when it can't be read (and then
     why, appended to ``errors``)."""
@@ -783,7 +786,7 @@ def _read_database(
     from openadapt_flow.runtime.effects.db_snapshot import mac_key, take_snapshot
 
     database = cfg.frame.database if cfg.frame is not None else None
-    if database is None:
+    if database is None or cfg.frame is None:
         return None
     try:
         return take_snapshot(
@@ -800,6 +803,7 @@ def _read_database(
             schemas=database.schemas,
             optional_modes=database.profile_modes(),  # type: ignore[arg-type]
             links=database.recheck_after_s is not None,
+            retain_values=tuple(set(retain_values) | {b.table for b in cfg.frame.identities.values()}),
         )
     except Exception as exc:  # noqa: BLE001 - unreadable -> the frame is not checked
         if errors is not None:
@@ -1192,6 +1196,42 @@ def _declared_by_surface(
     return keys
 
 
+def _map_frame_rows(
+    cfg: VerifyConfig, before: EffectState, after: Any, db: _DatabaseFrame,
+    slices: Mapping[str, tuple[EffectState, Optional[list[dict[str, Any]]]]],
+    effects: Sequence[Effect], routes: Mapping[str, Sequence[str]], salt: bytes,
+    declared: dict[str, set[str]],
+) -> None:
+    from openadapt_flow.runtime.effects.effect import record_matches
+    from openadapt_flow.runtime.effects.frame import declared_selectors
+    from openadapt_flow.runtime.effects.frame_identity import match_records
+
+    if cfg.frame is None or not isinstance(after, EffectState):
+        raise VerifyRunError("no current mapped surface read")
+    current = _frame_identity_indexes(cfg, after, db.post, salt)
+    previous = before.detail.get(FRAME_IDENTITY_DETAIL)
+    if not isinstance(previous, dict):
+        raise VerifyRunError("baseline has no bound identity index")
+    for surface, binding in cfg.frame.identities.items():
+        prior = previous.get(surface)
+        if not isinstance(prior, dict) or any(type(k) is not str or type(v) is not str for k, v in prior.items()):
+            raise VerifyRunError("baseline identity index is malformed")
+        old_table = db.old.tables.get(binding.table) if db.old is not None else None
+        if old_table is None or set(prior.values()) != set(old_table.rows) or len(prior) != len(old_table.rows):
+            raise VerifyRunError("baseline identity index does not cover its table")
+        old_state, post_records = slices[surface]
+        if post_records is None:
+            raise VerifyRunError("mapped surface is unreadable")
+        selectors = [s for i, e in enumerate(effects) if surface in routes.get(str(i), ()) for s in declared_selectors(e)]
+        keys = set()
+        for records, index in ((old_state.records, prior), (post_records, current[surface])):
+            row_keys = match_records(binding, records, index, _mac_key(salt))
+            for record, row_key in zip(records, row_keys):
+                if any(record_matches(dict(record), sel, text_numbers=old_state.substrate == "sql") for sel in selectors):
+                    keys.add(row_key)
+        declared[binding.table] = keys
+
+
 def judge_run_frame(
     cfg: VerifyConfig,
     verifier: Any,
@@ -1281,7 +1321,7 @@ def judge_run_frame(
             )
     elif not database_only:
         slices[""] = (before, _post_records(after))
-    identities: Optional[dict[str, str]] = None
+    identities: dict[str, str] = {name: b.surface_field for name, b in spec.identities.items()}
     #: Table -> row key MACs its ``judged_by`` surface declares.
     declared_rows: dict[str, set[str]] = {}
     if db is not None and db.still_moving:
@@ -1327,7 +1367,12 @@ def judge_run_frame(
                     declared_rows[table] = _declared_by_surface(
                         table, surface, slices[surface], bound_effects, routes, db
                     )
-        identities = {name: KEY for name in db.slices}
+        identities.update({name: KEY for name in db.slices})
+        if spec.identities and not database_only:
+            try:
+                _map_frame_rows(cfg, before, after, db, slices, bound_effects, routes, salt, declared_rows)
+            except (ValueError, TypeError) as exc:
+                return FrameVerdict(status="not_checked", reason=f"frame identity mapping refused: {exc}")
     audit_before: Optional[list[dict[str, Any]]] = None
     audit_after: Optional[list[dict[str, Any]]] = None
     stored = (
@@ -1635,6 +1680,118 @@ def _tag_reads(verifier: Any, execution_id: str) -> None:
 # -- baseline -----------------------------------------------------------------
 
 
+def _surface_config(cfg: VerifyConfig, surface: str) -> EffectsConfig:
+    if not surface and not cfg.verifier.surfaces:
+        return cfg.verifier
+    if surface not in cfg.verifier.surfaces:
+        raise VerifyRunError("frame identity names an unavailable surface")
+    return cfg.verifier.surfaces[surface]
+
+
+def _surface_records(state: EffectState, surface: str) -> list[dict[str, Any]]:
+    if not surface:
+        if not state.reachable or state.readback_complete is not True:
+            raise VerifyRunError("frame identity needs a complete reachable read")
+        return list(state.records)
+    sub = state.detail.get(surface)
+    if not state.reachable or not isinstance(sub, dict) or sub.get("reachable") is not True or sub.get("readback_complete") is not True:
+        raise VerifyRunError("frame identity needs a complete reachable surface")
+    records = sub.get("records")
+    if not isinstance(records, list) or any(not isinstance(r, dict) for r in records):
+        raise VerifyRunError("frame identity surface has no record list")
+    return records
+
+
+def learn_frame_identities(
+    cfg: VerifyConfig,
+    params: Mapping[str, object],
+    *,
+    read_provider: Optional[CompleteReadProvider] = None,
+) -> VerifyConfig:
+    """Learn row correspondence during setup, before the contract is frozen.
+
+    Uses the frame's own complete snapshot, not a supplied column descriptor.
+    The same read-only client/provider used for selection can be retained.
+    Returned data contains column names and witness counts, never raw rows.
+    """
+    from openadapt_flow.runtime.effects.db_snapshot import settled_state
+    from openadapt_flow.runtime.effects.frame_identity import FrameIdentityError, learn_identity
+
+    if cfg.frame is None or cfg.frame.database is None:
+        raise VerifyRunError("identity learning needs a database frame")
+    database = cfg.frame.database
+    targets = {**database.views, **database.judged_by}
+    if not targets or len(set(targets.values())) != len(targets):
+        raise VerifyRunError("identity learning needs one target table per surface")
+    salt = secrets.token_bytes(32)
+    old = _read_database(cfg, salt, retain_values=tuple(targets))
+    verifier = _build_verifier(cfg, params, read_provider)
+    state = verifier.capture_pre_state()
+    current = _read_database(cfg, salt, retain_values=tuple(targets))
+    if old is None or current is None or not settled_state(old, current):
+        raise VerifyRunError("frame snapshot changed or was unavailable during identity setup")
+    if not isinstance(state, EffectState):
+        raise VerifyRunError("identity setup returned no readable state")
+    bindings = {}
+    try:
+        for table_name, surface in targets.items():
+            table = current.tables.get(table_name)
+            if table is None or table.mode != "compare" or set(table.values) != set(table.rows):
+                raise FrameIdentityError("identity learning needs every target-table row")
+            read = _surface_config(cfg, surface)
+            # FHIR has a resource identity; other readers keep their declared
+            # shared identity (or the ordinary default id).
+            records = _surface_records(state, surface)
+            identity = cfg.frame.identity_field or "id"
+            if read.kind == "fhir" or any(identity not in record for record in records):
+                identity = "id"  # The ordinary record reader's stable-id field.
+            bindings[surface] = learn_identity(
+                records, list(table.values.values()),
+                surface_field=identity, table=table_name,
+                read_config=read.model_dump(mode="json"),
+            )
+    except FrameIdentityError as exc:
+        raise VerifyRunError(f"frame identity setup refused: {exc}") from exc
+    frame = cfg.frame.model_copy(update={"identities": bindings})
+    return cfg.model_copy(update={"frame": frame})
+
+
+def _frame_identity_indexes(cfg: VerifyConfig, state: EffectState, snapshot: Any, salt: bytes) -> dict[str, dict[str, str]]:
+    from openadapt_flow.runtime.effects.frame_identity import FrameIdentityError, match_records, read_config_digest, snapshot_index
+
+    if cfg.frame is None:
+        return {}
+    indexes = {}
+    try:
+        for surface, binding in cfg.frame.identities.items():
+            read = _surface_config(cfg, surface)
+            database = cfg.frame.database
+            if database is None or {**database.views, **database.judged_by}.get(binding.table) != surface:
+                raise FrameIdentityError("identity binding does not match its frame route")
+            if binding.read_config_sha256 != read_config_digest(read.model_dump(mode="json")):
+                raise FrameIdentityError("identity binding belongs to another read configuration")
+            table = snapshot.tables.get(binding.table) if snapshot is not None else None
+            index = snapshot_index(binding, table, _mac_key(salt))
+            match_records(binding, _surface_records(state, surface), index, _mac_key(salt))
+            indexes[surface] = index
+        # A legacy identity absent from a selected FHIR resource is a setup
+        # error, never evidence that its own newly created row is collateral.
+        reads = cfg.verifier.surfaces or {"": cfg.verifier}
+        for surface, read in reads.items():
+            identity = cfg.frame.identity_field
+            if read.kind == "fhir" and surface not in cfg.frame.identities and identity:
+                if identity not in {"id", *(read.field_paths or {})}:
+                    raise FrameIdentityError("frame identity is unavailable on the selected read; learn its row mapping at setup")
+                from openadapt_flow.runtime.effects.frame_identity import canonical_identity
+
+                values = [canonical_identity(record.get(identity), "exact") for record in _surface_records(state, surface)]
+                if len(set(values)) != len(values):
+                    raise FrameIdentityError("frame identity is not unique on the selected read")
+    except FrameIdentityError as exc:
+        raise VerifyRunError(f"frame identity setup refused: {exc}") from exc
+    return indexes
+
+
 def capture_baseline(
     cfg: VerifyConfig,
     params: Mapping[str, object],
@@ -1698,6 +1855,9 @@ def capture_baseline(
         )
     if detail:
         state = state.model_copy(update={"detail": {**state.detail, **detail}})
+    indexes = _frame_identity_indexes(cfg, state, snapshot, salt)
+    if indexes:
+        state = state.model_copy(update={"detail": {**state.detail, FRAME_IDENTITY_DETAIL: indexes}})
     state = _seal_state(cfg, state, salt)
     payload = {
         "schema_version": BASELINE_SCHEMA,
@@ -1718,13 +1878,16 @@ def _seal_state(cfg: VerifyConfig, state: EffectState, salt: bytes) -> EffectSta
 
     identity = cfg.frame.identity_field if cfg.frame is not None else None
     key = _mac_key(salt)
-    sealed = {"": seal(state.records, key, identity)}
+    identities = cfg.frame.identities if cfg.frame is not None else {}
+    own_identity = identities[""].surface_field if "" in identities else identity
+    sealed = {"": seal(state.records, key, own_identity)}
     detail = dict(state.detail or {})
     for name, sub in (state.detail or {}).items():
         if name.startswith("openadapt:") or not isinstance(sub, dict):
             continue
         if isinstance(sub.get("records"), list):
-            sealed[name] = seal(sub["records"], key, identity, name)
+            field = identities[name].surface_field if name in identities else identity
+            sealed[name] = seal(sub["records"], key, field, name)
             detail[name] = {**sub, "records": []}
     detail[SEALED_DETAIL] = sealed
     return state.model_copy(update={"records": [], "detail": detail})
@@ -1749,6 +1912,7 @@ def _unseal_state(
     identity = cfg.frame.identity_field if cfg.frame is not None else None
     key = _mac_key(salt)
     detail = dict(before.detail)
+    identities = cfg.frame.identities if cfg.frame is not None else {}
     for name, entries in sealed.items():
         if not name:
             continue
@@ -1759,12 +1923,14 @@ def _unseal_state(
         detail[name] = {
             **detail.get(name, {}),
             "records": unseal(
-                entries, list(current.get("records", [])), key, identity, name
+                entries, list(current.get("records", [])), key,
+                identities[name].surface_field if name in identities else identity, name
             ),
         }
     return before.model_copy(
         update={
-            "records": unseal(sealed.get("", []), list(now.records), key, identity),
+            "records": unseal(sealed.get("", []), list(now.records), key,
+                identities[""].surface_field if "" in identities else identity),
             "detail": detail,
         }
     )
