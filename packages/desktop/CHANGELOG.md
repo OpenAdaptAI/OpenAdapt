@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.29.2 (2026-11-08)
+
+### Bug Fixes
+
+- **desktop**: select explicit release comparison history
+- **desktop**: attribute generated version-only merges
+
+
+
 ## v0.29.1 (2026-11-08)
 
 ### Bug Fixes

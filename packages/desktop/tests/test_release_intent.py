@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import datetime
 import importlib.util
+import json
+import re
 import shutil
 import subprocess
 import sys
@@ -1177,3 +1179,633 @@ def test_removing_one_duplicate_behavior_keeps_counted_copy_lineage(
     assert prepare_release.required_level(commits, _version(repo)) == "minor"
     assert any(c.sha == feature and "src/duplicate-copy.txt" in c.paths for c in commits)
     assert len(check_release_intent.check(repo, base, head)) == 1
+
+
+# One field-ownership model for every output of set_engine_version. The
+# placeholders are engine fields; equal dependency/comment/string versions
+# deliberately remain ordinary bytes in the expected result.
+_RELEASE_DOCUMENTS = {
+    "pyproject.toml": (
+        '[project]\nname = "openadapt-desktop"\nversion = "@ENGINE@"\n'
+        '[tool.plugin]\nversion = "0.28.1"\n'
+    ),
+    "uv.lock": (
+        'version = 1\n[[package]]\nname = "dependency"\nversion = "0.28.1"\n'
+        '[[package]]\nname = "openadapt-desktop"\nversion = "@ENGINE@"\n'
+        'source = { editable = "." }\n'
+    ),
+    "package.json": (
+        '{"name":"openadapt-desktop", "version":"@ENGINE@", '
+        '"plugin":{"version":"0.28.1"}, "note":"0.28.1"}\n'
+    ),
+    "package-lock.json": (
+        '{"name":"openadapt-desktop", "version":"@ENGINE@", "packages":{'
+        '"":{"name":"openadapt-desktop", "version":"@ENGINE@"}, '
+        '"node_modules/plugin":{"version":"0.28.1"}}}\n'
+    ),
+    "src-tauri/tauri.conf.json": (
+        '{"identifier":"synthetic.desktop", "version":"@ENGINE@", '
+        '"plugins":{"plugin":{"version":"0.28.1"}}}\n'
+    ),
+    "src-tauri/Cargo.toml": (
+        '[package]\nname = "openadapt-desktop"\nversion = "@ENGINE@"\n'
+        '[dependencies]\nplugin = { version = "0.28.1" }\n'
+    ),
+    "src-tauri/Cargo.lock": (
+        'version = 4\n[[package]]\nname = "plugin"\nversion = "0.28.1"\n'
+        '[[package]]\nname = "openadapt-desktop"\nversion = "@ENGINE@"\n'
+    ),
+    "openadapt_desktop/__init__.py": (
+        '"""Ambient example 0.28.1 and Unicode café."""\n'
+        'OTHER_VERSION = "0.28.1"\n__version__ = "@ENGINE@"\n'
+        '# __version__ = "0.28.1"\n'
+    ),
+}
+
+
+@pytest.mark.parametrize("relative", _RELEASE_DOCUMENTS)
+@pytest.mark.parametrize("ending", ["\n", "\r\n"])
+def test_release_literal_model_preserves_every_unowned_byte(relative: str, ending: str) -> None:
+    template = _RELEASE_DOCUMENTS[relative].replace("\n", ending)
+    original = template.replace("@ENGINE@", "0.28.1").encode("utf-8")
+    expected = template.replace("@ENGINE@", "1.2.3").encode("utf-8")
+    assert prepare_release._release_content(relative, original, "1.2.3") == expected
+
+
+@pytest.mark.parametrize("relative", _RELEASE_DOCUMENTS)
+@pytest.mark.parametrize("version", ["01.2.3", "1.2", "1.2.3rc1"])
+def test_release_literal_model_refuses_malformed_engine_versions(
+    relative: str, version: str
+) -> None:
+    original = _RELEASE_DOCUMENTS[relative].replace("@ENGINE@", version).encode("utf-8")
+    with pytest.raises(ValueError):
+        prepare_release._release_content(relative, original, "1.2.3")
+
+
+@pytest.mark.parametrize("relative", _RELEASE_DOCUMENTS)
+def test_release_literal_model_refuses_missing_fields(relative: str) -> None:
+    text = _RELEASE_DOCUMENTS[relative]
+    if relative.endswith(".json"):
+        text = text.replace('"@ENGINE@"', "null")
+    elif relative.endswith(".py"):
+        text = text.replace('__version__ = "@ENGINE@"', 'UNRELATED = "0.28.1"')
+    else:
+        text = text.replace('version = "@ENGINE@"', 'missing = "0.28.1"')
+    with pytest.raises(ValueError):
+        prepare_release._release_content(relative, text.encode(), "1.2.3")
+
+
+@pytest.mark.parametrize("relative", _RELEASE_DOCUMENTS)
+def test_release_literal_model_refuses_duplicate_fields_or_self_packages(relative: str) -> None:
+    text = _RELEASE_DOCUMENTS[relative].replace("@ENGINE@", "0.28.1")
+    if relative.endswith(".json"):
+        text = text.replace("{", '{"version":"0.28.1",', 1)
+    elif relative in {"uv.lock", "src-tauri/Cargo.lock"}:
+        text += '\n[[package]]\nname = "openadapt-desktop"\nversion = "0.28.1"\n'
+        if relative == "uv.lock":
+            text += 'source = { editable = "." }\n'
+    elif relative.endswith(".py"):
+        text += '__version__ = "0.28.1"\n'
+    else:
+        text = text.replace('version = "0.28.1"', 'version = "0.28.1"\nversion = "0.28.1"', 1)
+    with pytest.raises(ValueError):
+        prepare_release._release_content(relative, text.encode(), "1.2.3")
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "pyproject.toml",
+        "uv.lock",
+        "package.json",
+        "package-lock.json",
+        "src-tauri/Cargo.toml",
+        "src-tauri/Cargo.lock",
+    ],
+)
+def test_release_literal_model_refuses_foreign_package_identity(relative: str) -> None:
+    text = _RELEASE_DOCUMENTS[relative].replace("@ENGINE@", "0.28.1")
+    text = text.replace("openadapt-desktop", "different-package")
+    with pytest.raises(ValueError):
+        prepare_release._release_content(relative, text.encode(), "1.2.3")
+
+
+@pytest.mark.parametrize("shape", ["foreign-source", "inconsistent-lock", "non-json-constant"])
+def test_release_literal_model_refuses_ambiguous_document_roles(shape: str) -> None:
+    relative = "uv.lock" if shape == "foreign-source" else "package-lock.json"
+    text = _RELEASE_DOCUMENTS[relative].replace("@ENGINE@", "0.28.1")
+    if shape == "foreign-source":
+        text = text.replace('editable = "."', 'registry = "https://example.invalid"')
+    elif shape == "inconsistent-lock":
+        text = text.replace('"version":"0.28.1"', '"version":"1.0.0"', 1)
+    else:
+        text = text.replace("{", '{"unrelated":NaN,', 1)
+    with pytest.raises(ValueError):
+        prepare_release._release_content(relative, text.encode(), "1.2.3")
+
+
+def _version_merge_branches(repo: Path, metadata_edit: bool = False) -> tuple[str, str, str]:
+    start = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "-q", "-b", "release-feature")
+    if metadata_edit:
+        source = repo / "pyproject.toml"
+        source.write_text(
+            source.read_text().replace("The OpenAdapt desktop app", "The synthetic desktop app")
+        )
+    _commit(repo, "feat: preserve the new feature", touch="src/feature.txt")
+    prepare_release.prepare(repo, today=datetime.date(2026, 11, 1))
+    feature = _commit(repo, "chore: prepare feature release")
+    _git(repo, "checkout", "-q", "-b", "release-main", start)
+    if metadata_edit:
+        source = repo / "pyproject.toml"
+        source.write_text(source.read_text() + "\n[tool.synthetic]\nambient = true\n")
+    _commit(repo, "fix: independent ambient fix", touch="src/ambient.txt")
+    prepare_release.prepare(repo, today=datetime.date(2026, 11, 2))
+    main = _commit(repo, "chore: prepare ambient release")
+    return start, feature, main
+
+
+def _resolve_version_merge(
+    repo: Path, feature: str, main: str, *, first: str, version: str | None = None
+) -> str:
+    _git(
+        repo, "checkout", "-q", "-B", "release-resolution", feature if first == "feature" else main
+    )
+    other = main if first == "feature" else feature
+    result = subprocess.run(
+        ["git", "merge", "--no-ff", "--no-commit", other],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode in {0, 1}, result.stderr
+    # Resolve only the generated version files. The independent runtime files
+    # are the ordinary merge result; no source code is fabricated by the helper.
+    for relative in VERSION_FILES:
+        text = subprocess.run(
+            ["git", "show", f"{main}:./{relative}"],
+            cwd=repo,
+            capture_output=True,
+            check=True,
+        ).stdout.decode("utf-8")
+        if relative == "pyproject.toml":
+            feature_text = _git(repo, "show", f"{feature}:./{relative}")
+            if "The synthetic desktop app" in feature_text:
+                text = text.replace("The OpenAdapt desktop app", "The synthetic desktop app")
+        (repo / relative).write_bytes(text.encode("utf-8"))
+    selected = version or check_release_intent.version_at(repo, feature)
+    prepare_release.set_engine_version(repo, selected)
+    prepare_release.write_changelog(
+        repo,
+        prepare_release.changelog_section(
+            selected,
+            [
+                prepare_release.Commit(
+                    feature, "feat: preserve the new feature", "", ("src/feature.txt",)
+                )
+            ],
+            datetime.date(2026, 11, 1),
+        ),
+    )
+    return _commit(repo, "merge: combine generated release metadata")
+
+
+@pytest.mark.parametrize("first", ["feature", "main"])
+@pytest.mark.parametrize("metadata_edit", [False, True])
+def test_generated_version_resolution_keeps_feature_intent_and_ambient_bytes(
+    repo: Path, first: str, metadata_edit: bool
+) -> None:
+    _start, feature, main = _version_merge_branches(repo, metadata_edit)
+    head = _resolve_version_merge(repo, feature, main, first=first)
+    commits = prepare_release.commits_for_net_diff(repo, main, head)
+    assert (
+        prepare_release.required_level(commits, check_release_intent.version_at(repo, main))
+        == "minor"
+    )
+    assert check_release_intent.check(repo, main, head) == []
+    assert (repo / "src/feature.txt").read_text() == "feat: preserve the new feature\n"
+    assert (repo / "src/ambient.txt").read_text() == "fix: independent ambient fix\n"
+    notes = (repo / "CHANGELOG.md").read_text()
+    assert "preserve the new feature" in notes
+    assert "independent ambient fix" in notes
+    if metadata_edit:
+        metadata = (repo / "pyproject.toml").read_text()
+        assert "The synthetic desktop app" in metadata
+        assert "ambient = true" in metadata
+
+
+@pytest.mark.parametrize("first", ["feature", "main"])
+def test_repeated_generated_version_merges_keep_surviving_feature_intent(
+    repo: Path, first: str
+) -> None:
+    _start, feature, main = _version_merge_branches(repo)
+    merged = _resolve_version_merge(repo, feature, main, first=first)
+    _git(repo, "checkout", "-q", "release-main")
+    _commit(repo, "fix: another ambient correction", touch="src/ambient-second.txt")
+    prepare_release.prepare(repo, today=datetime.date(2026, 11, 3))
+    next_main = _commit(repo, "chore: prepare next ambient release")
+    head = _resolve_version_merge(repo, merged, next_main, first=first)
+    assert (
+        prepare_release.required_level(
+            prepare_release.commits_for_net_diff(repo, next_main, head),
+            check_release_intent.version_at(repo, next_main),
+        )
+        == "minor"
+    )
+    assert check_release_intent.check(repo, next_main, head) == []
+
+
+@pytest.mark.parametrize("shape", ["too-small", "inconsistent", "missing-changelog"])
+def test_generated_version_resolution_keeps_all_final_release_guards(
+    repo: Path, shape: str
+) -> None:
+    _start, feature, main = _version_merge_branches(repo)
+    version = check_release_intent.version_at(repo, main) if shape == "too-small" else None
+    _resolve_version_merge(repo, feature, main, first="feature", version=version)
+    if shape == "inconsistent":
+        source = repo / "openadapt_desktop/__init__.py"
+        source.write_text(source.read_text().replace(_version(repo), "99.0.0"))
+    elif shape == "missing-changelog":
+        (repo / "CHANGELOG.md").write_text("# CHANGELOG\n\nNo dated release section.\n")
+    head = _commit(repo, "chore: retain proposed resolution", touch="docs/check.txt")
+    problems = check_release_intent.check(repo, main, head)
+    assert problems
+    expected = {
+        "too-small": "should ship",
+        "inconsistent": "version sources disagree",
+        "missing-changelog": "CHANGELOG.md must start",
+    }
+    assert any(expected[shape] in problem for problem in problems)
+
+
+@pytest.mark.parametrize("relative", [path for path in VERSION_FILES if path != "CHANGELOG.md"])
+def test_generated_version_resolution_cannot_hide_unexplained_nonversion_bytes(
+    repo: Path, relative: str
+) -> None:
+    _start, feature, main = _version_merge_branches(repo)
+    _resolve_version_merge(repo, feature, main, first="feature")
+    # Keep the edit in the merge itself rather than an ordinary attributed
+    # commit. The resulting exact tree must be rejected, even on owned files.
+    source = repo / relative
+    text = source.read_text()
+    if relative.endswith(".json"):
+        text = text.replace("{", '{"unexplained_plugin_version":"77.0.0",', 1)
+    elif relative.endswith(".py"):
+        text += '\nUNEXPLAINED_RUNTIME_VALUE = "77.0.0"\n'
+    else:
+        text += '\n[unexplained]\nplugin_version = "77.0.0"\n'
+    source.write_text(text)
+    _git(repo, "add", "--", relative)
+    tree = _git(repo, "write-tree")
+    head = _git(
+        repo,
+        "commit-tree",
+        tree,
+        "-p",
+        feature,
+        "-p",
+        main,
+        "-m",
+        "merge: unexplained nonversion edit",
+    )
+    with pytest.raises(
+        ValueError, match="unexplained content|no clean combination|no commit intent"
+    ):
+        prepare_release.commits_for_net_diff(repo, main, head)
+
+
+@pytest.mark.parametrize("first", ["feature", "main"])
+def test_generated_version_selection_may_exceed_an_unchanged_parent_version(
+    repo: Path, first: str
+) -> None:
+    start, feature, _released_main = _version_merge_branches(repo)
+    _git(repo, "checkout", "-q", "-b", "unreleased-main", start)
+    main = _commit(
+        repo, "fix: ambient change without preparing a release", touch="src/unreleased.txt"
+    )
+    version = prepare_release.bump(check_release_intent.version_at(repo, feature), "minor")
+    head = _resolve_version_merge(repo, feature, main, first=first, version=version)
+    assert check_release_intent.check(repo, main, head) == []
+    assert (
+        prepare_release.required_level(
+            prepare_release.commits_for_net_diff(repo, main, head),
+            check_release_intent.version_at(repo, main),
+        )
+        == "minor"
+    )
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "package.json",
+        "package-lock.json",
+        "uv.lock",
+        "src-tauri/Cargo.toml",
+        "src-tauri/Cargo.lock",
+    ],
+)
+def test_release_normalization_never_absorbs_a_dependency_version_edit(
+    repo: Path, relative: str
+) -> None:
+    _start, feature, main = _version_merge_branches(repo)
+    _resolve_version_merge(repo, feature, main, first="main")
+    source = repo / relative
+    text = source.read_text()
+    if relative.endswith(".json"):
+        document = json.loads(text)
+        if relative == "package.json":
+            dependency = next(iter(document["dependencies"]))
+            document["dependencies"][dependency] = "99.0.0"
+        else:
+            dependency = next(key for key in document["packages"] if key)
+            document["packages"][dependency]["version"] = "99.0.0"
+        text = json.dumps(document, indent=2, ensure_ascii=False) + "\n"
+    else:
+        owned = set(prepare_release._release_version_spans(relative, text))
+        matches = [
+            match
+            for match in re.finditer(r'version = "([^"\n]+)"', text)
+            if match.span(1) not in owned
+        ]
+        assert matches, "the ordinary public fixture must contain an actual dependency version"
+        match = matches[0]
+        text = text[: match.start(1)] + "99.0.0" + text[match.end(1) :]
+    source.write_text(text)
+    _git(repo, "add", "--", relative)
+    tree = _git(repo, "write-tree")
+    head = _git(
+        repo, "commit-tree", tree, "-p", main, "-p", feature, "-m", "merge: dependency tampering"
+    )
+    with pytest.raises(
+        ValueError, match="unexplained content|no clean combination|no commit intent"
+    ):
+        prepare_release.commits_for_net_diff(repo, main, head)
+
+
+@pytest.mark.parametrize("relative", ["openadapt_desktop/__init__.py", "src/feature.txt"])
+def test_generated_version_resolution_never_absorbs_a_file_mode_change(
+    repo: Path, relative: str
+) -> None:
+    _start, feature, main = _version_merge_branches(repo)
+    _resolve_version_merge(repo, feature, main, first="feature")
+    _git(repo, "update-index", "--chmod=+x", "--", relative)
+    tree = _git(repo, "write-tree")
+    head = _git(
+        repo,
+        "commit-tree",
+        tree,
+        "-p",
+        feature,
+        "-p",
+        main,
+        "-m",
+        "merge: unexplained executable mode",
+    )
+    with pytest.raises(ValueError, match="file modes|unexplained content|no clean combination"):
+        prepare_release.commits_for_net_diff(repo, main, head)
+
+
+# Release-history selection oracle: equal generated versions are not evidence
+# that either merge side was published. The explicit base is only a comparison.
+def _boundary_outputs(repo: Path) -> dict[str, bytes]:
+    return {name: (repo / name).read_bytes() for name in VERSION_FILES}
+
+
+def _boundary_patch(version: str) -> str:
+    major, minor, patch = map(int, version.split("."))
+    return f"{major}.{minor}.{patch + 1}"
+
+
+def _boundary_merge(repo: Path, other: str, published: str, name: str) -> str:
+    result = subprocess.run(
+        ["git", "merge", "--no-ff", "--no-commit", other], cwd=repo, capture_output=True
+    )
+    assert result.returncode in {0, 1}, result.stderr
+    assert set(_git(repo, "diff", "--name-only", "--diff-filter=U").splitlines()) <= {
+        "CHANGELOG.md"
+    }
+    # Both sides prepared the same version. Keep the declared comparison
+    # side's existing notes; the next normal preparation creates new notes.
+    notes = subprocess.check_output(["git", "show", f"{published}:./CHANGELOG.md"], cwd=repo)
+    (repo / "CHANGELOG.md").write_bytes(notes)
+    return _commit(repo, name)
+
+
+def _equal_version_history(
+    repo: Path, monkeypatch, published_side: str, first: str, clock: str, merges: int
+) -> tuple[str, str, str]:
+    start = _git(repo, "rev-parse", "HEAD")
+    dates = {
+        "left-newer": {"left": "2040-01-01T00:00:00Z", "right": "2001-01-01T00:00:00Z"},
+        "right-newer": {"left": "2001-01-01T00:00:00Z", "right": "2040-01-01T00:00:00Z"},
+        "equal": {"left": "2026-01-01T00:00:00Z", "right": "2026-01-01T00:00:00Z"},
+    }
+    tips = {}
+    for side in ("left", "right"):
+        _git(repo, "checkout", "-q", "-b", "boundary-" + side, start)
+        monkeypatch.setenv("GIT_AUTHOR_DATE", dates[clock][side])
+        monkeypatch.setenv("GIT_COMMITTER_DATE", dates[clock][side])
+        message = "already shipped rollback" if side == published_side else "retain unshipped fix"
+        _commit(repo, f"fix({side}): {message}", touch=f"src/{side}.txt")
+        prepare_release.prepare(repo, today=datetime.date(2026, 11, 1))
+        tips[side] = _commit(repo, "chore: prepare equal engine version")
+    other = "right" if first == "left" else "left"
+    _git(repo, "checkout", "-q", "-b", "boundary-integration", tips[first])
+    published = tips[published_side]
+    _boundary_merge(repo, tips[other], published, "merge: combine equal versions")
+    if merges == 2:
+        _git(repo, "checkout", "-q", "boundary-" + published_side)
+        published = _commit(
+            repo, "docs: retain published release metadata", touch="docs/release.txt"
+        )
+        _git(repo, "checkout", "-q", "boundary-integration")
+        _commit(repo, "fix: retain an additional unshipped correction", touch="src/additional.txt")
+        _boundary_merge(repo, published, published, "merge: combine equal versions again")
+    return published, "right" if published_side == "left" else "left", _version(repo)
+
+
+@pytest.mark.parametrize("published_side", ["left", "right"])
+@pytest.mark.parametrize("first", ["left", "right"])
+@pytest.mark.parametrize("clock", ["left-newer", "right-newer", "equal"])
+@pytest.mark.parametrize("merges", [1, 2])
+def test_equal_version_history_requires_explicit_comparison_base(
+    repo: Path, monkeypatch, published_side: str, first: str, clock: str, merges: int
+) -> None:
+    base, unshipped_side, current = _equal_version_history(
+        repo, monkeypatch, published_side, first, clock, merges
+    )
+    before = _boundary_outputs(repo)
+    for options in ({}, {"level": "patch"}, {"version": _boundary_patch(current)}):
+        with pytest.raises(ValueError, match="ambiguous.*--base"):
+            prepare_release.prepare(repo, **options)
+        assert _boundary_outputs(repo) == before
+    selected = prepare_release._release_commits(repo, base, current)
+    assert f"fix({unshipped_side}): retain unshipped fix" in {c.subject for c in selected}
+    assert not any("already shipped rollback" in c.subject for c in selected)
+    problems = check_release_intent.check(repo, base, _git(repo, "rev-parse", "HEAD"))
+    assert len(problems) == 1 and f"--base {base}" in problems[0]
+    assert "--bump patch" in problems[0]
+    if (published_side, first, clock, merges) == ("left", "left", "left-newer", 1):
+        monkeypatch.setattr(prepare_release, "ROOT", repo)
+        assert prepare_release.main(["--base", base]) == 0
+        actual = _version(repo)
+    else:
+        actual = prepare_release.prepare(repo, base=base, today=datetime.date(2026, 11, 8))
+    assert actual == _boundary_patch(current)
+    notes = (repo / "CHANGELOG.md").read_text()
+    new_section = notes.split("## v", 2)[1]
+    assert f"**{unshipped_side}**: retain unshipped fix" in new_section
+    assert "already shipped rollback" not in new_section
+    if merges == 2:
+        assert "retain an additional unshipped correction" in new_section
+    head = _commit(repo, "chore: prepare the next engine patch")
+    assert check_release_intent.check(repo, base, head) == []
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [
+        "missing-full-oid",
+        "abbreviated-oid",
+        "symbolic-ref",
+        "nonancestor-commit",
+        "unrelated-root",
+        "pyproject-absent",
+        "pyproject-nonregular",
+        "wrong-project-identity",
+        "duplicate-or-malformed-version",
+        "base-current-version-mismatch",
+    ],
+)
+def test_explicit_release_base_refuses_invalid_history_before_writing(
+    repo: Path, shape: str
+) -> None:
+    start = _git(repo, "rev-parse", "HEAD")
+    original = (repo / "pyproject.toml").read_bytes()
+    _git(repo, "checkout", "-q", "-b", "base-candidate")
+    base = start
+    if shape == "nonancestor-commit":
+        _git(repo, "checkout", "-q", "-b", "unmerged-base", start)
+        base = _commit(repo, "fix: unmerged side", touch="src/side.txt")
+        _git(repo, "checkout", "-q", "base-candidate")
+    elif shape == "unrelated-root":
+        _git(repo, "checkout", "-q", "--orphan", "unrelated-base")
+        base = _commit(repo, "chore: unrelated root")
+        _git(repo, "checkout", "-q", "base-candidate")
+    elif shape in {"pyproject-absent", "pyproject-nonregular"}:
+        _git(repo, "rm", "-q", "pyproject.toml")
+        if shape == "pyproject-nonregular":
+            (repo / "project-target.toml").write_bytes(original)
+            (repo / "pyproject.toml").symlink_to("project-target.toml")
+        base = _commit(repo, "chore: invalid historical project path")
+        if shape == "pyproject-nonregular":
+            _git(repo, "rm", "-q", "pyproject.toml")
+        (repo / "pyproject.toml").write_bytes(original)
+    elif shape in {"wrong-project-identity", "duplicate-or-malformed-version"}:
+        text = original.decode()
+        if shape == "wrong-project-identity":
+            text = text.replace('name = "openadapt-desktop"', 'name = "different-project"', 1)
+        else:
+            text = text.replace(f'version = "{_version(repo)}"', 'version = "01.2.3"', 1)
+        (repo / "pyproject.toml").write_text(text)
+        base = _commit(repo, "chore: invalid historical project metadata")
+        (repo / "pyproject.toml").write_bytes(original)
+    elif shape == "base-current-version-mismatch":
+        prepare_release.set_engine_version(repo, _boundary_patch(_version(repo)))
+    _commit(repo, "fix: a genuine pending correction", touch="src/pending.txt")
+    if shape == "missing-full-oid":
+        base = "f" * 40
+    elif shape == "abbreviated-oid":
+        base = start[:12]
+    elif shape == "symbolic-ref":
+        base = "HEAD"
+    before = _boundary_outputs(repo)
+    for options in ({}, {"level": "patch"}, {"version": _boundary_patch(_version(repo))}):
+        with pytest.raises(ValueError):
+            prepare_release.prepare(repo, base=base, **options)
+        assert _boundary_outputs(repo) == before
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [
+        "ordinary-linear-feature",
+        "ordinary-linear-fix",
+        "ordinary-docs-only-refusal",
+        "ordinary-explicit-level-existing-semantics",
+        "ordinary-explicit-version-existing-semantics",
+        "linear-clock-skew-ancestry-maximal-origin",
+        "explicit-base-cancelled-fix-no-surviving-bump",
+        "explicit-base-unexplained-merge-refusal",
+        "dependency-version-text-not-engine-origin",
+    ],
+)
+def test_release_boundary_preserves_ordinary_calls_and_lineage_guards(
+    repo: Path, monkeypatch, shape: str
+) -> None:
+    base = _git(repo, "rev-parse", "HEAD")
+    current = _version(repo)
+    options = {}
+    if shape == "ordinary-linear-feature":
+        _commit(repo, "feat: retain a normal feature", touch="src/feature.txt")
+    elif shape == "ordinary-docs-only-refusal":
+        _commit(repo, "docs: only explain", touch="docs/words.md")
+    elif shape.startswith("ordinary-explicit-"):
+        _commit(repo, "docs: only explain", touch="docs/words.md")
+        options = (
+            {"level": "patch"} if "-level-" in shape else {"version": _boundary_patch(current)}
+        )
+    elif shape == "explicit-base-cancelled-fix-no-surviving-bump":
+        _commit(repo, "fix: a cancelled feature", touch="src/cancelled.txt")
+        _git(repo, "rm", "-q", "src/cancelled.txt")
+        _commit(repo, "fix: remove the cancelled feature")
+        options = {"base": base}
+    elif shape == "explicit-base-unexplained-merge-refusal":
+        (repo / "src").mkdir(exist_ok=True)
+        (repo / "src/shared.txt").write_text("baseline\n")
+        start = _commit(repo, "chore: establish a merge source")
+        _git(repo, "checkout", "-q", "-b", "unexplained-left")
+        _commit(repo, "fix: left change", touch="src/shared.txt")
+        left = _git(repo, "rev-parse", "HEAD")
+        _git(repo, "checkout", "-q", "-b", "unexplained-right", start)
+        base = _commit(repo, "fix: right change", touch="src/shared.txt")
+        result = subprocess.run(
+            ["git", "merge", "--no-ff", "--no-commit", left], cwd=repo, capture_output=True
+        )
+        assert result.returncode == 1
+        (repo / "src/shared.txt").write_text("unexplained manual bytes\n")
+        _commit(repo, "merge: invent an unexplained resolution")
+        options = {"base": base}
+    elif shape == "dependency-version-text-not-engine-origin":
+        path = repo / "pyproject.toml"
+        path.write_text(path.read_text() + '\n[tool.synthetic]\nversion = "8.9.0"\n')
+        _commit(repo, "fix: update dependency metadata")
+        assert prepare_release.last_version_change(repo) == base
+    else:
+        if shape == "linear-clock-skew-ancestry-maximal-origin":
+            monkeypatch.setenv("GIT_AUTHOR_DATE", "2001-01-01T00:00:00Z")
+            monkeypatch.setenv("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        _commit(repo, "fix: retain a normal correction", touch="src/correction.txt")
+    before = _boundary_outputs(repo)
+    if shape in {
+        "ordinary-docs-only-refusal",
+        "explicit-base-cancelled-fix-no-surviving-bump",
+        "explicit-base-unexplained-merge-refusal",
+    }:
+        with pytest.raises(ValueError):
+            prepare_release.prepare(repo, **options)
+        assert _boundary_outputs(repo) == before
+        return
+    actual = prepare_release.prepare(repo, today=datetime.date(2026, 11, 8), **options)
+    major, minor, _patch = map(int, current.split("."))
+    expected = (
+        f"{major}.{minor + 1}.0" if shape == "ordinary-linear-feature" else _boundary_patch(current)
+    )
+    assert actual == expected
+    version_commit = _commit(repo, "chore: prepare a normal engine version")
+    assert prepare_release.last_version_change(repo) == version_commit
+    if shape == "dependency-version-text-not-engine-origin":
+        assert '[tool.synthetic]\nversion = "8.9.0"' in (repo / "pyproject.toml").read_text()
+    if not shape.startswith("ordinary-explicit-"):
+        assert check_release_intent.check(repo, base, version_commit) == []
