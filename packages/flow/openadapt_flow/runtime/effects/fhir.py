@@ -230,10 +230,17 @@ class FhirEffectVerifier(VerifierAdapterBase):
         poll_interval_s: float = 0.3,
         drop_fields: tuple[str, ...] = (),
         snapshot_path: Optional[str] = None,
+        consistency: Optional[str] = None,
+        quiescence: Any = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.drop_fields = tuple(drop_fields)
         self.snapshot_path = snapshot_path
+        self.consistency, self.quiescence = consistency, quiescence
+        if consistency not in (None, "quiescent-two-pass") or (
+            consistency and snapshot_path
+        ):
+            raise ValueError("unsupported or conflicting FHIR consistency contract")
         self.resource_type = resource_type
         self.search_params = dict(search_params or {})
         if not resource_type or not field_paths:
@@ -307,6 +314,30 @@ class FhirEffectVerifier(VerifierAdapterBase):
         return flat
 
     def _search(self) -> Optional[list[dict[str, Any]]]:
+        if self.consistency is None:
+            return self._search_pass()
+        from openadapt_flow.runtime.effects.quiescence import two_pass_read
+
+        try:
+            records = two_pass_read(
+                self.quiescence,
+                {
+                    "kind": "fhir",
+                    "base_url": self.base_url,
+                    "resource_type": self.resource_type,
+                    "search_params": self.search_params,
+                    "field_paths": self.field_paths,
+                },
+                self._search_pass,
+            )
+        except Exception:  # noqa: BLE001 - failed exclusion/coverage cannot confirm
+            self.read_problem = "quiescent complete-read validation failed"
+            return None
+        return drop_record_fields(records, self.drop_fields)
+
+    def _search_pass(
+        self, check_quiescence: Any = None
+    ) -> Optional[list[dict[str, Any]]]:
         """Run the configured FHIR search; return flattened resources.
 
         Returns ``None`` (read as unreadable -> INDETERMINATE) on any
@@ -334,12 +365,22 @@ class FhirEffectVerifier(VerifierAdapterBase):
             """One page: the parsed Bundle, or None with ``read_problem``."""
 
             try:
+                if check_quiescence is not None:
+                    check_quiescence()
                 kwargs = dict(tls_kwargs)
                 if params is not None:
                     kwargs["params"] = params
+                import httpx
+
+                if isinstance(session, httpx.Client):
+                    kwargs.pop("verify", None)
+                    kwargs.pop("allow_redirects", None)
+                    kwargs["follow_redirects"] = False
                 resp = session.get(
                     target, headers=headers, timeout=self.timeout_s, **kwargs
                 )
+                if check_quiescence is not None:
+                    check_quiescence()
             except Exception as exc:  # noqa: BLE001 - transport failure is unreadable
                 self.read_problem = f"GET {target} failed: {type(exc).__name__}"
                 return None
@@ -362,6 +403,13 @@ class FhirEffectVerifier(VerifierAdapterBase):
                 return None
             if not isinstance(bundle, dict) or bundle.get("resourceType") != "Bundle":
                 self.read_problem = f"GET {target} returned no Bundle"
+                return None
+            if check_quiescence is not None and (
+                bundle.get("type") != "searchset" or "total" not in bundle
+            ):
+                self.read_problem = (
+                    "quiescent FHIR reads require searchset totals on every page"
+                )
                 return None
             return bundle
 
@@ -447,6 +495,9 @@ class FhirEffectVerifier(VerifierAdapterBase):
                 return None
             if next_url is None:
                 break
+            from urllib.parse import urljoin
+
+            next_url = urljoin(url, next_url)
             if not _same_origin(next_url, self.base_url):
                 # A next page elsewhere is not this system of record.
                 self.read_problem = (
@@ -454,10 +505,18 @@ class FhirEffectVerifier(VerifierAdapterBase):
                     f"{_origin(self.base_url)}"
                 )
                 return None
-            if self.snapshot_path is None:
+            if self.snapshot_path is None and check_quiescence is None:
                 self.read_problem = (
                     "multi-page reads require declared immutable snapshot semantics"
                 )
+                return None
+            from urllib.parse import urlsplit
+
+            if check_quiescence is not None and (
+                urlsplit(next_url).path != urlsplit(url).path
+                or urlsplit(next_url).fragment
+            ):
+                self.read_problem = "next link leaves the declared endpoint path"
                 return None
             bundle = get(next_url, None)
             if bundle is None:
@@ -470,7 +529,11 @@ class FhirEffectVerifier(VerifierAdapterBase):
         except ValueError as exc:
             self.read_problem = str(exc)
             return None
-        return drop_record_fields(out, self.drop_fields)
+        return (
+            out
+            if check_quiescence is not None
+            else drop_record_fields(out, self.drop_fields)
+        )
 
     # -- EffectVerifier protocol --------------------------------------------
 
@@ -483,10 +546,13 @@ class FhirEffectVerifier(VerifierAdapterBase):
         }
         if records is None and self.read_problem:
             detail["read_problem"] = self.read_problem
+        if self.consistency:
+            detail["consistency"] = self.consistency
         return EffectState(
             substrate=self.substrate,
             reachable=records is not None,
             records=records or [],
+            readback_complete=(records is not None) if self.consistency else None,
             detail=detail,
         )
 
