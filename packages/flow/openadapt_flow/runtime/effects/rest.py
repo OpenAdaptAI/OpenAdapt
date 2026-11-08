@@ -111,7 +111,7 @@ class RestRecordVerifier(VerifierAdapterBase):
             reads as that record removed and a new one added, and the
             collateral-loss check catches it). Empty -> records as read.
         next_path: Dotted path in the body to the next page's URL. Set, every
-            page on the same origin is read (at most :data:`MAX_PAGES`); a
+            page on the same origin and endpoint path is read (at most :data:`MAX_PAGES`); a
             failed page or a longer chain reads as unreadable. Unset, one
             response is not assumed to be the whole read.
         total_path: Dotted path in every page's body to the number of
@@ -149,12 +149,20 @@ class RestRecordVerifier(VerifierAdapterBase):
         total_path: Optional[str] = None,
         records_complete: Optional[bool] = None,
         snapshot_path: Optional[str] = None,
+        consistency: Optional[str] = None,
+        quiescence: Any = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.next_path = next_path
         self.total_path = total_path
         self.records_complete = records_complete
         self.snapshot_path = snapshot_path
+        self.consistency = consistency
+        self.quiescence = quiescence
+        if consistency not in (None, "quiescent-two-pass") or (
+            consistency and snapshot_path
+        ):
+            raise ValueError("unsupported or conflicting REST consistency contract")
         self.readback_complete: Optional[bool] = None
         self.read_problem: Optional[str] = None
         self.drop_fields = tuple(drop_fields)
@@ -238,6 +246,38 @@ class RestRecordVerifier(VerifierAdapterBase):
         return records if isinstance(records, list) else None
 
     def _fetch_records(self) -> Optional[list[dict[str, Any]]]:
+        if self.consistency is None:
+            return self._fetch_pass()
+        from openadapt_flow.runtime.effects.quiescence import two_pass_read
+
+        self.readback_complete = False
+        try:
+            if not self.total_path or not self.next_path:
+                raise ValueError(
+                    "quiescent REST reads require total and terminal next semantics"
+                )
+            records = two_pass_read(
+                self.quiescence,
+                {
+                    "kind": "rest",
+                    "base_url": self.base_url,
+                    "records_path": self.records_path,
+                    "records_key": self.records_key,
+                    "total_path": self.total_path,
+                    "next_path": self.next_path,
+                },
+                self._fetch_pass,
+            )
+        except Exception:  # noqa: BLE001 - failed exclusion/coverage cannot confirm
+            self.read_problem = "quiescent complete-read validation failed"
+            self.readback_complete = False
+            return None
+        self.readback_complete = True
+        return drop_record_fields(records, self.drop_fields)
+
+    def _fetch_pass(
+        self, check_quiescence: Any = None
+    ) -> Optional[list[dict[str, Any]]]:
         """GET the system-of-record document and extract the records list.
 
         Returns ``None`` -- read as unreadable, forcing INDETERMINATE -- on
@@ -247,13 +287,22 @@ class RestRecordVerifier(VerifierAdapterBase):
         """
         self.read_problem = None
         self.readback_complete = None
+        if check_quiescence is not None:
+            reset_pass = getattr(self._get_session(), "begin_read_pass", None)
+            if callable(reset_pass):
+                reset_pass()
         url = f"{self.base_url}{self.records_path}"
+        endpoint_path = urlsplit(url).path
         collected: list[Any] = []
         total: Any = None
         next_chain_complete = True
         snapshot: str | int | object = _MISSING
         for page in range(MAX_PAGES):
+            if check_quiescence is not None:
+                check_quiescence()
             body = self._get_json(url)
+            if check_quiescence is not None:
+                check_quiescence()
             if body is _UNREADABLE:
                 self.readback_complete = False
                 return None
@@ -315,7 +364,16 @@ class RestRecordVerifier(VerifierAdapterBase):
                 )
                 self.readback_complete = False
                 return None
-            if self.snapshot_path is None:
+            # Query cursors may vary; a next link cannot extend the declared
+            # read to another endpoint or smuggle a fragment-only page.
+            if (
+                urlsplit(following).path != endpoint_path
+                or urlsplit(following).fragment
+            ):
+                self.read_problem = "next link leaves the declared endpoint path"
+                self.readback_complete = False
+                return None
+            if self.snapshot_path is None and check_quiescence is None:
                 self.read_problem = (
                     "multi-page reads require declared immutable snapshot semantics"
                 )
@@ -395,7 +453,11 @@ class RestRecordVerifier(VerifierAdapterBase):
         if self.readback_complete is not True:
             self.read_problem = "REST read completeness was not established"
             return None
-        return drop_record_fields(collected, self.drop_fields)
+        return (
+            collected
+            if check_quiescence is not None
+            else drop_record_fields(collected, self.drop_fields)
+        )
 
     # -- EffectVerifier protocol --------------------------------------------
 

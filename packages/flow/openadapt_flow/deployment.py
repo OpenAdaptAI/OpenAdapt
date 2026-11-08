@@ -412,6 +412,11 @@ class EffectsConfig(BaseModel):
     records_snapshot_path: Optional[StrictStr] = Field(
         default=None, min_length=1, max_length=256, pattern=r"^[^.\s]+(?:\.[^.\s]+)*$"
     )
+    #: A learned read may be consumed only with an explicit current in-process
+    #: context. This marker grants no permission and is retained on export.
+    records_read_context: Optional[Literal["revalidate"]] = None
+    #: Distinct guarded mode. Equal pages alone never establish quiescence.
+    records_consistency: Optional[Literal["quiescent-two-pass"]] = None
     #: Secret-isolated auth headers for the records read (bearer_env /
     #: header+value_env / basic_env). Never a credential literal.
     auth: Optional[AuthRef] = None
@@ -646,6 +651,8 @@ class EffectsConfig(BaseModel):
             "records_total_path",
             "records_complete",
             "records_snapshot_path",
+            "records_read_context",
+            "records_consistency",
             "records_path",
             "resource_type",
         ):
@@ -659,6 +666,16 @@ class EffectsConfig(BaseModel):
         if self.records_drop_fields and kind not in ("rest", "sql", "fhir"):
             raise ValueError(
                 "effects.records_drop_fields applies only to kinds rest, sql and fhir"
+            )
+        if self.records_consistency is not None and (
+            kind not in ("rest", "fhir") or self.records_snapshot_path is not None
+        ):
+            raise ValueError(
+                "quiescent consistency requires rest/fhir and excludes immutable snapshot mode"
+            )
+        if self.records_read_context is not None and kind not in ("rest", "fhir"):
+            raise ValueError(
+                "effects.records_read_context applies only to kind rest or fhir"
             )
         if self.records_complete is not None and kind != "rest":
             raise ValueError("effects.records_complete applies only to kind rest")
@@ -1983,6 +2000,8 @@ def build_effect_verifier(
     params: Optional[Mapping[str, object]] = None,
     *,
     session: Any = None,
+    read_context: Any = None,
+    quiescence: Any = None,
 ) -> Optional[Any]:
     """Construct the configured ``EffectVerifier`` (or None for ``kind: none``).
 
@@ -2013,6 +2032,42 @@ def build_effect_verifier(
             unresolved ``{param: ...}`` reference, or a missing secret env var
             (fail loud rather than wire a broken verifier).
     """
+    if quiescence is not None and (
+        cfg.candidates or cfg.kind not in ("rest", "fhir", "surfaces")
+    ):
+        raise ValueError("quiescence must be routed to a REST/FHIR read")
+    if (
+        quiescence is not None
+        and cfg.kind == "surfaces"
+        and (not isinstance(quiescence, Mapping) or set(quiescence) - set(cfg.surfaces))
+    ):
+        raise ValueError("quiescence must be routed by declared surface names")
+    if cfg.records_consistency and quiescence is None and read_context is None:
+        raise ValueError("quiescent read requires current writer-exclusion authority")
+    if read_context is not None and (
+        session is not None or quiescence is not None or cfg.candidates
+    ):
+        raise ValueError(
+            "a REST read context cannot replace another session or candidates"
+        )
+    if cfg.records_read_context is not None:
+        from openadapt_flow.rest_setup import RestReadContext
+
+        if not isinstance(read_context, RestReadContext):
+            raise ValueError(
+                "learned REST read requires current read-context revalidation"
+            )
+        verifier = read_context.build(cfg, params)
+        from openadapt_flow.runtime.effects.adapter import set_verifier_identity
+
+        set_verifier_identity(verifier, _effect_verifier_config_identity(cfg, verifier))
+        return verifier
+    if read_context is not None and (
+        cfg.kind != "surfaces" or not isinstance(read_context, Mapping)
+    ):
+        raise ValueError("read contexts must be routed by the declared surface names")
+    if isinstance(read_context, Mapping) and set(read_context) - set(cfg.surfaces):
+        raise ValueError("read context names an unknown surface")
     if session is not None and (
         cfg.candidates or (cfg.kind or "").strip().lower() not in _SESSION_KINDS
     ):
@@ -2067,7 +2122,9 @@ def build_effect_verifier(
             return RedactingVerifier(candidate_selector, policy)
         return candidate_selector
 
-    verifier = _build_effect_verifier_unredacted(cfg, params, session=session)
+    verifier = _build_effect_verifier_unredacted(
+        cfg, params, session=session, read_context=read_context, quiescence=quiescence
+    )
     if verifier is None:
         return None
     from openadapt_flow.runtime.effects.adapter import set_verifier_identity
@@ -2184,6 +2241,8 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
         "records_total_path",
         "records_complete",
         "records_snapshot_path",
+        "records_read_context",
+        "records_consistency",
     ):
         if config.get(added) is None:
             config.pop(added, None)
@@ -2222,6 +2281,8 @@ def _build_effect_verifier_unredacted(
     params: Optional[Mapping[str, object]] = None,
     *,
     session: Any = None,
+    read_context: Any = None,
+    quiescence: Any = None,
 ) -> Optional[Any]:
     """The per-kind construction behind :func:`build_effect_verifier`."""
     kind = (cfg.kind or "none").strip().lower()
@@ -2302,7 +2363,12 @@ def _build_effect_verifier_unredacted(
 
         built: dict[str, Any] = {}
         for name, surface in cfg.surfaces.items():
-            verifier = build_effect_verifier(surface, params)
+            verifier = build_effect_verifier(
+                surface,
+                params,
+                read_context=None if read_context is None else read_context.get(name),
+                quiescence=None if quiescence is None else quiescence.get(name),
+            )
             if verifier is None:  # guarded by EffectsConfig, retained fail-closed
                 raise ValueError(f"effects.surfaces[{name!r}] built no verifier")
             built[name] = verifier
@@ -2349,6 +2415,8 @@ def _build_effect_verifier_unredacted(
             total_path=cfg.records_total_path,
             records_complete=cfg.records_complete,
             snapshot_path=cfg.records_snapshot_path,
+            consistency=cfg.records_consistency,
+            quiescence=quiescence,
         )
 
     if kind == "fhir":
@@ -2396,6 +2464,8 @@ def _build_effect_verifier_unredacted(
             poll_interval_s=cfg.poll_interval_s,
             drop_fields=tuple(cfg.records_drop_fields),
             snapshot_path=cfg.records_snapshot_path,
+            consistency=cfg.records_consistency,
+            quiescence=quiescence,
         )
 
     if kind == "sql":

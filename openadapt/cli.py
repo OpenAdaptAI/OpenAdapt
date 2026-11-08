@@ -32,6 +32,7 @@ import re
 import shlex
 import sys
 from contextlib import contextmanager
+from importlib import import_module
 from pathlib import Path
 from typing import Optional
 
@@ -1495,6 +1496,47 @@ def shadow(command_ctx: click.Context) -> None:
     _run_flow(["shadow", *command_ctx.args])
 
 
+def _optional_engine_entrypoint(command_ctx: click.Context, modules: tuple[str, ...]):
+    """Show pure help for absent commands; preserve installed-engine failures."""
+    targets = {
+        ".".join(parts[:end])
+        for module in modules
+        for parts in (module.split("."),)
+        for end in range(1, len(parts) + 1)
+    }
+    try:
+        loaded = [import_module(module) for module in modules]
+    except ModuleNotFoundError as exc:
+        if exc.name not in targets:
+            raise
+        if list(command_ctx.args) in (["--help"], ["-h"]):
+            click.echo(command_ctx.get_help())
+            command_ctx.exit(0)
+        return None
+    return loaded[-1].main
+
+
+@main.command(
+    "wrap",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def wrap(command_ctx: click.Context) -> None:
+    """Run an agent task once, then reuse its checked compiled tool."""
+    _require_supported_python()
+    wrap_main = _optional_engine_entrypoint(command_ctx, ("openadapt_flow.wrap.cli",))
+    if wrap_main is None:
+        click.echo(
+            "Error: this openadapt-flow installation has no wrap command.", err=True
+        )
+        sys.exit(2)
+    sys.exit(int(wrap_main(list(command_ctx.args)) or 0))
+
+
 @main.command(
     "agent",
     context_settings={
@@ -1515,9 +1557,8 @@ def agent(command_ctx: click.Context) -> None:
     MCP client can launch this command directly.
     """
     _require_supported_python()
-    try:
-        from openadapt_agent.cli import main as agent_main
-    except ImportError:
+    agent_main = _optional_engine_entrypoint(command_ctx, ("openadapt_agent.cli",))
+    if agent_main is None:
         click.echo("Error: openadapt-agent is not installed.", err=True)
         click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
         sys.exit(1)
@@ -1549,18 +1590,10 @@ def seal(command_ctx: click.Context) -> None:
         sys.exit(_view_sealed_runs(args[1:]))
     if len(args) >= 2 and args[0] == "verify" and Path(args[1]).is_dir():
         sys.exit(_verify_sealed_runs(Path(args[1]), args[2:]))
-    try:
-        from openadapt_agent import seal_cli  # noqa: F401
-        from openadapt_agent.cli import main as agent_main
-    except ImportError:
-        args = list(command_ctx.args)
-        if not args or args[0] in ("--help", "-h"):
-            click.echo("Usage: openadapt seal verify <file|url|->")
-            click.echo("       openadapt seal keys pin | keys show")
-            click.echo("")
-            click.echo("Seal checks need a newer openadapt-agent:")
-            click.echo("  pip install --upgrade openadapt-agent")
-            sys.exit(0)
+    agent_main = _optional_engine_entrypoint(
+        command_ctx, ("openadapt_agent.seal_cli", "openadapt_agent.cli")
+    )
+    if agent_main is None:
         click.echo("Error: this openadapt-agent cannot check Seals.", err=True)
         click.echo("Upgrade with: pip install --upgrade openadapt-agent", err=True)
         sys.exit(1)
