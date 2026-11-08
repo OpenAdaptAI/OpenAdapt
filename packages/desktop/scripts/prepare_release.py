@@ -26,6 +26,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -344,9 +345,45 @@ def commits_for_net_diff(root: Path, base: str, head: str) -> list[Commit]:
         # Shared ambient text is not evidence that branch intent was copied.
         # Compare the source's contributed bytes with the destination edit.
         destination_delta = b"\n".join(added_lines(before, after))
-        return any(
+        if any(
             line.strip() and line in destination_delta for line in added_lines(source_base, source)
-        )
+        ):
+            return True
+        if source_base is None:
+            return False
+        # A removal contributes an absence. Require the complete surviving
+        # source component in destination order, not a shared ambient line.
+        # The removed span must remain absent, and an existing destination
+        # must remove it in its own edit rather than merely lack it already.
+        kept = content(source[1]).splitlines()
+        source_counts = Counter(content(source_base[1]).splitlines())
+        removed = source_counts - Counter(kept)
+        if not removed:
+            return False
+        destination = content(after[1]).splitlines()
+        destination_counts = Counter(destination)
+        if any(
+            destination_counts[line] > source_counts[line] - count
+            for line, count in removed.items()
+        ):
+            return False
+        if before is not None:
+            before_counts = Counter(content(before[1]).splitlines())
+            if any(
+                before_counts[line] - destination_counts[line] < count
+                for line, count in removed.items()
+            ):
+                return False
+
+        def contains_ordered(needles: list[bytes], lines: list[bytes]) -> bool:
+            remaining = iter(lines)
+            return all(any(value == needle for value in remaining) for needle in needles)
+
+        if not any(line.strip() for line in kept):
+            # Empty/blank surviving payload cannot disprove a source edge;
+            # retain its strict recursive lineage as for opaque binary data.
+            return True
+        return contains_ordered(kept, destination)
 
     # All changed paths matter, including a feature's original location that
     # disappears from the final diff. Version references are ordered before a

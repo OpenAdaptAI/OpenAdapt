@@ -985,3 +985,195 @@ def test_completely_rewritten_move_of_unexplained_merge_source_still_refuses(
     head = _commit(repo, "fix: move and rewrite source")
     with pytest.raises(ValueError, match="no non-merge commit metadata"):
         prepare_release.commits_for_net_diff(repo, base, head)
+
+
+def _edit_existing_component(lines: list[str], edit: str, position: int) -> list[str]:
+    result = list(lines)
+    if edit == "remove":
+        del result[position]
+    elif edit == "add":
+        result.insert(position, "new component behavior\n")
+    else:
+        assert edit == "replace"
+        result[position] = "replacement component behavior\n"
+    return result
+
+
+def _decorate_component(lines: list[str], where: str) -> list[str]:
+    result = list(lines)
+    position = {"prefix": 0, "middle": len(result) // 2, "suffix": len(result)}[where]
+    result.insert(position, "copy maintenance annotation\n")
+    return result
+
+
+@pytest.mark.parametrize("edit", ["add", "remove", "replace"])
+@pytest.mark.parametrize("position", [0, 4, 8])
+@pytest.mark.parametrize("decoration", ["prefix", "middle", "suffix"])
+@pytest.mark.parametrize("existing_destination", [False, True])
+def test_source_edit_lineage_survives_a_modified_copy_and_source_restore(
+    repo: Path, edit: str, position: int, decoration: str, existing_destination: bool
+) -> None:
+    original = [f"component behavior {n}\n" for n in range(9)]
+    source, destination = repo / "src/component.txt", repo / "src/copied-component.txt"
+    source.parent.mkdir(exist_ok=True)
+    source.write_text("".join(original))
+    if existing_destination:
+        destination.write_text("".join(original))
+    base = _commit(repo, "chore: existing component baseline")
+    changed = _edit_existing_component(original, edit, position)
+    source.write_text("".join(changed))
+    feature = _commit(repo, "feat: update existing component behavior")
+    destination.write_text("".join(_decorate_component(changed, decoration)))
+    _commit(repo, "chore: maintain a component copy")
+    source.write_text("".join(original))
+    head = _commit(repo, "chore: restore original component")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) == "minor"
+    assert any(c.sha == feature and "src/copied-component.txt" in c.paths for c in commits)
+    problems = check_release_intent.check(repo, base, head)
+    assert len(problems) == 1
+    assert "--bump minor" in problems[0]
+
+
+@pytest.mark.parametrize("finish", ["keep", "remove-later", "move"])
+@pytest.mark.parametrize("position", [0, 8])
+@pytest.mark.parametrize("decoration", ["prefix", "suffix"])
+def test_removal_intent_reaches_destination_for_copy_and_move_lifetimes(
+    repo: Path, finish: str, position: int, decoration: str
+) -> None:
+    original = [f"lifetime component {n}\n" for n in range(9)]
+    source, destination = repo / "src/lifetime.txt", repo / "src/lifetime-copy.txt"
+    source.parent.mkdir(exist_ok=True)
+    source.write_text("".join(original))
+    base = _commit(repo, "chore: baseline lifetime component")
+    changed = _edit_existing_component(original, "remove", position)
+    source.write_text("".join(changed))
+    feature = _commit(repo, "feat: remove obsolete lifetime behavior")
+    destination.write_text("".join(_decorate_component(changed, decoration)))
+    if finish == "move":
+        source.unlink()
+    _commit(repo, "chore: relocate component with maintenance")
+    if finish == "remove-later":
+        source.unlink()
+        _commit(repo, "chore: retire old component location")
+    head = _git(repo, "rev-parse", "HEAD")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) == "minor"
+    assert any(c.sha == feature and "src/lifetime-copy.txt" in c.paths for c in commits)
+
+
+@pytest.mark.parametrize("relative", ["docs/transit.txt", "tests/transit.py"])
+@pytest.mark.parametrize("decoration", ["prefix", "suffix"])
+def test_removed_behavior_survives_modified_nonshipped_transit(
+    repo: Path, relative: str, decoration: str
+) -> None:
+    original = [f"transit component {n}\n" for n in range(9)]
+    source = repo / "src/transit-source.txt"
+    source.parent.mkdir(exist_ok=True)
+    source.write_text("".join(original))
+    base = _commit(repo, "chore: baseline transit component")
+    changed = _edit_existing_component(original, "remove", 4)
+    source.write_text("".join(changed))
+    feature = _commit(repo, "feat: remove obsolete transit behavior")
+    transit = repo / relative
+    transit.parent.mkdir(parents=True, exist_ok=True)
+    transit.write_text("".join(_decorate_component(changed, decoration)))
+    _commit(repo, "chore: retain an intermediate component copy")
+    destination = repo / "src/transit-destination.txt"
+    destination.write_bytes(transit.read_bytes() + b"second copy maintenance\n")
+    _commit(repo, "chore: install intermediate component")
+    source.write_text("".join(original))
+    transit.unlink()
+    head = _commit(repo, "chore: restore source and remove intermediate")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) == "minor"
+    assert any(c.sha == feature and "src/transit-destination.txt" in c.paths for c in commits)
+
+
+@pytest.mark.parametrize("edit", ["add", "remove", "replace"])
+def test_canceled_source_edit_does_not_promote_a_later_maintenance_copy(
+    repo: Path, edit: str
+) -> None:
+    original = [f"canceled component {n}\n" for n in range(9)]
+    source = repo / "src/canceled-source.txt"
+    source.parent.mkdir(exist_ok=True)
+    source.write_text("".join(original))
+    base = _commit(repo, "chore: canceled component baseline")
+    source.write_text("".join(_edit_existing_component(original, edit, 4)))
+    feature = _commit(repo, "feat: temporary component edit")
+    source.write_text("".join(original))
+    _commit(repo, "chore: cancel component edit")
+    (repo / "src/canceled-copy.txt").write_text("".join(_decorate_component(original, "middle")))
+    head = _commit(repo, "chore: retain only baseline component copy")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) is None
+    assert all(c.sha != feature for c in commits)
+    assert check_release_intent.check(repo, base, head) == []
+
+
+@pytest.mark.parametrize("position", [0, 4, 8])
+def test_a_copy_that_retains_removed_behavior_has_no_negative_edit_witness(
+    repo: Path, position: int
+) -> None:
+    original = [f"retained component {n}\n" for n in range(9)]
+    source = repo / "src/retained-source.txt"
+    source.parent.mkdir(exist_ok=True)
+    source.write_text("".join(original))
+    base = _commit(repo, "chore: baseline retained behavior")
+    source.write_text("".join(_edit_existing_component(original, "remove", position)))
+    feature = _commit(repo, "feat: remove behavior in original location")
+    (repo / "src/retained-copy.txt").write_text("".join(_decorate_component(original, "middle")))
+    _commit(repo, "chore: copy baseline with behavior still present")
+    source.write_text("".join(original))
+    head = _commit(repo, "chore: restore baseline original")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) is None
+    assert all(c.sha != feature for c in commits)
+
+
+@pytest.mark.parametrize("relative", ["docs/removed.txt", "tests/removed.py"])
+@pytest.mark.parametrize("decoration", ["prefix", "suffix"])
+def test_modified_copy_of_unexplained_removal_source_still_refuses(
+    repo: Path, relative: str, decoration: str
+) -> None:
+    source = repo / relative
+    source.parent.mkdir(parents=True, exist_ok=True)
+    original = [f"unexplained removal component {n}\n" for n in range(9)]
+    source.write_text("".join(original))
+    _commit(repo, "chore: reference component baseline")
+    base, _origin, _host = _two_sided_history(repo, "feat", False)
+    source.write_text("".join(_edit_existing_component(original, "remove", 4)))
+    _commit(repo, "merge: unexplained removal from reference component")
+    (repo / "src/unexplained-removal-copy.txt").write_text(
+        "".join(_decorate_component(source.read_text().splitlines(keepends=True), decoration))
+    )
+    head = _commit(repo, "chore: install modified reference copy")
+    with pytest.raises(ValueError, match="no non-merge commit metadata"):
+        prepare_release.commits_for_net_diff(repo, base, head)
+
+
+@pytest.mark.parametrize("position", [0, 4, 8])
+@pytest.mark.parametrize("decoration", ["prefix", "suffix"])
+@pytest.mark.parametrize("existing_destination", [False, True])
+def test_removing_one_duplicate_behavior_keeps_counted_copy_lineage(
+    repo: Path, position: int, decoration: str, existing_destination: bool
+) -> None:
+    original = [f"duplicate component {n}\n" for n in range(9)]
+    original[1] = original[position]
+    source, destination = repo / "src/duplicate-source.txt", repo / "src/duplicate-copy.txt"
+    source.parent.mkdir(exist_ok=True)
+    source.write_text("".join(original))
+    if existing_destination:
+        destination.write_text("".join(original))
+    base = _commit(repo, "chore: repeated behavior baseline")
+    changed = _edit_existing_component(original, "remove", position)
+    source.write_text("".join(changed))
+    feature = _commit(repo, "feat: remove one duplicate behavior")
+    destination.write_text("".join(_decorate_component(changed, decoration)))
+    _commit(repo, "chore: retain repeated-behavior component copy")
+    source.write_text("".join(original))
+    head = _commit(repo, "chore: restore original repeated behavior")
+    commits = prepare_release.commits_for_net_diff(repo, base, head)
+    assert prepare_release.required_level(commits, _version(repo)) == "minor"
+    assert any(c.sha == feature and "src/duplicate-copy.txt" in c.paths for c in commits)
+    assert len(check_release_intent.check(repo, base, head)) == 1
