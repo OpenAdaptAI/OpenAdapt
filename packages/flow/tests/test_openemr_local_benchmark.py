@@ -886,7 +886,7 @@ window.openDuplicateCheck = () => {
 </iframe>
 </body></html>"""
 _FORM_HTML = """<!doctype html><html><body>
-<p>Name: <input id="form_fname" onclick="top.actions.push('fname')">
+<p>Name: <input id="form_fname" name="form_fname" onclick="top.actions.push('fname')">
 <input id="form_lname" onclick="top.actions.push('lname')"></p>
 <button id="create"
   onclick="top.actions.push('create'); top.openDuplicateCheck()">Create New Patient</button>
@@ -964,6 +964,10 @@ def test_openemr_adapter_delivers_guarded_dom_actions_in_the_form_frame(
         locator, handle, receipt = _act(backend, point)
         assert locator.selector == selector
         assert locator.frame_path  # bound to the exact hit-tested frame chain
+        if selector == "#form_fname":
+            assert locator.name == "form_fname"
+        elif selector == "#create":
+            assert locator.name == "Create New Patient"
         assert handle.target_fingerprint
         assert receipt.target_fingerprint == handle.target_fingerprint
     assert json.loads(

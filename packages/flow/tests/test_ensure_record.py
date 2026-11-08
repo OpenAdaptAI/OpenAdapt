@@ -296,7 +296,7 @@ def test_every_incomplete_read_is_unreadable(routes):
 
 
 def test_a_warning_outcome_is_a_message_not_an_unreadable_search():
-    """Epic answers an empty search with a warning outcome entry."""
+    """An explicitly informational warning is not a matching resource."""
 
     r = reader_for(
         {

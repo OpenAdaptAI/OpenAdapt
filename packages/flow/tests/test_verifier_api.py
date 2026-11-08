@@ -311,6 +311,7 @@ def test_the_public_api_is_stable() -> None:
         ("authorization_ref", "KEYWORD_ONLY"),
         ("workdir", "KEYWORD_ONLY"),
         ("declared_by", "KEYWORD_ONLY"),
+        ("read_provider", "KEYWORD_ONLY"),
     ]
     assert params(verify_write) == [
         ("pending", "POSITIONAL_OR_KEYWORD"),
@@ -361,6 +362,7 @@ def test_the_public_api_is_stable() -> None:
         ("excused_by", "KEYWORD_ONLY"),
         ("wait", "KEYWORD_ONLY"),
         ("ledger", "KEYWORD_ONLY"),
+        ("read_provider", "KEYWORD_ONLY"),
     ]
     assert [f for f in RecheckResult.__dataclass_fields__] == [
         "outcome",

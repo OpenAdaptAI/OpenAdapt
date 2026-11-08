@@ -123,10 +123,6 @@ def load_observer(
 
     import yaml
 
-    from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
-    from openadapt_flow.qualify.config import _expand
-    from openadapt_flow.verification import verifier_effect_tier
-
     source = Path(path)
     if not source.is_file():
         raise RecordSorError(f"{source} is not a file")
@@ -137,6 +133,23 @@ def load_observer(
     raw = data.get("verifier") if isinstance(data, dict) else None
     if not isinstance(raw, dict):
         raise RecordSorError(f"{source} has no verifier: section")
+    return observer_from_config(raw, for_run1=for_run1)
+
+
+def observer_from_config(
+    raw: Mapping[str, Any], *, for_run1: bool = False
+) -> tuple[SystemOfRecordObserver, dict[str, Any]]:
+    """Build the same SoR observer from a generated verifier declaration.
+
+    This does not compare snapshots, confirm effects or admit a compiled program.
+    Environment references stay unexpanded in the returned declaration.
+    """
+    from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
+    from openadapt_flow.qualify.config import _expand
+    from openadapt_flow.verification import verifier_effect_tier
+
+    if not isinstance(raw, Mapping):
+        raise RecordSorError("a verifier: mapping is required")
     missing: list[str] = []
     expanded = _expand({k: v for k, v in raw.items() if k != "session"}, missing)
     if missing:
