@@ -1,0 +1,232 @@
+# Temporary, fixed-ref diagnostic for #2078. No production or test changes.
+name: Flow shard measurement
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - .github/workflows/flow-shard-measurement.yml
+      - scripts/ci/flow_shard_measurement.py
+      - scripts/ci/tests/test_flow_shard_measurement.py
+
+permissions:
+  contents: read
+
+# Serializes separate requests without cancelling a useful measurement.
+concurrency:
+  group: flow-shard-measurement-2078
+  cancel-in-progress: false
+
+jobs:
+  parent:
+    name: parent fast shard ${{ matrix.shard }}/3
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'agent/2078'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        shard: [1, 2, 3]
+    defaults:
+      run:
+        working-directory: subject/packages/flow
+    steps:
+      - name: Check out the reviewed observer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: measurement
+          persist-credentials: false
+      - name: Check out the fixed subject
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 79833c3c18e5e4723635f0e4844b0957e3c18d9c
+          path: subject
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            subject/packages/flow/uv.lock
+            subject/packages/capture/uv.lock
+          cache-suffix: flow-unit
+      - name: Install from the locks
+        run: >-
+          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,capture,agent]' --lock packages/capture
+          --editable packages/types --editable packages/capture --editable packages/flow
+      - name: Install Harness² for the integration tests
+        run: >-
+          uv pip install --system --no-deps
+          'harness2 @ git+https://github.com/google-research/harness2@1cfe254e8d25b15f37048c3730134686abe60335'
+      - name: Verify the in-tree openadapt-capture imports headless
+        run: |
+          python - <<'PYCODE'
+          import pathlib, openadapt_capture
+          here = pathlib.Path(openadapt_capture.__file__).resolve().as_posix()
+          assert "packages/capture/openadapt_capture" in here, here
+          print("openadapt_capture from", here)
+          PYCODE
+      - name: Resolve Playwright version
+        id: pw
+        run: |
+          python -c "import importlib.metadata as m; print('version=' + m.version('playwright'))" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+      - name: Install and launch Playwright browser
+        timeout-minutes: 12
+        run: >-
+          python scripts/install_playwright_browser.py
+          --attempts 2 --attempt-timeout-seconds 270
+      - name: Select the unchanged fast shard
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          find tests -name 'test_*.py' -not -path 'tests/e2e/*' \
+            -not -path 'tests/test_install_playwright_browser.py' \
+            -not -path 'tests/test_qualification_gate_campaign.py' \
+            | python ../../scripts/ci/flow_shards.py --shard "$SHARD" --of 3 > "$RUNNER_TEMP/shard.txt"
+          wc -l < "$RUNNER_TEMP/shard.txt"
+      - name: Measure the unchanged pytest command
+        env:
+          OPENADAPT_TEST_LANE: fast
+          SHARD: ${{ matrix.shard }}
+        run: |
+          python "$GITHUB_WORKSPACE/measurement/scripts/ci/flow_shard_measurement.py" \
+            --subject "$GITHUB_WORKSPACE/subject" \
+            --profile parent --shard "$SHARD" \
+            --files "$RUNNER_TEMP/shard.txt" \
+            --output "$RUNNER_TEMP/flow-measurement"
+      - name: Retain only measurement records
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flow-measurement-parent-${{ matrix.shard }}
+          path: |
+            ${{ runner.temp }}/flow-measurement/identity-before.json
+            ${{ runner.temp }}/flow-measurement/identity-after.json
+            ${{ runner.temp }}/flow-measurement/phases.jsonl
+            ${{ runner.temp }}/flow-measurement/resources.jsonl
+            ${{ runner.temp }}/flow-measurement/pytest-exit.json
+            ${{ runner.temp }}/flow-measurement/result.json
+            ${{ runner.temp }}/flow-measurement/measurement-error.json
+          if-no-files-found: error
+          retention-days: 14
+
+  current:
+    name: current fast shard ${{ matrix.shard }}/3
+    needs: parent
+    if: >-
+      always() && !cancelled() &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'agent/2078'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        shard: [1, 2, 3]
+    defaults:
+      run:
+        working-directory: subject/packages/flow
+    steps:
+      - name: Check out the reviewed observer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: measurement
+          persist-credentials: false
+      - name: Check out the fixed subject
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: f81a0bcee5efacdb9387bc64d8480bc81aba7acb
+          path: subject
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            subject/packages/flow/uv.lock
+            subject/packages/capture/uv.lock
+          cache-suffix: flow-unit
+      - name: Install from the locks
+        run: >-
+          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,capture,agent]' --lock packages/capture
+          --editable packages/types --editable packages/capture --editable packages/flow
+      - name: Install Harness² for the integration tests
+        run: >-
+          uv pip install --system --no-deps
+          'harness2 @ git+https://github.com/google-research/harness2@1cfe254e8d25b15f37048c3730134686abe60335'
+      - name: Verify the in-tree openadapt-capture imports headless
+        run: |
+          python - <<'PYCODE'
+          import pathlib, openadapt_capture
+          here = pathlib.Path(openadapt_capture.__file__).resolve().as_posix()
+          assert "packages/capture/openadapt_capture" in here, here
+          print("openadapt_capture from", here)
+          PYCODE
+      - name: Resolve Playwright version
+        id: pw
+        run: |
+          python -c "import importlib.metadata as m; print('version=' + m.version('playwright'))" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+      - name: Install and launch Playwright browser
+        timeout-minutes: 12
+        run: >-
+          python scripts/install_playwright_browser.py
+          --attempts 2 --attempt-timeout-seconds 270
+      - name: Select the unchanged fast shard
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          find tests -name 'test_*.py' -not -path 'tests/e2e/*' \
+            -not -path 'tests/test_install_playwright_browser.py' \
+            -not -path 'tests/test_qualification_gate_campaign.py' \
+            | python ../../scripts/ci/flow_shards.py --shard "$SHARD" --of 3 > "$RUNNER_TEMP/shard.txt"
+          wc -l < "$RUNNER_TEMP/shard.txt"
+      - name: Measure the unchanged pytest command
+        env:
+          OPENADAPT_TEST_LANE: fast
+          SHARD: ${{ matrix.shard }}
+        run: |
+          python "$GITHUB_WORKSPACE/measurement/scripts/ci/flow_shard_measurement.py" \
+            --subject "$GITHUB_WORKSPACE/subject" \
+            --profile current --shard "$SHARD" \
+            --files "$RUNNER_TEMP/shard.txt" \
+            --output "$RUNNER_TEMP/flow-measurement"
+      - name: Retain only measurement records
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flow-measurement-current-${{ matrix.shard }}
+          path: |
+            ${{ runner.temp }}/flow-measurement/identity-before.json
+            ${{ runner.temp }}/flow-measurement/identity-after.json
+            ${{ runner.temp }}/flow-measurement/phases.jsonl
+            ${{ runner.temp }}/flow-measurement/resources.jsonl
+            ${{ runner.temp }}/flow-measurement/pytest-exit.json
+            ${{ runner.temp }}/flow-measurement/result.json
+            ${{ runner.temp }}/flow-measurement/measurement-error.json
+          if-no-files-found: error
+          retention-days: 14
+
