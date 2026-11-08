@@ -16,7 +16,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 Canonicaliser = Literal["exact", "uuid"]
-_UUID = re.compile(r"(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})\Z")
+_UUID = re.compile(
+    r"(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})\Z"
+)
 
 
 class FrameIdentityError(ValueError):
@@ -36,7 +38,11 @@ class FrameIdentity(BaseModel):
 
 
 def read_config_digest(config: Mapping[str, Any]) -> str:
-    return hashlib.sha256(json.dumps(dict(config), sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+    return hashlib.sha256(
+        json.dumps(
+            dict(config), sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode()
+    ).hexdigest()
 
 
 def canonical_identity(value: Any, canonicaliser: Canonicaliser) -> str:
@@ -70,7 +76,9 @@ def learn_identity(
 ) -> FrameIdentity:
     """Search every stored column; no column-name or application hints."""
     if not records or not rows:
-        raise FrameIdentityError("identity learning needs an observed record and stored rows")
+        raise FrameIdentityError(
+            "identity learning needs an observed record and stored rows"
+        )
     values = [record.get(surface_field) for record in records]
     try:
         for value in values:
@@ -95,7 +103,9 @@ def learn_identity(
     for identity in observed:
         matching = by_value.get(identity, set())
         if len(matching) != 1:
-            raise FrameIdentityError("reader identity must match exactly one stored column")
+            raise FrameIdentityError(
+                "reader identity must match exactly one stored column"
+            )
         matches.update(matching)
     if len(matches) != 1:
         raise FrameIdentityError("reader identities do not share one stored column")
@@ -104,14 +114,25 @@ def learn_identity(
     if not set(observed).issubset(stored):
         raise FrameIdentityError("reader identities are absent from stored rows")
     return FrameIdentity(
-        surface_field=surface_field, table=table, column=column,
-        canonicaliser=canonicaliser, read_config_sha256=read_config_digest(read_config),
-        witnesses=len(observed), diagnostics=["single_witness"] if len(observed) == 1 else [],
+        surface_field=surface_field,
+        table=table,
+        column=column,
+        canonicaliser=canonicaliser,
+        read_config_sha256=read_config_digest(read_config),
+        witnesses=len(observed),
+        diagnostics=["single_witness"] if len(observed) == 1 else [],
     )
 
 
 def identity_token(binding: FrameIdentity, value: Any, key: bytes) -> str:
-    message = "openadapt.frame-identity/v1\0" + binding.table + "\0" + binding.column + "\0" + canonical_identity(value, binding.canonicaliser)
+    message = (
+        "openadapt.frame-identity/v1\0"
+        + binding.table
+        + "\0"
+        + binding.column
+        + "\0"
+        + canonical_identity(value, binding.canonicaliser)
+    )
     return hmac.new(key, message.encode(), hashlib.sha256).hexdigest()
 
 
@@ -130,10 +151,19 @@ def snapshot_index(binding: FrameIdentity, table: Any, key: bytes) -> dict[str, 
     return result
 
 
-def match_records(binding: FrameIdentity, records: Sequence[Mapping[str, Any]], index: Mapping[str, str], key: bytes) -> list[str]:
-    tokens = [identity_token(binding, r.get(binding.surface_field), key) for r in records]
+def match_records(
+    binding: FrameIdentity,
+    records: Sequence[Mapping[str, Any]],
+    index: Mapping[str, str],
+    key: bytes,
+) -> list[str]:
+    tokens = [
+        identity_token(binding, r.get(binding.surface_field), key) for r in records
+    ]
     if len(set(tokens)) != len(tokens):
         raise FrameIdentityError("reader identity is not one-to-one")
     if any(token not in index for token in tokens):
-        raise FrameIdentityError("reader identity is absent from the current frame snapshot")
+        raise FrameIdentityError(
+            "reader identity is absent from the current frame snapshot"
+        )
     return [index[token] for token in tokens]

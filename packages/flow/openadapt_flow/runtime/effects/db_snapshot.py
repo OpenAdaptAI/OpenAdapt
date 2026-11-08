@@ -1911,7 +1911,9 @@ def _snapshot(
                 mac,
                 "".join(cell_hash(key, row.get(c), t, c) for c in table.cell_columns),
             ]
-            if t in retain_values or (old is not None and (k not in old.rows or old.rows[k][0] != mac)):
+            if t in retain_values or (
+                old is not None and (k not in old.rows or old.rows[k][0] != mac)
+            ):
                 table.values[k] = dict(row)
         snap.tables[t] = table
     return snap

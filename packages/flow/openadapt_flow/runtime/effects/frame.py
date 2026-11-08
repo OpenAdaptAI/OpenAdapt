@@ -1560,9 +1560,17 @@ def judge_frame(
                 ) in taken:
                     continue
                 if (
-                    key_of(record, side.of_surface) in surface_declared.get(side.of_surface, ())
+                    key_of(record, side.of_surface)
+                    in surface_declared.get(side.of_surface, ())
                     if side.of_surface in mapped_tables
-                    else any(record_matches(dict(record), s, text_numbers=before_state.substrate == "sql") for s in sels)
+                    else any(
+                        record_matches(
+                            dict(record),
+                            s,
+                            text_numbers=before_state.substrate == "sql",
+                        )
+                        for s in sels
+                    )
                 ):
                     links.add(str(value))
                 elif inserted_by_other(
