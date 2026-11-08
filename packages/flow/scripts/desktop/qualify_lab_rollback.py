@@ -22,8 +22,8 @@ The in-tree Patient Notes WinForms app (SQLite ground truth) on the WinRM lab:
 Every verdict is checked again against the guest's SQLite file. The lab
 database is a test copy only these runs write (``exclusive``).
 
-Usage (from packages/flow, with the lab ``.env`` loaded and ``winrm_lab`` on
-the path)::
+Usage (from packages/flow, with an explicitly configured lab profile and
+``winrm_lab`` on the path)::
 
     python scripts/desktop/qualify_lab_rollback.py --transport native \\
         --out ~/oa/scratch/winlab/runs/rollback-native-1 --evidence ev.json
@@ -51,7 +51,6 @@ sys.path.insert(0, str(HERE))
 import winrm_lab  # noqa: E402
 
 GUEST = r"C:\oa"
-PY = r"C:\Program Files\Python312-arm64\python.exe"
 APP = rf"{GUEST}\patient_notes.ps1"
 DB = rf"{GUEST}\patients.db"
 SEARCH = "Neil"
@@ -108,17 +107,18 @@ def _fresh_app(
         "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }",
         check=False,
     )
-    lab.run_ps(f"& '{PY}' '{GUEST}\\pn_db.py' seed --drift none")
+    py = lab.resolve_app_python()
+    lab.run_ps(f"& '{py}' '{GUEST}\\pn_db.py' seed --drift none")
     if note:
         b64 = base64.b64encode(note.encode("utf-8")).decode("ascii")
-        lab.run_ps(f"& '{PY}' '{GUEST}\\pn_db.py' save 1 {b64}")
+        lab.run_ps(f"& '{py}' '{GUEST}\\pn_db.py' save 1 {b64}")
     lab.run_ps(
         f"Set-Content -Encoding ascii -Path '{GUEST}\\pn_env.json' "
         '-Value \'{"window": "maximized"}\''
     )
     lab.launch_interactive(
         f"powershell.exe -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File {APP} "
-        f'-Python "{PY}" -DbCli "{GUEST}\\pn_db.py"',
+        f'-Python "{py}" -DbCli "{GUEST}\\pn_db.py"',
         name="OAFlowApp",
     )
     time.sleep(settle_s)
@@ -366,14 +366,12 @@ def _review_selection_keys(workflow) -> list[dict[str, str]]:
 
 def _use_host(lab: winrm_lab.WinRMLab) -> str:
     """Point the guest paths at the lab host's profile; its env prefix."""
-    global PY, GUEST, APP, DB
+    global GUEST, APP, DB
     profile = getattr(lab, "profile", None)
     if profile is None:  # a lab module without host profiles: the ARM VM
         return "OAFLOW_WINLAB_"
     GUEST = profile.guest_dir
     APP, DB = rf"{GUEST}\patient_notes.ps1", rf"{GUEST}\patients.db"
-    # pn_db prints its JSON: the console python.exe beside pythonw.exe.
-    PY = lab.resolve_python().replace("pythonw.exe", "python.exe")
     return str(profile.prefix)
 
 
@@ -467,6 +465,21 @@ def run_case(
     }
 
 
+def _required_helpers(directories: tuple[Path, ...]) -> dict[str, Path]:
+    """Resolve every required helper before any guest deployment begins."""
+    helpers = {}
+    missing = []
+    for name in ("pn_db.py", "patient_notes.ps1", "foreign_window.ps1"):
+        local = next((d / name for d in directories if (d / name).is_file()), None)
+        if local is None:
+            missing.append(name)
+        else:
+            helpers[name] = local
+    if missing:
+        raise FileNotFoundError("missing required lab helpers: " + ", ".join(missing))
+    return helpers
+
+
 def run_trial(transport: str, out: Path, row: dict[str, Any]) -> None:
     from openadapt_flow.adapters.desktop_recorder import record_desktop_demo
 
@@ -479,12 +492,12 @@ def run_trial(transport: str, out: Path, row: dict[str, Any]) -> None:
             ).stdout.strip(),
         }
     )
+    tools = Path(winrm_lab.__file__).resolve().parent
+    helpers = _required_helpers((HERE, tools))
     lab = winrm_lab.WinRMLab()
     prefix = _use_host(lab)
     row["host"] = prefix.split("_")[1].lower()  # winlab | winlap
-    tools = Path(winrm_lab.__file__).resolve().parent
-    for name in ("pn_db.py", "patient_notes.ps1", "foreign_window.ps1"):
-        local = next(p for p in (HERE / name, tools / name) if p.exists())
+    for name, local in helpers.items():
         lab.push_file(local, rf"{GUEST}\{name}")
     rdp = _rdp_backend(prefix) if transport == "rdp" else None
     if rdp is not None:
@@ -575,12 +588,13 @@ def run_trial(transport: str, out: Path, row: dict[str, Any]) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--transport", choices=("native", "rdp"), required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--evidence", type=Path, required=True)
     args = parser.parse_args()
-    winrm_lab.load_env_file(Path.home() / "oa/src/OpenAdapt/.env")
     args.out.mkdir(parents=True, exist_ok=True)
     row: dict[str, Any] = {}
     try:

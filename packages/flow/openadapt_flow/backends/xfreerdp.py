@@ -373,7 +373,17 @@ class XFreeRDPTransport:
             if xvfb_proc.poll() is not None:
                 raise XFreeRDPError(f"Xvfb exited on display {self.display}")
             t = self.target
-            argv = [client, f"/v:{t.host}:{t.port}", "/f", "/from-stdin:force"]
+            # -decorations: the window manager started below would otherwise
+            # give the fullscreen window a title bar, drawing the remote
+            # desktop lower than the frame's coordinates (every click lands
+            # that many pixels high).
+            argv = [
+                client,
+                f"/v:{t.host}:{t.port}",
+                "/f",
+                "-decorations",
+                "/from-stdin:force",
+            ]
             if t.username:
                 argv.append(f"/u:{t.username}")
             if t.domain:

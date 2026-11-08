@@ -117,6 +117,7 @@ def test_packages_selects_every_package_on_a_nightly_event(
         ["bash", "-c", script], cwd=ROOT, env=env, check=True, capture_output=True
     )
     selected = dict(line.split("=", 1) for line in output.read_text().splitlines())
+    assert selected.pop("flow_unit_shards") == "2"
     assert selected and set(selected.values()) == {"true"}, selected
     assert {"flow", "types", "agent", "capture", "privacy", "desktop", "tray"} <= set(
         selected

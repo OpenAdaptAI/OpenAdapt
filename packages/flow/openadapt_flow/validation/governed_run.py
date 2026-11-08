@@ -277,7 +277,7 @@ def write_report(report: dict, out: Path) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--trials", type=int, default=3)
     args = parser.parse_args()

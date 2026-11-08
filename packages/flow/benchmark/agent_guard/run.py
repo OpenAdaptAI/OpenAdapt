@@ -46,9 +46,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
+import yaml
+
 from benchmark.agent_guard.agent import ScriptedAgent
 from benchmark.agent_guard.app import App, serve
 from benchmark.effect_e2e import ground_truth
+from benchmark.effect_e2e.record_service import ENCOUNTERS_READ_CONTRACT
 
 __all__ = ["SCENARIOS", "Scenario", "outcome", "run_benchmark"]
 
@@ -139,12 +142,17 @@ def write_setup(
     verify = work / "verify.yaml"
     verify.write_text(
         "schema_version: openadapt.verify/v1\n"
-        "verifier:\n"
-        "  kind: rest\n"
-        f"  base_url: {base}\n"
-        "  records_path: /api/records\n"
-        "  records_key: records\n"
-        "effects:\n"
+        + yaml.safe_dump(
+            {
+                "verifier": {
+                    "kind": "rest",
+                    "base_url": base,
+                    **ENCOUNTERS_READ_CONTRACT,
+                }
+            },
+            sort_keys=False,
+        )
+        + "effects:\n"
         "  - kind: record_written\n"
         "    match:\n"
         "      patient_id: {param: patient_id}\n"
@@ -463,7 +471,6 @@ def run2(
     """
 
     import anyio
-
     from openadapt_flow.agent.bridge import AgentBridge
     from openadapt_flow.agent.mcp import build_server
     from openadapt_flow.agent.runner import RunnerConfig
@@ -772,7 +779,9 @@ def summarize(results: dict[str, Any]) -> dict[str, Any]:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.split("\n\n")[0], allow_abbrev=False
+    )
     parser.add_argument("--n", type=int, default=3)
     parser.add_argument("--think", type=float, default=1.0)
     parser.add_argument("--arms", default=",".join(ARMS))

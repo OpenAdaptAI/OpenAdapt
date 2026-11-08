@@ -43,7 +43,6 @@ from types import SimpleNamespace
 from typing import Any, Optional
 
 import yaml
-
 from benchmark.fhir_medplum.leaderboard_rescore.frozen import FrozenMedplum
 from benchmark.fhir_medplum.public.model import WIPED
 from benchmark.fhir_medplum.public.run import CONTRACTS, PRACTITIONER_ID, Bench
@@ -60,7 +59,10 @@ DATA = HERE / "inputs"
 CASES = HERE.parent / "public" / "cases.yaml"
 OPERATIONS = HERE / "contracts_operations"
 #: Agent -> the Medplum stack its runs used (leaderboard README).
-STACKS = {"claude": 9800, "openai": 9810}
+STACKS = {"claude": 9800, "openai": 9810, "fara": 9820}
+#: Agent -> the time its live checks got a fresh token. A row checked at or
+#: after it has a live verdict and is not replayed (``PREREGISTRATION-FARA.md``).
+CHECKED_BEFORE = {"fara": datetime(2026, 11, 4, 11, 55, tzinfo=timezone.utc)}
 #: The harness sleeps 2.5 s after the seed, then snapshots and reads.
 BASELINE_AFTER_SEED_S = 2.6
 #: Deviation 1: cap what the check sees at the harness's next step.
@@ -232,7 +234,9 @@ def judge_row(
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     ap.add_argument(
         "--contracts", choices=("main", "operations", "operations-v2"), required=True
     )
@@ -264,7 +268,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         },
         "rows": {},
     }
-    for agent in args.agent or sorted(STACKS):
+    for agent in args.agent or ("claude", "openai"):
         stack = Stack(agent, times)
         for row in load_rows(agent):
             live = row.get("verifier") or {}
@@ -272,6 +276,9 @@ def main(argv: Optional[list[str]] = None) -> int:
                 continue
             key = f"{agent}/runs/{row['_name']}"
             row["_key"] = key
+            cutoff = CHECKED_BEFORE.get(agent)
+            if cutoff and _utc(times[key]["transcript.json"]) >= cutoff:
+                continue
             res = judge_row(
                 stack, row, times[key], cases[row["id"]], suite, args.contracts
             )

@@ -21,7 +21,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (  # noqa: E402
     Ed25519PrivateKey,
 )
 from fake_screen import ACCOUNTS, LABELS, AppClipboard, FakeScreen, region  # noqa: E402
-
 from openadapt_flow.records.export import CsvSink, DbApiSink, export  # noqa: E402
 from openadapt_flow.records.read import add_read, channel_read, read_field  # noqa: E402
 from openadapt_flow.records.review import ReviewQueue, apply_decision  # noqa: E402
@@ -84,7 +83,7 @@ def read_record(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--out", type=Path, default=Path("records-demo"))
     parser.add_argument("--min-grade", default="reopened")
     parser.add_argument(

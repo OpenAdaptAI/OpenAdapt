@@ -25,7 +25,6 @@ import argparse
 import hashlib
 import json
 import os
-import shutil
 import sys
 import time
 from pathlib import Path
@@ -33,6 +32,7 @@ from typing import Any, Optional
 
 from benchmark.fhir_medplum.fixture import FixtureError, MedplumFixture, _http
 from benchmark.fhir_medplum.readpath import suite as runner
+from benchmark.fhir_medplum.readpath.facts import generic_facts
 
 HERE = Path(__file__).resolve().parent
 PROBE = HERE.parent / "fhir_medplum" / "readpath" / "probe.json"
@@ -101,7 +101,7 @@ def cmd_teach(args: argparse.Namespace) -> int:
         out / "search_parameters.json",
         read_all(f"{fx.fhir_url}/SearchParameter?base={rtype}&_count=200", reader),
     )
-    shutil.copyfile(PROBE, out / "facts.json")
+    _dump(out / "facts.json", generic_facts(json.loads(PROBE.read_text())))
     _dump(
         out / "teach.json",
         {
@@ -230,7 +230,6 @@ def stop_card(
 
 def cmd_suite(args: argparse.Namespace) -> int:
     import yaml
-
     from openadapt_flow.ensure_record import load_contract
 
     raw = Path(args.suite).read_bytes()
@@ -297,12 +296,14 @@ def cmd_suite(args: argparse.Namespace) -> int:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     sub = ap.add_subparsers(dest="cmd", required=True)
-    t = sub.add_parser("teach")
+    t = sub.add_parser("teach", allow_abbrev=False)
     t.add_argument("--task", required=True)
     t.add_argument("--out", required=True)
-    s = sub.add_parser("suite")
+    s = sub.add_parser("suite", allow_abbrev=False)
     s.add_argument("--suite", required=True)
     s.add_argument("--sha256", required=True)
     s.add_argument("--contract", required=True)

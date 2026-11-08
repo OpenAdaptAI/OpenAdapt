@@ -33,6 +33,10 @@ def build_app(env_dir: str | Path, *, max_concurrent_envs: int = 8) -> Any:
     from openadapt_flow.rl_env.tasks import load_environment
 
     loaded = load_environment(env_dir)
+    if loaded.manifest.app.kind == "desktop":
+        from openadapt_flow.rl_env.desktop import build_app as build_desktop_app
+
+        return build_desktop_app(loaded.directory)
     if loaded.manifest.app.kind == "external":
         # One app database serves every session, and a reset restores it for
         # everyone: concurrent episodes would see and wipe each other's writes.
@@ -55,7 +59,9 @@ def build_app(env_dir: str | Path, *, max_concurrent_envs: int = 8) -> Any:
 def main(argv: list[str] | None = None) -> int:
     import uvicorn
 
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("env_dir", nargs="?", default=os.environ.get(ENV_DIR_VAR))
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)

@@ -93,8 +93,20 @@ def test_load_non_mapping_raises(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "kind,kwargs,expected",
     [
-        ("rest", {"base_url": "http://sor"}, "RestRecordVerifier"),
-        ("fhir", {"base_url": "http://sor/fhir"}, "FhirEffectVerifier"),
+        (
+            "rest",
+            {"base_url": "http://sor", "records_path": "/api/db"},
+            "RestRecordVerifier",
+        ),
+        (
+            "fhir",
+            {
+                "base_url": "http://sor/fhir",
+                "resource_type": "Observation",
+                "field_paths": {"value": "valueString"},
+            },
+            "FhirEffectVerifier",
+        ),
         ("document-hash", {"root": "/tmp/store"}, "DocumentHashVerifier"),
     ],
 )
@@ -109,7 +121,7 @@ def test_build_verifier_none_kind_is_none() -> None:
 
 def test_rest_requires_base_url() -> None:
     with pytest.raises(ValueError, match="base_url"):
-        build_effect_verifier(EffectsConfig(kind="rest"))
+        build_effect_verifier(EffectsConfig(kind="rest", records_path="/api/db"))
 
 
 def test_document_hash_requires_root() -> None:
@@ -127,3 +139,103 @@ def test_api_actuator_off_by_default_on_when_enabled() -> None:
     act = build_api_actuator(ActuationConfig(api=True, base_url="http://api"))
     assert type(act).__name__ == "ApiActuator"
     assert act.base_url == "http://api"
+
+
+@pytest.mark.parametrize(
+    ("transaction", "execution", "success", "profile", "label", "exit_code"),
+    [
+        ("VERIFIED", "VERIFIED", True, "standard", "Done and checked", 0),
+        (
+            "COMPLETED_UNVERIFIED",
+            "COMPLETED_UNVERIFIED",
+            True,
+            "demo",
+            "Finished, not checked",
+            0,
+        ),
+        (
+            "COMPLETED_UNVERIFIED",
+            "COMPLETED_UNVERIFIED",
+            True,
+            "standard",
+            "Finished, not checked",
+            1,
+        ),
+        (
+            "HALTED_BEFORE_EFFECT",
+            "HALTED",
+            False,
+            "standard",
+            "Stopped before saving",
+            1,
+        ),
+        ("RECONCILIATION_REQUIRED", "HALTED", False, "standard", "Check the record", 1),
+        ("ROLLED_BACK", "HALTED", False, "standard", "Check the record", 1),
+        (
+            "SAVED_AWAITING_CHECK",
+            "SAVED_AWAITING_CHECK",
+            False,
+            "standard",
+            "Saved, waiting for its check",
+            1,
+        ),
+        (None, "HALTED", False, "standard", "Check the record", 1),
+        ("UNKNOWN_NEW_STATE", "HALTED", False, "standard", "Check the record", 1),
+    ],
+)
+def test_run_summary_keeps_result_safety_and_exit_policy(
+    tmp_path,
+    monkeypatch,
+    capsys,
+    transaction,
+    execution,
+    success,
+    profile,
+    label,
+    exit_code,
+):
+    from types import SimpleNamespace
+
+    from openadapt_flow import __main__ as cli
+    from openadapt_flow import report as report_module
+    from openadapt_flow import rollback
+
+    retained = tmp_path / "report.json"
+    original = b'{"transaction_outcome":"RECONCILIATION_REQUIRED","unchanged":true}'
+    retained.write_bytes(original)
+    monkeypatch.setattr(
+        report_module, "render_run_report", lambda folder: folder / "REPORT.md"
+    )
+    for helper in (
+        "_maybe_report_break",
+        "_maybe_report_run",
+        "_maybe_attest_run",
+    ):
+        monkeypatch.setattr(cli, helper, lambda *args, **kwargs: None)
+    monkeypatch.setattr(cli, "_replay_outcome_epilogue", lambda *args: "")
+    monkeypatch.setattr(cli, "_change_ledger_epilogue", lambda *args: "")
+    monkeypatch.setattr(rollback, "rollback_lines", lambda report: [])
+    report = SimpleNamespace(
+        transaction_outcome=transaction,
+        execution_outcome=execution,
+        success=success,
+        execution_profile=profile,
+        screenshots_may_leave_box=False,
+    )
+
+    assert cli._finish_replay(tmp_path, report) == exit_code
+    output = capsys.readouterr().out
+    assert output.startswith(f"Result: {label}.")
+    assert "Next: " in output
+    assert f"Report: {tmp_path / 'REPORT.md'}" in output
+    assert retained.read_bytes() == original
+    if label == "Check the record":
+        assert "Check the record before anyone runs this again." in output
+        assert "Nothing was written" not in output
+        assert "run it again" not in output
+    if transaction == "SAVED_AWAITING_CHECK":
+        assert "Don't run it again." in output
+        assert "openadapt-flow deferred settle" in output
+        assert "openadapt flow deferred settle" not in output
+    if transaction:
+        assert transaction not in output

@@ -91,6 +91,8 @@ class Engine(Protocol):
         run_id: str,
         inputs: dict[str, str],
         raw: Mapping[str, Any],
+        *,
+        admitted_bundle_sha256: Optional[str] = None,
     ) -> EngineResult: ...
 
     def refresh(self, entry: "CatalogEntry", run_id: str) -> Optional[EngineResult]: ...
@@ -141,16 +143,32 @@ class FlowCliEngine:
         run_id: str,
         inputs: dict[str, str],
         raw: Mapping[str, Any],
+        *,
+        admitted_bundle_sha256: Optional[str] = None,
     ) -> EngineResult:
         bundle_dir = Path(entry.info.bundle_dir)
         if self.repair_desk is not None:
             # A person-approved repair, once activated, replaces the bundle.
             bundle_dir = self.repair_desk.active_bundle(entry.name, bundle_dir)
+        if admitted_bundle_sha256 is not None:
+            # The intake grant admitted one digest. A switched repair or edited
+            # bundle after the gate must not reach the CLI with other bytes.
+            from openadapt_flow.intake.param_gate import bundle_sha256
+
+            try:
+                digest = bundle_sha256(bundle_dir)
+            except Exception:
+                digest = None
+            if digest != admitted_bundle_sha256:
+                return EngineResult(reason="policy_refused")
         outcome = self.runner.run(
             workflow=entry.legacy_id or entry.name,
             bundle_dir=bundle_dir,
             params=inputs,
             run_id=run_id,
+            # The CLI runs a digest-checked private snapshot and is told the
+            # admitted digest, so a later edit can't reach consumption.
+            admitted_bundle_sha256=admitted_bundle_sha256,
         )
         attention = None
         if outcome.status == "halt":
@@ -250,6 +268,7 @@ class RunService:
         allow_run: bool,
         require_all_inputs: bool = True,
         repair_desk: Any = None,
+        intake_grants: Any = None,
     ) -> None:
         self.repair_desk = repair_desk
         self.store = store
@@ -257,6 +276,13 @@ class RunService:
         self.mode = mode
         self.allow_run = allow_run
         self.require_all_inputs = require_all_inputs
+        #: Shared with AgentBridge: operator-registered, single-use intake
+        #: grants (#1890). Never filled from tool arguments.
+        if intake_grants is None:
+            from openadapt_flow.intake.param_gate import IntakeGrantRegistry
+
+            intake_grants = IntakeGrantRegistry()
+        self.intake_grants = intake_grants
         self._active: dict[str, threading.Event] = {}
         self._lock = threading.Lock()
         # Reserving a request and marking its run active happen together, so a
@@ -298,6 +324,43 @@ class RunService:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return float(default)
         return float(min(max(value, 0), MAX_WAIT_SECONDS))
+
+    # -- intake provenance gate (#1890) ----------------------------------------
+
+    def _intake_param_gate(
+        self, entry: CatalogEntry, inputs: Mapping[str, Any], request_id: str
+    ) -> Any:
+        """Check intake-bound params against this workflow's grant (#1890).
+
+        Gates the bundle that will actually run (an activated repair
+        included). Returns an ``IntakeGateDecision``; its ``values`` are what
+        the run must use. Uses operator-registered grants only, never the
+        caller's inputs.
+        """
+
+        from openadapt_flow.intake.param_gate import IntakeGateDecision
+
+        names = [entry.name, entry.legacy_id or ""]
+        info = entry.info
+        if info is None:
+            # A taught-over-MCP entry has no bundle the gate can read, and a
+            # grant can't be registered for one, so there is nothing to check.
+            if self.intake_grants.get(names) is not None:
+                return IntakeGateDecision(
+                    ok=False,
+                    reason="intake provenance can't be checked for this workflow",
+                )
+            return IntakeGateDecision(ok=True, values=dict(inputs))
+        bundle_dir = Path(info.bundle_dir)
+        if self.repair_desk is not None:
+            bundle_dir = self.repair_desk.active_bundle(entry.name, bundle_dir)
+        return self.intake_grants.gate(
+            names,
+            bundle_dir,
+            inputs,
+            param_types=getattr(info, "param_types", None),
+            request_id=request_id,
+        )
 
     # -- run_workflow ----------------------------------------------------------
 
@@ -348,6 +411,29 @@ class RunService:
                 workflow=entry.name,
                 invalid_inputs=problems,
             )
+        intake = self._intake_param_gate(entry, inputs, request_id)
+        if not intake.ok:
+            return self._refuse(
+                "invalid_input",
+                request_id=request_id,
+                workflow=entry.name,
+                invalid_inputs=[{"input": "(intake)", "problem": intake.reason}],
+            )
+        # Run with the proven intake values, not the caller's spelling of them.
+        inputs = intake.values
+        if input_problems(entry.card, inputs, require_all=self.require_all_inputs):
+            return self._refuse(
+                "invalid_input",
+                request_id=request_id,
+                workflow=entry.name,
+                invalid_inputs=[
+                    {
+                        "input": "(intake)",
+                        "problem": "the proven intake values don't fit the "
+                        "workflow's declared inputs",
+                    }
+                ],
+            )
         event = threading.Event()
         with self._begin_lock:
             begin = self.store.begin(
@@ -383,7 +469,12 @@ class RunService:
             return self.get(begin.run_id, wait_seconds=wait, replayed=True)
         try:
             self._start(
-                entry, begin.record, coerce_inputs(entry.card, inputs), inputs, event
+                entry,
+                begin.record,
+                coerce_inputs(entry.card, inputs),
+                inputs,
+                event,
+                admitted_bundle_sha256=intake.bundle_sha256,
             )
         except BaseException:
             # No worker owns the run, so get_run reports it as interrupted
@@ -401,6 +492,8 @@ class RunService:
         rendered: dict[str, str],
         raw: Mapping[str, Any],
         event: threading.Event,
+        *,
+        admitted_bundle_sha256: Optional[str] = None,
     ) -> None:
         """Run one reserved attempt on a worker; ``run`` already marked it active."""
         run_id = record["run_id"]
@@ -408,7 +501,13 @@ class RunService:
         def work() -> None:
             try:
                 try:
-                    outcome = entry.engine.execute(entry, run_id, rendered, raw)
+                    outcome = entry.engine.execute(
+                        entry,
+                        run_id,
+                        rendered,
+                        raw,
+                        admitted_bundle_sha256=admitted_bundle_sha256,
+                    )
                 except Exception:
                     # The engine may have acted before it failed: uncertain.
                     _LOG.exception(

@@ -155,9 +155,9 @@ class HarnessPerson:
 def run_one(
     env: dict[str, Any], arm: str, ref_idx: int, bundle: Path, out: Path
 ) -> dict[str, Any]:
+    from benchmark.harness.openemr_local import OpenEMRPatientOracle
     from openadapt_flow.approval_mode.gate import ApprovalGate
     from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
-    from benchmark.harness.openemr_local import OpenEMRPatientOracle
     from openadapt_flow.ir import Workflow
     from openadapt_flow.runtime import Replayer
     from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
@@ -248,9 +248,8 @@ def run_one(
 
 
 def cmd_run(a: argparse.Namespace) -> None:
-    from playwright.sync_api import sync_playwright
-
     import openadapt_flow.vision.ocr  # noqa: F401
+    from playwright.sync_api import sync_playwright
 
     ocr = sys.modules["openadapt_flow.vision.ocr"]
     out, bundle = Path(a.out), Path(a.bundle)
@@ -417,18 +416,20 @@ def cmd_summarize(a: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     sub = ap.add_subparsers(dest="cmd", required=True)
     sm = sub.add_parser(
-        "summarize", help="Rebuild runs.csv and summary.json from items/"
+        "summarize",
+        help="Rebuild runs.csv and summary.json from items/",
+        allow_abbrev=False,
     )
     sm.add_argument("--out", required=True, action="append")
     sm.add_argument("--to", required=True)
     sm.add_argument("--engine-sha", required=True)
-    c = sub.add_parser("compile")
+    c = sub.add_parser("compile", allow_abbrev=False)
     c.add_argument("--recording", required=True)
     c.add_argument("--out", required=True)
-    r = sub.add_parser("run")
+    r = sub.add_parser("run", allow_abbrev=False)
     r.add_argument("--bundle", required=True)
     r.add_argument("--out", required=True)
     r.add_argument("--blocks", type=int, default=5)

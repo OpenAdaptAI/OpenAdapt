@@ -28,6 +28,7 @@ import pytest
 from openadapt_flow.compiler import compile_recording
 from openadapt_flow.interactive_recorder import record_interactive
 from openadapt_flow.ir import Workflow
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 
 sync_api = pytest.importorskip("playwright.sync_api")
 
@@ -1166,7 +1167,9 @@ def test_an_api_span_after_a_late_refusal_halts_before_sending(
             report = Replayer(
                 backend,
                 web_form_actuator=actuator,
-                effect_verifier=RestRecordVerifier(sor_url.rstrip("/")),
+                effect_verifier=RestRecordVerifier(
+                    sor_url.rstrip("/"), **mockmed_rest_read_kwargs()
+                ),
                 poll_interval_s=0.01,
             ).run(
                 _span_workflow(),
@@ -1269,7 +1272,9 @@ def test_a_late_refusal_adds_to_an_earlier_halt_instead_of_replacing_it(
             replayer = Replayer(
                 backend,
                 web_form_actuator=actuator,
-                effect_verifier=RestRecordVerifier(sor_url.rstrip("/")),
+                effect_verifier=RestRecordVerifier(
+                    sor_url.rstrip("/"), **mockmed_rest_read_kwargs()
+                ),
                 poll_interval_s=0.01,
             )
             report = replayer.run(

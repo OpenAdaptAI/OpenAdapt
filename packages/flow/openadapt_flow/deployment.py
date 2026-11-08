@@ -26,12 +26,14 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Callable, Literal, Mapping, Optional
+from typing import Any, Callable, Final, Literal, Mapping, Optional
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictBool,
+    StrictStr,
     field_validator,
     model_serializer,
     model_validator,
@@ -384,19 +386,37 @@ class EffectsConfig(BaseModel):
     #: ``runtime/effects/fresh_session.py`` and ``docs/READBACK_LADDER.md``.
     fresh_session: Optional[FreshSessionSpec] = None
 
-    # -- rest (JSON REST system of record, e.g. MockMed /api/db) -------------
+    # -- rest (JSON REST system of record) -----------------------------------
     base_url: Optional[str] = None
-    records_path: str = "/api/db"
+    #: ``rest`` only, and required there: the path whose GET returns the
+    #: records. Every app keeps them somewhere else, so there is no default.
+    records_path: Optional[str] = None
     records_key: Optional[str] = "records"
     #: ``rest`` only: dotted path in the response body to the next page's URL
     #: (``links.next``). Set, the read follows every page on the same origin
     #: and reads as unreadable when a page fails or the chain is too long.
-    #: Unset: one response is the whole read, as before.
+    #: Unset: no completeness guarantee is inferred from one response.
     records_next_path: Optional[str] = None
     #: ``rest`` only: dotted path in the first page's body to the number of
     #: records the read should return (``meta.total``). Set, a read whose
-    #: count differs reads as unreadable. Unset: the read trusts the chain.
+    #: count differs reads as unreadable. Unset: no total-count check is made.
     records_total_path: Optional[str] = None
+    #: ``rest`` only: validated declaration that a single, unpaged response
+    #: includes the complete matching record set. It is not inferred from the
+    #: number of returned records. Prefer ``records_next_path`` or
+    #: ``records_total_path`` when the endpoint exposes pagination metadata.
+    records_complete: Optional[StrictBool] = None
+    #: ``rest`` / ``fhir``: response-body path to a token whose reviewed
+    #: endpoint semantics bind every page to one immutable result snapshot.
+    #: A next link or total alone is not a consistent multi-page read.
+    records_snapshot_path: Optional[StrictStr] = Field(
+        default=None, min_length=1, max_length=256, pattern=r"^[^.\s]+(?:\.[^.\s]+)*$"
+    )
+    #: A learned read may be consumed only with an explicit current in-process
+    #: context. This marker grants no permission and is retained on export.
+    records_read_context: Optional[Literal["revalidate"]] = None
+    #: Distinct guarded mode. Equal pages alone never establish quiescence.
+    records_consistency: Optional[Literal["quiescent-two-pass"]] = None
     #: Secret-isolated auth headers for the records read (bearer_env /
     #: header+value_env / basic_env). Never a credential literal.
     auth: Optional[AuthRef] = None
@@ -445,8 +465,10 @@ class EffectsConfig(BaseModel):
     #: Allowlist variant: when set, every evidence field NOT named is redacted.
     evidence_keep_fields: Optional[list[str]] = None
 
-    # -- fhir (FHIR R4 search, e.g. OpenEMR) ---------------------------------
-    resource_type: str = "Observation"
+    # -- fhir (FHIR R4 search) -----------------------------------------------
+    #: ``fhir`` only, and required there with ``field_paths``: which resource
+    #: the app keeps the write in, and where each field lives in it.
+    resource_type: Optional[str] = None
     search_params: dict[str, str] = Field(default_factory=dict)
     field_paths: Optional[dict[str, str]] = None
     #: OAuth2 bearer token literal. DEPRECATED for committed configs — prefer
@@ -627,6 +649,12 @@ class EffectsConfig(BaseModel):
             "deferred_report",
             "records_next_path",
             "records_total_path",
+            "records_complete",
+            "records_snapshot_path",
+            "records_read_context",
+            "records_consistency",
+            "records_path",
+            "resource_type",
         ):
             if data.get(added, "") is None:
                 data.pop(added, None)
@@ -638,6 +666,22 @@ class EffectsConfig(BaseModel):
         if self.records_drop_fields and kind not in ("rest", "sql", "fhir"):
             raise ValueError(
                 "effects.records_drop_fields applies only to kinds rest, sql and fhir"
+            )
+        if self.records_consistency is not None and (
+            kind not in ("rest", "fhir") or self.records_snapshot_path is not None
+        ):
+            raise ValueError(
+                "quiescent consistency requires rest/fhir and excludes immutable snapshot mode"
+            )
+        if self.records_read_context is not None and kind not in ("rest", "fhir"):
+            raise ValueError(
+                "effects.records_read_context applies only to kind rest or fhir"
+            )
+        if self.records_complete is not None and kind != "rest":
+            raise ValueError("effects.records_complete applies only to kind rest")
+        if self.records_snapshot_path is not None and kind not in ("rest", "fhir"):
+            raise ValueError(
+                "effects.records_snapshot_path applies only to kinds rest and fhir"
             )
         return self
 
@@ -1451,7 +1495,11 @@ def load_deployment(
     if pinned is None and not path.is_file():
         raise FileNotFoundError(f"deployment config {source!r} is not an existing file")
     try:
-        text = pinned.decode("utf-8") if pinned is not None else path.read_text()
+        text = (
+            pinned.decode("utf-8")
+            if pinned is not None
+            else path.read_text(encoding="utf-8")
+        )
         data = yaml.safe_load(text) or {}
     except yaml.YAMLError as e:  # pragma: no cover - passthrough
         raise ValueError(f"could not parse deployment YAML {path}: {e}") from e
@@ -1948,7 +1996,12 @@ def plugin_secrets(
 
 
 def build_effect_verifier(
-    cfg: EffectsConfig, params: Optional[Mapping[str, object]] = None
+    cfg: EffectsConfig,
+    params: Optional[Mapping[str, object]] = None,
+    *,
+    session: Any = None,
+    read_context: Any = None,
+    quiescence: Any = None,
 ) -> Optional[Any]:
     """Construct the configured ``EffectVerifier`` (or None for ``kind: none``).
 
@@ -1960,6 +2013,11 @@ def build_effect_verifier(
             ``graphql_variables``) are resolved against these AT CONSTRUCTION,
             so the verifier probes the record THIS run writes. A config with
             no references ignores ``params`` entirely (fully back-compatible).
+        session: An authenticated ``requests``-style client the read-back
+            uses instead of building its own, for ``kind: rest``, ``fhir``
+            or ``graphql`` (for example one from a qualify
+            ``verifier.session`` hook that renews an expiring token). Any
+            other kind refuses it rather than read without it.
 
     Resolution order for ``kind``: built-in adapters, then plugin factories registered under the
     ``openadapt_flow.effect_verifiers`` entry-point group or via
@@ -1974,6 +2032,50 @@ def build_effect_verifier(
             unresolved ``{param: ...}`` reference, or a missing secret env var
             (fail loud rather than wire a broken verifier).
     """
+    if quiescence is not None and (
+        cfg.candidates or cfg.kind not in ("rest", "fhir", "surfaces")
+    ):
+        raise ValueError("quiescence must be routed to a REST/FHIR read")
+    if (
+        quiescence is not None
+        and cfg.kind == "surfaces"
+        and (not isinstance(quiescence, Mapping) or set(quiescence) - set(cfg.surfaces))
+    ):
+        raise ValueError("quiescence must be routed by declared surface names")
+    if cfg.records_consistency and quiescence is None and read_context is None:
+        raise ValueError("quiescent read requires current writer-exclusion authority")
+    if read_context is not None and (
+        session is not None or quiescence is not None or cfg.candidates
+    ):
+        raise ValueError(
+            "a REST read context cannot replace another session or candidates"
+        )
+    if cfg.records_read_context is not None:
+        from openadapt_flow.rest_setup import RestReadContext
+
+        if not isinstance(read_context, RestReadContext):
+            raise ValueError(
+                "learned REST read requires current read-context revalidation"
+            )
+        verifier = read_context.build(cfg, params)
+        from openadapt_flow.runtime.effects.adapter import set_verifier_identity
+
+        set_verifier_identity(verifier, _effect_verifier_config_identity(cfg, verifier))
+        return verifier
+    if read_context is not None and (
+        cfg.kind != "surfaces" or not isinstance(read_context, Mapping)
+    ):
+        raise ValueError("read contexts must be routed by the declared surface names")
+    if isinstance(read_context, Mapping) and set(read_context) - set(cfg.surfaces):
+        raise ValueError("read context names an unknown surface")
+    if session is not None and (
+        cfg.candidates or (cfg.kind or "").strip().lower() not in _SESSION_KINDS
+    ):
+        raise ValueError(
+            "an injected read-back session is supported for kind: "
+            + ", ".join(_SESSION_KINDS)
+            + f", not {cfg.kind!r}"
+        )
     if cfg.candidates:
         built = [
             build_effect_verifier(candidate, params) for candidate in cfg.candidates
@@ -2020,7 +2122,9 @@ def build_effect_verifier(
             return RedactingVerifier(candidate_selector, policy)
         return candidate_selector
 
-    verifier = _build_effect_verifier_unredacted(cfg, params)
+    verifier = _build_effect_verifier_unredacted(
+        cfg, params, session=session, read_context=read_context, quiescence=quiescence
+    )
     if verifier is None:
         return None
     from openadapt_flow.runtime.effects.adapter import set_verifier_identity
@@ -2042,6 +2146,41 @@ def build_effect_verifier(
 
 _PLUGIN_ONLY_FIELDS = ("options", "option_params", "secret_env")
 
+#: The built-in read-backs that can read through an injected client.
+_SESSION_KINDS: Final[tuple[str, ...]] = ("rest", "fhir", "graphql")
+
+
+#: What these fields held when they still had defaults. Verifier identities
+#: and check digests issued before then hashed these values, so for hashing
+#: only, an unset field still reads as its old value. Never used to read a
+#: store: a read without its own records_path or resource_type is refused.
+LEGACY_HASHED_DEFAULTS: Final[dict[str, str]] = {
+    "records_path": "/api/db",
+    "resource_type": "Observation",
+}
+
+
+def legacy_hash_dump(dumped: dict[str, Any], *, defaults_excluded: bool) -> None:
+    """Make a config dump hash as it did when those fields had defaults.
+
+    ``defaults_excluded``: the dump left defaults out (``exclude_defaults``),
+    so a field holding its old default is dropped; otherwise an unset field
+    takes its old default.
+    """
+
+    for name, legacy in LEGACY_HASHED_DEFAULTS.items():
+        if defaults_excluded:
+            if dumped.get(name) == legacy:
+                dumped.pop(name)
+        elif dumped.get(name) is None:
+            dumped[name] = legacy
+    for item in dumped.get("candidates") or []:
+        if isinstance(item, dict):
+            legacy_hash_dump(item, defaults_excluded=defaults_excluded)
+    for item in (dumped.get("surfaces") or {}).values():
+        if isinstance(item, dict):
+            legacy_hash_dump(item, defaults_excluded=defaults_excluded)
+
 
 def _identity_config_dump(cfg: EffectsConfig) -> dict[str, Any]:
     """Serialize ``cfg`` for the verifier identity.
@@ -2051,6 +2190,7 @@ def _identity_config_dump(cfg: EffectsConfig) -> dict[str, Any]:
     """
 
     def prune(dumped: dict[str, Any]) -> dict[str, Any]:
+        legacy_hash_dump(dumped, defaults_excluded=False)
         for name in _PLUGIN_ONLY_FIELDS:
             if not dumped.get(name):
                 dumped.pop(name, None)
@@ -2099,6 +2239,10 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
         "deferred_report",
         "records_next_path",
         "records_total_path",
+        "records_complete",
+        "records_snapshot_path",
+        "records_read_context",
+        "records_consistency",
     ):
         if config.get(added) is None:
             config.pop(added, None)
@@ -2133,7 +2277,12 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
 
 
 def _build_effect_verifier_unredacted(
-    cfg: EffectsConfig, params: Optional[Mapping[str, object]] = None
+    cfg: EffectsConfig,
+    params: Optional[Mapping[str, object]] = None,
+    *,
+    session: Any = None,
+    read_context: Any = None,
+    quiescence: Any = None,
 ) -> Optional[Any]:
     """The per-kind construction behind :func:`build_effect_verifier`."""
     kind = (cfg.kind or "none").strip().lower()
@@ -2214,7 +2363,12 @@ def _build_effect_verifier_unredacted(
 
         built: dict[str, Any] = {}
         for name, surface in cfg.surfaces.items():
-            verifier = build_effect_verifier(surface, params)
+            verifier = build_effect_verifier(
+                surface,
+                params,
+                read_context=None if read_context is None else read_context.get(name),
+                quiescence=None if quiescence is None else quiescence.get(name),
+            )
             if verifier is None:  # guarded by EffectsConfig, retained fail-closed
                 raise ValueError(f"effects.surfaces[{name!r}] built no verifier")
             built[name] = verifier
@@ -2223,6 +2377,11 @@ def _build_effect_verifier_unredacted(
     if kind == "rest":
         if not cfg.base_url:
             raise ValueError("effects.kind 'rest' requires effects.base_url")
+        if not cfg.records_path:
+            raise ValueError(
+                "effects.kind 'rest' requires effects.records_path (the path "
+                "whose GET returns the app's records)"
+            )
         from openadapt_flow.runtime.effects import RestRecordVerifier
 
         headers = cfg.auth.resolve_headers() if cfg.auth is not None else None
@@ -2247,17 +2406,28 @@ def _build_effect_verifier_unredacted(
             cfg.base_url,
             records_path=records_path,
             records_key=cfg.records_key,
+            session=session,
             headers=headers,
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,
             drop_fields=tuple(cfg.records_drop_fields),
             next_path=cfg.records_next_path,
             total_path=cfg.records_total_path,
+            records_complete=cfg.records_complete,
+            snapshot_path=cfg.records_snapshot_path,
+            consistency=cfg.records_consistency,
+            quiescence=quiescence,
         )
 
     if kind == "fhir":
         if not cfg.base_url:
             raise ValueError("effects.kind 'fhir' requires effects.base_url")
+        if not cfg.resource_type or not cfg.field_paths:
+            raise ValueError(
+                "effects.kind 'fhir' requires effects.resource_type and "
+                "effects.field_paths (which resource the app keeps the write "
+                "in, and where each field lives in it)"
+            )
         from openadapt_flow.runtime.effects import FhirEffectVerifier
 
         access_token = cfg.access_token
@@ -2288,10 +2458,14 @@ def _build_effect_verifier_unredacted(
             field_paths=cfg.field_paths,
             access_token=access_token,
             token_source=token_source,
+            session=session,
             verify_tls=cfg.verify_tls,
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,
             drop_fields=tuple(cfg.records_drop_fields),
+            snapshot_path=cfg.records_snapshot_path,
+            consistency=cfg.records_consistency,
+            quiescence=quiescence,
         )
 
     if kind == "sql":
@@ -2384,6 +2558,7 @@ def _build_effect_verifier_unredacted(
             query=cfg.graphql_query,
             variables=variables,
             records_path=cfg.graphql_records_path,
+            session=session,
             headers=headers,
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,

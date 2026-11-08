@@ -286,6 +286,12 @@ def test_a_colleagues_own_ui_state_is_theirs_only_by_their_entry_for_it(
     assert _frame(_run(tmp_path / "d", password)) == "refuted"
 
 
+def test_the_openemr_profile_names_its_no_record_value() -> None:
+    """Record 0 names no chart in OpenEMR's data, not in the engine."""
+    profile = load_profile("openemr")
+    assert profile.no_record_values == ["0"]
+
+
 def test_a_rule_never_judges_a_row_whose_columns_have_no_cell_macs(
     tmp_path: Path,
 ) -> None:

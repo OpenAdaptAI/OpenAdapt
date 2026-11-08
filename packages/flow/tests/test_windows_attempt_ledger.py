@@ -134,6 +134,8 @@ def _run_case(main, bundle, inputs_path, run_dir):
             "rest",
             "--effects-base-url",
             "http://sor.local",
+            "--effects-records-path",
+            "/api/db",
             "--backend",
             "web",
         ]

@@ -21,6 +21,10 @@ pytest.importorskip("openadapt_types.reward")
 from openadapt_types.oracle import OracleChannel  # noqa: E402
 from openadapt_types.reward import RewardOutcomeV1  # noqa: E402
 
+from openadapt_flow.reward.bundle import (  # noqa: E402
+    calibrate_bundle,
+    write_bundle,
+)
 from openadapt_flow.reward.calibration import (  # noqa: E402
     FAULT_CLASSES,
     CalibrationRefused,
@@ -44,10 +48,8 @@ from openadapt_flow.reward.seed import (  # noqa: E402
     MOCKMED_HONEST_PATIENT,
     MOCKMED_LIE_PATIENT,
     MOCKMED_QUERY,
-    calibrate_bundle,
     mockmed_episode,
     seed_mockmed,
-    write_bundle,
     write_mockmed_encounter,
 )
 from openadapt_flow.reward.worker import RewardWorker, RewardWorkerError  # noqa: E402
@@ -529,3 +531,16 @@ def test_the_calibration_records_which_corpus_it_ran_on(
         calibration["calibration_corpus_digest"]
         == contract["certificate_policy"]["calibration_corpus_digest"]
     )
+
+
+def test_a_rest_recipe_names_its_records_path() -> None:
+    """No app's records path is assumed for a REST oracle."""
+    with pytest.raises(ValueError, match="records_path"):
+        OracleRecipeV1(kind="rest", base_url="http://app.local")
+    recipe = OracleRecipeV1(
+        kind="rest",
+        base_url="http://app.local",
+        records_path="/api/resource/Loan Application",
+        records_key="data",
+    )
+    assert recipe.records_path == "/api/resource/Loan Application"

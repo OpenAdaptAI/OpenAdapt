@@ -1236,7 +1236,9 @@ def _resume_under_lease(
                 checkpoint.model_copy(deep=True) for checkpoint in linear_checkpoints
             ],
             "program_checkpoints": [],
-            "auxiliary_digest": replayer._durable_auxiliary_digest(run_dir, []),
+            "auxiliary_digest": replayer._durable_auxiliary_digest(
+                run_dir, [], key=getattr(replayer, "checkpoint_key", None)
+            ),
         },
         authorizing_approval=approved.model_copy(deep=True),
     )
@@ -1383,7 +1385,9 @@ def _resume_program(
             "linear_checkpoints": [],
             "program_checkpoints": [item.model_copy(deep=True) for item in checkpoints],
             "auxiliary_digest": replayer._durable_auxiliary_digest(
-                store.run_dir, checkpoints
+                store.run_dir,
+                checkpoints,
+                key=getattr(replayer, "checkpoint_key", None),
             ),
         },
         authorizing_approval=approval.model_copy(deep=True),
