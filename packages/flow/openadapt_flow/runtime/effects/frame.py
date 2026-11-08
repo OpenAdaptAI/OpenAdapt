@@ -85,8 +85,8 @@ from openadapt_flow.runtime.effects.effect import (
     selector_value,
     stable_id,
 )
-from openadapt_flow.runtime.effects.history import FrameHistory
 from openadapt_flow.runtime.effects.frame_identity import FrameIdentity
+from openadapt_flow.runtime.effects.history import FrameHistory
 from openadapt_flow.runtime.effects.learned import (
     NOT_COMPARED,
     LearnedFrame,
