@@ -18,6 +18,7 @@ import re
 import shutil
 from pathlib import Path
 
+from openadapt_flow.emit.mcp_sdk import server_import
 from openadapt_flow.emit.python_names import PythonNames
 from openadapt_flow.emit.skill import bundle_surface, declared_params
 from openadapt_flow.ir import Workflow
@@ -37,7 +38,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
+{sdk_import}
 
 BUNDLE_DIR = Path(__file__).resolve().parent / {bundle_subdir!r}
 
@@ -139,7 +140,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
+{sdk_import}
 
 BUNDLE_DIR = Path(__file__).resolve().parent / {bundle_subdir!r}
 SURFACE = {surface!r}
@@ -288,6 +289,7 @@ def emit_mcp_server(bundle_dir: Path | str, out_path: Path | str) -> Path:
     # Reserve every executable name in both template scopes before allocating
     # injective aliases. Original workflow names remain dictionary keys.
     template_values = dict(
+        sdk_import=server_import("FastMCP", "mcp_import_error"),
         name="workflow",
         out_name="server.py",
         bundle_subdir="bundle",
@@ -341,6 +343,7 @@ def emit_mcp_server(bundle_dir: Path | str, out_path: Path | str) -> Path:
     surface = bundle_surface(workflow)
     if surface == "web":
         source = _SERVER_TEMPLATE.format(
+            sdk_import=server_import("FastMCP", "mcp_import_error"),
             name=workflow.name,
             out_name=out.name,
             bundle_subdir=bundle_subdir,
@@ -352,6 +355,7 @@ def emit_mcp_server(bundle_dir: Path | str, out_path: Path | str) -> Path:
         )
     else:
         source = _SURFACE_SERVER_TEMPLATE.format(
+            sdk_import=server_import("FastMCP", "mcp_import_error"),
             name=workflow.name,
             out_name=out.name,
             bundle_subdir=bundle_subdir,

@@ -16,6 +16,7 @@ import keyword
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from openadapt_flow.emit.mcp_sdk import server_import
 from openadapt_flow.emit.python_names import PythonNames
 from openadapt_flow.emit.skill import _recorded_literals, _slugify, _step_line
 from openadapt_flow.ir import Workflow
@@ -38,10 +39,7 @@ from __future__ import annotations
 from typing import Annotated as {annotated_type}
 from pydantic import Field as {field_type}
 
-try:
-    from mcp.server.mcpserver import MCPServer as {server_type}  # mcp 2
-except ImportError:  # mcp 1
-    from mcp.server.fastmcp import FastMCP as {server_type}
+{sdk_import}
 
 {task_symbol} = {task_dir!r}
 
@@ -87,6 +85,7 @@ def emit_mcp(compiler: "FirstRunCompiler", out_path: Path) -> Path:
     annotated_type = symbols.allocate("Annotated")
     field_type = symbols.allocate("Field")
     server_type = symbols.allocate("FastMCP")
+    import_error = symbols.allocate("mcp_import_error")
     task_symbol = symbols.allocate("TASK_DIR")
     server_symbol = symbols.allocate("mcp")
     dispatch_symbol = symbols.allocate("run_compiled_params")
@@ -103,6 +102,7 @@ def emit_mcp(compiler: "FirstRunCompiler", out_path: Path) -> Path:
         annotated_type=annotated_type,
         field_type=field_type,
         server_type=server_type,
+        sdk_import=server_import(server_type, import_error),
         task_symbol=task_symbol,
         server_symbol=server_symbol,
         dispatch_symbol=dispatch_symbol,

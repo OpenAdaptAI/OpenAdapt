@@ -28,6 +28,8 @@ from openadapt_flow.emit import emit_mcp_server
 from openadapt_flow.ir import Step, Workflow
 from openadapt_flow.jit.compile_agent import WebApp
 from openadapt_flow.jit.compile_agent import compile_agent as make_jit
+
+from tests._mcp_tools import call_generated_tool
 from openadapt_flow.jit.signature import TaskSignature
 
 COMPILED_PARAMETERS = [
@@ -229,7 +231,7 @@ def _assert_compiled_binding(
     values = {name: "caller-data:" + name for name in parameters}
     if "TASK_DIR" in values:
         values["TASK_DIR"] = str(tmp_path / "different-admitted-task")
-    returned = asyncio.run(tool.run(values))
+    returned = asyncio.run(call_generated_tool(module, values))
     assert returned == reply.to_dict() and returned["verified"] is False
     assert len(calls) == 1
     assert str(calls[0][0]) == str(fixed)
