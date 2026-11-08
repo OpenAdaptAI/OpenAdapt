@@ -48,7 +48,14 @@ from pathlib import Path
 from typing import Any, Literal, Optional
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictStr,
+    model_serializer,
+    model_validator,
+)
 
 from openadapt_flow.fhir_read import (
     check_search_coverage,
@@ -63,6 +70,7 @@ from openadapt_flow.fhir_reference import (
     ReferenceSchema,
     ReferenceUnreadable,
 )
+from openadapt_flow.runtime.effects._common import page_snapshot_token
 
 Outcome = Literal["found_existing", "created_verified", "needs_review"]
 Compare = Literal["exact", "casefold", "digits", "date", "instant"]
@@ -229,6 +237,10 @@ class EnsureContract(BaseModel):
     resource_type: str = Field(min_length=1)
     base_url: str = Field(min_length=1)
     access_token_env: Optional[str] = None
+    #: Reviewed immutable snapshot semantics for every multi-page Bundle.
+    records_snapshot_path: Optional[StrictStr] = Field(
+        default=None, min_length=1, max_length=256, pattern=r"^[^.\s]+(?:\.[^.\s]+)*$"
+    )
     #: Exact schema metadata proving which elements are FHIR References.
     reference_schema: Optional[ReferenceSchema] = None
     #: The agent's own actor references (``Practitioner/<id>``).
@@ -337,6 +349,8 @@ class EnsureContract(BaseModel):
         data = handler(self)
         if self.reference_schema is None:
             data.pop("reference_schema", None)
+        if self.records_snapshot_path is None:
+            data.pop("records_snapshot_path", None)
         return data
 
     @property
@@ -1057,6 +1071,7 @@ class FhirReader:
         self.base_url = contract.base_url.rstrip("/")
         self.timeout_s = contract.timeout_s
         self._token_env = contract.access_token_env
+        self.snapshot_path = contract.records_snapshot_path
         self._get = get or self._httpx_get
         self._client: Any = None
 
@@ -1073,7 +1088,11 @@ class FhirReader:
             if not token:
                 raise Unreadable(f"no access token in {self._token_env}")
             headers["Authorization"] = f"Bearer {token}"
-        resp = self._client.get(url, params=dict(params or {}), headers=headers)
+        # None preserves an opaque continuation URL's existing query. An empty
+        # mapping would replace it and lose its server-bound snapshot cursor.
+        resp = self._client.get(
+            url, params=dict(params) if params is not None else None, headers=headers
+        )
         try:
             body = resp.json()
         except ValueError:
@@ -1089,7 +1108,7 @@ class FhirReader:
             raise
         except Exception as exc:  # noqa: BLE001 - transport failure is unreadable
             raise Unreadable(f"GET {url} failed: {type(exc).__name__}") from exc
-        if status // 100 != 2:
+        if status // 100 != 2 or status == 206:
             raise Unreadable(f"GET {url} returned HTTP {status}")
         return headers, body
 
@@ -1102,14 +1121,56 @@ class FhirReader:
         query: Optional[Mapping[str, Any]] = params
         entries: list[dict[str, Any]] = []
         total: Optional[int] = None
+        snapshot: str | int | None = None
+        match_identities: set[tuple[str, str]] = set()
         for _ in range(MAX_PAGES):
             assert url is not None
             _, body = self.fetch(url, query)
             if not isinstance(body, dict) or body.get("resourceType") != "Bundle":
                 raise Unreadable(f"{path}: the reply is not a Bundle")
+            if self.snapshot_path is not None:
+                try:
+                    current_snapshot = page_snapshot_token(body, self.snapshot_path)
+                except ValueError as exc:
+                    raise Unreadable(f"{path}: {exc}") from exc
+                if snapshot is not None and (
+                    type(current_snapshot) is not type(snapshot)
+                    or current_snapshot != snapshot
+                ):
+                    raise Unreadable(
+                        f"{path}: the declared snapshot changed across pages"
+                    )
+                snapshot = current_snapshot
             page = body.get("entry") or []
             if not isinstance(page, list):
                 raise Unreadable(f"{path}: entry is not a list")
+            if body.get("type") == "searchset":
+                for entry in page:
+                    if not isinstance(entry, dict):
+                        raise Unreadable(f"{path}: an entry is not an object")
+                    resource = entry.get("resource") or {}
+                    if not isinstance(resource, dict):
+                        raise Unreadable(f"{path}: an entry has no resource object")
+                    if (entry.get("search") or {}).get(
+                        "mode", "match"
+                    ) != "match" or resource.get("resourceType") == "OperationOutcome":
+                        continue
+                    kind, identity = resource.get("resourceType"), resource.get("id")
+                    if (
+                        not isinstance(kind, str)
+                        or not kind
+                        or not isinstance(identity, str)
+                        or not identity
+                    ):
+                        raise Unreadable(
+                            f"{path}: a matching resource has no stable identity"
+                        )
+                    key = (kind, identity)
+                    if key in match_identities:
+                        raise Unreadable(
+                            f"{path}: a matching resource identity was repeated; coverage is ambiguous"
+                        )
+                    match_identities.add(key)
             entries += [e for e in page if isinstance(e, dict)]
             has_matches = any(
                 isinstance(e.get("resource"), dict)
@@ -1154,6 +1215,10 @@ class FhirReader:
                 return entries
             if _origin(nxt) != _origin(self.base_url):
                 raise Unreadable(f"{path}: next page on another origin")
+            if self.snapshot_path is None:
+                raise Unreadable(
+                    f"{path}: multi-page reads require declared immutable snapshot semantics"
+                )
             url, query = nxt, None
         raise Unreadable(f"{path}: more than {MAX_PAGES} pages")
 

@@ -63,6 +63,7 @@ from openadapt_flow.runtime.effects.sql import SqlRecordVerifier
 from openadapt_flow.runtime.replayer import Replayer
 from openadapt_flow.transaction import classify_transaction_outcome
 from openadapt_flow.undo_proposal import network_candidates
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 from tests.test_replayer import FakeBackend, FakeVision, Match
 
 # ---------------------------------------------------------------------------
@@ -208,9 +209,7 @@ def _mockmed_replayer(url: str) -> Replayer:
     return Replayer(
         MockMedBackend(url),
         vision=_vision(),
-        effect_verifier=RestRecordVerifier(
-            url, records_path="/api/db", records_key="records"
-        ),
+        effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
         api_actuator=ApiActuator(url),
         poll_interval_s=0.01,
     )
@@ -222,7 +221,7 @@ def _run_with_rollback(
     bundle = tmp_path / "bundle"
     workflow.save(bundle)
     workflow = Workflow.load(bundle)
-    verifier = RestRecordVerifier(url, records_path="/api/db", records_key="records")
+    verifier = RestRecordVerifier(url, **mockmed_rest_read_kwargs())
     from openadapt_flow.after_stop import records_reader
 
     plan = RollbackPlan(
