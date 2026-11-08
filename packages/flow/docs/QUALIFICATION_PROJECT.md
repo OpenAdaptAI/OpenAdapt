@@ -144,6 +144,17 @@ openadapt-flow qualify certify bundle \
   --json
 ```
 
+A bundle that embeds reusable subroutines (`subroutine/<name>/<sha256>`
+subflows, see `docs/design/SUBROUTINES.md`) also needs
+`--subroutine-library subroutines.json`. Certification then admits every
+embedded subroutine against that library and registers the workflow as a user
+of those exact versions (`--subroutine-workflow-id`, default the workflow
+name), writing the library back. Without the library, or when any use is
+refused, certification fails with `subroutine_not_admitted`. A bundle with no
+subroutines is certified exactly as before. `openadapt-flow qualify <bundle>
+--verify verify.yaml --certify` takes the same flag and refuses before running
+any case when it is missing.
+
 `qualify run` imports typed results from Desktop or another local,
 customer-controlled executor. Unsigned, stale, missing, symlinked, or
 hash-mismatched evidence is refused. Raw parameters, screenshots, credentials,

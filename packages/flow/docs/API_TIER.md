@@ -1,10 +1,13 @@
 # API steps from a recording's network traffic
 
-**Scope: a single HTML form submission.** An API step repeats one
-`application/x-www-form-urlencoded` POST of one HTML form, read again from
-the live page, in place of the clicks and keystrokes that filled it. It is
-not a general API client: JSON or script-built requests and multi-page
-server state stay on the GUI. Other writes during the replaced steps are a
+**Scope: a single HTML form submission.** An API step repeats one POST of
+one HTML form, read again from the live page, in place of the clicks and
+keystrokes that filled it. The POST is `application/x-www-form-urlencoded`
+or `multipart/form-data` with no file attached, and either the browser
+submits the form or the page's script sends the form's fields to another
+endpoint (see [Saves the page's script sends](#saves-the-pages-script-sends)).
+It is not a general API client: JSON and GraphQL bodies, uploads and
+multi-page server state stay on the GUI. Other writes during the replaced steps are a
 declared sequence (below): the page's own background requests are listed
 and left to the page, and a write a step caused is sent in its recorded
 place before the save and read back. A form whose script
@@ -74,6 +77,29 @@ every field it sent:
 | `select_label` | A select a recorded step typed an option's label into | The option with that label in the live form; refuse if it isn't exactly one |
 | `session` | A CSRF or session value the server issued | Read from the live form in this session |
 | `form_default` | The form's own default | Must still equal the recorded default |
+| `submitter` | The `name=value` the browser adds for the submit button the person clicked (`commit=Create`) | The live form must have exactly one enabled submit button that sends that value |
+| `empty_file` | A file input sent empty in a multipart save | The live form must have exactly the recorded file inputs; the API step never attaches a file |
+
+The save is sent with the encoding it was recorded with. A multipart save
+is encoded the way Chromium encodes a form with no file (each field a part,
+an empty file input a part with `filename=""`, line breaks as CRLF), with a
+boundary derived from the fields, so the same request always has the same
+bytes. A multipart save that attached a file isn't captured
+(`body_omitted: "multipart"`), so it isn't proposed. A form with no `action`
+posts to its own page and is matched as such.
+
+The submit button's pair is explained only by exactly one button whose value
+is written in the page. An `<input type=submit>` without a `value` sends the
+browser's own label, which the page doesn't state, so such a pair isn't
+explained. When the recording doesn't name the clicked control by `#id` or
+`[name]`, the button that sends the pair is the one clicked when the page's
+script runs; a recorded click on another control refuses the proposal.
+
+The save's success signal is the address it sent the browser to. A record's
+own address (`/ticket/17`, `/ipam/ip-addresses/3/`) is kept whole with each
+number generalized, since the number alone matches almost any URL. A query
+value that is a long hash or nonce (a comment's `moderation-hash`) must be
+present, with any value.
 
 A field is bound by provenance: which recorded step typed into it (the
 field the click before the typing targeted), never by its value matching a
@@ -117,6 +143,22 @@ found." The API step sends these requests and requires the same text before
 it sends the save. On-screen checks of steps that made no request (layout
 and region checks) are screen-only. They are listed for the person who
 admits the step and aren't repeated.
+
+## Saves the page's script sends
+
+Some pages don't submit the form. Their script reads the form's fields and
+posts them to another endpoint (WordPress's category form posts to
+`admin-ajax.php`, not to its `action`). The compiler takes the form whose
+controls name every field the request sent, on the last captured page
+before the save; two such forms refuse the proposal. The binding names the
+form's own action (`form_action`), and the request's endpoint.
+
+Such a save always runs the page's script first (below): the scratch page's
+blocked request to the endpoint is the save compared, and it gets an empty
+`200` so the script carries on. The API step sends only when the script
+sends exactly the body the API step built. A page that no longer has script
+keeps the save on the GUI. There is no redirect to read, so success is the
+recorded status and then the record check.
 
 ## Other writes in the span
 
@@ -439,9 +481,13 @@ recording.
 
 - Web only. A desktop app, an RDP session or a Citrix session has no page
   requests to capture (`record --capture-network` refuses those backends).
-- One form save, posted as `application/x-www-form-urlencoded`. JSON bodies
-  built by script, multipart uploads, signed or computed fields, and saves
-  over a websocket aren't proposed.
+- One form save, URL-encoded or multipart with no file. JSON and GraphQL
+  bodies, file uploads, signed or computed fields, and saves over a
+  websocket aren't proposed. Step writes in the span must be URL-encoded.
+- A field the server fills in on every page load (a page-load time, a
+  per-record code, a date defaulting to today) is a form default that
+  differs on the next load, so the API step doesn't run and the GUI steps
+  do.
 - The server may enforce less than the page. On OpenEMR, the duplicate
   check and the required fields run only in the browser. The API step
   carries over the checks it can evaluate (pre-checks, native HTML

@@ -871,6 +871,7 @@ def register(sub: argparse._SubParsersAction) -> None:
         "learn",
         help="Learn the app's own per-request writes from checked traffic, "
         "propose excuses, and approve them into the contracts",
+        allow_abbrev=False,
     )
     build_parser(p)
 
@@ -878,7 +879,9 @@ def register(sub: argparse._SubParsersAction) -> None:
 def build_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     steps = p.add_subparsers(dest="learn_step", required=True)
 
-    c = steps.add_parser("collect", help="run a shadow and record each check")
+    c = steps.add_parser(
+        "collect", help="run a shadow and record each check", allow_abbrev=False
+    )
     c.add_argument("--config", required=True, help="openadapt.shadow/v1 YAML (sql)")
     c.add_argument("--out", default="learn", help="folder for episodes.jsonl")
     c.add_argument("--actor", default=None, help="the agent's user id in the app")
@@ -886,7 +889,9 @@ def build_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     c.add_argument("--until-idle", type=float, default=None, metavar="SECONDS")
     c.set_defaults(func=cmd_collect)
 
-    q = steps.add_parser("propose", help="write a proposal a person can read")
+    q = steps.add_parser(
+        "propose", help="write a proposal a person can read", allow_abbrev=False
+    )
     q.add_argument("--episodes", action="append", required=True, help="episodes.jsonl")
     q.add_argument(
         "--users",
@@ -910,7 +915,9 @@ def build_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     q.add_argument("--out", default="learn/proposal.yaml")
     q.set_defaults(func=cmd_propose)
 
-    a = steps.add_parser("approve", help="write the approved excuses into contracts")
+    a = steps.add_parser(
+        "approve", help="write the approved excuses into contracts", allow_abbrev=False
+    )
     a.add_argument("proposal")
     a.add_argument("--by", required=True, help="who approves (recorded)")
     a.add_argument("--config", default=None, help="the shadow config's routes")
@@ -1078,6 +1085,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         argparse.ArgumentParser(
             prog="python -m openadapt_flow.learn",
             description="Learn, then enforce: excuse the app's own per-request writes.",
+            allow_abbrev=False,
         )
     )
     args = parser.parse_args(argv)

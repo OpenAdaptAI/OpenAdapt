@@ -160,7 +160,9 @@ def render_card(stats: dict[str, object]):
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("run_dir", help="Completed run directory (report.json)")
     parser.add_argument("-o", "--out", default="card.png", help="Output PNG path")
     args = parser.parse_args(argv)

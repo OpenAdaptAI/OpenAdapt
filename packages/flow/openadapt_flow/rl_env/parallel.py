@@ -130,7 +130,9 @@ def run(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("env_dir", type=Path)
     parser.add_argument("-n", type=int, default=8)
     parser.add_argument("--episodes", type=int, default=2)

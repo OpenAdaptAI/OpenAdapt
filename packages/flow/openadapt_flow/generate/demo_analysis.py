@@ -551,22 +551,28 @@ def pick_anchor(
             v = demo.values.get(p)
             if v is None or isinstance(v, (list, dict)):
                 continue
-            if mode == "update":
-                hit = locate(schema, demo, ch, v, before=True, max_hops=1) or locate(
-                    schema, demo, ch, v, changed_only=True, max_hops=1
-                )
-            else:
-                hit = locate(schema, demo, ch, v, max_hops=1)
+
             # Only the row's own columns, and keys named after the table they
             # point to: a row the write added beside the main record (an
             # issue's journal) reaches the record's values only through a
             # link back, and a key equal to some row's id by chance proves
-            # nothing.
-            hit = [
-                loc
-                for loc in hit
-                if all(h.kind == "fk" and _hop_cost(h) <= 1 for h in loc.hops)
-            ]
+            # nothing. Filtered before an update falls back to its changed
+            # columns: a key equal to some row's id by chance (a project id
+            # that is also an issue id) must not hide the value the write
+            # put in the row itself.
+            def kept(locs: list[Location]) -> list[Location]:
+                return [
+                    loc
+                    for loc in locs
+                    if all(h.kind == "fk" and _hop_cost(h) <= 1 for h in loc.hops)
+                ]
+
+            if mode == "update":
+                hit = kept(
+                    locate(schema, demo, ch, v, before=True, max_hops=1)
+                ) or kept(locate(schema, demo, ch, v, changed_only=True, max_hops=1))
+            else:
+                hit = kept(locate(schema, demo, ch, v, max_hops=1))
             score += 1 if hit else 0
             direct += 1 if any(not loc.hops for loc in hit) else 0
         if (score, direct) > (best_score, best_direct):

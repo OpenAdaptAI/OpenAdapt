@@ -27,7 +27,7 @@ NOTE = "Synthetic: recheck blood pressure in 2 weeks"
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--out", default="docs/examples/sandbox-results.json")
     args = parser.parse_args()
     os.environ.setdefault("DO_NOT_TRACK", "1")
