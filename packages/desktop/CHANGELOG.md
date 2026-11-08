@@ -5,7 +5,7 @@
 
 ### Bug Fixes
 
-- **desktop**: attribute generated version-only merges
+- **desktop**: revert extension host integration
 
 
 
