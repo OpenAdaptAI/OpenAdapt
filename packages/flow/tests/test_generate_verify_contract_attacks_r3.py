@@ -318,3 +318,30 @@ def test_pg_read_only_check_counts_set_role_and_column_grants(pg: Any) -> None:
     ro4 = check("ro4")
     assert any("has UPDATE on table public.t" in p for p in ro4), ro4
     assert check("ro6") == []
+
+
+def test_an_update_with_no_version_check_says_so_in_questions() -> None:
+    from openadapt_flow.generate.verify_contract import _questions_md
+
+    def kind(mode: str, versions: Any, refused: list[str]) -> dict[str, Any]:
+        return {
+            "mode": mode,
+            "main_table": "t",
+            "emitted": 1,
+            "versions": versions,
+            "refused": refused,
+            "rejected": [],
+        }
+
+    report = {
+        "kinds": {
+            "bare": kind("update", None, []),
+            "stepped": kind("update", {"kind": "step"}, []),
+            "made": kind("create", None, []),
+            "stopped": kind("update", None, ["no identity"]),
+        }
+    }
+    text = _questions_md([], {}, report)
+    sections = text.split("- `")[1:]
+    said = {s.split("`", 1)[0]: "No version check" in s for s in sections}
+    assert said == {"bare": True, "stepped": False, "made": False, "stopped": False}

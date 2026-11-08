@@ -11,6 +11,7 @@ from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.runtime.effects import RestRecordVerifier
 from openadapt_flow.runtime.readback_pipeline import ReadbackPipeline
 from openadapt_flow.runtime.replayer import Replayer
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 from tests.test_loop_authoring import (
     _encounter_body,
     _RowWritingBackend,
@@ -27,6 +28,11 @@ def dirs(tmp_path):
     return bundle, tmp_path / "run"
 
 
+def _demo_verifier(url):
+    """The demo app's records read."""
+    return RestRecordVerifier(url, **mockmed_rest_read_kwargs())
+
+
 def _run(records, dirs, *, corrupt=None, pipeline=None, verifier_factory=None):
     bundle, run_dir = dirs
     looped = author_data_driven_loop(_encounter_body(), records)
@@ -35,7 +41,7 @@ def _run(records, dirs, *, corrupt=None, pipeline=None, verifier_factory=None):
     replayer = Replayer(
         backend,
         vision=_vision_confirms_saved(),
-        effect_verifier=(verifier_factory or RestRecordVerifier)(url),
+        effect_verifier=(verifier_factory or _demo_verifier)(url),
         poll_interval_s=0.01,
         readback_pipeline=pipeline,
     )
@@ -132,10 +138,15 @@ def test_screen_bound_or_wrapped_verifiers_are_never_deferred(dirs, kind) -> Non
 
     def factory(url):
         if kind == "screen_attr":
-            return ScreenVerifier(url)
+            return ScreenVerifier(url, **mockmed_rest_read_kwargs())
         if kind == "candidate":
-            return CandidateEffectVerifier([RestRecordVerifier(url)])
-        return RedactingVerifier(RestRecordVerifier(url), policy=None)
+            return CandidateEffectVerifier(
+                [RestRecordVerifier(url, **mockmed_rest_read_kwargs())]
+            )
+        return RedactingVerifier(
+            RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
+            policy=None,
+        )
 
     pipeline = ReadbackPipeline()
     report, settled, backend, _ = _run(
@@ -172,7 +183,7 @@ def test_pending_report_is_not_saved_as_success(dirs) -> None:
         report = Replayer(
             _RowWritingBackend(url),
             vision=_vision_confirms_saved(),
-            effect_verifier=SlowVerifier(url),
+            effect_verifier=SlowVerifier(url, **mockmed_rest_read_kwargs()),
             poll_interval_s=0.01,
             readback_pipeline=pipeline,
         ).run(looped, bundle_dir=bundle, run_dir=run_dir)

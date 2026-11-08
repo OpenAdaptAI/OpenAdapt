@@ -7,9 +7,9 @@ the version. This check runs on every pull request that touches
 packages/desktop:
 
 * With no version change, it fails when the pull request has a releasable
-  commit, and prints the bump and the command that makes it.
+  net change, and prints the bump and the command that makes it.
 * With a version change, it requires a strict advance at least as large as the
-  commits need, every engine and native version source on the new version, and
+  surviving commits need, every engine and native version source on the new version, and
   a matching dated section at the top of CHANGELOG.md.
 
     python scripts/check_release_intent.py --base <base-sha> --head <head-sha>
@@ -51,9 +51,10 @@ def version_at(root: Path, ref: str) -> str:
 def check(root: Path, base: str, head: str) -> list[str]:
     """Return the problems with this change; empty means it may merge."""
 
+    base = prepare_release._commit_identity(root, base)
     base_version = version_at(root, base)
     head_version = version_at(root, head)
-    commits = prepare_release.commits_between(root, base, head)
+    commits = prepare_release.commits_for_net_diff(root, base, head)
     needed = prepare_release.required_level(commits, base_version)
     releasable = [
         commit.subject
@@ -74,7 +75,7 @@ def check(root: Path, base: str, head: str) -> list[str]:
     if stale:
         problems.append(
             f"version sources disagree with {head_version}: {stale}; "
-            "run scripts/prepare_release.py --version " + head_version
+            "run scripts/prepare_release.py --version " + head_version + " --base " + base
         )
 
     if head_version == base_version:
@@ -86,7 +87,8 @@ def check(root: Path, base: str, head: str) -> list[str]:
             f"This pull request changes Desktop in a way that should ship:\n{listed}\n"
             f"but keeps version {base_version}, so nothing would be released. Bump to "
             f"{suggested} ({needed}) with:\n"
-            f"  cd packages/desktop && python scripts/prepare_release.py --bump {needed}"
+            f"  cd packages/desktop && python scripts/prepare_release.py "
+            f"--bump {needed} --base {base}"
         ]
 
     if prepare_release.parse_version(head_version) <= prepare_release.parse_version(base_version):

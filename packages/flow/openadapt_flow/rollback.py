@@ -194,21 +194,50 @@ def fresh_presence(
             (s for s in iter_workflow_steps(workflow) if s.id == entry.step_id), None
         )
         effects = list(step.effects) if step is not None else []
+        # A null value counts only when declared or passed as None. An unset
+        # parameter has no value, and a supplied value its map doesn't name
+        # resolves to nothing: either way the step's new value can't be told.
         new_values = {
             e.field: e.value.resolve(params)
             for e in effects
-            if e.field is not None and e.value is not None
+            if e.field is not None
+            and e.value is not None
+            and (
+                e.value.resolve(params) is not None
+                or e.value.null
+                or (
+                    e.value.param is not None
+                    and e.value.param in params
+                    and params[e.value.param] is None
+                )
+            )
         }
         row = rows[0]
         fields = list(undo.restore.fields)
-        if all(str(row.get(f)) == str(values.get(f)) for f in fields):
+        if all(
+            f in row and f in values and _same_text(row[f], values[f]) for f in fields
+        ):
             return "absent", "the record still holds its old values"
         if fields and all(
-            f in new_values and str(row.get(f)) == str(new_values[f]) for f in fields
+            f in row and f in new_values and _same_text(row[f], new_values[f])
+            for f in fields
         ):
             return "present", "the record holds the run's new values"
         return "unknown", "the record holds neither the old nor the new values"
     return _judge_declared(entry, workflow, records, params)
+
+
+def _same_text(stored: Any, want: Any) -> bool:
+    """Whether a stored field equals a value, by text.
+
+    A null equals only a null: ``str(None)`` is ``"None"``, which would let a
+    stored null match the text ``"None"``, and a missing field or old value
+    match a null.
+    """
+
+    if stored is None or want is None:
+        return stored is None and want is None
+    return str(stored) == str(want)
 
 
 def _judge_declared(
@@ -345,6 +374,12 @@ def _bookkeeping_inserts(reader: Any) -> set[str]:
     return set(profile.no_record_insert_tables()) if profile is not None else set()
 
 
+def _no_record_values(reader: Any) -> set[str]:
+    """Record-field values that name no record, from the app profile."""
+    profile = _profile_of(reader)
+    return set(profile.no_record_values) if profile is not None else set()
+
+
 def _own_row_tables(reader: Any) -> set[str]:
     """Tables of the acting user's own rows the reader's app profile excuses."""
     from openadapt_flow.app_profiles import table_name
@@ -466,6 +501,10 @@ def roll_back(
     attributor: Optional[Attributor] = None,
     allow_delete: bool = False,
     exclusive: bool = False,
+    journal: Any = None,
+    after_stop: Optional[Snapshot] = None,
+    restarted: frozenset[str] = frozenset(),
+    compensated: frozenset[str] = frozenset(),
 ) -> Optional[RollbackRecord]:
     """Undo what a stopped run left, then prove the run's changes are gone.
 
@@ -492,6 +531,16 @@ def roll_back(
     compensation; those end as ``not_rolled_back`` with the reason.
     ``assume_stopped`` treats a finished run as stopped there (``rollback
     qualify`` stops runs on purpose).
+
+    ``journal`` (``rollback_durable.SealedRollback``) keeps the read after
+    the stop and which compensations started, so a rollback a crash
+    interrupted can run again. That later attempt passes the first attempt's
+    stop read as ``after_stop``, the steps whose compensation it finished as
+    ``compensated`` and those it only started as ``restarted``. The run's
+    changes are judged by that read, and the store must since have changed
+    only in the run's own rows. No compensation runs twice: a finished one is
+    left to the reads, and a started one is skipped when a fresh read shows
+    the change gone, otherwise the rollback stops.
     """
     if report.success and not assume_stopped:
         return None
@@ -532,10 +581,21 @@ def roll_back(
             "is compared and no compensation runs",
         )
     record.before_sha256 = snapshot_sha256(before)
-    try:
-        after_stop = reader.read(before=before)
-    except StateUnreadable as exc:
-        return finish("not_rolled_back", f"after the stop, {exc}; nothing ran")
+    resumed = after_stop is not None
+    if after_stop is None:
+        try:
+            after_stop = reader.read(before=before)
+        except StateUnreadable as exc:
+            return finish("not_rolled_back", f"after the stop, {exc}; nothing ran")
+        if journal is not None:
+            try:
+                journal.stop_read(after_stop)
+            except Exception as exc:  # noqa: BLE001 - no record, no compensation
+                return finish(
+                    "not_rolled_back",
+                    f"the read after the stop couldn't be kept ({type(exc).__name__}); "
+                    "nothing ran",
+                )
     record.after_stop_sha256 = snapshot_sha256(after_stop)
     landed = diff_states(before, after_stop, excuse=_excuser(reader, after_stop))
     params = dict(report.params)
@@ -559,7 +619,11 @@ def roll_back(
         if attributor is None:
             return None
         return attributor.unaccounted_writes(
-            rows, window, _bookkeeping_inserts(reader), _own_row_tables(reader)
+            rows,
+            window,
+            _bookkeeping_inserts(reader),
+            _own_row_tables(reader),
+            _no_record_values(reader),
         )
 
     record.after_stop_diff = landed.summary()
@@ -682,6 +746,34 @@ def roll_back(
     at_stop = {c[:2]: c[3] for c in run_changes}
     #: The latest read: after the stop, then after each compensation.
     last = after_stop
+    if resumed:
+        # An earlier attempt may have undone some of the run's rows since its
+        # read after the stop: nothing else may have changed since.
+        try:
+            last = reader.read(before=before)
+        except StateUnreadable as exc:
+            return finish(
+                "not_rolled_back",
+                f"the read before continuing the rollback failed ({exc}); nothing ran",
+                landed,
+            )
+        since_stop = [
+            c
+            for c in changes(
+                diff_states(after_stop, last, excuse=_excuser(reader, last))
+            )
+            if c[:2] not in run_keys
+        ]
+        others = not_own(diff_states(before, last, excuse=_excuser(reader, last)), last)
+        if since_stop or others:
+            record.conflicts = len(since_stop) + len(others)
+            return finish(
+                "not_rolled_back",
+                f"since the stop, {record.conflicts} row(s) changed that the run "
+                "didn't write or that aren't positively its own; nothing more was "
+                "compensated. Different now: " + landed.describe(),
+                landed,
+            )
 
     #: Rows a compensation took that the run didn't write: born and gone
     #: between two reads, so the final read can't show them.
@@ -738,6 +830,36 @@ def roll_back(
             stop_reason = f"step {entry.step_id}: {step_record.reason}"
             break
         step_record.undo_id = undo.id
+        if entry.step_id in compensated:
+            # An earlier attempt finished it: never run twice. The reads judge.
+            step_record.decision = "compensated"
+            step_record.reason = "an earlier attempt compensated it"
+            continue
+        if entry.step_id in restarted:
+            # An earlier attempt started it and may have finished it: run
+            # nothing; only a fresh read showing the change gone settles it.
+            presence, why = fresh_presence(
+                entry,
+                undo,
+                workflow,
+                run_dir=run_dir,
+                params=params,
+                read_records=read_records,
+            )
+            step_record.fresh_read = presence  # type: ignore[assignment]
+            if presence == "absent":
+                step_record.decision = "not_needed"
+                step_record.reason = (
+                    "an earlier attempt started its compensation, and a fresh "
+                    f"read shows nothing left to undo: {why}"
+                )
+                continue
+            step_record.reason = (
+                "an earlier attempt started its compensation and may have "
+                f"finished it ({why}); not run twice"
+            )
+            stop_reason = f"step {entry.step_id}: {step_record.reason}"
+            break
         if entry.attempt_state == "delivery_uncertain" or entry.status != "confirmed":
             presence, why = fresh_presence(
                 entry,
@@ -791,6 +913,15 @@ def roll_back(
         # From here the store may change: the run can't be resumed.
         (run_dir / COMPENSATED_MARKER).touch()
         try:
+            if journal is not None:
+                journal.step(entry.step_id, "started")
+        except Exception as exc:  # noqa: BLE001 - no record, no compensation
+            step_record.reason = (
+                f"the rollback journal couldn't be written ({type(exc).__name__})"
+            )
+            stop_reason = f"step {entry.step_id}: {step_record.reason}"
+            break
+        try:
             undo_report = runner.run(
                 undo_workflow(workflow, undo),
                 bundle_dir=bundle_dir,
@@ -815,6 +946,11 @@ def roll_back(
             break
         step_record.decision = "compensated"
         step_record.reason = judged
+        if journal is not None:
+            try:
+                journal.step(entry.step_id, "compensated")
+            except Exception:  # noqa: BLE001 - "started" already makes a rerun re-read
+                pass
         if kind == "void" and undo.locate is not None:
             located = str(undo_params.get(undo.locate.param, ""))
             retained |= {(table, undo.locate.field, located) for table in undo.retains}
@@ -1471,6 +1607,63 @@ class RollbackPlan:
         except StateUnreadable:
             return None
 
+    def settings(self) -> dict[str, Any]:
+        """What decides whose rows a rollback may touch: a later process must
+        roll back under the same settings the run was armed with."""
+        return {
+            "exclusive": bool(self.exclusive),
+            "allow_delete": bool(self.allow_delete),
+            "attribution": (
+                self.attribution.model_dump(mode="json")
+                if self.attribution is not None
+                else None
+            ),
+            "scope": getattr(self.reader, "scope", None),
+            "allow_tables": sorted(getattr(self.reader, "allow_tables", ()) or ()),
+            "profile_id": getattr(self.reader, "profile_id", None),
+        }
+
+    def seal(
+        self,
+        sealed: Any,
+        before: Snapshot,
+        params: dict[str, Any],
+        *,
+        bundle_version: Optional[str] = None,
+    ) -> None:
+        """Keep the read from before the run, encrypted, for a rollback in a
+        later process (``rollback_durable.SealedRollback``)."""
+        sealed.save_armed(
+            before=before,
+            reader_key=self.reader.key,  # type: ignore[attr-defined]
+            audit_before=(
+                self.attributor._before if self.attributor is not None else None
+            ),
+            params=dict(params),
+            settings=self.settings(),
+            bundle_version=bundle_version,
+        )
+
+    def restore(self, armed: dict[str, Any]) -> Optional[Snapshot]:
+        """The read from before the run, from sealed state (``seal``), with the
+        reader's row digests and the audit log as they were then; None when
+        attribution can't be rebuilt from it, or the deployment's rollback
+        settings changed since the run was armed."""
+        if armed.get("settings") != self.settings():
+            return None
+        self.reader.key = armed["reader_key"]  # type: ignore[attr-defined]
+        if self.attribution is not None:
+            self.attributor = Attributor.from_spec(
+                self.attribution, armed["params"], self.audit_read
+            )
+            if self.attributor is None:
+                return None
+            self.attributor._before = armed["audit_before"]
+            if self.attribution.kind == "audit_read" and armed["audit_before"] is None:
+                return None
+        before: Snapshot = armed["before"]
+        return before
+
     def finish(
         self,
         report: RunReport,
@@ -1480,6 +1673,10 @@ class RollbackPlan:
         run_dir: Path,
         bundle_dir: Path,
         runner: CompensationRunner,
+        journal: Any = None,
+        after_stop: Optional[Snapshot] = None,
+        restarted: frozenset[str] = frozenset(),
+        compensated: frozenset[str] = frozenset(),
     ) -> RunReport:
         record = roll_back(
             report,
@@ -1493,7 +1690,16 @@ class RollbackPlan:
             attributor=self.attributor,
             allow_delete=self.allow_delete,
             exclusive=self.exclusive,
+            journal=journal,
+            after_stop=after_stop,
+            restarted=restarted,
+            compensated=compensated,
         )
+        if journal is not None and record is not None:
+            try:
+                journal.mark_finished(record.status)
+            except Exception:  # noqa: BLE001 - the verdict stands; a rerun re-reads
+                pass
         return apply_rollback(report, workflow, record, run_dir)
 
 

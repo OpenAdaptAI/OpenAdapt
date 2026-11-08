@@ -104,13 +104,16 @@ def _not_tier_one(kind: str) -> RecordSorError:
     )
 
 
-def load_observer(path: str | Path) -> tuple[SystemOfRecordObserver, dict[str, Any]]:
+def load_observer(
+    path: str | Path, *, for_run1: bool = False
+) -> tuple[SystemOfRecordObserver, dict[str, Any]]:
     """Build the observer from the ``verifier:`` section of ``path``.
 
     Returns the observer and the ``verifier:`` mapping as written in the file
     (environment references unexpanded). Any ``effects`` or ``record`` section
     is ignored, so the same ``verify.yaml`` can be used before and after its
-    contract exists.
+    contract exists. ``for_run1`` refuses mapped server-managed FHIR metadata
+    unless its output field is explicitly dropped from record comparisons.
 
     Raises:
         RecordSorError: the file has no usable ``verifier:`` section, the
@@ -119,10 +122,6 @@ def load_observer(path: str | Path) -> tuple[SystemOfRecordObserver, dict[str, A
     """
 
     import yaml
-
-    from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
-    from openadapt_flow.qualify.config import _expand
-    from openadapt_flow.verification import verifier_effect_tier
 
     source = Path(path)
     if not source.is_file():
@@ -134,6 +133,23 @@ def load_observer(path: str | Path) -> tuple[SystemOfRecordObserver, dict[str, A
     raw = data.get("verifier") if isinstance(data, dict) else None
     if not isinstance(raw, dict):
         raise RecordSorError(f"{source} has no verifier: section")
+    return observer_from_config(raw, for_run1=for_run1)
+
+
+def observer_from_config(
+    raw: Mapping[str, Any], *, for_run1: bool = False
+) -> tuple[SystemOfRecordObserver, dict[str, Any]]:
+    """Build the same SoR observer from a generated verifier declaration.
+
+    This does not compare snapshots, confirm effects or admit a compiled program.
+    Environment references stay unexpanded in the returned declaration.
+    """
+    from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
+    from openadapt_flow.qualify.config import _expand
+    from openadapt_flow.verification import verifier_effect_tier
+
+    if not isinstance(raw, Mapping):
+        raise RecordSorError("a verifier: mapping is required")
     missing: list[str] = []
     expanded = _expand({k: v for k, v in raw.items() if k != "session"}, missing)
     if missing:
@@ -156,6 +172,20 @@ def load_observer(path: str | Path) -> tuple[SystemOfRecordObserver, dict[str, A
             else type(exc).__name__
         )
         raise RecordSorError(f"invalid verifier section: {detail}") from None
+    if for_run1 and cfg.kind == "fhir":
+        from openadapt_flow.runtime.effects.fhir import DEFAULT_OBSERVATION_PATHS
+
+        for name, field_path in (cfg.field_paths or DEFAULT_OBSERVATION_PATHS).items():
+            volatile = field_path == "meta" or any(
+                field_path == path or field_path.startswith(path + ".")
+                for path in ("meta.lastUpdated", "meta.versionId")
+            )
+            if volatile and name not in cfg.records_drop_fields:
+                raise RecordSorError(
+                    f"run 1 cannot compare field {name!r} mapped to server-managed "
+                    f"FHIR path {field_path!r}; add {name!r} to "
+                    "verifier.records_drop_fields or remove it from field_paths"
+                )
     if cfg.candidates:
         raise RecordSorError("record --verify does not support verifier candidates")
     if cfg.kind in _NOT_SYSTEM_OF_RECORD:

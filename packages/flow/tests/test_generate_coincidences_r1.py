@@ -211,12 +211,12 @@ def shop(pg: Any) -> dict[str, Any]:
     first = json.loads((work / "out" / "report.json").read_text())
     questions = (work / "out" / "QUESTIONS.md").read_text()
     answers = {q["key"]: q["proposal"] for q in first["questions"]}
-    # The person names the two columns that hold a row's own key, or what
-    # reads like one (a sale's price, an audit row's reference).
+    # The person names the column that holds a row's own key (an audit row's
+    # reference). A sale's price only reads like one: it is a copy.
     bk = answers["bookkeeping"]
     bk = json.loads(json.dumps(bk)) if isinstance(bk, dict) else {"accept": True}
     named = bk.setdefault("unchecked", {})
-    for table, col in (("sales", "price"), ("job_audit", "ref")):
+    for table, col in (("job_audit", "ref"),):
         if col not in named.setdefault(table, []):
             named[table].append(col)
     answers["bookkeeping"] = bk
@@ -320,19 +320,20 @@ def test_a_constant_equal_to_its_source_in_every_demo_is_asked(
 # -- review round 3 ------------------------------------------------------------
 
 
-def test_a_value_that_reads_as_the_own_key_is_asked_never_templated(
-    shop: dict[str, Any],
+@pytest.mark.parametrize("price,confirmed", [(None, True), (45, False)])
+def test_a_copy_that_reads_as_the_own_key_is_checked_as_a_copy(
+    shop: dict[str, Any], price: Any, confirmed: bool
 ) -> None:
     """Sales 1 and 2 copied prices 15 and 25, which read as ``{key}5``. The
-    column is listed in the question; nothing checks that template, so the
-    app's real price for sale 3 (40) passes once the person names it."""
+    column is a copy of the product's price, never asked about, so a wrong
+    45 on the next sale is refuted and the real price (40) passes."""
 
-    assert "sales: " in shop["questions"] and "price" in shop["questions"]
     refused_first = shop["first"]["kinds"]["create_sale"]["refused"]
-    assert any("sales.price" in r for r in refused_first), refused_first
-    v = {"product": "Doohickey", "ref": "S-3"}
-    out = _run(shop, "create_sale", v, lambda: shop["app"].sale(v))
-    assert out.startswith("CONFIRMED"), out
+    assert not any("sales.price" in r for r in refused_first), refused_first
+    assert "sales.price" not in json.dumps(shop["first"]["questions"])
+    v = {"product": "Doohickey", "ref": f"S-{price}"}
+    out = _run(shop, "create_sale", v, lambda: shop["app"].sale(v, price=price))
+    assert out.startswith("CONFIRMED") is confirmed, out
 
 
 def test_an_audit_row_holding_its_own_key_can_be_named(shop: dict[str, Any]) -> None:

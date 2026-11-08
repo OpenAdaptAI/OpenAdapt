@@ -5,7 +5,7 @@ unhandled state, but nothing learns from the operator's post-halt correction.
 The continuous-learning scaffold (:mod:`openadapt_flow.learning.loop`,
 :mod:`~openadapt_flow.learning.gate`, :mod:`~openadapt_flow.learning.library`)
 and the multi-trace inducer (:mod:`openadapt_flow.compiler.induction`,
-:mod:`openadapt_flow.learning.synth_stream`) already EXIST but no real run feeds
+:mod:`openadapt_flow.learning.induce`) already EXIST but no real run feeds
 them. This module is the thin BRIDGE that makes the loop real:
 
 1. **A halt emits a learnable trace.** ``Replayer.run`` now populates

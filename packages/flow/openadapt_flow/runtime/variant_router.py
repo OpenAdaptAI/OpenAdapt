@@ -348,6 +348,9 @@ def _now() -> str:
 
 def _write(run_dir: Path, report: VariantRunReport) -> VariantRunReport:
     run_dir.mkdir(parents=True, exist_ok=True)
+    from openadapt_flow import at_rest as _at_rest
+
+    _at_rest.unsealed_write("a variant report", run_dir, refuse=False)
     (run_dir / VARIANT_REPORT_FILENAME).write_text(
         report.model_dump_json(indent=2, exclude_none=True), encoding="utf-8"
     )
@@ -434,6 +437,9 @@ def execute_variant_set(
     outcome ``DRY_RUN``; nothing is executed.
     """
 
+    from openadapt_flow import at_rest as _at_rest
+
+    _at_rest.hold_back_in_strict("a variant report")
     parent = Path(parent_dir)
     root = Path(run_dir)
     started = _now()

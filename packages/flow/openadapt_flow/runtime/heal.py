@@ -109,6 +109,8 @@ def _recontext(
     frame: tuple[int, int],
     *,
     identifier_region: Region | None = None,
+    dialog_region: Region | None = None,
+    dialog_row: bool = True,
 ) -> str | None:
     """Re-derive the anchor's identity context band from the live frame.
 
@@ -139,11 +141,12 @@ def _recontext(
     return identity_mod.context_from_lines(
         lines,
         exclude_region=region,
-        band=identity_mod.band_region(click_point, region[3], frame),
+        band=dialog_region or identity_mod.band_region(click_point, region[3], frame),
         # Same row refinement the compiler applies: record only the click
         # point's own text row, matching what verification reads back.
-        point=click_point,
+        point=None if dialog_region is not None and not dialog_row else click_point,
         reference_date=date.today(),
+        scope=dialog_region,
     )
 
 
@@ -203,6 +206,15 @@ def build_heal_event(
             iw,
             ih,
         )
+    translated_dialog_region = None
+    if old_anchor.dialog_region is not None:
+        dx, dy, dw, dh = old_anchor.dialog_region
+        translated_dialog_region = (
+            dx + resolution.point[0] - old_anchor.click_point[0],
+            dy + resolution.point[1] - old_anchor.click_point[1],
+            dw,
+            dh,
+        )
     if (
         old_anchor.context_text is None
         and old_anchor.identity_template is not None
@@ -213,13 +225,24 @@ def build_heal_event(
         # identity evidence. Do not add live plaintext to the healed anchor.
         new_context = None
     else:
-        new_context = _recontext(
-            vision,
-            frame_png,
-            new_region,
-            resolution.point,
-            frame,
-            identifier_region=translated_identifier_region,
+        context_png: bytes | None = frame_png
+        if translated_dialog_region is not None:
+            # A target in a dialog keeps its band read on the dialog alone, as
+            # the compiler read it; replay masks the live frame the same way.
+            context_png = identity_mod.mask_outside(frame_png, translated_dialog_region)
+        new_context = (
+            _recontext(
+                vision,
+                context_png,
+                new_region,
+                resolution.point,
+                frame,
+                identifier_region=translated_identifier_region,
+                dialog_region=translated_dialog_region,
+                dialog_row=old_anchor.dialog_row is not False,
+            )
+            if context_png is not None
+            else None
         )
     new_anchor = old_anchor.model_copy(
         update={
@@ -228,6 +251,7 @@ def build_heal_event(
             "ocr_text": new_text if new_text is not None else old_anchor.ocr_text,
             "context_text": new_context,
             "identifier_region": translated_identifier_region,
+            "dialog_region": translated_dialog_region,
         }
     )
     event = HealEvent(
@@ -284,10 +308,13 @@ def persist_heal(
     # Heal artifacts (crop + full frame) are embedded by relative path into the
     # shareable REPORT.md. Redact PII/PHI when opt-in image redaction is on
     # (OPENADAPT_FLOW_SCRUB_IMAGES=1); no-op otherwise (see openadapt_flow.privacy).
-    (heal_dir / _HEAL_TEMPLATE_NAME).write_bytes(_scrub_png(crop_png))
-    (heal_dir / _HEAL_SCREEN_NAME).write_bytes(_scrub_png(frame_png))
+    # Through the sealed-set helpers, so a sealed run keeps them encrypted.
+    from openadapt_flow import sealed_set
+
+    sealed_set.write_bytes(heal_dir / _HEAL_TEMPLATE_NAME, _scrub_png(crop_png))
+    sealed_set.write_bytes(heal_dir / _HEAL_SCREEN_NAME, _scrub_png(frame_png))
     event.screenshot = f"heals/{event.step_id}/{_HEAL_SCREEN_NAME}"
-    (heal_dir / _HEAL_JSON_NAME).write_text(event.model_dump_json(indent=2))
+    sealed_set.write_text(heal_dir / _HEAL_JSON_NAME, event.model_dump_json(indent=2))
     return heal_dir
 
 
@@ -316,6 +343,9 @@ def write_healed_bundle(
     """
     src = Path(src_bundle_dir)
     dest = Path(dest_bundle_dir)
+    from openadapt_flow import at_rest as _at_rest
+
+    _at_rest.unsealed_write("a healed bundle (--save-healed-to)", dest, refuse=False)
     dest.mkdir(parents=True, exist_ok=True)
     (dest / "templates").mkdir(parents=True, exist_ok=True)
 

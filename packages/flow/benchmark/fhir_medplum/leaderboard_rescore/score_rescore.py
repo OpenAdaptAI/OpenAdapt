@@ -41,6 +41,7 @@ from typing import Any, Callable, Optional
 
 HERE = Path(__file__).resolve().parent
 INPUTS = HERE / "inputs"
+#: The pre-registered population; ``--agent fara`` scores the addendum.
 AGENTS = ("claude", "openai")
 CONFIRMED = ("found_existing", "created_verified")
 SEED = 20261103
@@ -162,9 +163,12 @@ def fidelity(rows: list[dict[str, Any]], judged: dict[str, Any]) -> dict[str, An
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     ap.add_argument("rescores", nargs="+", type=Path)
     ap.add_argument("--out", type=Path)
+    ap.add_argument("--agent", action="append", choices=AGENTS + ("fara",))
     args = ap.parse_args(argv)
     columns: dict[str, Callable[[str, dict[str, Any]], Any]] = {
         "live": lambda key, r: r.get("verifier"),
@@ -182,7 +186,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         "schema": "openadapt.leaderboard-rescore-score/v1",
         "agents": {},
     }
-    for agent in AGENTS:
+    for agent in args.agent or AGENTS:
         rows = load_rows(agent)
         for r in rows:
             r["_key"] = f"{agent}/runs/{r['_name']}"

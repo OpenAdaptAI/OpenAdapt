@@ -107,7 +107,6 @@ async def judge_one(
                 view["task"],
                 view.get("init_url", ""),
                 view["steps"],
-                view["predicted_output"],
                 shots,
                 client,
                 rubric=rubric,
@@ -188,7 +187,7 @@ async def effect_e2e(client: Any, parallel: int, views: list[str]) -> None:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("set", choices=["medplum", "effect_e2e"])
     ap.add_argument("--parallel", type=int, default=6)
     ap.add_argument("--views", default="j1_view,j2_view")

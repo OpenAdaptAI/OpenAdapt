@@ -477,7 +477,7 @@ def _bundle_key(bundle: Path) -> tuple[bool, Optional[str]]:
     if not (bundle / "workflow.json.enc").is_file():
         return False, None
     try:
-        return True, crypto.require_key(None)
+        return True, crypto.require_configured_key()
     except crypto.MissingKeyError as exc:
         raise RecordCheckBindingError(
             [f"the bundle is encrypted and {crypto.ENV_KEY} is not set: {exc}"]

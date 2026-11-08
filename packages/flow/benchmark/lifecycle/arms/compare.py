@@ -232,7 +232,7 @@ def _move_partial(d: Path) -> Optional[Path]:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    p = argparse.ArgumentParser(description=__doc__.splitlines()[0], allow_abbrev=False)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--seed", type=int, default=7)
     p.add_argument("--items", type=int, default=40)
