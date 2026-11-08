@@ -544,7 +544,10 @@ def test_real_candidate_publication_waits_for_cleanup_and_reload_refuses_failed_
         # Candidate persistence uses JSON arrays for LiftedParam tuple fields.
         assert json.loads(json.dumps(recording.result.candidate)) == jit.candidate()
         assert jit.candidate()["recorder"]
-        assert lifecycle._recorder(jit.program_dir, jit.key_dir) == jit.candidate()["recorder"]
+        assert (
+            lifecycle._recorder(jit.program_dir, jit.key_dir)
+            == jit.candidate()["recorder"]
+        )
         assert FirstRunCompiler.load(compiler.dir)._jit().candidate() == jit.candidate()
         assert not list(jit.program_dir.glob("candidate-pending-*.json"))
     else:
