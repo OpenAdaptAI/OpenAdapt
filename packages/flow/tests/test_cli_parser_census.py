@@ -57,6 +57,30 @@ FORMS = (
         "import argparse as ap\nParser = ap.ArgumentParser if condition else unrelated",
         "Parser",
     ),
+    (
+        "list_walrus_alias",
+        "import argparse as ap",
+        "def build():\n unused = [(Parser := ap.ArgumentParser) for _ in (1,)]\n"
+        " return Parser({settings})",
+    ),
+    (
+        "set_walrus_alias",
+        "import argparse as ap",
+        "def build():\n unused = {{(Parser := ap.ArgumentParser) for _ in (1,)}}\n"
+        " return Parser({settings})",
+    ),
+    (
+        "dict_walrus_alias",
+        "import argparse as ap",
+        "def build():\n unused = {{_: (Parser := ap.ArgumentParser) for _ in (1,)}}\n"
+        " return Parser({settings})",
+    ),
+    (
+        "generator_walrus_alias",
+        "import argparse as ap",
+        "def build():\n unused = list((Parser := ap.ArgumentParser) for _ in (1,))\n"
+        " return Parser({settings})",
+    ),
     ("subparser", "", 'subparsers.add_parser("synthetic", {settings})'),
 )
 SETTINGS = (
@@ -251,3 +275,22 @@ def test_comprehensions_keep_their_own_bindings(
     )
     calls = list(inventory_module["_parser_constructor_calls"](ast.parse(source)))
     assert len(calls) == expected
+
+
+@pytest.mark.parametrize(
+    "expression",
+    (
+        "[(Parser := ap.ArgumentParser) for ap in ()]",
+        "{(Parser := ap.ArgumentParser) for ap in ()}",
+        "{ap: (Parser := ap.ArgumentParser) for ap in ()}",
+        "((Parser := ap.ArgumentParser) for ap in ())",
+    ),
+    ids=("list", "set", "dict", "generator"),
+)
+def test_comprehension_walrus_uses_its_value_scope(inventory_module, expression):
+    source = (
+        "import argparse as ap\ndef build():\n"
+        f" unused = {expression}\n return Parser()\n"
+    )
+    calls = list(inventory_module["_parser_constructor_calls"](ast.parse(source)))
+    assert calls == []

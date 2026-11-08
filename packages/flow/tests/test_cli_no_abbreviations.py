@@ -131,9 +131,29 @@ def _parser_constructor_calls(tree):
             return {"parser"}
         return set()
 
-    def visit_scope(body, inherited, parameters=(), class_scope=False):
+    def comprehension_parts(node):
+        parameters = [
+            target.id
+            for generator in node.generators
+            for target in ast.walk(generator.target)
+            if isinstance(target, ast.Name)
+        ]
+        body = [node.key, node.value] if isinstance(node, ast.DictComp) else [node.elt]
+        body += [generator.iter for generator in node.generators[1:]]
+        body += [condition for generator in node.generators for condition in generator.ifs]
+        return body, parameters
+
+    def enclosing_assignments(nodes):
+        for node in scope_nodes(nodes):
+            if isinstance(node, ast.NamedExpr):
+                yield node.target.id
+            elif isinstance(node, comprehensions):
+                body, _ = comprehension_parts(node)
+                yield from enclosing_assignments(body)
+
+    def scope_bindings(body, inherited, parameters=(), class_scope=False):
         nodes = list(scope_nodes(body))
-        local_names = set(parameters)
+        local_names = set(parameters) | set(enclosing_assignments(body))
         for node in nodes:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 local_names.add(node.name)
@@ -194,6 +214,24 @@ def _parser_constructor_calls(tree):
                     if not kinds <= previous:
                         previous.update(kinds)
                         changed = True
+            # Assignment expressions escape a comprehension into this scope.
+            # Resolve their values inside the comprehension, where iteration
+            # targets shadow outer aliases, then propagate only known kinds.
+            for node in nodes:
+                if not isinstance(node, comprehensions):
+                    continue
+                child_body, child_parameters = comprehension_parts(node)
+                _, child_bindings = scope_bindings(child_body, bindings, child_parameters)
+                for name in enclosing_assignments(child_body):
+                    kinds = child_bindings.get(name, set())
+                    previous = bindings.setdefault(name, set())
+                    if not kinds <= previous:
+                        previous.update(kinds)
+                        changed = True
+        return nodes, bindings
+
+    def visit_scope(body, inherited, parameters=(), class_scope=False):
+        nodes, bindings = scope_bindings(body, inherited, parameters, class_scope)
         for node in nodes:
             if isinstance(node, ast.Call) and (
                 "parser" in provenance(node.func, bindings)
@@ -202,23 +240,7 @@ def _parser_constructor_calls(tree):
             ):
                 yield node
             if isinstance(node, comprehensions):
-                parameters = [
-                    target.id
-                    for generator in node.generators
-                    for target in ast.walk(generator.target)
-                    if isinstance(target, ast.Name)
-                ]
-                child_body = (
-                    [node.key, node.value]
-                    if isinstance(node, ast.DictComp)
-                    else [node.elt]
-                )
-                child_body += [generator.iter for generator in node.generators[1:]]
-                child_body += [
-                    condition
-                    for generator in node.generators
-                    for condition in generator.ifs
-                ]
+                child_body, parameters = comprehension_parts(node)
                 yield from visit_scope(child_body, bindings, parameters)
             elif isinstance(node, scopes):
                 parameters = []
