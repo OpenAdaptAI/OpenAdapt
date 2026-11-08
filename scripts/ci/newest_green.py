@@ -111,7 +111,9 @@ def _gh(path: str, key: str) -> list[dict]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.split("\n\n")[0], allow_abbrev=False
+    )
     parser.add_argument("package", choices=sorted(PACKAGES))
     parser.add_argument("--tip", default="HEAD")
     parser.add_argument("--github-output")

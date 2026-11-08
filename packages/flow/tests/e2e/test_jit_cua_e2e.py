@@ -35,6 +35,7 @@ from openadapt_flow.jit.recorded import RecordedTrajectoryAgent
 from openadapt_flow.mockmed.fault_server import serve
 from openadapt_flow.runtime.effects import RestRecordVerifier
 from openadapt_flow.tutorial import _http_json, _records
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 from tests._teach_authorization_support import mockmed_note
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "jit"
@@ -65,8 +66,7 @@ def _app(base: str, fault: str = "ok") -> WebApp:
 def _verifier(base: str) -> RestRecordVerifier:
     return RestRecordVerifier(
         base,
-        records_path="/api/db",
-        records_key="records",
+        **mockmed_rest_read_kwargs(),
         timeout_s=2.0,
         poll_interval_s=0.05,
     )

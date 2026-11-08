@@ -1150,9 +1150,9 @@ Per-kind required fields:
 | `ui_readback` | `ui_readback` section: `record_url`, `sign_in` (env-var names for the read-back account), `ready_selector`, `row_selector`, `fields`, `identity` | `url_params`, `empty_selector`, `not_found_selector`, `read_post_paths`, per-field `attribute` / `date_format` / `casefold`, `truncation_markers`, `navigation_timeout_s` |
 | `desktop_readback` | `desktop_readback` section: `session` (a `backend:`-style config for the read-back session), `search` (`box`, `query`), `ready`, `identity`, `fields` | `credentials` (env-var names), `sign_in`, `search.submit`, `open.results`, `not_found`, per-control `shows` / `region` / `at`, per-field `date_format` / `casefold`, `min_ocr_confidence`, `navigation_timeout_s`, `settle_s` |
 | `deferred_report` | `deferred_report` section: `report` (`format`, and for csv/text its columns or pattern and `accept`), `key`, `deadline_hours`, `ledger` | `report.reject`, `describe` |
-| `rest` | `base_url` | `records_path` (may contain `{placeholder}`s), `records_key`, `records_next_path`, `records_total_path`, `path_params`, `auth`, `records_drop_fields` |
+| `rest` | `base_url` | `records_path` (may contain `{placeholder}`s), `records_key`, `records_next_path`, `records_total_path`, `records_complete`, `records_snapshot_path`, `path_params`, `auth`, `records_drop_fields` |
 | `graphql` | `base_url` + `graphql_query` | `graphql_variables` (`{param: ...}` entity binding), `graphql_records_path`, `graphql_freshness_field` + `graphql_freshness_window_s`, `auth` |
-| `fhir` | `base_url` | `resource_type`, `search_params`, `search_param_exprs`, `field_paths`, `access_token_env` or `smart_backend`, `verify_tls`, `records_drop_fields` |
+| `fhir` | `base_url` | `resource_type`, `search_params`, `search_param_exprs`, `field_paths`, `access_token_env` or `smart_backend`, `verify_tls`, `records_drop_fields`, `records_snapshot_path` |
 | `sql` | `sql_query` + (`sqlite_database` or `sql_driver`) | `sql_query_params`, `sql_connect_args`, `sql_password_env`, `records_drop_fields` |
 | `file` | `root` | `file_pattern`, `file_min_size`, `file_mtime_window_s`, `file_content_probe` |
 | `email` | `root` | `mail_pattern`, `file_mtime_window_s` (freshness), `file_content_probe` (body regex) |
@@ -1161,18 +1161,47 @@ Per-kind required fields:
 | `surfaces` | `surfaces`: name -> one plain verifier config (any kind above) | each effect's `probe` names its surface (`surface=<name>`); an effect naming none, or an unknown one, halts |
 
 A paged list is read whole or not at all. `fhir` follows the Bundle's `next`
-links. `rest` follows the next page's URL at `records_next_path` (a dotted
-path in the body, such as `links.next`; a relative URL resolves against the
-page it came from). Without `records_next_path` one response is the whole
-read, as before. A next page on another origin, a page that fails, more than
-50 pages, or a FHIR `total` other than the number of matches read (included
-resources don't count) makes the read unreadable (INDETERMINATE), never a
-confirmation or a refutation from the first pages.
+links. For REST, `records_next_path` follows the continuation URL in the
+response body (relative URLs resolve against the page that returned them),
+and `records_total_path` checks the returned record count against the server
+total. A failed page, a cross-origin next URL, a malformed record, an
+inconsistent total, or more than 50 pages makes the read unreadable
+(INDETERMINATE), never a confirmation or refutation based on a partial page.
+
+Every multi-page REST or FHIR read also needs `records_snapshot_path`: a
+dotted response-body path whose declared endpoint semantics bind every page
+to the same immutable result set. The value must be a nonblank string or a
+nonnegative integer, with the same type and value on every page. Missing or
+changed values make the read unreadable. Configure this from a reviewed,
+validated endpoint contract; a constant version-looking field or repeated
+stable probes do not establish immutable snapshot semantics. Matching tokens
+do not establish freshness or attribute a write to this attempt.
+
+REST counted or paged reads require usable `id` values. FHIR search matches
+use `(resourceType, id)`. Repeated identities make coverage ambiguous and
+refuse the read rather than silently deduplicating it to fit a total. The
+ensure-record reader applies the same snapshot contract to searches and
+history while retaining distinct versions of a resource in history.
+
+Without `records_next_path`, `records_total_path`, or `records_complete: true`,
+a REST response is not known to contain the whole matching set and is
+unreadable. `records_complete: true` is an explicit validated endpoint
+declaration that one response contains all matching records; it is not
+inferred from the number of rows returned. A declaration does not override configured pagination or total validation,
+a partial response, or a malformed entry.
+
+A reviewed verifier configuration carries its declared pagination or
+complete-response semantics into the generated REST contract. A captured GET
+alone does not supply them. Without a declaration, including for an
+identity-filtered read, the generated check stays a draft. URL templating a
+captured parameter does not establish that it is a unique record identity.
+Declared next-page reads without snapshot semantics also stay drafts.
 
 REST has no standard total. With `records_total_path` (a dotted path in the
-first page, such as `meta.total`), a read whose record count differs, or a
-first page without the total, is unreadable. Without it, a REST read trusts
-the page chain.
+response body, such as `meta.total`), a read whose distinct record count differs,
+whose pages disagree on the total, or whose body omits it is unreadable. Without a total, a configured
+next-page chain must reach its declared terminal marker; an unpaged read
+requires a validated `records_complete: true` declaration.
 
 A redirect is a failed read: the configured auth headers never follow it to
 another host. Why a read was unreadable is in the verdict's reason and the

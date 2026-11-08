@@ -52,7 +52,7 @@ from benchmark.harness.effectbench import (
     RestRecordVerifier,
     score_episode,
 )
-from openadapt_flow.mockmed.fault_server import FaultDB, serve
+from openadapt_flow.mockmed.fault_server import FaultDB, mockmed_rest_read_kwargs, serve
 
 ARMS = ("screen_only", "effect_verify")
 # Faults whose realistic manifestation is a repeated delivery (a double-submit
@@ -165,9 +165,7 @@ def _agent_action(
         # The agent's OWN verifier — a distinct RestRecordVerifier instance, not
         # the benchmark oracle. It captures its own pre-state, acts, and halts
         # unless the write is CONFIRMED against the system of record.
-        own = RestRecordVerifier(
-            base_url, records_path="/api/db", records_key="records"
-        )
+        own = RestRecordVerifier(base_url, **mockmed_rest_read_kwargs())
         own_before = own.capture_pre_state()
         _perform_writes(base_url, drive, params)
         resolved = task.spec.expected_effect.resolve(params)
@@ -202,7 +200,7 @@ def run_mockmed_episode(
     params = trial_params(task.spec.task_id, trial)
     _reset_and_seed(base_url, task.drive, params)
 
-    oracle = RestRecordVerifier(base_url, records_path="/api/db", records_key="records")
+    oracle = RestRecordVerifier(base_url, **mockmed_rest_read_kwargs())
     return score_episode(
         episode_id=f"{arm}::{task.spec.task_id}::{trial}",
         task_id=task.spec.task_id,
