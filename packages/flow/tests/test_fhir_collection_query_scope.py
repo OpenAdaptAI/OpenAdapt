@@ -166,7 +166,9 @@ def test_capped_collection_query_cannot_certify_complete(service, name, location
     assert service.calls == 3
     assert observed.readback_complete is False
     assert observed.records == []
-    assert observed.detail["read_problem"] == "quiescent complete-read validation failed"
+    assert (
+        observed.detail["read_problem"] == "quiescent complete-read validation failed"
+    )
     if location != "self":
         assert parse_qs(urlsplit(service.requests[-1]).query) == {name: ["1"]}
 
@@ -205,7 +207,12 @@ def test_searchset_paging_query_retains_complete_two_pass_search(service):
     assert service.returned == [1] * 6
     assert service.calls == 6
     assert [urlsplit(path).query for path in service.requests] == [
-        "_count=1", "cursor=1", "cursor=2", "_count=1", "cursor=1", "cursor=2"
+        "_count=1",
+        "cursor=1",
+        "cursor=2",
+        "_count=1",
+        "cursor=1",
+        "cursor=2",
     ]
     assert "read_diagnostics" not in observed.detail
 
@@ -217,7 +224,9 @@ def test_collection_on_a_queried_next_page_cannot_certify_complete(service):
     assert not observed.reachable and observed.readback_complete is False
     assert service.calls == 2 and service.returned == [0, 1]
     assert service.requests[-1].endswith("?_page=1")
-    assert observed.detail["read_problem"] == "quiescent complete-read validation failed"
+    assert (
+        observed.detail["read_problem"] == "quiescent complete-read validation failed"
+    )
 
 
 @pytest.mark.parametrize("completion", ["PENDING", "INVALID", "UNKNOWN"])
