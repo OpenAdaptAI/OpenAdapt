@@ -36,6 +36,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from openadapt_flow.teach_authorization_fixture import demo_authority
+
 HERE = Path(__file__).resolve().parent
 RESULTS = HERE / "results"
 PROMPT = (
@@ -215,7 +217,9 @@ def _summary(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--env-file", type=Path, required=True)
     parser.add_argument("--trials", type=int, default=3)
     parser.add_argument("--replays", type=int, default=5)
@@ -262,6 +266,17 @@ def main() -> int:
                 # with one note for every trial, later runs read earlier runs'
                 # screenshots from the prompt cache and cost less than a real run.
                 note = f"{NOTE}, trial {trial}"
+                # A throwaway approver signs what run 1 may do.
+                compiler.teach_authorization = demo_authority(
+                    work,
+                    task_id=compiler.task.task_id,
+                    url=base,
+                    record={"patient_id": "p1", "type": "Triage"},
+                    inputs={"note": note},
+                    fields={"note": note},
+                    constants=["Jane Sample", "MRN P1"],
+                    record_kind="encounter",
+                )
                 result = compiler.record(agent, {"note": note})
                 run1 = _clean_run1(result.run1)
                 cost = float(((run1.get("agent") or {}).get("cost_usd")) or 0.0)

@@ -5,7 +5,7 @@ The effect-verified companion to ``benchmark/lending_fault_model/run.py``. Where
 screen-only postcondition contract (and measures how often that silently
 mishandles a transactional fault), THIS module measures the same faults through
 the shared EffectBench scoring contract
-(:func:`openadapt_flow.benchmark.effectbench.score_episode`) under a THREE-arm
+(:func:`benchmark.harness.effectbench.score_episode`) under a THREE-arm
 ladder that mirrors the clinical ``effect_e2e`` study (screen / single-surface /
 complete-read-path), so the two domains are directly comparable:
 
@@ -70,8 +70,7 @@ from pathlib import Path
 from typing import Callable, Iterator, Optional
 
 import requests
-
-from openadapt_flow.benchmark.effectbench import (
+from benchmark.harness.effectbench import (
     AgentReport,
     DivergenceCategory,
     Effect,
@@ -86,6 +85,10 @@ from openadapt_flow.benchmark.effectbench import (
 from openadapt_flow.mockloan.fault_server import LedgerDB, serve
 
 from .ground_truth import SQLiteGroundTruthVerifier
+from .read_contracts import (
+    MOCKLOAN_ALL_READ_CONTRACT,
+    MOCKLOAN_DISBURSEMENTS_READ_CONTRACT,
+)
 
 HERE = Path(__file__).resolve().parent
 
@@ -385,7 +388,11 @@ def _agent_action(
         # blind to a fees-surface (collateral) write; ``effect_verify_full``
         # reads the complete path over every mutable surface.
         own = RestRecordVerifier(
-            base_url, records_path=_ARM_READ_PATH[arm], records_key="records"
+            base_url,
+            **{
+                "effect_verify_full": MOCKLOAN_ALL_READ_CONTRACT,
+                "effect_verify_single": MOCKLOAN_DISBURSEMENTS_READ_CONTRACT,
+            }[arm],
         )
         own_before = own.capture_pre_state()
         _perform_writes(base_url, task, params)
@@ -724,7 +731,7 @@ def to_markdown(result: dict) -> str:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--trials", type=int, default=3, help="trials per task per arm")
     parser.add_argument(
         "--print", action="store_true", help="print results, do not write files"

@@ -55,6 +55,7 @@ class Fixture:
 
 
 def _fixtures() -> dict[str, Fixture]:
+    from benchmark.harness.mockloan.demo import record_disbursement_demo
     from openadapt_flow import demo_driver
     from openadapt_flow.mockloan.fault_server import serve as serve_loan
     from openadapt_flow.mockmed.fault_server import serve as serve_med
@@ -74,7 +75,7 @@ def _fixtures() -> dict[str, Fixture]:
         "mockloan": Fixture(
             name="mockloan",
             serve=serve_loan,
-            record=demo_driver.record_disbursement_demo,
+            record=record_disbursement_demo,
             record_kwargs={"memo_text": "Synthetic funding memo"},
             query="?fault=ok",
             match_fields=("loan_id", "product"),
@@ -86,7 +87,7 @@ def _fixtures() -> dict[str, Fixture]:
         "mockloan-fee-row": Fixture(
             name="mockloan-fee-row",
             serve=serve_loan,
-            record=demo_driver.record_disbursement_demo,
+            record=record_disbursement_demo,
             record_kwargs={"memo_text": "Synthetic funding memo"},
             query="?fault=collateral",
             match_fields=("loan_id", "product"),
@@ -184,8 +185,7 @@ def _bind_save_effect(
 
 def _contract(directory: Path, base_url: str, fixture: Fixture, body: dict) -> Path:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
-    from openadapt_flow.reward.seed import write_bundle
+    from openadapt_flow.reward.bundle import write_bundle
 
     match: dict[str, Any] = {k: str(body[k]) for k in fixture.match_fields}
     match.update(dict(fixture.extra_match))
@@ -193,7 +193,7 @@ def _contract(directory: Path, base_url: str, fixture: Fixture, body: dict) -> P
     write_bundle(
         directory,
         contract_id=f"undo_propose_{fixture.name}",
-        oracle={"kind": "rest", "base_url": base_url},
+        oracle={"kind": "rest", "base_url": base_url, "records_path": "/api/db"},
         channel="api",
         key=Ed25519PrivateKey.generate(),
         issuer_key_id="self_signed:benchmark",
@@ -218,7 +218,11 @@ def _deployment(path: Path, fixture: Fixture, base_url: str, contract: Path) -> 
             {
                 "name": f"{fixture.name}-test-copy",
                 "backend": {"kind": "web", "url": base_url + "/" + fixture.query},
-                "effects": {"kind": "rest", "base_url": base_url},
+                "effects": {
+                    "kind": "rest",
+                    "base_url": base_url,
+                    "records_path": "/api/db",
+                },
                 "actuation": {"api": True, "base_url": base_url},
                 "test_copy": {
                     "declared": True,
@@ -373,7 +377,9 @@ def markdown_table(summary: dict[str, Any]) -> str:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--fixture", action="append", default=None)
     parser.add_argument(

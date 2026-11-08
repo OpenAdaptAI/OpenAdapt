@@ -16,6 +16,7 @@ import shutil
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
+from openadapt_flow import artifacts
 from openadapt_flow.composition import (
     CHILDREN_DIR,
     TERMINAL_OUTCOMES,
@@ -123,9 +124,8 @@ def author_composition(
 
     for child_name, src in children:
         src_path = Path(src)
-        if (
-            not (src_path / "workflow.json").is_file()
-            and not (src_path / "workflow.json.enc").is_file()
+        if not artifacts.is_file(src_path / "workflow.json") and not artifacts.is_file(
+            src_path / "workflow.json.enc"
         ):
             errors.append(
                 f"child {child_name!r} at {src_path} is not a workflow bundle"

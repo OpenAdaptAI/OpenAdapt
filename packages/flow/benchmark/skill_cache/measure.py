@@ -33,6 +33,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from openadapt_flow.teach_authorization_fixture import demo_authority
+
 HERE = Path(__file__).resolve().parent
 MODEL = "claude-sonnet-5-5"
 TRACE: Path | None = None
@@ -157,7 +159,6 @@ def agent_for(chat: Any) -> Any:
     from langchain_core.tools import StructuredTool
     from langgraph.graph import END, START, MessagesState, StateGraph
     from langgraph.prebuilt import ToolNode, tools_condition
-
     from openadapt_flow.compile_agent.agents import PRICES_PER_MTOK
     from openadapt_flow.integrations.agents.skills import FrameworkAgent
 
@@ -249,7 +250,7 @@ def admitter_for(key_dir: Path) -> Any:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--app", choices=sorted(APPS), required=True)
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--work", type=Path, required=True, help="private state")
@@ -259,12 +260,11 @@ def main() -> int:
     args.work.mkdir(parents=True, exist_ok=True)
     TRACE = args.work / "agent-tool-calls.jsonl"
 
-    from langchain_anthropic import ChatAnthropic
+    import subprocess
 
+    from langchain_anthropic import ChatAnthropic
     from openadapt_flow.integrations.agents.skills import SkillCache
     from openadapt_flow.jit.keys import load_customer_model_key
-
-    import subprocess
 
     commit = subprocess.run(
         ["git", "rev-parse", "--short=10", "HEAD"],
@@ -313,6 +313,15 @@ def main() -> int:
             # on p1 a duplicate, so it is reset before every task.
             reset()
         before = load_1m()
+        # A throwaway approver signs what run 1 of this task may do.
+        cache.common["teach_authorization"] = demo_authority(
+            args.work,
+            task_id=cache.task_id(app["prompt"], values),
+            url=app["url"],
+            record=app["expect"],
+            inputs=values,
+            constants=app["on_screen"],
+        )
         result = cache.run(app["prompt"], values, agent)
         row = {
             "app": args.app,

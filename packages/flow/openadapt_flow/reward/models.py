@@ -32,6 +32,7 @@ from pydantic import (
     StrictInt,
     StrictStr,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -222,15 +223,22 @@ class OracleRecipeV1(_Strict):
     records_key: Optional[StrictStr] = "records"
     #: ``rest`` / ``fhir``: base URL of the read endpoint.
     base_url: Optional[StrictStr] = None
-    #: ``rest``: path of the records document.
-    records_path: StrictStr = "/api/db"
+    #: ``rest``: path of the records document. Required there.
+    records_path: Optional[StrictStr] = None
+    #: ``rest``: declared pagination or validated unpaged endpoint semantics.
+    records_next_path: Optional[StrictStr] = None
+    records_total_path: Optional[StrictStr] = None
+    records_complete: Optional[StrictBool] = None
+    records_snapshot_path: Optional[StrictStr] = Field(
+        default=None, min_length=1, max_length=256, pattern=r"^[^.\s]+(?:\.[^.\s]+)*$"
+    )
     #: ``rest``: environment variable holding a JSON object of headers.
     headers_env: Optional[StrictStr] = None
     #: ``sqlite``: database file. ``query``: one read-only SELECT.
     query: Optional[StrictStr] = None
     #: ``fhir``: resource type and search parameters; ``token_env`` names the
     #: bearer token variable.
-    resource_type: StrictStr = "Observation"
+    resource_type: Optional[StrictStr] = None
     search_params: dict[StrictStr, StrictStr] = Field(default_factory=dict)
     field_paths: Optional[dict[StrictStr, StrictStr]] = None
     token_env: Optional[StrictStr] = None
@@ -245,9 +253,39 @@ class OracleRecipeV1(_Strict):
             raise ValueError(f"oracle recipe {self.kind} requires path")
         if self.kind in {"rest", "fhir"} and not self.base_url:
             raise ValueError(f"oracle recipe {self.kind} requires base_url")
+        if self.kind == "rest" and not self.records_path:
+            raise ValueError("oracle recipe rest requires records_path")
+        if self.kind != "rest" and any(
+            value is not None
+            for value in (
+                self.records_next_path,
+                self.records_total_path,
+                self.records_complete,
+            )
+        ):
+            raise ValueError("REST read completeness fields require kind rest")
+        if self.kind == "fhir" and not (self.resource_type and self.field_paths):
+            raise ValueError(
+                "oracle recipe fhir requires resource_type and field_paths"
+            )
+        if self.records_snapshot_path is not None and self.kind not in {"rest", "fhir"}:
+            raise ValueError("snapshot read semantics require kind rest or fhir")
         if self.kind == "sqlite" and not self.query:
             raise ValueError("oracle recipe sqlite requires query")
         return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        for added in (
+            "records_next_path",
+            "records_total_path",
+            "records_complete",
+            "records_snapshot_path",
+        ):
+            if data.get(added) is None:
+                data.pop(added, None)
+        return data
 
     @property
     def channel(self) -> OracleChannel:

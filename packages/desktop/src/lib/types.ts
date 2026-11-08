@@ -1290,3 +1290,24 @@ export interface StopAnswer {
   changed?: number;
   results?: { card_id: string; ok: boolean; error?: string | null }[];
 }
+
+/** Usage-stats consent and the update-check switch (privacy_settings.py). */
+export interface PrivacySettings {
+  usage_stats: "share" | "off" | null;
+  /** True only before the person has answered and nothing in the env decides. */
+  ask_usage_stats: boolean;
+  usage_stats_managed_by_env: boolean;
+  update_check: boolean;
+  update_check_managed_by_env: boolean;
+}
+
+/** The last update check against the Desktop releases (updates.py). */
+export interface UpdateStatus {
+  enabled: boolean;
+  managed_by_env: boolean;
+  current_version: string;
+  latest_version: string | null;
+  available: boolean;
+  url: string;
+  checked_at: number | null;
+}

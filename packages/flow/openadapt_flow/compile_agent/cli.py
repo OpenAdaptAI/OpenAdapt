@@ -53,6 +53,21 @@ def _write_adapter(ref: Optional[str]) -> Any:
         raise SystemExit(f"--write-adapter: {exc}") from None
 
 
+def _teach_authority(args: argparse.Namespace) -> Any:
+    """``--teach-authorization`` as a TeachAuthority, checked now; or None."""
+
+    path = getattr(args, "teach_authorization", None)
+    if not path:
+        return None
+    from openadapt_flow.teach_authorization import TeachAuthority
+
+    return TeachAuthority(
+        Path(path),
+        key_dir=Path(args.key_dir) if args.key_dir else None,
+        approver_root=getattr(args, "approver_root", None),
+    )
+
+
 def _pairs(items: Optional[list[str]], flag: str) -> dict[str, str]:
     out: dict[str, str] = {}
     for item in items or []:
@@ -73,6 +88,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         ),
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
     )
     p.add_argument(
         "prompt",
@@ -147,6 +163,23 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         ),
     )
     p.add_argument(
+        "--teach-authorization",
+        metavar="STATEMENT",
+        help=(
+            "a person's signed teach authorization (openadapt-flow "
+            "teach-authorization): run 1 is scoped by it, and the flags may only "
+            "narrow it. Without one the draft is refused at admission"
+        ),
+    )
+    p.add_argument(
+        "--approver-root",
+        default=None,
+        help=(
+            "the approver root the teach authorization's signer is checked under "
+            "(default OPENADAPT_APPROVER_ROOT)"
+        ),
+    )
+    p.add_argument(
         "--agent",
         default="claude",
         help=(
@@ -156,11 +189,19 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     )
     p.add_argument(
         "--vision",
-        choices=["selective", "every_turn", "code"],
-        default="selective",
-        help="code: act through one terminal-style tool (docs/CODE_AS_ACTION.md)",
+        choices=["code", "selective", "every_turn"],
+        default="code",
+        help=(
+            "code (default): act through one terminal-style tool, every save read "
+            "back (docs/CODE_AS_ACTION.md); selective: the structural listing; "
+            "every_turn: a screenshot after every action"
+        ),
     )
-    p.add_argument("--model", default=None, help="model id (default claude-opus-5-5)")
+    p.add_argument(
+        "--model",
+        default=None,
+        help="model id (default claude-sonnet-5-5 for code, claude-opus-5-5 otherwise)",
+    )
     p.add_argument("--effort", default="medium")
     p.add_argument("--max-cost", type=float, default=2.0, help="USD cap for run 1")
     p.add_argument("--task-id", default=None)
@@ -207,16 +248,12 @@ def _interactive() -> bool:
 
 
 def _agent(args: argparse.Namespace) -> Any:
-    from openadapt_flow.compile_agent.agents import (
-        DEFAULT_MODEL,
-        ClaudeAgent,
-        ScriptedAgent,
-    )
+    from openadapt_flow.compile_agent.agents import ClaudeAgent, ScriptedAgent
 
     if args.agent == "claude":
         return ClaudeAgent(
             vision=args.vision,
-            model=args.model or DEFAULT_MODEL,
+            model=args.model or "",
             effort=args.effort,
             max_cost_usd=args.max_cost,
         )
@@ -394,6 +431,7 @@ def cmd_compile_agent(
         allow_origins=args.allow_origin,
         constants=args.allow_text,
         write_adapter=_write_adapter(args.write_adapter),
+        teach_authorization=_teach_authority(args),
     )
     out = result.to_dict()
     if result.status == "draft" and not tty:
@@ -422,6 +460,7 @@ def _cmd_admit(
     if not args.task_dir:
         raise SystemExit("compile-agent admit needs the compiled task directory")
     compiler = FirstRunCompiler.load(args.task_dir)
+    compiler.teach_authorization = _teach_authority(args)
     jit = compiler._jit()
     if jit.admitted:
         _print({"status": "admitted", "detail": "already admitted"}, args.json)

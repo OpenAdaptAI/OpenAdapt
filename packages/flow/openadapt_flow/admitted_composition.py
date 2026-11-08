@@ -359,14 +359,16 @@ class ProcessContract(BaseModel):
 
     @classmethod
     def load(cls, parent_dir: Path | str) -> "ProcessContract":
+        from openadapt_flow import artifacts
+
         parent = Path(parent_dir)
         path = parent / PROCESS_CONTRACT_FILENAME
-        if not path.is_file():
+        if not artifacts.is_file(path):
             raise ProcessContractError(
                 f"{parent} is not a process-contract artifact "
                 f"(no {PROCESS_CONTRACT_FILENAME})"
             )
-        return cls.model_validate_json(path.read_text(encoding="utf-8"))
+        return cls.model_validate_json(artifacts.read_text(path))
 
 
 class ProcessContractV1(ProcessContract):
@@ -380,7 +382,9 @@ class ProcessContractV1(ProcessContract):
 def is_process_contract_artifact(path: Path | str) -> bool:
     """True when ``path`` is a process-contract parent directory."""
 
-    return (Path(path) / PROCESS_CONTRACT_FILENAME).is_file()
+    from openadapt_flow import artifacts
+
+    return artifacts.is_file(Path(path) / PROCESS_CONTRACT_FILENAME)
 
 
 def resolve_pointer(parent_dir: Path | str, stored: str) -> Path:
@@ -414,21 +418,23 @@ def load_child_envelope(
 ) -> QualificationAdmissionEnvelope:
     """Load the child's v1 admission envelope from its pointer."""
 
+    from openadapt_flow import artifacts
+
     path = resolve_pointer(parent_dir, child.envelope)
-    if not path.is_file():
+    if not artifacts.is_file(path):
         raise ProcessContractError(
-            f"child {child.name!r} has no QualificationAdmissionEnvelope at "
+            f"child {child.name!r} has no signed run permission at "
             f"{path}; a compiled recording (including a compose child under "
             "composition.json) is not an independently admitted capability"
         )
     try:
         return QualificationAdmissionEnvelope.model_validate_json(
-            path.read_text(encoding="utf-8")
+            artifacts.read_text(path)
         )
     except Exception as exc:
         raise ProcessContractError(
             f"child {child.name!r} envelope at {path} is not a valid "
-            "QualificationAdmissionEnvelope"
+            "signed run permission"
         ) from exc
 
 
@@ -498,9 +504,10 @@ def _pointer_for(src: Path, parent: Path) -> str:
 
 
 def _load_admitted_bundle(name: str, bundle: Path) -> Workflow:
-    if (
-        not (bundle / "workflow.json").is_file()
-        and not (bundle / "workflow.json.enc").is_file()
+    from openadapt_flow import artifacts
+
+    if not artifacts.is_file(bundle / "workflow.json") and not artifacts.is_file(
+        bundle / "workflow.json.enc"
     ):
         raise ProcessContractError(
             f"child {name!r} at {bundle} is not an admitted workflow bundle"
@@ -528,6 +535,8 @@ def author_process_contract(
     ``children`` is an ordered list of ``(name, envelope_path, bundle_path)``.
     The parent does not copy recordings. Default sequencing is that order.
     """
+
+    from openadapt_flow import artifacts
 
     if len(children) < 2:
         raise ProcessContractError(
@@ -558,9 +567,9 @@ def author_process_contract(
     for child_name, envelope_src, bundle_src in children:
         envelope_path = Path(envelope_src)
         bundle_path = Path(bundle_src)
-        if not envelope_path.is_file():
+        if not artifacts.is_file(envelope_path):
             errors.append(
-                f"child {child_name!r} has no QualificationAdmissionEnvelope at "
+                f"child {child_name!r} has no signed run permission at "
                 f"{envelope_path}; a compiled recording (including a compose "
                 "child under composition.json) is not an independently "
                 "admitted capability"
@@ -568,12 +577,12 @@ def author_process_contract(
             continue
         try:
             envelope = QualificationAdmissionEnvelope.model_validate_json(
-                envelope_path.read_text(encoding="utf-8")
+                artifacts.read_text(envelope_path)
             )
         except Exception as exc:
             errors.append(
                 f"child {child_name!r} envelope is not a valid "
-                f"QualificationAdmissionEnvelope ({type(exc).__name__})"
+                f"signed run permission ({type(exc).__name__})"
             )
             continue
         try:

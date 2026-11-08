@@ -73,6 +73,7 @@ SCROLL_PIXELS_PER_NOTCH = 100
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 _CONTEXT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 _SESSION_ID_RE = re.compile(r"^[a-f0-9]{64}$")
+_IMAGE_DIGEST_RE = re.compile(r"^sha256:[a-f0-9]{64}$")
 
 
 @dataclass(frozen=True)
@@ -240,6 +241,11 @@ class WindowsBackend:
         session: Optional ``requests.Session`` (injected in tests). When a
             ``pin_fingerprint`` is set the pinning adapter is mounted onto it.
     """
+
+    #: ``element_identity_at`` asks UI Automation for the control under a
+    #: point across every window on the desktop (``ControlFromPoint``), so it
+    #: names whatever is on top there: a dialog, another app, nothing.
+    hit_test_sees_every_window = True
 
     def __init__(
         self,
@@ -492,6 +498,12 @@ class WindowsBackend:
                     "guarded Windows input refused "
                     f"({code}): {message or 'identity binding changed'}"
                 )
+            if path in {"/input", "/input/guarded"} and code == "input_focus_changed":
+                raise ActionDeliveryUncertain(
+                    operation=operation,
+                    native=False,
+                    cause_type="ForegroundChanged",
+                )
             if response.status_code >= 500:
                 raise ActionDeliveryUncertain(
                     operation=operation,
@@ -587,11 +599,27 @@ class WindowsBackend:
             raise StructuralResolutionRefused(
                 "Windows workflow-state context is invalid for guarded input"
             )
-        return {
+        context = {
             "application": application,
             "session": session,
             "workflow_state": workflow_state,
         }
+        # An agent with ``context_environment_v1`` also binds the executable's
+        # digest and the environment, so a same-named program from another
+        # path cannot take the foreground between the check and the input.
+        for key, pattern in (
+            ("application_version", _IMAGE_DIGEST_RE),
+            ("environment", _SESSION_ID_RE),
+        ):
+            value = payload.get(key)
+            if value is None:
+                continue
+            if not isinstance(value, str) or not pattern.fullmatch(value):
+                raise StructuralResolutionRefused(
+                    f"Windows {key} context is invalid for guarded input"
+                )
+            context[key] = value
+        return context
 
     def application_identity(self) -> Optional[str]:
         """Return the live foreground process id, never its window title."""
@@ -610,6 +638,41 @@ class WindowsBackend:
         if not isinstance(value, str) or not _SESSION_ID_RE.fullmatch(value):
             return None
         return value
+
+    def qualification_environment_identity(
+        self,
+    ) -> Optional[tuple[str, str, str, str]]:
+        """Application, version, session and environment from one agent snapshot.
+
+        The agent reads all four in one ``/context/identity`` call: the
+        foreground executable's basename, the SHA-256 of that same
+        executable file (the host executable: for a script, browser or
+        runtime-hosted app it does not cover the app's own code), the live
+        logon-session digest, and a digest of the machine id and exact OS
+        build, so an OS update requires a new qualification. Any missing or malformed value (an older
+        agent without ``context_environment_v1``, a desktop with no
+        foreground window) returns None, and a qualification case refuses.
+        """
+
+        payload = self._execution_context()
+        if payload is None:
+            return None
+        application = payload.get("application")
+        version = payload.get("application_version")
+        session = payload.get("session")
+        environment = payload.get("environment")
+        if not (
+            isinstance(application, str)
+            and _CONTEXT_ID_RE.fullmatch(application)
+            and isinstance(version, str)
+            and _IMAGE_DIGEST_RE.fullmatch(version)
+            and isinstance(session, str)
+            and _SESSION_ID_RE.fullmatch(session)
+            and isinstance(environment, str)
+            and _SESSION_ID_RE.fullmatch(environment)
+        ):
+            return None
+        return application, version, session, environment
 
     def workflow_state_identity(self) -> Optional[str]:
         """Workflow state requires an explicitly qualified UIA marker."""
@@ -859,10 +922,13 @@ class WindowsBackend:
         ``region`` is ``(x, y, w, h)`` in click pixels; ``pinned_step_id`` is
         the last step whose identity check verified (its window recorded by
         :meth:`record_verified_window`). Returns ``{"title", "hwnd",
-        "owner_hwnd", "pid"}`` only when the first visible window above the
+        "owner_hwnd", "pid", "region"}`` only when the first visible window above the
         recorded one, of the same process and with an owner chain reaching it
-        (an owned dialog, a message box), covers the region's center, and no
-        window of another process, or unowned, meets the region above it. Returns None with no record for that step, when the
+        (an owned dialog, a message box), meets the region, and no window of
+        another process, or unowned, meets the region above it. The topmost
+        owned window that meets it is returned; ``region`` is its visible
+        frame (DWM bounds, no shadow) as ``[x, y, w, h]`` in the same click
+        pixels. A 1x1 ``region`` asks about one point. Returns None with no record for that step, when the
         recorded window is gone or now another process's, for any other
         process's window or an unowned one, and on any failure. Never raises.
         """
@@ -883,15 +949,22 @@ class WindowsBackend:
             "hwnd",
             "owner_hwnd",
             "pid",
+            "region",
         }:
             return None
         title = window["title"]
         ints = [window[k] for k in ("hwnd", "owner_hwnd", "pid")]
+        frame = window["region"]
         if (
             (title is not None and (not isinstance(title, str) or len(title) > 512))
             or any(
                 isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in ints
             )
+            or not isinstance(frame, list)
+            or len(frame) != 4
+            or any(isinstance(v, bool) or not isinstance(v, int) for v in frame)
+            or frame[2] <= 0
+            or frame[3] <= 0
             or window["pid"] != pinned[1]
             or window["hwnd"] == pinned[0]
         ):
@@ -1250,6 +1323,44 @@ class WindowsBackend:
             ):
                 return None
         return payload
+
+    def window_tree(
+        self, window_name: str, *, max_nodes: int = 400
+    ) -> Optional[tuple[list[dict], bool]]:
+        """The UIA elements of the top-level windows named ``window_name``.
+
+        Read-only, for an observation (an RL environment's UIA surface): each
+        element's role, name, automation id, bounds and depth, and whether the
+        list was cut at ``max_nodes``. Returns None when the read is
+        unavailable or the answer is malformed; it never acts.
+        """
+        typed = self._post_typed_read(
+            "/uia/tree", {"window_name": window_name, "max_nodes": max_nodes}
+        )
+        payload = typed.payload
+        if not typed.available or payload is None:
+            return None
+        nodes = payload.get("nodes")
+        if not isinstance(nodes, list) or not isinstance(
+            payload.get("truncated"), bool
+        ):
+            return None
+        for node in nodes:
+            bounds = node.get("bounds") if isinstance(node, dict) else None
+            if not (
+                isinstance(bounds, list)
+                and len(bounds) == 4
+                and all(isinstance(v, int) and not isinstance(v, bool) for v in bounds)
+                and isinstance(node.get("depth"), int)
+                and not isinstance(node.get("depth"), bool)
+                and all(
+                    node.get(key) is None
+                    or (isinstance(node[key], str) and len(node[key]) <= 512)
+                    for key in ("role", "name", "automation_id")
+                )
+            ):
+                return None
+        return nodes, payload["truncated"]
 
     def arm_guarded_coordinate(self, x: int, y: int) -> None:
         """Bind a coordinate and live execution context before identity readback."""

@@ -75,6 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Your AI agent decides what to enter. OpenAdapt enters it in the app "
             "and checks that it saved. 'serve' with no flags starts a sandbox."
         ),
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--version", action="version", version=f"%(prog)s {__version__}"
@@ -87,6 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Serve workflows to your AI agent over MCP (stdio). With no flags, "
             "serve the sandbox."
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--mode",
@@ -312,6 +314,17 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="DIR",
         help="With --teach: the JIT key directory (default $OPENADAPT_JIT_KEY_DIR or ~/.openadapt/jit)",
+    )
+    p.add_argument(
+        "--teach-authorization",
+        default=None,
+        metavar="STATEMENT",
+        help=(
+            "With --teach: a person's signed teach authorization (openadapt-flow "
+            "teach-authorization). Run 1 is scoped by it; without one, drafts "
+            "are refused at admission. With --repair-access: it lets a calling "
+            "agent's fix be approved (it must cover repair). Its signer is checked under the deployment config's approvers section (--config) only."
+        ),
     )
     p.add_argument(
         "--teach-hold",
@@ -597,11 +610,13 @@ def build_parser() -> argparse.ArgumentParser:
     repair = sub.add_parser(
         "repair",
         help="Control whether calling agents may help repair halted runs (local only).",
+        allow_abbrev=False,
     )
     repair_sub = repair.add_subparsers(dest="repair_command", required=True)
     access = repair_sub.add_parser(
         "access",
         help="Set screen access for repairs for one workflow or the whole organization.",
+        allow_abbrev=False,
     )
     scope = access.add_mutually_exclusive_group(required=True)
     scope.add_argument("--workflow", help="Workflow name from list_workflows")
@@ -619,6 +634,7 @@ def build_parser() -> argparse.ArgumentParser:
     approve = repair_sub.add_parser(
         "approve-screen",
         help="Look at the exact screen a calling agent would get for one repair, and approve it.",
+        allow_abbrev=False,
     )
     approve.add_argument("token_id", help="token_id from the needs_repair result")
     approve.add_argument(
@@ -634,6 +650,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Hosted authoring mailbox client (ChatGPT.com / Claude.ai). "
             "Outbound HTTPS only; not an HTTP listener."
         ),
+        allow_abbrev=False,
     )
     authoring_sub = authoring.add_subparsers(dest="authoring_command", required=True)
     connect = authoring_sub.add_parser(
@@ -648,6 +665,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Desktop-only. Continue uses record_observed; it does not type "
             "secrets. This process only makes outbound HTTPS."
         ),
+        allow_abbrev=False,
     )
     connect.add_argument(
         "target",
@@ -677,6 +695,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Run a small reports portal on this computer to teach a first task "
             "on: a date-filtered sales report with an Export CSV link."
         ),
+        allow_abbrev=False,
     )
     p.add_argument("--port", type=int, default=8765, help="Port (default 8765)")
     p.set_defaults(func=_cmd_example_app)
@@ -687,6 +706,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Write an Agent Skill for one workflow: what it does, its inputs, and "
             "how to read the result. No recorded values, step text, or secrets."
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument("--out", required=True, help="Parent directory for the skill folder")
@@ -1150,6 +1170,45 @@ def _teach_write_adapter(ref: Optional[str]) -> Any:
     return load_write_adapter(ref)
 
 
+def _served_authority(args: argparse.Namespace) -> Any:
+    """``--teach-authorization`` for a server the agent runs, or ``None``.
+
+    The roster's root, key directory and head come only from the deployment
+    config's ``approvers`` section (``--config``): the agent starts this
+    server, so the environment and flags it sets never count. Without that
+    pin the statement verifies nowhere.
+    """
+
+    path = getattr(args, "teach_authorization", None)
+    if not path:
+        return None
+    from openadapt_flow.teach_authorization import TeachAuthority
+
+    approvers = _config_approvers(args)
+    return TeachAuthority(
+        Path(path).expanduser().resolve(),
+        key_dir=Path(approvers.key_dir) if approvers and approvers.key_dir else None,
+        approver_root=approvers.root_public_key if approvers else None,
+        config_only=True,
+        at_least=tuple(approvers.head) if approvers and approvers.head else None,
+    )
+
+
+def _teach_authority(args: argparse.Namespace, key_dir: Optional[Path]) -> Any:
+    """``--teach-authorization``, checked now so a bad one stops the server."""
+
+    from openadapt_flow.teach_authorization import TeachAuthorizationError
+
+    authority = _served_authority(args)
+    if authority is None:
+        return None
+    try:
+        authority.verify(purpose="teach")
+    except TeachAuthorizationError as exc:
+        raise ValueError(f"--teach-authorization doesn't verify: {exc}") from None
+    return authority
+
+
 def _serve_verify(args: argparse.Namespace, serve) -> int:
     """Serve only the verify tools over local stdio."""
     from openadapt_flow.agent.verify_tools import VerifyBridge
@@ -1316,6 +1375,7 @@ def _serve_teach(args: argparse.Namespace, serve) -> int:
             ),
             allow_origins=tuple(args.teach_allow_origin),
             write_adapter=_teach_write_adapter(args.teach_write_adapter),
+            teach_authorization=_teach_authority(args, key_dir),
         )
     except Exception as exc:  # noqa: BLE001 - every setup problem is a refusal
         print(f"serve: {exc}", file=sys.stderr)
@@ -1462,10 +1522,12 @@ def _repair_desk(args: argparse.Namespace, runs_dir: Path):
     else:
         policy = RepairAccessPolicy(args.repair_access)
         demonstrator = LazyBackendDemonstrator(url=args.url, headed=args.headed)
+    authority = _served_authority(args)
     return RepairDesk(
         Path(args.repair_dir) if args.repair_dir else Path(runs_dir) / ".repair",
         policy,
         demonstrator=demonstrator,
+        teach_authorization=authority,
     )
 
 

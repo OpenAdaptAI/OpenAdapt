@@ -77,9 +77,15 @@ def test_its_group_differs_from_the_groups_its_callees_compute() -> None:
     assert NIGHTLY["concurrency"]["cancel-in-progress"] is False
 
 
+def test_it_runs_the_desktop_replays() -> None:
+    job = NIGHTLY["jobs"]["desktop-replay"]
+    assert job["uses"] == "./.github/workflows/desktop-replay.yml"
+    assert "workflow_call" in _triggers(_load("desktop-replay.yml"))
+
+
 def test_the_report_runs_after_failures_but_not_after_a_cancel() -> None:
     report = NIGHTLY["jobs"]["report"]
-    assert set(report["needs"]) == {"packages", "launcher"}
+    assert set(report["needs"]) == {"packages", "launcher", "desktop-replay"}
     assert report["if"] == "${{ !cancelled() && github.ref == 'refs/heads/main' }}"
     assert report["permissions"] == {
         "actions": "read",
@@ -111,6 +117,7 @@ def test_packages_selects_every_package_on_a_nightly_event(
         ["bash", "-c", script], cwd=ROOT, env=env, check=True, capture_output=True
     )
     selected = dict(line.split("=", 1) for line in output.read_text().splitlines())
+    assert selected.pop("flow_unit_shards") == "2"
     assert selected and set(selected.values()) == {"true"}, selected
     assert {"flow", "types", "agent", "capture", "privacy", "desktop", "tray"} <= set(
         selected

@@ -39,6 +39,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Literal,
     Mapping,
     Optional,
     Protocol,
@@ -62,6 +63,7 @@ __all__ = [
     "App",
     "RECORDING_WARNING",
     "Recording",
+    "RecordingDispatcher",
     "SURFACE_KINDS",
     "SurfaceApp",
     "TaskRequest",
@@ -486,8 +488,10 @@ class Recording:
     """One capture, as a context manager. Get it from
     :meth:`CompiledAgent.recording`.
 
-    Inside the ``with`` block, send each action to ``computer.execute`` and
-    give the model the observation. On exit the recording is compiled into a
+    Inside the ``with`` block, send each action to ``dispatcher.execute`` and
+    give the agent the observation. The dispatcher is the action boundary for
+    external agents; capture controllers may register per-action and
+    pre-finish checks on it. On exit the recording is compiled into a
     DRAFT bundle, and :attr:`result` says what happened. An
     :class:`UnsupportedAction` raised in the block ends the capture with no
     draft and is not re-raised; any other exception is recorded as
@@ -512,6 +516,7 @@ class Recording:
         self.result: Optional[JitResult] = None
         #: The teach scope's guard, when the task declared one.
         self.guard: Optional["TeachGuard"] = None
+        self.dispatcher: Optional[RecordingDispatcher] = None
         self._baseline: Optional[list[dict[str, Any]]] = None
 
     def __enter__(self) -> "Recording":
@@ -537,7 +542,12 @@ class Recording:
             inputs=dict(self._params),
             model_key=owner.model_key,
         )
-        scope = owner._teach_scope(self._params)
+        try:
+            scope = owner._teach_scope(self._params)
+        except Exception:
+            # An authorization that does not verify or fit leaves no draft.
+            shutil.rmtree(program, ignore_errors=True)
+            raise
         if scope is not None:
             from openadapt_flow.teach_scope import TeachGuard
 
@@ -572,7 +582,10 @@ class Recording:
                 else None,
                 sleep=owner._sleep,
                 guard=self.guard,
+                after_action=self._dispatch_after_action,
             )
+            self.dispatcher = RecordingDispatcher(self)
+            self.computer.dispatcher = self.dispatcher
             self._session.start_record()
         except BaseException:
             self._close()
@@ -589,6 +602,8 @@ class Recording:
         try:
             self.result = self._finish(exc)
         finally:
+            if self.dispatcher is not None:
+                self.dispatcher.close()
             self._close()
         return isinstance(exc, UnsupportedAction)
 
@@ -599,6 +614,11 @@ class Recording:
         owner, session, computer = self._owner, self._session, self.computer
         assert computer is not None
         guard = self.guard
+        if exc is None and self.dispatcher is not None:
+            try:
+                self.dispatcher.finish()
+            except Exception as finish_error:  # noqa: BLE001 - fail closed
+                exc = finish_error
         if guard is not None and exc is None:
             # A request the page made after the agent's last action.
             try:
@@ -687,6 +707,131 @@ class Recording:
             readback=readback,
         )
 
+    def _dispatch_after_action(self, native: Mapping[str, Any]) -> None:
+        if self.dispatcher is not None:
+            self.dispatcher.after_action(native)
+
+
+class RecordingDispatcher:
+    """The capture-owned action interface for an external agent.
+
+    Pass only this object to an external agent. Each call to :meth:`execute`
+    goes through the recording computer and its pre-action teach guard. A
+    capture controller can register request-pump and completion callbacks;
+    those run before the observation is taken and before the recording is
+    finalized, respectively.
+    """
+
+    def __init__(self, recording: Recording) -> None:
+        self._recording = recording
+        self._after_action: list[Callable[[Mapping[str, Any]], None]] = []
+        self._finalizers: list[Callable[[], None]] = []
+        self._closers: list[Callable[[], None]] = []
+        self._finish_state: Literal["open", "running", "complete", "failed"] = "open"
+        self._finish_error: Optional[BaseException] = None
+        self._closed = False
+
+    @property
+    def recording(self) -> Recording:
+        """The owning capture, for trusted capture controllers."""
+
+        return self._recording
+
+    def execute(self, native: Mapping[str, Any]) -> Any:
+        """Perform one action under the live recording's guard."""
+
+        if (
+            self._closed
+            or self._finish_state != "open"
+            or self._recording.computer is None
+        ):
+            raise RuntimeError("the recording action dispatcher is closed")
+        return self._recording.computer.execute(native)
+
+    def add_after_action(self, callback: Callable[[Mapping[str, Any]], None]) -> None:
+        """Run a capture controller after each guarded operation."""
+
+        if self._closed or self._finish_state != "open":
+            raise RuntimeError("the recording action dispatcher is finishing")
+        self._after_action.append(callback)
+
+    def add_settle_callback(self, callback: Callable[[float], None]) -> None:
+        """Pump a guard while the recorder samples an action's settled result."""
+
+        if self._closed or self._finish_state != "open":
+            raise RuntimeError("the recording action dispatcher is finishing")
+        if self._recording._session is None:
+            raise RuntimeError("the recording session has not started")
+        self._recording._session.add_settle_callback(callback)
+
+    def before_finish(self, callback: Callable[[], None]) -> None:
+        """Require capture-side checks to finish before a draft is written."""
+
+        if self._closed or self._finish_state != "open":
+            raise RuntimeError("the recording action dispatcher is finishing")
+        self._finalizers.append(callback)
+
+    def on_close(self, callback: Callable[[], None]) -> None:
+        """Release a capture controller on both success and refusal."""
+
+        if self._closed:
+            raise RuntimeError("the recording action dispatcher is closed")
+        self._closers.append(callback)
+
+    def after_action(self, native: Mapping[str, Any]) -> None:
+        """Internal action boundary used by :class:`Recording`."""
+
+        if self._closed or self._finish_state != "open":
+            raise RuntimeError("the recording action dispatcher is closed")
+        for callback in tuple(self._after_action):
+            callback(native)
+
+    def finish(self) -> None:
+        """Complete checks once; a caught refusal never authorizes a draft."""
+
+        if self._finish_state == "failed":
+            assert self._finish_error is not None
+            raise self._finish_error
+        if self._finish_state == "complete":
+            return
+        if self._finish_state == "running" or self._closed:
+            self._finish_error = RuntimeError(
+                "recording completion was reentered or its dispatcher closed"
+            )
+            self._finish_state = "failed"
+            raise self._finish_error
+        self._finish_state = "running"
+        try:
+            for callback in tuple(self._finalizers):
+                callback()
+                # A callback may catch a reentrant finish refusal. It still
+                # cannot turn that failed completion back into success.
+                if self._finish_error is not None:
+                    raise self._finish_error
+                if self._closed:
+                    raise RuntimeError(
+                        "the recording dispatcher closed during completion"
+                    )
+        except BaseException as error:
+            if self._finish_error is None:
+                self._finish_error = error
+            self._finish_state = "failed"
+            raise self._finish_error
+        self._finish_state = "complete"
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        errors: list[Exception] = []
+        for callback in reversed(self._closers):
+            try:
+                callback()
+            except Exception as exc:  # noqa: BLE001 - close remaining resources
+                errors.append(exc)
+        if errors and self._recording.result is None:
+            raise errors[0]
+
 
 @dataclass
 class CompiledAgent:
@@ -705,7 +850,15 @@ class CompiledAgent:
     on_warning: Optional[Callable[[str], None]] = None
     require_distinct_reviewer_and_admitter: bool = False
     teach_scope: Optional[TeachScopeSource] = None
+    #: A person's signed teach authorization
+    #: (:class:`~openadapt_flow.teach_authorization.TeachAuthority`). With
+    #: one, the recording's scope is bound from it; ``teach_scope`` may only
+    #: narrow it. Without one the draft can't be admitted.
+    teach_authorization: Any = None
     _sleep: Callable[[float], None] = field(default=time.sleep, repr=False)
+
+    # Enabled only by the compile-agent task loader, never a raw bundle path.
+    _use_skill_repair: bool = field(default=False, init=False, repr=False)
 
     # -- layout --------------------------------------------------------------
 
@@ -719,6 +872,12 @@ class CompiledAgent:
 
     @property
     def bundle_dir(self) -> Path:
+        if self._use_skill_repair:
+            from openadapt_flow.compile_agent.repair_selection import selected_bundle
+
+            selected = selected_bundle(self)
+            if selected is not None:
+                return selected
         return self.program_dir / "bundle"
 
     @property
@@ -752,11 +911,13 @@ class CompiledAgent:
     def status(self) -> dict[str, Any]:
         """The draft's steps and which admission requirements it meets."""
 
-        return lifecycle.admission_status(self.program_dir, key_dir=self.key_dir)
+        return lifecycle.admission_status(
+            self.program_dir, key_dir=self.key_dir, trust=self.teach_authorization
+        )
 
     # -- run -----------------------------------------------------------------
 
-    def run(self, **params: Any) -> JitResult:
+    def run(self, /, **params: Any) -> JitResult:
         """Run the task with ``params``.
 
         Raises:
@@ -788,7 +949,7 @@ class CompiledAgent:
             )
         return self._explore(params, values)
 
-    def recording(self, **params: Any) -> Recording:
+    def recording(self, /, **params: Any) -> Recording:
         """Record your own CUA loop: ``with jit.recording(note="x") as rec:``.
 
         ``rec.request`` is what to ask the model, ``rec.computer.execute``
@@ -812,11 +973,28 @@ class CompiledAgent:
         from openadapt_flow.teach_scope import TeachScope
 
         source = self.teach_scope
-        if source is None:
+        authority = self.teach_authorization
+        if source is None and authority is None:
             return None
-        scope = source if isinstance(source, TeachScope) else source(dict(params))
+        authorized = None
+        if authority is not None:
+            from openadapt_flow import teach_authorization as ta
+
+            # Verify the copy kept beside the draft, so it is the one admitted.
+            kept = authority.kept_in(
+                self.program_dir / lifecycle.TEACH_AUTHORIZATION_DIR
+            )
+            authorized = kept.scope(
+                purpose="teach", task_id=self.task.task_id, params=params
+            )
+        if source is None:
+            scope = authorized
+        else:
+            scope = source if isinstance(source, TeachScope) else source(dict(params))
         if not isinstance(scope, TeachScope):
             raise ValueError("teach_scope must be a TeachScope or return one")
+        if authorized is not None and scope is not authorized:
+            scope = ta.narrowed(scope, authorized)
         if scope.task_id != self.task.task_id:
             raise ValueError(
                 f"the teach scope is for task {scope.task_id!r}, not "
@@ -921,6 +1099,10 @@ class CompiledAgent:
                 **guard.report(),
                 "readback": readback.to_dict() if readback is not None else None,
             }
+            if guard.scope.authorization is not None:
+                # Who signed the scope; the statement is kept beside the
+                # draft (lifecycle.TEACH_AUTHORIZATION_DIR) for admission.
+                candidate["teach_authorization"] = dict(guard.scope.authorization)
         # Who made the recording, signed with the bundle digest, so editing
         # candidate.json can't turn the recorder into someone else.
         candidate = lifecycle.sign_recorder(program, candidate, key_dir=self.key_dir)
@@ -1006,7 +1188,14 @@ class CompiledAgent:
             key_dir=self.key_dir,
         )
 
-    def canary(self, *, principal_id: Any, **params: Any) -> JitResult:
+    def canary(self, /, *, principal_id: Any, **params: Any) -> JitResult:
+        """Run a canary with keyword data; use canary_params for control-name keys."""
+
+        return self.canary_params(params, principal_id=principal_id)
+
+    def canary_params(
+        self, params: Mapping[str, Any], /, *, principal_id: Any
+    ) -> JitResult:
         """Run the draft once on the target app, attended.
 
         ``principal_id`` is a person's name, or a registered
@@ -1131,6 +1320,7 @@ class CompiledAgent:
             require_distinct_reviewer_and_admitter=(
                 self.require_distinct_reviewer_and_admitter
             ),
+            trust=self.teach_authorization,
         )
 
     def admit_with_key(self, principal: Any) -> dict[str, Any]:
@@ -1139,7 +1329,11 @@ class CompiledAgent:
         See :func:`openadapt_flow.jit.lifecycle.admit_with_key`."""
 
         return lifecycle.admit_with_key(
-            self.program_dir, principal=principal, key_dir=self.key_dir
+            self.program_dir,
+            principal=principal,
+            key_dir=self.key_dir,
+            # The roster pin the teach authorization was checked under.
+            trust=self.teach_authorization,
         )
 
     def reject(self, *, principal_id: Any, reason: str = "") -> Path:
@@ -1154,8 +1348,13 @@ class CompiledAgent:
 
     # -- cache hit -----------------------------------------------------------
 
-    def _run_admitted(self, values: dict[str, str]) -> JitResult:
+    def _run_admitted(
+        self, values: dict[str, str], *, bundle_dir: Optional[Path] = None
+    ) -> JitResult:
         from openadapt_flow.ir import Workflow
+
+        def bundle() -> Path:
+            return self.bundle_dir if bundle_dir is None else Path(bundle_dir)
 
         def refused(detail: str) -> JitResult:
             return self._to_inbox(
@@ -1169,10 +1368,12 @@ class CompiledAgent:
             )
 
         try:
-            record = lifecycle.verify_admission(self.bundle_dir, key_dir=self.key_dir)
-            workflow = Workflow.load(self.bundle_dir)
+            record = lifecycle.verify_admission(bundle(), key_dir=self.key_dir)
+            workflow = Workflow.load(bundle())
         except Exception as exc:  # noqa: BLE001 - any doubt is a refusal
             return refused(f"the admission does not hold: {exc}")
+        if bundle_dir is not None and record.get("admission_mode") != "repair":
+            return refused("an explicit repair canary requires normal repair admission")
         # Pin what was admitted, not what is on disk now: the bundle is loaded
         # again for the run, and must still be the admitted one.
         digest = str(record["digest"])
@@ -1206,7 +1407,12 @@ class CompiledAgent:
             )
         run_dir = self.runs_dir / f"{_stamp()}-{uuid.uuid4().hex[:8]}"
         run_dir.parent.mkdir(parents=True, exist_ok=True)
-        gate_detail, report = self._run_governed(workflow, digest, values, run_dir)
+        if bundle_dir is None:
+            gate_detail, report = self._run_governed(workflow, digest, values, run_dir)
+        else:
+            gate_detail, report = self._run_governed(
+                workflow, digest, values, run_dir, bundle_dir=bundle_dir
+            )
         if report is None:
             return refused(gate_detail or "the run gate refused")
         result = JitResult(
@@ -1237,6 +1443,7 @@ class CompiledAgent:
         run_dir: Path,
         *,
         attended_by: Any = None,
+        bundle_dir: Optional[Path] = None,
     ) -> tuple[Optional[str], Any]:
         """The standard-profile run: gate, authorization, Replayer, verifier.
 
@@ -1256,9 +1463,12 @@ class CompiledAgent:
         )
         from openadapt_flow.runtime import Replayer
 
+        def bundle() -> Path:
+            return self.bundle_dir if bundle_dir is None else Path(bundle_dir)
+
         if attended_by is None:
             try:
-                lifecycle.verify_admission(self.bundle_dir, key_dir=self.key_dir)
+                lifecycle.verify_admission(bundle(), key_dir=self.key_dir)
             except AdmissionError as exc:
                 return f"a DRAFT never runs unattended: {exc}", None
         refusal = getattr(self.app, "run_refusal", lambda: None)()
@@ -1266,7 +1476,7 @@ class CompiledAgent:
             return f"refused before any action: {refusal}", None
         gate = evaluate_run_gate(
             workflow,
-            bundle_dir=self.bundle_dir,
+            bundle_dir=bundle(),
             deployment=DeploymentConfig(policy=PolicySection(policy=self.policy)),
             effect_verifier=self.verifier,
             profile_contract=execution_profile_contract(ExecutionProfile.STANDARD),
@@ -1302,7 +1512,7 @@ class CompiledAgent:
             ).run(
                 workflow.model_copy(deep=True),
                 params=values,
-                bundle_dir=self.bundle_dir,
+                bundle_dir=bundle(),
                 run_dir=run_dir,
                 execution_target_kind=self.app.kind,
                 execution_origin=self.app.origin if self.app.kind == "web" else None,
@@ -1379,6 +1589,7 @@ def compile_agent(
     on_warning: Optional[Callable[[str], None]] = None,
     require_distinct_reviewer_and_admitter: bool = False,
     teach_scope: Optional[TeachScopeSource] = None,
+    teach_authorization: Any = None,
 ) -> CompiledAgent:
     """Wrap ``agent`` so a task is explored once and then run as a program.
 
@@ -1417,6 +1628,11 @@ def compile_agent(
             system of record is read back after the run. A violation ends the
             capture as ``scope_refused`` or ``readback_refused`` with no
             draft. See ``docs/THREAT_MODEL.md``.
+        teach_authorization: A person's signed teach authorization
+            (:class:`~openadapt_flow.teach_authorization.TeachAuthority`).
+            The recording's scope is bound from it, and ``teach_scope`` may
+            only narrow it. Admission refuses an agent-taught draft without
+            one.
     """
 
     if agent is not None:
@@ -1446,4 +1662,5 @@ def compile_agent(
         on_warning=on_warning,
         require_distinct_reviewer_and_admitter=require_distinct_reviewer_and_admitter,
         teach_scope=teach_scope,
+        teach_authorization=teach_authorization,
     )

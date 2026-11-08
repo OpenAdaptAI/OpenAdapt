@@ -17,7 +17,7 @@ import re
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
 from urllib.parse import urlsplit
 
@@ -28,10 +28,15 @@ from openadapt_flow.runtime.step_timing import timed_span
 if TYPE_CHECKING:  # pragma: no cover
     from playwright.sync_api import Page
 
-from openadapt_flow.backend import ActionDeliveryUncertain, StructuralResolutionRefused
+from openadapt_flow.backend import (
+    ActionDeliveryUncertain,
+    StructuralElementNotActionable,
+    StructuralResolutionRefused,
+)
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
     FormIdentity,
+    NativeSelectContract,
     StructuralHandle,
     StructuralLocator,
     SubmitBinding,
@@ -149,6 +154,17 @@ class _StructuralGuard:
     scope: Any
     frame_path: tuple[str, ...]
     context: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class _NativeSelectBinding:
+    """Exact control retained across capture or delivery/readback."""
+
+    guard: _StructuralGuard
+    selector: str
+    options: list[dict[str, Any]]
+    value: Optional[str] = None
+    label: Optional[str] = None
 
 
 @dataclass
@@ -562,8 +578,41 @@ _INSTALL_GUARD_BODY_JS = (
         context: {},
         invalidate: null,
         focusListener: null,
+        nativeFocus: null,
+        nativeFocusChanged: false,
+        stopNativeFocusTracking: null,
     };
+    // A native selection may acquire focus later, but only from the exact
+    // unchanged focus chain observed during structural resolution.
+    if (el.localName === 'select') {
+        const focusChain = [];
+        try {
+            let win = window;
+            for (let depth = 0; depth < 9; depth++) {
+                focusChain.push({win, active: win.document.activeElement});
+                if (win === win.top) break;
+                win = win.parent;
+            }
+            if (focusChain[focusChain.length - 1].win === win.top) {
+                entry.nativeFocus = focusChain;
+            }
+        } catch (_) { entry.nativeFocus = null; }
+        if (entry.nativeFocus) {
+            const changed = () => { entry.nativeFocusChanged = true; };
+            for (const item of entry.nativeFocus) {
+                item.win.document.addEventListener('focusin', changed, true);
+                item.win.document.addEventListener('focusout', changed, true);
+            }
+            entry.stopNativeFocusTracking = () => {
+                for (const item of entry.nativeFocus) {
+                    item.win.document.removeEventListener('focusin', changed, true);
+                    item.win.document.removeEventListener('focusout', changed, true);
+                }
+            };
+        }
+    }
     const invalidate = () => {
+        if (entry.stopNativeFocusTracking) entry.stopNativeFocusTracking();
         if (entry.observer) entry.observer.disconnect();
         if (entry.contextObserver) entry.contextObserver.disconnect();
         if (entry.focusListener) {
@@ -600,6 +649,10 @@ _INSTALL_GUARD_BODY_JS = (
     };
 """
 )
+
+# True when the element is fully transparent. Such a control is laid over its
+# own visible box on purpose, so the bind guard refusing it is not occlusion.
+_TRANSPARENT_JS = "el => Number(window.getComputedStyle(el).opacity || '1') === 0"
 
 _BIND_STRUCTURAL_TARGET_JS = (
     "(el, args) => { const describe = "
@@ -782,7 +835,11 @@ _SNAPSHOT_FILLED_VALUE_JS = r"""(el, args) => {
     let typed;
     if (el.localName === 'select') {
         const option = el.options[el.selectedIndex];
-        typed = Boolean(option) && clean(option.text) === clean(args.typed);
+        typed = Boolean(option) && (
+            typeof args.nativeValue === 'string'
+                ? option.value === args.nativeValue && option.label === args.typed
+                : clean(option.text) === clean(args.typed)
+        );
     } else if ('value' in el) {
         typed = value === String(args.typed);
     } else {
@@ -1051,6 +1108,55 @@ _FOCUSED_PLAIN_TEXT_JS = r"""() => {
     return ['text', 'email', 'tel', 'search', 'url'].includes(t);
 }"""
 
+#: An ISO calendar date, the value a native ``<input type=date>`` holds.
+_ISO_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+#: Is the element an editable native date input?
+_IS_DATE_INPUT_JS = (
+    "e => e.tagName === 'INPUT' && e.type === 'date' && !e.readOnly && !e.disabled"
+)
+#: The focused element, through open shadow roots (frames are walked in Python).
+_ACTIVE_ELEMENT_JS = """() => {
+    let e = document.activeElement;
+    while (e && e.shadowRoot && e.shadowRoot.activeElement) {
+        e = e.shadowRoot.activeElement;
+    }
+    return e;
+}"""
+
+
+def _is_iso_date(text: str) -> bool:
+    """True for a real calendar date written ``YYYY-MM-DD`` in ASCII digits."""
+
+    if not _ISO_DATE.fullmatch(text or ""):
+        return False
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        return False
+    return True
+
+
+def _fill_iso_date(target: Any, text: str) -> bool:
+    """Set an ISO date (``YYYY-MM-DD``) into a native ``<input type=date>``.
+
+    Chromium splits a date input into locale-ordered segments that a typed
+    string can't fill: ``-`` doesn't move to the next segment, and the year
+    segment takes six digits. ``fill`` takes the ISO value whatever the
+    locale and fires ``input`` and ``change`` (no key events). ``target`` is
+    an element handle; the check and the fill run on that one element.
+    Returns ``False``, with nothing delivered, when ``text`` isn't a real ISO
+    date or the target isn't an editable date input. Once it is, a failed
+    ``fill`` raises rather than falling back to typing.
+    """
+
+    if not _is_iso_date(text):
+        return False
+    if target.evaluate(_IS_DATE_INPUT_JS) is not True:
+        return False
+    target.fill(text, timeout=1000)
+    return True
+
+
 _TEXT_AT_POINT_JS = r"""([px, py, target]) => {
     // Recorded texts come from OCR, which drops spaces and misreads
     // punctuation ("October-2026-" for "October 2026"): keep letters and
@@ -1287,7 +1393,12 @@ _IDENTITY_CANDIDATES_AT_JS = (
         ? Array.from(document.getElementsByTagName(level.tagName)).filter(
             (candidate) => !tag || candidate.getElementsByTagName(tag).length > 0)
         : Array.from(document.querySelectorAll('tr, [role="row"], li, [role="listitem"]'));
-    const pool = new Set(siblings.concat(pageWide));
+    const dialog = el.closest(
+        'dialog:modal, [aria-modal="true"], [role="alertdialog"], .modal.show'
+    );
+    const pool = new Set(siblings.concat(pageWide).filter(
+        (candidate) => !dialog || dialog.contains(candidate)
+    ));
     const result = {
         record_key: recordKey(row, el),
         incomplete: pool.size > cap,
@@ -1496,6 +1607,225 @@ _GUARD_CURRENT_JS = (
 }"""
 )
 
+# Native selection is a fixed semantic operation, never arbitrary supplied JS.
+# Its guard and option census are checked in the same JS task as the setter.
+_NATIVE_SELECT_STATE_JS = r"""(el, requireFocused = true) => {
+    if (!(el instanceof HTMLSelectElement) || !el.isConnected ||
+            el.multiple || el.size > 1 || el.matches(':disabled') ||
+            el.options.length < 1 || el.options.length > 2048) return null;
+    for (let node = el; node; node = node.parentElement) {
+        const style = getComputedStyle(node);
+        if (style.display === 'none' || style.visibility !== 'visible' ||
+                Number(style.opacity) === 0 || node.inert) return null;
+    }
+    const rect = el.getBoundingClientRect();
+    const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
+    if (rect.width <= 0 || rect.height <= 0 || x < 0 || y < 0 ||
+            x >= innerWidth || y >= innerHeight ||
+            document.elementFromPoint(x, y) !== el ||
+            (requireFocused && document.activeElement !== el)) return null;
+    const options = Array.from(el.options, option => ({
+        value: option.value,
+        label: option.label,
+        disabled: option.disabled ||
+            (option.parentElement instanceof HTMLOptGroupElement &&
+             option.parentElement.disabled),
+    }));
+    if (options.some(o => o.value.length > 512 || o.label.length > 512)) return null;
+    if (el.selectedOptions.length !== 1) return null;
+    const selected = el.selectedOptions[0];
+    return {value: selected.value, label: selected.label, options};
+}"""
+
+_NATIVE_SELECT_CURRENT_JS = (
+    "(el, args) => { const current = "
+    + _GUARD_CURRENT_JS
+    + "; const state = "
+    + _NATIVE_SELECT_STATE_JS
+    + "; const contextCurrent = (window, document) => { const check = "
+    + _CONTEXT_CURRENT_JS
+    + r"""; return check({context: args.context || {}}); };
+    const requireFocused = args.requireFocused !== false;
+    if (!current(el, {...args, requireFocused})) return null;
+    if (args.requireOriginalFocus) {
+        const entry = window[args.storeKey]?.get(args.token);
+        if (!entry || entry.nativeFocusChanged || !entry.nativeFocus ||
+                !entry.nativeFocus.every(item =>
+                    item.win.document.activeElement === item.active)) return null;
+    }
+    const matches = document.querySelectorAll(args.selector);
+    if (matches.length !== 1 || matches[0] !== el) return null;
+    const observed = state(el, requireFocused);
+    if (!observed || JSON.stringify(observed.options) !==
+            JSON.stringify(args.options)) return null;
+    // Re-prove the ancestor frame hit chain synchronously. Cross-origin
+    // ancestors cannot supply this proof and therefore refuse selection.
+    try {
+        let win = window;
+        const rect = el.getBoundingClientRect();
+        let x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
+        for (let i = args.framePath.length - 1; i >= 0; i--) {
+            const frame = win.frameElement;
+            const parent = win.parent;
+            if (!frame || parent === win ||
+                    (requireFocused && parent.document.activeElement !== frame)) return null;
+            const candidates = parent.document.querySelectorAll(args.framePath[i]);
+            if (candidates.length !== 1 || candidates[0] !== frame) return null;
+            for (let node = frame; node; node = node.parentElement) {
+                const style = parent.getComputedStyle(node);
+                if (style.transform !== 'none' || style.display === 'none' ||
+                        style.visibility !== 'visible' ||
+                        Number(style.opacity) === 0 || node.inert) return null;
+            }
+            const box = frame.getBoundingClientRect();
+            x += box.x + frame.clientLeft;
+            y += box.y + frame.clientTop;
+            if (parent.document.elementFromPoint(x, y) !== frame) return null;
+            win = parent;
+        }
+        if (win !== win.top || !contextCurrent(win, win.document)) return null;
+    } catch (_) { return null; }
+    return observed;
+}"""
+)
+
+_NATIVE_SELECT_DELIVER_JS = (
+    "(el, args) => { const current = "
+    + _NATIVE_SELECT_CURRENT_JS
+    + "; const register = "
+    + _REGISTER_FILLED_FIELD_JS
+    + "; const snapshot = "
+    + _SNAPSHOT_FILLED_VALUE_JS
+    + r""";
+    const before = current(el, {...args, requireFocused: false, requireOriginalFocus: true});
+    if (!before) return {status: 'refused'};
+    const chosen = before.options.filter(o => o.value === args.value);
+    if (chosen.length !== 1 || chosen[0].label !== args.label ||
+            chosen[0].disabled) return {status: 'refused'};
+    const setter = Object.getOwnPropertyDescriptor(
+        HTMLSelectElement.prototype, 'value').set;
+    let focusLost = false;
+    const focusDocuments = [];
+    const invalidateFocus = () => {
+        focusLost = true;
+        const entry = window[args.storeKey]?.get(args.token);
+        if (entry && entry.invalidate) entry.invalidate();
+    };
+    el.addEventListener('blur', invalidateFocus, true);
+    try {
+        if (!register(el, args.fillKey)) return {status: 'refused'};
+        const entry = window[args.storeKey]?.get(args.token);
+        if (entry?.stopNativeFocusTracking) entry.stopNativeFocusTracking();
+        if (document.activeElement !== el) el.focus({preventScroll: true});
+        // Focus itself delivers an event. If its handler changes the target,
+        // stop before setting a value and report that delivery is uncertain.
+        const focused = !focusLost && current(el, args);
+        if (!focused || focused.value !== before.value || focused.label !== before.label) {
+            return {status: 'uncertain'};
+        }
+        // The intended focus transition is complete. From here, losing
+        // focus anywhere in the frame chain permanently invalidates delivery,
+        // even if the child document keeps its activeElement unchanged.
+        for (const item of entry.nativeFocus) {
+            const doc = item.win.document;
+            doc.addEventListener('focusin', invalidateFocus, true);
+            doc.addEventListener('focusout', invalidateFocus, true);
+            focusDocuments.push(doc);
+        }
+        setter.call(el, args.value);
+        const stillSelected = () => {
+            const observed = !focusLost && current(el, args);
+            return observed && observed.value === args.value &&
+                observed.label === args.label;
+        };
+        if (!stillSelected()) return {status: 'uncertain'};
+        el.dispatchEvent(new Event('input', {bubbles: true}));
+        // Even a blur followed by refocus invalidates the retained proof.
+        // Never send a later event after losing the original focus lease.
+        if (!stillSelected()) return {status: 'uncertain'};
+        el.dispatchEvent(new Event('change', {bubbles: true}));
+        if (!stillSelected()) return {status: 'uncertain'};
+        snapshot(el, {key: args.valueKey, typed: args.label, nativeValue: args.value});
+        return {status: 'delivered'};
+    } finally {
+        el.removeEventListener('blur', invalidateFocus, true);
+        for (const doc of focusDocuments) {
+            doc.removeEventListener('focusin', invalidateFocus, true);
+            doc.removeEventListener('focusout', invalidateFocus, true);
+        }
+    }
+}"""
+)
+
+_NATIVE_SELECT_CAPTURE_JS = (
+    "(el, args) => { const read = "
+    + _NATIVE_SELECT_STATE_JS
+    + "; const bind = "
+    + _BIND_STRUCTURAL_TARGET_JS
+    + "; const register = "
+    + _REGISTER_FILLED_FIELD_JS
+    + r""";
+    const requireFocused = args.requireFocused !== false;
+    const observed = read(el, requireFocused);
+    if (!observed) return null;
+    let selector = el.id ? '#' + CSS.escape(el.id) : null;
+    if (!selector && el.name) selector = 'select[name="' + CSS.escape(el.name) + '"]';
+    if (!selector) return null;
+    const matches = document.querySelectorAll(selector);
+    if (matches.length !== 1 || matches[0] !== el) return null;
+    if (!bind(el, {...args, requireFocused, requireRowIdentity: false})) return null;
+    register(el, args.fillKey);
+    return {...observed, selector};
+}"""
+)
+
+_NATIVE_SELECT_CAPTURE_AT_JS = (
+    "args => { const capture = "
+    + _NATIVE_SELECT_CAPTURE_JS
+    + "; const el = document.elementFromPoint(args.x, args.y);"
+    + " return el ? capture(el, {...args, requireFocused: false}) : null; }"
+)
+
+_NATIVE_SELECT_CONTINUE_JS = (
+    "(el, args) => { const current = "
+    + _NATIVE_SELECT_CURRENT_JS
+    + r""";
+    const observed = current(el, args);
+    if (!observed || observed.value !== args.value || observed.label !== args.label) return false;
+    const entry = window[args.storeKey]?.get(args.token);
+    if (!entry || !entry.nativeFocus) return false;
+    if (!entry.captureFocusArmed) {
+        if (entry.stopNativeFocusTracking) entry.stopNativeFocusTracking();
+        const invalidate = () => entry.invalidate();
+        for (const item of entry.nativeFocus) {
+            item.win.document.addEventListener('focusin', invalidate, true);
+            item.win.document.addEventListener('focusout', invalidate, true);
+        }
+        entry.stopNativeFocusTracking = () => {
+            for (const item of entry.nativeFocus) {
+                item.win.document.removeEventListener('focusin', invalidate, true);
+                item.win.document.removeEventListener('focusout', invalidate, true);
+            }
+        };
+        entry.captureFocusArmed = true;
+    }
+    return true;
+}"""
+)
+
+_NATIVE_SELECT_COMMIT_OBSERVATION_JS = (
+    "(el, args) => { const current = "
+    + _NATIVE_SELECT_CURRENT_JS
+    + "; const snapshot = "
+    + _SNAPSHOT_FILLED_VALUE_JS
+    + r""";
+    const observed = current(el, args);
+    if (!observed || observed.value !== args.value || observed.label !== args.label) return null;
+    snapshot(el, {key: args.valueKey, typed: args.label, nativeValue: args.value});
+    return observed;
+}"""
+)
+
 _BIND_CONTEXT_IDENTITY_JS = (
     r"""(args) => {
     const tokenMap = window[args.storeKey];
@@ -1531,6 +1861,7 @@ _BIND_CONTEXT_IDENTITY_JS = (
 _CLEAN_GUARD_JS = r"""(args) => {
     const tokenMap = window[args.storeKey];
     const entry = tokenMap instanceof Map ? tokenMap.get(args.token) : null;
+    if (entry && entry.stopNativeFocusTracking) entry.stopNativeFocusTracking();
     if (entry && entry.observer) entry.observer.disconnect();
     if (entry && entry.contextObserver) entry.contextObserver.disconnect();
     if (entry && entry.focusListener && entry.el) {
@@ -1617,6 +1948,82 @@ _FRAME_SELECTOR_JS = r"""(el) => {
     }
     return null;
 }"""
+
+# The active modal dialog holding the element under a viewport point. Walks the
+# hit-tested chain from the top document down through same-origin frames; the
+# first dialog met is the outermost one, and hit testing already follows the
+# stacking order, so a dialog painted over another wins. The box is the
+# dialog's first element (from the dialog down toward the hit) that does not
+# cover the viewport, so a Bootstrap ``.modal`` overlay yields its
+# ``.modal-dialog``. Answers ``{status: "dialog", box}``, ``{status: "none"}``,
+# or ``{status: "unknown"}`` when a frame on the chain is cross-origin or
+# transformed and the chain cannot be followed.
+_DIALOG_AT_JS = r"""([x, y]) => {
+    // Modal dialogs only: a popover or date picker with role="dialog" leaves
+    // the page behind live, and its rows stay identity evidence.
+    const SELECTOR = 'dialog:modal, [aria-modal="true"], [role="alertdialog"], ' +
+        '.modal.show';
+    const visible = (el, win) => {
+        const style = win.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        if (parseFloat(style.opacity) < 0.05) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+    };
+    let doc = document;
+    let win = window;
+    let ox = 0, oy = 0;
+    let px = x, py = y;
+    for (let depth = 0; depth < 9; depth++) {
+        const hit = doc.elementFromPoint(px, py);
+        if (!hit) return {status: 'none'};
+        const dialog = hit.closest(SELECTOR);
+        if (dialog && visible(dialog, win)) {
+            const chain = [];
+            for (let node = hit; node; node = node.parentElement) {
+                chain.push(node);
+                if (node === dialog) break;
+            }
+            const vw = win.innerWidth, vh = win.innerHeight;
+            let box = null;
+            for (let i = chain.length - 1; i >= 0; i--) {
+                const r = chain[i].getBoundingClientRect();
+                if (r.width <= 0 || r.height <= 0) continue;
+                if (r.width >= 0.95 * vw && r.height >= 0.95 * vh) continue;
+                box = r;
+                break;
+            }
+            if (!box) box = dialog.getBoundingClientRect();
+            const left = Math.max(0, box.left), top = Math.max(0, box.top);
+            const right = Math.min(vw, box.right), bottom = Math.min(vh, box.bottom);
+            if (right <= left || bottom <= top) return {status: 'unknown'};
+            return {status: 'dialog', box: [
+                Math.floor(left + ox), Math.floor(top + oy),
+                Math.ceil(right - left), Math.ceil(bottom - top),
+            ]};
+        }
+        const tag = hit.localName;
+        if (tag !== 'iframe' && tag !== 'frame') return {status: 'none'};
+        let child;
+        try { child = hit.contentDocument; } catch (_) { child = null; }
+        if (!child || !hit.contentWindow) return {status: 'unknown'};
+        const r = hit.getBoundingClientRect();
+        if (!(hit.offsetWidth > 0 && hit.offsetHeight > 0)) return {status: 'unknown'};
+        if (Math.abs(r.width / hit.offsetWidth - 1) > 0.01 ||
+                Math.abs(r.height / hit.offsetHeight - 1) > 0.01) {
+            return {status: 'unknown'};
+        }
+        const style = win.getComputedStyle(hit);
+        const dx = r.left + hit.clientLeft + (parseFloat(style.paddingLeft) || 0);
+        const dy = r.top + hit.clientTop + (parseFloat(style.paddingTop) || 0);
+        ox += dx; oy += dy;
+        px -= dx; py -= dy;
+        doc = child;
+        win = hit.contentWindow;
+    }
+    return {status: 'unknown'};
+}"""
+
 
 _PROJECT_FRAME_POINT_JS = r"""(el, point) => {
     const [px, py] = point;
@@ -1831,6 +2238,8 @@ class PlaywrightBackend:
         except Exception:  # noqa: BLE001 - a page stand-in without events
             pass
         self._structural_tokens: dict[str, _StructuralGuard] = {}
+        self._native_select_captures: dict[str, _NativeSelectBinding] = {}
+        self._native_selected_proof: Optional[_NativeSelectBinding] = None
         self._guarded_coordinate: Optional[_CoordinateGuard] = None
         # One-shot expectation that the next click closes this page surface
         # (Step.closes_surface; see expect_page_close).
@@ -2309,6 +2718,43 @@ class PlaywrightBackend:
         except Exception:
             return None
         return result or None
+
+    def dialog_region_at(
+        self, x: int, y: int
+    ) -> tuple[str, Optional[tuple[int, int, int, int]]]:
+        """The box of the active dialog holding viewport pixel (x, y).
+
+        Returns ``("dialog", (x, y, w, h))`` when the element under the point
+        sits in an open modal dialog (a modal ``dialog``, ``aria-modal``, an
+        ``alertdialog``, or a shown Bootstrap modal), the outermost one along the frame
+        chain; ``("none", None)`` when the chain was followed and no dialog
+        holds the point; ``("unknown", None)`` when it could not be followed
+        (a cross-origin or transformed frame, an evaluation error). Callers
+        that need a dialog treat ``unknown`` as a failed check. Never raises.
+        """
+        try:
+            result = self.page.evaluate(_DIALOG_AT_JS, [int(x), int(y)])
+        except Exception:
+            return ("unknown", None)
+        if not isinstance(result, dict):
+            return ("unknown", None)
+        status = result.get("status")
+        if status == "none":
+            return ("none", None)
+        box = result.get("box")
+        if (
+            status == "dialog"
+            and isinstance(box, list)
+            and len(box) == 4
+            and all(isinstance(v, (int, float)) for v in box)
+            and box[2] > 0
+            and box[3] > 0
+        ):
+            bx, by, bw, bh = (int(v) for v in box)
+            if not (bx <= int(x) < bx + bw and by <= int(y) < by + bh):
+                return ("unknown", None)
+            return ("dialog", (bx, by, bw, bh))
+        return ("unknown", None)
 
     def identity_candidates_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
         """Census of the rows that show the same record identity as (x, y).
@@ -3215,9 +3661,12 @@ class PlaywrightBackend:
         """Locate ``locator``'s element in the live DOM; return its center.
 
         Resolves by the recorded ``selector`` first, else by ``role`` +
-        ``name``. Requires a UNIQUE, on-screen, UNOCCLUDED match. A missing,
-        off-viewport, or covered element returns None; ambiguity is an explicit
-        structural refusal and cannot fall through to a weaker pixel match.
+        ``name``. Requires a UNIQUE, on-screen, UNOCCLUDED match. A missing
+        element (or a transparent one, ``opacity: 0``) returns None.
+        Ambiguity raises ``StructuralResolutionRefused``; one candidate that
+        is covered, off-viewport, zero-sized or outside its recorded frame
+        chain raises ``StructuralElementNotActionable``. Neither may fall
+        through to a weaker pixel match.
         The returned handle binds an opaque one-shot token to the exact Element
         and its enclosing-row identity for same-operation delivery.
         """
@@ -3248,18 +3697,16 @@ class PlaywrightBackend:
                     },
                 )
                 box = loc.bounding_box()
-                if (
-                    not isinstance(observed, dict)
-                    or not isinstance(box, dict)
-                    or not self._frame_chain_matches(
-                        scope, tuple(locator.frame_path or ()), box
-                    )
-                ):
+                if not isinstance(box, dict):
                     self._cleanup_guard(token, scope)
-                    return None
+                    raise StructuralElementNotActionable(
+                        "DOM candidate is not rendered or has no bounding box"
+                    )
                 if float(box["width"]) <= 0 or float(box["height"]) <= 0:
                     self._cleanup_guard(token, scope)
-                    return None
+                    raise StructuralElementNotActionable(
+                        f"DOM candidate has non-positive dimensions: {box['width']}x{box['height']}"
+                    )
                 point = (
                     int(round(float(box["x"]) + float(box["width"]) / 2)),
                     int(round(float(box["y"]) + float(box["height"]) / 2)),
@@ -3267,7 +3714,23 @@ class PlaywrightBackend:
                 vw, vh = self.viewport
                 if not (0 <= point[0] < vw and 0 <= point[1] < vh):
                     self._cleanup_guard(token, scope)
+                    raise StructuralElementNotActionable(
+                        f"DOM candidate center is outside the viewport: point={point}, viewport=({vw}, {vh})"
+                    )
+                if not isinstance(observed, dict) and loc.evaluate(_TRANSPARENT_JS):
+                    # A transparent control laid over its own visible box (a
+                    # styled checkbox, radio, switch or file input) never
+                    # binds, and can't be shown covered either. It keeps the
+                    # visual ladder, as before.
+                    self._cleanup_guard(token, scope)
                     return None
+                if not isinstance(observed, dict) or not self._frame_chain_matches(
+                    scope, tuple(locator.frame_path or ()), box
+                ):
+                    self._cleanup_guard(token, scope)
+                    raise StructuralElementNotActionable(
+                        "DOM candidate is covered or outside its recorded frame chain"
+                    )
                 # The handle's region is the target's VISIBLE box: its
                 # bounding box clipped to the viewport. A control that runs a
                 # few pixels past the viewport edge (a full-width section
@@ -3282,7 +3745,9 @@ class PlaywrightBackend:
                 x1, y1 = min(vw, bx + bw), min(vh, by + bh)
                 if x1 <= x0 or y1 <= y0:
                     self._cleanup_guard(token, scope)
-                    return None
+                    raise StructuralElementNotActionable(
+                        "DOM candidate visible region clipped to viewport is empty"
+                    )
                 region = (x0, y0, x1 - x0, y1 - y0)
             except Exception:
                 self._cleanup_guard(token, scope)
@@ -3439,6 +3904,321 @@ class PlaywrightBackend:
             )
         except Exception:
             return False
+
+    def _native_select_args(self, binding: _NativeSelectBinding) -> dict[str, Any]:
+        guard = binding.guard
+        return {
+            "storeKey": self._structural_store_key,
+            "tokenAttribute": self._token_attribute(guard.token),
+            "token": guard.token,
+            "selector": binding.selector,
+            "framePath": list(guard.frame_path),
+            "context": guard.context,
+            "options": binding.options,
+            "value": binding.value,
+            "label": binding.label,
+            "fillKey": self._fill_store_key,
+            "valueKey": self._fill_value_slot,
+        }
+
+    def begin_native_select(
+        self, x: Optional[int] = None, y: Optional[int] = None
+    ) -> Optional[str]:
+        """Retain a focused select, or the exact unfocused select at a point."""
+
+        token = uuid.uuid4().hex
+        frame_path: list[str] = []
+        args: dict[str, Any] = {
+            "storeKey": self._structural_store_key,
+            "tokenAttribute": self._token_attribute(token),
+            "token": token,
+            "fillKey": self._fill_store_key,
+        }
+        if x is None and y is None:
+            observed = self._focused_element_call(
+                _NATIVE_SELECT_CAPTURE_JS,
+                arg=args,
+                with_arg=True,
+                frame_path_out=frame_path,
+            )
+        elif x is not None and y is not None:
+            point = self._frame_point(x, y)
+            if point is None:
+                return None
+            frame_path = list(point.frame_path)
+            try:
+                observed = point.scope.evaluate(
+                    _NATIVE_SELECT_CAPTURE_AT_JS, {**args, "x": point.x, "y": point.y}
+                )
+            except Exception:
+                observed = None
+        else:
+            return None
+        retained = False
+        try:
+            if not isinstance(observed, dict):
+                return None
+            scope = self._resolve_scope(tuple(frame_path))
+            if scope is None:
+                return None
+            binding = _NativeSelectBinding(
+                guard=_StructuralGuard(token, scope, tuple(frame_path)),
+                selector=observed["selector"],
+                options=observed["options"],
+                value=observed["value"],
+                label=observed["label"],
+            )
+            # Bound retention even if a recorder abandons a pending pair.
+            if len(self._native_select_captures) >= 16:
+                self.cancel_native_select(next(iter(self._native_select_captures)))
+            self._native_select_captures[token] = binding
+            retained = True
+            return token
+        except Exception:
+            return None
+        finally:
+            if not retained:
+                # A frame selector can become ambiguous after the page-local
+                # bind. Clean this token even if its original scope no longer
+                # resolves; navigation itself disposes detached documents.
+                try:
+                    for frame in self.page.frames:
+                        self._cleanup_guard(token, frame)
+                except Exception:
+                    pass
+
+    def begin_native_select_at(self, x: int, y: int) -> Optional[str]:
+        """Observe an exact native control before a recorded pointer gesture."""
+
+        return self.begin_native_select(x, y)
+
+    def continue_native_select(self, token: str) -> bool:
+        """Prove the recorded click retained control, census and selected value."""
+
+        binding = self._native_select_captures.get(token)
+        if binding is None:
+            return False
+        guard = binding.guard
+        try:
+            loc = self._token_locator(guard.token, guard.scope)
+            if loc.count() != 1:
+                return False
+            box = loc.bounding_box()
+            if not isinstance(box, dict) or not self._frame_chain_matches(
+                guard.scope, guard.frame_path, box
+            ):
+                return False
+            return bool(
+                loc.evaluate(
+                    _NATIVE_SELECT_CONTINUE_JS, self._native_select_args(binding)
+                )
+            )
+        except Exception:
+            return False
+
+    def cancel_native_select(self, token: str) -> None:
+        """Discard one recording observation without input."""
+
+        binding = self._native_select_captures.pop(token, None)
+        if binding is not None:
+            self._cleanup_guard(binding.guard.token, binding.guard.scope)
+
+    def finish_native_select(self, token: str) -> Optional[dict[str, Any]]:
+        """Read the same control after Enter; changed controls/censuses refuse."""
+
+        binding = self._native_select_captures.pop(token, None)
+        if binding is None:
+            return None
+        guard = binding.guard
+        value_before, label_before = binding.value, binding.label
+        try:
+            loc = self._token_locator(guard.token, guard.scope)
+            if loc.count() != 1:
+                return None
+            box = loc.bounding_box()
+            if not isinstance(box, dict) or not self._frame_chain_matches(
+                guard.scope, guard.frame_path, box
+            ):
+                return None
+            observed = loc.evaluate(
+                _NATIVE_SELECT_CURRENT_JS, self._native_select_args(binding)
+            )
+            if not isinstance(observed, dict):
+                return None
+            # Apply the same duplicate/disabled/label rules as replay.
+            contract = NativeSelectContract.model_validate(observed)
+            if (
+                not isinstance(value_before, str)
+                or not isinstance(label_before, str)
+                or contract.value == value_before
+            ):
+                return None
+            binding.value, binding.label = contract.value, contract.label
+            observed = loc.evaluate(
+                _NATIVE_SELECT_COMMIT_OBSERVATION_JS, self._native_select_args(binding)
+            )
+            if not isinstance(observed, dict):
+                return None
+            return {
+                **observed,
+                "value_before": value_before,
+                "label_before": label_before,
+                "selector": binding.selector,
+                "frame_path": list(guard.frame_path),
+            }
+        except Exception:
+            return None
+        finally:
+            self._cleanup_guard(guard.token, guard.scope)
+
+    def select_native_option_guarded(
+        self,
+        contract: NativeSelectContract,
+        *,
+        locator: StructuralLocator,
+        handle: StructuralHandle,
+    ) -> ActionDeliveryReceipt:
+        """Select one exact option using a consumed structural resolution."""
+
+        previous = self._native_selected_proof
+        self._native_selected_proof = None
+        if previous is not None:
+            self._cleanup_guard(previous.guard.token, previous.guard.scope)
+        fingerprint = handle.target_fingerprint
+        guard = self._structural_tokens.pop(fingerprint or "", None)
+        if guard is None or not fingerprint:
+            raise StructuralResolutionRefused(
+                "native selection requires a fresh handle"
+            )
+        retain = False
+        try:
+            if not isinstance(contract, NativeSelectContract) or not locator.selector:
+                raise StructuralResolutionRefused(
+                    "native selection requires an exact contract"
+                )
+            resolved = self._locator_with_scope(locator)
+            if resolved is None:
+                raise StructuralResolutionRefused(
+                    "native selection target is unavailable"
+                )
+            scope, loc = resolved
+            if (
+                scope != guard.scope
+                or tuple(locator.frame_path or ()) != guard.frame_path
+                or not self._context_guard_is_current(guard)
+                or loc.count() != 1
+                or not self._guard_is_current(loc, guard.token)
+            ):
+                raise StructuralResolutionRefused(
+                    "native selection target or context changed"
+                )
+            box = loc.bounding_box()
+            if not isinstance(box, dict) or not self._frame_chain_matches(
+                scope, guard.frame_path, box
+            ):
+                raise StructuralResolutionRefused(
+                    "native selection frame chain changed"
+                )
+            binding = _NativeSelectBinding(
+                guard=guard,
+                selector=locator.selector,
+                options=[option.model_dump() for option in contract.options],
+                value=contract.value,
+                label=contract.label,
+            )
+            self._assert_qualification_environment_current()
+            receipt_fingerprint = structural_resolution_fingerprint(locator, handle)
+            # The binding is independent of resolver tokens created during
+            # post-action verification. Keep it even if delivery is uncertain.
+            self._native_selected_proof = binding
+            retain = True
+            try:
+                result = loc.evaluate(
+                    _NATIVE_SELECT_DELIVER_JS, self._native_select_args(binding)
+                )
+            except Exception as exc:
+                raise ActionDeliveryUncertain(
+                    operation="guarded_dom_select",
+                    native=False,
+                    target_fingerprint=receipt_fingerprint,
+                    cause_type=type(exc).__name__,
+                ) from exc
+            status = result.get("status") if isinstance(result, dict) else None
+            if status == "refused":
+                retain = False
+                self._native_selected_proof = None
+                raise StructuralResolutionRefused(
+                    "native selection failed its atomic guard"
+                )
+            if status != "delivered":
+                raise ActionDeliveryUncertain(
+                    operation="guarded_dom_select",
+                    native=False,
+                    target_fingerprint=receipt_fingerprint,
+                    cause_type="SelectionContinuityLost",
+                )
+            return ActionDeliveryReceipt(
+                receipt_id=f"playwright-{uuid.uuid4().hex}",
+                operation="guarded_dom_select",
+                native=False,
+                target_fingerprint=receipt_fingerprint,
+                selection_value_sha256=hashlib.sha256(
+                    contract.value.encode("utf-8")
+                ).hexdigest(),
+                selection_commit_key=None,
+                delivered_at=datetime.now(timezone.utc).isoformat(),
+            )
+        except (ActionDeliveryUncertain, StructuralResolutionRefused):
+            raise
+        except Exception as exc:
+            raise StructuralResolutionRefused(
+                "native selection unavailable before dispatch"
+            ) from exc
+        finally:
+            if not retain:
+                self._cleanup_guard(guard.token, guard.scope)
+
+    def native_selected_option_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """Consume proof of the selected value on the original delivered node."""
+
+        binding = self._native_selected_proof
+        self._native_selected_proof = None
+        if binding is None:
+            return None
+        guard = binding.guard
+        try:
+            point = self._frame_point(x, y)
+            if (
+                point is None
+                or point.scope != guard.scope
+                or point.frame_path != guard.frame_path
+                or not self._context_guard_is_current(guard)
+            ):
+                return None
+            loc = self._token_locator(guard.token, guard.scope)
+            if loc.count() != 1 or not loc.evaluate(
+                "(el, p) => document.elementFromPoint(p[0], p[1]) === el",
+                [point.x, point.y],
+            ):
+                return None
+            observed = loc.evaluate(
+                _NATIVE_SELECT_CURRENT_JS, self._native_select_args(binding)
+            )
+            if (
+                not isinstance(observed, dict)
+                or observed.get("value") != binding.value
+                or observed.get("label") != binding.label
+            ):
+                return None
+            return {
+                **observed,
+                "selector": binding.selector,
+                "frame_path": list(guard.frame_path),
+            }
+        except Exception:
+            return None
+        finally:
+            self._cleanup_guard(guard.token, guard.scope)
 
     def act_structural(
         self,
@@ -4180,7 +4960,13 @@ class PlaywrightBackend:
             operation="guarded_dom_type",
             # Keys go through the leased element itself, never the page
             # keyboard, so delivery stays bound to the checked target.
-            deliver=lambda locator: locator.press_sequentially(text, timeout=1000),
+            deliver=lambda locator: (
+                (
+                    _is_iso_date(text)
+                    and _fill_iso_date(locator.element_handle(timeout=1000), text)
+                )
+                or locator.press_sequentially(text, timeout=1000)
+            ),
         )
         self._snapshot_focused_field(text)
         return receipt
@@ -4743,11 +5529,39 @@ class PlaywrightBackend:
         except Exception:
             return False
 
+    def _focused_element_handle(self) -> Any:
+        """The focused element's handle, through frames and open shadow
+        roots, or None."""
+
+        scope: Any = self.page
+        for _depth in range(9):
+            handle = scope.evaluate_handle(_ACTIVE_ELEMENT_JS).as_element()
+            if handle is None:
+                return None
+            if handle.evaluate("e => e.localName") not in {"iframe", "frame"}:
+                return handle
+            scope = handle.content_frame()
+            if scope is None:
+                return None
+        return None
+
+    def _fill_focused_iso_date(self, text: str) -> bool:
+        if not _is_iso_date(text):
+            return False
+        try:
+            target = self._focused_element_handle()
+        except Exception:  # noqa: BLE001 - unreadable focus: type as before
+            return False
+        return target is not None and _fill_iso_date(target, text)
+
     def _deliver_text(self, text: str, per_key: Callable[[], None]) -> None:
         """Insert ``text`` at the caret in one call when the focused element
         is an ordinary text field (native fill: the field's ``input`` event
         fires, and ``change`` on blur, as for typing); otherwise ``per_key``
-        types it key by key."""
+        types it key by key. An ISO date into a native date input is set
+        with ``fill`` (see :func:`_fill_iso_date`)."""
+        if self._fill_focused_iso_date(text):
+            return
         if self.native_fill and text and self._focused_plain_text_field():
             self.page.keyboard.insert_text(text)
             return

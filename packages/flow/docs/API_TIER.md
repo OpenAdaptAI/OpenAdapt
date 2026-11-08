@@ -1,11 +1,19 @@
 # API steps from a recording's network traffic
 
-**Scope: a single HTML form submission.** An API step repeats one
-`application/x-www-form-urlencoded` POST of one HTML form, read again from
-the live page, in place of the clicks and keystrokes that filled it. It is
-not a general API client: JSON or script-built requests, more than one
-write, multi-page server state, and forms whose script validates or rewrites
-values all stay on the GUI.
+**Scope: a single HTML form submission.** An API step repeats one POST of
+one HTML form, read again from the live page, in place of the clicks and
+keystrokes that filled it. The POST is `application/x-www-form-urlencoded`
+or `multipart/form-data` with no file attached, and either the browser
+submits the form or the page's script sends the form's fields to another
+endpoint (see [Saves the page's script sends](#saves-the-pages-script-sends)).
+It is not a general API client: JSON and GraphQL bodies, uploads and
+multi-page server state stay on the GUI. Other writes during the replaced steps are a
+declared sequence (below): the page's own background requests are listed
+and left to the page, and a write a step caused is sent in its recorded
+place before the save and read back. A form whose script
+validates or rewrites values is run, not refused: the API step runs that
+script on the run's values before each save (below), and the save stays on
+the GUI when the script can't be run.
 
 The right-record check before the save and the record check after it stay
 the same. If anything the API step depends on has changed, the recorded GUI
@@ -69,6 +77,29 @@ every field it sent:
 | `select_label` | A select a recorded step typed an option's label into | The option with that label in the live form; refuse if it isn't exactly one |
 | `session` | A CSRF or session value the server issued | Read from the live form in this session |
 | `form_default` | The form's own default | Must still equal the recorded default |
+| `submitter` | The `name=value` the browser adds for the submit button the person clicked (`commit=Create`) | The live form must have exactly one enabled submit button that sends that value |
+| `empty_file` | A file input sent empty in a multipart save | The live form must have exactly the recorded file inputs; the API step never attaches a file |
+
+The save is sent with the encoding it was recorded with. A multipart save
+is encoded the way Chromium encodes a form with no file (each field a part,
+an empty file input a part with `filename=""`, line breaks as CRLF), with a
+boundary derived from the fields, so the same request always has the same
+bytes. A multipart save that attached a file isn't captured
+(`body_omitted: "multipart"`), so it isn't proposed. A form with no `action`
+posts to its own page and is matched as such.
+
+The submit button's pair is explained only by exactly one button whose value
+is written in the page. An `<input type=submit>` without a `value` sends the
+browser's own label, which the page doesn't state, so such a pair isn't
+explained. When the recording doesn't name the clicked control by `#id` or
+`[name]`, the button that sends the pair is the one clicked when the page's
+script runs; a recorded click on another control refuses the proposal.
+
+The save's success signal is the address it sent the browser to. A record's
+own address (`/ticket/17`, `/ipam/ip-addresses/3/`) is kept whole with each
+number generalized, since the number alone matches almost any URL. A query
+value that is a long hash or nonce (a comment's `moderation-hash`) must be
+present, with any value.
 
 A field is bound by provenance: which recorded step typed into it (the
 field the click before the typing targeted), never by its value matching a
@@ -93,10 +124,10 @@ doesn't propose an API step in these cases:
 - the save sends a secret field;
 - the form page wasn't captured;
 - the save isn't the program's last step;
-- the steps the API step would replace also sent another write (a POST,
-  PUT, PATCH or DELETE other than the save, such as a reservation, an
-  autosave or a background call). Admission and runs refuse such a binding
-  too;
+- the steps the API step would replace also sent a write (a POST, PUT,
+  PATCH or DELETE other than the save) that is neither the page's own
+  request nor a write the API step can repeat (see "Other writes in the
+  span");
 - the program has branches;
 - a URL value equals two inputs' values (ambiguous), or the save or a
   pre-check is on another origin than the form;
@@ -113,6 +144,68 @@ it sends the save. On-screen checks of steps that made no request (layout
 and region checks) are screen-only. They are listed for the person who
 admits the step and aren't repeated.
 
+## Saves the page's script sends
+
+Some pages don't submit the form. Their script reads the form's fields and
+posts them to another endpoint (WordPress's category form posts to
+`admin-ajax.php`, not to its `action`). The compiler takes the form whose
+controls name every field the request sent, on the last captured page
+before the save; two such forms refuse the proposal. The binding names the
+form's own action (`form_action`), and the request's endpoint.
+
+Such a save always runs the page's script first (below): the scratch page's
+blocked request to the endpoint is the save compared, and it gets an empty
+`200` so the script carries on. The API step sends only when the script
+sends exactly the body the API step built. A page that no longer has script
+keeps the save on the GUI. There is no redirect to read, so success is the
+recorded status and then the record check.
+
+## Other writes in the span
+
+Every other write sent while the replaced steps ran is declared in the
+proposal (`web_form.writes`), in recorded order, with one of two roles:
+
+- **ambient**: the page sent it on its own. It is a script request (fetch or
+  XHR) from another document than the form, one that was loaded before the
+  form opened, to an endpoint the form page's source doesn't name. OpenEMR's
+  tab shell, for example, posts `execute_background_services.php` on a
+  timer while the patient form is open. No replaced step caused it, so the
+  API step neither sends nor waits for it: the live page goes on sending it,
+  as it does under the GUI steps. `api show` lists it with that evidence.
+- **step**: a replaced step caused it. The API step sends it, rebuilt the
+  same way as the save (typed parameters by which step typed them, session
+  values and unchanged form defaults from the live form), in its recorded
+  place before the save. A write whose body isn't form-encoded, that carries
+  values in its URL or another value, that went to another origin, or that
+  wasn't accepted when recorded refuses the proposal. Before each save the
+  page's own script must send each step write itself, with the same body,
+  when it runs on the run's values in the scratch page (there the request
+  never reaches the app; the page gets an empty 200, as the recorded write
+  was accepted), and each request it sent matches one step write;
+  otherwise the GUI steps run. Each step write is
+  read back by the record check declared on the step it was sent during:
+  admission refuses one whose step has none, and the binding's record check
+  is the save's followed by those steps' checks. If a write fails or answers
+  outside its recorded status, the run stops there: nothing after it is
+  sent, nothing is retried or redone through the GUI, and the run reconciles
+  by reading the records back. Under approval, the digest the person
+  approves covers every request in the sequence.
+
+A write that fits neither role keeps the save on the GUI.
+
+In a durable run, the span persists a write-ahead checkpoint before its
+first request leaves: the folded steps' checkpoints and a
+delivery-uncertain pause at the save. If the process stops anywhere in the
+sequence, a resume starts at the save, which is only reconciled (the
+attended reconcile action reads the records back) and never sent again,
+and no write of the sequence is resent. The save's own outcome replaces
+that pause; once its checkpoint is persisted, the pause is removed (only if
+it is still exactly the one written). A resumed leg uses the continuation
+guard's `delivery_started` phase as its write-ahead.
+
+`api admit` lists each request the API step leaves to the page, with the
+evidence, before the person types `admit`.
+
 ## What happens at run time
 
 The API step uses the replaying browser's own session: its requests go
@@ -125,16 +218,53 @@ Before it sends the save, the API step:
 1. reads the form page again in this session;
 2. refuses if the form's fields or its client-side validation rules (for
    example, OpenEMR's `constraints` object) differ from the recording;
-3. refuses if the form runs script it can't run: an `on*` handler on the
-   form (`onsubmit`) or on a field it sends (`onchange`, `oninput`,
-   `onblur`, script that can validate or rewrite a value), a page script
-   listening for the submit, or a validate.js rule kind other than
-   `presence`, `length`, `format`, `numericality` and `email`;
+3. refuses if the page's script isn't the script recorded with the
+   proposal (`client_scripts`): every script the page loads, by URL;
+   whether it has inline script; each `on*` handler of the form, of a field
+   it sends and of the form's buttons, with a digest of its source; a page
+   script listening for submit; and validate.js rule kinds other than
+   `presence`, `length`, `format`, `numericality` and `email`, such as
+   OpenEMR's `pastDate`;
 4. builds the body and checks it the way the browser would before it
    submits: native HTML constraints (`required`, `minlength`, `maxlength`,
    `pattern`, `min`, `max`, and the `email`, `url`, `number` and `date`
    input types) and the page's validate.js rules;
-5. runs the pre-checks.
+5. when the page has any script, **runs it** (`runtime/actuators/form_eval.py`),
+   the way the person's steps would:
+   - it opens the form page in a scratch copy of the live session: a
+     separate browser context with the session's cookies and no service
+     workers. Every request of every page in it goes through one route,
+     every WebSocket is closed, and EventSource, RTCPeerConnection,
+     `sendBeacon` and `window.open` do nothing. While the page loads, only
+     same-origin GET requests go through. Once it has loaded, everything is
+     blocked except the exact scripts and stylesheets the page loaded, the
+     reads the person's click made in the recording (`submitter_requests`;
+     on OpenEMR, the duplicate search) and the static `.js` and `.css` files
+     of a recorded read's own frame, so nothing the page does there can
+     write. A popup or new tab, and a form submit or a blocked channel in
+     any frame, make the run unevaluable;
+   - it types the run's typed and picked values with real key events, so
+     key handlers (`onkeyup`, `onchange`) run as they do for the person. A
+     field that isn't on screen when the form opens (on a tab the person
+     opened first) can't be typed with real key events, so the run is
+     unevaluable and the GUI steps run;
+   - it clicks the control the person clicked (`submitter`) with a real,
+     trusted click. When the recording names none it submits the form, and
+     a form whose buttons have click handlers is refused. When the click
+     shows a dialog from the recorded reads, it clicks the control the
+     person clicked to confirm (`confirm`; on OpenEMR, `#confirmCreate`),
+     in whichever frame has it;
+   - the page must then submit the form, exactly once: a last `submit`
+     listener sees it go through, the form's own `submit()` is called, or
+     the browser's POST reaches the route (blocked). The body compared is
+     the one the page submits, taken when it submits. Declared validate.js
+     `constraints` run too;
+   - the save goes ahead only when the page submitted once, raised no
+     error, showed no dialog, opened no window or socket, tried to send
+     nothing else, and the body equals the one the API step built (session
+     values aside). Any difference, and anything else, is a reason, and the
+     GUI steps run;
+6. runs the pre-checks.
 
 Each of these refusals means the save wasn't sent, so the GUI steps run.
 After the save request starts, the API tier's no-double-write rule
@@ -351,21 +481,28 @@ recording.
 
 - Web only. A desktop app, an RDP session or a Citrix session has no page
   requests to capture (`record --capture-network` refuses those backends).
-- One form save, posted as `application/x-www-form-urlencoded`. JSON bodies
-  built by script, multipart uploads, signed or computed fields, and saves
-  over a websocket aren't proposed.
+- One form save, URL-encoded or multipart with no file. JSON and GraphQL
+  bodies, file uploads, signed or computed fields, and saves over a
+  websocket aren't proposed. Step writes in the span must be URL-encoded.
+- A field the server fills in on every page load (a page-load time, a
+  per-record code, a date defaulting to today) is a form default that
+  differs on the next load, so the API step doesn't run and the GUI steps
+  do.
 - The server may enforce less than the page. On OpenEMR, the duplicate
   check and the required fields run only in the browser. The API step
   carries over the checks it can evaluate (pre-checks, native HTML
-  constraints and validate.js rules of the kinds above), and leaves a form
-  whose script it can't run to the GUI. A `pattern` is evaluated with
-  Python's regular expressions, which differ from the browser's in rare
-  syntax; one that doesn't compile keeps the save on the GUI. Letting
-  qualification show that the server enforces a script-only rule, so the
-  API step can run anyway, isn't built yet.
-- OpenEMR's new-patient form runs script on submit (`submitme(...)`) and on
-  each name field (`capitalizeMe`, which rewrites the typed value), and its
-  `constraints` use a custom `pastDate` rule. So its save stays on the GUI.
+  constraints and validate.js rules of the kinds above) and runs the
+  form's own script for the rest. A `pattern` is evaluated with Python's
+  regular expressions, which differ from the browser's in rare syntax; one
+  that doesn't compile keeps the save on the GUI.
+- Running the form's script covers what it does on `input`, `change`,
+  `blur`, the recorded click and `submit`, within a short settle time.
+  Script that validates later (after a timer or a server reply) isn't seen:
+  a form whose script needs the server while it validates is blocked and
+  stays on the GUI. Running it is evidence for one run's values, not a
+  proof that the two paths always agree; admitting the API step stays a
+  person's decision. Each save with script costs one extra load of the
+  form page.
 - Multi-step server state (wizards, uploads, locks held between pages) needs
   the whole request sequence, and isn't proposed.
 

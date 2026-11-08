@@ -36,8 +36,8 @@ from benchmark.effectbench.task_pack import (
 from benchmark.effectbench.task_pack.audit import audit_mockmed_oracle
 from benchmark.effectbench.task_pack.driver import run_mockmed_pack
 from benchmark.effectbench.task_pack.mockmed_tasks import MOCKMED_TASKS
-from openadapt_flow.benchmark.effectbench import OutcomeLabel, Substrate, summarize
-from openadapt_flow.benchmark.effectbench.schema import DivergenceCategory
+from benchmark.harness.effectbench import OutcomeLabel, Substrate, summarize
+from benchmark.harness.effectbench.schema import DivergenceCategory
 from openadapt_flow.runtime.effects.sql import assert_read_only_sql
 
 MANIFEST_PATH = Path(__file__).resolve().parents[1] / (

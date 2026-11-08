@@ -104,13 +104,16 @@ def _not_tier_one(kind: str) -> RecordSorError:
     )
 
 
-def load_observer(path: str | Path) -> tuple[SystemOfRecordObserver, dict[str, Any]]:
+def load_observer(
+    path: str | Path, *, for_run1: bool = False
+) -> tuple[SystemOfRecordObserver, dict[str, Any]]:
     """Build the observer from the ``verifier:`` section of ``path``.
 
     Returns the observer and the ``verifier:`` mapping as written in the file
     (environment references unexpanded). Any ``effects`` or ``record`` section
     is ignored, so the same ``verify.yaml`` can be used before and after its
-    contract exists.
+    contract exists. ``for_run1`` refuses mapped server-managed FHIR metadata
+    unless its output field is explicitly dropped from record comparisons.
 
     Raises:
         RecordSorError: the file has no usable ``verifier:`` section, the
@@ -119,10 +122,6 @@ def load_observer(path: str | Path) -> tuple[SystemOfRecordObserver, dict[str, A
     """
 
     import yaml
-
-    from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
-    from openadapt_flow.qualify.config import _expand
-    from openadapt_flow.verification import verifier_effect_tier
 
     source = Path(path)
     if not source.is_file():
@@ -134,6 +133,23 @@ def load_observer(path: str | Path) -> tuple[SystemOfRecordObserver, dict[str, A
     raw = data.get("verifier") if isinstance(data, dict) else None
     if not isinstance(raw, dict):
         raise RecordSorError(f"{source} has no verifier: section")
+    return observer_from_config(raw, for_run1=for_run1)
+
+
+def observer_from_config(
+    raw: Mapping[str, Any], *, for_run1: bool = False
+) -> tuple[SystemOfRecordObserver, dict[str, Any]]:
+    """Build the same SoR observer from a generated verifier declaration.
+
+    This does not compare snapshots, confirm effects or admit a compiled program.
+    Environment references stay unexpanded in the returned declaration.
+    """
+    from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
+    from openadapt_flow.qualify.config import _expand
+    from openadapt_flow.verification import verifier_effect_tier
+
+    if not isinstance(raw, Mapping):
+        raise RecordSorError("a verifier: mapping is required")
     missing: list[str] = []
     expanded = _expand({k: v for k, v in raw.items() if k != "session"}, missing)
     if missing:
@@ -156,6 +172,20 @@ def load_observer(path: str | Path) -> tuple[SystemOfRecordObserver, dict[str, A
             else type(exc).__name__
         )
         raise RecordSorError(f"invalid verifier section: {detail}") from None
+    if for_run1 and cfg.kind == "fhir":
+        from openadapt_flow.runtime.effects.fhir import DEFAULT_OBSERVATION_PATHS
+
+        for name, field_path in (cfg.field_paths or DEFAULT_OBSERVATION_PATHS).items():
+            volatile = field_path == "meta" or any(
+                field_path == path or field_path.startswith(path + ".")
+                for path in ("meta.lastUpdated", "meta.versionId")
+            )
+            if volatile and name not in cfg.records_drop_fields:
+                raise RecordSorError(
+                    f"run 1 cannot compare field {name!r} mapped to server-managed "
+                    f"FHIR path {field_path!r}; add {name!r} to "
+                    "verifier.records_drop_fields or remove it from field_paths"
+                )
     if cfg.candidates:
         raise RecordSorError("record --verify does not support verifier candidates")
     if cfg.kind in _NOT_SYSTEM_OF_RECORD:
@@ -286,9 +316,73 @@ def _param_lookup(params: Mapping[str, str]) -> tuple[dict[str, str], list[str]]
     return lookup, shared
 
 
-def _expr(value: Any, lookup: Mapping[str, str]) -> ValueExpr:
+_FLAG_WORDS = frozenset({"true", "false", "yes", "no", "on", "off"})
+
+
+def distinctive_value(value: Any) -> bool:
+    """True when a value is unlikely to equal another field's by chance.
+
+    Short values ("1", "F", "ab"), numbers ("1.50", "$30", "42"), booleans
+    and yes/no words repeat across fields (quantity and refills, a count and
+    an id, two flags), so equality alone does not show which parameter a
+    field holds.
+    """
+
+    if isinstance(value, bool):
+        return False
+    text = str(value).strip()
+    if len(text) < 3 or text.lower() in _FLAG_WORDS:
+        return False
+    try:
+        float(text.replace(",", "").replace("$", "").replace("%", ""))
+    except ValueError:
+        return True
+    return False
+
+
+def _value_counts(record: Mapping[str, Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for value in record.values():
+        if isinstance(value, _SCALARS) and value is not None and str(value) != "":
+            counts[str(value)] = counts.get(str(value), 0) + 1
+    return counts
+
+
+def _expr(
+    value: Any,
+    lookup: Mapping[str, str],
+    field: str,
+    counts: Mapping[str, int],
+    unbound: list[str],
+) -> ValueExpr:
+    """``value`` as its parameter, or as a literal when equality can't tell.
+
+    A field takes a parameter by value alone only when the value is
+    distinctive and no other field of the record holds it. Otherwise the
+    field's name must be the parameter's (``field_key``). The rest stay
+    literals, and ``unbound`` says why, so the reviewer can bind them.
+    """
+
+    from openadapt_flow.compiler.distill import field_key
+
     name = lookup.get(str(value))
-    return ValueExpr(param=name) if name else ValueExpr(literal=str(value))
+    if not name:
+        return ValueExpr(literal=str(value))
+    if field_key(field) == field_key(name):
+        return ValueExpr(param=name)
+    if distinctive_value(value) and counts.get(str(value), 0) <= 1:
+        return ValueExpr(param=name)
+    why = (
+        "it is held by more than one field"
+        if counts.get(str(value), 0) > 1
+        else "it is short, a number or a flag"
+    )
+    unbound.append(
+        f"field {field!r} equals parameter {name!r}'s value, but {why}; "
+        "the observed value is kept as a literal (bind it by hand if the "
+        "field holds that parameter)"
+    )
+    return ValueExpr(literal=str(value))
 
 
 def _describe(expr: ValueExpr) -> str:
@@ -303,7 +397,9 @@ def propose_effects(
     lookup, shared = _param_lookup(dict(params or {}))
     proposal = ContractProposal(not_proposed=list(shared))
 
+    unbound: list[str] = []
     for record in diff.created:
+        counts = _value_counts(record)
         match: dict[str, ValueExpr] = {}
         skipped: list[str] = []
         for name, value in sorted(record.items()):
@@ -312,7 +408,7 @@ def propose_effects(
             if not isinstance(value, _SCALARS):
                 skipped.append(name)
                 continue
-            match[name] = _expr(value, lookup)
+            match[name] = _expr(value, lookup, name, counts, unbound)
         if skipped:
             proposal.not_proposed.append(
                 f"new record: nested field(s) {', '.join(skipped)} are not matched"
@@ -338,7 +434,16 @@ def propose_effects(
         )
 
     for change in diff.changed:
-        identity = {str(diff.identity_field): _expr(change.identity, lookup)}
+        counts = _value_counts(change.after)
+        identity = {
+            str(diff.identity_field): _expr(
+                change.identity,
+                lookup,
+                str(diff.identity_field),
+                counts,
+                unbound,
+            )
+        }
         for item in change.changes:
             if item.after is None or str(item.after) == "":
                 proposal.not_proposed.append(
@@ -350,7 +455,7 @@ def propose_effects(
                     f"changed record: nested field {item.field!r} changed"
                 )
                 continue
-            value = _expr(item.after, lookup)
+            value = _expr(item.after, lookup, item.field, counts, unbound)
             proposal.effects.append(
                 Effect(
                     kind=EffectKind.FIELD_EQUALS,
@@ -367,6 +472,7 @@ def propose_effects(
                 )
             )
 
+    proposal.not_proposed.extend(unbound)
     if diff.removed:
         proposal.not_proposed.append(
             f"{len(diff.removed)} record(s) disappeared; no effect kind checks "

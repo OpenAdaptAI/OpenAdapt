@@ -45,6 +45,34 @@ field's identity check: OCR read only part of the patient banner (coverage
 an uncommitted tree got past that check and was refused at the save by the
 frame lease (finding 5).
 
+## Linux (AT-SPI)
+
+`qualify_linux.py` does the same on Linux with `LinuxBackend`, on
+[`tests/native_apps/chart_gtk.py`](../../tests/native_apps/chart_gtk.py), the
+GTK3 counterpart of the Cocoa app, and adds a governed run of the unrepaired
+bundle on the old version. The `flow-linux-atspi` CI job runs it; locally,
+`benchmark/linux_container/run.sh` runs it in a container (Xvfb, openbox,
+session D-Bus, AT-SPI).
+
+[Result, 2026-11-03](results/linux-atspi-20261103.json) (clean tree,
+`d26f3e16f`; the fixture qualification is
+[here](results/linux-atspi-fixture-20261103.json)):
+
+| Check | Result |
+| --- | --- |
+| Demonstration recorded and compiled, certified `clinical-write`, every click with an AT-SPI locator | Yes |
+| Governed run (`standard`) on the old version | `VERIFIED`, exactly one new row |
+| Another patient's chart; a look-alike chart (one MRN character different) | Both stopped at the first click's identity check, nothing written |
+| New version stops at the notice; "Later" admitted on `element_and_record_check (button 'Later')` | Yes |
+| Probe, fault campaign, one scripted approval, resumed run | Passed; `VERIFIED`, exactly one new row |
+| `demo` profile, and no verifier | Refused, nothing written |
+
+Getting there found three backend gaps, now fixed: GTK refuses `grab_focus` on
+a top-level frame, so `LinuxBackend` refused every physical click; the
+AT-SPI registry can synthesize input only when the session bus starts after
+`DISPLAY` is set; and RapidOCR misses text in a tight crop of a GTK entry, so
+typed input is now read back from the field over AT-SPI.
+
 ## Findings
 
 Each is a fail-closed refusal, not a wrong action.

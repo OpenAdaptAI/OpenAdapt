@@ -312,10 +312,11 @@ def run_case(
 
 def main(argv: Optional[list[str]] = None) -> int:
     import yaml
-
     from openadapt_flow.ensure_record import load_contract
 
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     ap.add_argument("--suite", required=True)
     ap.add_argument(
         "--sha256", required=True, help="the frozen digest; refuses any other file"

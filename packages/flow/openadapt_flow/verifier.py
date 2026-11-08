@@ -67,12 +67,20 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator, Optional, Union
 
+from openadapt_flow.complete_read import CompleteReadProvider
+from openadapt_flow.runtime.effects.db_snapshot import (
+    DEFAULT_READ_ROW_BUDGET,
+    TableDiff,
+    diff,
+    take_snapshot,
+)
 from openadapt_flow.runtime.effects.db_snapshot import Snapshot as DatabaseSnapshot
-from openadapt_flow.runtime.effects.db_snapshot import TableDiff, diff, take_snapshot
 from openadapt_flow.runtime.effects.late_write import (
     EVIDENCE_KEY,
     LATER_WRITE_DISPUTED,
+    LATER_WRITE_UNJUDGED,
     LateOutcome,
+    parse_time,
     seconds_until,
     state_problem,
 )
@@ -290,9 +298,11 @@ class Contract:
     def digest(self) -> str:
         """SHA-256 of the contract as parsed: part of a write's identity."""
 
+        config = self.config.model_dump(mode="json")
+        config["verifier"] = self._verifier_dump()
         body = json.dumps(
             {
-                "config": self.config.model_dump(mode="json"),
+                "config": config,
                 "writes": list(self.writes),
             },
             sort_keys=True,
@@ -310,11 +320,19 @@ class Contract:
         return _digest(
             {
                 "environment": self.config.environment_id,
-                "verifier": _strip(
-                    self.config.verifier.model_dump(mode="json"), drop_secrets=True
-                ),
+                "verifier": _strip(self._verifier_dump(), drop_secrets=True),
             }
         )
+
+    def _verifier_dump(self) -> dict[str, Any]:
+        """The verifier as hashed: fields that lost their defaults still hash
+        as their old values, so contracts written before keep their digests."""
+
+        from openadapt_flow.deployment import legacy_hash_dump
+
+        dumped = self.config.verifier.model_dump(mode="json")
+        legacy_hash_dump(dumped, defaults_excluded=False)
+        return dumped
 
     @property
     def shape(self) -> str:
@@ -757,6 +775,9 @@ class RecheckResult:
     #: The frame's closed evidence since the post-save read (counts and
     #: names, no values).
     evidence: dict[str, Any] = field(default_factory=dict)
+    #: A held native read did not establish the due time, so this recheck
+    #: remains pending. No completed judgment may be recorded for it.
+    recheck_owed: bool = False
 
     @property
     def verified(self) -> bool:
@@ -804,6 +825,7 @@ class PendingWrite:
     write_key_bound: bool = False
     used: bool = False
     _lease: Any = field(default=None, repr=False)
+    _read_provider: Optional[CompleteReadProvider] = field(default=None, repr=False)
 
     @property
     def baseline_path(self) -> Path:
@@ -837,6 +859,7 @@ def begin_write(
     authorization_ref: str = "",
     workdir: Union[str, Path, None] = None,
     declared_by: DeclaredBy = "agent",
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> PendingWrite:
     """Consult the ledger, then read the system of record before the write.
 
@@ -845,6 +868,10 @@ def begin_write(
         params: The values the write will save, and any that name the record.
         actor: Who writes. Its own changes are never excused as another
             user's.
+        read_provider: An in-process reader bound to this config and params.
+            Baseline and post-write checks use the same reader. Its ordinary
+            completeness checks still apply; pending audit completion cannot
+            authorize the baseline. Keep its session open through verification.
         ledger: The uncertain-write ledger: a :class:`Ledger`, a
             :class:`LedgerBackend`, or None to turn it off (only for a
             sandbox that resets between runs). Default: :class:`FileLedger`
@@ -909,7 +936,14 @@ def begin_write(
     if led is None:
         folder = _new_folder(Path(workdir or DEFAULT_WORKDIR), write_id)
         return _capture(
-            contract, params, actor, write_id, folder, authorization_ref, declared_by
+            contract,
+            params,
+            actor,
+            write_id,
+            folder,
+            authorization_ref,
+            declared_by,
+            read_provider=read_provider,
         )
     try:
         key = led.key_for(contract.identity, values, write_key)
@@ -924,7 +958,7 @@ def begin_write(
             key=key,
         )
     try:
-        _settle(led, key, contract, params, actor)
+        _settle(led, key, contract, params, actor, read_provider=read_provider)
         _hold_elsewhere(led, key, shape_key)
         if any(v is None for v in values.values()):
             _hold_legacy_null(led, contract, values, write_key)
@@ -935,7 +969,14 @@ def begin_write(
         )
         started = time.time()  # before the baseline: this attempt's window opens
         pending = _capture(
-            contract, params, actor, write_id, folder, authorization_ref, declared_by
+            contract,
+            params,
+            actor,
+            write_id,
+            folder,
+            authorization_ref,
+            declared_by,
+            read_provider=read_provider,
         )
         pending.started = started
         _write_private(
@@ -989,6 +1030,8 @@ def _capture(
     folder: Path,
     authorization_ref: str,
     declared_by: DeclaredBy,
+    *,
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> PendingWrite:
     pending = PendingWrite(
         contract=contract,
@@ -999,10 +1042,14 @@ def _capture(
         authorization_ref=authorization_ref or write_id,
         authorized=bool(authorization_ref),
         declared_by=declared_by,
+        _read_provider=read_provider,
     )
     try:
         payload = capture_baseline(
-            contract.config, pending.params, pending.baseline_path
+            contract.config,
+            pending.params,
+            pending.baseline_path,
+            read_provider=read_provider,
         )
     except Exception as exc:  # a store that can't be reached, a bad binding
         raise BaselineUnreadable(
@@ -1026,6 +1073,8 @@ def _settle(
     contract: Contract,
     params: Mapping[str, Any],
     actor: Actor,
+    *,
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> None:
     """With the lease held: resolve the key's earlier attempt, or raise."""
 
@@ -1033,7 +1082,7 @@ def _settle(
     if attempt is not None and attempt.state in ("open", "uncertain"):
         # Open with a free lease: its owner died between the send and the
         # read-back. Read back before anything is sent.
-        _reconcile(led, key, attempt, contract, params)
+        _reconcile(led, key, attempt, contract, params, read_provider=read_provider)
         attempt = led.latest(key)
     state = led.state(attempt)
     if state == "free":
@@ -1042,6 +1091,12 @@ def _settle(
         assert attempt is not None and attempt.resolved is not None
         result = dict(attempt.resolved.get("result") or {})
         result["not_sent_again"] = True
+        if attempt.rechecked is not None:
+            # A recheck confirmed it since: no longer provisional, and no
+            # recheck is due.
+            result["provisional"] = False
+            result["recheck_due_at"] = None
+            result["rechecked_at"] = attempt.rechecked.get("at")
         if not attempt.delivered:
             led.delivered(key, attempt.attempt_id)
         raise AlreadyWritten(
@@ -1139,6 +1194,8 @@ def _reconcile(
     attempt: Attempt,
     contract: Contract,
     params: Optional[Mapping[str, Any]] = None,
+    *,
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> None:
     """Resolve ``attempt`` by reading back. The caller holds the lease.
 
@@ -1175,6 +1232,7 @@ def _reconcile(
         authorized=bool(attempt.begun.get("authorized")),
         declared_by=attempt.begun.get("declared_by") or "agent",
         write_key=key,
+        _read_provider=read_provider,
     )
     result = _judge(
         pending,
@@ -1591,16 +1649,28 @@ def _judge(
             provenance=None if source is None else source.provenance,
             documents=None if source is None else source.documents,
             post_state_out=post_state,
+            read_provider=pending._read_provider,
         )
         path: Optional[str] = str(write_result(doc, pending.workdir))
     except Exception as exc:  # noqa: BLE001 - unreadable store, timeout, used baseline
+        reasons = [
+            "the system of record could not be read back "
+            f"({type(exc).__name__}); the write may still land"
+        ]
+        if isinstance(exc, VerifyRunError):
+            code = (
+                exc.validation_reason if type(exc) is VerifyRunError else "unclassified"
+            )
+            label = (
+                "unclassified"
+                if code == "unclassified"
+                else f"receipt_validation.{code}"
+            )
+            reasons.append(f"verification diagnostic: {label}")
         return WriteResult(
             outcome=Outcome.UNCERTAIN,
             scope=_scope(pending.contract, {}),
-            reasons=[
-                "the system of record could not be read back "
-                f"({type(exc).__name__}); the write may still land"
-            ],
+            reasons=reasons,
             **base,
         )
     receipt = dict(doc["receipt"])
@@ -1804,7 +1874,16 @@ def _reasons(evidence: Mapping[str, Any], receipt_outcome: str) -> list[str]:
             f"{frame.get('unattributed_count', 0)} of them no actor explains"
         )
     elif frame.get("status") == "not_checked" and not problem:
-        out.append("what else changed could not be read, so the frame is not checked")
+        database = frame.get("database") or {}
+        if database.get("read_status") == "too_large":
+            out.append(
+                "frame too large: row read budget of "
+                f"{database.get('read_row_budget')} exceeded; the frame is not checked"
+            )
+        else:
+            out.append(
+                "what else changed could not be read, so the frame is not checked"
+            )
     source = evidence.get("source") or {}
     if isinstance(source, Mapping) and source.get("status") == "refuted":
         fields = ", ".join(source.get("mismatched_fields") or [])
@@ -2135,6 +2214,7 @@ def reconcile(
     key: str,
     *,
     ledger: Any = _NO_LEDGER,
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> Optional[str]:
     """Resolve the key's open or uncertain attempt by reading back.
 
@@ -2154,7 +2234,7 @@ def reconcile(
         if attempt is None:
             return None
         if attempt.state in ("open", "uncertain"):
-            _reconcile(led, key, attempt, contract)
+            _reconcile(led, key, attempt, contract, read_provider=read_provider)
             attempt = led.latest(key)
         return attempt.state if attempt is not None else None
     finally:
@@ -2173,6 +2253,7 @@ def recheck(
     excused_by: Sequence[WriteResult | RecheckState] = (),
     wait: bool = False,
     ledger: Any = _NO_LEDGER,
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> RecheckResult:
     """Read the whole database again and judge every change since a verified
     write's post-save read.
@@ -2218,16 +2299,72 @@ def recheck(
     A write that lands after the recheck's read (``read_at``) is not seen.
     """
 
-    late = _judge_recheck(
-        contract, write, params=params, actor=actor, excused_by=excused_by, wait=wait
+    late, trusted = _judge_recheck(
+        contract,
+        write,
+        params=params,
+        actor=actor,
+        excused_by=excused_by,
+        wait=wait,
+        read_provider=read_provider,
     )
+    if late.recheck_owed:
+        return late
     if late.outcome != "CONFIRMED":
-        late = _hold_after_recheck(ledger, write, late)
+        late = _hold_after_recheck(ledger, write, late, trusted=trusted)
+    else:
+        _mark_rechecked(ledger, write, late)
     return late
 
 
-def _hold_after_recheck(
+def _mark_rechecked(
     ledger: Any, write: WriteResult | RecheckState, late: RecheckResult
+) -> None:
+    """Record on the write's ledger attempt that a recheck confirmed it, so
+    ``openadapt verify ledger list`` no longer shows a recheck owed and a
+    retry is handed a result that is no longer provisional.
+
+    Best effort: the verdict stands either way. If nothing is recorded, the
+    list keeps showing the recheck as owed, which is the safe side.
+    """
+
+    try:
+        if isinstance(write, WriteResult):
+            write_id, key = write.write_id, write.write_key
+            if ledger is _NO_LEDGER and write.ledger is not None:
+                ledger = write.ledger
+        else:
+            receipt = write.payload.get("receipt") or {}
+            write_id, key = str(receipt.get("correlation_id") or ""), ""
+        led = _resolve_ledger(ledger)
+        if led is None or not write_id:
+            return
+        if key:
+            attempt = led.latest(key)
+        else:
+            found = led.find_attempt(write_id)
+            key, attempt = found if found is not None else ("", None)
+        if attempt is None or attempt.attempt_id != write_id:
+            return
+        if (attempt.resolved or {}).get("outcome") != "CONFIRMED":
+            return
+        led.rechecked(
+            key,
+            write_id,
+            outcome=late.outcome,
+            read_at=late.read_at,
+            receipt_sha256=late.receipt_sha256 or None,
+        )
+    except Exception:  # noqa: BLE001 - the list keeps showing it owed
+        return
+
+
+def _hold_after_recheck(
+    ledger: Any,
+    write: WriteResult | RecheckState,
+    late: RecheckResult,
+    *,
+    trusted: bool = True,
 ) -> RecheckResult:
     """Resolve the write's ledger attempt again with the recheck's outcome,
     for review: ``REFUTED`` holds it, ``UNCERTAIN`` keeps it uncertain.
@@ -2239,6 +2376,8 @@ def _hold_after_recheck(
     The ledger is the one given, else the one the write was made under.
     When no attempt is re-resolved (no ledger, no such attempt, or a newer
     attempt of the key), the result says so: the write must be held by hand.
+    A saved state that failed validation (``trusted`` False) names no attempt
+    that can be trusted, so its ``correlation_id`` is never looked up.
     """
 
     if isinstance(write, WriteResult):
@@ -2262,6 +2401,10 @@ def _hold_after_recheck(
             ],
         )
 
+    if not trusted and not isinstance(write, WriteResult):
+        # A WriteResult names its own attempt; a saved state that failed
+        # validation could name another write's.
+        return unheld("the saved recheck state failed validation")
     try:
         led = _resolve_ledger(ledger)
         if led is None:
@@ -2283,6 +2426,16 @@ def _hold_after_recheck(
         if attempt.attempt_id != write_id:
             return unheld("a newer attempt of this write is in the ledger")
         prior = attempt.resolved or {}
+        if prior.get("outcome") == "REFUTED" and late.outcome != "REFUTED":
+            # An earlier recheck refuted it: a later UNCERTAIN doesn't soften
+            # that. The attempt stays held as it is.
+            return _replace(
+                late,
+                reasons=[
+                    *late.reasons,
+                    "the ledger already holds this write as REFUTED; left as is",
+                ],
+            )
         reason = "; ".join(late.reasons) or "the recheck did not confirm the write"
         led.resolved(
             key,
@@ -2316,6 +2469,32 @@ def _hold_after_recheck(
     return late
 
 
+#: ``recheck_problem`` sentences that fault the recheck call (the params or
+#: actor it was given), not the write.
+_CALL_PROBLEMS = (
+    "the params don't bind the contract",
+    "the params are not the ones the write was verified with",
+    "the recheck state's write was made by a different actor",
+    "the contract can't be bound for the recheck",
+    "the recheck state was taken under a different contract",
+)
+
+
+def _recheck_refusal(problem: str) -> str:
+    """The UNCERTAIN reason for a recheck that couldn't run. When the call
+    was given other params, another actor or another contract than the
+    write was made with, it says the call was wrong: the write itself may
+    be fine, and stays unrechecked until a call with its own does."""
+
+    if problem.startswith(_CALL_PROBLEMS):
+        return (
+            f"{problem}: the recheck call doesn't match the write (its params, "
+            "actor or contract), so nothing was rechecked; this says nothing "
+            "about the write itself"
+        )
+    return f"{problem}, so the write can't be rechecked"
+
+
 def _judge_recheck(
     contract: Contract,
     write: WriteResult | RecheckState,
@@ -2324,7 +2503,10 @@ def _judge_recheck(
     actor: Actor,
     excused_by: Sequence[WriteResult | RecheckState],
     wait: bool,
-) -> RecheckResult:
+    read_provider: Optional[CompleteReadProvider] = None,
+) -> tuple[RecheckResult, bool]:
+    """The recheck's result, and whether the state passed validation."""
+
     state = write.recheck if isinstance(write, WriteResult) else write
     receipt = state.payload.get("receipt") if state is not None else None
     if (
@@ -2355,9 +2537,18 @@ def _judge_recheck(
         else "the write's result was downgraded from CONFIRMED to UNCERTAIN"
         if _recheck_withdrawn(state.payload)
         else None
-    ) or recheck_problem(cfg, state.payload, params=params, run_record=run_record)
+    ) or recheck_problem(
+        cfg,
+        state.payload,
+        params=params,
+        run_record=run_record,
+        read_provider=read_provider,
+    )
     if problem is not None:
-        return _replace(base, reasons=[f"{problem}, so the write can't be rechecked"])
+        return (
+            _replace(base, reasons=[_recheck_refusal(problem)]),
+            False,
+        )
     wait_s = seconds_until(state.due_at)
     if wait_s > 0:
         if not wait:
@@ -2384,14 +2575,24 @@ def _judge_recheck(
         excused.append((later.payload, later.params))
     try:
         verdict, read_at = recheck_run(
-            cfg, state.payload, params=params, run_record=run_record, excused=excused
+            cfg,
+            state.payload,
+            params=params,
+            run_record=run_record,
+            excused=excused,
+            read_provider=read_provider,
         )
     except VerifyRunError as exc:
         raise VerifierError(str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - an unreadable store is not a pass
-        return _replace(
-            base,
-            reasons=[f"the database could not be read again ({type(exc).__name__})"],
+        return (
+            _replace(
+                base,
+                reasons=[
+                    f"the database could not be read again ({type(exc).__name__})"
+                ],
+            ),
+            True,
         )
     evidence = verdict.evidence(spec) if spec is not None else {}
     reasons: list[str] = []
@@ -2404,6 +2605,27 @@ def _judge_recheck(
             "a change since the verdict lies in a later write that was not "
             "verified and may be what refuted it; reconcile both"
         )
+    if status == "refuted" and LATER_WRITE_UNJUDGED in verdict.excused_by:
+        # A later write whose own frame wasn't judged may have made the
+        # change: the harm may not be this write's, but it isn't excused.
+        status = "not_checked"
+        reasons.append(
+            "a change since the verdict may be a later write's whose own "
+            "frame was not judged; reconcile both"
+        )
+    keep_owed = False
+    if status == "held":
+        try:
+            read_was_due = parse_time(read_at) >= parse_time(state.due_at)
+        except ValueError:
+            read_was_due = False
+        if not read_was_due:
+            status = "not_checked"
+            keep_owed = True
+            reasons.append(
+                "the recheck's read time does not establish that it was due; "
+                "the write remains unrechecked"
+            )
     if status == "refuted":
         kinds = ", ".join(sorted({c.change for c in verdict.collateral}))
         reasons.append(
@@ -2412,14 +2634,18 @@ def _judge_recheck(
         )
     elif status != "held" and not reasons:
         reasons.append(verdict.reason or "the database could not be judged again")
-    return _replace(
-        base,
-        outcome=_late_outcome(status),
-        frame=verdict.status,
-        reasons=reasons,
-        read_at=read_at,
-        excused=len(excused),
-        evidence=evidence,
+    return (
+        _replace(
+            base,
+            outcome=_late_outcome(status),
+            frame=verdict.status,
+            reasons=reasons,
+            read_at=read_at,
+            excused=len(excused),
+            evidence=evidence,
+            recheck_owed=keep_owed,
+        ),
+        True,
     )
 
 
@@ -2449,6 +2675,7 @@ def capture_database(
     *,
     allow_tables: Sequence[str] = (),
     max_rows: int = 2000,
+    read_row_budget: int = DEFAULT_READ_ROW_BUDGET,
     key: Optional[bytes] = None,
     profile: Optional[str] = None,
     before: Optional[DatabaseSnapshot] = None,
@@ -2462,7 +2689,9 @@ def capture_database(
     (to read through ``podman exec``, say). It talks to the database over
     that connection only; no application code is imported. The snapshot
     holds keyed MACs, never values: ``key`` keys them (default: one key per
-    process). ``allow_tables`` are kept append-only.
+    process). ``allow_tables`` are kept append-only. ``read_row_budget``
+    caps data rows across tables and auxiliary queries; exceeding it refuses
+    the read without returning a partial snapshot.
 
     ``profile`` (``openemr``) applies an app profile's bookkeeping rules, the
     same ones the frame uses (``openadapt_flow.app_profiles``); its own-row
@@ -2491,6 +2720,7 @@ def capture_database(
             key=key or _PROCESS_KEY,
             modes=dict.fromkeys(allow_tables, "append_only"),
             max_rows=max_rows,
+            read_row_budget=read_row_budget,
             before=before,
             extra_queries=extra,
             **_profile_args(profile),
@@ -2533,7 +2763,11 @@ def diff_database(
     counters, a uuid backfill) is left out, as the frame leaves it out.
     """
 
-    from openadapt_flow.runtime.effects.db_snapshot import cell_hash, unpack
+    from openadapt_flow.runtime.effects.db_snapshot import (
+        cell_hash,
+        every_cell_hashed,
+        unpack,
+    )
 
     k = key or _PROCESS_KEY
     moved = diff(before, after, key=k, allow_tables=allow_tables)
@@ -2547,7 +2781,14 @@ def diff_database(
     out: dict[str, TableDiff] = {}
     for name, d in moved.items():
         a, b = before.tables.get(name), after.tables.get(name)
-        if d.unread or a is None or b is None or a.cell_columns != b.cell_columns:
+        if (
+            d.unread
+            or a is None
+            or b is None
+            or a.cell_columns != b.cell_columns
+            or not every_cell_hashed(a)
+        ):
+            # A column no cell MAC shows may have moved: no rule judges it.
             out[name] = d
             continue
         hasher = (lambda t: lambda col, v: cell_hash(k, v, t, col))(name)

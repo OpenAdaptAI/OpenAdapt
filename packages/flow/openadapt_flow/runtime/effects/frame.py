@@ -74,6 +74,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from openadapt_flow.app_profiles import Owner, table_name
+from openadapt_flow.runtime.effects.db_snapshot import DEFAULT_READ_ROW_BUDGET
 from openadapt_flow.runtime.effects.effect import (
     Effect,
     EffectKind,
@@ -84,6 +85,7 @@ from openadapt_flow.runtime.effects.effect import (
     selector_value,
     stable_id,
 )
+from openadapt_flow.runtime.effects.frame_identity import FrameIdentity
 from openadapt_flow.runtime.effects.learned import (
     NOT_COMPARED,
     LearnedFrame,
@@ -329,6 +331,10 @@ class FrameDatabase(BaseModel):
     #: Over this many rows a table keeps, per row, its key and contents MACs
     #: and cell MACs only for the columns attribution and side records read.
     max_rows: int = Field(default=2000, ge=1)
+    #: Maximum data rows per whole-database snapshot, including auxiliary
+    #: audit reads. Exceeding it makes the frame not checked, never truncated.
+    #: This bounds rows, not elapsed time or bytes in an individual cell.
+    read_row_budget: int = Field(default=DEFAULT_READ_ROW_BUDGET, ge=1)
     #: Schemas the read account must see; the snapshot refuses when one isn't
     #: visible, so a schema the app writes can't be left out. Every other
     #: visible schema is read too. On PostgreSQL a schema the account can't
@@ -380,6 +386,8 @@ class FrameDatabase(BaseModel):
             data.pop("recheck_after_s", None)
         if data.get("settle_attempts") == 1:
             data.pop("settle_attempts", None)
+        if data.get("read_row_budget") == DEFAULT_READ_ROW_BUDGET:
+            data.pop("read_row_budget", None)
         if not data.get("judged_by"):
             data.pop("judged_by", None)
         return data
@@ -461,6 +469,17 @@ class FrameDatabase(BaseModel):
             raise ValueError("frame.database.read reads every table; drop sql_query")
         return self
 
+    @model_validator(mode="after")
+    def _schema_wildcards_postgresql_only(self) -> "FrameDatabase":
+        if self.dialect != "postgresql":
+            for entry in self.allow_tables:
+                if entry.table.endswith(".*"):
+                    raise ValueError(
+                        f"allow_tables entry {entry.table!r} ('<schema>.*') is "
+                        "PostgreSQL only"
+                    )
+        return self
+
 
 class FrameSpec(BaseModel):
     """``frame:`` in ``verify.yaml``: the slice that must otherwise not move."""
@@ -470,6 +489,8 @@ class FrameSpec(BaseModel):
     #: Records are compared by this field. Unset: :func:`stable_id` (``id``
     #: when present, else the whole record).
     identity_field: Optional[str] = None
+    #: Learned per-surface correspondence; omitted for legacy contracts.
+    identities: dict[str, FrameIdentity] = Field(default_factory=dict)
     #: Fields that change on their own on every record (a last-seen time).
     ignore_fields: list[str] = Field(default_factory=list)
     #: Fields of a pre-existing target record the save may change. Unset:
@@ -500,6 +521,8 @@ class FrameSpec(BaseModel):
         # Unset, ``versions`` is left out, so a contract that doesn't use it
         # keeps its digests (``frame_sha256``, the check digest).
         data: dict[str, Any] = handler(self)
+        if not data.get("identities"):
+            data.pop("identities", None)
         if data.get("versions") is None:
             data.pop("versions", None)
         if data.get("learned") is None:
@@ -826,6 +849,7 @@ def judge_frame(
     new_row_defaults: Optional[Mapping[str, Mapping[str, Optional[str]]]] = None,
     unread_changes: Sequence[tuple[str, str]] = (),
     no_record_inserts: Collection[str] = (),
+    no_record_values: Collection[str] = (),
     hashers: Optional[Mapping[str, Callable[[str, Any], str]]] = None,
     clock: tuple[str, str] = ("", ""),
     database_evidence: Optional[dict[str, Any]] = None,
@@ -864,6 +888,9 @@ def judge_frame(
         no_record_inserts: Tables both database reads read as append-only
             whose profile rule marks the acting user's insert entry naming no
             record as the app's bookkeeping (an id map, a link row).
+        no_record_values: Record-field values that name no record in such an
+            entry, besides an empty field (the app profile's
+            ``no_record_values``).
         hashers: Slice -> (column, value) -> the keyed MAC its baseline records hold instead of
             values (database tables). A post-save record is plain; it is
             hashed to compare with the baseline.
@@ -936,6 +963,8 @@ def judge_frame(
     def identity_of(name: str) -> Optional[str]:
         if identities is not None and name in identities:
             return identities[name]
+        if name in spec.identities:
+            return spec.identities[name].surface_field
         return spec.identity_field
 
     def key_of(record: Mapping[str, Any], name: str = "") -> Any:
@@ -1446,6 +1475,7 @@ def judge_frame(
     #: Table -> the surface that declares its rows (``database.judged_by``).
     judged_of = dict(database.judged_by) if database is not None else {}
     surface_declared = {t: set(k) for t, k in (declared_rows or {}).items()}
+    mapped_tables = {b.table for b in spec.identities.values()}
 
     def may_change_for(name: str) -> set[str]:
         by_surface = spec.target_fields_by_surface
@@ -1529,13 +1559,18 @@ def judge_frame(
                     of_hasher(side.of_field, value) if of_hasher else str(value)
                 ) in taken:
                     continue
-                if any(
-                    record_matches(
-                        dict(record),
-                        s,
-                        text_numbers=before_state.substrate == "sql",
+                if (
+                    key_of(record, side.of_surface)
+                    in surface_declared.get(side.of_surface, ())
+                    if side.of_surface in mapped_tables
+                    else any(
+                        record_matches(
+                            dict(record),
+                            s,
+                            text_numbers=before_state.substrate == "sql",
+                        )
+                        for s in sels
                     )
-                    for s in sels
                 ):
                     links.add(str(value))
                 elif inserted_by_other(
@@ -1564,6 +1599,8 @@ def judge_frame(
         typed = before_state.substrate == "sql"
 
         def declared(record: Mapping[str, Any], hashed: bool = False) -> bool:
+            if name in mapped_tables:
+                return False  # Only the selected surface's mapped row keys declare it.
             if hashed and hasher is not None:
                 return any(
                     all(
@@ -1934,14 +1971,15 @@ def judge_frame(
                     else ""
                 )
                 if (
-                    ref in (None, "", "0", 0)
+                    (ref in (None, "") or str(ref) in no_record_values)
                     and attribution is not None
                     and event in attribution.insert_events
                     and entry_table not in (None, "")
                     and any(same_table(entry_table, t) for t in no_record_inserts)
                 ):
                     # The bot's insert into an id map or link row a save
-                    # makes (OpenEMR's uuid_registry), filed under no chart:
+                    # makes (an id map such as a uuid registry), filed under
+                    # no record:
                     # both reads read the table, which allows the row and
                     # judges every existing row. An update or delete, an
                     # entry naming a record, or any other table still counts.

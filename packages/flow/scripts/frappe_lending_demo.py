@@ -39,11 +39,8 @@ from benchmark.frappe_lending.fixture import (  # noqa: E402
     FrappeFixture,
     audit_table_deltas,
 )
-from openadapt_flow.backends.playwright_backend import (  # noqa: E402
-    PlaywrightBackend as _BasePlaywrightBackend,
-)
-from openadapt_flow.benchmark import agent_baseline  # noqa: E402
-from openadapt_flow.benchmark.frappe_lending import (  # noqa: E402
+from benchmark.harness import agent_baseline  # noqa: E402
+from benchmark.harness.frappe_lending import (  # noqa: E402
     CONDITIONS,
     INITIAL_TRIALS_PER_CELL,
     PUBLICATION_TRIALS_PER_CELL,
@@ -56,6 +53,9 @@ from openadapt_flow.benchmark.frappe_lending import (  # noqa: E402
     loan_application_effects,
     publication_gate,
     records_sha256,
+)
+from openadapt_flow.backends.playwright_backend import (  # noqa: E402
+    PlaywrightBackend as _BasePlaywrightBackend,
 )
 from openadapt_flow.ir import StructuralLocator  # noqa: E402
 
@@ -347,9 +347,7 @@ def record(fixture: FrappeFixture, out_dir: Path, *, headed: bool) -> Path:
         _preauthenticate_browser(backend, fixture)
         page = backend.page
         before_counts = fixture.table_counts()
-        before_non_target_loan_sha256 = (
-            fixture.non_target_loan_applications_sha256()
-        )
+        before_non_target_loan_sha256 = fixture.non_target_loan_applications_sha256()
         recorder = Recorder(
             backend,
             out_dir,
@@ -451,9 +449,7 @@ def record(fixture: FrappeFixture, out_dir: Path, *, headed: bool) -> Path:
             "primary_outcome": verdict.primary_outcome.value,
             "rest_records_sha256": _safe_records_sha256(evidence.rest_records),
             "db_records_sha256": _safe_records_sha256(evidence.db_records),
-            "before_non_target_loan_sha256": (
-                evidence.before_non_target_loan_sha256
-            ),
+            "before_non_target_loan_sha256": (evidence.before_non_target_loan_sha256),
             "after_non_target_loan_sha256": evidence.after_non_target_loan_sha256,
             "all_table_deltas": evidence.all_table_deltas,
             "delta_violations": evidence.delta_violations,
@@ -585,9 +581,7 @@ def _capture_post_evidence(
         errors.append("pre-write non-target Loan Application digest unavailable")
     else:
         try:
-            after_non_target_loan_sha256 = (
-                fixture.non_target_loan_applications_sha256()
-            )
+            after_non_target_loan_sha256 = fixture.non_target_loan_applications_sha256()
             if after_non_target_loan_sha256 != before_non_target_loan_sha256:
                 violations.append("tabLoan Application:non-target-content-changed")
         except Exception as exc:  # noqa: BLE001 - unreadable is not clean
@@ -826,9 +820,7 @@ def _persist_evidence(
             "before_table_counts": evidence.before_table_counts,
             "after_table_counts": evidence.after_table_counts,
             "all_table_deltas": evidence.all_table_deltas,
-            "before_non_target_loan_sha256": (
-                evidence.before_non_target_loan_sha256
-            ),
+            "before_non_target_loan_sha256": (evidence.before_non_target_loan_sha256),
             "after_non_target_loan_sha256": evidence.after_non_target_loan_sha256,
             "delta_violations": evidence.delta_violations,
             "oracle_errors": evidence.errors,
@@ -1064,9 +1056,7 @@ def run_compiled_trial(
         # Authentication/form navigation are declared unmeasured setup; take
         # the collateral-delta baseline only after they finish.
         before_counts = fixture.table_counts()
-        before_non_target_loan_sha256 = (
-            fixture.non_target_loan_applications_sha256()
-        )
+        before_non_target_loan_sha256 = fixture.non_target_loan_applications_sha256()
         start = time.monotonic()
         report = Replayer(backend, effect_verifier=oracle.verifier).run(
             Workflow.load(bundle_dir),
@@ -1155,9 +1145,7 @@ def run_agent_trial(
         _preauthenticate_browser(backend, fixture)
         _apply_condition(backend, condition)
         before_counts = fixture.table_counts()
-        before_non_target_loan_sha256 = (
-            fixture.non_target_loan_applications_sha256()
-        )
+        before_non_target_loan_sha256 = fixture.non_target_loan_applications_sha256()
         start = time.monotonic()
         result = agent_baseline.run_agent(
             backend,
@@ -1527,30 +1515,30 @@ def _plan(n: int, *, model_free: bool = False) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument(
         "--state", type=Path, default=REPO / "benchmark/frappe_lending/state"
     )
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("preflight")
-    sub.add_parser("prepare")
-    sub.add_parser("build")
-    sub.add_parser("up")
-    sub.add_parser("bootstrap")
-    sub.add_parser("snapshot")
-    sub.add_parser("reset")
-    plan_parser = sub.add_parser("plan")
+    sub.add_parser("preflight", allow_abbrev=False)
+    sub.add_parser("prepare", allow_abbrev=False)
+    sub.add_parser("build", allow_abbrev=False)
+    sub.add_parser("up", allow_abbrev=False)
+    sub.add_parser("bootstrap", allow_abbrev=False)
+    sub.add_parser("snapshot", allow_abbrev=False)
+    sub.add_parser("reset", allow_abbrev=False)
+    plan_parser = sub.add_parser("plan", allow_abbrev=False)
     plan_parser.add_argument(
         "--profile", choices=("initial", "publication"), default="initial"
     )
     plan_parser.add_argument("--model-free", action="store_true")
-    record_parser = sub.add_parser("record")
+    record_parser = sub.add_parser("record", allow_abbrev=False)
     record_parser.add_argument("--out", type=Path, required=True)
     record_parser.add_argument("--headed", action="store_true")
-    compile_parser = sub.add_parser("compile")
+    compile_parser = sub.add_parser("compile", allow_abbrev=False)
     compile_parser.add_argument("--recording", type=Path, required=True)
     compile_parser.add_argument("--bundle", type=Path, required=True)
-    run_parser = sub.add_parser("run")
+    run_parser = sub.add_parser("run", allow_abbrev=False)
     run_parser.add_argument("--bundle", type=Path, required=True)
     run_parser.add_argument("--out", type=Path, required=True)
     run_parser.add_argument(
