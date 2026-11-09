@@ -173,21 +173,115 @@ def _environment():
     return OpenAdaptWebEnvironment(MOCKMED)
 
 
-SLEEPER = [sys.executable, "-c", "import time; time.sleep(600)"]
+#: The real teardowns, saved before any test patches them; the harness only
+#: ever cleans up through these.
+REAL_STOP_SUPERVISED = lifecycle.stop_supervised
+REAL_KILL_CHILD_TREE = lifecycle.kill_child_tree
+
+#: A driver stand-in that reports its own pid (it leads its own group) and
+#: exits by itself after 30 s, a backstop if every cleanup failed.
+SLEEPER = [
+    sys.executable,
+    "-c",
+    "import os, time; print(os.getpid(), flush=True); time.sleep(30)",
+]
 
 
-def _registered_driver(monkeypatch) -> subprocess.Popen[bytes]:
-    """A real driver stand-in on this platform's own route: on Linux a bound
-    supervised launch registered for its pid (the only route that is ever
-    signalled there); elsewhere a plain child in its own group."""
-    from openadapt_flow.rl_env import environment as E
+class Driver:
+    """One acquired driver and what is needed to tear it down for real."""
 
-    if E.SUPERVISE_DRIVER:
-        proc, launch = lifecycle.spawn_supervised(SLEEPER)
-        assert launch.bound, "the supervisor did not hand over its pidfd"
-        monkeypatch.setitem(E._SUPERVISED, proc.pid, launch)
-        return proc
-    return lifecycle.spawn(SLEEPER)
+    def __init__(self, proc: subprocess.Popen[bytes]) -> None:
+        self.proc = proc
+        self.pid = proc.pid  # what the environment sees as the driver
+        self.launch: "lifecycle.SupervisedLaunch | None" = None
+        self.command: "int | None" = None  # the sleeper; leads its own group
+
+
+def _group_gone(pgid: int, within: float = 10.0) -> bool:
+    deadline = time.monotonic() + within
+    while time.monotonic() < deadline:
+        try:
+            os.killpg(pgid, 0)
+        except ProcessLookupError:
+            return True
+        except PermissionError:
+            pass  # only zombies left (macOS); wait for their reaper
+        time.sleep(0.05)
+    return False
+
+
+def _teardown_driver(driver: Driver) -> "str | None":
+    """Tear ``driver`` down through the saved real route and confirm its
+    command's tree is gone; the problem, or None."""
+    problem = None
+    try:
+        if driver.launch is not None:
+            if driver.launch.pidfd is not None:  # not torn down yet
+                result = REAL_STOP_SUPERVISED(
+                    driver.launch, proc=driver.proc, timeout=20
+                )
+                if not result.proven:
+                    problem = f"supervisor {driver.pid} teardown {result}"
+            # The supervisor is reaped: no unreaped child of ours has its pid.
+            try:
+                os.waitpid(driver.pid, os.WNOHANG)
+                problem = problem or f"supervisor {driver.pid} not reaped"
+            except ChildProcessError:
+                pass
+        else:
+            REAL_KILL_CHILD_TREE(driver.pid, timeout=20)
+    except Exception as exc:  # noqa: BLE001 - reported below
+        problem = f"teardown of {driver.pid} failed: {exc!r}"
+    if driver.command is not None and not _group_gone(driver.command):
+        # Last resort, then fail the test: the command outlived the teardown.
+        try:
+            os.killpg(driver.command, signal.SIGKILL)
+        except OSError:
+            pass
+        problem = problem or f"command group {driver.command} survived the teardown"
+    # Only now Popen bookkeeping: the process is gone, whoever reaped it.
+    if driver.proc.returncode is None:
+        try:
+            driver.proc.wait(timeout=0.1)
+        except (subprocess.TimeoutExpired, ChildProcessError):
+            driver.proc.returncode = -signal.SIGKILL
+    return problem
+
+
+@pytest.fixture
+def drivers():
+    """``acquire(monkeypatch)`` registers a real driver on this platform's
+    own route: on Linux a bound supervised launch in the environment's
+    registry; elsewhere a plain child in its own group. Every acquisition is
+    recorded for cleanup before anything can fail or be asserted, and the
+    fixture tears each one down through the saved real route."""
+    acquired: list[Driver] = []
+
+    def acquire(monkeypatch) -> Driver:
+        from openadapt_flow.rl_env import environment as E
+
+        if E.SUPERVISE_DRIVER:
+            proc, launch = lifecycle.spawn_supervised(SLEEPER, stdout=subprocess.PIPE)
+            driver = Driver(proc)
+            driver.launch = launch
+            acquired.append(driver)
+            monkeypatch.setitem(E._SUPERVISED, proc.pid, launch)
+        else:
+            driver = Driver(lifecycle.spawn(SLEEPER, stdout=subprocess.PIPE))
+            acquired.append(driver)
+        assert driver.proc.stdout is not None
+        line = driver.proc.stdout.readline()
+        driver.command = int(line) if line.strip() else None
+        assert driver.command is not None, "the driver stand-in did not start"
+        if driver.launch is not None:
+            assert driver.launch.bound, "the supervisor did not hand over its pidfd"
+        return driver
+
+    try:
+        yield acquire
+    finally:
+        problems = [p for p in map(_teardown_driver, acquired) if p]
+        assert not problems, problems
 
 
 def _break_route(monkeypatch, exc: BaseException) -> None:
@@ -203,28 +297,19 @@ def _break_route(monkeypatch, exc: BaseException) -> None:
         monkeypatch.setattr(E, "kill_child_tree", broken)
 
 
-def _discard(proc: subprocess.Popen[bytes]) -> None:
-    if proc.poll() is None:
-        proc.kill()
-        proc.wait(timeout=30)
-
-
 def test_an_abandoned_browser_that_cannot_be_reaped_is_not_reported_closed(
-    monkeypatch,
+    monkeypatch, drivers
 ) -> None:
     env = _environment()
-    driver = _registered_driver(monkeypatch)
-    try:
-        _break_route(monkeypatch, lifecycle.ProcessNotReaped("still running"))
-        env._pw, env._driver_pid = object(), driver.pid
-        with pytest.raises(lifecycle.ProcessNotReaped):
-            env._abandon_worker()
-        # The episode is torn down, but nothing claims the browser stopped.
-        assert env._teardown is None and env._driver_pid is None
-        assert env.state.done is True and env._pw is None
-        assert env._unproven is not None
-    finally:
-        _discard(driver)
+    driver = drivers(monkeypatch)
+    _break_route(monkeypatch, lifecycle.ProcessNotReaped("still running"))
+    env._pw, env._driver_pid = object(), driver.pid
+    with pytest.raises(lifecycle.ProcessNotReaped):
+        env._abandon_worker()
+    # The episode is torn down, but nothing claims the browser stopped.
+    assert env._teardown is None and env._driver_pid is None
+    assert env.state.done is True and env._pw is None
+    assert env._unproven is not None
 
 
 def test_an_abandoned_browser_with_an_unknown_driver_pid_raises() -> None:
@@ -240,9 +325,11 @@ def test_an_abandoned_worker_without_a_browser_has_nothing_to_kill() -> None:
     assert env._teardown is None and env.state.done is True
 
 
-def test_an_abandoned_browser_reports_how_its_driver_was_stopped(monkeypatch) -> None:
+def test_an_abandoned_browser_reports_how_its_driver_was_stopped(
+    monkeypatch, drivers
+) -> None:
     env = _environment()
-    child = _registered_driver(monkeypatch)
+    child = drivers(monkeypatch)
     env._pw, env._driver_pid = object(), child.pid
     env._abandon_worker()
     # Proven only through a bound supervisor (Linux); still tainted either way.
@@ -254,7 +341,6 @@ def test_an_abandoned_browser_reports_how_its_driver_was_stopped(monkeypatch) ->
     assert env._unproven is not None  # later episodes are INDETERMINATE
     with pytest.raises(ChildProcessError):
         os.waitpid(child.pid, os.WNOHANG)
-    child.returncode = -signal.SIGKILL
 
 
 # -- an unreadable process table is unknown, never an empty tree -------------
@@ -811,49 +897,43 @@ def _judged(env, monkeypatch) -> dict:
 
 
 def test_any_teardown_failure_leaves_later_episodes_indeterminate(
-    monkeypatch,
+    monkeypatch, drivers
 ) -> None:
     env = _environment()
-    driver = _registered_driver(monkeypatch)
-    try:
-        _break_route(monkeypatch, RuntimeError("kill failed in an unexpected way"))
-        env._pw, env._driver_pid = object(), driver.pid
-        with pytest.raises(RuntimeError, match="unexpected"):
-            env._abandon_worker()
-        assert env._unproven is not None and env._teardown is None
-        out = _judged(env, monkeypatch)
-        assert (out["verdict"], out["reward"]) == ("INDETERMINATE", 0.0)
-    finally:
-        _discard(driver)
+    driver = drivers(monkeypatch)
+    _break_route(monkeypatch, RuntimeError("kill failed in an unexpected way"))
+    env._pw, env._driver_pid = object(), driver.pid
+    with pytest.raises(RuntimeError, match="unexpected"):
+        env._abandon_worker()
+    assert env._unproven is not None and env._teardown is None
+    out = _judged(env, monkeypatch)
+    assert (out["verdict"], out["reward"]) == ("INDETERMINATE", 0.0)
 
 
-def test_a_later_proven_teardown_never_lifts_the_taint(monkeypatch) -> None:
+def test_a_later_proven_teardown_never_lifts_the_taint(monkeypatch, drivers) -> None:
     env = _environment()
-    drivers = [_registered_driver(monkeypatch) for _ in range(2)]
-    try:
-        env._pw, env._driver_pid = object(), drivers[0].pid
-        env._abandon_worker()
-        # On Linux a genuinely proven teardown through a bound supervisor;
-        # elsewhere the unproven one. Tainted either way: the abandoned
-        # worker may have started more than the driver this code saw.
-        assert env._teardown == {
-            "driver_pid": drivers[0].pid,
-            "driver": "killed",
-            "proven": LINUX,
-        }
-        assert env._unproven is not None
-        first = env._unproven
-        env._pw, env._driver_pid = object(), drivers[1].pid
-        env._abandon_worker()
-        assert env._teardown is not None
-        assert env._teardown["proven"] is LINUX
-        assert env._unproven == first  # never lifted, never replaced
-        out = _judged(env, monkeypatch)
-        assert (out["verdict"], out["reward"]) == ("INDETERMINATE", 0.0)
-    finally:
-        for driver in drivers:
-            if driver.returncode is None:
-                driver.returncode = -signal.SIGTERM  # reaped by the teardown
+    first_driver = drivers(monkeypatch)
+    env._pw, env._driver_pid = object(), first_driver.pid
+    env._abandon_worker()
+    # On Linux a genuinely proven teardown through a bound supervisor;
+    # elsewhere the unproven one. Tainted either way: the abandoned worker
+    # may have started more than the driver this code saw.
+    assert env._teardown == {
+        "driver_pid": first_driver.pid,
+        "driver": "killed",
+        "proven": LINUX,
+    }
+    assert env._unproven is not None
+    first = env._unproven
+    second_driver = drivers(monkeypatch)
+    env._pw, env._driver_pid = object(), second_driver.pid
+    env._abandon_worker()
+    assert env._teardown is not None
+    assert env._teardown["proven"] is LINUX
+    assert env._unproven == first  # never lifted, never replaced
+    out = _judged(env, monkeypatch)
+    assert (out["verdict"], out["reward"]) == ("INDETERMINATE", 0.0)
+    # The fixture confirms both command trees are gone.
 
 
 def test_a_timeout_inside_playwright_start_taints_later_episodes(monkeypatch) -> None:
@@ -1037,3 +1117,28 @@ def test_a_pid_now_held_by_another_live_child_is_never_signalled(monkeypatch) ->
     finally:
         other.kill()
         other.wait(timeout=30)
+
+
+# -- the harness itself: cleanup goes through the saved real teardown --------
+
+
+def test_the_harness_cleans_up_a_driver_whose_route_was_broken(monkeypatch) -> None:
+    if LINUX:
+        proc, launch = lifecycle.spawn_supervised(SLEEPER, stdout=subprocess.PIPE)
+        driver = Driver(proc)
+        driver.launch = launch
+    else:
+        driver = Driver(lifecycle.spawn(SLEEPER, stdout=subprocess.PIPE))
+    assert driver.proc.stdout is not None
+    driver.command = int(driver.proc.stdout.readline())
+
+    def broken(*_a: object, **_k: object) -> lifecycle.Teardown:
+        raise RuntimeError("route broken")
+
+    monkeypatch.setattr(lifecycle, "stop_supervised", broken)
+    monkeypatch.setattr(lifecycle, "kill_child_tree", broken)
+    # The patched route is not used: the saved real teardown is.
+    assert _teardown_driver(driver) is None
+    with pytest.raises(ProcessLookupError):
+        os.killpg(driver.command, 0)  # the command's whole group is gone
+    assert driver.proc.returncode is not None
