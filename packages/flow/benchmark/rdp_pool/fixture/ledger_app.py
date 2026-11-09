@@ -28,7 +28,7 @@ def accounts(seed: int, n: int = 500) -> dict[str, tuple[str, str]]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--width", type=int, default=1280)
     ap.add_argument("--height", type=int, default=800)

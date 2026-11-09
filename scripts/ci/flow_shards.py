@@ -87,7 +87,9 @@ def from_logs(paths: list[Path]) -> dict[str, float]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     ap.add_argument("--shard", type=int, help="1-based shard to print")
     ap.add_argument("--of", type=int, help="number of shards")
     ap.add_argument("--durations", type=Path, default=DURATIONS)

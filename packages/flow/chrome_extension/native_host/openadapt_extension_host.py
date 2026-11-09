@@ -48,7 +48,7 @@ def write_message(message: dict) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument(
         "--recording",
         default=os.environ.get("OPENADAPT_EXTENSION_RECORDING", ""),

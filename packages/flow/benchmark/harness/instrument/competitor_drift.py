@@ -905,7 +905,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             "and a dry-run estimator; a real (paid) competitor adapter is "
             "wired in code and run as a separate user decision. No vendor is "
             "named; no model is called."
-        )
+        ),
+        allow_abbrev=False,
     )
     parser.add_argument("--out", default=DEFAULT_OUT_DIR, help="output directory")
     parser.add_argument(

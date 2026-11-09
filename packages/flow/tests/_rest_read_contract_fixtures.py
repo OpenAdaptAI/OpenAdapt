@@ -30,3 +30,18 @@ def mockmed_effects_yaml(base_url: str) -> str:
             mockmed_effects_config(base_url), sort_keys=False
         ).splitlines()
     )
+
+
+def memory_rest_effects_config(base_url: str) -> dict[str, Any]:
+    """The owned MemoryRestCopy fixture's complete, unpaged /api/db read.
+
+    Its HTTP handler copies every row under the store lock. This declaration
+    applies to that fixture, not an arbitrary endpoint with the same path.
+    """
+    return {
+        "kind": "rest",
+        "base_url": base_url,
+        "records_path": "/api/db",
+        "records_key": "records",
+        "records_complete": True,
+    }

@@ -27,9 +27,16 @@ from pathlib import Path
 from typing import Any, Optional
 
 HERE = Path(__file__).resolve().parent
-ASSUMPTIONS = json.loads((HERE.parent / "economic_comparison" / "assumptions.json").read_text())
+ASSUMPTIONS = json.loads(
+    (HERE.parent / "economic_comparison" / "assumptions.json").read_text()
+)
 S = ASSUMPTIONS["operator_s"]
-STOP, RECONCILE, REDO, INTERRUPT = S["stop"], S["reconcile"], S["manual_entry_openemr"], S["interrupt"]
+STOP, RECONCILE, REDO, INTERRUPT = (
+    S["stop"],
+    S["reconcile"],
+    S["manual_entry_openemr"],
+    S["interrupt"],
+)
 #: Pre-registered setup people time (minutes, engineer).
 SETUP_MIN = {"A_agent_readback": 60.0, "B_agent_openadapt": 90.0}
 #: People seconds per outcome, before the x0.5 / x2 sensitivity.
@@ -42,7 +49,13 @@ PEOPLE_S = {
     "missed_harm": RECONCILE + REDO + INTERRUPT,
     "silent_absent": RECONCILE + REDO + INTERRUPT,
 }
-CORRECT_AFTER_HANDLING = {"correct", "correct_stop", "false_stop", "caught_harm", "failed_stop"}
+CORRECT_AFTER_HANDLING = {
+    "correct",
+    "correct_stop",
+    "false_stop",
+    "caught_harm",
+    "failed_stop",
+}
 EXCLUDED = {"infra", "not_run"}
 
 
@@ -51,7 +64,10 @@ def load_costs(path: Path) -> tuple[dict[str, float], dict[str, float], dict[str
     (``costs_2.json`` for run 2)."""
 
     c = json.loads(path.read_text())
-    people = {"correct": 0.0, **{k: float(c[k]["seconds"]) for k in PEOPLE_S if k != "correct"}}
+    people = {
+        "correct": 0.0,
+        **{k: float(c[k]["seconds"]) for k in PEOPLE_S if k != "correct"},
+    }
     return people, {k: float(v) for k, v in c["setup_min"].items()}, c
 
 
@@ -69,8 +85,12 @@ def outcome(row: dict[str, Any]) -> str:
     # A harmful case whose ops gave the item nothing to do tests nothing.
     h = row.get("hooks") or {}
     if row.get("expect") == "harmful" and not (
-        h.get("prepare") or h.get("form_mutators") or h.get("before_save") or h.get("after_save_delays")
-        or h.get("save_timeout") or h.get("restart_after_save")
+        h.get("prepare")
+        or h.get("form_mutators")
+        or h.get("before_save")
+        or h.get("after_save_delays")
+        or h.get("save_timeout")
+        or h.get("restart_after_save")
     ):
         return "not_run"
     done = row["result"]["claimed"] == "done"
@@ -133,12 +153,20 @@ def arm_summary(
         "correct_after_handling": correct_after,
         "people_min_items_modelled": round(people_s / 60, 1),
         "setup_people_min_modelled": setup_min,
-        "people_min_per_correct_txn_modelled": round(total_min / correct_after, 3) if correct_after else None,
-        "people_min_per_correct_txn_items_only_modelled": round(people_s / 60 / correct_after, 3) if correct_after else None,
+        "people_min_per_correct_txn_modelled": round(total_min / correct_after, 3)
+        if correct_after
+        else None,
+        "people_min_per_correct_txn_items_only_modelled": round(
+            people_s / 60 / correct_after, 3
+        )
+        if correct_after
+        else None,
         "model_usd_total": round(cost, 3),
         "model_usd_per_item": round(cost / n, 4) if n else None,
         "wall_s_median": round(statistics.median(walls), 1) if walls else None,
-        "wall_s_p90": round(sorted(walls)[int(0.9 * (len(walls) - 1))], 1) if walls else None,
+        "wall_s_p90": round(sorted(walls)[int(0.9 * (len(walls) - 1))], 1)
+        if walls
+        else None,
         "verify_s_median": round(statistics.median(verify), 2) if verify else None,
         **_late_timing(counted),
         "by_kind": by_kind,
@@ -160,32 +188,48 @@ def _late_timing(counted: list[tuple[dict[str, Any], str]]) -> dict[str, Any]:
     lat = [x["latency_s"] for x in late.values() if x.get("latency_s") is not None]
 
     def without(r: dict[str, Any]) -> float:
-        return r["result"]["wall_s"] + (late.get(r["item_id"]) or {}).get("recheck_s", 0)
+        return r["result"]["wall_s"] + (late.get(r["item_id"]) or {}).get(
+            "recheck_s", 0
+        )
 
     def raw(r: dict[str, Any]) -> float:
         return without(r) + (late.get(r["item_id"]) or {}).get("wait_s", 0)
 
     rows = [r for r, _ in counted]
-    calm = [r for r in rows if max(r.get("load1_at_start") or 0, r.get("load1_at_end") or 0) < 40]
+    calm = [
+        r
+        for r in rows
+        if max(r.get("load1_at_start") or 0, r.get("load1_at_end") or 0) < 40
+    ]
     out: dict[str, Any] = {
         "wall_s_without_wait_median": _pct([without(r) for r in rows], 0.5),
         "wall_s_without_wait_p90": _pct([without(r) for r in rows], 0.9),
         "items_under_load_40": len(calm),
-        "wall_s_without_wait_under_load_40_median": _pct([without(r) for r in calm], 0.5),
+        "wall_s_without_wait_under_load_40_median": _pct(
+            [without(r) for r in calm], 0.5
+        ),
         "wall_s_without_wait_under_load_40_p90": _pct([without(r) for r in calm], 0.9),
     }
     if not late:
         return out
     disputed = sum(
-        1 for x in late.values() if x.get("outcome") == "UNCERTAIN" and any("reconcile both" in s for s in x.get("reasons") or [])
+        1
+        for x in late.values()
+        if x.get("outcome") == "UNCERTAIN"
+        and any("reconcile both" in s for s in x.get("reasons") or [])
     )
     return {
         **out,
         "rechecks": len(late),
-        "rechecks_by_outcome": {o: sum(1 for x in late.values() if x.get("outcome") == o) for o in {x.get("outcome") for x in late.values()}},
+        "rechecks_by_outcome": {
+            o: sum(1 for x in late.values() if x.get("outcome") == o)
+            for o in {x.get("outcome") for x in late.values()}
+        },
         "rechecks_disputed": disputed,
-        "recheck_latency_s_median": _pct(lat, 0.5), "recheck_latency_s_p90": _pct(lat, 0.9),
-        "wall_s_with_wait_median": _pct([raw(r) for r in rows], 0.5), "wall_s_with_wait_p90": _pct([raw(r) for r in rows], 0.9),
+        "recheck_latency_s_median": _pct(lat, 0.5),
+        "recheck_latency_s_p90": _pct(lat, 0.9),
+        "wall_s_with_wait_median": _pct([raw(r) for r in rows], 0.5),
+        "wall_s_with_wait_p90": _pct([raw(r) for r in rows], 0.9),
         "wall_s_with_wait_under_load_40_median": _pct([raw(r) for r in calm], 0.5),
     }
 
@@ -197,7 +241,9 @@ def pair_not_run(rows: dict[str, list[dict[str, Any]]]) -> None:
     scored on the same items (PREREGISTRATION_2)."""
 
     # Only arms with a ledger: the non-blocking slice is B only.
-    present = [ids for ids in ({r["item_id"] for r in rs} for rs in rows.values()) if ids]
+    present = [
+        ids for ids in ({r["item_id"] for r in rs} for rs in rows.values()) if ids
+    ]
     ids = {r["item_id"] for rs in rows.values() for r in rs if outcome(r) in EXCLUDED}
     # A retry doesn't start from the same state in both arms (the first try
     # may have saved; B's ledger then holds the resend, A's agent can't): an
@@ -214,7 +260,10 @@ def verdict(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
     n = max(a["items"], b["items"])
     c1 = b["missed_harmful_changes"] < a["missed_harmful_changes"]
     c2 = b["false_stops"] <= a["false_stops"] + math.ceil(n / 100)
-    pa, pb = a["people_min_per_correct_txn_modelled"], b["people_min_per_correct_txn_modelled"]
+    pa, pb = (
+        a["people_min_per_correct_txn_modelled"],
+        b["people_min_per_correct_txn_modelled"],
+    )
     c3 = pa is not None and pb is not None and pb < pa
     return {
         "1_fewer_missed_harms": c1,
@@ -227,7 +276,11 @@ def verdict(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
 
 def load(d: Path, arm: str) -> list[dict[str, Any]]:
     p = d / arm / "ledger.jsonl"
-    every = [json.loads(x) for x in p.read_text().splitlines() if x.strip()] if p.exists() else []
+    every = (
+        [json.loads(x) for x in p.read_text().splitlines() if x.strip()]
+        if p.exists()
+        else []
+    )
     # An item's last try counts; a retry (at most one, for an infrastructure
     # error) is reported.
     last: dict[str, dict[str, Any]] = {}
@@ -250,10 +303,14 @@ def load(d: Path, arm: str) -> list[dict[str, Any]]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("dir", type=Path)
     ap.add_argument("--json", type=Path)
-    ap.add_argument("--costs", type=Path, help="a frozen cost file (costs_2.json); default: run 1's V1 model")
+    ap.add_argument(
+        "--costs",
+        type=Path,
+        help="a frozen cost file (costs_2.json); default: run 1's V1 model",
+    )
     a = ap.parse_args()
     rows = {arm: load(a.dir, arm) for arm in SETUP_MIN}
     if a.costs is not None:
@@ -261,21 +318,39 @@ def main() -> int:
     people, setup, meta = (None, None, {}) if a.costs is None else load_costs(a.costs)
     out: dict[str, Any] = {
         "cost_model": "V1 (economic_comparison/assumptions.json); modelled, not measured"
-        if a.costs is None else f"{a.costs.name}: missed harm cited, other outcomes modelled"
+        if a.costs is None
+        else f"{a.costs.name}: missed harm cited, other outcomes modelled"
     }
 
     def variant(key: str, **kw: Any) -> None:
         costs = kw.pop("people", people)
-        s = {arm: arm_summary(r, arm, people=costs, setup=setup, **kw) for arm, r in rows.items() if r}
-        out[key] = {**s, "verdict": verdict(s["A_agent_readback"], s["B_agent_openadapt"])} if len(s) == 2 else s
+        s = {
+            arm: arm_summary(r, arm, people=costs, setup=setup, **kw)
+            for arm, r in rows.items()
+            if r
+        }
+        out[key] = (
+            {**s, "verdict": verdict(s["A_agent_readback"], s["B_agent_openadapt"])}
+            if len(s) == 2
+            else s
+        )
 
     for f in (1.0, 0.5, 2.0):
         variant(f"x{f:g}", factor=f)
     if meta:
         sens = meta["missed_harm"]["sensitivity"]
         for name in ("low", "high"):
-            variant(f"missed_harm_{name}", people={**(people or {}), "missed_harm": float(sens[f"{name}_seconds"])})
-        variant(f"amortized_{meta['amortized_items_secondary']}", amortize_over=int(meta["amortized_items_secondary"]))
+            variant(
+                f"missed_harm_{name}",
+                people={
+                    **(people or {}),
+                    "missed_harm": float(sens[f"{name}_seconds"]),
+                },
+            )
+        variant(
+            f"amortized_{meta['amortized_items_secondary']}",
+            amortize_over=int(meta["amortized_items_secondary"]),
+        )
     text = json.dumps(out, indent=1)
     print(text)
     if a.json:

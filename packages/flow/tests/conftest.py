@@ -60,6 +60,7 @@ def _isolation_env(root: Path) -> dict[str, str | None]:
 
     return {
         # Offline Seals must not create keys or a batch queue in the real home.
+        "OPENADAPT_SEALED_LOCK_DIR": str(root / ".sealed-locks"),
         "OPENADAPT_SEAL_HOME": str(root / ".seal-home"),
         # Never create or read the real ~/.config/openadapt/frame.key.
         "OPENADAPT_FRAME_SECRET": "11" * 32,
@@ -126,3 +127,11 @@ def pytest_runtest_makereport(item, call):
 
     if is_pytest_timeout(call.excinfo.value):
         clear_leaked_running_loop()
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    # A package-local pyproject.toml cuts off ancestor conftest discovery.
+    if not config.pluginmanager.hasplugin("openadapt-headless"):
+        from tests import headless_guard
+
+        config.pluginmanager.register(headless_guard, "openadapt-headless")

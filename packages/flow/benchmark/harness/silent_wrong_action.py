@@ -697,7 +697,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             "screen-verify silently passes a wrong/absent/duplicate write on "
             "the MockMed transactional-fault suite versus effect-verify "
             "(#63) catching it. $0, localhost only, no model calls."
-        )
+        ),
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--out",

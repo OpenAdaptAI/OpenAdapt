@@ -38,6 +38,7 @@ from openadapt_flow.compile_agent.pipeline import (
     check_run_record,
     compile_first_run,
     run_compiled,
+    run_compiled_params,
 )
 
 __all__ = [
@@ -61,4 +62,5 @@ __all__ = [
     "check_trace_against_ir",
     "compile_first_run",
     "run_compiled",
+    "run_compiled_params",
 ]

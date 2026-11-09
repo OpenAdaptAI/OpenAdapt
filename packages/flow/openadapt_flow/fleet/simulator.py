@@ -1085,7 +1085,9 @@ def _run_scenario(root: Path, *, log: Any) -> dict[str, Any]:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.split("\n\n")[0], allow_abbrev=False
+    )
     parser.add_argument(
         "--out", required=True, help="Directory for the simulated fleet"
     )

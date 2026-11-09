@@ -31,17 +31,21 @@ def strip_submit(rec: Path, out: Path, field: str) -> int:
             n += before - len(d["form"])
         fixed.append(json.dumps(d))
     (out / "network.jsonl").write_text("\n".join(fixed) + "\n")
-    (out / "COUNTERFACTUAL.txt").write_text(f"removed {n} '{field}' pair(s) from captured POST forms\n")
+    (out / "COUNTERFACTUAL.txt").write_text(
+        f"removed {n} '{field}' pair(s) from captured POST forms\n"
+    )
     return n
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--recording", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--field", required=True)
     a = ap.parse_args()
-    print(json.dumps({"removed": strip_submit(Path(a.recording), Path(a.out), a.field)}))
+    print(
+        json.dumps({"removed": strip_submit(Path(a.recording), Path(a.out), a.field)})
+    )
 
 
 if __name__ == "__main__":

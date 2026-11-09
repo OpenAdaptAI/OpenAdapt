@@ -97,6 +97,7 @@ from openadapt_flow.tutorial import (  # noqa: E402
 from openadapt_flow.verification import VerificationTier  # noqa: E402
 from scripts import export_public_demo_evidence as demo  # noqa: E402
 from tests import _approver_keys as approver_keys  # noqa: E402
+from tests._rest_read_contract_fixtures import mockmed_effects_yaml  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_KEY = "desktop-check-it-test-key"
@@ -116,6 +117,35 @@ def _flow(*argv: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
         timeout=120,
         check=False,
     )
+
+
+def _mockmed_deployment_config(path: Path, base_url: str) -> Path:
+    """Keep the approver pin and declare the owned fixture's complete read."""
+
+    config = approver_keys.approver_config(path)
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write("effects:\n" + mockmed_effects_yaml(base_url))
+    return config
+
+
+def test_mockmed_deployment_preserves_approver_pin_and_read_contract(
+    tmp_path: Path, approver
+) -> None:
+    from openadapt_flow.deployment import EffectsConfig, load_deployment
+    from tests._rest_read_contract_fixtures import mockmed_effects_config
+
+    base_url = "http://127.0.0.1:1"
+    pinned = load_deployment(approver_keys.approver_config(tmp_path / "pin.yaml"))
+    combined = load_deployment(
+        _mockmed_deployment_config(tmp_path / "deployment.yaml", base_url)
+    )
+    assert pinned.approvers is not None
+    assert combined.approvers == pinned.approvers
+    assert combined.effects == EffectsConfig.model_validate(
+        mockmed_effects_config(base_url)
+    )
+    assert combined.runtime == pinned.runtime
+    assert combined.actuation == pinned.actuation
 
 
 class DesktopRunIt:
@@ -373,7 +403,7 @@ def check_it(tmp_path_factory: pytest.TempPathFactory, module_durable_authority)
                 "120",
                 # A governed run takes its approver pin only from its config.
                 "--config",
-                str(approver_keys.approver_config(work / "approvers.yaml")),
+                str(_mockmed_deployment_config(work / "approvers.yaml", base_url)),
             ]
             with DesktopRunIt(run_dir, env, approver_key) as person:
                 exit_code = main.main(argv)
@@ -595,7 +625,11 @@ def test_run_it_saves_once_after_approval_and_never_saves_a_form_nobody_sees(
         "--params-file",
         str(params_file),
         "--config",
-        str(approver_keys.approver_config(check_it.bundle.parent / "approvers.yaml")),
+        str(
+            _mockmed_deployment_config(
+                check_it.bundle.parent / "approvers.yaml", base_url
+            )
+        ),
     ]
 
     def run(run_dir: Path, wait_s: str) -> int:

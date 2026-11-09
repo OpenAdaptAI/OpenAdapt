@@ -1071,7 +1071,9 @@ def phase_drift(ctx: dict[str, Any], trials: int, agent: Any) -> dict[str, Any]:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument(
         "phase",
         choices=(

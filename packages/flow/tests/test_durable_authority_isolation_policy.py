@@ -14,6 +14,7 @@ import pytest
 FLOW = Path(__file__).resolve().parents[1]
 KEYS = (
     "OPENADAPT_DURABLE_AUTHORITY_DB",
+    "OPENADAPT_SEALED_LOCK_DIR",
     "OPENADAPT_SEAL_HOME",
     "OPENADAPT_FRAME_SECRET",
     "OPENADAPT_FRAME_SECRET_FILE",
@@ -115,6 +116,16 @@ def test_shared_policy_reaches_both_scopes_and_restores(
         "PYTHONDONTWRITEBYTECODE": "1",
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
     }
+    # Preserve inherited nonsecret outbound policy; never copy CI credentials.
+    for name in (
+        "OPENADAPT_NO_OUTBOUND",
+        "OPENADAPT_NO_OUTBOUND_ALLOW",
+        "OPENADAPT_NO_OUTBOUND_ALLOW_FILE",
+        "OPENADAPT_NO_OUTBOUND_LOG",
+        "OPENADAPT_NO_OUTBOUND_CHILDREN",
+    ):
+        if name in os.environ:
+            env[name] = os.environ[name]
     prior = {key: "synthetic-prior-" + key for key in KEYS} if prior_set else {}
     env.update(prior)
     child = subprocess.run(
@@ -165,6 +176,7 @@ def test_shared_policy_reaches_both_scopes_and_restores(
         )
         assert snapshot["values"] == {
             "OPENADAPT_DURABLE_AUTHORITY_DB": str(root / database),
+            "OPENADAPT_SEALED_LOCK_DIR": str(root / ".sealed-locks"),
             "OPENADAPT_SEAL_HOME": str(root / ".seal-home"),
             "OPENADAPT_FRAME_SECRET": "11" * 32,
             "OPENADAPT_FRAME_SECRET_FILE": None,

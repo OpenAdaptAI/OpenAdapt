@@ -43,6 +43,7 @@ def register(sub: argparse._SubParsersAction) -> None:
         "shadow",
         help="Check each write an agent makes against the system of record, "
         "without blocking or changing it, and write a report",
+        allow_abbrev=False,
     )
     p.add_argument("--config", help=f"{SCHEMA} YAML (flags override it)")
     p.add_argument(
