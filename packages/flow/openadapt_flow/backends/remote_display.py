@@ -1577,22 +1577,14 @@ class RemoteDisplayBackend:
         byte-decoded RGB-identical frames outside any reviewed volatile regions.
         The contract applies only to derived comparisons. It never changes the
         exact raw frame evidence or learns regions from ordinary runs.
-
-        The wait ends at the timeout, but never before twice the required
-        number of frames was captured: when a capture is slow (a loaded host,
-        a VM), the timeout alone would refuse a still screen it never had the
-        time to see. The frames must still be identical.
         """
 
         deadline = time.monotonic() + self._pointer_settle_timeout_s
-        min_captures = 2 * self._pointer_settle_stable_frames
-        captures = 0
         previous_digest: Optional[bytes] = None
         stable_frames = 0
         poll_s = max(0.01, self._settle_s)
-        while time.monotonic() < deadline or captures < min_captures:
+        while time.monotonic() < deadline:
             self.screenshot()
-            captures += 1
             digest = self._last_comparison_digest
             if digest is not None and digest == previous_digest:
                 stable_frames += 1

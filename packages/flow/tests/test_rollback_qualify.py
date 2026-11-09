@@ -28,6 +28,7 @@ from openadapt_flow.runtime.effects import Effect, EffectKind, RestRecordVerifie
 from openadapt_flow.runtime.effects.effect import ValueExpr
 from openadapt_flow.runtime.replayer import Replayer
 from openadapt_flow.undo_proposal import Sources, accept_proposal, write_proposals
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 from tests.test_rollback import (
     SCHEMA,
     ClinicBackend,
@@ -56,7 +57,7 @@ def test_matrix_qualifies_a_compensation_for_every_save_on_mockmed(tmp_path, moc
         bundle_dir=bundle,
         target=target,
         reader=VerifierReader(
-            RestRecordVerifier(mockmed, records_path="/api/db", records_key="records")
+            RestRecordVerifier(mockmed, **mockmed_rest_read_kwargs())
         ),
         sources=Sources(network_lines=_network()),
         work_dir=tmp_path / "work",

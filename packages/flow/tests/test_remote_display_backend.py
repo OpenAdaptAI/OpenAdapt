@@ -21,6 +21,7 @@ from typing import Any
 import pytest
 from PIL import Image
 
+import openadapt_flow.backends.remote_display as remote_display
 from openadapt_flow.backend import (
     ActionDeliveryUncertain,
     Backend,
@@ -43,6 +44,32 @@ from openadapt_flow.backends.remote_display import (
 )
 from openadapt_flow.remote_frame_contract import RemoteFrameContract
 from openadapt_flow.runtime.resolver import visual_resolution_point_fingerprint
+
+
+class BackendClock:
+    """Synthetic frame time; PNG encoding and host scheduling are not input."""
+
+    def __init__(self) -> None:
+        self.now = 100.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
+
+
+@pytest.fixture(autouse=True)
+def backend_clock(monkeypatch: pytest.MonkeyPatch) -> BackendClock:
+    """Keep the fake-client lease model independent of real CPU contention.
+
+    Only this backend's time reference is replaced. Explicit stale-frame tests
+    still advance their own clocks; pointer-settle deadline controls below
+    charge each synthetic capture before the next production deadline check.
+    """
+    clock = BackendClock()
+    monkeypatch.setattr(remote_display, "time", clock)
+    return clock
 
 
 class FakeClient:
@@ -335,53 +362,39 @@ def test_delayed_remote_hover_paint_settles_before_final_frame() -> None:
     assert [call[0] for call in client.calls].count("mouse") == 2
 
 
-def _slow_capture_backend(*, changing: bool) -> tuple[RemoteDisplayBackend, Any]:
-    """A capture path slower than the settle timeout allows four frames for
-    (a loaded host, a VM): each capture takes 0.3 s against a 0.5 s timeout."""
-
-    class SlowClient(FakeClient):
-        captures = 0
+@pytest.mark.parametrize(
+    ("capture_seconds", "settled", "expected_captures"),
+    [(0.1, True, 4), (0.7, False, 3)],
+)
+def test_pointer_settle_keeps_its_four_frame_two_second_budget(
+    backend_clock: BackendClock,
+    capture_seconds: float,
+    settled: bool,
+    expected_captures: int,
+) -> None:
+    class TimedClient(FakeClient):
+        captures_after_move = 0
 
         def capture(self, window_id):
-            time.sleep(0.3)
-            self.captures += 1
-            if changing:
-                self.frame_color = (self.captures % 250, 1, 1)
+            if any(call[0] == "move" for call in self.calls):
+                self.captures_after_move += 1
+                backend_clock.sleep(capture_seconds)
             return super().capture(window_id)
 
-    window = WindowInfo(
-        window_id=1,
-        owner="Parallels Desktop",
-        title="Windows 11",
-        pid=99,
-        bounds=(0.0, 0.0, 200.0, 100.0),
-        on_screen=True,
-    )
-    client = SlowClient(window=window, px=(200, 100))
-    backend = RemoteDisplayBackend(
-        client=client,
-        settle_s=0.0,
-        pointer_settle_stable_frames=4,
-        pointer_settle_timeout_s=0.5,
-    )
+    client = TimedClient()
+    backend = RemoteDisplayBackend(client=client, settle_s=0.0)
+    assert client.px == (3024, 1888)
+    assert backend._pointer_settle_stable_frames == 4
+    assert backend._pointer_settle_timeout_s == 2.0
     backend.screenshot()
-    return backend, client
 
+    if settled:
+        backend.prepare_pointer_actuation(100, 100)
+    else:
+        with pytest.raises(RemoteDisplayError, match="pixels did not settle"):
+            backend.prepare_pointer_actuation(100, 100)
 
-def test_a_still_screen_settles_when_each_capture_is_slow() -> None:
-    backend, client = _slow_capture_backend(changing=False)
-    backend.prepare_pointer_actuation(100, 50)
-    backend.acquire_actuation_frame()
-    backend.click(100, 50)
-    assert [call[0] for call in client.calls].count("mouse") == 2
-
-
-def test_a_changing_screen_still_refuses_when_each_capture_is_slow() -> None:
-    backend, client = _slow_capture_backend(changing=True)
-    with pytest.raises(RemoteDisplayError, match="did not settle"):
-        backend.prepare_pointer_actuation(100, 50)
-    # Bounded: at most twice the frames it needs, then it refuses.
-    assert client.captures <= 1 + 2 * 4 + 1
+    assert client.captures_after_move == expected_captures
     assert not any(call[0] == "mouse" for call in client.calls)
 
 
@@ -1306,3 +1319,51 @@ def test_ambiguous_title_selector_is_refused_before_pinning() -> None:
 
     with pytest.raises(RemoteDisplayError, match="ambiguous"):
         backend.screenshot()
+
+
+def test_hover_jitter_reprepare_goes_through_the_real_remote_lease(tmp_path) -> None:
+    """The jitter re-prepare (#1708) on the real backend's prepared-pointer lease.
+
+    The first fresh resolve lands one pixel off. The runtime prepares the
+    pointer again at the fresh point; the backend validates and consumes the
+    first lease before moving, and the click goes out at exactly the second
+    prepared point.
+    """
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.runtime.replayer import Replayer
+    from tests.test_replayer import FakeVision, Match, click_step, make_png
+
+    client = FakeClient(
+        window=WindowInfo(
+            window_id=1,
+            owner="Parallels Desktop",
+            title="Windows 11",
+            pid=99,
+            bounds=(0.0, 0.0, 300.0, 200.0),
+            on_screen=True,
+        ),
+        px=(300, 200),
+    )
+    backend = RemoteDisplayBackend(client=client, settle_s=0.0)
+    vision = FakeVision()
+    # The resolver puts the click at the match box plus the recorded offset.
+    vision.template_results = [
+        Match(point=(0, 0), region=(100, 100, 50, 20), confidence=0.95),
+        Match(point=(0, 0), region=(101, 101, 50, 20), confidence=0.95),
+        Match(point=(0, 0), region=(101, 101, 50, 20), confidence=0.95),
+    ]
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True)
+    (bundle / "templates" / "btn.png").write_bytes(make_png((50, 20)))
+
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="jitter-real-lease", steps=[click_step(risk="irreversible")]),
+        bundle_dir=bundle,
+        run_dir=tmp_path / "run",
+    )
+
+    assert report.success is True, report.results[0].error
+    moves = [call[1:] for call in client.calls if call[0] == "move"]
+    presses = [call[1:3] for call in client.calls if call[0] == "mouse"]
+    assert moves[-2:] == [(110.0, 105.0), (111.0, 106.0)]
+    assert presses and set(presses) == {(111.0, 106.0)}

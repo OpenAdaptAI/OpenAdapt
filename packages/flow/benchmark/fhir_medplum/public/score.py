@@ -271,7 +271,9 @@ def render(
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description="Score a results.json again.")
+    ap = argparse.ArgumentParser(
+        description="Score a results.json again.", allow_abbrev=False
+    )
     ap.add_argument("results")
     ap.add_argument(
         "--strict",

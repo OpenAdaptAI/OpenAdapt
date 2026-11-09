@@ -285,6 +285,9 @@ class ReplayResult:
         out = dict(self.__dict__)
         for key in ("run_dir", "receipt", "inbox_item"):
             out[key] = str(out[key]) if out[key] is not None else None
+        known_zero = type(self.model_calls) is int and self.model_calls == 0
+        out["usage"] = [] if known_zero else None
+        out["usage_known"] = known_zero
         return out
 
 
@@ -303,6 +306,7 @@ class _HarnessedAgent:
         evidence_dir: Path,
         principal_id: Optional[str],
         readback: Optional[Callable[[], Any]] = None,
+        metadata_url: Optional[str] = None,
     ) -> None:
         self.inner = inner
         #: Read after every save that goes through the gate (harness module).
@@ -315,6 +319,8 @@ class _HarnessedAgent:
         self.harness: Optional[Union[Harness, SurfaceHarness]] = None
         self.ledger: Any = None
         self.error: Optional[str] = None
+        self.metadata_url = metadata_url
+        self.network_metadata: Optional[dict[str, Any]] = None
 
     @property
     def requires_model_key(self) -> bool:
@@ -331,6 +337,16 @@ class _HarnessedAgent:
             evidence_dir=self.evidence_dir,
             readback=self.readback,
         )
+        from openadapt_flow.compile_agent.network_metadata import NetworkMetadata
+
+        metadata = NetworkMetadata(computer.page, target_url=self.metadata_url)
+        try:
+            with metadata:
+                self._drive(request)
+        finally:
+            self.network_metadata = metadata.summary()
+
+    def _drive(self, request: TaskRequest) -> None:
         try:
             if self.readback is not None:
                 from openadapt_flow.compile_agent.harness import _start_readback
@@ -477,7 +493,7 @@ class FirstRunCompiler:
         )
 
     def _jit(self, agent: Any = None) -> CompiledAgent:
-        return compile_agent(
+        jit = compile_agent(
             agent,
             task=self.task,
             app=self._app(),
@@ -496,6 +512,11 @@ class FirstRunCompiler:
             teach_authorization=self.teach_authorization,
             on_screen=self.on_screen,
         )
+
+        # Resolve only the fixed task-local promoted-repair pointer.
+        # The property revalidates it on every access, including each run.
+        jit._use_skill_repair = True
+        return jit
 
     def teach_scope(self, params: Mapping[str, Any]) -> Any:
         """What run 1 may do, from what this task declares before the agent
@@ -642,6 +663,7 @@ class FirstRunCompiler:
         attempt = self.dir / "attempts" / _stamp()
         harnessed = _HarnessedAgent(
             agent,
+            metadata_url=self.url,
             gate=SaveGate(self.on_screen, hold),
             keep=[*self.on_screen, *values.values(), *self.expect.values()],
             evidence_dir=attempt / "gates",
@@ -675,6 +697,7 @@ class FirstRunCompiler:
                 for r in (harness.readback_log if harness else [])
             ],
             "agent_error": harnessed.error,
+            "network_metadata": harnessed.network_metadata,
         }
         trace_data: Optional[dict[str, Any]] = None
         trace = getattr(agent, "last_trace", None)
@@ -1095,9 +1118,9 @@ class FirstRunCompiler:
                     f"canary-{i + 1}",
                     values,
                     functools.partial(
-                        jit.canary,
+                        jit.canary_params,
+                        params,
                         principal_id=admitter if admitter is not None else person,
-                        **params,
                     ),
                 )
             except lifecycle.AdmissionError as exc:
@@ -1187,7 +1210,7 @@ class FirstRunCompiler:
 
     # -- every later run -------------------------------------------------------------
 
-    def run(self, **params: Any) -> ReplayResult:
+    def run(self, /, **params: Any) -> ReplayResult:
         """Run the admitted program: no model calls, every save read back,
         and a verify-run receipt against the confirmed checks."""
 
@@ -1429,6 +1452,7 @@ def compile_first_run(
 
 def run_compiled(
     task_dir: Union[str, Path],
+    /,
     *,
     reset: Optional[Callable[[], None]] = None,
     **params: Any,
@@ -1440,4 +1464,20 @@ def run_compiled(
     doesn't end VERIFIED goes to the exception inbox.
     """
 
-    return FirstRunCompiler.load(task_dir, reset=reset).run(**params)
+    return run_compiled_params(task_dir, params, reset=reset)
+
+
+def run_compiled_params(
+    task_dir: Union[str, Path],
+    params: Mapping[str, Any],
+    /,
+    *,
+    reset: Optional[Callable[[], None]] = None,
+) -> ReplayResult:
+    """Run input data separately from the fixed task and trusted controls.
+
+    Generated tools use this mapping entry point. Admission, record checks
+    and receipts use the same compiler run path as ordinary callers.
+    """
+
+    return FirstRunCompiler.load(task_dir, reset=reset).run(**dict(params))

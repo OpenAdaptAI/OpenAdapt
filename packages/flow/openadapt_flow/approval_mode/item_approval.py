@@ -75,6 +75,14 @@ from openadapt_flow.approval_mode.model import (
     DeclineReason,
     ItemApprovalRef,
 )
+from openadapt_flow.approval_mode.named_person_binding import (
+    AssertionMaterial,
+    ExecutionProfile,
+    NamedPersonBindingV1,
+    NamedPersonVerifier,
+    PersonCredentialRegistry,
+    require_named_person_binding,
+)
 from openadapt_flow.approval_mode.signed_policy import (
     GrantRefused,
     SignedApproverGrant,
@@ -395,6 +403,18 @@ class ApproverContext:
     #: Why the run's pin can't be trusted (another root or key directory
     #: than the run recorded), or ``None``. A person's answer is then refused.
     pin_refusal: Optional[str] = None
+    #: Execution profile for this run. Under ``regulated``, a named-person
+    #: binding (:mod:`.named_person_binding`) is required and verified
+    #: fail-closed. ``None`` or ``demo`` skips that check (device/key
+    #: attestation alone still applies).
+    execution_profile: Optional[ExecutionProfile] = None
+    #: Seal-safe named-person binding for the answer being checked.
+    named_person_binding: Optional[NamedPersonBindingV1] = None
+    #: Raw assertion material held only in memory for verification. Never
+    #: logged; never written to the run directory or Seal.
+    named_person_assertion: Optional[AssertionMaterial] = None
+    named_person_registry: Optional[PersonCredentialRegistry] = None
+    named_person_verifier: Optional[NamedPersonVerifier] = None
 
 
 def _as_context(
@@ -512,6 +532,24 @@ def answer_refusal(
         refusal_code = _person_refusal(answer, context)
         if refusal_code is not None:
             return refusal_code
+        # Regulated runs also bind the approval to a named person (WebAuthn /
+        # OIDC / SAML). Device/key attestation above is not enough alone.
+        expected_person = None
+        if answer.approver_id is not None:
+            expected_person = answer.approver_id
+        elif answer.approver is not None and answer.approver.id is not None:
+            expected_person = answer.approver.id
+        named_refusal = require_named_person_binding(
+            profile=context.execution_profile,
+            approval_payload_sha256=request.digest(),
+            expected_person_id=expected_person,
+            binding=context.named_person_binding,
+            assertion=context.named_person_assertion,
+            registry=context.named_person_registry,
+            verifier=context.named_person_verifier,
+        )
+        if named_refusal is not None:
+            return named_refusal
     else:
         if answer.attestation is not None:
             return "answer_fields_inconsistent"

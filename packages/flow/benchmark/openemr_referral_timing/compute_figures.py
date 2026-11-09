@@ -178,7 +178,7 @@ def compute() -> dict:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--check", action="store_true")
     args = ap.parse_args()
     text = json.dumps(compute(), indent=1) + "\n"
