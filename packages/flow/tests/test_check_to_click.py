@@ -189,7 +189,10 @@ def test_a_blinking_caret_settles_on_a_confirmed_frame(tmp_path):
     error, result, backend = _click(tmp_path, frames, identifier_region=ROW_FIELD)
     assert error is None
     assert backend.clicks == [(170, 142)]
-    assert [e.outcome for e in result.check_to_click] == ["reobserved"]
+    assert [(e.outcome, e.settled_on) for e in result.check_to_click] == [
+        ("reobserved", None),
+        ("settled", 1),
+    ]
 
 
 def test_a_frame_that_matches_no_confirmed_frame_is_still_refused(tmp_path):

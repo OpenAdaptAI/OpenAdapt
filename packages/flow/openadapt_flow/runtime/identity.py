@@ -934,6 +934,118 @@ _GEN_SUFFIX_CANON = frozenset(ocr_canonical(s) for s in GENERATIONAL_SUFFIXES)
 _GENERIC_IDENTITY_CANON = frozenset(ocr_canonical(w) for w in _GENERIC_IDENTITY_WORDS)
 
 
+# Form labels, hints and column headings: the words a UI prints beside a
+# record, never part of it. With lowercase words and "Label:" tokens they are
+# not identity-bearing, so they never pad coverage (see identity_bearing).
+_LABEL_WORDS = frozenset(
+    (
+        "name",
+        "last",
+        "first",
+        "middle",
+        "preferred",
+        "phone",
+        "home",
+        "work",
+        "mobile",
+        "cell",
+        "fax",
+        "email",
+        "address",
+        "city",
+        "state",
+        "zip",
+        "country",
+        "dob",
+        "birth",
+        "birthdate",
+        "date",
+        "time",
+        "age",
+        "sex",
+        "gender",
+        "mrn",
+        "id",
+        "number",
+        "num",
+        "account",
+        "acct",
+        "ssn",
+        "subscriber",
+        "invoice",
+        "billing",
+        "type",
+        "mode",
+        "note",
+        "notes",
+        "user",
+        "provider",
+        "select",
+        "ok",
+        "cancel",
+        "save",
+        "clear",
+        "new",
+        "add",
+        "edit",
+        "delete",
+        "close",
+        "previous",
+        "next",
+        "show",
+        "only",
+        "all",
+        "insurance",
+        "clinic",
+        "family",
+    )
+)
+_LABEL_CANON = (
+    frozenset(ocr_canonical(w) for w in _LABEL_WORDS) | _GENERIC_IDENTITY_CANON
+)
+
+
+def identity_bearing(raw_token: str, squashed_token: str) -> bool:
+    """Whether a band token can identify a record, from its shape alone.
+
+    Digit-bearing tokens (ids, dates, ages, counts) and capitalised
+    name-shaped words count. Lowercase words, ``Label:`` tokens and UI
+    vocabulary (field labels, hints, column words) do not: they appear
+    identically beside every record, so they must never pad coverage. The
+    same rule holds in a list, a form or a dialog.
+    """
+    if _has_digit(squashed_token):
+        return True
+    if raw_token.rstrip().endswith(":"):
+        return False
+    bare = squashed_token.strip(".,;:()[]")
+    return (
+        _name_shaped(raw_token, squashed_token)
+        and ocr_canonical(bare) not in _LABEL_CANON
+    )
+
+
+def identity_coverage(
+    lengths: list[int], matched: list[bool], bearing: list[bool]
+) -> tuple[float, bool]:
+    """Coverage the band must meet, and whether identity evidence is short.
+
+    The lower of whole-band coverage and coverage over identity-bearing
+    tokens. Label text then cannot pad coverage (the bearing share must pass
+    on its own), and leaving a token out of the bearing share can never let
+    a band pass that whole-band coverage fails: a real name that reads like
+    a UI word ("Ali" / "all") or is entered lowercase still counts there.
+    Short when no recorded token is identity-bearing: nothing identifies
+    the record, so the OCR tier abstains.
+    """
+    whole = sum(n for n, m in zip(lengths, matched) if m) / max(sum(lengths), 1)
+    total = sum(n for n, b in zip(lengths, bearing) if b)
+    if not total:
+        return whole, True
+    share = sum(n for n, m, b in zip(lengths, matched, bearing) if m and b) / total
+    return min(whole, share), False
+
+
 def _is_generational_suffix(token: str) -> bool:
     """Whether a squashed token is a Jr/Sr/II/III/IV generational suffix,
     tolerating OCR confusions ('lI' for 'II', '5r' for 'Sr')."""
@@ -1371,6 +1483,12 @@ def _glues_digits(fragments: list[str]) -> bool:
     )
 
 
+def _digit_floor_met(digit: list[bool], raw_matched: list[bool]) -> bool:
+    """With an id, date or other digit token in the recorded band, at least
+    one of them must match raw: a name-only match is not enough."""
+    return not any(digit) or any(d and r for d, r in zip(digit, raw_matched))
+
+
 def _digit_token_absent(exp: list[str], matched: list[bool]) -> bool:
     """Whether a digit-bearing recorded token (id, date, age, count) is
     unmatched. Such a token is never a tolerated uncovered run: absent, the
@@ -1443,6 +1561,7 @@ def band_match(
     exp = tokenize(expected_text)
     if not exp:
         return BandMatch(0.0, 0, 0)
+    exp_raw = [tok for tok in expected_text.split() if squash(tok)]
     obs_raw = [tok for tok in observed_text.split() if squash(tok)]
     obs = [squash(tok) for tok in obs_raw]
     exp_c = [ocr_canonical(t) for t in exp]
@@ -1563,8 +1682,15 @@ def band_match(
         or _extra_digit_token(exp, obs, explained)
         or _name_token_replaced(exp, obs, matched, explained)
     )
+    coverage, no_bearing = identity_coverage(
+        [len(t) for t in exp],
+        matched,
+        [identity_bearing(r, t) for r, t in zip(exp_raw, exp)],
+    )
+    if no_bearing or not _digit_floor_met([_has_digit(t) for t in exp], raw_matched):
+        evidence_short = True
     return BandMatch(
-        matched_chars / total_chars,
+        coverage,
         max(uncovered_runs, default=0),
         contradicted_chars,
         suspect_chars,

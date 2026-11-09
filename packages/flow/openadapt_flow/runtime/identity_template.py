@@ -117,8 +117,11 @@ def new_salt_hex() -> str:
 # ---------------------------------------------------------------------------
 
 
-def _token_template(salt: bytes, squashed: str) -> TokenTemplate:
+def _token_template(
+    salt: bytes, squashed: str, bearing: Optional[bool] = None
+) -> TokenTemplate:
     return TokenTemplate(
+        bearing=bearing,
         c=_hash(salt, _id.ocr_canonical(squashed)),
         r=_hash(salt, squashed),
         n=len(squashed),
@@ -291,8 +294,12 @@ def build_identity_template(
             names=context_names,
         )
         squashed_tokens = _id.tokenize(context_text)
+        raw_tokens = [tok for tok in context_text.split() if _id.squash(tok)]
         tmpl.band_len = len(_id.squash(context_text))
-        tmpl.tokens = [_token_template(salt, t) for t in squashed_tokens]
+        tmpl.tokens = [
+            _token_template(salt, t, _id.identity_bearing(r, t))
+            for r, t in zip(raw_tokens, squashed_tokens)
+        ]
         # Split-window concat keys (recorded tokens the live OCR may glue).
         for i in range(len(squashed_tokens)):
             for size, concat_raw in (
@@ -688,9 +695,16 @@ def _band_match_template(tmpl: IdentityTemplate, observed_text: str) -> _id.Band
             )
         )
     )
+    coverage, no_bearing = _id.identity_coverage(
+        [t.n for t in toks],
+        matched,
+        [True if t.bearing is None else t.bearing for t in toks],
+    )
+    if no_bearing or not _id._digit_floor_met([t.digit for t in toks], raw_matched):
+        evidence_short = True
 
     return _id.BandMatch(
-        matched_chars / total_chars if total_chars else 0.0,
+        coverage,
         max(uncovered_runs, default=0),
         contradicted_chars,
         suspect_chars,
@@ -782,8 +796,11 @@ def verify_template_identity(
         run_value_tokens: list[TokenTemplate] = []
         for name in in_band:
             value = params.get(name, param_examples.get(name, ""))
-            for tok in _id.tokenize(value):
-                run_value_tokens.append(_token_template(salt, tok))
+            raw_tokens = [tok for tok in value.split() if _id.squash(tok)]
+            for raw_tok, tok in zip(raw_tokens, _id.tokenize(value)):
+                run_value_tokens.append(
+                    _token_template(salt, tok, _id.identity_bearing(raw_tok, tok))
+                )
         sub_tmpl = IdentityTemplate(
             salt=tmpl.salt,
             band_len=tmpl.band_len,
