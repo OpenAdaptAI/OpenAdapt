@@ -58,7 +58,7 @@ Every other command, and qualification trials (`qualify campaign`,
 `seal` runs on plaintext input too: it writes a sealed set under
 `OPENADAPT_BUNDLE_KEY`. A symlink is judged by the directory it points to,
 and a directory holding a plaintext `workflow.json`, `events.jsonl` or
-`report.json` counts as plaintext wherever it sits. `qualify run` and
+`report.json` counts as plaintext wherever it sits. Every entry under an encrypted input is checked when the command starts: a symlink or a directory that can't be read below it refuses the run, and with a key the set is opened again rather than taken from an earlier read. `qualify run` and
 `qualify certify` take `--evidence-root`, which is usually a plaintext parent
 of sealed runs, so in strict mode run them on encrypted evidence or outside
 strict mode. It encrypts every recording, bundle and run directory, and an

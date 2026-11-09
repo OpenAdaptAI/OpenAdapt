@@ -13648,16 +13648,49 @@ def _local_path_kind(text: str) -> Optional[str]:
 _PLAINTEXT_ARTIFACT_MARKERS = ("workflow.json", "events.jsonl", "report.json")
 
 
+def _complete_inventory(top: Path) -> Optional[list[Path]]:
+    """Every regular file under ``top``, read from the filesystem now, or
+    None when any entry can't be inspected: a directory that can't be
+    listed, a symlink (it could point anywhere, now or later), or an entry
+    that is neither a regular file nor a directory."""
+    import os
+    import stat
+
+    files: list[Path] = []
+    pending = [top]
+    while pending:
+        current = pending.pop()
+        try:
+            with os.scandir(current) as entries:
+                listed = list(entries)
+        except OSError:
+            return None
+        for entry in listed:
+            try:
+                mode = entry.stat(follow_symlinks=False).st_mode
+            except OSError:
+                return None
+            if stat.S_ISDIR(mode):
+                pending.append(Path(entry.path))
+            elif stat.S_ISREG(mode):
+                files.append(Path(entry.path))
+            else:  # a symlink, socket, device or FIFO
+                return None
+    return files
+
+
 def _inside_sealed_set(path: Path) -> bool:
     """Whether ``path`` really is, or is inside, a sealed set.
 
     Symlinks are resolved first, so a link inside a set to a directory
     elsewhere is judged by where it points. The set's header must read, and
-    the path must be part of the set: with a key, the set's authenticated
-    index must open (it refuses any file it doesn't list) and contain the
-    path; without one, every file under the path must be ciphertext or a
-    structural file. A plaintext workflow, event log or report inside a set's
-    directory is plaintext.
+    every entry under the path must be inspected now: a directory that can't
+    be listed or a symlink below the path refuses. The path must be part of
+    the set: with a key, the set and every set nested under the path are
+    opened afresh (never from a cached open), and each authenticated index
+    refuses any file it doesn't list; without one, every file under the path
+    must be ciphertext or a structural file. A plaintext workflow, event log
+    or report inside a set's directory is plaintext.
     """
     import os
 
@@ -13669,30 +13702,57 @@ def _inside_sealed_set(path: Path) -> bool:
         return False
     if any((real / name).exists() for name in _PLAINTEXT_ARTIFACT_MARKERS):
         return False
-    try:
-        kind = str(sealed_set.read_header(root)["kind"])
-    except (sealed_set.SealedSetError, KeyError):
+    inventory = _complete_inventory(real)
+    if inventory is None:
         return False
-    rel = Path(os.path.relpath(real, root)).as_posix()
-    key = (
-        os.environ.get(sealed_set.RECORDING_ENV_KEY) if kind == "recording" else None
-    ) or crypto.resolve_read_key(None)
-    if key:
+
+    def read_key(set_root: Path) -> tuple[Optional[str], bool]:
         try:
-            files = sealed_set.open_set(root, key).files("")
-        except (sealed_set.SealedSetError, crypto.CryptoError):
+            kind = str(sealed_set.read_header(set_root)["kind"])
+        except (sealed_set.SealedSetError, KeyError):
+            return None, False
+        key = (
+            os.environ.get(sealed_set.RECORDING_ENV_KEY)
+            if kind == "recording"
+            else None
+        ) or crypto.resolve_read_key(None)
+        return key, True
+
+    key, readable = read_key(root)
+    if not readable:
+        return False
+    if key:
+
+        def opened_afresh(set_root: Path, set_key: str) -> Optional[list[str]]:
+            # Never open_set's cache: a cached open says what was on disk
+            # then, not what is there now.
+            try:
+                return sealed_set.SealedSet.open(set_root, set_key).files("")
+            except (sealed_set.SealedSetError, crypto.CryptoError):
+                return None
+
+        files = opened_afresh(root, key)
+        if files is None:
             return False
-        return rel == "." or any(f == rel or f.startswith(rel + "/") for f in files)
-    for current, _dirs, names in os.walk(real):
-        for name in names:
-            if not (
-                name.endswith(sealed_set.SEALED_SUFFIX)
-                or name == sealed_set.HEADER
-                or name == "manifest.json"
-                or name.endswith(".lock")
-                or name.startswith(".")
-            ):
+        nested = {f.parent for f in inventory if f.name == sealed_set.HEADER}
+        for set_root in sorted(nested - {root}):
+            set_key, readable = read_key(set_root)
+            if not readable or not set_key:
                 return False
+            if opened_afresh(set_root, set_key) is None:
+                return False
+        rel = Path(os.path.relpath(real, root)).as_posix()
+        return rel == "." or any(f == rel or f.startswith(rel + "/") for f in files)
+    for file in inventory:
+        name = file.name
+        if not (
+            name.endswith(sealed_set.SEALED_SUFFIX)
+            or name == sealed_set.HEADER
+            or name == "manifest.json"
+            or name.endswith(".lock")
+            or name.startswith(".")
+        ):
+            return False
     return True
 
 

@@ -723,3 +723,65 @@ def test_strict_refuses_a_path_it_cannot_check(
             )
     finally:
         locked.chmod(0o700)
+
+
+# -- review round 4 (#1815): a complete, current inventory -----------------------
+
+_ADMITTING = ("_cmd_certify", "_cmd_scaffold_verifier")
+
+
+def _assert_refused(cli, target: Path) -> None:
+    for name in _ADMITTING:
+        with pytest.raises(at_rest.AtRestRefused, match="not encrypted"):
+            cli._unsealed_output_check(
+                argparse.Namespace(func=getattr(cli, name), bundle=str(target))
+            )
+
+
+@pytest.mark.skipif(os.name != "posix", reason="symlinks")
+def test_strict_without_a_key_refuses_a_set_holding_a_directory_symlink(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from openadapt_flow import __main__ as cli
+
+    sealed, plain = _sealed_and_plain(tmp_path)
+    (sealed / "evil").symlink_to(plain, target_is_directory=True)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    monkeypatch.setattr(crypto, "resolve_read_key", lambda key: None)  # no key
+    _assert_refused(cli, sealed)
+
+
+@pytest.mark.skipif(os.name != "posix" or os.geteuid() == 0, reason="POSIX perms")
+@pytest.mark.parametrize("keyed", [True, False])
+def test_strict_refuses_a_set_with_an_unreadable_subtree(
+    default_mode: Path, tmp_path: Path, monkeypatch, keyed: bool
+) -> None:
+    from openadapt_flow import __main__ as cli
+
+    sealed, _plain = _sealed_and_plain(tmp_path)
+    hidden = sealed / "hidden"
+    hidden.mkdir()
+    (hidden / "notes.txt").write_text("plaintext patient note")
+    hidden.chmod(0)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    if not keyed:
+        monkeypatch.setattr(crypto, "resolve_read_key", lambda key: None)
+    try:
+        _assert_refused(cli, sealed)
+    finally:
+        hidden.chmod(0o700)
+
+
+def test_strict_rechecks_a_set_it_already_opened(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from openadapt_flow import __main__ as cli
+
+    sealed, _plain = _sealed_and_plain(tmp_path)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    cli._unsealed_output_check(
+        argparse.Namespace(func=cli._cmd_certify, bundle=str(sealed))
+    )
+    sealed_set.open_set(sealed)  # a warm cache, as in a long-lived process
+    (sealed / "notes.txt").write_text("plaintext patient note")
+    _assert_refused(cli, sealed)
