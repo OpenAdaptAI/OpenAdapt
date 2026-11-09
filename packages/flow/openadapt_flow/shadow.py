@@ -22,8 +22,17 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 from urllib.parse import parse_qsl, quote, urlsplit
+
+if TYPE_CHECKING:
+    from openadapt_flow.runtime.effects.effect_model import (
+        CandidateResult,
+        CapturedObservations,
+        EffectModel,
+        EvaluationIdentity,
+        ObservationRequirements,
+    )
 
 WRITE_METHODS = ("POST", "PUT", "PATCH", "DELETE")
 HOP_BY_HOP = {
@@ -42,6 +51,23 @@ CONFIRMED, REFUTED, UNCERTAIN = "CONFIRMED", "REFUTED", "UNCERTAIN"
 #: Characters a request target keeps as they are (RFC 3986 reserved,
 #: unreserved and "%").
 _SAFE_URL = "/?#[]@!$&'()*+,;=:%-._~"
+
+
+def evaluate_effect_candidate(
+    model: EffectModel,
+    observations: CapturedObservations,
+    requirements: ObservationRequirements,
+    identity: EvaluationIdentity,
+) -> CandidateResult:
+    """Compare caller-captured reader observations without modifying an episode.
+
+    The caller supplies the complete before/after reader snapshots and scope.
+    Report summaries are not substituted for those observations. The candidate
+    is returned separately; it is never added to canonical receipt evidence.
+    """
+    from openadapt_flow.runtime.effects.effect_model import evaluate_effect_model
+
+    return evaluate_effect_model(model, observations, requirements, identity)
 
 
 class ShadowConfigError(ValueError):

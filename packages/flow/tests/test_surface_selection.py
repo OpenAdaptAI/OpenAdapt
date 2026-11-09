@@ -25,6 +25,7 @@ from openadapt_flow.surface_selection import (
     native_surface_for_this_os,
     store_last_surface,
 )
+from tests.browser_readiness import ReadyBrowserMixin
 
 # ---------------------------------------------------------------------------
 # fakes (mirrors test_cli_new_commands)
@@ -38,7 +39,7 @@ class _FakePage:
         self.url = url
 
 
-class _FakeBrowser:
+class _FakeBrowser(ReadyBrowserMixin):
     def new_page(self, viewport=None, **_options):
         return _FakePage()
 

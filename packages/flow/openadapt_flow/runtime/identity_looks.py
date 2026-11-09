@@ -63,7 +63,7 @@ def identifier_tokens(text: str) -> list[str]:
     """Identifier-shaped tokens of a read, in :func:`known_ids.id_core` form."""
     out = []
     for raw in (text or "").split():
-        tok = identity_mod.squash(raw)
+        tok = identity_mod.comparison_squash(raw)
         if tok and identity_mod._is_identifier_shaped(tok):
             out.append(id_core(tok))
     return out

@@ -50,8 +50,10 @@ from __future__ import annotations
 
 import getpass
 import hashlib
+import hmac
 import json
 import re
+import secrets
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -445,6 +447,27 @@ def _normalized_bounds(
     return scaled
 
 
+def _window_key(raw: Any) -> Optional[tuple[int, int]]:
+    """A node's top-level window ``{hwnd, pid}`` as a tuple, or None."""
+    if not isinstance(raw, Mapping) or set(raw) != {"hwnd", "pid"}:
+        return None
+    values = (raw["hwnd"], raw["pid"])
+    if any(isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in values):
+        return None
+    return values  # type: ignore[return-value]
+
+
+def _identity_of(raw: Mapping[str, Any]) -> Any:
+    """A native node's element identity, or None when malformed or windowless."""
+
+    from openadapt_flow.repair.element_identity import ElementIdentity
+
+    identity = ElementIdentity.from_mapping(raw.get("identity"))
+    if identity is None or not identity.ends_at_window():
+        return None
+    return identity
+
+
 def _pixels_optional(raw: Any) -> Optional[_NodePixels]:
     if not isinstance(raw, Mapping):
         return None
@@ -512,6 +535,19 @@ class AuthoringSession:
         self._recorder: Optional[Recorder] = None
         self._recording_dir: Optional[Path] = None
         self._nodes: dict[str, _NodePixels] = {}
+        #: Element identity of each observed native node, kept here (it holds
+        #: window titles) and read again before a click by ``node_id``.
+        self._identities: dict[str, Any] = {}
+        #: Nodes whose identity another node in the same observation shares.
+        self._ambiguous: set[str] = set()
+        #: The top-level window each native node was observed in, when the
+        #: backend names one (Windows: ``{hwnd, pid}``); re-read at the click.
+        self._windows: dict[str, Any] = {}
+        #: The latest native tree was cut short (node cap, budget, deadline).
+        self._tree_truncated = False
+        #: Salts the identity part of native node ids, so a node id can't be
+        #: matched offline against guessed window titles or names.
+        self._node_salt = secrets.token_bytes(16)
         self._last_target: Optional[_NodePixels] = None
         self._pause: Optional[_Pause] = None
         self._secret_pause_params: list[str] = []
@@ -600,15 +636,36 @@ class AuthoringSession:
             raw_nodes, raw_window, truncated = [], None, False
         else:
             raw_nodes, raw_window, truncated = self._collect_raw_tree()
+        # A native node is clickable by ref only from the latest observation.
+        for stale in self._identities:
+            self._nodes.pop(stale, None)
+        self._identities.clear()
+        self._windows.clear()
+        self._ambiguous.clear()
         tree: list[dict[str, Any]] = []
+        digests: dict[str, list[str]] = {}
         for item in raw_nodes:
+            if item.get("offscreen") is True:
+                # Not listed, but a control scrolled out of view that shares a
+                # listed control's identity makes that identity ambiguous.
+                hidden = _identity_of(item)
+                if hidden is not None:
+                    digests.setdefault(hidden.digest(), []).append("")
+                continue
             node = self._project_node(item, viewport)
             if node is None:
                 continue
             tree.append(node)
+            identity = self._identities.get(node["node_id"])
+            if identity is not None:
+                digests.setdefault(identity.digest(), []).append(node["node_id"])
             if len(tree) >= _MAX_OBSERVE_NODES:
                 truncated = True
                 break
+        for node_ids in digests.values():
+            if len(node_ids) > 1:
+                self._ambiguous.update(i for i in node_ids if i)
+        self._tree_truncated = truncated
         window = self._project_window(raw_window, viewport)
         payload: dict[str, Any] = {
             "schema_version": OBSERVE_SCHEMA_VERSION,
@@ -670,6 +727,7 @@ class AuthoringSession:
         if node_id is not None:
             target = self._lookup_node(node_id)
             px, py = target.center
+            self._require_same_element(node_id, (px, py))
             self._last_target = target
             self._as_agent(recorder, lambda: recorder.click(px, py))
             return
@@ -677,6 +735,65 @@ class AuthoringSession:
             raise AuthoringError("click requires node_id or x/y", code="invalid_click")
         self._last_target = _NodePixels(x=int(x), y=int(y), w=0, h=0)
         self._as_agent(recorder, lambda: recorder.click(int(x), int(y)))
+
+    def _require_same_element(self, node_id: str, point: tuple[int, int]) -> None:
+        """Refuse a click by ``node_id`` unless the control there is the observed one.
+
+        A native tree node carries the element identity its backend's
+        ``element_identity_at`` reads (role, name, AutomationId or AX id,
+        ancestry, window, process). Before the click the identity under the
+        node's center is read again and must be equal, with a known process.
+        A node another node shares its identity with is refused too: the
+        identity can't tell them apart. Nodes with no identity (the browser
+        tree) click as before.
+        """
+
+        identity = self._identities.get(node_id)
+        if identity is None:
+            return
+        if self._tree_truncated:
+            # Controls past the cut were never compared with this one.
+            raise AuthoringError(
+                "the control tree was cut short, so this control's identity "
+                "can't be shown unique; click it by x, y instead",
+                code="tree_truncated",
+            )
+        if node_id in self._ambiguous:
+            raise AuthoringError(
+                f"node {node_id!r} has the same identity as another control; "
+                "click it by x, y instead",
+                code="ambiguous_node",
+            )
+        from openadapt_flow.repair.element_identity import ElementIdentity
+
+        reader = getattr(self._backend, "element_identity_at", None)
+        live = None
+        if callable(reader):
+            try:
+                live = ElementIdentity.from_mapping(reader(*point))
+            except Exception:
+                live = None
+        if live is None or live.process is None or live != identity:
+            raise AuthoringError(
+                f"the control at node {node_id!r} is not the one observed; "
+                "observe again",
+                code="stale_node",
+            )
+        if node_id in self._windows:
+            # Two windows of one app can share a title and their controls'
+            # identities: the window under the point must be the observed one.
+            read_window = getattr(self._backend, "window_root_at", None)
+            try:
+                window = read_window(*point) if callable(read_window) else None
+            except Exception:
+                window = None
+            recorded = self._windows[node_id]
+            if recorded is None or window is None or window != recorded:
+                raise AuthoringError(
+                    f"node {node_id!r} is not in the window it was observed in; "
+                    "observe again",
+                    code="stale_node",
+                )
 
     def type_text(self, text: str, param: Optional[str] = None) -> None:
         """Agent-driven type through :class:`Recorder` (actuates the backend).
@@ -908,6 +1025,7 @@ class AuthoringSession:
             target = _pixels_from_mapping(backend_pixels)
         elif node_id is not None:
             target = self._lookup_node(node_id)
+            self._require_same_element(node_id, target.center)
         else:
             raise AuthoringError(
                 "mark_field requires node_id or backend_pixels", code="invalid_mark"
@@ -967,6 +1085,7 @@ class AuthoringSession:
         name: str = "authoring",
         distill: bool = True,
         mine_effects: bool = False,
+        before_compile: Optional[Callable[[Path], None]] = None,
     ) -> CompileResult:
         """Compile via :func:`compile_recording`; never paints ``VERIFIED``.
 
@@ -982,6 +1101,9 @@ class AuthoringSession:
         ``mine_effects`` proposes an effect contract from the system-of-record
         delta the recording kept (see ``system_of_record_reader``). It is a
         proposal: compile still returns ``needs_human_admit``.
+
+        ``before_compile`` is called with the finished recording's folder
+        before anything reads it (to add operator marks to its ``meta.json``).
         """
 
         self._require_not_halted()
@@ -996,6 +1118,8 @@ class AuthoringSession:
         if recording_dir is None:
             raise AuthoringError("no recording to compile", code="not_recording")
         self._refuse_missing_secret_type(recording_dir)
+        if before_compile is not None:
+            before_compile(recording_dir)
         out_bundle = (
             Path(bundle_dir)
             if bundle_dir is not None
@@ -1145,11 +1269,18 @@ class AuthoringSession:
         if backend_pixels is not None:
             target = _pixels_from_mapping(backend_pixels)
             if node_id is not None:
+                if node_id in self._identities:
+                    raise AuthoringError(
+                        f"node {node_id!r} is an observed control; name it "
+                        "without backend_pixels",
+                        code="invalid_pause",
+                    )
                 self._nodes[node_id] = target
             self._last_target = target
             return target
         if node_id is not None:
             target = self._lookup_node(node_id)
+            self._require_same_element(node_id, target.center)
             self._last_target = target
             return target
         if self._last_target is not None:
@@ -1409,6 +1540,12 @@ class AuthoringSession:
             enabled = True
         if not isinstance(focused, bool):
             focused = False
+        identity = None
+        if raw.get("identity") is not None:
+            identity = _identity_of(raw)
+            if identity is None:
+                # A node whose identity is unreadable can't be checked at click.
+                return None
         node_id = raw.get("node_id")
         if not isinstance(node_id, str) or not _NODE_ID_RE.fullmatch(node_id):
             seed = (
@@ -1416,6 +1553,13 @@ class AuthoringSession:
                 f"{bounds['x']:.4f}|{bounds['y']:.4f}|"
                 f"{bounds['w']:.4f}|{bounds['h']:.4f}"
             )
+            if identity is not None:
+                seed += (
+                    "|"
+                    + hmac.new(
+                        self._node_salt, identity.digest().encode("utf-8"), "sha256"
+                    ).hexdigest()
+                )
             node_id = "n_" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:8]
         node: dict[str, Any] = {
             "node_id": node_id,
@@ -1424,12 +1568,24 @@ class AuthoringSession:
             "focused": focused,
             "bounds": bounds,
         }
-        for key in ("control_type", "class_name", "automation_id", "name"):
+        keys = ["control_type", "class_name", "automation_id", "name"]
+        if identity is not None and role in ("combobox", "list_item"):
+            # A native pop-up or combo box names itself after its selection,
+            # and a list row after its contents: field values.
+            keys.remove("name")
+        for key in keys:
             label = _safe_label(raw.get(key))
             if label:
                 node[key] = label[:64] if key == "class_name" else label
         if pixels is not None:
             self._nodes[node_id] = pixels
+        if identity is not None:
+            self._identities[node_id] = identity
+            if "window" in raw:
+                self._windows[node_id] = _window_key(raw.get("window"))
+        else:
+            self._identities.pop(node_id, None)
+        self._ambiguous.discard(node_id)
         return node
 
 

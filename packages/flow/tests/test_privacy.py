@@ -24,6 +24,7 @@ from PIL import Image
 from openadapt_flow import privacy
 from openadapt_flow.ir import RunReport, StepResult, UnarmedStep
 from openadapt_flow.report import render_run_report
+from tests.browser_readiness import ReadyBrowserMixin
 
 
 class _FakeTextScrubber:
@@ -367,7 +368,15 @@ def test_default_mockmed_replay_warns_for_arbitrary_phi_bundle(
     page = SimpleNamespace(
         url="http://127.0.0.1:45678/", video=None, goto=lambda _url: None
     )
-    browser = SimpleNamespace(new_page=lambda **_kw: page, close=lambda: None)
+
+    class Browser(ReadyBrowserMixin):
+        def new_page(self, **_options):
+            return page
+
+        def close(self):
+            pass
+
+    browser = Browser()
     playwright = SimpleNamespace(chromium=SimpleNamespace(launch=lambda **_kw: browser))
 
     @contextmanager
