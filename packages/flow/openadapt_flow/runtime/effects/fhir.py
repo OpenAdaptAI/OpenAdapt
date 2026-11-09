@@ -430,7 +430,12 @@ class FhirEffectVerifier(VerifierAdapterBase):
                 return None
             if bundle.get("type") == "collection":
                 try:
-                    check_collection_search(bundle, self.resource_type)
+                    check_collection_search(
+                        bundle,
+                        self.resource_type,
+                        search_params=self.search_params,
+                        request_urls=(target, landed),
+                    )
                 except ValueError as error:
                     self.read_problem = str(error)
                     return None

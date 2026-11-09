@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import secrets
 import stat
 from pathlib import Path
 
@@ -17,6 +18,7 @@ import pytest
 from openadapt_flow import at_rest, crypto, sealed_set
 from openadapt_flow.__main__ import _recording_encryption_key, main
 from openadapt_flow.ir import Workflow
+from tests._sealed_markers import assert_sealed_marker_absent
 from tests.test_sealed_at_rest import (
     PNG_SIGNATURE,
     _assert_ciphertext_only,
@@ -377,10 +379,20 @@ def test_default_mode_checkpoints_are_encrypted_on_disk(
         pass
     assert replayer.checkpoint_key == at_rest.local_key()
     store = CheckpointStore(run_dir, key=replayer.checkpoint_key)
-    store._write_model(run_dir / "checkpoints" / "probe.json", Workflow(name="x"))
+    marker = secrets.token_hex(16)
+    probe = run_dir / "checkpoints" / "probe.json"
+    store._write_model(probe, Workflow(name=marker))
     on_disk = sorted(p.name for p in (run_dir / "checkpoints").iterdir())
     assert on_disk == ["probe.json.enc"]
-    assert b"probe" not in (run_dir / "checkpoints" / "probe.json.enc").read_bytes()
+    assert_sealed_marker_absent(
+        probe.with_name("probe.json.enc").read_bytes(), marker.encode("ascii")
+    )
+    restored = store._read_json(probe)
+    assert restored is not None
+    assert Workflow.model_validate(restored).name == marker
+    wrong_store = CheckpointStore(run_dir, key="synthetic-wrong-checkpoint-key")
+    with pytest.raises(crypto.DecryptionError):
+        wrong_store._read_json(probe)
 
 
 def test_a_recording_only_key_reads_back_from_the_environment(
@@ -550,3 +562,226 @@ def test_read_paths_create_no_key_and_no_ledger_line(
     monkeypatch.delenv(at_rest.OPT_OUT_ENV)
     key = crypto.resolve_key(None)
     assert crypto.resolve_read_key(None) == key
+
+
+# -- review round 3 follow-ups --------------------------------------------------
+
+
+def _sealed_and_plain(tmp_path: Path) -> tuple[Path, Path]:
+    from tests.test_after_stop_mockmed import _workflow
+
+    plain = tmp_path / "plain-bundle"
+    _workflow().save(plain)
+    sealed = tmp_path / "sealed-bundle"
+    with sealed_set.writing(sealed, "bundle", crypto.resolve_key(None)):
+        _workflow().save(sealed)
+    return sealed, plain
+
+
+@pytest.mark.skipif(os.name != "posix", reason="symlinks")
+def test_strict_judges_a_symlink_inside_a_set_by_its_target(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from openadapt_flow import __main__ as cli
+
+    sealed, plain = _sealed_and_plain(tmp_path)
+    link = sealed / "evil"
+    link.symlink_to(plain, target_is_directory=True)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    with pytest.raises(at_rest.AtRestRefused, match="not encrypted"):
+        cli._unsealed_output_check(
+            argparse.Namespace(func=cli._cmd_certify, bundle=str(link))
+        )
+
+
+def test_strict_treats_a_plaintext_copy_inside_a_set_as_plaintext(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    import shutil
+
+    from openadapt_flow import __main__ as cli
+
+    sealed, plain = _sealed_and_plain(tmp_path)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    cli._unsealed_output_check(
+        argparse.Namespace(func=cli._cmd_certify, bundle=str(sealed))
+    )
+    sealed_set._OPENED.clear()  # a new process: the set is opened afresh
+    nested = sealed / "nested"
+    shutil.copytree(plain, nested)
+    for target in (nested, sealed):  # planted plaintext taints the whole set
+        with pytest.raises(at_rest.AtRestRefused, match="not encrypted"):
+            cli._unsealed_output_check(
+                argparse.Namespace(func=cli._cmd_certify, bundle=str(target))
+            )
+
+
+def test_strict_refuses_plaintext_crops_and_broken_links_inside_a_set(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from openadapt_flow import __main__ as cli
+
+    sealed, _plain = _sealed_and_plain(tmp_path)
+    crops = sealed / "t" / "templates"
+    crops.mkdir(parents=True)
+    (crops / "x.png").write_bytes(b"plaintext crop")
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    monkeypatch.setattr(crypto, "resolve_read_key", lambda key: None)  # no key
+    with pytest.raises(at_rest.AtRestRefused, match="not encrypted"):
+        cli._unsealed_output_check(
+            argparse.Namespace(func=cli._cmd_certify, bundle=str(sealed / "t"))
+        )
+    if os.name == "posix":
+        broken = tmp_path / "broken"
+        broken.symlink_to(tmp_path / "missing", target_is_directory=True)
+        with pytest.raises(at_rest.AtRestRefused, match="not encrypted"):
+            cli._unsealed_output_check(
+                argparse.Namespace(func=cli._cmd_certify, bundle=str(broken))
+            )
+
+
+def test_strict_seals_plaintext_input_with_seal(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from openadapt_flow import __main__ as cli
+
+    _sealed, plain = _sealed_and_plain(tmp_path)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    cli._unsealed_output_check(
+        argparse.Namespace(func=cli._cmd_seal, source=str(plain), out="out")
+    )
+
+
+@pytest.mark.skipif(os.name != "posix" or os.geteuid() == 0, reason="POSIX perms")
+def test_the_kept_report_message_says_what_happened(
+    default_mode: Path, tmp_path: Path, monkeypatch, capsys
+) -> None:
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    (locked / at_rest.LEDGER_NAME).mkdir()
+    monkeypatch.setenv(at_rest.HOME_ENV, str(locked))
+    at_rest.unsealed_write("a worklist report", "/data/pool", refuse=False)
+    err = capsys.readouterr().err
+    assert "is kept in plaintext" in err and "Nothing was written" not in err
+
+
+# -- review round 3 (#1815): no string skipped by its spelling --------------------
+
+
+@pytest.mark.skipif(os.name != "posix", reason="newline and ':' in file names")
+@pytest.mark.parametrize("spelling", ["new\nline", "url://shaped"])
+def test_strict_refuses_plaintext_at_a_newline_or_url_shaped_path(
+    default_mode: Path, tmp_path: Path, monkeypatch, spelling: str
+) -> None:
+    from openadapt_flow import __main__ as cli
+    from tests.test_after_stop_mockmed import _workflow
+
+    plain = tmp_path / spelling
+    _workflow().save(plain)
+    text = f"{tmp_path}/{spelling}"
+    assert Path(text).is_dir() and (Path(text) / "workflow.json").is_file()
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    for func in (cli._cmd_scaffold_verifier, cli._cmd_certify):
+        with pytest.raises(at_rest.AtRestRefused, match="not encrypted"):
+            cli._unsealed_output_check(argparse.Namespace(func=func, bundle=text))
+
+
+def test_strict_takes_text_that_names_no_path(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    # Controls: a URL, multi-line text and an over-long string name nothing
+    # on disk, so they never refuse a run; a sealed bundle is still taken.
+    from openadapt_flow import __main__ as cli
+
+    sealed, _plain = _sealed_and_plain(tmp_path)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    for text in ("http://127.0.0.1:8080", "a\nb", "x" * 5000, str(sealed)):
+        cli._unsealed_output_check(
+            argparse.Namespace(func=cli._cmd_certify, bundle=str(sealed), note=text)
+        )
+
+
+@pytest.mark.skipif(os.name != "posix" or os.geteuid() == 0, reason="POSIX permissions")
+def test_strict_refuses_a_path_it_cannot_check(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from openadapt_flow import __main__ as cli
+
+    sealed, _plain = _sealed_and_plain(tmp_path)
+    locked = tmp_path / "locked"
+    (locked / "inner").mkdir(parents=True)
+    locked.chmod(0)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    try:
+        with pytest.raises(at_rest.AtRestRefused, match="not encrypted"):
+            cli._unsealed_output_check(
+                argparse.Namespace(
+                    func=cli._cmd_certify,
+                    bundle=str(sealed),
+                    other=str(locked / "inner"),
+                )
+            )
+    finally:
+        locked.chmod(0o700)
+
+
+# -- review round 4 (#1815): a complete, current inventory -----------------------
+
+_ADMITTING = ("_cmd_certify", "_cmd_scaffold_verifier")
+
+
+def _assert_refused(cli, target: Path) -> None:
+    for name in _ADMITTING:
+        with pytest.raises(at_rest.AtRestRefused, match="not encrypted"):
+            cli._unsealed_output_check(
+                argparse.Namespace(func=getattr(cli, name), bundle=str(target))
+            )
+
+
+@pytest.mark.skipif(os.name != "posix", reason="symlinks")
+def test_strict_without_a_key_refuses_a_set_holding_a_directory_symlink(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from openadapt_flow import __main__ as cli
+
+    sealed, plain = _sealed_and_plain(tmp_path)
+    (sealed / "evil").symlink_to(plain, target_is_directory=True)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    monkeypatch.setattr(crypto, "resolve_read_key", lambda key: None)  # no key
+    _assert_refused(cli, sealed)
+
+
+@pytest.mark.skipif(os.name != "posix" or os.geteuid() == 0, reason="POSIX perms")
+@pytest.mark.parametrize("keyed", [True, False])
+def test_strict_refuses_a_set_with_an_unreadable_subtree(
+    default_mode: Path, tmp_path: Path, monkeypatch, keyed: bool
+) -> None:
+    from openadapt_flow import __main__ as cli
+
+    sealed, _plain = _sealed_and_plain(tmp_path)
+    hidden = sealed / "hidden"
+    hidden.mkdir()
+    (hidden / "notes.txt").write_text("plaintext patient note")
+    hidden.chmod(0)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    if not keyed:
+        monkeypatch.setattr(crypto, "resolve_read_key", lambda key: None)
+    try:
+        _assert_refused(cli, sealed)
+    finally:
+        hidden.chmod(0o700)
+
+
+def test_strict_rechecks_a_set_it_already_opened(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from openadapt_flow import __main__ as cli
+
+    sealed, _plain = _sealed_and_plain(tmp_path)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    cli._unsealed_output_check(
+        argparse.Namespace(func=cli._cmd_certify, bundle=str(sealed))
+    )
+    sealed_set.open_set(sealed)  # a warm cache, as in a long-lived process
+    (sealed / "notes.txt").write_text("plaintext patient note")
+    _assert_refused(cli, sealed)

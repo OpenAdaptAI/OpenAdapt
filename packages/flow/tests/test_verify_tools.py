@@ -357,6 +357,7 @@ def test_an_owed_recheck_is_named_after_a_restart(sqlite_bridge, tmp_path) -> No
     )
     assert retry["ok_to_write"] is False
     assert retry["earlier_result"]["provisional"] is True
+    assert retry["earlier_result"]["final"] is False
     assert "doesn't hold it" in retry["next"] and "ledger list" in retry["next"]
 
 
@@ -453,6 +454,35 @@ def test_mcp_absence_without_dispatch_proof_never_advertises_retry(
     retained = verifier.default_ledger().unresolved()
     assert len(retained) == 1 and retained[0][1].resolved is not None
     assert retained[0][1].resolved["retry_safe"] is False
+
+
+def test_verify_check_uncertain_is_not_final(sqlite_bridge) -> None:
+    bridge, _db = sqlite_bridge
+    begun = bridge.dispatch("verify_begin", {"contract": "patient", "values": VALUES})
+    checked = bridge.dispatch("verify_check", {"write_id": begun["write_id"]})
+    assert checked["outcome"] == "UNCERTAIN"
+    assert checked["verified"] is False
+    assert checked["provisional"] is False
+    assert checked["final"] is False
+
+
+def test_verify_recheck_disputed_later_write_is_not_final(
+    sqlite_bridge, monkeypatch
+) -> None:
+    bridge, db = sqlite_bridge
+    first = _provisional(bridge, db)
+    begun = bridge.dispatch("verify_begin", {"contract": "patient", "values": VALUES_3})
+    _sql(db, SAVE_3, "INSERT INTO calendar (pid, title) VALUES (2, 'Unexplained')")
+    second = bridge.dispatch("verify_check", {"write_id": begun["write_id"]})
+    assert second["outcome"] == "REFUTED"
+    assert second["verified"] is False
+    assert second["final"] is True
+    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+    late = bridge.dispatch("verify_recheck", {"write_id": first["write_id"]})
+    assert late["outcome"] == "UNCERTAIN", late["reasons"]
+    assert late["verified"] is False
+    assert late["final"] is False
+    assert "Not a pass" in late["next"]
 
 
 # -- a native read before the bound deadline has not completed the recheck ----

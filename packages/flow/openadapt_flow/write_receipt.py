@@ -690,7 +690,16 @@ def issue_for_recheck(
         },
         source="verifier",
         verdict=verdict,
-        scope=recheck_scope(scope_of_result(result), ["frame.database"], when),
+        scope=recheck_scope(
+            scope_of_result(result),
+            ["frame.history"]
+            if ((result.evidence.get("frame") or {}).get("recheck") or {}).get(
+                "compares"
+            )
+            == "history_since_checkpoint"
+            else ["frame.database"],
+            when,
+        ),
         checked={**result.checked, "frame": late.frame},
         write_id=result.write_id,
         verify_run_receipt_sha256=result.receipt_sha256 or None,

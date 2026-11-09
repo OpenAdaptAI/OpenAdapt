@@ -643,6 +643,19 @@ class WriteResult:
         return self.verified and bool(self.recheck_due_at)
 
     @property
+    def final(self) -> bool:
+        """Whether this verdict is resolved, with no owed final recheck.
+
+        An uncertain read does not settle the verdict. A final refutation
+        remains a negative verdict, not verification or permission to retry.
+        """
+
+        return (
+            self.outcome in (Outcome.CONFIRMED, Outcome.REFUTED)
+            and not self.provisional
+        )
+
+    @property
     def verdict(self) -> str:
         """The outcome under its old name (``VERIFIED``, ``REFUTED``,
         ``RECONCILIATION_REQUIRED``)."""
@@ -687,6 +700,7 @@ class WriteResult:
             "review": self.review,
             "recheck_due_at": self.recheck_due_at,
             "provisional": self.provisional,
+            "final": self.final,
             "write_receipt": self.write_receipt,
             "write_receipt_path": self.write_receipt_path,
         }
@@ -789,6 +803,16 @@ class RecheckResult:
         """True only when this receipt-bound recheck claim still stands."""
 
         return self.outcome == "CONFIRMED"
+
+    @property
+    def final(self) -> bool:
+        """A completed proof through read_at, with no unread history gap."""
+
+        return (
+            self.outcome in ("CONFIRMED", "REFUTED")
+            and bool(self.read_at)
+            and self.frame in ("held", "refuted")
+        )
 
     @property
     def late(self) -> bool:
@@ -1069,7 +1093,37 @@ def _capture(
     database = contract.config.frame.database if contract.config.frame else None
     if database is not None and FRAME_DB_DETAIL not in (state.get("detail") or {}):
         raise BaselineUnreadable(_frame_db_unread(state))
+    if contract.config.frame is not None and contract.config.frame.history is not None:
+        from openadapt_flow.runtime.effects.history import DETAIL, checkpoint_problem
+
+        if (
+            checkpoint_problem(
+                (state.get("detail") or {}).get(DETAIL), contract.config.frame.history
+            )
+            is not None
+        ):
+            raise BaselineUnreadable(
+                "complete change history could not be read before the write"
+            )
     return pending
+
+
+def _sql_history_coverage(contract: Contract) -> Optional[dict[str, str]]:
+    """The model and actual frame bound by a current SQL-history proof."""
+    spec = contract.config.frame
+    if spec is None:
+        return None
+    history = spec.history
+    if history is None:
+        return None
+    kinds = {feed.read.get("kind") for feed in history.feeds.values()}
+    if not kinds <= {"sql", "fhir"}:
+        raise ValueError("history feed kind is unresolved")
+    if "sql" not in kinds:
+        return None
+    from openadapt_flow.runtime.effects.history import SQL_INVENTORY
+
+    return {"model": SQL_INVENTORY, "frame_sha256": spec.digest()}
 
 
 def _settle(
@@ -1094,6 +1148,23 @@ def _settle(
         return
     if state == "undelivered":
         assert attempt is not None and attempt.resolved is not None
+
+        def _require_history_proof(seen: Any) -> None:
+            if seen.rechecked is None:
+                return
+            coverage = _sql_history_coverage(contract)
+            if (
+                coverage is not None
+                and seen.rechecked.get("history_coverage") != coverage
+            ):
+                raise WriteHeld(
+                    "the earlier SQL history proof lacks the current retained-event inventory; a person must reconcile it",
+                    key=key,
+                )
+
+        # Refuse before journaling a handback, so a held write's journal
+        # stays exactly as it was.
+        _require_history_proof(attempt)
         # The lifecycle lease does not exclude late rechecks. Linearize the
         # handback against their settlements even if an earlier reply was
         # already delivered, then use that accepted snapshot.
@@ -1106,9 +1177,11 @@ def _settle(
         result["retry_safe"] = False
         result["not_sent_again"] = True
         if attempt.rechecked is not None:
+            _require_history_proof(attempt)
             # A recheck confirmed it since: no longer provisional, and no
             # recheck is due.
             result["provisional"] = False
+            result["final"] = True
             result["recheck_due_at"] = None
             result["rechecked_at"] = attempt.rechecked.get("at")
         raise AlreadyWritten(
@@ -2342,7 +2415,9 @@ def recheck(
             ledger, write, late, trusted=trusted, expected_revision=revision
         )
     else:
-        late = _mark_rechecked(ledger, write, late, expected_revision=revision)
+        late = _mark_rechecked(
+            ledger, write, late, contract, expected_revision=revision
+        )
     return late
 
 
@@ -2381,6 +2456,7 @@ def _mark_rechecked(
     ledger: Any,
     write: WriteResult | RecheckState,
     late: RecheckResult,
+    contract: Contract,
     *,
     expected_revision: Optional[int] = None,
 ) -> RecheckResult:
@@ -2389,10 +2465,11 @@ def _mark_rechecked(
     retry is handed a result that is no longer provisional.
 
     A journal change can invalidate this positive observation. If the
-    revision changed or recording fails, return UNCERTAIN. A fresh read
-    may still confirm while the ledger retains an earlier REFUTED or
-    UNCERTAIN settlement: this observation does not release that hold or
-    grant permission to retry. The read facts stay intact.
+    revision changed or recording fails, return UNCERTAIN. When the ledger
+    already settled the attempt as REFUTED or UNCERTAIN, a fresh positive
+    read never upgrades that entry in place: nothing is recorded, the
+    ledger outcome stays as it was, and the reply is UNCERTAIN with the
+    prior settlement as the reason. The read facts stay intact.
     """
 
     try:
@@ -2429,6 +2506,22 @@ def _mark_rechecked(
                     "the ledger no longer has this attempt as its current write",
                 ],
             )
+        prior = (attempt.resolved or {}).get("outcome")
+        if prior != "CONFIRMED":
+            # Never upgrade an old REFUTED or UNCERTAIN ledger entry in place:
+            # the ledger keeps its settlement and this reply is not a pass.
+            return _replace(
+                late,
+                outcome="UNCERTAIN",
+                reasons=[
+                    *late.reasons,
+                    f"the ledger settled this write as {prior or 'unresolved'}; "
+                    "a later positive read does not change that settlement",
+                ],
+            )
+        # Only reached after this contract's authenticated checkpoint and
+        # actual recheck confirmed.
+        coverage = _sql_history_coverage(contract)
         recorded = led.rechecked(
             key,
             write_id,
@@ -2440,6 +2533,7 @@ def _mark_rechecked(
             if late.excuse_receipt_sha256s is not None
             else None,
             expected_revision=expected_revision,
+            **({"history_coverage": coverage} if coverage is not None else {}),
         )
         if (
             recorded.attempt_id != write_id
@@ -2720,7 +2814,7 @@ def _judge_recheck(
     ):
         raise VerifierError(
             "this write scheduled no recheck: it was not verified, or the "
-            "contract doesn't set frame.database.recheck_after_s"
+            "contract schedules no history or database recheck"
         )
     run_record = actor.run_record()
     cfg = contract.config

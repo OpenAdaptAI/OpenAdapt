@@ -333,11 +333,14 @@ def test_positive_recheck_cannot_mark_over_concurrent_refutation(
             assert negative.outcome == "REFUTED", negative.reasons
         finally:
             resume.set()
-        assert not positive.result(timeout=15).verified
+        late = positive.result(timeout=15)
+        assert not late.verified and late.outcome == "UNCERTAIN", late.reasons
+        assert "REFUTED" in late.reasons[-1]
     current = ledger.latest(first.write_key)
     assert current is not None and current.state == "held" and current.rechecked is None
-    assert current.events[-1]["event"] == "rechecked"
-    assert current.events[-1]["based_on"] == before.revision
+    # The positive read is never recorded over the REFUTED settlement.
+    assert current.events[-1]["event"] == "resolved"
+    assert current.events[-1]["outcome"] == "REFUTED"
 
 
 def test_initial_record_cannot_prune_or_return_positive_over_refutation(
@@ -486,8 +489,9 @@ def test_a_later_verified_write_excuses_its_own_rows(
     contract, db, first = _first(tmp_path)
     second = _save(contract, db, 3)
     assert second.verified, second.reasons
-    # Without the excuse, the next patient's rows are unexplained.
-    assert _recheck(contract, first).outcome == "REFUTED"
+    # Without the excuse, the next patient's rows are unexplained. The probe
+    # uses no ledger: a recorded REFUTED would hold every later recheck.
+    assert _recheck(contract, first, ledger=None).outcome == "REFUTED"
     late = _recheck(contract, first, excused_by=[second])
     assert late.outcome == "CONFIRMED", late.reasons
     assert late.excused == 1
@@ -515,6 +519,7 @@ def test_what_refuted_a_later_write_leaves_the_earlier_one_uncertain(
     # refute the earlier one; but the harm may be the earlier write's.
     late = _recheck(contract, first, excused_by=[second])
     assert late.outcome == "UNCERTAIN", late.reasons
+    assert not late.verified and not late.final
     assert "may be what refuted it" in late.reasons[0]
     # A change no later write accounts for still refutes the earlier one.
     _sql(db, "INSERT INTO calendar (pid, title) VALUES (1, 'Follow-up')")
@@ -564,6 +569,7 @@ def test_p3_the_earlier_writes_late_harm_inside_a_later_window_is_uncertain(
     assert second.status == "refuted"
     late = _recheck(contract, first, excused_by=[second])
     assert late.outcome == "UNCERTAIN", late.reasons
+    assert not late.verified and not late.final
 
 
 def test_p4_a_removal_a_later_window_reported_is_uncertain(
@@ -576,6 +582,7 @@ def test_p4_a_removal_a_later_window_reported_is_uncertain(
     assert second.status == "refuted"
     late = _recheck(contract, first, excused_by=[second])
     assert late.outcome == "UNCERTAIN", late.reasons
+    assert not late.verified and not late.final
 
 
 def test_a_removal_a_verified_later_window_explained_is_excused(
@@ -592,7 +599,7 @@ def test_a_removal_a_verified_later_window_explained_is_excused(
     )
     second = verify_write(before)
     assert second.verified, second.reasons  # the nurse's delete, attributed
-    assert _recheck(contract, first).outcome == "REFUTED"
+    assert _recheck(contract, first, ledger=None).outcome == "REFUTED"
     late = _recheck(contract, first, excused_by=[second])
     assert late.outcome == "CONFIRMED", late.reasons
 
@@ -615,7 +622,7 @@ def test_a_state_not_issued_here_is_uncertain_and_never_excuses(
     assert first.recheck is not None and second.recheck is not None
     # Another state directory: no issuance record for either state.
     monkeypatch.setattr(verifier, "USED_DIR", tmp_path / "elsewhere")
-    late = _recheck(contract, first)
+    late = _recheck(contract, first, ledger=None)
     assert late.outcome == "UNCERTAIN"
     assert "not issued" in late.reasons[0]
     monkeypatch.setattr(verifier, "USED_DIR", tmp_path / "used")
@@ -747,6 +754,7 @@ def test_a_mismatched_state_is_uncertain(
     tamper(payload)
     late = _recheck(contract, RecheckState(payload))
     assert late.outcome == "UNCERTAIN", late.reasons
+    assert not late.verified and not late.final
     assert "can't be rechecked" in late.reasons[0]
 
 
@@ -870,6 +878,7 @@ def test_a_confirmed_write_downgraded_to_uncertain_cannot_be_rechecked_as_verifi
     for state in (down, first, first.recheck):
         late = _recheck(contract, state)
         assert late.outcome == "UNCERTAIN", late.reasons
+        assert not late.verified and not late.final
         assert "downgraded" in late.reasons[0]
 
 
@@ -1051,6 +1060,7 @@ def test_an_uncertain_recheck_is_not_handed_back_as_confirmed(
     db.unlink()  # the database can't be read again
     late = _recheck(contract, result)
     assert late.outcome == "UNCERTAIN"
+    assert not late.verified and not late.final
     with pytest.raises(verifier.WriteBlocked) as raised:
         begin_write(contract, _params(2), actor=BOT, write_key="order-78")
     assert not isinstance(raised.value, verifier.AlreadyWritten)
@@ -1064,6 +1074,9 @@ def test_a_confirming_recheck_leaves_the_ledger_as_it_was(
     with pytest.raises(verifier.AlreadyWritten) as raised:
         begin_write(contract, _params(2), actor=BOT, write_key="order-79")
     assert raised.value.result["outcome"] == "CONFIRMED"
+    assert raised.value.result["verified"] is True
+    assert raised.value.result["final"] is True
+    assert raised.value.result["provisional"] is False
 
 
 def test_a_recheck_without_a_ledger_changes_no_ledger(
@@ -1156,6 +1169,7 @@ def test_a_later_write_whose_frame_was_not_judged_leaves_the_earlier_uncertain(
     monkeypatch.setattr(verify_run, "_later_window", lambda state: None)
     late = _recheck(contract, first, excused_by=[second])
     assert late.outcome == "UNCERTAIN", late.reasons
+    assert not late.verified and not late.final
     assert "frame was not judged" in late.reasons[0]
 
 
@@ -1330,12 +1344,12 @@ def test_fresh_excused_recheck_does_not_release_hold_or_retry(
     assert before is not None and before.state == "held"
     files = {str(p): p.read_bytes() for p in before.folder.rglob("*") if p.is_file()}
     assert files, "the genuine saved attempt must contain retained files"
-    assert _recheck(contract, first, excused_by=[second]).outcome == "CONFIRMED"
+    fresh = _recheck(contract, first, excused_by=[second])
+    assert fresh.outcome == "UNCERTAIN" and "REFUTED" in fresh.reasons[-1]
     after = led.latest(first.write_key)
     assert after is not None and after.state == "held"
     assert after.resolved == before.resolved and not after.resolved["retry_safe"]
-    assert after.events[-1]["applied"] is True
-    assert after.events[-1]["outcome"] == "CONFIRMED"
+    assert after.events == before.events  # nothing recorded over the hold
     assert {
         str(p): p.read_bytes() for p in before.folder.rglob("*") if p.is_file()
     } == files
@@ -1352,10 +1366,9 @@ def test_historical_claim_cannot_be_revived_by_recycled_excuses(
     plain = _recheck(contract, first)
     assert plain.outcome == "REFUTED" and plain.excuse_receipt_sha256s == ()
     explained = _recheck(contract, first, excused_by=[second])
-    assert (
-        explained.verified
-        and explained.recheck_claim_sha256 != plain.recheck_claim_sha256
-    )
+    # A REFUTED settlement holds: no later positive read is a pass.
+    assert explained.outcome == "UNCERTAIN", explained.reasons
+    assert explained.recheck_claim_sha256 != plain.recheck_claim_sha256
     _sql(db, "UPDATE patient_data SET phone_cell='unexpected' WHERE id=1")
     disputed = _recheck(contract, first, excused_by=[second])
     assert disputed.outcome == "REFUTED"
@@ -1365,7 +1378,7 @@ def test_historical_claim_cannot_be_revived_by_recycled_excuses(
         assert not later.verified, later.reasons
     third = _save(contract, db, 4)
     new_claim = _recheck(contract, first, excused_by=[second, third])
-    assert new_claim.verified, new_claim.reasons
+    assert not new_claim.verified and new_claim.outcome == "UNCERTAIN"
     assert new_claim.excuse_receipt_sha256s == tuple(
         sorted({second.receipt_sha256, third.receipt_sha256})
     )
@@ -1403,7 +1416,7 @@ def test_legacy_missing_context_does_not_admit_a_fresh_confirmation(
     file.write_text("".join(json.dumps(event) + "\n" for event in old_format))
     late = _recheck(contract, first, excused_by=[second], ledger=legacy)
     assert not late.verified and late.outcome == "UNCERTAIN"
-    assert "context" in late.reasons[-1]
+    assert "REFUTED" in late.reasons[-1]
     held = legacy.latest(first.write_key)
     assert held is not None and held.state == "held"
     assert first.ledger.backend.events(first.write_key) == original
@@ -1452,17 +1465,16 @@ def test_receipt_bound_revision_model_on_generated_sqlite_histories(
                     negative_contexts.add(context)
                     negative_receipts.update(context)
                 else:
-                    permitted = not negative_contexts or (
-                        context not in negative_contexts
-                        and bool(set(context) - negative_receipts)
-                    )
+                    # Any recorded REFUTED holds: never upgraded in place.
+                    permitted = not negative_contexts
                     assert result.verified is permitted, result.reasons
                     if not permitted:
                         assert result.outcome == "UNCERTAIN"
                 events = first.ledger.backend.events(first.write_key)
-                assert (
-                    events[: len(prefix)] == prefix and len(events) == len(prefix) + 1
-                )
+                recorded = result.outcome == "REFUTED" or result.verified
+                assert events[: len(prefix)] == prefix and len(events) == len(
+                    prefix
+                ) + int(recorded)
                 if negative_contexts:
                     held = first.ledger.latest(first.write_key)
                     assert held is not None and held.state == "held"
@@ -1471,3 +1483,78 @@ def test_receipt_bound_revision_model_on_generated_sqlite_histories(
                         begin_write(contract, _params(2), actor=BOT)
 
     histories()
+
+
+# -- a positive recheck never upgrades a non-CONFIRMED ledger entry ----------
+
+
+def _settled_ledger(outcome: str) -> tuple[Any, str]:
+    from openadapt_flow import write_ledger as wl
+
+    led = wl.Ledger(wl.MemoryLedger())
+    key = "c" * 64
+    led.begun(key, "first")
+    led.resolved(
+        key,
+        "first",
+        outcome=outcome,
+        result={"provisional": outcome == "CONFIRMED", "recheck_due_at": "due"},
+    )
+    return led, key
+
+
+def _late_confirmed() -> RecheckResult:
+    return RecheckResult(
+        outcome="CONFIRMED",
+        frame="held",
+        reasons=["nothing unexplained moved"],
+        read_at="2026-11-09T00:00:00Z",
+    )
+
+
+class _NoFrameContract:
+    class config:  # noqa: N801 - mirrors Contract.config
+        frame = None
+
+
+@pytest.mark.parametrize("prior", ["REFUTED", "UNCERTAIN"])
+def test_positive_recheck_after_a_non_confirmed_settlement_replies_uncertain(
+    prior: str,
+) -> None:
+    led, key = _settled_ledger(prior)
+    before = led.latest(key)
+    assert before is not None
+    state = RecheckState(payload={"receipt": {"correlation_id": "first"}})
+    reply = verifier._mark_rechecked(
+        led,
+        state,
+        _late_confirmed(),
+        _NoFrameContract(),  # type: ignore[arg-type]
+        expected_revision=before.revision,
+    )
+    assert reply.outcome == "UNCERTAIN"
+    assert any(prior in reason for reason in reply.reasons), reply.reasons
+    after = led.latest(key)
+    assert after is not None
+    assert after.resolved == before.resolved
+    assert after.resolved["outcome"] == prior  # type: ignore[index]
+    assert after.revision == before.revision and after.rechecked is None
+
+
+def test_positive_recheck_after_confirmed_still_records_rechecked() -> None:
+    led, key = _settled_ledger("CONFIRMED")
+    before = led.latest(key)
+    assert before is not None and before.recheck_owed is not None
+    state = RecheckState(payload={"receipt": {"correlation_id": "first"}})
+    reply = verifier._mark_rechecked(
+        led,
+        state,
+        _late_confirmed(),
+        _NoFrameContract(),  # type: ignore[arg-type]
+        expected_revision=before.revision,
+    )
+    assert reply.outcome == "CONFIRMED", reply.reasons
+    after = led.latest(key)
+    assert after is not None
+    assert after.rechecked is not None and after.recheck_owed is None
+    assert after.resolved["outcome"] == "CONFIRMED"  # type: ignore[index]
