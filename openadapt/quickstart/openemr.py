@@ -55,6 +55,11 @@ READY_TIMEOUT_S = 240.0
 #: The duplicate-check dialog in the 1280x800 screenshot.
 DIALOG_CROP = (204, 30, 1078, 262)
 
+#: The certified program's duplicate rule: Create New Patient must show
+#: OpenEMR's duplicate-check dialog (its title) saying it found no match.
+DUPLICATE_DIALOG_TEXT = "Confirm Create New Patient"
+DUPLICATE_CLEAR_TEXT = "No matches were found."
+
 #: Field labels for the demonstration's typed values.
 FIELD_LABELS = {
     "title": "Title",
@@ -245,6 +250,53 @@ def run_facts(index: int, facts: dict[str, Any], checked: bool) -> RunFacts:
         seconds=float(facts["seconds"]),
         plain_label=str(facts["plain_label"]),
     )
+
+
+def _kind(condition: Any) -> str:
+    kind = getattr(condition, "kind", "")
+    return str(getattr(kind, "value", kind))
+
+
+def duplicate_stop_observed(
+    workflow: Any,
+    *,
+    execution_outcome: str,
+    transaction_outcome: Optional[str],
+    halt_reason: str,
+) -> bool:
+    """True only when the halt itself shows the duplicate check listed a match.
+
+    The program waits, at the step that opens OpenEMR's duplicate check, for
+    the dialog and for its "no matches" line. Act 3 is the demonstration only
+    when the run halted before any effect at that step, with the dialog on
+    screen and the "no matches" line (or the duplicate-candidate check)
+    failing. A readiness, identity or any other halt, or a halt at that step
+    without the dialog, is not attributed to the duplicate check.
+    """
+
+    if execution_outcome != "HALTED" or transaction_outcome != "HALTED_BEFORE_EFFECT":
+        return False
+    head, sep, failed = halt_reason.partition(" — failed: ")
+    if not sep:
+        return False
+    for step in getattr(workflow, "steps", ()):
+        expect = list(getattr(step, "expect", None) or ())
+        texts = {
+            str(getattr(pc, "text", "")) for pc in expect if _kind(pc) == "text_present"
+        }
+        guard = DUPLICATE_CLEAR_TEXT in texts or any(
+            _kind(pc) == "no_duplicate_candidate" for pc in expect
+        )
+        if not guard or not head.startswith(
+            f"Postconditions failed for step '{step.id}' "
+        ):
+            continue
+        if repr(DUPLICATE_DIALOG_TEXT) in failed:
+            return False  # the dialog itself never showed
+        return repr(DUPLICATE_CLEAR_TEXT) in failed or (
+            "no_duplicate_candidate" in failed
+        )
+    return False
 
 
 def read_dialog(screenshot: Path) -> Optional[str]:
@@ -623,6 +675,12 @@ class OpenEMREngine:
             halt_reason=str(facts["halt_reason"]),
             model_calls=int(facts["model_calls"]),
             seconds=float(facts["seconds"]),
+            stop_attributed=duplicate_stop_observed(
+                self.workflow,
+                execution_outcome=str(facts["execution_outcome"]),
+                transaction_outcome=facts["transaction_outcome"],
+                halt_reason=str(facts["halt_reason"]),
+            ),
         )
 
     def read_screen(self, broken: BreakFacts) -> Optional[str]:
@@ -645,6 +703,7 @@ __all__ = [
     "checkout_problem",
     "demo_step_label",
     "docker_problem",
+    "duplicate_stop_observed",
     "find_flow_checkout",
     "read_dialog",
 ]

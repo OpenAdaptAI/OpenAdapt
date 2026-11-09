@@ -26,6 +26,7 @@ from openadapt.quickstart.openemr import (
     checkout_problem,
     demo_step_label,
     docker_problem,
+    duplicate_stop_observed,
     find_flow_checkout,
 )
 from openadapt.quickstart.scene import OPENEMR
@@ -45,6 +46,18 @@ NAMES = (
     "Grace Adeyemi",
     "Arlo Whitcombe",
     "Priya Raman",
+)
+#: The certified program's halt when OpenEMR's duplicate check lists a match.
+DUPLICATE_HALT = (
+    "Postconditions failed for step 'step_039' (click 'Create New Patient'): "
+    "expected screen state not reached (semantic drift) — failed: text_present "
+    "'No matches were found.' — run aborted"
+)
+#: Two other halts the same Act 3 can end in (Codex review on #1431).
+READINESS_HALT = "Readiness check failed before step 'step_000': the page never settled"
+IDENTITY_HALT = (
+    "Identity check failed for step 'step_003': the focused field is not the "
+    "one the program was compiled against"
 )
 DEMO = (
     ('Title: "Ms."', 2.1),
@@ -284,9 +297,10 @@ def _broken(root: Path, **overrides) -> BreakFacts:
         new_records=0,
         effects_required=11,
         effects_refuted=0,
-        halt_reason="Postconditions failed for step 'step_039'",
+        halt_reason=DUPLICATE_HALT,
         model_calls=0,
         seconds=24.5,
+        stop_attributed=True,
     )
     return replace(facts, **overrides)
 
@@ -437,6 +451,103 @@ def test_a_new_chart_in_act_three_is_never_called_a_clean_stop(root):
     assert "a new chart is in OpenEMR. Check it." in output
 
 
+@pytest.mark.parametrize("halt", [READINESS_HALT, IDENTITY_HALT])
+def test_a_stop_the_duplicate_check_did_not_cause_is_not_the_demonstration(root, halt):
+    # Codex review on #1431: a readiness or identity halt, with nothing read
+    # off the screen, printed that the duplicate check found a chart, that
+    # replay would have saved a duplicate, and that the screen showed the
+    # duplicate dialog. None of that was observed.
+    output, outcome = _plain(
+        FakeOpenEMR(
+            root,
+            broken={
+                "screen_text": None,
+                "halt_reason": halt,
+                "stop_attributed": False,
+            },
+        )
+    )
+    assert outcome.broken is not None and outcome.broken.stopped
+    assert "duplicate check found" not in output
+    assert "duplicate check listed" not in output
+    assert "Replaying those clicks" not in output
+    assert "listing a matching chart" not in output
+    assert "possible duplicate" not in output.split("Break it", 1)[1]
+    assert "■ Stopped" in output
+    assert "not at the check this act sets off" in output
+
+
+def test_the_duplicate_stop_shows_the_dialog_only_when_the_halt_observed_it(root):
+    output, _ = _plain(FakeOpenEMR(root, broken={"screen_text": None}))
+    assert "OpenEMR's duplicate check, listing a matching chart" in output
+    assert "■ Stopped before saving: possible duplicate" in output
+    assert "Replaying those clicks would have saved a possible duplicate" in output
+
+
+def _certified_workflow():
+    from types import SimpleNamespace
+
+    data = json.loads(
+        (
+            FLOW
+            / "benchmark"
+            / "openemr_local"
+            / "referral_program"
+            / "program"
+            / "workflow.json"
+        ).read_text()
+    )
+    return SimpleNamespace(
+        steps=[
+            SimpleNamespace(
+                id=step["id"],
+                expect=[SimpleNamespace(**pc) for pc in step.get("expect") or ()],
+            )
+            for step in data["steps"]
+        ]
+    )
+
+
+@pytest.mark.parametrize(
+    "transaction, halt, attributed",
+    [
+        ("HALTED_BEFORE_EFFECT", DUPLICATE_HALT, True),
+        ("HALTED_BEFORE_EFFECT", READINESS_HALT, False),
+        ("HALTED_BEFORE_EFFECT", IDENTITY_HALT, False),
+        # The dialog itself never showed: not the duplicate check listing one.
+        (
+            "HALTED_BEFORE_EFFECT",
+            DUPLICATE_HALT.replace(
+                "text_present 'No matches",
+                "text_present 'Confirm Create New Patient'; text_present 'No matches",
+            ),
+            False,
+        ),
+        # The right step, but a different expectation failed.
+        (
+            "HALTED_BEFORE_EFFECT",
+            DUPLICATE_HALT.replace("'No matches were found.'", "'Something else'"),
+            False,
+        ),
+        # A halt after an effect is never the stop before saving.
+        ("RECONCILIATION_REQUIRED", DUPLICATE_HALT, False),
+        ("HALTED_BEFORE_EFFECT", "", False),
+    ],
+)
+def test_the_duplicate_stop_is_attributed_only_from_the_halt(
+    transaction, halt, attributed
+):
+    assert (
+        duplicate_stop_observed(
+            _certified_workflow(),
+            execution_outcome="HALTED",
+            transaction_outcome=transaction,
+            halt_reason=halt,
+        )
+        is attributed
+    )
+
+
 def test_the_finale_names_the_agent_tool(root):
     # Since #1566 the finale ends on the person's own Seal, not a link.
     output, _ = _plain(FakeOpenEMR(root))
@@ -493,6 +604,7 @@ def test_real_openemr_quickstart(tmp_path, monkeypatch):
     assert outcome.broken is not None and outcome.broken.stopped, output
     assert outcome.broken.transaction_outcome == "HALTED_BEFORE_EFFECT"
     assert outcome.broken.new_records == 0
+    assert outcome.broken.stop_attributed, outcome.broken.halt_reason
     assert "5 of 5 saved and checked in OpenEMR's record" in output
     for index in range(1, 6):
         report = json.loads((root / f"run-{index}" / "report.json").read_text())

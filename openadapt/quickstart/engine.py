@@ -97,6 +97,12 @@ class BreakFacts:
     halt_reason: str
     model_calls: int
     seconds: float
+    #: True only when the run's own evidence shows it stopped at the check
+    #: this act sets off (the record check refuting the save, or the app's
+    #: own check the program waits on). A stop for any other reason, or one
+    #: whose cause the evidence doesn't show, stays False, and the views then
+    #: describe a generic stop instead of the demonstration.
+    stop_attributed: bool = False
     result: Any = field(default=None, repr=False)
 
     @property
@@ -587,6 +593,9 @@ class FlowEngine:
             halt_reason=str(result.halt_reason),
             model_calls=int(getattr(report, "model_calls", 0) or 0),
             seconds=seconds,
+            # The record check read the save back and refuted it: the
+            # silent failure this act injects, not some other refusal.
+            stop_attributed=int(result.effects_refuted) > 0,
             result=result,
         )
 

@@ -86,7 +86,7 @@ def bot_verdict(broken: BreakFacts, marks: Marks) -> Optional[str]:
 
 def openadapt_verdict(broken: BreakFacts, marks: Marks, scene: Scene = MOCKMED) -> str:
     if broken.stopped:
-        return f"{marks.stop} {scene.stopped}"
+        return f"{marks.stop} {scene.verdict(broken)}"
     return f"{broken.execution_outcome.title()} (expected a stop)"
 
 
@@ -289,9 +289,7 @@ class PlainView:
     def break_result(self, broken: BreakFacts) -> None:
         scene = self.scene
         screen, record, bot_label, openadapt = break_labels(scene)
-        quote = broken.screen_text
-        shown = f'"{quote}"' if quote else scene.screen_default
-        self._say(f"   {screen}{shown}")
+        self._say(f"   {screen}{scene.screen_line(broken)}")
         self._say(f"   {record}{database_line(broken, scene)}")
         bot = bot_verdict(broken, self.marks)
         if bot:
@@ -476,7 +474,7 @@ class RichView:
         if self.image_protocol and broken.screenshot is not None:
             drawn = self._draw_beside_screenshot(broken, right)
         if not drawn:
-            quote = broken.screen_text or self.scene.screen_default
+            quote = self.scene.screen_words(broken)
             box = Panel(
                 f"[green]{_escape(quote)}[/]",
                 title="What the screen showed",

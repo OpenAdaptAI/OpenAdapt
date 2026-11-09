@@ -45,8 +45,12 @@ class Scene:
     stopped: str
     #: The record check's subject in the receipt ("in the database").
     receipt_where: str
-    #: What Act 3's screen showed when its text couldn't be read.
+    #: What Act 3's screen showed when its text couldn't be read, said only
+    #: when the run observed it (see :meth:`screen_line`).
     screen_default: str = "a saved message"
+    #: What the screen row says when the run observed neither the text nor
+    #: the screen this act expects.
+    screen_unread: str = "not read (see the screenshot in the report)"
     #: The part of the 1280x800 screenshot Act 3 shows (left, top, right,
     #: bottom).
     screen_crop: tuple[int, int, int, int] = (0, 0, 640, 320)
@@ -58,6 +62,18 @@ class Scene:
     act1_live: bool = True
     #: How Act 1 ends, given the program's step count.
     compiled_template: str = "Compiled into a program: {steps} steps."
+    #: Why OpenAdapt stopped, when the run shows it stopped at this act's
+    #: check and nothing was saved.
+    why_stopped: str = (
+        "OpenAdapt reads the record back from the database after each save. "
+        "It found nothing, so it stopped."
+    )
+    #: Why, when it stopped at this act's check but a record was saved.
+    why_saved_anyway: str = (
+        "OpenAdapt read the record back, and it didn't match, so it stopped."
+    )
+    #: The one-line summary for a screen that doesn't claim success.
+    aha_stopped: str = ""
 
     def compiled_line(self, steps: int) -> str:
         return self.compiled_template.format(steps=steps)
@@ -66,37 +82,63 @@ class Scene:
         count = broken.new_records
         return f"{count} new {self.record_noun}" + ("" if count == 1 else "s")
 
+    def screen_observed(self, broken: "BreakFacts") -> bool:
+        """True when the run observed the screen this act describes."""
+
+        if self.screen_claims_success:
+            return broken.screen_showed_success
+        return broken.stop_attributed
+
+    def screen_words(self, broken: "BreakFacts") -> str:
+        """What the screen showed: the text read off it, else only what the
+        run observed, else that it wasn't read."""
+
+        if broken.screen_text:
+            return broken.screen_text
+        if self.screen_observed(broken):
+            return self.screen_default
+        return self.screen_unread
+
+    def screen_line(self, broken: "BreakFacts") -> str:
+        """:meth:`screen_words`, with text read off the screen in quotes."""
+
+        if broken.screen_text:
+            return f'"{broken.screen_text}"'
+        return self.screen_words(broken)
+
+    def verdict(self, broken: "BreakFacts") -> str:
+        """OpenAdapt's verdict when it stopped (``stopped`` only if attributed)."""
+
+        if broken.stop_attributed and (
+            self.screen_claims_success or broken.new_records == 0
+        ):
+            return self.stopped
+        return "Stopped"
+
     def why_line(self, broken: "BreakFacts") -> str:
-        if not self.screen_claims_success:
-            if broken.stopped and broken.new_records == 0:
-                return (
-                    "OpenEMR's duplicate check found an existing chart. The "
-                    "program saves only when it finds none, so it stopped "
-                    "before saving."
-                )
-            if broken.stopped:
-                return "OpenAdapt stopped, but a new chart is in OpenEMR. Check it."
+        if not broken.stopped:
             return "OpenAdapt did not stop. Treat this build as broken."
-        if broken.stopped and broken.new_records == 0:
+        if not broken.stop_attributed:
+            if broken.new_records:
+                return (
+                    f"OpenAdapt stopped, but a new {self.record_noun} was saved. "
+                    "Check it."
+                )
             return (
-                "OpenAdapt reads the record back from the database after each save. "
-                "It found nothing, so it stopped."
+                "OpenAdapt stopped, but not at the check this act sets off, so "
+                "this run doesn't show that check. The report says why it stopped."
             )
-        if broken.stopped:
-            return "OpenAdapt read the record back, and it didn't match, so it stopped."
-        return "OpenAdapt did not stop. Treat this build as broken."
+        if broken.new_records == 0:
+            return self.why_stopped
+        return self.why_saved_anyway
 
     def aha_line(self, broken: "BreakFacts") -> Optional[str]:
         """The one-line summary, only when the run showed all of it."""
 
-        if not (broken.stopped and broken.new_records == 0):
+        if not (broken.stopped and broken.stop_attributed and broken.new_records == 0):
             return None
         if not self.screen_claims_success:
-            return (
-                "The demonstration clicked Confirm Create New Patient here. "
-                "Replaying those clicks would have saved a possible duplicate. "
-                "OpenAdapt stopped."
-            )
+            return self.aha_stopped or None
         if not broken.screen_showed_success:
             return None
         text = broken.screen_text
@@ -115,13 +157,19 @@ class Scene:
 
         if not self.screen_claims_success:
             first = (
-                f"case {broken.fault!r}: OpenEMR already has a chart with this "
-                "name, so its duplicate check lists a match"
+                f"case {broken.fault!r}: OpenEMR already has a chart with this name"
+                + (
+                    ", and its duplicate check listed a match"
+                    if broken.stop_attributed
+                    else "; the halt doesn't show the duplicate check listing it"
+                )
             )
-            checks = (
-                f"record checks {broken.effects_required} declared, none run "
-                "(the save step never ran)"
+            ran = (
+                " (the save step never ran)"
+                if broken.transaction_outcome == "HALTED_BEFORE_EFFECT"
+                else ""
             )
+            checks = f"record checks {broken.effects_required} declared{ran}"
         else:
             first = (
                 f"fault mode {broken.fault!r}: the server rejects the write after "
@@ -182,6 +230,15 @@ OPENEMR = Scene(
     act1_live=False,
     compiled_template=(
         "The program compiled from it: {steps} steps, certified under clinical-write."
+    ),
+    why_stopped=(
+        "OpenEMR's duplicate check found an existing chart. The program saves "
+        "only when it finds none, so it stopped before saving."
+    ),
+    why_saved_anyway="OpenAdapt stopped, but a new chart is in OpenEMR. Check it.",
+    aha_stopped=(
+        "The demonstration clicked Confirm Create New Patient here. Replaying "
+        "those clicks would have saved a possible duplicate. OpenAdapt stopped."
     ),
     screen_default="OpenEMR's duplicate check, listing a matching chart",
     screen_crop=(204, 30, 1078, 262),
