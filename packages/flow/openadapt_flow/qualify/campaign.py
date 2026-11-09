@@ -223,6 +223,13 @@ def record_effects(config: VerifyConfig) -> list[Any]:
                 timeout_s=record.timeout_s,
             )
         )
+    if record.surface:
+        from openadapt_flow.runtime.effects.surfaces import surface_probe
+
+        effects = [
+            e.model_copy(update={"probe": surface_probe(record.surface, e.probe or "")})
+            for e in effects
+        ]
     return effects
 
 
@@ -1052,6 +1059,7 @@ def _pixels_only_pass(
     run_id_prefix: Optional[str],
     lookup: Mapping[str, Any],
     log: Callable[[str], None],
+    subroutine_library: Optional[SubroutineLibrary] = None,
 ) -> PixelsOnlyPass:
     """Run every selected case again with structure lookups disabled.
 
@@ -1095,7 +1103,10 @@ def _pixels_only_pass(
                 _c: Any = ctx,
             ) -> Any:
                 gate = evaluate_run_gate(
-                    workflow, qualification_evidence_only=True, **gate_kwargs
+                    workflow,
+                    qualification_evidence_only=True,
+                    subroutine_library=subroutine_library,
+                    **gate_kwargs,
                 )
                 if not gate.passed:
                     raise QualifyError(gate.render())
@@ -1275,9 +1286,10 @@ def qualify(
     ``evidence_root`` (default ``out``) is the root case evidence is relative
     to. ``write_campaign_files=False`` leaves out the campaign summary,
     timing, notes and ``QUALIFICATION.md`` (for packs that list every file).
-    ``subroutine_library`` is the library certification admits embedded
-    subroutines against (and registers this workflow with); a bundle that
-    embeds one is refused before any run when certifying without it.
+    ``subroutine_library`` is the library every case run re-admits embedded
+    subroutines against (the run gate) and certification admits them against
+    (and registers this workflow with); a bundle that embeds one is refused
+    before any run without it.
     ``persist_subroutine_registration`` writes that library; it runs right
     after certification, before the certified bundle is saved, and when it
     raises the certification is withdrawn and the bundle saved uncertified.
@@ -1332,14 +1344,12 @@ def qualify(
     )
 
     workflow = Workflow.load(bundle_src)
-    if (
-        certify is not None
-        and subroutine_library is None
-        and uses_subroutines(workflow)
-    ):
+    if subroutine_library is None and uses_subroutines(workflow):
+        # Every case run re-admits the embedded subroutines against the
+        # library (the run gate), and certification registers them in it.
         raise QualifyConfigError(
-            "the bundle embeds subroutines; --certify needs --subroutine-library "
-            "to admit them"
+            "the bundle embeds subroutines; qualifying it needs "
+            "--subroutine-library to admit them"
         )
     save, notes = apply_verify_config(workflow, config)
     params = resolve_inputs(workflow, config, campaign_id=campaign_id)
@@ -1488,7 +1498,10 @@ def qualify(
                 _c: Any = ctx,
             ) -> Any:
                 gate = evaluate_run_gate(
-                    workflow, qualification_evidence_only=True, **gate_kwargs
+                    workflow,
+                    qualification_evidence_only=True,
+                    subroutine_library=subroutine_library,
+                    **gate_kwargs,
                 )
                 if not gate.passed:
                     raise QualifyError(gate.render())
@@ -1635,6 +1648,7 @@ def qualify(
             campaign_id=campaign_id,
             run_id_prefix=run_id_prefix,
             lookup=lookup_kwargs,
+            subroutine_library=subroutine_library,
             log=log,
         )
     else:
@@ -1716,6 +1730,7 @@ def qualify(
             case_entries=case_entries,
             write_campaign_files=write_campaign_files,
             log=log,
+            subroutine_library=subroutine_library,
             fail_result=lambda: build_result(
                 report=qreport,
                 verify_sha256=verify_sha,
@@ -1838,6 +1853,7 @@ def qualify(
             policy=certify or config.campaign.policy,
             run_id=f"{campaign_id}-certified-run",
             lookup=lookup_kwargs,
+            subroutine_library=subroutine_library,
         )
         timing["certified_run"] = result.certified_run["timing"]
     if write_campaign_files:
@@ -1999,6 +2015,7 @@ def business_rule_trial(
     lookup: Optional[Mapping[str, Any]] = None,
     verifier_tier: Optional[VerificationTier] = None,
     verifier_substrate: Optional[str] = None,
+    subroutine_library: Optional[SubroutineLibrary] = None,
 ) -> tuple[dict[str, Any], dict[str, Any], Optional[str]]:
     """One trial of a business-rule case on the certified bundle.
 
@@ -2055,7 +2072,9 @@ def business_rule_trial(
         hooks.before_trial(ctx)
 
     def authorize(_verifier: Any, gate_kwargs: dict[str, Any]) -> Any:
-        gate = evaluate_run_gate(workflow, **gate_kwargs)
+        gate = evaluate_run_gate(
+            workflow, subroutine_library=subroutine_library, **gate_kwargs
+        )
         write_json(trial_dir / "run-gate.json", gate.model_dump(mode="json"))
         if not gate.passed:
             raise QualifyError(gate.render())
@@ -2164,6 +2183,7 @@ def _run_business_rules(
     write_campaign_files: bool,
     log: Callable[[str], None],
     fail_result: Callable[[], dict[str, Any]],
+    subroutine_library: Optional[SubroutineLibrary] = None,
 ) -> None:
     """Run every business-rule case ``n_trials`` times on the certified bundle.
 
@@ -2204,6 +2224,7 @@ def _run_business_rules(
                     lookup=lookup,
                     verifier_tier=verifier_tier,
                     verifier_substrate=verifier_substrate,
+                    subroutine_library=subroutine_library,
                 )
                 rows.append(row)
                 case_entries.append(entry)
@@ -2238,6 +2259,7 @@ def certified_run(
     policy: str,
     run_id: str,
     lookup: Optional[Mapping[str, Any]] = None,
+    subroutine_library: Optional[SubroutineLibrary] = None,
 ) -> dict[str, Any]:
     """One ordinary Standard-profile run of the certified bundle."""
 
@@ -2267,7 +2289,9 @@ def certified_run(
         hooks.before_trial(ctx)
 
     def authorize(_verifier: Any, gate_kwargs: dict[str, Any]) -> Any:
-        gate = evaluate_run_gate(workflow, **gate_kwargs)
+        gate = evaluate_run_gate(
+            workflow, subroutine_library=subroutine_library, **gate_kwargs
+        )
         write_json(out / "run-gate.json", gate.model_dump(mode="json"))
         if not gate.passed:
             raise QualifyError(gate.render())

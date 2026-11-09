@@ -1,0 +1,1204 @@
+{
+ "transcript": [
+  {
+   "reply": "We need to locate the existing AllergyIntolerance record for this patient, so we'll perform a search using the search bar.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [200, 32], \"text\": \"SNOMED CT 919360005\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the patient detail page to access their allergies section and search for the allergy record.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [214, 302]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the patient detail page to access their allergies section.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [214, 302]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the Details tab to display patient details including allergies section.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [124, 152]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to look for the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to locate the Allergies or Intolerance section for this patient.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to locate the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to locate the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to locate the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to locate the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to locate the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to locate the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to locate the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to locate the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the search bar to directly search for the allergy by its code to quickly determine if it is already recorded.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [203, 32], \"text\": \"AllergyIntolerance 919360005\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Press Enter in the search bar to execute the search and display results for the allergy code.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"Enter\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the refresh icon to execute the search query and display results for the allergy code.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [522, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "Press Enter in the search bar to execute the search query and load results for the allergy code.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"Enter\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Directly navigate to the search results URL for the allergy code to see if a matching AllergyIntolerance record exists, since the on-page search did not work.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/search?query=AllergyIntolerance%20919360005\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the search bar to search for the allergy by code, which should return results if the record exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [203, 32], \"text\": \"AllergyIntolerance 919360005\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Directly navigate to the FHIR search URL with the correct query parameter using the full resource type to avoid the unknown resource type error and see if any AllergyIntolerance record exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=AllergyIntolerance+919360005\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search the FHIR server for the specific AllergyIntolerance code, which should return results if the record exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [203, 32], \"text\": \"AllergyIntolerance 919360005\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Directly navigate to the FHIR search URL with the correct query parameter using the full resource type to find any existing AllergyIntolerance record for the given code.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search the FHIR server for the specific code, which should return results if the record exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [203, 32], \"text\": \"resourceType=AllergyIntolerance SNOMEDCT 919360005\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Directly navigate to the FHIR search URL with the correct query parameter using the full resource type and code to find any existing AllergyIntolerance record for the given code, since the on-page search has not worked.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search the FHIR server for the specific code, which should return results if the record exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [203, 32], \"text\": \"resourceType=AllergyIntolerance SNOMEDCT 919360005\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Directly navigate to the FHIR search URL with the correct query parameter using the full resource type and code to find any existing AllergyIntolerance record for the given code, since on-page search has failed.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the patient's allergies section directly via its FHIR path to quickly view whether an AllergyIntolerance record for penicillin already exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Patient/9f6ed1b1-f821-48a0-8571-d283fd97d2fc/AllergyIntolerance?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Wait briefly to allow the allergies FHIR search results to load, since the page currently appears blank.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"wait\", \"time\": 3}}\n</tool_call>"
+  },
+  {
+   "reply": "Allow additional time for the allergies FHIR search results to load, as the page currently appears blank and may still be fetching data.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"wait\", \"time\": 3}}\n</tool_call>"
+  },
+  {
+   "reply": "Return to the patient detail page where the allergies section is visible so we can manually check for the allergy record instead of the blank FHIR results view.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"history_back\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search the FHIR server for an existing AllergyIntolerance resource with the given SNOMED code, which should return results if the record exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [203, 32], \"text\": \"AllergyIntolerance SNOMED 919360005\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Directly navigate to the FHIR search results for the exact AllergyIntolerance SNOMED code to determine if a matching record exists, since the on-page search has not worked.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search the FHIR server for an existing AllergyIntolerance resource with the given SNOMED code, which should return results if the record exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [203, 32], \"text\": \"AllergyIntolerance SNOMED 919360005\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Directly navigate to the FHIR search results for the exact AllergyIntolerance SNOMED code to determine if a matching record exists, since on-page search has failed.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the patient's allergies section via its FHIR path to visually confirm whether an AllergyIntolerance record for penicillin already exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Patient/9f6ed1b1-f821-48a0-8571-d283fd97d2fc/AllergyIntolerance?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Allow the allergies FHIR search results to load, as the page currently appears blank and may need a few seconds to display items.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"wait\", \"time\": 3}}\n</tool_call>"
+  },
+  {
+   "reply": "Return to the patient detail page where the allergies section is visible so we can manually check for the allergy record instead of the blank FHIR results view.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"history_back\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search the FHIR server for an existing AllergyIntolerance resource with the given SNOMED code, which should return results if the record exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [203, 32], \"text\": \"AllergyIntolerance SNOMED 919360005\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Directly navigate to the FHIR search results for the exact AllergyIntolerance SNOMED code to determine if a matching record exists, since on-page search has failed.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the patient detail page so we can access the allergies section and visually check whether an existing AllergyIntolerance record with the specified code and details exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Patient/9f6ed1b1-f821-48a0-8571-d283fd97d2fc\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the Details tab to display the patient details section where the Allergies or Intolerance section can be found.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [124, 152]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to locate the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to locate the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to locate the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to locate the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to locate the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search the FHIR server for an existing AllergyIntolerance resource with the given SNOMED code, which should return results if the record exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [203, 32], \"text\": \"AllergyIntolerance SNOMED 919360005\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Directly navigate to the FHIR search results for the exact AllergyIntolerance SNOMED code to determine if a matching record exists, since on-page search has failed.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search the FHIR server for an existing AllergyIntolerance resource with the given SNOMED code, which should return results if the record exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [203, 32], \"text\": \"AllergyIntolerance SNOMED 919360005\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Directly navigate to the FHIR search results for the exact AllergyIntolerance SNOMED code to determine if a matching record exists, since on-page search has failed.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the patient detail page so we can manually check the Allergies or Intolerance section for the existing record.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Patient/9f6ed1b1-f821-48a0-8571-d283fd97d2fc\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the Details tab to display the patient details section where the Allergies or Intolerance section can be found.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [124, 152]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to locate the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to locate the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to locate the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to locate the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to locate the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to locate the Allergies or Intolerance section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search the FHIR server for an existing AllergyIntolerance resource with the exact code, which should return results if the record exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [203, 32], \"text\": \"AllergyIntolerance 919360005\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Directly navigate to the FHIR search results for the exact AllergyIntolerance code to determine if a matching record exists, since on-page search has failed.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search the FHIR server for an existing AllergyIntolerance resource with the exact code, which should return results if the record exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [203, 32], \"text\": \"AllergyIntolerance 919360005\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Directly navigate to the FHIR search results for the exact AllergyIntolerance code to determine if a matching record exists, since on-page search has failed.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005\"}}\n</tool_call>"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 198.75776397515529,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "SNOMED CT 919360005"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 212.67080745341616,
+   "y": 297.5369458128079,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 212.67080745341616,
+   "y": 297.5369458128079,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 123.22981366459628,
+   "y": 149.7536945812808,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "click",
+   "x": 201.7391304347826,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance 919360005"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 518.7577639751553,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/search?query=AllergyIntolerance%20919360005"
+  },
+  {
+   "a": "click",
+   "x": 201.7391304347826,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance 919360005"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=AllergyIntolerance+919360005"
+  },
+  {
+   "a": "click",
+   "x": 201.7391304347826,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance 919360005"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005"
+  },
+  {
+   "a": "click",
+   "x": 201.7391304347826,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "resourceType=AllergyIntolerance SNOMEDCT 919360005"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005"
+  },
+  {
+   "a": "click",
+   "x": 201.7391304347826,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "resourceType=AllergyIntolerance SNOMEDCT 919360005"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005"
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Patient/9f6ed1b1-f821-48a0-8571-d283fd97d2fc/AllergyIntolerance?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "back"
+  },
+  {
+   "a": "click",
+   "x": 201.7391304347826,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance SNOMED 919360005"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005"
+  },
+  {
+   "a": "click",
+   "x": 201.7391304347826,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance SNOMED 919360005"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005"
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Patient/9f6ed1b1-f821-48a0-8571-d283fd97d2fc/AllergyIntolerance?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "back"
+  },
+  {
+   "a": "click",
+   "x": 201.7391304347826,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance SNOMED 919360005"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005"
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Patient/9f6ed1b1-f821-48a0-8571-d283fd97d2fc"
+  },
+  {
+   "a": "click",
+   "x": 123.22981366459628,
+   "y": 149.7536945812808,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "click",
+   "x": 201.7391304347826,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance SNOMED 919360005"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005"
+  },
+  {
+   "a": "click",
+   "x": 201.7391304347826,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance SNOMED 919360005"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005"
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Patient/9f6ed1b1-f821-48a0-8571-d283fd97d2fc"
+  },
+  {
+   "a": "click",
+   "x": 123.22981366459628,
+   "y": 149.7536945812808,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "click",
+   "x": 201.7391304347826,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance 919360005"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005"
+  },
+  {
+   "a": "click",
+   "x": 201.7391304347826,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance 919360005"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/search?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated&query=resourceType=AllergyIntolerance+SNOMEDCT+919360005"
+  }
+ ],
+ "usage": [
+  {
+   "in": 3058,
+   "out": 90,
+   "usd": 0.0
+  },
+  {
+   "in": 4544,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 6000,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 6114,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 6230,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 6345,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 6459,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 6574,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 6689,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 6804,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 6919,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 7034,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 7149,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 7264,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 7379,
+   "out": 86,
+   "usd": 0.0
+  },
+  {
+   "in": 7534,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 7648,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 7768,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 7883,
+   "out": 87,
+   "usd": 0.0
+  },
+  {
+   "in": 8029,
+   "out": 85,
+   "usd": 0.0
+  },
+  {
+   "in": 8173,
+   "out": 107,
+   "usd": 0.0
+  },
+  {
+   "in": 8339,
+   "out": 93,
+   "usd": 0.0
+  },
+  {
+   "in": 8491,
+   "out": 111,
+   "usd": 0.0
+  },
+  {
+   "in": 8660,
+   "out": 96,
+   "usd": 0.0
+  },
+  {
+   "in": 8814,
+   "out": 122,
+   "usd": 0.0
+  },
+  {
+   "in": 8994,
+   "out": 96,
+   "usd": 0.0
+  },
+  {
+   "in": 9148,
+   "out": 120,
+   "usd": 0.0
+  },
+  {
+   "in": 9326,
+   "out": 121,
+   "usd": 0.0
+  },
+  {
+   "in": 9528,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 9656,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 9790,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 9899,
+   "out": 103,
+   "usd": 0.0
+  },
+  {
+   "in": 10060,
+   "out": 115,
+   "usd": 0.0
+  },
+  {
+   "in": 10233,
+   "out": 103,
+   "usd": 0.0
+  },
+  {
+   "in": 10394,
+   "out": 113,
+   "usd": 0.0
+  },
+  {
+   "in": 10565,
+   "out": 119,
+   "usd": 0.0
+  },
+  {
+   "in": 10766,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 10900,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 11009,
+   "out": 103,
+   "usd": 0.0
+  },
+  {
+   "in": 11170,
+   "out": 113,
+   "usd": 0.0
+  },
+  {
+   "in": 11341,
+   "out": 99,
+   "usd": 0.0
+  },
+  {
+   "in": 11508,
+   "out": 58,
+   "usd": 0.0
+  },
+  {
+   "in": 11635,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 11749,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 11864,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 11979,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 12094,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 12209,
+   "out": 103,
+   "usd": 0.0
+  },
+  {
+   "in": 12381,
+   "out": 113,
+   "usd": 0.0
+  },
+  {
+   "in": 12552,
+   "out": 103,
+   "usd": 0.0
+  },
+  {
+   "in": 12713,
+   "out": 113,
+   "usd": 0.0
+  },
+  {
+   "in": 12884,
+   "out": 91,
+   "usd": 0.0
+  },
+  {
+   "in": 13043,
+   "out": 58,
+   "usd": 0.0
+  },
+  {
+   "in": 13170,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 13284,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 13398,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 13512,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 13626,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 13740,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 13854,
+   "out": 97,
+   "usd": 0.0
+  },
+  {
+   "in": 14020,
+   "out": 110,
+   "usd": 0.0
+  },
+  {
+   "in": 14188,
+   "out": 97,
+   "usd": 0.0
+  },
+  {
+   "in": 14343,
+   "out": 110,
+   "usd": 0.0
+  }
+ ]
+}

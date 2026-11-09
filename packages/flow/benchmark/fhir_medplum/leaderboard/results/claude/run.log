@@ -1,0 +1,253 @@
+[r1] P01   clean            end correct      claim done      verifier created_verified $0.238  total $0.36
+[r1] P02   clean            end correct      claim done      verifier found_existing $0.033  total $0.42
+[r1] P03   clean            end absent       claim not_done  verifier needs_review  $0.075  total $0.58
+[r1] P04   wrong_value      end correct      claim done      verifier needs_review  $0.537  total $1.47
+[r1] P05   wrong_value      end correct      claim done      verifier needs_review  $0.697  total $2.16
+[r1] P06   wrong_value      end correct      claim done      verifier created_verified $1.208  total $3.54
+--- relaunch with load guard Mon Nov  2 21:59:48 EST 2026
+   waiting: host load 66 > 35
+[r1] P07   duplicate        end correct      claim done      verifier needs_review  $0.968  total $5.35
+   waiting: host load 49 > 35
+[r1] P08   lost_response    end correct      claim done      verifier needs_review  $0.341  total $5.96
+[r1] P09   collateral       end harmful      claim done      verifier needs_review  $0.273  total $6.30
+   waiting: host load 68 > 35
+[r1] P10   ambiguous        end needs_person claim not_done  verifier needs_review  $0.101  total $6.54
+   waiting: host load 36 > 35
+[r1] P11   refused_write    end correct      claim done      verifier needs_review  $0.883  total $7.80
+   waiting: host load 52 > 35
+[r1] P12   clean            end correct      claim done      verifier needs_review  $1.260  total $9.73
+[r1] P13   fake_success     end absent       claim not_done  verifier needs_review  $0.615  total $10.90
+[r1] A01   clean            end correct      claim done      verifier created_verified $0.540  total $11.88
+[r1] A02   clean            end correct      claim done      verifier found_existing $0.136  total $12.13
+[r1] A03   clean            end correct      claim not_done  verifier needs_review  $1.202  total $13.76
+[r1] A04   wrong_patient    end absent       claim not_done  verifier needs_review  $0.030  total $13.81
+[r1] A05   wrong_value      end absent       claim not_done  verifier needs_review  $0.015  total $13.83
+[r1] A06   wrong_value      end absent       claim not_done  verifier needs_review  $0.017  total $13.85
+[r1] A07   duplicate        end absent       claim not_done  verifier needs_review  $0.016  total $13.87
+[r1] A08   collateral       end absent       claim not_done  verifier needs_review  $0.016  total $13.89
+[r1] A09   other_user       end absent       claim not_done  verifier needs_review  $0.012  total $13.91
+[r1] A10   late_collateral  end absent       claim not_done  verifier needs_review  $0.016  total $13.92
+[r1] A11   clean            end absent       claim not_done  verifier needs_review  $0.031  total $13.97
+[r1] A12   other_user       end absent       claim not_done  verifier needs_review  $0.016  total $13.99
+[r1] AP01  clean            end absent       claim not_done  verifier needs_review  $0.031  total $14.02
+[r1] AP02  clean            end correct      claim not_done  verifier needs_review  $0.016  total $14.04
+   waiting: host load 40 > 35
+[r1] AP03  wrong_value      end absent       claim not_done  verifier needs_review  $0.012  total $14.06
+[r1] AP04  wrong_value      end absent       claim not_done  verifier needs_review  $0.016  total $14.08
+[r1] AP05  duplicate        end absent       claim not_done  verifier needs_review  $0.016  total $14.10
+[r1] AP06  lost_response    end absent       claim not_done  verifier needs_review  $0.012  total $14.12
+[r1] AP07  collateral       end absent       claim not_done  verifier needs_review  $0.016  total $14.14
+[r1] AP08  other_user       end absent       claim not_done  verifier needs_review  $0.012  total $14.16
+[r1] AP09  wrong_value      end absent       claim not_done  verifier needs_review  $0.012  total $14.18
+[r1] AP10  collateral       end absent       claim not_done  verifier needs_review  $0.012  total $14.19
+[r1] AP11  wrong_patient    end absent       claim not_done  verifier needs_review  $0.016  total $14.20
+[r1] AP12  clean            end absent       claim not_done  verifier needs_review  $0.030  total $14.23
+[r2] P01   clean            end absent       claim not_done  verifier needs_review  $0.030  total $14.26
+[r2] P02   clean            end correct      claim not_done  verifier needs_review  $0.016  total $14.28
+[r2] P03   clean            end absent       claim not_done  verifier needs_review  $0.016  total $14.30
+[r2] P04   wrong_value      end absent       claim not_done  verifier needs_review  $0.012  total $14.31
+[r2] P05   wrong_value      end absent       claim not_done  verifier needs_review  $0.012  total $14.32
+[r2] P06   wrong_value      end absent       claim not_done  verifier needs_review  $0.016  total $14.34
+[r2] P07   duplicate        end absent       claim not_done  verifier needs_review  $0.013  total $14.35
+[r2] P08   lost_response    end absent       claim not_done  verifier needs_review  $0.012  total $14.36
+[r2] P09   collateral       end absent       claim not_done  verifier needs_review  $0.013  total $14.37
+[r2] P10   ambiguous        end needs_person claim not_done  verifier needs_review  $0.016  total $14.39
+[r2] P11   refused_write    end absent       claim not_done  verifier needs_review  $0.012  total $14.40
+[r2] P12   clean            end absent       claim not_done  verifier needs_review  $0.030  total $14.43
+[r2] P13   fake_success     end absent       claim not_done  verifier needs_review  $0.012  total $14.45
+[r2] A01   clean            end absent       claim not_done  verifier needs_review  $0.030  total $14.48
+[r2] A02   clean            end correct      claim not_done  verifier needs_review  $0.016  total $14.49
+[r2] A03   clean            end absent       claim not_done  verifier needs_review  $0.013  total $14.50
+[r2] A04   wrong_patient    end absent       claim not_done  verifier needs_review  $0.016  total $14.52
+[r2] A05   wrong_value      end absent       claim not_done  verifier needs_review  $0.016  total $14.54
+[r2] A06   wrong_value      end absent       claim not_done  verifier needs_review  $0.017  total $14.55
+[r2] A07   duplicate        end absent       claim not_done  verifier needs_review  $0.013  total $14.57
+[r2] A08   collateral       end absent       claim not_done  verifier needs_review  $0.012  total $14.58
+   waiting: host load 45 > 35
+[r2] A09   other_user       end absent       claim not_done  verifier needs_review  $0.030  total $14.61
+   waiting: host load 37 > 35
+[r2] A10   late_collateral  end absent       claim not_done  verifier needs_review  $0.016  total $14.62
+[r2] A11   clean            end absent       claim not_done  verifier needs_review  $0.031  total $14.65
+   waiting: host load 38 > 35
+[r2] A12   other_user       end absent       claim not_done  verifier needs_review  $0.013  total $14.67
+[r2] AP01  clean            end absent       claim not_done  verifier needs_review  $0.030  total $14.70
+[r2] AP02  clean            end correct      claim not_done  verifier needs_review  $0.016  total $14.71
+[r2] AP03  wrong_value      end absent       claim not_done  verifier needs_review  $0.016  total $14.73
+[r2] AP04  wrong_value      end absent       claim not_done  verifier needs_review  $0.012  total $14.74
+[r2] AP05  duplicate        end absent       claim not_done  verifier needs_review  $0.013  total $14.75
+[r2] AP06  lost_response    end absent       claim not_done  verifier needs_review  $0.013  total $14.78
+   waiting: host load 37 > 35
+[r2] AP07  collateral       end absent       claim not_done  verifier needs_review  $0.016  total $14.80
+[r2] AP08  other_user       end absent       claim not_done  verifier needs_review  $0.016  total $14.82
+[r2] AP09  wrong_value      end absent       claim not_done  verifier needs_review  $0.012  total $14.83
+[r2] AP10  collateral       end absent       claim not_done  verifier needs_review  $0.016  total $14.85
+[r2] AP11  wrong_patient    end absent       claim not_done  verifier needs_review  $0.012  total $14.87
+[r2] AP12  clean            end absent       claim not_done  verifier needs_review  $0.030  total $14.90
+[r3] P01   clean            end absent       claim not_done  verifier needs_review  $0.030  total $14.94
+[r3] P02   clean            end correct      claim not_done  verifier needs_review  $0.013  total $14.96
+[r3] P03   clean            end absent       claim not_done  verifier needs_review  $0.013  total $14.98
+   waiting: host load 36 > 35
+[r3] P04   wrong_value      end absent       claim not_done  verifier needs_review  $0.012  total $15.00
+   waiting: host load 37 > 35
+[r3] P05   wrong_value      end absent       claim not_done  verifier needs_review  $0.012  total $15.02
+[r3] P06   wrong_value      end absent       claim not_done  verifier needs_review  $0.016  total $15.03
+   waiting: host load 36 > 35
+[r3] P07   duplicate        end absent       claim not_done  verifier needs_review  $0.012  total $15.05
+[r3] P08   lost_response    end absent       claim not_done  verifier needs_review  $0.016  total $15.07
+[r3] P09   collateral       end absent       claim not_done  verifier needs_review  $0.016  total $15.09
+[r3] P10   ambiguous        end needs_person claim not_done  verifier needs_review  $0.012  total $15.12
+[r3] P11   refused_write    end absent       claim not_done  verifier needs_review  $0.012  total $15.13
+[r3] P12   clean            end absent       claim not_done  verifier needs_review  $0.030  total $15.17
+[r3] P13   fake_success     end absent       claim not_done  verifier needs_review  $0.013  total $15.18
+[r3] A01   clean            end absent       claim not_done  verifier needs_review  $0.031  total $15.22
+   waiting: host load 49 > 35
+[r3] A02   clean            end correct      claim not_done  verifier needs_review  $0.016  total $15.24
+   waiting: host load 38 > 35
+[r3] A03   clean            end absent       claim not_done  verifier needs_review  $0.031  total $15.28
+[r3] A04   wrong_patient    end absent       claim not_done  verifier needs_review  $0.010  total $15.29
+[r3] A05   wrong_value      end absent       claim not_done  verifier needs_review  $0.030  total $15.32
+[r3] A06   wrong_value      end absent       claim not_done  verifier needs_review  $0.013  total $15.34
+   waiting: host load 36 > 35
+[r3] A07   duplicate        end absent       claim not_done  verifier needs_review  $0.013  total $15.36
+   waiting: host load 37 > 35
+[r3] A08   collateral       end absent       claim not_done  verifier needs_review  $0.015  total $15.38
+[r3] A09   other_user       end absent       claim not_done  verifier needs_review  $0.006  total $15.39
+[r3] A10   late_collateral  end absent       claim not_done  verifier needs_review  $0.013  total $15.40
+[r3] A11   clean            end absent       claim not_done  verifier needs_review  $0.031  total $15.44
+[r3] A12   other_user       end absent       claim not_done  verifier needs_review  $0.009  total $15.45
+[r3] AP01  clean            end absent       claim not_done  verifier needs_review  $0.030  total $15.48
+[r3] AP02  clean            end correct      claim not_done  verifier needs_review  $0.017  total $15.50
+[r3] AP03  wrong_value      end absent       claim not_done  verifier needs_review  $0.016  total $15.52
+[r3] AP04  wrong_value      end absent       claim not_done  verifier needs_review  $0.013  total $15.54
+[r3] AP05  duplicate        end absent       claim not_done  verifier needs_review  $0.013  total $15.55
+[r3] AP06  lost_response    end absent       claim not_done  verifier needs_review  $0.017  total $15.57
+[r3] AP07  collateral       end absent       claim not_done  verifier needs_review  $0.012  total $15.59
+[r3] AP08  other_user       end absent       claim not_done  verifier needs_review  $0.013  total $15.60
+[r3] AP09  wrong_value      end absent       claim not_done  verifier needs_review  $0.013  total $15.62
+[r3] AP10  collateral       end absent       claim not_done  verifier needs_review  $0.013  total $15.64
+[r3] AP11  wrong_patient    end absent       claim not_done  verifier needs_review  $0.016  total $15.66
+[r3] AP12  clean            end absent       claim not_done  verifier needs_review  $0.031  total $15.69
+--- relaunch after session fix Tue Nov  3 00:03:08 EST 2026
+[r1] A03   clean            end correct      claim done      verifier created_verified $0.513  total $16.73
+[r1] A04   wrong_patient    end harmful      claim done      verifier needs_review  $0.671  total $18.15
+   waiting: host load 87 > 35
+[r1] A05   wrong_value      end harmful      claim done      verifier needs_review  $0.316  total $18.90
+[r1] A06   wrong_value      end correct      claim done      verifier created_verified $1.558  total $21.24
+   waiting: host load 187 > 35
+   waiting: host load 56 > 35
+[r1] A07   duplicate        end correct      claim done      verifier needs_review  $1.883  total $23.26
+   waiting: host load 81 > 35
+[r1] A08   collateral       end harmful      claim done      verifier needs_review  $1.466  total $25.32
+   waiting: host load 116 > 35
+[r1] A09   other_user       end correct      claim done      verifier needs_review  $0.362  total $25.83
+   waiting: host load 51 > 35
+[r1] A10   late_collateral  end harmful      claim done      verifier needs_review  $0.649  total $26.87
+   waiting: host load 48 > 35
+[r1] A11   clean            end correct      claim done      verifier needs_review  $0.386  total $27.52
+   waiting: host load 48 > 35
+[r1] A12   other_user       end correct      claim done      verifier needs_review  $0.370  total $27.91
+   waiting: host load 69 > 35
+[r1] AP01  clean            end correct      claim done      verifier needs_review  $0.445  total $28.35
+[r1] AP02  clean            end correct      claim done      verifier needs_review  $0.157  total $28.51
+[r1] AP03  wrong_value      end harmful      claim done      verifier needs_review  $0.437  total $29.26
+   waiting: host load 36 > 35
+[r1] AP04  wrong_value      end correct      claim done      verifier needs_review  $0.480  total $30.08
+   waiting: host load 128 > 35
+[r1] AP05  duplicate        end correct      claim done      verifier needs_review  $0.750  total $31.36
+   waiting: host load 100 > 35
+[r1] AP06  lost_response    end harmful      claim done      verifier needs_review  $0.411  total $32.01
+   waiting: host load 45 > 35
+[r1] AP07  collateral       end harmful      claim done      verifier needs_review  $0.605  total $33.04
+   waiting: host load 97 > 35
+[r1] AP08  other_user       end correct      claim done      verifier needs_review  $0.433  total $33.74
+   waiting: host load 202 > 35
+[r1] AP09  wrong_value      end correct      claim done      verifier needs_review  $0.555  total $34.53
+   waiting: host load 35 > 35
+[r1] AP10  collateral       end harmful      claim done      verifier needs_review  $0.334  total $35.15
+   waiting: host load 63 > 35
+[r1] AP11  wrong_patient    end harmful      claim done      verifier needs_review  $0.342  total $35.87
+   waiting: host load 76 > 35
+[r1] AP12  clean            end correct      claim done      verifier needs_review  $0.448  total $36.85
+[r2] P01   clean            end correct      claim done      verifier needs_review  $1.029  total $38.48
+   waiting: host load 95 > 35
+[r2] P02   clean            end correct      claim done      verifier needs_review  $0.032  total $38.70
+[r2] P03   clean            end absent       claim not_done  verifier needs_review  $0.040  total $38.76
+[r2] P04   wrong_value      end correct      claim done      verifier needs_review  $0.600  total $39.63
+[r2] P05   wrong_value      end correct      claim done      verifier needs_review  $0.350  total $40.12
+[r2] P06   wrong_value      end harmful      claim done      verifier needs_review  $0.251  total $40.50
+   waiting: host load 71 > 35
+[r2] P07   duplicate        end correct      claim done      verifier needs_review  $0.953  total $41.89
+   waiting: host load 51 > 35
+[r2] P08   lost_response    end correct      claim done      verifier needs_review  $1.245  total $43.37
+   waiting: host load 183 > 35
+[r2] P09   collateral       end harmful      claim done      verifier needs_review  $1.018  total $44.92
+[r2] P10   ambiguous        end needs_person claim not_done  verifier needs_review  $0.108  total $45.03
+[r2] P11   refused_write    end correct      claim done      verifier needs_review  $0.320  total $45.35
+[r2] P12   clean            end correct      claim done      verifier needs_review  $0.875  total $46.35
+[r2] P13   fake_success     end absent       claim not_done  verifier needs_review  $0.605  total $47.43
+[r2] A01   clean            end correct      claim done      verifier needs_review  $0.381  total $48.10
+[r2] A02   clean            end correct      claim done      verifier needs_review  $0.115  total $48.34
+[r2] A03   clean            end correct      claim done      verifier needs_review  $1.226  total $50.58
+[r2] A04   wrong_patient    end correct      claim not_done  verifier needs_review  $2.403  total $54.63
+[r2] A05   wrong_value      end harmful      claim done      verifier needs_review  $0.316  total $55.29
+[r2] A06   wrong_value      end correct      claim done      verifier needs_review  $0.536  total $56.00
+[r2] A07   duplicate        end correct      claim done      verifier needs_review  $0.465  total $56.71
+   waiting: host load 110 > 35
+[r2] A08   collateral       end harmful      claim done      verifier needs_review  $0.356  total $57.32
+[r2] A09   other_user       end correct      claim done      verifier needs_review  $0.339  total $57.98
+[r2] A10   late_collateral  end harmful      claim done      verifier needs_review  $0.851  total $59.49
+[r2] A11   clean            end correct      claim done      verifier needs_review  $0.260  total $59.75
+[r2] A12   other_user       end correct      claim done      verifier needs_review  $1.553  total $61.31
+[r2] AP01  clean            end correct      claim done      verifier needs_review  $0.580  total $61.89
+[r2] AP02  clean            end correct      claim done      verifier needs_review  $0.136  total $62.02
+[r2] AP03  wrong_value      end harmful      claim done      verifier needs_review  $0.483  total $62.50
+[r2] AP04  wrong_value      end correct      claim done      verifier needs_review  $0.756  total $63.26
+[r2] AP05  duplicate        end harmful      claim done      verifier needs_review  $0.312  total $63.57
+[r2] AP06  lost_response    end harmful      claim done      verifier needs_review  $0.430  total $64.00
+[r2] AP07  collateral       end harmful      claim done      verifier needs_review  $0.445  total $64.45
+[r2] AP08  other_user       end correct      claim done      verifier needs_review  $0.471  total $64.92
+[r2] AP09  wrong_value      end correct      claim done      verifier needs_review  $0.423  total $65.34
+[r2] AP10  collateral       end harmful      claim done      verifier needs_review  $0.335  total $65.68
+[r2] AP11  wrong_patient    end correct      claim done      verifier needs_review  $0.478  total $66.16
+[r2] AP12  clean            end correct      claim done      verifier needs_review  $0.351  total $66.51
+[r3] P01   clean            end correct      claim done      verifier needs_review  $0.824  total $67.33
+[r3] P02   clean            end correct      claim done      verifier needs_review  $0.031  total $67.36
+[r3] P03   clean            end absent       claim not_done  verifier needs_review  $0.034  total $67.40
+[r3] P04   wrong_value      end correct      claim done      verifier needs_review  $0.385  total $67.78
+[r3] P05   wrong_value      end correct      claim done      verifier needs_review  $0.727  total $68.51
+[r3] P06   wrong_value      end harmful      claim done      verifier needs_review  $0.246  total $68.75
+[r3] P07   duplicate        end harmful      claim done      verifier needs_review  $1.067  total $69.82
+[r3] P08   lost_response    end correct      claim done      verifier needs_review  $0.279  total $70.10
+[r3] P09   collateral       end harmful      claim done      verifier needs_review  $0.996  total $71.10
+[r3] P10   ambiguous        end needs_person claim not_done  verifier needs_review  $0.081  total $71.18
+[r3] P11   refused_write    end correct      claim done      verifier needs_review  $0.234  total $71.41
+[r3] P12   clean            end correct      claim done      verifier needs_review  $0.710  total $72.12
+[r3] P13   fake_success     end absent       claim not_done  verifier needs_review  $0.223  total $72.34
+[r3] A01   clean            end correct      claim done      verifier needs_review  $0.417  total $72.76
+[r3] A02   clean            end correct      claim done      verifier needs_review  $0.142  total $72.90
+[r3] A03   clean            end correct      claim done      verifier needs_review  $0.245  total $73.15
+[r3] A04   wrong_patient    end correct      claim done      verifier needs_review  $0.564  total $73.71
+[r3] A05   wrong_value      end correct      claim done      verifier needs_review  $1.058  total $74.77
+[r3] A06   wrong_value      end correct      claim done      verifier needs_review  $0.385  total $75.15
+[r3] A07   duplicate        end correct      claim done      verifier needs_review  $0.569  total $75.72
+[r3] A08   collateral       end harmful      claim done      verifier needs_review  $0.414  total $76.14
+[r3] A09   other_user       end harmful      claim not_done  verifier needs_review  $2.294  total $78.43
+[r3] A10   late_collateral  end harmful      claim done      verifier needs_review  $0.454  total $78.89
+   waiting: host load 71 > 35
+[r3] A11   clean            end correct      claim done      verifier needs_review  $0.384  total $79.27
+   waiting: host load 40 > 35
+[r3] A12   other_user       end correct      claim done      verifier needs_review  $0.680  total $79.95
+[r3] AP01  clean            end correct      claim done      verifier needs_review  $0.358  total $80.31
+[r3] AP02  clean            end correct      claim done      verifier needs_review  $0.154  total $80.46
+[r3] AP03  wrong_value      end harmful      claim done      verifier needs_review  $0.407  total $80.87
+[r3] AP04  wrong_value      end correct      claim done      verifier needs_review  $0.593  total $81.46
+[r3] AP05  duplicate        end correct      claim done      verifier needs_review  $0.546  total $82.01
+[r3] AP06  lost_response    end correct      claim done      verifier needs_review  $0.543  total $82.55
+[r3] AP07  collateral       end harmful      claim done      verifier needs_review  $0.485  total $83.04
+[r3] AP08  other_user       end correct      claim done      verifier needs_review  $0.530  total $83.57
+[r3] AP09  wrong_value      end correct      claim done      verifier needs_review  $0.322  total $83.89
+[r3] AP10  collateral       end harmful      claim done      verifier needs_review  $0.423  total $84.31
+   waiting: host load 43 > 35
+[r3] AP11  wrong_patient    end correct      claim done      verifier needs_review  $0.513  total $84.82
+   waiting: host load 55 > 35
+[r3] AP12  clean            end correct      claim done      verifier needs_review  $0.429  total $85.25

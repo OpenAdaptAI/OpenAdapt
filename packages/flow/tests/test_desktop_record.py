@@ -579,22 +579,27 @@ def test_cli_record_web_requires_url(tmp_path: Path) -> None:
         _run_cli(["record", "--backend", "web", "--out", str(tmp_path / "r")])
 
 
-def test_cli_record_without_backend_or_url_starts_desktop_capture(
-    tmp_path: Path, monkeypatch, capsys
+def test_cli_record_without_backend_or_url_follows_the_person_across_windows(
+    tmp_path: Path, monkeypatch
 ) -> None:
     captured: dict = {}
+
+    def fake_multi(out, **kwargs):
+        captured.update(kwargs)
+        raise SystemExit("stop here")
+
+    monkeypatch.setattr(
+        "openadapt_flow.multi_surface_record.record_multi_surface", fake_multi
+    )
     monkeypatch.setattr(
         "openadapt_flow.desktop_record.record_desktop_capture",
-        _fake_desktop_record(captured),
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("single surface")),
     )
-    rc = _run_cli(["record", "--out", str(tmp_path / "rec")])
-    assert rc == 0
-    assert captured["window"] is None
-    from openadapt_flow.surface_selection import native_surface_for_this_os
-
-    out = capsys.readouterr().out
-    assert f"capture on this OS ({native_surface_for_this_os()})" in out
-    assert "defaulting to browser" not in out
+    with pytest.raises(SystemExit, match="stop here"):
+        _run_cli(["record", "--out", str(tmp_path / "rec")])
+    # No declared surfaces: they are found from the windows used.
+    assert captured["surfaces"] == []
+    assert captured["url"] is None
 
 
 def test_cli_record_url_without_backend_selects_web(

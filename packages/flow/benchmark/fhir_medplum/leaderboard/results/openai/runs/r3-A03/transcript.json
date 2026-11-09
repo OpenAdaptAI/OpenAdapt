@@ -1,0 +1,935 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a262bd6887d2b70815559c980dd5",
+     "call_id": "call_U2mo6QwR4YIUbOOrVzIFF5mw",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a265b3b487d2afab9c2be92cac35",
+     "call_id": "call_M1eqcXeTzm8mw1ONptvrCo8S",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 267,
+       "y": 298
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a26aaed087d28f5ff3c8db0c2a06",
+     "call_id": "call_I8qzGwUaveDNKIDda1eXSvDt",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a26df1c487d2aecaafffb04a5aed",
+     "call_id": "call_fXqyitPBjoqtbBymqnEO5u9H",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 124,
+       "y": 150
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a2704a6887d29a26f0a2987d86ac",
+     "call_id": "call_tG7zJxhHSCncjHRFztOl7ZFq",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a273f2d487d291f313324da7fc2c",
+     "call_id": "call_JOfexmzY67L9tAG3SiuwPvcS",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 159,
+       "y": 33
+      },
+      {
+       "text": "AllergyIntolerance",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a27741b887d2ba9f780d1aed81b5",
+     "call_id": "call_i2ek4GGERraU0WA0H1cs0bEa",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a27a556887d2a661ad3cbb534463",
+     "call_id": "call_f2KTu9i4D7mwTVEaP1oIWxV4",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a27caf4c87d2966d2cf6b423c3cc",
+     "call_id": "call_zesXEjQ2aAsJWQgVwFUU9QUV",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 32,
+       "y": 30
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a27f43bc87d2b0c089a8d55cac69",
+     "call_id": "call_17rv9eKCtYM2o6B22ZNJELPH",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 104,
+       "y": 91
+      },
+      {
+       "text": "AllergyIntolerance",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a282142087d2a2e34bb589107369",
+     "call_id": "call_nT56QDOT1aPvjDNfDkwe07Fp",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a285e22087d293b807d164a354d0",
+     "call_id": "call_M9WbcEwCMc9l71iVWbDftIdQ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a28a13a487d2b811d36b7441667b",
+     "call_id": "call_iiKKu8FE3OarXK4JT2EpWoDr",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 109,
+       "y": 139
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a28d190487d28d405417d4e8712b",
+     "call_id": "call_pwvVPsVZJjyNlG9h5aSIe7X3",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a2911a8c87d2bbfa1678c38a2af5",
+     "call_id": "call_g3lGUpvyIDNNkBIhcVuQckrL",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a294212887d289814e745b020c27",
+     "call_id": "call_cmkeIUeCUUsz5YuhOLDkjC5s",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1232,
+       "y": 167
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a29a95f887d2b828e2711506614f",
+     "call_id": "call_Dzry3mGSjAcbOneJhywxfTSM",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 349,
+       "y": 132
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a2a08be087d28644da0f3bf0e541",
+     "call_id": "call_lSkLtntcZ6iGH6sRh1AD61dm",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 642,
+       "y": 329
+      },
+      {
+       "keys": [
+        "CTRL",
+        "A"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "{\n  \"resourceType\": \"AllergyIntolerance\",\n  \"patient\": {\"reference\": \"Patient/29654d85-254e-417a-bdfb-4043c3a06d95\"},\n  \"code\": {\"coding\": [{\"system\": \"http://snomed.info/sct\", \"code\": \"91936005\", \"display\": \"Allergy to penicillin\"}]},\n  \"criticality\": \"high\",\n  \"clinicalStatus\": {\"coding\": [{\"system\": \"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\", \"code\": \"active\"}]},\n  \"verificationStatus\": {\"coding\": [{\"system\": \"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\", \"code\": \"confirmed\"}]}\n}",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1182,
+       "y": 717
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a2a851d087d28a168f059d91478f",
+     "call_id": "call_l6k5bjjOv0iilv9beTP6gAeB",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 635,
+       "y": 440
+      },
+      {
+       "keys": [
+        "Control",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a2af131087d2b285f1aab6d68052",
+     "call_id": "call_H4Lztje39HE0acT298YFP7Pp",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 573,
+       "y": 383
+      },
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a2b4246c87d28eb7efa3ac387653",
+     "call_id": "call_ywo4O0qYCuCKyejDjq70web7",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CMD",
+        "A"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a2b9a1d887d2ae1b2cf753b30ef1",
+     "call_id": "call_DJ3FFvkOPn80p08tMq4FSLxq",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "{\n  \"resourceType\": \"AllergyIntolerance\",\n  \"patient\": {\"reference\": \"Patient/29654d85-254e-417a-bdfb-4043c3a06d95\"},\n  \"code\": {\"coding\": [{\"system\": \"http://snomed.info/sct\", \"code\": \"91936005\", \"display\": \"Allergy to penicillin\"}]},\n  \"criticality\": \"high\",\n  \"clinicalStatus\": {\"coding\": [{\"system\": \"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\", \"code\": \"active\"}]},\n  \"verificationStatus\": {\"coding\": [{\"system\": \"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\", \"code\": \"confirmed\"}]}\n}",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a2c241c487d2958bca01b4e44206",
+     "call_id": "call_NHXxj9DDtNHLsQE26sMCTM9T",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1183,
+       "y": 719
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a2c7110087d29359c11579a0bdb3",
+     "call_id": "call_rDqlVb0zQB21kZpiC00Na9Xi",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 504,
+       "type": "scroll",
+       "x": 1152,
+       "y": 674
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a2cbdfa487d292e8b2c7db4ce926",
+     "call_id": "call_EeMfpsCPcZ2opKgWahEloCmP",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1184,
+       "y": 733
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a2d0cfe487d29ab7e99dad24d280",
+     "call_id": "call_te39EbN73seT1Lzs6PB3o2K0",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0d99a32d9aa088a6016ae9a2d722d087d2a18c491f96e5e0ef",
+     "call_id": "call_Lw6E8mSHqiWSUGGQsjT2FSyz",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 375,
+       "y": 13
+      },
+      {
+       "scroll_x": 0,
+       "scroll_y": -616,
+       "type": "scroll",
+       "x": 1129,
+       "y": 306
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE AllergyIntolerance/b6fdab26-1655-43c8-a7dd-eba9d45f2356",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 267,
+   "y": 298,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 150,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 159,
+   "y": 33,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 32,
+   "y": 30,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 104,
+   "y": 91,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 109,
+   "y": 139,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 1232,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 349,
+   "y": 132,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 642,
+   "y": 329,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "A"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\n  \"resourceType\": \"AllergyIntolerance\",\n  \"patient\": {\"reference\": \"Patient/29654d85-254e-417a-bdfb-4043c3a06d95\"},\n  \"code\": {\"coding\": [{\"system\": \"http://snomed.info/sct\", \"code\": \"91936005\", \"display\": \"Allergy to penicillin\"}]},\n  \"criticality\": \"high\",\n  \"clinicalStatus\": {\"coding\": [{\"system\": \"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\", \"code\": \"active\"}]},\n  \"verificationStatus\": {\"coding\": [{\"system\": \"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\", \"code\": \"confirmed\"}]}\n}"
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 717,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635,
+   "y": 440,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Control",
+    "a"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 573,
+   "y": 383,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CMD",
+    "A"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\n  \"resourceType\": \"AllergyIntolerance\",\n  \"patient\": {\"reference\": \"Patient/29654d85-254e-417a-bdfb-4043c3a06d95\"},\n  \"code\": {\"coding\": [{\"system\": \"http://snomed.info/sct\", \"code\": \"91936005\", \"display\": \"Allergy to penicillin\"}]},\n  \"criticality\": \"high\",\n  \"clinicalStatus\": {\"coding\": [{\"system\": \"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\", \"code\": \"active\"}]},\n  \"verificationStatus\": {\"coding\": [{\"system\": \"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\", \"code\": \"confirmed\"}]}\n}"
+  },
+  {
+   "a": "click",
+   "x": 1183,
+   "y": 719,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 1152,
+   "y": 674,
+   "dx": 0,
+   "dy": 504
+  },
+  {
+   "a": "click",
+   "x": 1184,
+   "y": 733,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 375,
+   "y": 13,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 1129,
+   "y": 306,
+   "dx": 0,
+   "dy": -616
+  }
+ ],
+ "usage": [
+  {
+   "in": 2343,
+   "out": 41,
+   "usd": 0.005096,
+   "cached": 0
+  },
+  {
+   "in": 3560,
+   "out": 31,
+   "usd": 0.003218,
+   "cached": 2340
+  },
+  {
+   "in": 4816,
+   "out": 19,
+   "usd": 0.003419,
+   "cached": 3557
+  },
+  {
+   "in": 6056,
+   "out": 31,
+   "usd": 0.003759,
+   "cached": 4813
+  },
+  {
+   "in": 7312,
+   "out": 19,
+   "usd": 0.003919,
+   "cached": 6053
+  },
+  {
+   "in": 8552,
+   "out": 42,
+   "usd": 0.004368,
+   "cached": 7309
+  },
+  {
+   "in": 9823,
+   "out": 19,
+   "usd": 0.004448,
+   "cached": 8549
+  },
+  {
+   "in": 11063,
+   "out": 24,
+   "usd": 0.00469,
+   "cached": 9820
+  },
+  {
+   "in": 12308,
+   "out": 41,
+   "usd": 0.005118,
+   "cached": 11060
+  },
+  {
+   "in": 13574,
+   "out": 42,
+   "usd": 0.005419,
+   "cached": 12305
+  },
+  {
+   "in": 14845,
+   "out": 19,
+   "usd": 0.005452,
+   "cached": 13571
+  },
+  {
+   "in": 16085,
+   "out": 19,
+   "usd": 0.005644,
+   "cached": 14842
+  },
+  {
+   "in": 17325,
+   "out": 31,
+   "usd": 0.006012,
+   "cached": 16082
+  },
+  {
+   "in": 18581,
+   "out": 19,
+   "usd": 0.006172,
+   "cached": 17322
+  },
+  {
+   "in": 19821,
+   "out": 19,
+   "usd": 0.006392,
+   "cached": 18578
+  },
+  {
+   "in": 21061,
+   "out": 32,
+   "usd": 0.00677,
+   "cached": 19818
+  },
+  {
+   "in": 22318,
+   "out": 31,
+   "usd": 0.007042,
+   "cached": 21058
+  },
+  {
+   "in": 23574,
+   "out": 253,
+   "usd": 0.009511,
+   "cached": 22315
+  },
+  {
+   "in": 25068,
+   "out": 78,
+   "usd": 0.008488,
+   "cached": 23571
+  },
+  {
+   "in": 26375,
+   "out": 79,
+   "usd": 0.008423,
+   "cached": 25065
+  },
+  {
+   "in": 27683,
+   "out": 38,
+   "usd": 0.008276,
+   "cached": 26372
+  },
+  {
+   "in": 28942,
+   "out": 209,
+   "usd": 0.01015,
+   "cached": 27680
+  },
+  {
+   "in": 30372,
+   "out": 32,
+   "usd": 0.008974,
+   "cached": 28939
+  },
+  {
+   "in": 31629,
+   "out": 38,
+   "usd": 0.008974,
+   "cached": 30369
+  },
+  {
+   "in": 32892,
+   "out": 36,
+   "usd": 0.009217,
+   "cached": 31626
+  },
+  {
+   "in": 34157,
+   "out": 19,
+   "usd": 0.009304,
+   "cached": 32889
+  },
+  {
+   "in": 35397,
+   "out": 55,
+   "usd": 0.009867,
+   "cached": 34154
+  },
+  {
+   "in": 36685,
+   "out": 33,
+   "usd": 0.009991,
+   "cached": 35394
+  }
+ ]
+}
