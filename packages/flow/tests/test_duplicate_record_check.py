@@ -666,3 +666,81 @@ def test_a_mobile_phone_ties_a_renamed_chart(serve) -> None:
     result = check_duplicate(FhirPatientSource(server.url), want)
     assert result.decision == "close"
     assert "same phone" in result.candidates[0].why
+
+
+def _prior_mary_ann_paths(serve, tmp_path: Path) -> dict[str, Any]:
+    """The same chart on every channel: now Rosa Okafor, formerly Mary Ann
+    Ashford (given names Mary and Ann), born 1990-04-09."""
+
+    resource = patient("41", "Rosa", "Okafor", "1990-04-09")
+    resource["name"].append(
+        {"use": "maiden", "family": "Ashford", "given": ["Mary", "Ann"]}
+    )
+    fhir = serve(
+        lambda p, q: (
+            200,
+            {"resourceType": "Bundle", "total": 1, "entry": [{"resource": resource}]},
+        )
+    )
+    row = {
+        "uuid": "41",
+        "fname": "Rosa",
+        "lname": "Okafor",
+        "DOB": "1990-04-09",
+        "birth_fname": "Mary Ann",
+        "birth_lname": "Ashford",
+    }
+    rest = serve(lambda p, q: (200, {"data": [row], "links": {}}))
+    db = tmp_path / "prior.db"
+    con = sqlite3.connect(db)
+    con.execute(
+        "CREATE TABLE patient_data (pid INTEGER, fname TEXT, mname TEXT, "
+        "lname TEXT, DOB TEXT, pubpid TEXT, phone_home TEXT, street TEXT, "
+        "email TEXT, birth_fname TEXT, birth_lname TEXT)"
+    )
+    con.execute(
+        "INSERT INTO patient_data VALUES (41, 'Rosa', '', 'Okafor', '1990-04-09', "
+        "'41', '', '', '', 'Mary Ann', 'Ashford')"
+    )
+    con.commit()
+    con.close()
+    return {
+        "fhir": FhirPatientSource(fhir.url),
+        "rest": RestPatientSource(rest.url, APP.rest, path="/api/patient"),
+        "sql": SqlPatientSource(
+            lambda: sqlite3.connect(db), APP.sql, paramstyle="qmark"
+        ),
+        "table": TableSource(
+            [
+                PatientRecord(
+                    "41",
+                    "Rosa",
+                    "Okafor",
+                    "1990-04-09",
+                    prior_names=(("Mary Ann", "Ashford"),),
+                )
+            ]
+        ),
+    }
+
+
+@pytest.mark.parametrize("fname", ["Ann", "Mary", "Mary Ann"])
+def test_a_prior_name_keeps_every_given_name_on_every_channel(
+    serve, tmp_path: Path, fname: str
+) -> None:
+    want = {"fname": fname, "lname": "Ashford", "DOB": "1990-04-09"}
+    decisions = {
+        name: check_duplicate(source, want).decision
+        for name, source in _prior_mary_ann_paths(serve, tmp_path).items()
+    }
+    assert decisions == {
+        "fhir": "close",
+        "rest": "close",
+        "sql": "close",
+        "table": "close",
+    }
+
+
+def test_fhir_prior_name_keeps_every_given_part(serve, tmp_path: Path) -> None:
+    record = _prior_mary_ann_paths(serve, tmp_path)["fhir"].by_birthdate("1990-04-09")
+    assert record[0].prior_names == (("Mary Ann", "Ashford"),)

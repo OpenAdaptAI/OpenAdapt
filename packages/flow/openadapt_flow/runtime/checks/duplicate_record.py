@@ -390,7 +390,14 @@ def classify(want: Mapping[str, str], record: PatientRecord) -> Optional[Candida
     if mrn and record.mrn and mrn == record.mrn.strip():
         return Candidate(record, "exact", "same MRN")
     names = [(record.fname, record.lname, record.mname)]
-    names += [(first, last, "") for first, last in record.prior_names]
+    # A prior name's first given name, and the rest as its middle name: the
+    # same first-and-middle comparison as the current name.
+    names += [
+        (first.split(" ", 1)[0], last, first.split(" ", 1)[1] if " " in first else "")
+        for first, last in (
+            (re.sub(r"\s+", " ", f or "").strip(), la) for f, la in record.prior_names
+        )
+    ]
     for i, (first, last, middle) in enumerate(names):
         found = _classify_name(want, record, first, last, middle)
         if found is not None:
@@ -699,14 +706,16 @@ class FhirPatientSource:
             current[0] if current else {},
         )
 
-        def pair(n: dict[str, Any]) -> tuple[str, str]:
-            given = n.get("given") or []
-            return (str(given[0]) if given else "", str(n.get("family") or ""))
+        def given_of(n: dict[str, Any]) -> list[str]:
+            return [str(g) for g in n.get("given") or [] if str(g).strip()]
 
-        # Every given name after the first (a middle name, a second given
-        # name), so "Mary Ann" is compared with all of it.
-        official_given = official.get("given") or []
-        mname = " ".join(str(g) for g in official_given[1:] if str(g).strip())
+        def pair(n: dict[str, Any]) -> tuple[str, str]:
+            # Every given name of every HumanName (current, old, maiden),
+            # so "Mary Ann" is compared with all of it.
+            return (" ".join(given_of(n)), str(n.get("family") or ""))
+
+        official_given = given_of(official)
+        mname = " ".join(official_given[1:])
 
         mrn = ""
         for ident in resource.get("identifier") or []:
@@ -743,9 +752,10 @@ class FhirPatientSource:
             (a for a in resource.get("address") or [] if isinstance(a, dict)), {}
         )
         lines = address.get("line") or []
-        first, last = pair(official)
+        whole, last = pair(official)
+        first = official_given[0] if official_given else ""
         prior = tuple(
-            pair(n) for n in names if n is not official and pair(n) != (first, last)
+            pair(n) for n in names if n is not official and pair(n) != (whole, last)
         )
         return PatientRecord(
             record_id=str(resource.get("id") or ""),
