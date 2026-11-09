@@ -139,132 +139,132 @@
      "actuation_path": "gui",
      "contract_index": 0,
      "contract_kind": "explicit_predicate",
-     "contract_sha256": "fe84784a4fa6d1ffb51e672dd03890517fa2089273e848416e2c1c829092c5d7",
+     "contract_sha256": "26b0e2ff1226d818334ffad31102c894d90f77966f21b9cc79d358d0b4226c48",
      "result_index": 0,
-     "step_contract_sha256": "6bf682e8ab410f6db36beda60015bbe7818ef5558883b410f7740ffce7835ce0",
+     "step_contract_sha256": "fd2449f5f2f0454b354cee09023ebf8d58cc62a6272dd09ef13c787dc4914ee0",
      "step_index": 0,
      "verdict": "passed",
-     "workflow_contract_sha256": "4e2641e241b18190da19e426f9e5890d6f8dcca4e49ce544d924f2b521f4e681"
+     "workflow_contract_sha256": "03ef68277e63dded9141d8ab2d8460b0742d9a184e5f69161d70c7415ceb6494"
     },
     {
      "action_kind": "type",
      "actuation_path": "gui",
      "contract_index": 0,
      "contract_kind": "explicit_predicate",
-     "contract_sha256": "01eca1f4ef4e7fdd9113ef35fb8c0e7da90895c785f5e93eef3d93f258d094bf",
+     "contract_sha256": "c64e9d8be92a43868d3ef832e7ea68b34d7256b61177d1c89162bab690e0ecd6",
      "result_index": 1,
-     "step_contract_sha256": "26ac0c9d60e78c9b8303f3fe2c312580fd56e59461afb048d40050c0e68272c5",
+     "step_contract_sha256": "328ac5538ca64129c0962e815439db2e7500f2725c13fac3f2bc6d614b7baee0",
      "step_index": 1,
      "verdict": "passed",
-     "workflow_contract_sha256": "4e2641e241b18190da19e426f9e5890d6f8dcca4e49ce544d924f2b521f4e681"
+     "workflow_contract_sha256": "03ef68277e63dded9141d8ab2d8460b0742d9a184e5f69161d70c7415ceb6494"
     },
     {
      "action_kind": "type",
      "actuation_path": "gui",
      "contract_index": 1,
      "contract_kind": "explicit_predicate",
-     "contract_sha256": "3d418dafc0decd2b2d7fa006422549e78b3f81e676df6acd0f3f475c41ed5dc0",
+     "contract_sha256": "6277e99e462c3a8d3b533119efd39d2dcc522381d14231d95e45191a4deea747",
      "result_index": 1,
-     "step_contract_sha256": "26ac0c9d60e78c9b8303f3fe2c312580fd56e59461afb048d40050c0e68272c5",
+     "step_contract_sha256": "328ac5538ca64129c0962e815439db2e7500f2725c13fac3f2bc6d614b7baee0",
      "step_index": 1,
      "verdict": "passed",
-     "workflow_contract_sha256": "4e2641e241b18190da19e426f9e5890d6f8dcca4e49ce544d924f2b521f4e681"
+     "workflow_contract_sha256": "03ef68277e63dded9141d8ab2d8460b0742d9a184e5f69161d70c7415ceb6494"
     },
     {
      "action_kind": "type",
      "actuation_path": "gui",
      "contract_index": 0,
      "contract_kind": "intrinsic_input_readback",
-     "contract_sha256": "bbd16e8fc0fc2c7310b70f92de6f58c0a7ab16adaa9cc46bfdfa1e9b63e9b34f",
+     "contract_sha256": "d745b95bfc5a57c77ff805f616a4dc62a5e76f6194dc37fb2be33f5d48c11aaa",
      "result_index": 1,
-     "step_contract_sha256": "26ac0c9d60e78c9b8303f3fe2c312580fd56e59461afb048d40050c0e68272c5",
+     "step_contract_sha256": "328ac5538ca64129c0962e815439db2e7500f2725c13fac3f2bc6d614b7baee0",
      "step_index": 1,
      "verdict": "passed",
-     "workflow_contract_sha256": "4e2641e241b18190da19e426f9e5890d6f8dcca4e49ce544d924f2b521f4e681"
+     "workflow_contract_sha256": "03ef68277e63dded9141d8ab2d8460b0742d9a184e5f69161d70c7415ceb6494"
     },
     {
      "action_kind": "click",
      "actuation_path": "gui",
      "contract_index": 0,
      "contract_kind": "explicit_predicate",
-     "contract_sha256": "d8a865a76a78eb8c1f8c0a932f3cfb7c723715112f9ede5233b348fbf67d0358",
+     "contract_sha256": "d33e44772d56dd4329b534e43b2bf87a420ba877b52d4a2ef5c1b29bc097e1de",
      "result_index": 2,
-     "step_contract_sha256": "b1ac8e5ec1f94709f643ef6e4047dbbabe53d50ef6aee5b2982c89b1f9c33f90",
+     "step_contract_sha256": "f4b33128d76a67eee8c27ca502cd70594fdac4f9b19a2224a3266505fb66c94b",
      "step_index": 2,
      "verdict": "passed",
-     "workflow_contract_sha256": "4e2641e241b18190da19e426f9e5890d6f8dcca4e49ce544d924f2b521f4e681"
+     "workflow_contract_sha256": "03ef68277e63dded9141d8ab2d8460b0742d9a184e5f69161d70c7415ceb6494"
     },
     {
      "action_kind": "type",
      "actuation_path": "gui",
      "contract_index": 0,
      "contract_kind": "explicit_predicate",
-     "contract_sha256": "25724a3f67da3f2bde2a47543b69af26905a62a4aea96814f038bc62c6089466",
+     "contract_sha256": "74e4b8676be07bc588594024694970b175a15e1de89afb5d8316395536fd93b1",
      "result_index": 3,
-     "step_contract_sha256": "bb2d440a21097bb9e2e5760a665d1d0cbbe8421e54d257bff91719740978e300",
+     "step_contract_sha256": "47495b30025945fab14469232acd95a5e33f03ed9387e6eb87f394ccbb4a9116",
      "step_index": 3,
      "verdict": "passed",
-     "workflow_contract_sha256": "4e2641e241b18190da19e426f9e5890d6f8dcca4e49ce544d924f2b521f4e681"
+     "workflow_contract_sha256": "03ef68277e63dded9141d8ab2d8460b0742d9a184e5f69161d70c7415ceb6494"
     },
     {
      "action_kind": "type",
      "actuation_path": "gui",
      "contract_index": 0,
      "contract_kind": "intrinsic_input_readback",
-     "contract_sha256": "4581ab5cdf052d6bfbe08c733e0173c54c824297f177a7393233b07abd5f86af",
+     "contract_sha256": "69a321d1d5fb50ebd0a13949d03641976f3a8bdaa08b28a19494094b22e49396",
      "result_index": 3,
-     "step_contract_sha256": "bb2d440a21097bb9e2e5760a665d1d0cbbe8421e54d257bff91719740978e300",
+     "step_contract_sha256": "47495b30025945fab14469232acd95a5e33f03ed9387e6eb87f394ccbb4a9116",
      "step_index": 3,
      "verdict": "passed",
-     "workflow_contract_sha256": "4e2641e241b18190da19e426f9e5890d6f8dcca4e49ce544d924f2b521f4e681"
+     "workflow_contract_sha256": "03ef68277e63dded9141d8ab2d8460b0742d9a184e5f69161d70c7415ceb6494"
     },
     {
      "action_kind": "click",
      "actuation_path": "gui",
      "contract_index": 0,
      "contract_kind": "explicit_predicate",
-     "contract_sha256": "f02a7170072e316742505d17220ade035dd366ace896fa809d03a5be2eff626d",
+     "contract_sha256": "649aea6eb7de522c81b64f3941df0b4520ab46ea7fd52b0e3adc6c2afb44371e",
      "result_index": 4,
-     "step_contract_sha256": "fe3a75adf814f46b7f86e46632edb31eb224de9d27e27c73427865b915ddd0cf",
+     "step_contract_sha256": "719c1ec0e5aaedbfdcafb749176913c42590b36284f57074b2874203bdac920f",
      "step_index": 4,
      "verdict": "passed",
-     "workflow_contract_sha256": "4e2641e241b18190da19e426f9e5890d6f8dcca4e49ce544d924f2b521f4e681"
+     "workflow_contract_sha256": "03ef68277e63dded9141d8ab2d8460b0742d9a184e5f69161d70c7415ceb6494"
     },
     {
      "action_kind": "click",
      "actuation_path": "gui",
      "contract_index": 1,
      "contract_kind": "explicit_predicate",
-     "contract_sha256": "8868781da939c959072ff2bcf7488c30d6b07cadd8a4de97ca6c6791ead5ee8d",
+     "contract_sha256": "aa4b54c19b32c2e260a21cabeb35b9e2910bc13bf7db327d97a89c9445cd24c1",
      "result_index": 4,
-     "step_contract_sha256": "fe3a75adf814f46b7f86e46632edb31eb224de9d27e27c73427865b915ddd0cf",
+     "step_contract_sha256": "719c1ec0e5aaedbfdcafb749176913c42590b36284f57074b2874203bdac920f",
      "step_index": 4,
      "verdict": "passed",
-     "workflow_contract_sha256": "4e2641e241b18190da19e426f9e5890d6f8dcca4e49ce544d924f2b521f4e681"
+     "workflow_contract_sha256": "03ef68277e63dded9141d8ab2d8460b0742d9a184e5f69161d70c7415ceb6494"
     },
     {
      "action_kind": "click",
      "actuation_path": "gui",
      "contract_index": 0,
      "contract_kind": "explicit_predicate",
-     "contract_sha256": "64880fb29d2abf85340167a0746edfc7fdcf6f9d9259ce6f9a9a18465cb81b3e",
+     "contract_sha256": "cafcc8570d48f6777c14d62389f70ca77ffd4d042d7bf1ee58775759674fc59c",
      "result_index": 5,
-     "step_contract_sha256": "f60d0abbaeb8f1a6035aa61c533157d39f8ae8688a0883bf3adb79b5fcba0b65",
+     "step_contract_sha256": "da3424bd7cbb6476fb26fa12c6a6e8f2e4e83456cd9a8fddf66616923c8bcff6",
      "step_index": 5,
      "verdict": "unverifiable",
-     "workflow_contract_sha256": "4e2641e241b18190da19e426f9e5890d6f8dcca4e49ce544d924f2b521f4e681"
+     "workflow_contract_sha256": "03ef68277e63dded9141d8ab2d8460b0742d9a184e5f69161d70c7415ceb6494"
     },
     {
      "action_kind": "click",
      "actuation_path": "gui",
      "contract_index": 1,
      "contract_kind": "explicit_predicate",
-     "contract_sha256": "901f38d1688f6eadc1d2d1edcab6f10ca76f034600448ecb925bdb21aa8a178d",
+     "contract_sha256": "67c032a0e0a7f4257ef01a5284120d8e5aae40e9ce72adc3ffd4cee5d2f2457a",
      "result_index": 5,
-     "step_contract_sha256": "f60d0abbaeb8f1a6035aa61c533157d39f8ae8688a0883bf3adb79b5fcba0b65",
+     "step_contract_sha256": "da3424bd7cbb6476fb26fa12c6a6e8f2e4e83456cd9a8fddf66616923c8bcff6",
      "step_index": 5,
      "verdict": "unverifiable",
-     "workflow_contract_sha256": "4e2641e241b18190da19e426f9e5890d6f8dcca4e49ce544d924f2b521f4e681"
+     "workflow_contract_sha256": "03ef68277e63dded9141d8ab2d8460b0742d9a184e5f69161d70c7415ceb6494"
     }
    ],
    "production_eligible": false,
@@ -276,7 +276,7 @@
     "postcondition": 11
    },
    "version": "openadapt.execution-outcome/v1",
-   "workflow_contract_sha256": "4e2641e241b18190da19e426f9e5890d6f8dcca4e49ce544d924f2b521f4e681"
+   "workflow_contract_sha256": "03ef68277e63dded9141d8ab2d8460b0742d9a184e5f69161d70c7415ceb6494"
   },
   "parameter_schema_sha256": "b9706e023d1b70651493a1b2b68bb1939f7173f74b5e574d4f9fa57acc89fc6d",
   "params": {
@@ -667,7 +667,7 @@
   "transaction_outcome": "REJECTED_POLICY",
   "transaction_platform_fault": false,
   "visited_states": [],
-  "workflow_contract_sha256": "4e2641e241b18190da19e426f9e5890d6f8dcca4e49ce544d924f2b521f4e681",
+  "workflow_contract_sha256": "03ef68277e63dded9141d8ab2d8460b0742d9a184e5f69161d70c7415ceb6494",
   "workflow_name": "golden-triage"
  },
  "trace": [
