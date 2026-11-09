@@ -193,3 +193,22 @@ The kill thresholds, the baselines (`hand-written+complete` for the
 thresholds), the ground truth and the trial cases are unchanged. MockLoan is
 still held out: the fixes contain no MockLoan-specific code and were written
 and tested against a separate local test app.
+
+### 2026-11-09, before the third run (refuse partial probed reads)
+
+The second run's `Z-net-probed` arm on MockLoan accepted 3 wrong runs: the
+probed read covered only the written collection, and a write on another
+surface passed it. The generator had labelled that file a draft, but the
+protocol deletes the confirmation flags, so the file ran. Ruling: a check
+that can say CONFIRMED while its read cannot see part of the save must not
+be runnable. The engine change (#2129, 32997eeac) makes `scaffold-verifier`
+refuse a probed read when its fault test shows a write outside the reads
+would pass (`collateral_unaudited`) or a captured write no read covers. It
+then writes the TODO draft and records the reason in `read_discovery.json`
+and the proof. Under this protocol a refusal is "no runnable verifier".
+
+The third run re-runs every arm on the same cases, because the harness runs
+them together. Only `Z-net-probed` can change; the others' generator paths
+did not change. The second run's data is kept as `results-run2.json`. The
+thresholds, the baselines, the ground truth and the trial cases are
+unchanged.
