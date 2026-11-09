@@ -128,54 +128,63 @@ def stop(
 
 
 # -- processes this one did not start with Popen -----------------------------
+#
+# The proof that a tree is gone is its process group: the target must lead
+# its own group (started with ``start_new_session``), the whole group is
+# SIGKILLed, and ``killpg(pgid, 0)`` must then fail with ESRCH. A ``ps`` walk
+# by parent pid only adds processes that left the group (``setsid``) to the
+# kill list. It is never the proof, and a census that looks incomplete
+# refuses the teardown instead of being read as "nothing else there".
+
+Row = tuple[int, int, int, str]  # pid, ppid, pgid, stat
+
+#: The header ``ps -A -o pid,ppid,pgid,stat`` prints first.
+PS_HEADER = ["PID", "PPID", "PGID", "STAT"]
 
 
-def _ps_rows() -> Optional[list[tuple[int, int, str]]]:
-    """One read of the process table as (pid, ppid, stat), or None when it
-    could not be read or parsed. None is never an empty table."""
-    if os.name == "nt":
-        command = [
-            "powershell",
-            "-NoProfile",
-            "-Command",
-            "Get-CimInstance Win32_Process | ForEach-Object "
-            '{ "$($_.ProcessId) $($_.ParentProcessId) R" }',
-        ]
-    else:
-        command = ["ps", "-A", "-o", "pid=,ppid=,stat="]
+def _ps_rows(must_include: Sequence[int] = ()) -> Optional[list[Row]]:
+    """One read of the process table, or None when it could not be read or
+    looks incomplete: no header, an unparseable row, or a missing process
+    that is known to exist (this one, and each of ``must_include``)."""
     try:
         out = subprocess.run(
-            command, capture_output=True, text=True, check=True, timeout=30
+            ["ps", "-A", "-o", "pid,ppid,pgid,stat"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
         ).stdout
     except (OSError, subprocess.SubprocessError):
         return None
-    rows = []
-    for line in out.splitlines():
-        parts = line.split()
-        if not parts:
-            continue
-        if len(parts) < 3:
+    lines = [line.split() for line in out.splitlines() if line.strip()]
+    if not lines or [t.upper() for t in lines[0]] != PS_HEADER:
+        return None
+    rows: list[Row] = []
+    for parts in lines[1:]:
+        if len(parts) < 4:
             return None
         try:
-            rows.append((int(parts[0]), int(parts[1]), parts[2]))
+            rows.append((int(parts[0]), int(parts[1]), int(parts[2]), parts[3]))
         except ValueError:
             return None
-    # The table always holds at least this process; an empty one was not read.
-    return rows if any(row[0] == os.getpid() for row in rows) else None
+    listed = {row[0] for row in rows}
+    if os.getpid() not in listed or any(p not in listed for p in must_include):
+        return None
+    return rows
 
 
-def _census() -> Optional[list[tuple[int, int, str]]]:
+def _census(must_include: Sequence[int] = ()) -> Optional[list[Row]]:
     for _ in range(CENSUS_ATTEMPTS):
-        rows = _ps_rows()
+        rows = _ps_rows(must_include)
         if rows is not None:
             return rows
     return None
 
 
-def _tree(pid: int, rows: list[tuple[int, int, str]]) -> set[int]:
+def _tree(pid: int, rows: list[Row]) -> set[int]:
     """``pid``'s live descendants in one census (not ``pid`` itself)."""
     children: dict[int, list[int]] = {}
-    for child, parent, stat in rows:
+    for child, parent, _pgid, stat in rows:
         if not stat.startswith("Z"):
             children.setdefault(parent, []).append(child)
     found: set[int] = set()
@@ -211,81 +220,117 @@ def _signal(pid: int, sig: int) -> bool:
     return True
 
 
+def _killpg(pgid: int, sig: int) -> None:
+    try:
+        os.killpg(pgid, sig)
+    except ProcessLookupError:
+        pass  # already empty
+    except PermissionError:
+        pass  # only zombies left (macOS); the emptiness check decides
+    except OSError as exc:
+        raise ProcessNotReaped(
+            f"process group {pgid} could not be signalled: {exc}"
+        ) from exc
+
+
 def kill_child_tree(
     pid: int, *, timeout: float = KILL_TIMEOUT_S
 ) -> Literal["killed", "exited"]:
-    """SIGKILL ``pid`` (a child of this process) and every process below it.
+    """SIGKILL ``pid``, a child of this process that leads its own process
+    group, and everything it started.
 
-    The tree is frozen with SIGSTOP while it is listed, so no member can
-    start another one unseen, then killed. Returns ``"killed"`` only once
-    ``pid`` is reaped and a successful read of the process table shows none
-    of its descendants still running. A process table that cannot be read,
-    before or after the kill, raises :class:`DescendantsUnknown`; anything
-    still running at the bound raises :class:`ProcessNotReaped`.
-    ``"exited"`` means ``pid`` had already exited and been reaped, and was
-    not signalled, so a reused process id is never hit.
+    Returns ``"killed"`` only once ``pid`` is reaped, its group (and the
+    group of any descendant that left it) is confirmed empty with
+    ``killpg(pgid, 0)``, and a complete census found every process it listed
+    gone. Raises :class:`DescendantsUnknown` when that cannot be shown: the
+    target does not lead its own group, or the process table looks
+    incomplete. Anything still there at the bound raises
+    :class:`ProcessNotReaped`. Either way everything known is killed first.
+    ``"exited"`` means ``pid`` had already exited and been reaped and its
+    group is empty; nothing was signalled, so a reused id is never hit.
     """
     deadline = time.monotonic() + timeout
-    windows = os.name == "nt"
-    if not windows and _reap_child(pid):
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
+        raise DescendantsUnknown(
+            f"process {pid} was sent taskkill /T, but Windows has no process "
+            "group to prove its descendants gone"
+        )
+    try:
+        pgid: Optional[int] = os.getpgid(pid)
+    except ProcessLookupError:
+        pgid = None
+    if _reap_child(pid):
+        if _group_alive(pid):
+            raise DescendantsUnknown(
+                f"process {pid} had already exited, but a process group with "
+                "its id is still there and may not be its own"
+            )
         return "exited"
-    known: set[int] = {pid}
-    if not windows:
-        _signal(pid, signal.SIGSTOP)
     unknown: Optional[str] = None
+    groups: set[int] = set()
+    if pgid == pid and pgid != os.getpgrp():
+        groups.add(pgid)
+        _killpg(pgid, signal.SIGSTOP)  # nothing in it can start anything now
+    else:
+        unknown = f"process {pid} does not lead its own process group"
+        _signal(pid, signal.SIGSTOP)
+    # Processes that left the group, to kill as well; never the proof.
+    extras: set[int] = set()
     while True:
-        rows = _census()
+        rows = _census(must_include=[pid, *sorted(extras)])
         if rows is None:
-            unknown = "the process table could not be read before the kill"
+            unknown = unknown or "the process table looks incomplete before the kill"
             break
-        new = _tree(pid, rows) - known
+        pgids = {row[0]: row[2] for row in rows}
+        found = _tree(pid, rows)
+        new = {p for p in found - extras if pgids.get(p) not in groups}
+        for p in new:
+            if pgids.get(p) == p and p != os.getpgrp():
+                groups.add(p)  # a descendant that leads a group of its own
+                _killpg(p, signal.SIGSTOP)
+            else:
+                _signal(p, signal.SIGSTOP)
+        extras |= new
         if not new:
             break
-        known |= new
-        if not windows:
-            for target in new:
-                _signal(target, signal.SIGSTOP)
         if time.monotonic() > deadline:
-            unknown = f"process {pid} kept starting processes while being stopped"
+            unknown = unknown or f"process {pid} kept starting processes"
             break
-    if windows:
-        for target in sorted(known):
-            subprocess.run(
-                ["taskkill", "/F", "/T", "/PID", str(target)], capture_output=True
-            )
-    else:
-        for target in [pid, *sorted(known - {pid})]:
-            _signal(target, signal.SIGKILL)
-    descendants = known - {pid}
-    remaining: Optional[set[int]] = None
+    for group in sorted(groups):
+        _killpg(group, signal.SIGKILL)
+    for target in [pid, *sorted(extras)]:
+        _signal(target, signal.SIGKILL)
+    reaped = False
     while True:
-        rows = _census()
-        if windows:
-            reaped = rows is not None and pid not in {r[0] for r in rows}
-        else:
-            reaped = _reap_child(pid)
-        if reaped and unknown is not None:
-            raise DescendantsUnknown(
-                f"process {pid} was killed and reaped, but {unknown}, so its "
-                "descendants are unknown"
-            )
-        if reaped and rows is not None:
-            running = {p for p, _pp, stat in rows if not stat.startswith("Z")}
-            remaining = descendants & running
-            if not remaining:
-                return "killed"
-        if time.monotonic() > deadline:
-            if not reaped:
-                raise ProcessNotReaped(
-                    f"process {pid} still running {timeout:.0f} s after SIGKILL"
+        reaped = reaped or _reap_child(pid)
+        occupied = [g for g in sorted(groups) if _group_alive(g)]
+        if reaped and not occupied:
+            if unknown is not None:
+                raise DescendantsUnknown(
+                    f"process {pid} was killed and reaped, but {unknown}, so "
+                    "what it started is unknown"
                 )
+            rows = _census()
             if rows is None:
                 raise DescendantsUnknown(
-                    f"process {pid} was reaped, but the process table could not "
-                    "be read after the kill"
+                    f"process {pid} and its group are gone, but the process "
+                    "table looks incomplete after the kill"
                 )
+            running = {p for p, _pp, _pg, stat in rows if not stat.startswith("Z")}
+            survivors = extras & running
+            if not survivors:
+                return "killed"
+        else:
+            survivors = set()
+        if time.monotonic() > deadline:
+            if not reaped:
+                what = f"process {pid}"
+            elif occupied:
+                what = f"process group(s) {occupied} of {pid}"
+            else:
+                what = f"descendants {sorted(survivors)} of {pid}"
             raise ProcessNotReaped(
-                f"descendants {sorted(remaining or ())} of {pid} still running "
-                f"{timeout:.0f} s after SIGKILL"
+                f"{what} still running {timeout:.0f} s after SIGKILL"
             )
         time.sleep(0.05)

@@ -18,7 +18,9 @@ from __future__ import annotations
 import base64
 import importlib
 import json
+import os
 import random
+import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -268,6 +270,43 @@ def _driver_pid(pw: Any) -> Optional[int]:
         return None
 
 
+class _NewSessionAsyncio:
+    """``asyncio`` as Playwright's transport sees it, except that the driver
+    subprocess starts in a new session: its own process group, which is what
+    proves the browser gone when a stuck episode is torn down."""
+
+    def __init__(self, real: Any) -> None:
+        self._real = real
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._real, name)
+
+    async def create_subprocess_exec(self, *args: Any, **kwargs: Any) -> Any:
+        kwargs.setdefault("start_new_session", True)
+        return await self._real.create_subprocess_exec(*args, **kwargs)
+
+
+_SESSION_LOCK = threading.Lock()
+
+
+def _driver_in_own_session() -> None:
+    """Start Playwright's driver in its own process group from now on.
+
+    If Playwright's internals differ, nothing changes and a stuck browser's
+    teardown refuses (DescendantsUnknown) instead of claiming it is gone.
+    """
+    if os.name == "nt":
+        return
+    try:
+        from playwright._impl import _transport
+    except ImportError:
+        return
+    with _SESSION_LOCK:
+        current = getattr(_transport, "asyncio", None)
+        if current is not None and not isinstance(current, _NewSessionAsyncio):
+            setattr(_transport, "asyncio", _NewSessionAsyncio(current))
+
+
 def _frame_selector(frame: Any) -> Optional[str]:
     """The iframe element's selector in its parent: by name, else by id."""
     if frame.name:
@@ -450,6 +489,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             return self._page
         from playwright.sync_api import sync_playwright
 
+        _driver_in_own_session()
         self._pw = sync_playwright().start()
         self._driver_pid = _driver_pid(self._pw)
         from openadapt_flow._browser_readiness import launch_rendering_ready

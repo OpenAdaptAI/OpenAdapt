@@ -102,7 +102,7 @@ def test_a_server_that_cannot_be_reaped_raises_instead_of_reporting_stopped(
 
 
 def test_kill_child_tree_reaps_a_child_that_ignores_sigterm_and_its_children() -> None:
-    proc = subprocess.Popen(
+    proc = lifecycle.spawn(
         [sys.executable, "-c", STUBBORN],
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
@@ -118,18 +118,33 @@ def test_kill_child_tree_reaps_a_child_that_ignores_sigterm_and_its_children() -
 
 
 def test_kill_child_tree_does_not_signal_an_already_reaped_pid(monkeypatch) -> None:
-    proc = subprocess.Popen([sys.executable, "-c", "pass"])
+    proc = lifecycle.spawn([sys.executable, "-c", "pass"])
     proc.wait(timeout=30)
     sent: list[int] = []
+    real_killpg = os.killpg
+
+    def killpg(pgid: int, sig: int) -> None:
+        if sig != 0:
+            sent.append(pgid)
+        else:
+            real_killpg(pgid, sig)
+
     monkeypatch.setattr(lifecycle.os, "kill", lambda pid, sig: sent.append(pid))
+    monkeypatch.setattr(lifecycle.os, "killpg", killpg)
     assert lifecycle.kill_child_tree(proc.pid) == "exited"
     assert sent == []  # the pid may already belong to someone else
 
 
 def test_kill_child_tree_raises_when_the_child_cannot_be_reaped(monkeypatch) -> None:
-    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+    proc = lifecycle.spawn([sys.executable, "-c", "import time; time.sleep(600)"])
+    real_killpg = os.killpg
     try:
         monkeypatch.setattr(lifecycle.os, "kill", lambda pid, sig: None)
+        monkeypatch.setattr(
+            lifecycle.os,
+            "killpg",
+            lambda pgid, sig: real_killpg(pgid, sig) if sig == 0 else None,
+        )
         with pytest.raises(lifecycle.ProcessNotReaped, match=str(proc.pid)):
             lifecycle.kill_child_tree(proc.pid, timeout=0.3)
     finally:
@@ -183,7 +198,7 @@ def test_an_abandoned_worker_without_a_browser_has_nothing_to_kill() -> None:
 
 def test_an_abandoned_browser_reports_how_its_driver_was_stopped(monkeypatch) -> None:
     env = _environment()
-    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+    child = lifecycle.spawn([sys.executable, "-c", "import time; time.sleep(600)"])
     env._pw, env._driver_pid = object(), child.pid
     env._abandon_worker()
     assert env._teardown == {"driver_pid": child.pid, "driver": "killed"}
@@ -212,7 +227,7 @@ def _failing_census(monkeypatch, fail: "set[int]") -> list[int]:
 
 
 def _live_child() -> subprocess.Popen[bytes]:
-    proc = subprocess.Popen(
+    proc = lifecycle.spawn(
         [sys.executable, "-c", "import time; print(flush=True); time.sleep(600)"],
         stdout=subprocess.PIPE,
     )
@@ -238,7 +253,7 @@ def test_a_census_that_fails_twice_refuses_to_report_killed(monkeypatch) -> None
     proc = _live_child()
     calls = _failing_census(monkeypatch, fail={1, 2})
     try:
-        with pytest.raises(lifecycle.DescendantsUnknown, match="descendants"):
+        with pytest.raises(lifecycle.DescendantsUnknown, match="unknown"):
             lifecycle.kill_child_tree(proc.pid, timeout=5)
         assert calls[:2] == [1, 2]
         # The child itself was still killed and reaped; only the verdict is
@@ -306,3 +321,148 @@ def test_a_stopped_group_that_cannot_be_inspected_is_not_reported_stopped(
         assert proc.poll() is not None  # the leader itself was reaped
     finally:
         monkeypatch.undo()
+
+
+# -- the process group is the proof; a ps walk only adds to the kill list ----
+
+
+def _truncated_census(monkeypatch, keep) -> None:
+    """Serve a real, successful ``ps`` table with only the rows ``keep``
+    accepts: what a truncated census looks like."""
+    real_run = lifecycle.subprocess.run
+
+    def run(args, *a, **k):
+        result = real_run(args, *a, **k)
+        if list(args[:1]) == ["ps"]:
+            lines = result.stdout.splitlines()
+            kept = [lines[0]] + [
+                line
+                for line in lines[1:]
+                if line.split() and keep(int(line.split()[0]))
+            ]
+            result = SimpleNamespace(stdout="\n".join(kept) + "\n")
+        return result
+
+    monkeypatch.setattr(lifecycle.subprocess, "run", run)
+
+
+def _stubborn_with_grandchild() -> tuple[subprocess.Popen[bytes], int]:
+    proc = lifecycle.spawn(
+        [sys.executable, "-c", STUBBORN],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    assert proc.stdout is not None
+    grandchild = int(proc.stdout.readline())
+    assert _running(grandchild) and os.getpgid(grandchild) == proc.pid
+    return proc, grandchild
+
+
+def _gone(pid: int, within: float = 5.0) -> bool:
+    deadline = time.monotonic() + within
+    while time.monotonic() < deadline:
+        if not _running(pid):
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def test_a_truncated_census_without_the_target_refuses(monkeypatch) -> None:
+    proc, grandchild = _stubborn_with_grandchild()
+    # Codex's control: a successful table that holds the caller only.
+    _truncated_census(monkeypatch, keep=lambda pid: pid == os.getpid())
+    try:
+        with pytest.raises(lifecycle.DescendantsUnknown, match="incomplete"):
+            lifecycle.kill_child_tree(proc.pid, timeout=5)
+    finally:
+        monkeypatch.undo()
+    # The group was killed anyway, so the grandchild is gone too.
+    assert _gone(grandchild)
+    with pytest.raises(ChildProcessError):
+        os.waitpid(proc.pid, os.WNOHANG)
+    proc.returncode = -signal.SIGKILL
+
+
+def test_a_census_missing_a_grandchild_still_kills_it_through_the_group(
+    monkeypatch,
+) -> None:
+    proc, grandchild = _stubborn_with_grandchild()
+    _truncated_census(monkeypatch, keep=lambda pid: pid != grandchild)
+    try:
+        assert lifecycle.kill_child_tree(proc.pid, timeout=10) == "killed"
+    finally:
+        monkeypatch.undo()
+    # "killed" rests on the empty group, not on the census that missed it.
+    assert not _running(grandchild)
+    with pytest.raises(ProcessLookupError):
+        os.killpg(proc.pid, 0)
+    proc.returncode = -signal.SIGKILL
+
+
+def test_a_target_outside_its_own_group_is_killed_but_not_reported_killed() -> None:
+    proc = subprocess.Popen(
+        [sys.executable, "-c", STUBBORN],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    assert proc.stdout is not None
+    grandchild = int(proc.stdout.readline())
+    try:
+        with pytest.raises(lifecycle.DescendantsUnknown, match="own process group"):
+            lifecycle.kill_child_tree(proc.pid, timeout=10)
+        with pytest.raises(ChildProcessError):
+            os.waitpid(proc.pid, os.WNOHANG)
+        assert _gone(grandchild)  # the ps walk still added it to the kill list
+    finally:
+        proc.returncode = -signal.SIGKILL
+        try:
+            os.kill(grandchild, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
+#: A child whose own child leaves the group with setsid.
+ESCAPING = """
+import subprocess, sys, time
+child = subprocess.Popen([sys.executable, "-c",
+    "import time; print(flush=True); time.sleep(600)"],
+    stdout=subprocess.PIPE, start_new_session=True)
+child.stdout.readline()
+print(child.pid, flush=True)
+time.sleep(600)
+"""
+
+
+def test_a_descendant_that_left_the_group_is_killed_and_its_group_checked() -> None:
+    proc = lifecycle.spawn(
+        [sys.executable, "-c", ESCAPING],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    assert proc.stdout is not None
+    escaped = int(proc.stdout.readline())
+    assert os.getpgid(escaped) == escaped != proc.pid
+    try:
+        assert lifecycle.kill_child_tree(proc.pid, timeout=10) == "killed"
+        assert not _running(escaped)
+        with pytest.raises(ProcessLookupError):
+            os.killpg(escaped, 0)
+    finally:
+        proc.returncode = -signal.SIGKILL
+        try:
+            os.kill(escaped, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
+def test_a_census_without_its_header_is_incomplete(monkeypatch) -> None:
+    real = lifecycle.subprocess.run(
+        ["ps", "-A", "-o", "pid,ppid,pgid,stat"], capture_output=True, text=True
+    ).stdout
+    assert lifecycle._ps_rows() is not None
+    monkeypatch.setattr(
+        lifecycle.subprocess,
+        "run",
+        lambda *a, **k: SimpleNamespace(stdout="\n".join(real.splitlines()[1:])),
+    )
+    assert lifecycle._ps_rows() is None
