@@ -120,7 +120,7 @@ def report_scan_result(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("report_path", type=Path)
     parser.add_argument("scanner_exit_code", type=int)
     args = parser.parse_args()
