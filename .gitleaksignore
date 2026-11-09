@@ -6,6 +6,8 @@
 # a benchmark idempotency key from the openadapt-flow and openadapt-agent histories.
 # None is a credential. Each fingerprint pins commit:file:rule:line, so a new finding,
 # or the same text in any other commit, file or line, still fails. No rule is relaxed.
+# PR #1951: a synthetic record parameter in a test, not a key.
+9f7b67e652a1906366fec4cd1966ec0865bc675f:packages/flow/tests/test_ensure_invariants.py:generic-api-key:15
 01d9ead6895964e8236272296fad0d424dffd98f:packages/flow/tests/fixtures/terminal_verification_v2_terminal_vectors.json:generic-api-key:33
 0f5f39557513cd71d9e84996f5773eeca26b1005:packages/flow/tests/test_attended_actions.py:generic-api-key:122
 0f5f39557513cd71d9e84996f5773eeca26b1005:packages/flow/tests/test_attended_actions.py:generic-api-key:174
