@@ -183,16 +183,34 @@ covers other clients.
 
 ### Record a task by hand
 
+Recording works the same way on every surface; only the target differs:
+`--url` for a web app, `--window` (and `--window-title`) for a Windows or macOS
+app window or a local RDP or Citrix client window. Linux and network RDP record
+the whole local desktop, so they take no target.
+
 ```bash
 python -m pip install --upgrade openadapt
-openadapt record --url https://staging.your-app.example --out rec
+openadapt record --backend <web|windows|macos|linux|rdp|citrix> <target> --out rec
+
+# A web app
+openadapt record --backend web --url https://staging.your-app.example --out rec
 openadapt compile rec --out bundle --name my-first-workflow
 openadapt run --replay bundle --url https://staging.your-app.example --run-dir run
+
+# A desktop app (macOS here; Windows and Citrix take --window too).
+# Desktop recording and macOS replay are separate extras.
+python -m pip install --upgrade 'openadapt[capture,macos]'
+openadapt record --backend macos --window "Your App" --out rec
+openadapt compile rec --out bundle --name my-first-workflow
+openadapt run --replay bundle --macos-app "Your App" --run-dir run
 ```
 
-`run --replay` drives the app at `--url` and performs every recorded action,
+`run --replay` drives the app and performs every recorded action,
 including saves you can't undo. It doesn't ask first and doesn't check the
 saved record. Point it at a test or staging copy, never at production data.
+
+The commands for every surface, including Linux, RDP and Citrix, are in
+[SURFACES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SURFACES.md#first-workflow-per-surface).
 
 The existing engine command remains available for scripts:
 
