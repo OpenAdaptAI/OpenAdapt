@@ -285,7 +285,9 @@ def scrub_lines(
     if not text or not text_scrubbing_works():
         return text
     kept = sorted({str(k) for k in keep if k and str(k).strip()}, key=len, reverse=True)
-    bound = sorted((bindings or {}).items(), key=lambda kv: -len(kv[1]))
+    from openadapt_flow.privacy import listing_bindings
+
+    bound = sorted(listing_bindings(bindings or {}).items(), key=lambda kv: -len(kv[1]))
     memo: dict[str, str] = {}
 
     def piece(segment: str) -> str:
@@ -342,6 +344,9 @@ def placeholder_regions(
     value split across elements). An unreadable page has no regions.
     """
 
+    from openadapt_flow.privacy import listing_bindings
+
+    bindings = listing_bindings(bindings)
     if not bindings:
         return []
     names = list(bindings)

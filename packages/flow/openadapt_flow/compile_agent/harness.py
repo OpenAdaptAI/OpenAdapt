@@ -473,24 +473,25 @@ class _TaskValues:
     bindings: Mapping[str, str]
 
     def task_text(self, text: str) -> str:
-        """The task text for the model: each record identity the task names
-        is its placeholder. Inputs stay as given, since the agent types them."""
+        """The task text for the model: every value the task names (its
+        record identity and its inputs) is its placeholder. The agent types
+        an input as its placeholder, and the harness types the value."""
 
-        return self.shown_as(text, identity_only=True)
+        return self._bound(text, self.bindings)
 
-    def shown_as(self, text: str, *, identity_only: bool = False) -> str:
+    def shown_as(self, text: str) -> str:
         """``text`` as the agent sees it in listings: each bound value is its
         placeholder, when the listings are scrubbed (otherwise unchanged)."""
 
+        from openadapt_flow.privacy import listing_bindings
+
+        return self._bound(text, listing_bindings(self.bindings))
+
+    def _bound(self, text: str, bound: Mapping[str, str]) -> str:
         from openadapt_flow.privacy import bind_text, text_scrubbing_works
 
-        if not self.bindings or not text or not text_scrubbing_works():
+        if not bound or not text or not text_scrubbing_works():
             return text
-        bound = {
-            name: value
-            for name, value in self.bindings.items()
-            if not identity_only or name.startswith("\u27e6task.identity_")
-        }
         return bind_text(text, bound) or text
 
     def placeholder_regions(

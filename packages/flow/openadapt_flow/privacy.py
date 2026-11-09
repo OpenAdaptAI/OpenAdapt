@@ -77,6 +77,7 @@ __all__ = [
     "task_bindings",
     "bind_text",
     "bound_pattern",
+    "listing_bindings",
     "label_regions",
 ]
 
@@ -520,8 +521,9 @@ def prepare_outbound_image(
 # the real value locally (the save gate and the read-back). Values that are not
 # bound to the task are scrubbed as usual.
 
-#: The shortest value that is bound. A shorter one would turn ordinary words
-#: into placeholders; it is scrubbed like any other text instead.
+#: The shortest value replaced on page text (listings, screenshots). A shorter
+#: one would turn ordinary words into placeholders; it is scrubbed like any
+#: other text there. The task text binds every value.
 MIN_BOUND_LENGTH = 3
 
 PLACEHOLDER_HELP = (
@@ -551,21 +553,31 @@ def task_bindings(
     """Map placeholder to value for a task's identity strings and inputs.
 
     Identity strings are named ``identity_1``, ``identity_2``... in the order
-    the task declares them; inputs keep their own names. Values shorter than
-    :data:`MIN_BOUND_LENGTH` (after trimming) are not bound. When two names
-    hold the same value, the first one wins.
+    the task declares them; inputs keep their own names. Every non-empty value
+    is bound, so none reaches the model in the task text. Listings and
+    screenshots use only :func:`listing_bindings`. When two names hold the
+    same value, the first one wins.
     """
     out: dict[str, str] = {}
     seen: set[str] = set()
-    named = [(f"identity_{i}", v) for i, v in enumerate(identity, start=1)]
+    named: list[tuple[str, object]] = [
+        (f"identity_{i}", v) for i, v in enumerate(identity, start=1)
+    ]
     named += [(str(k), v) for k, v in (params or {}).items()]
     for name, value in named:
         text = " ".join(str(value or "").split())
-        if len(text) < MIN_BOUND_LENGTH or text in seen:
+        if not text or text in seen:
             continue
         seen.add(text)
         out[placeholder(name)] = text
     return out
+
+
+def listing_bindings(bindings: "Mapping[str, str]") -> dict[str, str]:
+    """The bindings used on page text: values of at least
+    :data:`MIN_BOUND_LENGTH` characters. A shorter value would turn ordinary
+    words on the page into placeholders; it is scrubbed like other text."""
+    return {k: v for k, v in bindings.items() if len(v) >= MIN_BOUND_LENGTH}
 
 
 def bound_pattern(value: str) -> "re.Pattern[str]":
@@ -584,7 +596,7 @@ def bind_text(text: Optional[str], bindings: "Mapping[str, str]") -> Optional[st
     if not text or not bindings:
         return text
     for name, value in sorted(bindings.items(), key=lambda kv: -len(kv[1])):
-        text = bound_pattern(value).sub(lambda _m, n=name: n, text)
+        text = bound_pattern(value).sub(name.replace("\\", "\\\\"), text)
     return text
 
 

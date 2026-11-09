@@ -87,11 +87,21 @@ def test_ref_tokens_are_never_scrubbed() -> None:
     assert scrub_lines('@12 button "Open"') == '@12 button "Open"'
 
 
-def test_bindings_match_whole_words_and_skip_short_values() -> None:
+def test_short_values_bind_in_task_text_but_not_on_page_text() -> None:
     bindings = privacy.task_bindings(identity=["MRN P1", "P1"], params={"note": "ok"})
-    # "P1" and "ok" are too short to bind: they are scrubbed like other text.
-    assert bindings == {NAME: "MRN P1"}
-    assert privacy.bind_text("MRN P12 and MRN  P1", bindings) == f"MRN P12 and {NAME}"
+    note = privacy.placeholder("note")
+    # Every value is bound, so none is left raw in the task text...
+    assert bindings == {NAME: "MRN P1", MRN: "P1", note: "ok"}
+    assert privacy.bind_text("Find P1, say ok", bindings) == f"Find {MRN}, say {note}"
+    # ...but page text replaces only values long enough not to hit ordinary
+    # words; shorter ones are scrubbed like any other text.
+    assert privacy.listing_bindings(bindings) == {NAME: "MRN P1"}
+    assert scrub_lines("row: P1 | ok | MRN P1", bindings=bindings) == (
+        f"row: P1 | ok | {NAME}"
+    )
+    assert privacy.bind_text("MRN P12 and MRN  P1", {NAME: "MRN P1"}) == (
+        f"MRN P12 and {NAME}"
+    )
 
 
 def test_inputs_are_bound_under_their_own_names() -> None:
@@ -229,8 +239,11 @@ def test_the_raw_identity_never_leaves_in_the_model_payload(page) -> None:
     payload = json.dumps(client.requests, ensure_ascii=False)
     assert "Jane Sample" not in payload and "MRN P1" not in payload
     assert NAME in payload and MRN in payload
-    # The task's input stays in the task text: the agent has to type it.
-    assert "Bring the form" in client.requests[0]["messages"][0]["content"][0]["text"]
+    # The task's input is a placeholder in the task text too: the agent types
+    # the placeholder and the harness types the value.
+    assert "Bring the form" not in payload
+    task_text = client.requests[0]["messages"][0]["content"][0]["text"]
+    assert privacy.placeholder("note") in task_text
     # Unbound personal data is still redacted generically.
     assert "Alex Testcase" not in payload and "<PERSON>" in payload
     # The listing's refs survived the scrubber.
@@ -253,3 +266,120 @@ def test_the_raw_identity_never_leaves_in_the_model_payload(page) -> None:
     region = shot.crop(tuple(int(v) for v in box))
     pixels = list(region.getdata())
     assert pixels.count((32, 32, 48)) > len(pixels) // 2
+
+
+# -- every adapter: no declared task value leaves raw -------------------------
+
+VALUES = {
+    "note": "Bring the form",
+    "dob": "1970-01-02",
+    "code": "Z9",  # short: bound in the task text only
+}
+TASK = (
+    "Open the referral for Jane Sample (MRN P1), check DOB 1970-01-02, "
+    "use code Z9 and note: Bring the form"
+)
+
+
+def _harness(page: Any) -> Any:
+    from openadapt_flow.compile_agent.harness import Harness, SaveGate
+
+    page.set_content(PAGE.replace("</body>", "<p>DOB 1970-01-02 code Z9</p></body>"))
+    bindings = privacy.task_bindings(identity=IDENTITY, params=VALUES)
+    return Harness(_Computer(page), SaveGate(IDENTITY), keep=[], bindings=bindings)
+
+
+def _assert_no_raw_value(payload: str) -> None:
+    for value in [*IDENTITY, "Bring the form", "1970-01-02"]:
+        assert value not in payload, value
+    task_text = re.search(r"Task: [^\n\"]*", payload)
+    assert task_text is not None and "Z9" not in task_text.group(0)
+    for name in ("identity_1", "identity_2", "note", "dob", "code"):
+        assert privacy.placeholder(name) in payload, name
+
+
+def _request() -> Any:
+    from openadapt_flow.jit.compile_agent import TaskRequest
+
+    return TaskRequest(task_id="t", instruction=TASK, inputs=dict(VALUES))
+
+
+def test_claude_payload_has_no_raw_task_value(page) -> None:
+    from openadapt_flow.compile_agent import ClaudeAgent
+
+    client = _Client([("screenshot", {}), ("finish", {"summary": "done"})])
+    agent = ClaudeAgent(vision="selective", client=client)
+    agent.drive(_request(), _harness(page))  # type: ignore[arg-type]
+    _assert_no_raw_value(json.dumps(client.requests, ensure_ascii=False))
+
+
+def test_framework_agent_payload_has_no_raw_task_value(page) -> None:
+    from openadapt_flow.integrations.agents.skills import FrameworkAgent
+
+    sent: list[str] = []
+
+    def run(task: str, tools: Any) -> Any:
+        sent.append(task)
+        sent.append(tools.observe())
+        tools.finish("done")
+        return {"calls": []}
+
+    FrameworkAgent(run).drive(_request(), _harness(page))
+    _assert_no_raw_value("\n".join(sent))
+
+
+def test_openai_payload_has_no_raw_task_value(page, monkeypatch) -> None:
+    import sys
+    import types
+
+    from openadapt_flow.integrations.agents.providers import OpenAIBrowserAgent
+
+    sent: list[str] = []
+
+    class FakeAgent:
+        def __init__(self, **kwargs: Any) -> None:
+            self.__dict__.update(kwargs)
+
+    class FakeRunner:
+        @staticmethod
+        async def run(agent: Any, task: str, **_kwargs: Any) -> Any:
+            sent.extend([agent.instructions, task])
+            observe = next(t for t in agent.tools if t.__name__ == "observe")
+            sent.append(observe())
+            return SimpleNamespace(final_output="done")
+
+    class FakeClient:
+        async def close(self) -> None:
+            return None
+
+    fake_agents = types.ModuleType("agents")
+    fake_agents.__dict__.update(
+        Agent=FakeAgent,
+        ModelSettings=lambda **kw: SimpleNamespace(**kw),
+        OpenAIResponsesModel=lambda **_kw: object(),
+        RunConfig=lambda **kw: SimpleNamespace(**kw),
+        RunHooks=type("RunHooks", (), {}),
+        Runner=FakeRunner,
+        function_tool=lambda function: function,
+    )
+    fake_openai = types.ModuleType("openai")
+    fake_openai.__dict__.update(AsyncOpenAI=lambda **_kw: FakeClient())
+    monkeypatch.setitem(sys.modules, "agents", fake_agents)
+    monkeypatch.setitem(sys.modules, "openai", fake_openai)
+    agent = OpenAIBrowserAgent(
+        model="scripted-test-model",
+        max_turns=1,
+        max_cost_usd=1,
+        prices={"input": 1, "output": 1, "cache_write": 1, "cache_read": 1},
+        price_model="scripted-test-model",
+        pricing_source_url="https://developers.openai.com/api/docs/pricing",
+        pricing_verified_at="2026-11-07",
+    )
+    import dataclasses
+
+    request = dataclasses.replace(
+        _request(),
+        model_key=SimpleNamespace(provider="openai", secret=lambda: "opaque"),
+    )
+    agent.drive(request, _harness(page))
+    _assert_no_raw_value("\n".join(sent))
