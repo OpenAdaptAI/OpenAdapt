@@ -78,17 +78,44 @@ def test_a_stray_write_in_another_surface_refutes(tmp_path: Path) -> None:
     assert _run(tmp_path, stray_note=True) == "reconciliation_required"
 
 
-def test_an_unset_surface_keeps_the_contract_digest(tmp_path: Path) -> None:
-    from openadapt_flow.qualify.campaign import record_effects  # noqa: F401
-    from openadapt_flow.verify_run import parse_verify_config as parse
+def test_an_unset_surface_keeps_the_contract_digest() -> None:
+    from openadapt_flow.verify_run import (
+        parse_verify_config as parse,
+    )
+    from openadapt_flow.verify_run import (
+        verifier_identity,
+        verify_config_sha256,
+    )
 
-    single = {
+    without_field = {
         "schema_version": "openadapt.verify/v1",
         "verifier": {"kind": "sql", "sqlite_database": "x.db", "sql_query": "SELECT 1"},
         "record": {"name": "p", "match": ["email"], "fields": {"email": "email"}},
     }
-    effects = parse(single).effects
-    assert all("surface:" not in (e.probe or "") for e in effects)
+    with_none = {
+        "schema_version": "openadapt.verify/v1",
+        "verifier": {"kind": "sql", "sqlite_database": "x.db", "sql_query": "SELECT 1"},
+        "record": {
+            "name": "p",
+            "match": ["email"],
+            "fields": {"email": "email"},
+            "surface": None,
+        },
+    }
+
+    parsed_without = parse(without_field)
+    parsed_none = parse(with_none)
+
+    assert all("surface:" not in (e.probe or "") for e in parsed_without.effects)
+    assert all("surface:" not in (e.probe or "") for e in parsed_none.effects)
+
+    digest_without = verify_config_sha256(
+        verifier_identity(parsed_without.verifier), list(parsed_without.effects)
+    )
+    digest_none = verify_config_sha256(
+        verifier_identity(parsed_none.verifier), list(parsed_none.effects)
+    )
+    assert digest_without == digest_none
 
 
 # -- a composite duplicate key read through a selected surface ---------------
