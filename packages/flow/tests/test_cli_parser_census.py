@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import runpy
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -139,13 +140,31 @@ def synthetic_inventory(tmp_path, monkeypatch, inventory_module):
         (tmp_path / relative).mkdir(parents=True)
     location = tmp_path / "packages/flow/tests/test_inventory.py"
     monkeypatch.setitem(inventory.__globals__, "__file__", str(location))
+    # The normal inventory reads tracked sources, including in this fixture.
+    # No commit or author identity is needed for a local index.
+    subprocess.run(
+        ["git", "-c", "init.templateDir=", "-C", str(tmp_path), "init", "--quiet"],
+        check=True,
+        capture_output=True,
+    )
     baseline = (
         "import argparse\n" + "argparse.ArgumentParser(allow_abbrev=False)\n" * 501
     )
     (tmp_path / "scripts/canonical.py").write_text(baseline, encoding="utf-8")
 
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "add", "--", "scripts/canonical.py"],
+        check=True,
+        capture_output=True,
+    )
+
     def check(source, relative="scripts/synthetic.py"):
         (tmp_path / relative).write_text(source, encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(tmp_path), "add", "--", relative],
+            check=True,
+            capture_output=True,
+        )
         inventory()
 
     return check
