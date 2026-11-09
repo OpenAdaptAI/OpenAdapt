@@ -1558,7 +1558,7 @@ def render_markdown(result: dict[str, Any], agg: dict[str, Any]) -> str:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument(
         "--out", default="benchmark/dense_surface", help="output directory"
     )

@@ -75,7 +75,7 @@ _DIGEST_HEX = 16
 # v1 could erase punctuation from identifiers before hashing. Those hashes
 # cannot be repaired or safely upgraded without the original plaintext.
 _OCR_TEMPLATE_VERSION = 2
-_PUNCTUATION_POLICY = "strict-lexeme-punctuation-v1"
+_PUNCTUATION_POLICY = "strict-lexeme-punctuation-v2"
 _NOISE_TEMPLATE_VERSION = 0
 
 
@@ -123,8 +123,15 @@ def new_salt_hex() -> str:
 # ---------------------------------------------------------------------------
 
 
-def _token_template(salt: bytes, squashed: str) -> TokenTemplate:
+def _token_template(
+    salt: bytes,
+    squashed: str,
+    bearing: Optional[bool] = None,
+    label: Optional[bool] = None,
+) -> TokenTemplate:
     return TokenTemplate(
+        bearing=bearing,
+        label=label,
         c=_hash(salt, _id.ocr_canonical(squashed)),
         r=_hash(salt, squashed),
         n=len(squashed),
@@ -224,11 +231,23 @@ def qualified_signal_hash(
     return key, _signal_hash(_salt_bytes(tmpl.salt), parameterized), used
 
 
-def _populate_band(tmpl: IdentityTemplate, words: list[str], band_len: int) -> None:
+def _populate_band(
+    tmpl: IdentityTemplate, words: list[str], raw_words: list[str], band_len: int
+) -> None:
     """Hash one declared representation; no source text is retained."""
     salt = _salt_bytes(tmpl.salt)
     tmpl.band_len = band_len
-    tmpl.tokens = [_token_template(salt, token) for token in words]
+    if len(raw_words) != len(words):
+        raise ValueError("raw and comparison tokens must remain paired")
+    tmpl.tokens = [
+        _token_template(
+            salt,
+            token,
+            _id.identity_bearing(raw, token),
+            _id.generic_label_role(raw, token),
+        )
+        for raw, token in zip(raw_words, words)
+    ]
     tmpl.punctuation_policy = _PUNCTUATION_POLICY
     tmpl.punctuation_indices = [
         i for i, t in enumerate(words) if _id._punctuation_token(t)
@@ -266,14 +285,37 @@ def _populate_band(tmpl: IdentityTemplate, words: list[str], band_len: int) -> N
 def _noise_template(text: str, salt_hex: str) -> IdentityTemplate:
     # Schema0 is deliberately rejected by all positive OCR-template APIs.
     noise = IdentityTemplate(schema_version=_NOISE_TEMPLATE_VERSION, salt=salt_hex)
-    words = [_id.squash(t) for t in text.split() if _id.squash(t)]
-    _populate_band(noise, words, len(_id.squash(text)))
+    raw_words = [t for t in text.split() if _id.squash(t)]
+    words = [_id.squash(t) for t in raw_words]
+    _populate_band(noise, words, raw_words, len(_id.squash(text)))
     return noise
 
 
 def _punctuation_metadata_complete(tmpl: IdentityTemplate) -> bool:
     if tmpl.punctuation_policy != _PUNCTUATION_POLICY:
         return False
+    salt = _salt_bytes(tmpl.salt)
+    label_keys = {_hash(salt, word) for word in _id._LABEL_CANON}
+    for i, token in enumerate(tmpl.tokens):
+        if type(token.label) is not bool or (
+            token.bearing is not None and type(token.bearing) is not bool
+        ):
+            return False
+        if (
+            token.c in label_keys
+            and not token.digit
+            and (token.label is not True or token.bearing is True)
+        ):
+            return False
+        if token.label and (
+            token.digit
+            or token.bearing is True
+            or (
+                token.c not in label_keys
+                and tmpl.punctuation_body_keys.get(i) not in label_keys
+            )
+        ):
+            return False
     indices = tmpl.punctuation_indices
     if (
         len(indices) != len(set(indices))
@@ -311,6 +353,7 @@ def _template_punctuation_agrees(tmpl: IdentityTemplate, obs: list[str]) -> bool
             _template_identity_kind(token, lambda word: _hash(salt, word)) == "name"
             for token in tmpl.tokens
         ],
+        [token.label is True for token in tmpl.tokens],
     )
     observed = _id._punctuation_signature(
         [_hash(salt, _id.ocr_canonical(t)) for t in obs],
@@ -322,6 +365,7 @@ def _template_punctuation_agrees(tmpl: IdentityTemplate, obs: list[str]) -> bool
         [i for i, t in enumerate(obs) if _id._punctuation_token(t)],
         [i for i, t in enumerate(obs) if _id._standalone_punctuation(t)],
         [_id._is_discriminative_name(t) for t in obs],
+        [_id.generic_label_role(t, t) for t in obs],
     )
     return expected is not None and expected == observed
 
@@ -402,7 +446,10 @@ def build_identity_template(
             names=context_names,
         )
         squashed_tokens = _id.tokenize(context_text)
-        _populate_band(tmpl, squashed_tokens, len(_id.comparison_squash(context_text)))
+        raw_tokens = [t for t in context_text.split() if _id.comparison_squash(t)]
+        _populate_band(
+            tmpl, squashed_tokens, raw_tokens, len(_id.comparison_squash(context_text))
+        )
         # Which tokens were a parameter's demonstrated value (param re-anchor).
         # Use the plaintext matcher's whole-value embedding decision first.
         # A token shared with a longer parameter is not enough to make that
@@ -410,55 +457,9 @@ def build_identity_template(
         # name and inside ``openadapt@example.invalid``). Marking both would
         # require the unrelated full value during replay and create a false
         # identity halt, diverging from ``verify_target_identity``.
-        embedded = set(_id.embedded_params(context_text, param_examples))
-        raw_token_spans = [match.span() for match in re.finditer(r"\S+", context_text)]
-        for name, example in param_examples.items():
-            if name not in embedded:
-                continue
-            ex = _id.comparison_squash(example or "")
-            # Match the plaintext substitute path exactly. When the complete
-            # demonstrated value occurs verbatim, own only tokens inside that
-            # occurrence. Otherwise use the same OCR-jitter fallback as
-            # ``substitute_param``. Without the span rule, a value such as an
-            # email containing an MRN substring could also claim and remove a
-            # separate MRN token, turning a wrong-record mismatch into verify.
-            occurrences = list(
-                re.finditer(re.escape(example), context_text, re.IGNORECASE)
-            )
-            if occurrences:
-                owned: set[int] = set()
-                aligned = True
-                for occurrence in occurrences:
-                    start, end = occurrence.span()
-                    overlapping = [
-                        j
-                        for j, (token_start, token_end) in enumerate(raw_token_spans)
-                        if token_start < end and token_end > start
-                    ]
-                    if not overlapping:
-                        aligned = False
-                        break
-                    first, last = overlapping[0], overlapping[-1]
-                    if (
-                        raw_token_spans[first][0] != start
-                        or raw_token_spans[last][1] != end
-                    ):
-                        # The parameter occupies only part of a larger token.
-                        # The current template IR cannot retain the token's
-                        # dynamic prefix/suffix while replacing its middle;
-                        # leave it hashed and safely over-halt on changed input.
-                        aligned = False
-                        break
-                    owned.update(overlapping)
-                idxs = sorted(owned) if aligned else []
-            else:
-                idxs = [
-                    j
-                    for j, t in enumerate(squashed_tokens)
-                    if _id._token_belongs_to(t, ex)
-                ]
-            if idxs:
-                tmpl.param_token_indices[name] = idxs
+        tmpl.param_token_indices = _id.parameter_token_ownership(
+            context_text, param_examples
+        )
         tmpl.rests_on_confusable_identifier = any(t.glyph for t in tmpl.tokens)
         # Keep the classification-only representation separate. No parameter
         # ownership is guessed or transferred into its lossy token space.
@@ -788,8 +789,27 @@ def _band_match_template_normalized(
         )
     )
 
+    coverage, no_bearing = _id.identity_coverage(
+        [t.n for t in toks],
+        matched,
+        [True if t.bearing is None else t.bearing for t in toks],
+    )
+    if any(t.bearing is None for t in toks):
+        # Missing optional weights keep the old count-every-token share.
+        # Conjoin, never replace it with, a conservative possible-identity
+        # witness. Explicit generic-label roles cannot supply that witness.
+        # This can only tighten the old fallback, including mixed weights.
+        legacy_coverage, legacy_no_bearing = _id.identity_coverage(
+            [t.n for t in toks],
+            matched,
+            [t.label is False and (t.digit or (t.alpha and t.name)) for t in toks],
+        )
+        coverage = min(coverage, legacy_coverage)
+        no_bearing = no_bearing or legacy_no_bearing
+    if no_bearing or not _id._digit_floor_met([t.digit for t in toks], raw_matched):
+        evidence_short = True
     return _id.BandMatch(
-        matched_chars / total_chars if total_chars else 0.0,
+        coverage,
         max(uncovered_runs, default=0),
         contradicted_chars,
         suspect_chars,
@@ -872,6 +892,117 @@ def recorded_identifier_matches(tmpl: IdentityTemplate, member: str) -> bool:
     return any(t.idsh and t.r == digest for t in tmpl.tokens)
 
 
+def _reanchor_template(
+    tmpl: IdentityTemplate,
+    names: list[str],
+    params: dict[str, str],
+    examples: dict[str, str],
+) -> Optional[IdentityTemplate]:
+    """Transform exact tokens and every positional witness together."""
+    salt = _salt_bytes(tmpl.salt)
+    owned = {name: tmpl.param_token_indices[name] for name in names}
+    plan = _id.parameter_projection(
+        [token.r for token in tmpl.tokens],
+        owned,
+        {
+            name: [_hash(salt, word) for word in _id.tokenize(examples.get(name, ""))]
+            for name in names
+        },
+        [
+            i in tmpl.punctuation_indices and not token.digit
+            for i, token in enumerate(tmpl.tokens)
+        ],
+        {
+            name: any(
+                _id._punctuation_token(word)
+                for word in _id.tokenize(params.get(name, examples.get(name, "")))
+            )
+            for name in names
+        },
+    )
+    if plan is None:
+        return None
+    spans, fallback = plan
+    replacements: dict[str, IdentityTemplate] = {}
+    for name in names:
+        value = params.get(name, examples.get(name, ""))
+        raw = [word for word in value.split() if _id.comparison_squash(word)]
+        words = [_id.comparison_squash(word) for word in raw]
+        if not words:
+            return None
+        replacement = IdentityTemplate(
+            schema_version=tmpl.schema_version, salt=tmpl.salt
+        )
+        _populate_band(replacement, words, raw, len(_id.comparison_squash(value)))
+        replacements[name] = replacement
+    dropped = {i for indices in owned.values() for i in indices}
+    starts = {start: (end, name) for start, end, name in spans}
+    tokens: list[TokenTemplate] = []
+    positions: dict[int, int] = {}
+    inserted: list[tuple[int, str]] = []
+    i = 0
+    while i < len(tmpl.tokens):
+        if i in starts:
+            end, name = starts[i]
+            inserted.append((len(tokens), name))
+            tokens.extend(replacements[name].tokens)
+            i = end
+        elif i in dropped:
+            i += 1
+        else:
+            positions[i] = len(tokens)
+            tokens.append(tmpl.tokens[i])
+            i += 1
+    for name in fallback:
+        inserted.append((len(tokens), name))
+        tokens.extend(replacements[name].tokens)
+    result = IdentityTemplate(
+        schema_version=tmpl.schema_version,
+        salt=tmpl.salt,
+        band_len=tmpl.band_len,
+        tokens=tokens,
+        punctuation_policy=tmpl.punctuation_policy,
+    )
+    result.punctuation_indices = [
+        positions[i] for i in tmpl.punctuation_indices if i in positions
+    ]
+    result.standalone_punctuation_indices = [
+        positions[i] for i in tmpl.standalone_punctuation_indices if i in positions
+    ]
+    result.punctuation_body_keys = {
+        positions[i]: key
+        for i, key in tmpl.punctuation_body_keys.items()
+        if i in positions
+    }
+    for offset, name in inserted:
+        replacement = replacements[name]
+        result.punctuation_indices.extend(
+            offset + j for j in replacement.punctuation_indices
+        )
+        result.standalone_punctuation_indices.extend(
+            offset + j for j in replacement.standalone_punctuation_indices
+        )
+        result.punctuation_body_keys.update(
+            {offset + j: key for j, key in replacement.punctuation_body_keys.items()}
+        )
+        result.concats.extend(
+            concat.model_copy(update={"i": offset + concat.i})
+            for concat in replacement.concats
+        )
+    # Only unchanged, still-contiguous residue windows keep old concat keys.
+    for concat in tmpl.concats:
+        window = list(range(concat.i, concat.i + concat.size))
+        if all(j in positions for j in window):
+            mapped = [positions[j] for j in window]
+            if mapped == list(range(mapped[0], mapped[0] + concat.size)):
+                result.concats.append(concat.model_copy(update={"i": mapped[0]}))
+    result.punctuation_indices.sort()
+    result.standalone_punctuation_indices.sort()
+    if not _punctuation_metadata_complete(result):
+        return None
+    return result
+
+
 def verify_template_identity(
     tmpl: IdentityTemplate,
     observed_text: str,
@@ -909,69 +1040,24 @@ def verify_template_identity(
     in_band = [
         n for n in tmpl.param_token_indices if n in param_examples or n in params
     ]
+    unknown_ownership = [
+        name
+        for name in tmpl.context_params
+        if (name in params or name in param_examples)
+        and name not in tmpl.param_token_indices
+    ]
+    if unknown_ownership:
+        return IdentityCheck(
+            status="abstain", mode="param", expected=marker, observed=observed_text
+        )
     if in_band:
         if not hay:
             return IdentityCheck(status="unreadable", mode="param", expected=marker)
-        salt = _salt_bytes(tmpl.salt)
-        # Drop the recorded param tokens; re-anchor on the RUN's value (hashed
-        # in with the same salt) so the demonstrated identifier is never stored.
-        drop: set[int] = set()
-        for name in in_band:
-            drop.update(tmpl.param_token_indices.get(name, []))
-        residue_tokens = [t for j, t in enumerate(tmpl.tokens) if j not in drop]
-        run_value_tokens: list[TokenTemplate] = []
-        for name in in_band:
-            value = params.get(name, param_examples.get(name, ""))
-            for tok in _id.tokenize(value):
-                run_value_tokens.append(_token_template(salt, tok))
-        sub_tmpl = IdentityTemplate(
-            schema_version=tmpl.schema_version,
-            salt=tmpl.salt,
-            band_len=tmpl.band_len,
-            tokens=residue_tokens + run_value_tokens,
-        )
-        # Preserve split-concat keys for recorded residue windows that survive
-        # substitution unchanged.  Recomputing them is impossible without the
-        # recorded plaintext, but their salted hashes remain valid after an
-        # index-only remap.  Windows touching a parameter are omitted.
-        sub_tmpl.concats = _remap_residue_concats(tmpl, drop)
-        surviving = [j for j in range(len(tmpl.tokens)) if j not in drop]
-        remap = {old: new for new, old in enumerate(surviving)}
-        sub_tmpl.punctuation_policy = tmpl.punctuation_policy
-        sub_tmpl.punctuation_indices = [
-            remap[j] for j in tmpl.punctuation_indices if j in remap
-        ]
-        sub_tmpl.standalone_punctuation_indices = [
-            remap[j] for j in tmpl.standalone_punctuation_indices if j in remap
-        ]
-        sub_tmpl.punctuation_body_keys = {
-            remap[j]: key for j, key in tmpl.punctuation_body_keys.items() if j in remap
-        }
-        offset = len(residue_tokens)
-        run_words = [
-            token
-            for name in in_band
-            for token in _id.tokenize(params.get(name, param_examples.get(name, "")))
-        ]
-        sub_tmpl.punctuation_indices.extend(
-            offset + j
-            for j, token in enumerate(run_words)
-            if _id._punctuation_token(token)
-        )
-        sub_tmpl.standalone_punctuation_indices.extend(
-            offset + j
-            for j, token in enumerate(run_words)
-            if _id._standalone_punctuation(token)
-        )
-        sub_tmpl.punctuation_body_keys.update(
-            {
-                offset + j: _hash(
-                    salt, _id.ocr_canonical("".join(ch for ch in token if ch.isalnum()))
-                )
-                for j, token in enumerate(run_words)
-                if _id._punctuation_token(token) and not _id._has_digit(token)
-            }
-        )
+        sub_tmpl = _reanchor_template(tmpl, in_band, params, param_examples)
+        if sub_tmpl is None:
+            return IdentityCheck(
+                status="abstain", mode="param", expected=marker, observed=observed_text
+            )
 
         # The run's value must actually appear in the live band (contiguous run).
         for name in in_band:
