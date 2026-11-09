@@ -23,6 +23,11 @@ required history row, the provider checked, audit attribution keyed by
 table and column, with a reviewed allow-list, instead of the tables a
 contract reads.
 
+A rerun into the same ``--out`` keeps the cases already scored there only
+when ``context.json`` beside ``rows.json`` records the same mode, contract,
+suite, contract configuration and baseline (by hash); any other directory
+with rows is refused untouched, so a run never reports another's verdicts.
+
 ``standin`` reads an SQLite copy of the pinned fixture's baseline (writes
 emulated by ``standin.py``). ``live`` runs on the pinned OpenEMR fixture
 (the bot's save through the form, other writes through each user's REST
@@ -37,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import os
 import sys
@@ -351,8 +357,103 @@ def grant_reader() -> str:
     return out[0]
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+CONTRACT_FILES = {
+    "production": (VERIFY_YAML,),
+    "plus": (FRAME_YAML,),
+    "whole": (DATABASE_YAML,),
+}
+
+
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def case_sha256(case: dict[str, Any]) -> str:
+    """The hash of one case as the harness runs it (after any aliases)."""
+
+    return _sha256(json.dumps(case, sort_keys=True, default=str).encode())
+
+
+def run_context(
+    mode: str,
+    contract: str,
+    suite: Path,
+    baseline_sql: Optional[Path],
+) -> dict[str, Any]:
+    """What a set of rows measured: rows are reused only under the same one.
+
+    The mode, the contract and the bytes of every input that decides a
+    verdict: the suite and its aliases, the contract's configuration and, for
+    the stand-in, the baseline dump.
+    """
+
+    aliases = suite.with_suffix(".ops.yaml")
+    return {
+        "mode": mode,
+        "contract": contract,
+        "suite_sha256": _sha256(suite.read_bytes()),
+        "ops_sha256": _sha256(aliases.read_bytes()) if aliases.exists() else None,
+        "contract_sha256": {
+            f.name: _sha256(f.read_bytes()) for f in CONTRACT_FILES[contract]
+        },
+        "baseline_sql_sha256": (
+            _sha256(baseline_sql.read_bytes()) if baseline_sql is not None else None
+        ),
+    }
+
+
+def resumable_rows(
+    out: Path, context: dict[str, Any], cases: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """The rows already in ``out`` that this run may keep, or a refusal.
+
+    Rows are kept only when ``out/context.json`` records exactly this run's
+    context and every row is one of this suite's cases, unchanged, under this
+    contract. Anything else stops the run before it writes: the old rows and
+    evidence stay as they are, and the measurement goes to a new directory.
+    """
+
+    rows_path, context_path = out / "rows.json", out / "context.json"
+    if not rows_path.exists():
+        if context_path.exists() and json.loads(context_path.read_text()) != context:
+            raise SystemExit(
+                f"{context_path} records another run; use a new --out directory"
+            )
+        return []
+    if not context_path.exists():
+        raise SystemExit(
+            f"{rows_path} has no context.json: it can't be bound to this run; "
+            "use a new --out directory"
+        )
+    recorded = json.loads(context_path.read_text())
+    if recorded != context:
+        changed = sorted(
+            k for k in set(recorded) | set(context) if recorded.get(k) != context.get(k)
+        )
+        raise SystemExit(
+            f"{rows_path} was measured under another context "
+            f"(differs in {', '.join(changed)}); use a new --out directory"
+        )
+    by_id = {c["id"]: c for c in cases}
+    rows = json.loads(rows_path.read_text())
+    for row in rows:
+        case = by_id.get(row.get("id"))
+        if (
+            case is None
+            or row.get("contract") != context["contract"]
+            or row.get("case_sha256") != case_sha256(case)
+        ):
+            raise SystemExit(
+                f"{rows_path} row {row.get('id')!r} doesn't match this suite and "
+                "contract; use a new --out directory"
+            )
+    return rows
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("mode", choices=("standin", "live"))
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--baseline-sql", type=Path)
@@ -363,7 +464,7 @@ def main() -> int:
     parser.add_argument(
         "--contract", choices=("production", "plus", "whole"), default="production"
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     suite = yaml.safe_load(args.suite.read_text())
     # A suite that describes operations in words maps them to the harness's
     # names in <suite>.ops.yaml beside it (a private suite keeps both).
@@ -378,21 +479,37 @@ def main() -> int:
                 step.update(alias if isinstance(alias, dict) else {"op": alias})
                 for key, value in (step.get("set") or {}).items():
                     step["set"][key] = set_values.get(value, value)
+    if args.mode == "standin" and args.baseline_sql is None:
+        raise SystemExit("standin needs --baseline-sql")
+    context = run_context(
+        args.mode,
+        args.contract,
+        args.suite,
+        args.baseline_sql if args.mode == "standin" else None,
+    )
+    # Bind before anything is built or written: a mismatch leaves the
+    # directory as it was.
+    rows = resumable_rows(args.out, context, suite["cases"])
     args.out.mkdir(parents=True, exist_ok=True)
+    if not (args.out / "context.json").exists():
+        (args.out / "context.json").write_text(
+            json.dumps(context, indent=1, sort_keys=True) + "\n"
+        )
+    rows_path = args.out / "rows.json"
+    done = {r["id"] for r in rows}
+    pending = [
+        case
+        for case in suite["cases"]
+        if not (args.only and case["id"] not in args.only.split(","))
+        and case["id"] not in done
+    ]
     work = Path(tempfile.mkdtemp(prefix="phase0-"))
-    if args.mode == "standin":
-        if args.baseline_sql is None:
-            raise SystemExit("standin needs --baseline-sql")
+    if pending and args.mode == "standin":
         standin.build(args.baseline_sql, work / "baseline.sqlite")
         standin.keep_tables(work / "baseline.sqlite", run.SLICE)
-    else:
+    elif pending:
         os.environ.setdefault("PHASE0_DB_CONTAINER", grant_reader())
-    rows_path = args.out / "rows.json"
-    rows = json.loads(rows_path.read_text()) if rows_path.exists() else []
-    done = {r["id"] for r in rows}
-    for case in suite["cases"]:
-        if (args.only and case["id"] not in args.only.split(",")) or case["id"] in done:
-            continue
+    for case in pending:
         case_fn = standin_case if args.mode == "standin" else live_case
         verdict = case_fn(case, work, args.contract)
         evidence = verdict.pop("evidence", None)
@@ -406,6 +523,7 @@ def main() -> int:
                 "class": case["class"],
                 "expect": case["expect"],
                 "contract": args.contract,
+                "case_sha256": case_sha256(case),
                 "verdict": {**verdict, "score": score},
             }
         )

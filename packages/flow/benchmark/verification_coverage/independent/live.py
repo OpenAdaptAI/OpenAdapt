@@ -814,7 +814,9 @@ def run_case(case: dict[str, Any], out: Path, container: str) -> dict[str, Any]:
 def main() -> int:
     from verification_coverage.openemr_run import ensure_audit_reader
 
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--only", default="")
     args = parser.parse_args()
