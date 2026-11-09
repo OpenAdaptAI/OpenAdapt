@@ -6034,13 +6034,30 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
         print(built.summary)
         return 0 if built.working else 1
     if getattr(args, "probe_reads", False):
+        import json as _json
+
+        from openadapt_flow import sealed_set as _sealed_set
         from openadapt_flow.scaffold_verifier import READ_DISCOVERY_FILE
 
         found = (out_dir or Path(args.source)) / READ_DISCOVERY_FILE
-        print(
-            "Read discovery: UNAVAILABLE. No probed read confirmed the written "
-            f"values, so no read was proposed; a person must name one ({found})."
-        )
+        status, reason = "unavailable", ""
+        try:
+            data = _json.loads(_sealed_set.read_text(found))
+            status, reason = str(data.get("status")), str(data.get("reason") or "")
+        except (OSError, ValueError, _sealed_set.SealedSetError):
+            pass
+        if status == "refused":
+            print(
+                "Read discovery: REFUSED. A probed read confirmed the written "
+                f"values but can't see the whole save, so no check was written: "
+                f"{reason} ({found})."
+            )
+        else:
+            print(
+                "Read discovery: UNAVAILABLE. No probed read confirmed the "
+                "written values, so no read was proposed; a person must name "
+                f"one ({found})."
+            )
     out, count = write_draft(Path(args.source), out_dir)
     print(
         "No read in the recording returns the saved record (no network capture, "

@@ -760,6 +760,22 @@ def build_record_check(
                 + "\n",
             )
         return None
+    if proposal.refused:
+        import json
+
+        _refuse_plaintext_output(recording_dir, out_dir)
+        destination = out_dir or recording_dir
+        destination.mkdir(parents=True, exist_ok=True)
+        _sealed.write_text(
+            destination / READ_DISCOVERY_FILE,
+            json.dumps(proposal.search.read_discovery, indent=2, sort_keys=True) + "\n",
+        )
+        # The proof, without the check: why nothing runnable was written.
+        _sealed.write_text(
+            destination / rcs.PROOF_NAME,
+            json.dumps(proposal.proof(), indent=2, sort_keys=True, default=str) + "\n",
+        )
+        return None
     if prove:
         from openadapt_flow.record_check_proof import ProofUnavailable, prove_live
 

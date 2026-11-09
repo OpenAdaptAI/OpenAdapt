@@ -371,12 +371,14 @@ def test_probe_finds_and_confirms_the_collection_read(tmp_path, app):
 
     before = [dict(r) for r in app.records]
     app.log.clear()
-    proposal = synthesize(rec, probe_reads=True)
+    # A person declares the read is the whole store, so the probed read may
+    # back a runnable check (without it, see the refusal test below).
+    proposal = synthesize(rec, probe_reads=True, complete_read=True)
 
     [surface] = proposal.search.surfaces
     assert surface.config["records_path"] == "/api/transfers"
     assert surface.source.startswith("probe GET /api/transfers")
-    assert surface.complete_basis == "observed"
+    assert surface.complete_basis == "declared"
     assert proposal.verifier["surfaces"][surface.name]["records_complete"] is True
     found = proposal.proof()["read_discovery"]
     assert found["status"] == "promoted"
@@ -390,6 +392,44 @@ def test_probe_finds_and_confirms_the_collection_read(tmp_path, app):
     cfg = _confirmed_config(proposal)
     body = {"account": "acct-3003", "memo": "Synthetic memo: probed read run"}
     assert _judge_one_save(cfg, app.url, app.write_path, body) == "CONFIRMED"
+
+
+def test_probed_read_that_cannot_see_the_whole_save_is_refused(tmp_path, app):
+    """A probe finds the written collection, not the store: a write
+    elsewhere would pass, so no runnable check is written."""
+
+    rec = _recording(tmp_path / "rec", app)
+    proposal = synthesize(rec, probe_reads=True)
+    assert proposal.refused and not proposal.working
+    found = proposal.search.read_discovery
+    assert found["status"] == "refused"
+    assert found["needs_operator_confirmation"] is True
+    assert "collateral_unaudited" in found["reason"]
+    assert proposal.proof()["status"] == "refused"
+
+    out = tmp_path / "out"
+    assert build_record_check(rec, out, probe_reads=True) is None
+    assert not (out / "record_check.proposed.yaml").exists()
+    saved = json.loads((out / READ_DISCOVERY_FILE).read_text())
+    assert saved["status"] == "refused" and saved["needs_operator_confirmation"]
+    proof = json.loads((out / "record_check.proof.json").read_text())
+    assert proof["status"] == "refused"
+    assert proof["read_discovery"]["reason"] == saved["reason"]
+
+
+def test_cli_writes_the_todo_draft_when_the_probed_read_is_refused(
+    tmp_path, app, capsys
+):
+    from openadapt_flow.__main__ import main
+
+    rec = _recording(tmp_path / "rec", app)
+    out = tmp_path / "out"
+    code = main(["scaffold-verifier", str(rec), "--probe-reads", "-o", str(out)])
+    text = capsys.readouterr().out
+    assert code == 0, text
+    assert "Read discovery: REFUSED" in text
+    assert (out / "effect_contract.yaml").is_file()
+    assert not (out / "record_check.proposed.yaml").exists()
 
 
 def test_no_read_route_leaves_the_read_unavailable(tmp_path):
@@ -472,7 +512,7 @@ def test_probe_base_points_a_remote_recording_at_a_local_copy(tmp_path, app):
         write_url="https://app.example/api/transfer",
     )
     requests.post(app.url + app.write_path, json=dict(PARAMS), timeout=5)
-    proposal = synthesize(rec, probe_reads=True, probe_base=app.url)
+    proposal = synthesize(rec, probe_reads=True, probe_base=app.url, complete_read=True)
     [surface] = proposal.search.surfaces
     assert surface.config["base_url"] == app.url
     assert surface.config["records_path"] == "/api/transfers"
@@ -504,7 +544,14 @@ def test_cli_flags(tmp_path, app, capsys):
 
     rec = _recording(tmp_path / "rec", app)
     code = main(
-        ["scaffold-verifier", str(rec), "--probe-reads", "-o", str(tmp_path / "out")]
+        [
+            "scaffold-verifier",
+            str(rec),
+            "--probe-reads",
+            "--complete-read",
+            "-o",
+            str(tmp_path / "out"),
+        ]
     )
     out = capsys.readouterr().out
     assert "Record check:" in out, out
