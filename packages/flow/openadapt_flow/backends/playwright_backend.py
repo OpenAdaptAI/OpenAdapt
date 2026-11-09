@@ -2184,6 +2184,10 @@ def _normalize_chord(key: str) -> str:
 #: whole, so the guard refuses to arm and nothing is clicked.
 LABEL_GUARD_MAX_NODES = 64
 
+#: The click guard script's name in a stack trace (``//# sourceURL``), so a
+#: test can tell the guard's own frames from page code.
+CLICK_GUARD_SOURCE_URL = "oaflow-click-guard.js"
+
 _CLICK_GUARD_JS = r"""
 ((key) => {
   if (Object.prototype.hasOwnProperty.call(window, key)) return;
@@ -2191,7 +2195,12 @@ _CLICK_GUARD_JS = r"""
   // script, and called with Reflect.apply: a getter or method the page
   // defines later (on a node, a prototype, Array or Object) never runs.
   // Lists are walked by index and results are built as strings, so a
-  // patched iterator, push or toJSON can't change them either.
+  // patched iterator, push or toJSON can't change them either. Every
+  // dictionary handed to a built-in (a property descriptor, observer
+  // options) has a null prototype and only own data properties, and a list
+  // a built-in iterates is a closed iterable, so converting them never
+  // reads an inherited property the page may have defined. Entry points are
+  // named oaflowClickGuard* so their frames can be told apart in a trace.
   const R = Reflect.apply;
   const defProp = Reflect.defineProperty;
   const getOwn = Object.getOwnPropertyDescriptor;
@@ -2231,6 +2240,23 @@ _CLICK_GUARD_JS = r"""
   const computed = window.getComputedStyle;
   const propOf = CSSStyleDeclaration.prototype.getPropertyValue;
   const freeze = Object.freeze;
+  const ITER = Symbol.iterator;
+  // A property descriptor with no prototype: ToPropertyDescriptor reads only
+  // what is set here.
+  const dataDesc = v => ({__proto__: null, value: v, writable: true,
+    enumerable: true, configurable: true});
+  // A list a built-in converts as a sequence, iterated without
+  // Array.prototype: its own iterator, own next, and null-prototype results.
+  const seq = arr => {
+    const o = {__proto__: null};
+    defProp(o, ITER, {__proto__: null, value: () => {
+      let i = 0;
+      return {__proto__: null, next: () => (i < arr.length
+        ? {__proto__: null, done: false, value: arr[i++]}
+        : {__proto__: null, done: true, value: undefined})};
+    }});
+    return o;
+  };
   // Brand-checked getters: a built-in getter throws on the wrong kind of
   // object, so trying each one reads the element's own built-in value.
   const VALUE_TYPES = ['HTMLInputElement', 'HTMLTextAreaElement',
@@ -2245,7 +2271,7 @@ _CLICK_GUARD_JS = r"""
     for (let i = 0; i < types.length; i += 1) {
       const ctor = window[types[i]];
       const g = ctor ? getter(ctor.prototype, name) : null;
-      if (g) defProp(out, out.length, {value: g, enumerable: true});
+      if (g) defProp(out, out.length, dataDesc(g));
     }
     return out;
   };
@@ -2256,11 +2282,11 @@ _CLICK_GUARD_JS = r"""
       let v;
       let ok = true;
       try { v = R(getters[i], node, []); } catch (err) { ok = false; }
-      if (ok) return {found: true, v};
+      if (ok) return {__proto__: null, found: true, v};
     }
-    return {found: false, v: null};
+    return {__proto__: null, found: false, v: null};
   };
-  const put = (list, v) => { defProp(list, list.length, {value: v, enumerable: true}); };
+  const put = (list, v) => { defProp(list, list.length, dataDesc(v)); };
   const nodes = list => {
     const out = [];
     if (!list) return out;
@@ -2396,7 +2422,8 @@ _CLICK_GUARD_JS = r"""
     }
     return false;
   };
-  const probe = key + '_probe';
+  // A random event type no page code can know, for the heartbeat.
+  const probe = 'oaflow' + Math.random() + Math.random();
   let beat = 0;
   let st = null;
   // Why the evidence no longer holds, or null. Throws when it can't tell.
@@ -2421,8 +2448,9 @@ _CLICK_GUARD_JS = r"""
     try { R(dispatch, window, [new Ev(probe)]); } catch (e) { return false; }
     return beat === before + 1;
   };
-  R(add, window, [probe, () => { beat += 1; }, true]);
-  const guard = e => {
+  const oaflowClickGuardBeat = () => { beat += 1; };
+  R(add, window, [probe, oaflowClickGuardBeat, true]);
+  const oaflowClickGuardListener = e => {
     if (!st) return;
     // Blocked unless the whole check finishes and passes: an exception
     // anywhere in it (a page getter, an unreadable node) blocks the input.
@@ -2436,17 +2464,24 @@ _CLICK_GUARD_JS = r"""
       why = 'the label evidence could not be read';
       st.tainted = st.tainted || why;
     } finally {
-      try { put(st.events, type); } catch (err) { /* recorded below */ }
+      // Block first: nothing recorded after the decision can undo it.
       if (why !== null) {
         R(prevent, e, []);
         R(stopNow, e, []);
-        put(st.violations, type + ': ' + why);
+      }
+      try {
+        put(st.events, type);
+        if (why !== null) put(st.violations, type + ': ' + why);
+      } catch (err) {
+        st.tainted = st.tainted || 'the label evidence could not be read';
       }
     }
   };
-  for (let i = 0; i < EVENTS.length; i += 1) R(add, window, [EVENTS[i], guard, true]);
+  for (let i = 0; i < EVENTS.length; i += 1) {
+    R(add, window, [EVENTS[i], oaflowClickGuardListener, true]);
+  }
   const answer = (ok, reason) => (ok ? 'ok' : 'refused: ' + reason);
-  const arm = (tokenAttr, secret) => {
+  const oaflowClickGuardArm = (tokenAttr, secret) => {
     if (st) {
       put(st.violations, 'armed twice');
       return answer(false, 'the guard is already armed');
@@ -2458,9 +2493,13 @@ _CLICK_GUARD_JS = r"""
       const found = nodes(R(qsa, document, ['[' + tokenAttr + ']']));
       if (found.length !== 1) return answer(false, 'the control is not in this document');
       const el = found[0];
-      const opts = {attributes: true, characterData: true, childList: true, subtree: true};
-      mo = new MO(() => { if (st) st.tainted = 'the control or its label changed'; });
-      docMo = new MO(rs => {
+      const opts = {__proto__: null, attributes: true, characterData: true,
+        childList: true, subtree: true};
+      const oaflowClickGuardObserved = () => {
+        if (st) st.tainted = 'the control or its label changed';
+      };
+      mo = new MO(oaflowClickGuardObserved);
+      docMo = new MO(function oaflowClickGuardStyled(rs) {
         if (!st) return;
         try {
           if (styled(rs)) st.tainted = 'a stylesheet changed';
@@ -2473,24 +2512,28 @@ _CLICK_GUARD_JS = r"""
       for (let i = 0; i < rs.length; i += 1) if (rs[i][1]) R(observe, mo, [rs[i][1], opts]);
       const ls = labels(el);
       for (let i = 0; i < ls.length; i += 1) R(observe, mo, [ls[i], opts]);
-      R(observe, docMo, [document, {characterData: true, childList: true,
-        subtree: true, attributes: true, attributeFilter: ['href', 'media', 'disabled']}]);
+      R(observe, docMo, [document, {__proto__: null, characterData: true,
+        childList: true, subtree: true, attributes: true,
+        attributeFilter: seq(['href', 'media', 'disabled'])}]);
       const snap = snapshot(el);
-      if (snap === null) throw new Error('too large');
-      st = {el, secret, snap, tainted: null, violations: [], events: [], mo, docMo};
-      return answer(true);
+      if (snap !== null) {
+        st = {__proto__: null, el, secret, snap, tainted: null, violations: [],
+          events: [], mo, docMo};
+        return answer(true);
+      }
     } catch (err) {
-      try { if (mo) R(disconnect, mo, []); if (docMo) R(disconnect, docMo, []); } catch (e2) { /* gone */ }
-      return answer(false, 'the control or its label has more than ' + MAX_LOOK
-        + " nodes in one part, or could not be read, so the whole label can't be observed");
+      /* refused below */
     }
+    try { if (mo) R(disconnect, mo, []); if (docMo) R(disconnect, docMo, []); } catch (e2) { /* gone */ }
+    return answer(false, 'the control or its label has more than ' + MAX_LOOK
+      + " nodes in one part, or could not be read, so the whole label can't be observed");
   };
   const list = xs => {
     let out = '[';
     for (let i = 0; i < xs.length; i += 1) out += (i ? ',' : '') + stringify('' + xs[i]);
     return out + ']';
   };
-  const finish = secret => {
+  const oaflowClickGuardFinish = secret => {
     if (!st || st.secret !== secret) {
       return '{"ok":false,"violations":["the guard was not armed by this click"],"events":[]}';
     }
@@ -2504,8 +2547,10 @@ _CLICK_GUARD_JS = r"""
     return out;
   };
   defProp(window, key, {
-    value: freeze({arm, finish}), enumerable: false,
-    configurable: false, writable: false,
+    __proto__: null,
+    value: freeze({__proto__: null, arm: oaflowClickGuardArm,
+      finish: oaflowClickGuardFinish}),
+    enumerable: false, configurable: false, writable: false,
   });
 })(%(key)s);
 """
@@ -3897,8 +3942,8 @@ class PlaywrightBackend:
         secret = uuid.uuid4().hex
         try:
             armed = guard.scope.evaluate(
-                "([k, a, s]) => { const g = window[k];"
-                " return g ? g.arm(a, s) : 'refused: this document has no click"
+                "(x) => { const g = window[x[0]];"
+                " return g ? g.arm(x[1], x[2]) : 'refused: this document has no click"
                 " guard (it loaded before the guard was installed)'; }",
                 [key, self._token_attribute(guard.token), secret],
             )
@@ -3918,8 +3963,8 @@ class PlaywrightBackend:
         finally:
             try:
                 seen = guard.scope.evaluate(
-                    "([k, s]) => { const g = window[k];"
-                    " return g ? g.finish(s) : null; }",
+                    "(x) => { const g = window[x[0]];"
+                    " return g ? g.finish(x[1]) : null; }",
                     [key, secret],
                 )
             except Exception:  # noqa: BLE001 - the document went away
@@ -6652,6 +6697,10 @@ def _click_guard_key(context: Any) -> Optional[str]:
         context.add_init_script(
             _CLICK_GUARD_JS
             % {"key": json.dumps(key), "max_look": LABEL_GUARD_MAX_NODES}
+            # Names the guard's frames in a stack trace, for audits.
+            + "\n//# sourceURL="
+            + CLICK_GUARD_SOURCE_URL
+            + "\n"
         )
         context._oaflow_click_guard = key
     except Exception:  # noqa: BLE001 - a stand-in context; guarding refuses

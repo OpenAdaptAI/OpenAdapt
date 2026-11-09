@@ -32,6 +32,9 @@ grow           a 64-node label grows past the cap on            halt, no GET
 getter-*       on pointerover a page getter that throws, plus   halt, no GET
                a CSSOM relabel to "Sign out"
 getter-stable  the same throwing getter, no relabel             saved
+traps-*        the page traps Object.prototype keys and the     no guard call
+               built-ins the guard could use; a stable label    reaches page
+               (saved) and a CSSOM relabel (halt, no GET)       code
 =============  ===============================================  ============
 """
 
@@ -199,6 +202,118 @@ if (kind === 'session') {
     if (kind !== 'getter-stable') fetch('/logout-everywhere');
     d.remove();
   };
+} else if (kind.startsWith('traps-')) {
+  // Page code a guard must never call: getters on Object.prototype for the
+  // keys a built-in reads from a dictionary, and wrappers on the built-ins
+  // the guard could use. Each is transparent (undefined is the same as
+  // absent for these keys; wrappers call the original). A call counts when
+  // a frame of the guard's script (its sourceURL) is on the stack.
+  const T = {count: 0, names: '', busy: false};
+  window.__oaTrap = T;
+  Error.stackTraceLimit = 200;
+  const apply = Reflect.apply;
+  const indexOf = String.prototype.indexOf;
+  const define = Object.defineProperty;
+  const describe = Object.getOwnPropertyDescriptor;
+  const E = Error;
+  const hit = name => {
+    if (T.busy) return;
+    T.busy = true;
+    try {
+      const stack = '' + new E().stack;
+      if (apply(indexOf, stack, ['oaflow-click-guard.js']) !== -1) {
+        T.count += 1;
+        T.names += name + ';';
+      }
+    } finally {
+      T.busy = false;
+    }
+  };
+  const KEYS = ['subtree', 'attributes', 'characterData', 'childList',
+    'attributeFilter', 'attributeOldValue', 'characterDataOldValue',
+    'capture', 'passive', 'once', 'signal', 'composed', 'configurable',
+    'enumerable', 'toJSON', 'then', 'done', 'bubbles', 'cancelable',
+    // Last: once it is trapped, an accessor descriptor inherits it.
+    'writable'];
+  const wrap = (obj, k, label) => {
+    const d = obj && describe(obj, k);
+    if (!d) return;
+    if (typeof d.value === 'function') {
+      const orig = d.value;
+      define(obj, k, {configurable: true, writable: true, enumerable: d.enumerable,
+        value: function (...args) { hit(label); return apply(orig, this, args); }});
+    } else if (d.get) {
+      const g = d.get;
+      define(obj, k, {configurable: true, enumerable: d.enumerable, set: d.set,
+        get: function () { hit(label); return apply(g, this, []); }});
+    }
+  };
+  const TARGETS = [
+    [Array.prototype, [Symbol.iterator, 'push', 'includes', 'indexOf', 'slice',
+      'some', 'filter', 'map', 'join', 'forEach', 'concat']],
+    [Object.getPrototypeOf([][Symbol.iterator]()), ['next']],
+    [String.prototype, ['split', 'slice', 'includes', 'indexOf', 'trim',
+      'toString', 'valueOf', 'charCodeAt', 'startsWith', 'concat', 'replace',
+      'toLowerCase', Symbol.iterator]],
+    [CSSStyleDeclaration.prototype, ['getPropertyValue', 'item', 'length',
+      'content', 'display', 'visibility', 'contentVisibility']],
+    [Event.prototype, ['type', 'target', 'currentTarget', 'composedPath',
+      'preventDefault', 'stopPropagation', 'stopImmediatePropagation',
+      'eventPhase']],
+    [NodeList.prototype, ['item', 'length', 'forEach', Symbol.iterator]],
+    [Element.prototype, ['getAttribute', 'querySelectorAll', 'tagName',
+      'matches', 'closest']],
+    [Node.prototype, ['textContent', 'isConnected', 'nodeName', 'parentNode',
+      'getRootNode', 'contains']],
+    [Document.prototype, ['getElementById', 'querySelectorAll']],
+    [MutationRecord.prototype, ['type', 'target', 'addedNodes', 'removedNodes']],
+    [MutationObserver.prototype, ['observe', 'takeRecords', 'disconnect']],
+    [EventTarget.prototype, ['dispatchEvent', 'addEventListener']],
+    [HTMLButtonElement.prototype, ['value', 'labels']],
+    [JSON, ['stringify']],
+    [Reflect, ['apply', 'defineProperty']],
+    [Object, ['defineProperty', 'getOwnPropertyDescriptor', 'freeze']],
+    [window, ['getComputedStyle']],
+  ];
+  for (let i = 0; i < TARGETS.length; i += 1) {
+    const [obj, keys] = TARGETS[i];
+    for (let j = 0; j < keys.length; j += 1) wrap(obj, keys[j], String(keys[j]));
+  }
+  const ctors = [Element, Document, DocumentFragment, Array, Node];
+  for (let i = 0; i < ctors.length; i += 1) {
+    const base = Function.prototype[Symbol.hasInstance];
+    define(ctors[i], Symbol.hasInstance, {configurable: true,
+      value(v) { hit('hasInstance'); return apply(base, this, [v]); }});
+  }
+  // Last, so the wrappers above are defined before descriptor keys are
+  // trapped.
+  for (let i = 0; i < KEYS.length; i += 1) {
+    const k = KEYS[i];
+    define(Object.prototype, k, {
+      configurable: true,
+      get() { hit('Object.prototype.' + k); return undefined; },
+      set(v) { define(this, k, {value: v, writable: true, enumerable: true, configurable: true}); },
+    });
+  }
+  // The dialog, named by generated CSS content.
+  const st = document.createElement('style');
+  st.textContent = '.l::before { content: "Close"; }';
+  document.head.appendChild(st);
+  const d = document.createElement('div');
+  d.setAttribute('role', 'dialog');
+  d.style = 'position:fixed;inset:0;background:#fff;padding:40px;font-size:28px';
+  d.innerHTML = '<p>Update available now</p><span id="lbl" class="l"></span> '
+    + '<button id="x" aria-labelledby="lbl" style="font-size:22px">x</button>';
+  document.body.appendChild(d);
+  const b = d.querySelector('#x');
+  if (kind === 'traps-change') {
+    b.addEventListener('pointerover', () => {
+      st.sheet.insertRule('.l::before { content: "Sign out" !important; }', 1);
+    });
+    b.onclick = () => { fetch('/logout-everywhere'); d.remove(); };
+  } else {
+    b.onclick = () => d.remove();
+  }
 } else if (kind === 'banner') {
   const b = document.createElement('div');
   b.style = 'position:fixed;top:0;left:0;right:0;height:120px;background:#ffd;'
@@ -259,6 +374,29 @@ def server() -> Iterator[str]:
         srv.shutdown()
 
 
+#: What the page's traps saw in the last run (``traps-*`` pages only).
+TRAPS: dict[str, Any] = {}
+
+_READ_TRAPS = """() => {
+  const T = window.__oaTrap;
+  if (!T) return null;
+  const before = T.count;
+  // The harness must be able to see a call made from the guard's script.
+  (0, eval)('[1].includes(1)\\n//# sourceURL=oaflow-click-guard.js');
+  return {count: before, names: T.names, selfTest: T.count - before};
+}"""
+
+
+def _read_traps(backend: Any) -> None:
+    TRAPS.clear()
+    try:
+        seen = backend.page.evaluate(_READ_TRAPS)
+    except Exception as exc:  # noqa: BLE001 - recorded for the assertion
+        seen = {"error": repr(exc)}
+    if seen:
+        TRAPS.update(seen)
+
+
 def _run(url: str, kind: str, tmp_path: Any, classes: Any = None) -> Any:
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
     from openadapt_flow.runtime.replayer import Replayer
@@ -294,6 +432,7 @@ def _run(url: str, kind: str, tmp_path: Any, classes: Any = None) -> Any:
         )
         backend.page.wait_for_timeout(300)
     finally:
+        _read_traps(backend)
         close()
     return report
 
@@ -440,6 +579,7 @@ def _learn(url: str, kind: str) -> Any:
         )
     finally:
         backend.page.wait_for_timeout(300)
+        _read_traps(backend)
         close()
 
 
@@ -580,3 +720,46 @@ def test_a_throwing_page_getter_alone_does_not_block_a_stable_label(
     report = _run(server, "getter-stable", tmp_path, classes=[LABELLED])
     assert report.success is True, report.results[0].error
     assert "POST /save" in _Server.seen
+
+
+def _no_guard_reached_page_code() -> None:
+    assert TRAPS.get("selfTest", 0) >= 1, TRAPS  # the harness sees guard frames
+    assert TRAPS.get("count") == 0, TRAPS.get("names")
+
+
+def test_the_guard_never_calls_page_code_on_a_stable_click(
+    server: str, tmp_path: Any
+) -> None:
+    report = _run(server, "traps-stable", tmp_path, classes=[LABELLED])
+    assert report.success is True, report.results[0].error
+    assert "POST /save" in _Server.seen
+    _no_guard_reached_page_code()
+
+
+def test_the_guard_never_calls_page_code_and_halts_on_a_relabel(
+    server: str, tmp_path: Any
+) -> None:
+    report = _run(server, "traps-change", tmp_path, classes=[LABELLED])
+    assert report.success is False
+    result = report.results[0]
+    assert result.delivery_uncertainty is not None
+    assert result.delivery_uncertainty.cause_type == "LabelChangedDuringClick"
+    assert not any("/logout-everywhere" in seen for seen in _Server.seen)
+    assert not any(seen.startswith("POST") for seen in _Server.seen)
+    _no_guard_reached_page_code()
+
+
+def test_learning_never_calls_page_code_on_a_stable_click(server: str) -> None:
+    learned = _learn(server, "traps-stable")
+    assert learned.watchers == ("network",)
+    _no_guard_reached_page_code()
+
+
+def test_learning_never_calls_page_code_and_refuses_a_relabel(server: str) -> None:
+    from openadapt_flow.interruptions import LearnRefused
+
+    with pytest.raises(LearnRefused, match="label changed during the click"):
+        _learn(server, "traps-change")
+    assert not any("/logout-everywhere" in seen for seen in _Server.seen)
+    assert not any(seen.startswith("POST") for seen in _Server.seen)
+    _no_guard_reached_page_code()

@@ -64,6 +64,11 @@ A run clears an interruption only when all four of these hold:
    limit during the click is a change. The guard reads all of this only
    through the browser's own getters and methods, captured before any page
    script runs, so a getter or method the page defines later never runs.
+   Every dictionary it hands to a built-in (a property descriptor, observer
+   options) has no prototype, and every list a built-in iterates brings its
+   own iterator, so no inherited property is ever read. A test traps
+   `Object.prototype` keys and the built-ins the guard could reach, and
+   checks that no call from the guard's script reaches them.
    An input is let through only when the whole check finishes and passes:
    an error anywhere in it blocks the input and counts as a change. If any
    of them changed before a press or click arrives, or the input is not on
