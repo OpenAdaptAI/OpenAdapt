@@ -2179,6 +2179,11 @@ def _normalize_chord(key: str) -> str:
 #: first descendants, so a CSSOM relabel counts), or the input
 #: is not on the element. A page that erases window listeners
 #: (``document.open``) fails the guard's heartbeat. Formatted with the key.
+#: The most nodes (the node itself included) the click guard observes in the
+#: control and in each node that labels it. A larger label can't be observed
+#: whole, so the guard refuses to arm and nothing is clicked.
+LABEL_GUARD_MAX_NODES = 64
+
 _CLICK_GUARD_JS = r"""
 ((key) => {
   if (Object.prototype.hasOwnProperty.call(window, key)) return;
@@ -2206,16 +2211,25 @@ _CLICK_GUARD_JS = r"""
   const elQsa = Element.prototype.querySelectorAll;
   const isEl = n => n instanceof Element;
   // How a node renders its label: generated ::before/::after text, its own
-  // computed content, and whether it is shown at all. Read for the node and
-  // its first descendants, so a CSSOM rule (insertRule, adoptedStyleSheets)
-  // that relabels or hides the text is a change too.
+  // computed content, and whether it is shown at all, for the node and every
+  // node under it, so a CSSOM rule (insertRule, adoptedStyleSheets) that
+  // relabels or hides the text is a change too. The evidence must be whole:
+  // a subtree of more than MAX_LOOK nodes (the node included), or one whose
+  // walk fails, can't be observed, and the snapshot is null. Arming then
+  // refuses; at an input, a null snapshot differs from the armed one.
   const LOOK = ['content', 'display', 'visibility', 'content-visibility'];
-  const MAX_LOOK = 64;
+  const MAX_LOOK = %(max_look)d;
   const look = (node, parts) => {
-    if (!isEl(node)) return;
-    const all = [node, ...R(elQsa, node, ['*'])];
+    if (!isEl(node)) return true;
+    let all;
+    try {
+      all = [node, ...R(elQsa, node, ['*'])];
+    } catch (err) {
+      return false;
+    }
+    if (all.length > MAX_LOOK) return false;
     parts.push(all.length);
-    for (const n of all.slice(0, MAX_LOOK)) {
+    for (const n of all) {
       try {
         const own = R(computed, window, [n]);
         for (const p of LOOK) parts.push(R(propOf, own, [p]));
@@ -2224,9 +2238,10 @@ _CLICK_GUARD_JS = r"""
           for (const p of LOOK) parts.push(R(propOf, ps, [p]));
         }
       } catch (err) {
-        parts.push('unreadable');
+        return false;
       }
     }
+    return true;
   };
   const ATTRS = ['role', 'aria-label', 'aria-labelledby', 'aria-describedby',
     'title', 'alt', 'value', 'hidden', 'aria-hidden', 'class', 'style', 'id',
@@ -2256,16 +2271,16 @@ _CLICK_GUARD_JS = r"""
     for (const a of ATTRS) parts.push(attr(el, a));
     parts.push(text(el));
     if ('value' in el) parts.push(String(el.value));
-    look(el, parts);
+    if (!look(el, parts)) return null;
     for (const [id, n] of refs(el)) {
       parts.push(id, n ? text(n) : null);
       if (n) for (const a of ATTRS) parts.push(attr(n, a));
-      if (n) look(n, parts);
+      if (n && !look(n, parts)) return null;
     }
     if (el.labels) {
       for (const l of el.labels) {
         parts.push(text(l), attr(l, 'class'), attr(l, 'style'));
-        look(l, parts);
+        if (!look(l, parts)) return null;
       }
     }
     return stringify(parts);
@@ -2283,7 +2298,11 @@ _CLICK_GUARD_JS = r"""
     if (!st) return;
     if (R(take, st.mo, []).length) st.tainted = 'the control or its label changed';
     if (styled(R(take, st.docMo, []))) st.tainted = 'a stylesheet changed';
-    if (!st.tainted && snapshot(st.el) !== st.snap) st.tainted = 'the control or its label changed';
+    if (!st.tainted) {
+      const now = snapshot(st.el);
+      if (now === null) st.tainted = 'the label grew too large to observe whole';
+      else if (now !== st.snap) st.tainted = 'the control or its label changed';
+    }
   };
   const alive = () => {
     const before = beat;
@@ -2326,7 +2345,15 @@ _CLICK_GUARD_JS = r"""
       R(disconnect, mo, []); R(disconnect, docMo, []);
       return {ok: false, reason: 'the label could not be watched'};
     }
-    st = {el, secret, snap: snapshot(el), tainted: null, violations: [], events: [], mo, docMo};
+    let snap = null;
+    try { snap = snapshot(el); } catch (err) { snap = null; }
+    if (snap === null) {
+      R(disconnect, mo, []); R(disconnect, docMo, []);
+      return {ok: false, reason: 'the control or its label has more than '
+        + MAX_LOOK + ' nodes in one part, or could not be read, so the whole '
+        + 'label can\'t be observed'};
+    }
+    st = {el, secret, snap, tainted: null, violations: [], events: [], mo, docMo};
     return {ok: true};
   };
   const finish = secret => {
@@ -2343,7 +2370,7 @@ _CLICK_GUARD_JS = r"""
     value: Object.freeze({arm, finish}), enumerable: false,
     configurable: false, writable: false,
   });
-})(%s);
+})(%(key)s);
 """
 
 
@@ -6472,7 +6499,10 @@ def _click_guard_key(context: Any) -> Optional[str]:
         return known
     key = f"__oaflow_click_{uuid.uuid4().hex}"
     try:
-        context.add_init_script(_CLICK_GUARD_JS % json.dumps(key))
+        context.add_init_script(
+            _CLICK_GUARD_JS
+            % {"key": json.dumps(key), "max_look": LABEL_GUARD_MAX_NODES}
+        )
         context._oaflow_click_guard = key
     except Exception:  # noqa: BLE001 - a stand-in context; guarding refuses
         return None

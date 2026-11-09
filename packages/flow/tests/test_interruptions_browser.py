@@ -24,6 +24,11 @@ external       a stable external label "Close"                  saved
 cssom-rule     insertRule turns the ::before "Close" into       halt, no GET
                "Sign out" on pointerover
 cssom-adopted  an adopted stylesheet does the same              halt, no GET
+nodes-65       a 65-node label, relabeled by CSSOM on its last  halt, no click
+               node (too large to observe whole)
+nodes-64       a stable 64-node label                           saved
+grow           a 64-node label grows past the cap on            halt, no GET
+               pointerover
 =============  ===============================================  ============
 """
 
@@ -134,6 +139,32 @@ if (kind === 'session') {
     }
   });
   b.onclick = () => { fetch('/logout-everywhere'); d.remove(); };
+} else if (kind.startsWith('nodes-') || kind === 'grow') {
+  // A label of N nodes (itself and N-1 empty children); the last child's
+  // generated content names the button.
+  const n = kind === 'nodes-65' ? 65 : 64;
+  const st = document.createElement('style');
+  st.textContent = '.t::before { content: "Close"; }';
+  document.head.appendChild(st);
+  const d = document.createElement('div');
+  d.setAttribute('role', 'dialog');
+  d.style = 'position:fixed;inset:0;background:#fff;padding:40px;font-size:28px';
+  d.innerHTML = '<p>Update available now</p><span id="lbl">'
+    + '<i></i>'.repeat(n - 2) + '<i class="t"></i></span> '
+    + '<button id="x" aria-labelledby="lbl" style="font-size:22px">x</button>';
+  document.body.appendChild(d);
+  const b = d.querySelector('#x');
+  b.addEventListener('pointerover', () => {
+    if (kind === 'nodes-65') {
+      st.sheet.insertRule('.t::before { content: "Sign out" !important; }', 1);
+    } else if (kind === 'grow') {
+      document.getElementById('lbl').appendChild(document.createElement('i'));
+    }
+  });
+  b.onclick = () => {
+    if (kind !== 'nodes-64') fetch('/logout-everywhere');
+    d.remove();
+  };
 } else if (kind === 'banner') {
   const b = document.createElement('div');
   b.style = 'position:fixed;top:0;left:0;right:0;height:120px;background:#ffd;'
@@ -420,5 +451,54 @@ def test_learning_refuses_a_cssom_relabel_as_the_pointer_arrives(
 
     with pytest.raises(LearnRefused, match="label changed during the click"):
         _learn(server, kind)
+    assert not any("/logout-everywhere" in seen for seen in _Server.seen)
+    assert not any(seen.startswith("POST") for seen in _Server.seen)
+
+
+def test_a_label_too_large_to_observe_whole_is_never_clicked(
+    server: str, tmp_path: Any
+) -> None:
+    report = _run(server, "nodes-65", tmp_path, classes=[LABELLED])
+    assert report.success is False
+    event = report.results[0].interstitial_actions[0]
+    assert event.delivered is False
+    assert "observed" in (event.error or ""), event.error
+    assert report.results[0].delivery_uncertainty is None
+    assert not any("/logout-everywhere" in seen for seen in _Server.seen)
+    assert not any(seen.startswith("POST") for seen in _Server.seen)
+
+
+def test_learning_refuses_a_label_too_large_to_observe_whole(server: str) -> None:
+    from openadapt_flow.interruptions import LearnRefused
+
+    with pytest.raises(LearnRefused, match="observed"):
+        _learn(server, "nodes-65")
+    assert not any("/logout-everywhere" in seen for seen in _Server.seen)
+    assert not any(seen.startswith("POST") for seen in _Server.seen)
+
+
+def test_a_stable_label_at_the_cap_is_cleared_and_the_save_lands(
+    server: str, tmp_path: Any
+) -> None:
+    report = _run(server, "nodes-64", tmp_path, classes=[LABELLED])
+    assert report.success is True, report.results[0].error
+    assert report.results[0].interstitial_actions[0].label_violations == []
+    assert "POST /save" in _Server.seen
+
+
+def test_learning_keeps_a_stable_label_at_the_cap(server: str) -> None:
+    learned = _learn(server, "nodes-64")
+    assert learned.watchers == ("network",)
+
+
+def test_a_label_that_grows_past_the_cap_during_the_click_is_blocked(
+    server: str, tmp_path: Any
+) -> None:
+    report = _run(server, "grow", tmp_path, classes=[LABELLED])
+    assert report.success is False
+    result = report.results[0]
+    assert result.safety_halt is True
+    assert result.delivery_uncertainty is not None
+    assert result.delivery_uncertainty.cause_type == "LabelChangedDuringClick"
     assert not any("/logout-everywhere" in seen for seen in _Server.seen)
     assert not any(seen.startswith("POST") for seen in _Server.seen)

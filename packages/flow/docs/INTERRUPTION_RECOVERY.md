@@ -57,8 +57,12 @@ A run clears an interruption only when all four of these hold:
    computed `::before` and `::after` content, their own computed content,
    and `display` and `visibility`, so a stylesheet rule added through the
    CSSOM (`insertRule`, `adoptedStyleSheets`) that relabels or hides the
-   text counts as a change. If any of them changed before a press or click
-   arrives, or the input is not on
+   text counts as a change. This evidence must be whole: if the control or
+   any node that labels it has more than 64 nodes in its subtree (itself
+   included, `LABEL_GUARD_MAX_NODES`), or the walk can't finish, the guard
+   refuses to arm and nothing is clicked. A label that grows past that
+   limit during the click is a change. If any of them changed before a
+   press or click arrives, or the input is not on
    the control, the guard cancels that input before the page sees it. The
    run then halts with the dismissal reported as delivered and its outcome
    uncertain (`LabelChangedDuringClick`), so it is reconciled, never
