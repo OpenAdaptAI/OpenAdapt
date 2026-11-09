@@ -79,6 +79,16 @@ def register_api_parser(sub: argparse._SubParsersAction) -> None:
             "Regulated runs need one."
         ),
     )
+    admit.add_argument(
+        "--footprint",
+        default=None,
+        metavar="VERDICT.json",
+        help=(
+            "The side-effect comparison of GUI and API saves on the same inputs "
+            "(openadapt_flow.api_footprint). An API step whose footprint differs "
+            "from the GUI save's isn't admitted."
+        ),
+    )
     admit.set_defaults(func=cmd_api_admit)
 
 
@@ -195,10 +205,17 @@ def cmd_api_admit(
             print(f"api admit: --identity {item!r} is not KEY=PARAM", file=sys.stderr)
             return 2
         identity[key.strip()] = param.strip()
+    footprint = None
+    if getattr(args, "footprint", None):
+        footprint = json.loads(Path(args.footprint).read_text())
     # Build the admission first, so the person reads exactly what is admitted.
     try:
         updated, steps = admit_api_step(
-            workflow, admitted_by=args.by, step_id=args.step, identity=identity
+            workflow,
+            admitted_by=args.by,
+            step_id=args.step,
+            identity=identity,
+            footprint=footprint,
         )
     except (ApiProposalError, ValueError) as exc:
         print(f"api admit: {exc}", file=sys.stderr)

@@ -1,0 +1,476 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost:3000/Appointment?patient=Patient/063b6f16-2663-4ec8-b1d9-1e59911f4ff7\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      213,
+      297
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      640,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 10
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      32,
+      31
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      124,
+      90
+     ]
+    },
+    {
+     "text": "Appointment"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      67,
+      138
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "There is one existing appointment. Let me check it.",
+   "actions": [
+    {
+     "coordinate": [
+      469,
+      297
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      722,
+      142
+     ]
+    },
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      84,
+      216
+     ]
+    },
+    {
+     "duration": 6
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 10
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The appointment you asked for is already booked, so I didn't create another one. The existing record has status booked, start 2026-11-17T14:00:00Z and end 2026-11-17T14:30:00Z. Its two participants are Tomasz Wren (Patient/063b6f16-2663-4ec8-b1d9-1e59911f4ff7) and Dr Ama Osei (Practitioner/7956ce69-8370-4227-b792-f74fd475026a). Both participants have status accepted. It is the only Appointment on the server.\n\nRESULT: DONE Appointment/9f10436f-59b5-4c4a-8815-5ece785329e2",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost:3000/Appointment?patient=Patient/063b6f16-2663-4ec8-b1d9-1e59911f4ff7\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 213,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 500,
+   "dx": 0,
+   "dy": 1200
+  },
+  {
+   "a": "click",
+   "x": 32,
+   "y": 31,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Appointment"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 67,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 469,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 722,
+   "y": 142,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 84,
+   "y": 216,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 6.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6283,
+   "out": 151,
+   "usd": 0.017215,
+   "cached": 0
+  },
+  {
+   "in": 7848,
+   "out": 161,
+   "usd": 0.006787,
+   "cached": 6279
+  },
+  {
+   "in": 9399,
+   "out": 270,
+   "usd": 0.008151,
+   "cached": 7846
+  },
+  {
+   "in": 11059,
+   "out": 192,
+   "usd": 0.007953,
+   "cached": 9397
+  },
+  {
+   "in": 12641,
+   "out": 124,
+   "usd": 0.00741,
+   "cached": 11057
+  },
+  {
+   "in": 14166,
+   "out": 83,
+   "usd": 0.007174,
+   "cached": 12639
+  },
+  {
+   "in": 15626,
+   "out": 98,
+   "usd": 0.007467,
+   "cached": 14164
+  },
+  {
+   "in": 17122,
+   "out": 75,
+   "usd": 0.007619,
+   "cached": 15624
+  },
+  {
+   "in": 18582,
+   "out": 75,
+   "usd": 0.007828,
+   "cached": 17120
+  },
+  {
+   "in": 20042,
+   "out": 83,
+   "usd": 0.0082,
+   "cached": 18580
+  },
+  {
+   "in": 21502,
+   "out": 122,
+   "usd": 0.008882,
+   "cached": 20040
+  },
+  {
+   "in": 23014,
+   "out": 98,
+   "usd": 0.009064,
+   "cached": 21500
+  },
+  {
+   "in": 24510,
+   "out": 148,
+   "usd": 0.009826,
+   "cached": 23012
+  },
+  {
+   "in": 26056,
+   "out": 83,
+   "usd": 0.009601,
+   "cached": 24508
+  },
+  {
+   "in": 27516,
+   "out": 83,
+   "usd": 0.009695,
+   "cached": 26054
+  },
+  {
+   "in": 28976,
+   "out": 75,
+   "usd": 0.009907,
+   "cached": 27514
+  },
+  {
+   "in": 30436,
+   "out": 216,
+   "usd": 0.011609,
+   "cached": 28974
+  }
+ ]
+}

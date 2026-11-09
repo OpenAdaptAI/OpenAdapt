@@ -1,0 +1,31 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't do the task. Medplum is showing its \"Sign in to Medplum\" page, so the session isn't signed in as the task said it would be. I have no credentials for it, and I'm not going to register a new account. I haven't searched for Rosa Delgado or changed any records.\n\nRESULT: NOT DONE Medplum is on the sign-in page and I have no credentials, so I couldn't reach any patient records.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [],
+ "usage": [
+  {
+   "in": 6357,
+   "out": 100,
+   "usd": 0.002279,
+   "cached": 6353
+  },
+  {
+   "in": 7830,
+   "out": 195,
+   "usd": 0.006912,
+   "cached": 6353
+  }
+ ]
+}

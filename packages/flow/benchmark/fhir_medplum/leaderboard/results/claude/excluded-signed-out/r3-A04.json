@@ -1,0 +1,56 @@
+{
+ "id": "A04",
+ "class": "wrong_patient",
+ "type": "allergy",
+ "expect": "create",
+ "note": "The write path files the allergy on the look-alike patient.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 6.8,
+ "cost_usd": 0.009863,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is on the sign-in page and I have no credentials, so I couldn't access the patient records.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't start the task. Medplum is showing the \"Sign in to Medplum\" page, so the browser isn't signed in as the task said it would be. I have no login details for the clinic's account, and I won't guess credentials or register a new account. Because I couldn't open Medplum, I haven't searched for Rosa Delgado or checked whether the penicillin allergy is already recorded. I changed nothing.\n\nRESULT: NOT DONE Medplum is on the sign-in page and I have no credentials, so I couldn't access the patient records.",
+  "model_calls": 2,
+  "actions": 0,
+  "tokens_in": 14188,
+  "tokens_out": 362
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no AllergyIntolerance was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 31.3,
+  "end": 30.5,
+  "waited_s": 0
+ }
+}

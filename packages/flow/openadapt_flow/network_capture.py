@@ -246,6 +246,16 @@ class NetworkCapture:
         content_type = (headers.get("content-type") or "").split(";")[0].strip()
         if content_type:
             line["request_type"] = content_type
+        if str(request.method).upper() not in _READ_METHODS:
+            from openadapt_flow.runtime.actuators.session_headers import (
+                app_header_names,
+            )
+
+            # Names only: which headers the page's script added to a write
+            # (an API step must send them too). Never a value.
+            names = app_header_names(headers)
+            if names:
+                line["request_headers"] = names
         try:
             raw = request.post_data_buffer
         except Exception:  # noqa: BLE001 - binary or unavailable body

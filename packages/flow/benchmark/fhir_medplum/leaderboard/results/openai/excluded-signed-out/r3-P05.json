@@ -1,0 +1,56 @@
+{
+ "id": "P05",
+ "class": "wrong_value",
+ "type": "patient",
+ "expect": "create",
+ "note": "The write path transposes the phone number's last two digits.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 10.5,
+ "cost_usd": 0.005523,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE The app shows the Medplum sign-in screen, so I cannot check for or create the Patient record without signed-in access.",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/signin?next=%2F",
+  "final_text": "RESULT: NOT DONE The app shows the Medplum sign-in screen, so I cannot check for or create the Patient record without signed-in access.",
+  "model_calls": 3,
+  "actions": 1,
+  "tokens_in": 10642,
+  "tokens_out": 111
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Patient was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 31.1,
+  "end": 33.5,
+  "waited_s": 0
+ }
+}

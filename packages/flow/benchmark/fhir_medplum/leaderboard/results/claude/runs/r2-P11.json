@@ -1,0 +1,133 @@
+{
+ "id": "P11",
+ "class": "refused_write",
+ "type": "patient",
+ "expect": "create",
+ "note": "The server refuses the create (503) and nothing lands.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 128.7,
+ "cost_usd": 0.319581,
+ "claim": {
+  "status": "done",
+  "id": "Patient/0ac9d3fe-094d-4435-b205-aac9ad4e81f3",
+  "note": "RESULT: DONE Patient/0ac9d3fe-094d-4435-b205-aac9ad4e81f3",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/Patient?_count=20&_fields=id,_lastUpdated,name,birthDate,gender&_sort=-_lastUpdated",
+  "final_text": "Lena Okafor now has exactly one Patient record, and I created it. The Patient list was empty when I searched, so there was no existing record to report. The list now shows 1 of 1.\n\nThe record has the name, birth date (1988-04-22), gender (female), the Springfield address, the home phone and the email, and nothing else.\n\nRESULT: DONE Patient/0ac9d3fe-094d-4435-b205-aac9ad4e81f3",
+  "model_calls": 28,
+  "actions": 210,
+  "tokens_in": 771232,
+  "tokens_out": 5230
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/0ac9d3fe-094d-4435-b205-aac9ad4e81f3"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Patient/0ac9d3fe-094d-4435-b205-aac9ad4e81f3": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "refuse"
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 2,
+ "host_load": {
+  "start": 27.8,
+  "end": 11.0,
+  "waited_s": 0
+ }
+}
