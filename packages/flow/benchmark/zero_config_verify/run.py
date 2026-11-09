@@ -42,7 +42,7 @@ HERE = Path(__file__).resolve().parent
 RESULTS_JSON = HERE / "results.json"
 GENERATED_DIR = HERE / "generated"
 
-ZERO_CONFIG = ("Z-net", "Z-net-read", "Z-db", "Z-db-gate")
+ZERO_CONFIG = ("Z-net", "Z-net-probed", "Z-net-read", "Z-db", "Z-db-gate")
 DECLARED = ("D-net-read-complete",)
 READ_PATH_GIVEN = ("P-record-verify", "P-scaffold-verifier")
 ARMS = ZERO_CONFIG + DECLARED + READ_PATH_GIVEN
@@ -202,6 +202,15 @@ def scaffold(recording: Path, out: Path, extra: list[str]) -> dict[str, Any]:
     elif draft.is_file():
         result["file"] = draft
         result["generator_status"] = "todo-draft"
+    discovery = out / "read_discovery.json"
+    if discovery.is_file():
+        result["read_discovery"] = json.loads(discovery.read_text())
+    elif proposed.is_file() and (out / "record_check.proof.json").is_file():
+        found = json.loads((out / "record_check.proof.json").read_text()).get(
+            "read_discovery"
+        )
+        if found:
+            result["read_discovery"] = found
     else:
         result["generator_status"] = "refused"
     return result
@@ -250,6 +259,11 @@ def generate(
     rec_plain = work / "rec-plain"
     drive(browser, origin, demo, recording=rec_plain)
     arms["Z-net"] = scaffold(rec_plain, work / "out-Z-net", [])
+    # Same recording; the generator may probe GET reads the write implies on
+    # this local fixture, right after the demonstration's save.
+    arms["Z-net-probed"] = scaffold(
+        rec_plain, work / "out-Z-net-probed", ["--probe-reads"]
+    )
     sqlite = getattr(db, spec.sqlite_attr) if spec.sqlite_attr else None
     for arm, extra in (("Z-db", []), ("Z-db-gate", ["--fault-gate"])):
         if sqlite is None:
@@ -316,6 +330,12 @@ def generate(
 
 ARM_INPUTS = {
     "Z-net": ["events.jsonl", "meta.json params", "network.jsonl (app's own traffic)"],
+    "Z-net-probed": [
+        "events.jsonl",
+        "meta.json params",
+        "network.jsonl (app's own traffic)",
+        "--probe-reads (GET probes on the local fixture after the save)",
+    ],
     "Z-net-read": [
         "events.jsonl",
         "meta.json params",
@@ -524,7 +544,9 @@ def _git_head() -> str:
 def main(argv: Optional[list[str]] = None) -> int:
     from playwright.sync_api import sync_playwright
 
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--only", help="comma-separated app names")
     parser.add_argument(
         "--generate-only",
@@ -603,6 +625,14 @@ def main(argv: Optional[list[str]] = None) -> int:
                                 result.get("output", ""), origin, work, sqlite
                             ),
                             "runnable": result["runnable"],
+                            "read_discovery": json.loads(
+                                scrub(
+                                    json.dumps(result.get("read_discovery")),
+                                    origin,
+                                    work,
+                                    sqlite,
+                                )
+                            ),
                             "parse_error": scrub(
                                 result.get("parse_error") or "", origin, work, sqlite
                             )

@@ -167,3 +167,29 @@ baselines:
 
 The `P-*` arms take their read path from `hand-written+complete` for the
 same reason. No other change.
+
+### 2026-11-09, before the second run (generator fixes)
+
+The first run found three generator gaps (RESULTS.md, "Why each zero-config
+arm failed"). The engine change `feat/zero-config-read-discovery` closes them
+in app-generic code: a generated REST read carries `records_complete: true`
+when it is declared or one unpaged response was seen whole; a step is a write
+when the capture shows a mutating request to the app's origin or its store
+snapshots differ; and `scaffold-verifier --probe-reads` probes the GET reads a
+captured write implies. The second run changes only this:
+
+- every arm is generated again with the fixed generator, on the same
+  demonstration and judged on the same trial cases;
+- one new zero-config arm, `Z-net-probed`: the `Z-net` recording (the app's
+  own traffic, no assisted read) plus `--probe-reads`. The generator sends
+  `GET` probes to the local fault server right after the demonstration's save
+  (the store then holds the demonstration's record, as it does for `Z-db`).
+  No person writes any verifier text, so it counts toward the zero-config
+  verdict;
+- the first run's raw data is kept as `results-run1.json`; `results.json` and
+  `generated/` hold the second run.
+
+The kill thresholds, the baselines (`hand-written+complete` for the
+thresholds), the ground truth and the trial cases are unchanged. MockLoan is
+still held out: the fixes contain no MockLoan-specific code and were written
+and tested against a separate local test app.
