@@ -254,7 +254,7 @@
 
 **Caveats (honest limits):**
 
-- Proven on synthetic fixtures only (MockMed, the effect_e2e SQLite record service, an OpenEMR-shaped FHIR fake). A check built from API reads alone cannot see writes to tables it does not read, so it stays a draft unless a database path covers them or a person declares the read complete. A REST read inferred complete (complete_basis: observed) means one unpaged response held the saved record and every record read before the save; that is an inference from the recording, not a guarantee from the server. The fault classes are the effect_e2e taxonomy, not a measured field incident rate.
+- Proven on synthetic fixtures only (MockMed, the effect_e2e SQLite record service, an OpenEMR-shaped FHIR fake). A check built from API reads alone cannot see writes to tables it does not read, so it stays a draft unless a database path covers them or a person declares the read complete. A REST read inferred complete (complete_basis: observed) means one unpaged response held the saved record and, when a read before the save was recorded, every record it returned; that is an inference from the recording, not a guarantee from the server. The fault classes are the effect_e2e taxonomy, not a measured field incident rate.
 - Saves that update an existing record are not handled yet: the check expects one new record. The read's credential is the operator's job; the recording's reads used the browser's sign-in.
 
 ### `reviewed-judgment-cases-supported` — supported — bound to required CI pass evidence
