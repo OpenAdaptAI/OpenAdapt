@@ -70,21 +70,21 @@ Citrix client window. Linux and network RDP record the whole local desktop, so
 they take no target.
 
 ```bash
-openadapt flow record --backend <web|windows|macos|linux|rdp|citrix> <target> --out rec
+openadapt record --backend <web|windows|macos|linux|rdp|citrix> <target> --out rec
 ```
 
 ```bash
 # A web app
-openadapt flow record --backend web --url https://your-app.example --out rec
-openadapt flow compile rec --out bundle --name my-workflow
-openadapt flow replay bundle --url https://your-app.example --run-dir run
+openadapt record --backend web --url https://your-app.example --out rec
+openadapt compile rec --out bundle --name my-workflow
+openadapt run --replay bundle --url https://your-app.example --run-dir run
 
 # A desktop app (macOS here; Windows and Citrix take --window too).
 # Desktop recording and macOS replay are separate extras.
 python -m pip install --upgrade 'openadapt[capture,macos]'
-openadapt flow record --backend macos --window "Your App" --out rec
-openadapt flow compile rec --out bundle --name my-workflow
-openadapt flow replay bundle --macos-app "Your App" --run-dir run
+openadapt record --backend macos --window "Your App" --out rec
+openadapt compile rec --out bundle --name my-workflow
+openadapt run --replay bundle --macos-app "Your App" --run-dir run
 ```
 
 `--backend` can be left out: with `--url` it records the browser, and without

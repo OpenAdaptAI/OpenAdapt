@@ -75,7 +75,7 @@ class KnownIdListError(ValueError):
 
 def id_core(token: str) -> str:
     """Identifier comparison form: lowercase, no whitespace or separators."""
-    return identity_mod._ID_SEP_RE.sub("", identity_mod.squash(token))
+    return identity_mod._ID_SEP_RE.sub("", identity_mod.comparison_squash(token))
 
 
 def lookalike_class(token: str) -> str:
@@ -155,7 +155,7 @@ class KnownIdList:
 def _identifier_tokens(text: str) -> list[str]:
     return [
         tok
-        for tok in (identity_mod.squash(t) for t in text.split())
+        for tok in (identity_mod.comparison_squash(t) for t in text.split())
         if tok and identity_mod._is_identifier_shaped(tok)
     ]
 

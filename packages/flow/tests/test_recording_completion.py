@@ -108,7 +108,7 @@ def test_guard_completion_cannot_be_caught_then_bypassed_by_context_exit(
     assert callback_calls == ["check"]
     if verdict == "VERIFIED":
         assert recording.result.status == "draft"
-        assert calls == ["compile", "draft", "controller-close", "backend-close"]
+        assert calls == ["compile", "controller-close", "backend-close", "draft"]
     else:
         assert recording.result.status == "capture_failed"
         assert calls == ["halt", "refused", "controller-close", "backend-close"]
