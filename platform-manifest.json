@@ -1,7 +1,7 @@
 {
   "manifest_kind": "openadapt-platform-release-manifest",
   "schema_version": "2.0.0",
-  "generated_at": "2026-11-09T19:12:45+00:00",
+  "generated_at": "2026-11-09T20:17:35+00:00",
   "generation": {
     "files": [
       {
@@ -17,7 +17,7 @@
   "release_selection": {
     "mode": "explicit-published",
     "component_versions": {
-      "desktop": "0.25.1",
+      "desktop": "0.28.1",
       "flow": "2.7.0"
     }
   },
@@ -474,7 +474,7 @@
     },
     "desktop": {
       "package": "openadapt-desktop",
-      "version": "0.25.1",
+      "version": "0.28.1",
       "source": "pypi",
       "requires_python": ">=3.11",
       "requires": {
@@ -519,24 +519,24 @@
       ],
       "provenance": {
         "repository": "OpenAdaptAI/OpenAdapt",
-        "release_ref": "openadapt-desktop-v0.25.1",
-        "commit": "b21a86d4a263f2bd8c4e8037e81f09457e998bdb",
-        "tree": "77acb2dfaab10e413f0d348ce98fbff9e24da752",
-        "url": "https://github.com/OpenAdaptAI/OpenAdapt/tree/openadapt-desktop-v0.25.1/packages/desktop",
+        "release_ref": "openadapt-desktop-v0.28.1",
+        "commit": "40799958f14967b0d881275f9d2980ffa1b2358a",
+        "tree": "a9a60deae39aef33211838d0a745b85a78accd3c",
+        "url": "https://github.com/OpenAdaptAI/OpenAdapt/tree/openadapt-desktop-v0.28.1/packages/desktop",
         "source_root": "packages/desktop"
       },
       "artifacts": [
         {
           "type": "bdist_wheel",
-          "filename": "openadapt_desktop-0.25.1-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/9c/fd/02310af2344b394cbc72901d73607b9816950e2246ce59d09e869bae916e/openadapt_desktop-0.25.1-py3-none-any.whl",
-          "sha256": "5f55ecffe173d0f7740cbbf011c19b763a495d9e1b37054f4f6ccf16a07a7be2"
+          "filename": "openadapt_desktop-0.28.1-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/b8/5b/31a2e095d43568f9387e07636c5334a7377ff38e9ddbd79d754b82e4bb8a/openadapt_desktop-0.28.1-py3-none-any.whl",
+          "sha256": "6eba560973fcaefe0fbd7b350041db26a006be464dc226cba130c73ccd5640b5"
         },
         {
           "type": "sdist",
-          "filename": "openadapt_desktop-0.25.1.tar.gz",
-          "url": "https://files.pythonhosted.org/packages/1e/b3/f93c118e93d03ff41f3c4db961cae256d7bbd157542e870d3afb36b8dd0f/openadapt_desktop-0.25.1.tar.gz",
-          "sha256": "5a9c22996b76a0efbcfa87d3710d88611ab2feb772de284d7233b9d38b04241b"
+          "filename": "openadapt_desktop-0.28.1.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/ca/08/0ed6062f7a364475d6255ba83e6f325f4d47f55e50650180df6955a79f8d/openadapt_desktop-0.28.1.tar.gz",
+          "sha256": "cc31d31b8788b82333b8e3df771eae4af8aa1691b40e2733aaab00edea26f18a"
         }
       ]
     },
@@ -628,11 +628,11 @@
     },
     "desktop_sidecar": {
       "kind": "frozen-desktop-sidecar",
-      "version": "0.25.1",
+      "version": "0.28.1",
       "source_component": "desktop",
-      "source_ref": "openadapt-desktop-v0.25.1",
-      "lock_url": "https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/openadapt-desktop-v0.25.1/packages/desktop/uv.lock",
-      "lock_sha256": "7c06835915ca3314cf7f40630c4ac45a7e8329e3565c3dc96bf251fa845903bb",
+      "source_ref": "openadapt-desktop-v0.28.1",
+      "lock_url": "https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/openadapt-desktop-v0.28.1/packages/desktop/uv.lock",
+      "lock_sha256": "0148c1a5778533cd7992941bb8cd2c679a9d95f0bb0fd777a60290639e77d2aa",
       "binary": "openadapt-engine",
       "requirements": {
         "openadapt-flow": "==2.4.1",
@@ -667,7 +667,7 @@
       "scope": "desktop-sidecar-lock",
       "source_role": "desktop",
       "source_package": "openadapt-desktop",
-      "source_version": "0.25.1",
+      "source_version": "0.28.1",
       "target_role": "capture",
       "target_package": "openadapt-capture",
       "requires": ">=1.3.0",
@@ -683,7 +683,7 @@
       "scope": "desktop-sidecar-lock",
       "source_role": "desktop",
       "source_package": "openadapt-desktop",
-      "source_version": "0.25.1",
+      "source_version": "0.28.1",
       "target_role": "flow",
       "target_package": "openadapt-flow",
       "requires": "==2.4.1",
@@ -699,7 +699,7 @@
       "scope": "desktop-sidecar-lock",
       "source_role": "desktop",
       "source_package": "openadapt-desktop",
-      "source_version": "0.25.1",
+      "source_version": "0.28.1",
       "target_role": "privacy",
       "target_package": "openadapt-privacy",
       "requires": ">=1.0.0",
@@ -715,7 +715,7 @@
       "scope": "desktop-sidecar-lock",
       "source_role": "desktop",
       "source_package": "openadapt-desktop",
-      "source_version": "0.25.1",
+      "source_version": "0.28.1",
       "target_role": "types",
       "target_package": "openadapt-types",
       "requires": "<0.25.0,>=0.24.0",
