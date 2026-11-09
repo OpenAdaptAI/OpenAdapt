@@ -59,6 +59,7 @@ from openadapt_flow.runtime.durable.continuation import (  # noqa: E402
     activate_continuation_token,
 )
 from openadapt_flow.runtime.effects import Effect, EffectKind  # noqa: E402
+from tests.browser_readiness import ReadyBrowserMixin  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # fixtures: a real bundle, a halted run, a paused run, a skill library
@@ -1875,7 +1876,10 @@ def test_attended_web_playwright_lifecycle_stays_on_owner_thread(monkeypatch):
             assert url == "https://example.test"
             mark("goto")
 
-    class Browser:
+    class Browser(ReadyBrowserMixin):
+        def _readiness_mark(self, name):
+            mark(name)
+
         def new_page(self, *, viewport, **_options):
             assert viewport == {"width": 1280, "height": 800}
             mark("new-page")
@@ -1973,6 +1977,15 @@ def test_attended_web_playwright_lifecycle_stays_on_owner_thread(monkeypatch):
         "playwright-enter",
         "ensure-browser",
         "browser-launch",
+        "readiness-context",
+        "readiness-page",
+        "readiness-start",
+        "readiness-progress",
+        "readiness-cancel",
+        "readiness-dispose",
+        "readiness-dispose",
+        "readiness-dispose",
+        "readiness-close",
         "new-page",
         "goto",
         "backend-build",

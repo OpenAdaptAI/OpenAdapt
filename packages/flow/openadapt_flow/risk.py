@@ -842,6 +842,9 @@ def infer_step_risk(
             (step.risk_explanation or LOCAL_EDIT_PREFIX)[:512],
             (action_evidence, "pattern:local_edit"),
         )
+    # Screen postconditions and an opener explanation cannot prove that the
+    # click did not also write. Keep the conservative classification; policy
+    # handles independently operator-qualified overrides separately.
     if write_keyword is not None and step.action in {
         ActionKind.CLICK,
         ActionKind.DOUBLE_CLICK,

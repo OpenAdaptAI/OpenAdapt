@@ -62,6 +62,7 @@ from openadapt_flow.ir import (
     StateKind,
     Step,
     StructuralLocator,
+    TokenTemplate,
     Workflow,
     business_decision_transitions,
 )
@@ -285,6 +286,15 @@ _SEALED_CANONICAL_OMISSIONS_BY_VERSION: dict[
             reason=(
                 "an anchor with no create-form identity is what every earlier "
                 "bundle held; a recorded form identity is sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
+            owner=TokenTemplate,
+            field_name="bearing",
+            omitted_values=(None,),
+            reason=(
+                "an absent identity-bearing flag predates the v2 field; "
+                "explicit token classifications remain sealed content"
             ),
         ),
         _SealedCanonicalOmission(
