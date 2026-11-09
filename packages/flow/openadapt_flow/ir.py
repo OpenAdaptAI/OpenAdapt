@@ -4423,6 +4423,12 @@ class InterstitialActionResult(BaseModel):
     effect_watchers: list[str] = Field(default_factory=list)
     #: Each write a watcher saw. Non-empty halts the run.
     write_attempts: list[str] = Field(default_factory=list)
+    #: Every request the network watcher logged during the dismissal
+    #: (``METHOD /path``), reads included, so the report shows what was sent.
+    requests_seen: list[str] = Field(default_factory=list)
+    #: Inputs the click guard blocked because the control or its label
+    #: changed during the click. Non-empty halts the run.
+    label_violations: list[str] = Field(default_factory=list)
     #: The dismiss control's label, for the receipt.
     control_label: Optional[str] = None
 
@@ -4432,7 +4438,13 @@ class InterstitialActionResult(BaseModel):
         existing interstitials serialize exactly as before."""
 
         data: dict[str, Any] = handler(self)
-        for key in ("effect_watchers", "write_attempts", "control_label"):
+        for key in (
+            "effect_watchers",
+            "write_attempts",
+            "requests_seen",
+            "label_violations",
+            "control_label",
+        ):
             if not data.get(key):
                 data.pop(key, None)
         return data

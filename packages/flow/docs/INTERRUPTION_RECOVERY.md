@@ -46,6 +46,27 @@ A run clears an interruption only when all four of these hold:
    click. So does a backend that can't read the live control
    (`structural_control_is`), which today means every backend except the
    browser.
+
+   The label must also hold for the whole click. In the browser, a click
+   guard is installed at the start of every document, ahead of any page
+   script, so its capture-phase listeners on `window` run before any page
+   listener. It is dormant until a dismissal arms it on the bound control.
+   While armed, it watches the control, the nodes its `aria-labelledby` and
+   `aria-describedby` name, its labels, and the page's stylesheets. If any
+   of them changed before a press or click arrives, or the input is not on
+   the control, the guard cancels that input before the page sees it. The
+   run then halts with the dismissal reported as delivered and its outcome
+   uncertain (`LabelChangedDuringClick`), so it is reconciled, never
+   retried. A label that turns "Close" into "Sign out" as the pointer
+   arrives is caught this way. A document that loaded before the guard was
+   installed, a guard that can't arm, or one whose listeners are gone after
+   the click (for example, erased by `document.open`) halts too. Learning a
+   class from a halt uses the same guard.
+
+   The report agrees with the fence. Every request made while the fence is
+   up is listed in the dismissal's `requests_seen`, reads included, and a
+   write in that log that no write attempt names is added as one. So a
+   report never says "no write attempts" while the fence saw a write.
 3. **No watcher sees a write.** The dismissal runs under every write watcher
    the run has (`openadapt_flow/runtime/effect_watch.py`):
    - in a browser, the write fence. It is the same hold that guards a

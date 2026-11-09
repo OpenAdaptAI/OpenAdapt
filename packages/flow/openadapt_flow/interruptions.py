@@ -469,6 +469,19 @@ def save_interruption_class(path: Path | str, interstitial: "Interstitial") -> N
 # -- learning a class from a halt -----------------------------------------------
 
 
+class LabelChangedDuringClick(RuntimeError):
+    """The dismiss control, or what labels it, changed while it was being
+    clicked, and the click guard blocked the input. Delivery was attempted;
+    the outcome must be reconciled, never retried."""
+
+    def __init__(self, violations: Sequence[str]) -> None:
+        self.violations = [str(v) for v in violations]
+        super().__init__(
+            "the control's label changed during the click; the guard blocked "
+            "the input (" + "; ".join(self.violations) + ")"
+        )
+
+
 class LearnRefused(RuntimeError):
     """The interruption can't be learned as a class; the reason says why."""
 
@@ -531,10 +544,33 @@ def learn_interruption(
     control_error = live_control_error(interstitial, backend, handle)
     if control_error is not None:
         raise LearnRefused(control_error)
+    opener = getattr(backend, "structural_label_guard", None)
+    if not callable(opener):
+        raise LearnRefused(
+            "this backend can't keep the control's label for the whole click, "
+            "so the class can't be learned here"
+        )
+    role = (locator.role or "").strip()
+    label = (locator.name or "").strip()
     with watch_effects(backend, effect_verifier) as report:
         if report.refusal is not None:
             raise LearnRefused(f"the dismissal can't be watched: {report.refusal}")
-        act(locator, handle)
+        guarded: Any = None
+        try:
+            with opener(locator, handle, role=role, name=label) as guarded:
+                if guarded.refusal is not None:
+                    raise LearnRefused(f"the click can't be guarded: {guarded.refusal}")
+                act(locator, handle)
+        except LearnRefused:
+            raise
+        except Exception as exc:
+            if guarded is not None and guarded.violations:
+                raise LearnRefused(
+                    str(LabelChangedDuringClick(guarded.violations))
+                ) from exc
+            raise
+        if guarded.violations:
+            raise LearnRefused(str(LabelChangedDuringClick(guarded.violations)))
         settle()
     if not report.held:
         raise LearnRefused(

@@ -2167,6 +2167,149 @@ def _normalize_chord(key: str) -> str:
     return "+".join(normalized)
 
 
+#: The click guard (:meth:`PlaywrightBackend.structural_label_guard`),
+#: installed by an init script at the start of every document, so its
+#: capture-phase listeners on ``window`` run ahead of every page listener.
+#: Dormant until armed for one click on one element; armed, it blocks the
+#: press and the click whenever the element's label inputs changed since it
+#: was armed (a MutationObserver, flushed with ``takeRecords`` in every
+#: listener, and a fresh snapshot compared with the armed one), or the input
+#: is not on the element. A page that erases window listeners
+#: (``document.open``) fails the guard's heartbeat. Formatted with the key.
+_CLICK_GUARD_JS = r"""
+((key) => {
+  if (Object.prototype.hasOwnProperty.call(window, key)) return;
+  const R = Reflect.apply;
+  const getAttr = Element.prototype.getAttribute;
+  const textOf = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent').get;
+  const connected = Object.getOwnPropertyDescriptor(Node.prototype, 'isConnected').get;
+  const rootOf = Node.prototype.getRootNode;
+  const qsa = Document.prototype.querySelectorAll;
+  const docById = Document.prototype.getElementById;
+  const fragById = DocumentFragment.prototype.getElementById;
+  const path = Event.prototype.composedPath;
+  const prevent = Event.prototype.preventDefault;
+  const stopNow = Event.prototype.stopImmediatePropagation;
+  const MO = window.MutationObserver;
+  const observe = MO.prototype.observe;
+  const take = MO.prototype.takeRecords;
+  const disconnect = MO.prototype.disconnect;
+  const add = EventTarget.prototype.addEventListener;
+  const dispatch = EventTarget.prototype.dispatchEvent;
+  const Ev = window.Event;
+  const stringify = JSON.stringify;
+  const ATTRS = ['role', 'aria-label', 'aria-labelledby', 'aria-describedby',
+    'title', 'alt', 'value', 'hidden', 'aria-hidden', 'class', 'style', 'id',
+    'type', 'disabled'];
+  const EVENTS = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click',
+    'auxclick', 'dblclick', 'contextmenu', 'keydown', 'keypress', 'keyup',
+    'touchstart', 'touchend'];
+  const probe = key + '_probe';
+  let beat = 0;
+  let st = null;
+  const attr = (el, a) => R(getAttr, el, [a]);
+  const text = n => R(textOf, n, []);
+  const refs = el => {
+    const out = [];
+    const root = R(rootOf, el, []);
+    for (const a of ['aria-labelledby', 'aria-describedby']) {
+      for (const id of (attr(el, a) || '').split(/\s+/).filter(Boolean)) {
+        const n = root instanceof Document ? R(docById, root, [id])
+          : (root instanceof DocumentFragment ? R(fragById, root, [id]) : null);
+        out.push([id, n]);
+      }
+    }
+    return out;
+  };
+  const snapshot = el => {
+    const parts = [R(connected, el, []), el.tagName];
+    for (const a of ATTRS) parts.push(attr(el, a));
+    parts.push(text(el));
+    if ('value' in el) parts.push(String(el.value));
+    for (const [id, n] of refs(el)) {
+      parts.push(id, n ? text(n) : null);
+      if (n) for (const a of ATTRS) parts.push(attr(n, a));
+    }
+    if (el.labels) for (const l of el.labels) parts.push(text(l), attr(l, 'class'), attr(l, 'style'));
+    return stringify(parts);
+  };
+  const styled = records => records.some(r => {
+    const t = r.target;
+    if (r.type === 'characterData') return !!(t.parentNode && t.parentNode.nodeName === 'STYLE');
+    if (t && (t.nodeName === 'STYLE' || t.nodeName === 'LINK')) return true;
+    for (const n of [...r.addedNodes, ...r.removedNodes]) {
+      if (n.nodeName === 'STYLE' || n.nodeName === 'LINK') return true;
+    }
+    return false;
+  });
+  const flush = () => {
+    if (!st) return;
+    if (R(take, st.mo, []).length) st.tainted = 'the control or its label changed';
+    if (styled(R(take, st.docMo, []))) st.tainted = 'a stylesheet changed';
+    if (!st.tainted && snapshot(st.el) !== st.snap) st.tainted = 'the control or its label changed';
+  };
+  const alive = () => {
+    const before = beat;
+    try { R(dispatch, window, [new Ev(probe)]); } catch (e) { return false; }
+    return beat === before + 1;
+  };
+  R(add, window, [probe, () => { beat += 1; }, true]);
+  const guard = e => {
+    if (!st) return;
+    flush();
+    let why = st.tainted;
+    if (!why) {
+      let inside = false;
+      try { inside = R(path, e, []).includes(st.el); } catch (err) { inside = false; }
+      if (!inside) why = 'the input is not on the control';
+    }
+    st.events.push(e.type + (e.isTrusted ? '' : ' (synthetic)'));
+    if (why) {
+      R(prevent, e, []);
+      R(stopNow, e, []);
+      st.violations.push(e.type + ': ' + why);
+    }
+  };
+  for (const t of EVENTS) R(add, window, [t, guard, true]);
+  const arm = (tokenAttr, secret) => {
+    if (st) { st.violations.push('armed twice'); return {ok: false, reason: 'the guard is already armed'}; }
+    if (!alive()) return {ok: false, reason: "the guard's listeners are not in this document"};
+    const found = R(qsa, document, ['[' + tokenAttr + ']']);
+    if (found.length !== 1) return {ok: false, reason: 'the control is not in this document'};
+    const el = found[0];
+    const opts = {attributes: true, characterData: true, childList: true, subtree: true};
+    const mo = new MO(() => { if (st) st.tainted = 'the control or its label changed'; });
+    const docMo = new MO(rs => { if (st && styled(rs)) st.tainted = 'a stylesheet changed'; });
+    try {
+      R(observe, mo, [el, opts]);
+      for (const [, n] of refs(el)) if (n) R(observe, mo, [n, opts]);
+      if (el.labels) for (const l of el.labels) R(observe, mo, [l, opts]);
+      R(observe, docMo, [document, {characterData: true, childList: true, subtree: true, attributes: true, attributeFilter: ['href', 'media', 'disabled']}]);
+    } catch (err) {
+      R(disconnect, mo, []); R(disconnect, docMo, []);
+      return {ok: false, reason: 'the label could not be watched'};
+    }
+    st = {el, secret, snap: snapshot(el), tainted: null, violations: [], events: [], mo, docMo};
+    return {ok: true};
+  };
+  const finish = secret => {
+    if (!st || st.secret !== secret) return {ok: false, violations: ['the guard was not armed by this click'], events: []};
+    // A change after the last input is the click's own effect (the dialog
+    // closing); only an input judged after a change is a violation.
+    const out = {ok: true, violations: st.violations.slice(), events: st.events.slice()};
+    if (!alive()) out.violations.push("the guard's listeners were removed during the click");
+    R(disconnect, st.mo, []); R(disconnect, st.docMo, []);
+    st = null;
+    return out;
+  };
+  Object.defineProperty(window, key, {
+    value: Object.freeze({arm, finish}), enumerable: false,
+    configurable: false, writable: false,
+  });
+})(%s);
+"""
+
+
 class PlaywrightBackend:
     """`Backend` implementation over a Playwright sync-API `Page`.
 
@@ -3516,6 +3659,76 @@ class PlaywrightBackend:
             return False
 
     @contextlib.contextmanager
+    def structural_label_guard(
+        self,
+        locator: StructuralLocator,
+        handle: StructuralHandle,
+        *,
+        role: str,
+        name: str,
+    ) -> Iterator["LabelGuardReport"]:
+        """Keep the control's checked label for the whole click.
+
+        Arms the document's click guard (:data:`_CLICK_GUARD_JS`) on the
+        element ``handle`` is bound to, after checking once more that it is
+        the one control with ``role`` and ``name``
+        (:meth:`structural_control_is`). While the ``with`` body clicks, any
+        change to the element, the nodes its ``aria-labelledby`` and
+        ``aria-describedby`` name, its labels, or a stylesheet, and any input
+        that is not on the element, blocks the press and the click before a
+        page listener sees them, and is recorded. A guard that can't arm
+        sets ``refusal`` and the body must not act. After the body,
+        ``violations`` lists what was blocked; a guard that can't be read
+        afterwards counts as a violation.
+        """
+
+        report = LabelGuardReport()
+        guard = self._structural_tokens.get(handle.target_fingerprint or "")
+        key = _click_guard_key(self.page.context)
+        if guard is None or key is None:
+            report.refusal = "the click guard can't be armed for this control"
+            yield report
+            return
+        if not self.structural_control_is(locator, handle, role=role, name=name):
+            report.refusal = f"the control is no longer the {role} {name!r}"
+            yield report
+            return
+        secret = uuid.uuid4().hex
+        try:
+            armed = guard.scope.evaluate(
+                "([k, a, s]) => { const g = window[k];"
+                " return g ? g.arm(a, s) : {ok: false,"
+                " reason: 'this document has no click guard (it loaded before"
+                " the guard was installed)'}; }",
+                [key, self._token_attribute(guard.token), secret],
+            )
+        except Exception as exc:  # noqa: BLE001 - no guard, no click
+            armed = {"ok": False, "reason": f"arming failed ({type(exc).__name__})"}
+        if not isinstance(armed, dict) or armed.get("ok") is not True:
+            reason = armed.get("reason") if isinstance(armed, dict) else None
+            report.refusal = f"the click guard did not arm: {reason or 'unknown'}"
+            yield report
+            return
+        try:
+            yield report
+        finally:
+            try:
+                seen = guard.scope.evaluate(
+                    "([k, s]) => { const g = window[k];"
+                    " return g ? g.finish(s) : null; }",
+                    [key, secret],
+                )
+            except Exception:  # noqa: BLE001 - the document went away
+                seen = None
+            if not isinstance(seen, dict) or seen.get("ok") is not True:
+                report.violations.append(
+                    "the click guard could not be read after the click"
+                )
+            else:
+                report.violations.extend(str(v) for v in seen.get("violations") or ())
+                report.events = [str(e) for e in seen.get("events") or ()]
+
+    @contextlib.contextmanager
     def write_fence(self) -> Iterator["WriteFenceReport"]:
         """Run the ``with`` body while nothing on the page can write.
 
@@ -3533,9 +3746,31 @@ class PlaywrightBackend:
             report.refusal = "a save is already held on this page"
             yield report
             return
-        refusal = self._arm_wire_check(None, check=WireCheck())
+        check = WireCheck()
+        context = self.page.context
+
+        def on_request(request: Any) -> None:
+            try:
+                parts = urlsplit(request.url)
+                report.requests.append(
+                    f"{str(request.method).upper()} {parts.path or '/'}"
+                )
+            except Exception:  # noqa: BLE001 - a request this can't read
+                report.requests.append("? (a request that could not be read)")
+
+        try:
+            context.on("request", on_request)
+        except Exception:  # noqa: BLE001 - no request log, no proof
+            report.refusal = "the fence could not log the page's requests"
+            yield report
+            return
+        refusal = self._arm_wire_check(None, check=check)
         if refusal is not None:
             report.refusal = refusal
+            try:
+                context.remove_listener("request", on_request)
+            except Exception:  # noqa: BLE001
+                pass
             yield report
             return
         try:
@@ -3544,6 +3779,12 @@ class PlaywrightBackend:
             self.wait_form_submit_guard(WRITE_FENCE_TAIL_MS)
         finally:
             report.attempts.extend(self._disarm_wire_check())
+            # A write the check let through is still a write.
+            report.attempts.extend(f"{sent} left the page" for sent in check.sent)
+            try:
+                context.remove_listener("request", on_request)
+            except Exception:  # noqa: BLE001 - the context is gone
+                pass
 
     def wait_form_submit_guard(self, ms: int) -> None:
         """Let the page and the wire check run for ``ms`` milliseconds."""
@@ -6179,12 +6420,42 @@ def _ws_guard_secrets(target: Any) -> tuple[str, str, str]:
         context._oaflow_ws_guard = secrets
     except Exception:  # noqa: BLE001 - a stand-in context; holding refuses
         pass
+    _click_guard_key(context)
     return secrets
+
+
+def _click_guard_key(context: Any) -> Optional[str]:
+    """The context's click-guard key (:data:`_CLICK_GUARD_JS`), installing
+    the guard's init script on first use. None when it can't be installed;
+    a guarded click then refuses. Documents opened before it have no guard,
+    so a guarded click in one refuses too."""
+
+    known = getattr(context, "_oaflow_click_guard", None)
+    if isinstance(known, str):
+        return known
+    key = f"__oaflow_click_{uuid.uuid4().hex}"
+    try:
+        context.add_init_script(_CLICK_GUARD_JS % json.dumps(key))
+        context._oaflow_click_guard = key
+    except Exception:  # noqa: BLE001 - a stand-in context; guarding refuses
+        return None
+    return key
 
 
 #: How long a write fence stays up after its action, so a request the action
 #: queued just before the fence comes down is still caught.
 WRITE_FENCE_TAIL_MS = 500
+
+
+@dataclass
+class LabelGuardReport:
+    """What the click guard saw. ``refusal`` set means it never armed."""
+
+    refusal: Optional[str] = None
+    #: Each input the guard blocked, and why.
+    violations: list[str] = field(default_factory=list)
+    #: The input events that reached the guard.
+    events: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -6194,6 +6465,9 @@ class WriteFenceReport:
     refusal: Optional[str] = None
     #: Each write the fence stopped, and how.
     attempts: list[str] = field(default_factory=list)
+    #: Every request the page made while the fence was up (``METHOD /path``),
+    #: reads included, so a report can be reconciled with what was sent.
+    requests: list[str] = field(default_factory=list)
 
     @property
     def held(self) -> bool:

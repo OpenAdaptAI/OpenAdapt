@@ -99,6 +99,7 @@ from openadapt_flow.identity_signals import (
     parameterize_identity_text,
 )
 from openadapt_flow.interruptions import (
+    LabelChangedDuringClick,
     class_texts,
     dismiss_label,
     live_control_error,
@@ -145,6 +146,8 @@ from openadapt_flow.ir import (
     StateKind,
     Step,
     StepResult,
+    StructuralHandle,
+    StructuralLocator,
     UnarmedStep,
     VisualResolutionEvidence,
     Workflow,
@@ -14618,6 +14621,50 @@ class Replayer:
         )
         return validated, canonical
 
+    def _deliver_guarded_dismissal(
+        self,
+        result: StepResult,
+        event: InterstitialActionResult,
+        locator: StructuralLocator,
+        handle: Optional[StructuralHandle],
+        native_act: Callable[..., Any],
+    ) -> None:
+        """Click an interruption class's dismiss control under the backend's
+        click guard, which keeps the checked label for the whole click
+        (``structural_label_guard``). No guard, or one that can't arm, is a
+        refusal before input; anything the guard blocked raises
+        :class:`LabelChangedDuringClick` after it."""
+
+        opener = getattr(self.backend, "structural_label_guard", None)
+        if (
+            not callable(opener)
+            or handle is None
+            or not locator.role
+            or not locator.name
+        ):
+            raise StructuralResolutionRefused(
+                "this backend can't keep the control's label for the whole "
+                "click, so the dismissal is not delivered"
+            )
+        label_report: Any = None
+        try:
+            with opener(
+                locator, handle, role=locator.role, name=locator.name
+            ) as label_report:
+                if label_report.refusal is not None:
+                    raise StructuralResolutionRefused(label_report.refusal)
+                self._deliver_backend_call(result, lambda: native_act(locator, handle))
+        except StructuralResolutionRefused:
+            if label_report is not None and label_report.violations:
+                raise LabelChangedDuringClick(label_report.violations) from None
+            raise
+        except Exception as exc:
+            if label_report is not None and label_report.violations:
+                raise LabelChangedDuringClick(label_report.violations) from exc
+            raise
+        if label_report.violations:
+            raise LabelChangedDuringClick(label_report.violations)
+
     def _interruption_control_error(
         self, it: Interstitial, resolution: Optional[Resolution]
     ) -> Optional[str]:
@@ -15326,6 +15373,7 @@ class Replayer:
                     if watched:
                         event.effect_watchers = list(watched[0].watchers)
                         event.write_attempts = list(watched[0].attempts)
+                        event.requests_seen = list(watched[0].requests)
 
                 watch_stack.callback(_record_watch)
                 watch = watch_stack.enter_context(
@@ -15371,14 +15419,23 @@ class Replayer:
                                 )
                                 if control_error is not None:
                                     raise StructuralResolutionRefused(control_error)
-                            self._require_qualification_environment_current()
-                            self._deliver_backend_call(
-                                result,
-                                lambda: native_act(
+                                self._require_qualification_environment_current()
+                                self._deliver_guarded_dismissal(
+                                    result,
+                                    event,
                                     structural_anchor,
                                     resolution.structural_handle,
-                                ),
-                            )
+                                    native_act,
+                                )
+                            else:
+                                self._require_qualification_environment_current()
+                                self._deliver_backend_call(
+                                    result,
+                                    lambda: native_act(
+                                        structural_anchor,
+                                        resolution.structural_handle,
+                                    ),
+                                )
                         else:
                             self._require_qualification_environment_current()
                             self._deliver_backend_call(
@@ -15389,6 +15446,13 @@ class Replayer:
                             )
                     event.delivered = True
                 except Exception as exc:
+                    if isinstance(exc, LabelChangedDuringClick):
+                        # The press reached the page's guard, which blocked
+                        # it: delivery was attempted, and nothing beneath
+                        # the label change is trusted.
+                        event.delivered = True
+                        event.label_violations = list(exc.violations)
+                        result.safety_halt = True
                     if not isinstance(
                         exc, (FreshActuationRequired, StructuralResolutionRefused)
                     ):
@@ -15414,10 +15478,13 @@ class Replayer:
                         "dismissal delivery failed "
                         f"({type(exc).__name__}); outcome is unknown"
                     )
+                    if it.effect_watch and str(exc):
+                        event.error += f": {exc}"
                     return before_png, (
                         f"Interstitial '{it.name}' dismissal delivery failed "
-                        f"({type(exc).__name__}) - refusing to act beneath it; run "
-                        "aborted."
+                        f"({type(exc).__name__}"
+                        + (f": {exc}" if it.effect_watch and str(exc) else "")
+                        + ") - refusing to act beneath it; run aborted."
                     )
 
                 before_png, settle_error = self._resettle_after_interstitial(before_png)

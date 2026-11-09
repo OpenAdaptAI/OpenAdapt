@@ -39,6 +39,10 @@ class EffectWatchReport:
     refusal: Optional[str] = None
     #: Each write a watcher saw.
     attempts: list[str] = field(default_factory=list)
+    #: Every request the network watcher logged (``METHOD /path``), reads
+    #: included. A write among them that no attempt accounts for is added to
+    #: ``attempts`` (:func:`reconcile_requests`).
+    requests: list[str] = field(default_factory=list)
     #: The system-of-record digest before and after, when it was read.
     record_before: Optional[str] = None
     record_after: Optional[str] = None
@@ -119,6 +123,8 @@ def watch_effects(
             pass
     if fence is not None and "network" in report.watchers:
         report.attempts.extend(f"network: {a}" for a in fence.attempts)
+        report.requests.extend(str(r) for r in getattr(fence, "requests", ()) or ())
+        report.attempts.extend(reconcile_requests(report.requests, report.attempts))
     if "record" in report.watchers:
         report.record_after = record_digest(effect_verifier)
         if report.record_after is None:
@@ -128,3 +134,24 @@ def watch_effects(
             )
         elif report.record_after != report.record_before:
             report.attempts.append("record: the system of record changed")
+
+
+#: Methods that only read. Any other method in the request log is a write.
+READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def reconcile_requests(requests: list[str], attempts: list[str]) -> list[str]:
+    """The writes in ``requests`` that no entry in ``attempts`` names.
+
+    The report must never say "no write attempts" while the request log holds
+    a write: each unnamed one (or an unreadable request) becomes an attempt.
+    """
+
+    missing: list[str] = []
+    for request in dict.fromkeys(requests):
+        method = request.split(" ", 1)[0].upper()
+        if method in READ_METHODS:
+            continue
+        if not any(request in attempt for attempt in attempts):
+            missing.append(f"network: {request} was sent while the fence was up")
+    return missing

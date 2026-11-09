@@ -63,6 +63,19 @@ class _Fence:
         self.attempts = list(attempts)
 
 
+class _Guard:
+    def __init__(self, refusal=None):
+        self.refusal = refusal
+        self.violations: list[str] = []
+        self.events: list[str] = []
+
+
+class _LoggingFence(_Fence):
+    def __init__(self, requests):
+        super().__init__()
+        self.requests = list(requests)
+
+
 class WatchedBackend(FakeBackend):
     """A structural backend with a scripted write fence."""
 
@@ -76,8 +89,17 @@ class WatchedBackend(FakeBackend):
         title="",
         live=None,
         can_read_live=True,
+        guard_refusal=None,
+        guard_violations=(),
+        can_guard=True,
     ):
         super().__init__()
+        self._guard_refusal = guard_refusal
+        self._guard_violations = list(guard_violations)
+        self.guarded: list[bool] = []
+        self._guard_up = False
+        if not can_guard:
+            self.structural_label_guard = None  # type: ignore[assignment]
         # The live control's (role, name); None means the declared one.
         self._live = live
         self.live_checks: list[tuple[str, str]] = []
@@ -108,7 +130,19 @@ class WatchedBackend(FakeBackend):
             point=(15, 15), region=(10, 10, 10, 10), target_fingerprint="a" * 64
         )
 
+    @contextmanager
+    def structural_label_guard(self, locator, handle, *, role, name):
+        report = _Guard(refusal=self._guard_refusal)
+        self._guard_up = self._guard_refusal is None
+        try:
+            yield report
+        finally:
+            self._guard_up = False
+            if self._guard_refusal is None:
+                report.violations.extend(self._guard_violations)
+
     def act_structural(self, locator, handle, *, double=False):
+        self.guarded.append(self._guard_up)
         self.fenced.append(self._up)
         self.actions.append(("act_structural", locator.name))
 
@@ -532,3 +566,123 @@ def test_learning_refuses_a_control_whose_live_label_differs_without_clicking():
             shows=lambda text: True,
         )
     assert backend.actions == []
+
+
+# -- the label holds for the whole click ------------------------------------------
+
+
+def test_a_watched_dismissal_is_clicked_under_the_click_guard(bundle, run_dir):
+    backend = WatchedBackend()
+    report = _run(
+        backend, _vision(), bundle, run_dir, [interruption_from_data(SESSION)]
+    )
+    assert report.success is True, report.results[0].error
+    assert backend.guarded == [True]
+
+
+def test_a_backend_without_a_click_guard_never_clicks(bundle, run_dir):
+    backend = WatchedBackend(can_guard=False)
+    report = _run(
+        backend, _vision(), bundle, run_dir, [interruption_from_data(SESSION)]
+    )
+    assert report.success is False
+    assert "for the whole click" in (report.results[0].error or "")
+    assert not any(a[0] == "act_structural" for a in backend.actions)
+
+
+def test_a_click_guard_that_cannot_arm_never_clicks(bundle, run_dir):
+    backend = WatchedBackend(guard_refusal="this document has no click guard")
+    report = _run(
+        backend, _vision(), bundle, run_dir, [interruption_from_data(SESSION)]
+    )
+    assert report.success is False
+    assert not any(a[0] == "act_structural" for a in backend.actions)
+    event = report.results[0].interstitial_actions[0]
+    assert event.delivered is False
+    assert "no click guard" in (event.error or "")
+
+
+def test_a_label_change_during_the_click_halts_as_uncertain_delivery(bundle, run_dir):
+    backend = WatchedBackend(
+        guard_violations=["pointerdown: the control or its label changed"]
+    )
+    report = _run(
+        backend, _vision(), bundle, run_dir, [interruption_from_data(SESSION)]
+    )
+    result = report.results[0]
+    assert report.success is False
+    assert result.safety_halt is True
+    assert result.delivery_uncertainty is not None
+    assert result.delivery_uncertainty.cause_type == "LabelChangedDuringClick"
+    event = result.interstitial_actions[0]
+    assert event.delivered is True
+    assert event.label_violations == ["pointerdown: the control or its label changed"]
+
+
+def test_learning_refuses_when_the_label_changes_during_the_click():
+    backend = WatchedBackend(
+        guard_violations=["click: the control or its label changed"]
+    )
+    with pytest.raises(LearnRefused, match="label changed during the click"):
+        learn_interruption(
+            name="n",
+            texts=["t"],
+            control={"role": "button", "name": "Close"},
+            backend=backend,
+            shows=lambda text: False if text == "t" and backend.actions else True,
+        )
+
+
+def test_learning_refuses_without_a_click_guard():
+    backend = WatchedBackend(can_guard=False)
+    with pytest.raises(LearnRefused, match="for the whole click"):
+        learn_interruption(
+            name="n",
+            texts=["t"],
+            control={"role": "button", "name": "Close"},
+            backend=backend,
+            shows=lambda text: True,
+        )
+    assert backend.actions == []
+
+
+# -- the report agrees with the fence's request log -------------------------------
+
+
+def test_a_write_in_the_request_log_is_never_reported_as_no_write():
+    from openadapt_flow.runtime.effect_watch import reconcile_requests
+
+    assert reconcile_requests(["GET /ping"], []) == []
+    assert (
+        reconcile_requests(
+            ["POST /logout"], ["network: POST /logout; it was cancelled"]
+        )
+        == []
+    )
+    assert reconcile_requests(["POST /logout"], []) == [
+        "network: POST /logout was sent while the fence was up"
+    ]
+    assert reconcile_requests(["? (a request that could not be read)"], [])
+
+
+def test_the_fence_log_reaches_the_report(bundle, run_dir):
+    class Logging(WatchedBackend):
+        @contextmanager
+        def write_fence(self):  # type: ignore[override]
+            report = _LoggingFence(["GET /ping", "PUT /x"])
+            self._up = True
+            try:
+                yield report
+            finally:
+                self._up = False
+
+    backend = Logging()
+    report = _run(
+        backend, _vision(), bundle, run_dir, [interruption_from_data(SESSION)]
+    )
+    result = report.results[0]
+    assert report.success is False
+    assert result.safety_halt is True
+    event = result.interstitial_actions[0]
+    assert event.requests_seen == ["GET /ping", "PUT /x"]
+    assert event.write_attempts == ["network: PUT /x was sent while the fence was up"]

@@ -18,6 +18,9 @@ steal-hover    a popup covers Save as the pointer arrives       halt, no write
 steal-press    a popup covers Save between press and release    halt, no write
 unknown        an unlisted dialog                               halt, no click
 mislabeled     class says "Close", its selector is "Sign out"   halt, no click
+relabel        external label turns "Close" into "Sign out"     halt, no GET
+               on pointerover
+external       a stable external label "Close"                  saved
 =============  ===============================================  ============
 """
 
@@ -87,6 +90,23 @@ if (kind === 'session') {
 } else if (kind === 'mislabeled') {
   dialog('Update available now', 'Sign out', () => fetch('/logout-everywhere'));
   document.querySelector('[role=dialog] button').id = 'danger';
+} else if (kind === 'relabel' || kind === 'external') {
+  // The button's name comes from an external aria-labelledby node.
+  const d = document.createElement('div');
+  d.setAttribute('role', 'dialog');
+  d.style = 'position:fixed;inset:0;background:#fff;padding:40px;font-size:28px';
+  d.innerHTML = '<p>Update available now</p><span id="lbl">Close</span> '
+    + '<button id="x" aria-labelledby="lbl" style="font-size:22px">x</button>';
+  document.body.appendChild(d);
+  const b = d.querySelector('#x');
+  if (kind === 'relabel') {
+    b.addEventListener('pointerover', () => {
+      document.getElementById('lbl').textContent = 'Sign out';
+    });
+    b.onclick = () => { fetch('/logout-everywhere'); d.remove(); };
+  } else {
+    b.onclick = () => d.remove();
+  }
 } else if (kind === 'banner') {
   const b = document.createElement('div');
   b.style = 'position:fixed;top:0;left:0;right:0;height:120px;background:#ffd;'
@@ -267,3 +287,81 @@ def test_a_selector_that_points_at_another_control_halts_without_a_click(
     assert report.results[0].interstitial_actions == []
     assert not any("/logout-everywhere" in seen for seen in _Server.seen)
     assert not any(seen.startswith("POST") for seen in _Server.seen)
+
+
+LABELLED = interruption_from_data(
+    {
+        "name": "update dialog",
+        "texts": ["Update available"],
+        "dismiss": {"control": {"selector": "#x", "role": "button", "name": "Close"}},
+    }
+)
+
+
+def test_a_label_that_changes_as_the_pointer_arrives_halts_with_no_request(
+    server: str, tmp_path: Any
+) -> None:
+    report = _run(server, "relabel", tmp_path, classes=[LABELLED])
+    assert report.success is False
+    result = report.results[0]
+    assert result.safety_halt is True
+    assert result.delivery_uncertainty is not None
+    assert result.delivery_uncertainty.cause_type == "LabelChangedDuringClick"
+    event = result.interstitial_actions[0]
+    assert event.delivered is True and event.label_violations
+    assert not any("/logout-everywhere" in seen for seen in _Server.seen)
+    assert not any(seen.startswith("POST") for seen in _Server.seen)
+
+
+def test_a_stable_external_label_is_cleared_and_the_save_lands(
+    server: str, tmp_path: Any
+) -> None:
+    report = _run(server, "external", tmp_path, classes=[LABELLED])
+    assert report.success is True, report.results[0].error
+    event = report.results[0].interstitial_actions[0]
+    assert event.ok and event.label_violations == []
+    assert "POST /save" in _Server.seen
+
+
+def _learn(url: str, kind: str) -> Any:
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+    from openadapt_flow.interruptions import learn_interruption
+
+    try:
+        backend, close = PlaywrightBackend.launch(url + "#" + kind, headless=True)
+    except Exception as exc:  # pragma: no cover - no browser installed
+        pytest.skip(f"no Playwright browser: {exc}")
+
+    def shows(text: str) -> bool:
+        return bool(
+            backend.page.evaluate("t => document.body.innerText.includes(t)", text)
+        )
+
+    try:
+        return learn_interruption(
+            name="update dialog",
+            texts=["Update available"],
+            control={"selector": "#x", "role": "button", "name": "Close"},
+            backend=backend,
+            shows=shows,
+            settle=lambda: backend.page.wait_for_timeout(200),
+        )
+    finally:
+        backend.page.wait_for_timeout(300)
+        close()
+
+
+def test_learning_refuses_a_label_that_changes_as_the_pointer_arrives(
+    server: str,
+) -> None:
+    from openadapt_flow.interruptions import LearnRefused
+
+    with pytest.raises(LearnRefused, match="label changed during the click"):
+        _learn(server, "relabel")
+    assert not any("/logout-everywhere" in seen for seen in _Server.seen)
+    assert not any(seen.startswith("POST") for seen in _Server.seen)
+
+
+def test_learning_keeps_a_stable_external_label(server: str) -> None:
+    learned = _learn(server, "external")
+    assert learned.watchers == ("network",)
