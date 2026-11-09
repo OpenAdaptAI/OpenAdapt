@@ -1,7 +1,7 @@
 {
  "app_state": {
-  "banner": "Encounter saved — Golden triage booking three months",
-  "enc_item": "Triage — Golden triage booking three months",
+  "banner": null,
+  "enc_item": null,
   "hash": "#patient/p1"
  },
  "artifacts": {
@@ -17,26 +17,7 @@
   "heals/step_004/patch.json": "6fd04b3d1545c31ae069240fab0ad3b6d51d98f1785b2bb77b54a253df353ebd",
   "heals/step_004/screen.png": "d4b2458d828ecadf3a558090f4d9079b8dffcda558e9a7a709d699802d950195",
   "heals/step_004/template.png": "c6e8bd05f344066f595bf57ac4a1523be2b6153cf71d57b2ca27807ca872f0bb",
-  "heals/step_005/heal.json": "375d399c7379a8c6c9e2da5bd362ea16ebf972a681b74810450d7f0d9ca51e1d",
-  "heals/step_005/patch.json": "88b554680e2a36a5d93a532c6e3c995be7fedf8857988409502a0512e04e2655",
-  "heals/step_005/screen.png": "0cf5a5011ed7f8fa456398dc5e2a9ae679813decd68ce9e78ff7dd4f79006269",
-  "heals/step_005/template.png": "330ed0efd8adf2c753d080188513c917969d8aafbeed14d0da248694d371e1c4",
-  "heals/step_006/heal.json": "05c56f8e8e6891ab70343cdb3e6293ba8cabd5bbb64939f2708bc37e628320ea",
-  "heals/step_006/patch.json": "36f0e22ed46b0fd824f77418cc844368b6377a4794c0133111e42117f21fa720",
-  "heals/step_006/screen.png": "1b9ebdb9d885ba46909fc8fb32fccb362380b5b576e49e1e91bb1224c36a0d01",
-  "heals/step_006/template.png": "0d18d8e6f13f243c09ce02ef3646a6544c11bd7136e053a305782526a17c4bed",
-  "heals/step_007/heal.json": "7902740263a482d1075e162fa7bf5c4283d67048323471bc1c8e1f4293e4930f",
-  "heals/step_007/patch.json": "dc03e9b33f2678d2ca9b1291b5669bc0c0af6fa2818004ad692940063f3aff01",
-  "heals/step_007/screen.png": "91c38bb1107a145bdd69aa7d16a91d6ccfd0ae591fd6dc05dcf8c4fb1542f97d",
-  "heals/step_007/template.png": "ce94517fe2c30adc2379a09c8e7fc0569bd06e5eb63bd24cdc401254dc5463da",
-  "heals/step_008/heal.json": "4aa8271e6da90c717b97face3539093ef59f99d36a467b020143fb0da3c29248",
-  "heals/step_008/patch.json": "fd9a4e1164b2422356e1a1f2967150712f1f8ee7d0f68725d37b08a06ceb833f",
-  "heals/step_008/screen.png": "1bc7f89daaad362b59777806d2acc7312e7ed7c969c1ba527925bab6c45358c4",
-  "heals/step_008/template.png": "13148f2b0f7acf7cf845361f49c4bce75d767eced0aff8f6f833db483bcf9ea8",
-  "heals/step_010/heal.json": "7c6495e882ee0fc20bd6994295f30a077e389531da9786662d7d4bb328d7bff3",
-  "heals/step_010/patch.json": "9ad14f25582935468fa2900a75b4808ebbd072bce75454bea90e8d64be94aa48",
-  "heals/step_010/screen.png": "e1279f4bc5f9d5aed67409a63ea016fed425884ebbbfdd314f0d19503820e6f4",
-  "heals/step_010/template.png": "588067ceff3b713e39d281edfa82ccbe9ec3bf9e3bd79a0a9e494b61051512cc",
+  "heals/step_005/patch.json": "1b5aeb503877fa1d5bf7e94b5eedb2806213f6bd422fbce57a3b7fce2c24a359",
   "steps/step_000_after.png": "3bc795168abc8711dbd98e9b00d2f281769a04f17f00fa26bb736e6b98c81f11",
   "steps/step_000_before.png": "9e43117c8f5dcc3ba3a5e6eb636f9e736b6c31feaee783d080458d35a162c5e4",
   "steps/step_001_after.png": "f3e6efed2eaf69d8e3f7ea4f3f03d6010b6520add327ca0d20cc8fe15b3304c0",
@@ -48,17 +29,7 @@
   "steps/step_004_after.png": "0cf5a5011ed7f8fa456398dc5e2a9ae679813decd68ce9e78ff7dd4f79006269",
   "steps/step_004_before.png": "d4b2458d828ecadf3a558090f4d9079b8dffcda558e9a7a709d699802d950195",
   "steps/step_005_after.png": "1b9ebdb9d885ba46909fc8fb32fccb362380b5b576e49e1e91bb1224c36a0d01",
-  "steps/step_005_before.png": "0cf5a5011ed7f8fa456398dc5e2a9ae679813decd68ce9e78ff7dd4f79006269",
-  "steps/step_006_after.png": "91c38bb1107a145bdd69aa7d16a91d6ccfd0ae591fd6dc05dcf8c4fb1542f97d",
-  "steps/step_006_before.png": "1b9ebdb9d885ba46909fc8fb32fccb362380b5b576e49e1e91bb1224c36a0d01",
-  "steps/step_007_after.png": "1bc7f89daaad362b59777806d2acc7312e7ed7c969c1ba527925bab6c45358c4",
-  "steps/step_007_before.png": "91c38bb1107a145bdd69aa7d16a91d6ccfd0ae591fd6dc05dcf8c4fb1542f97d",
-  "steps/step_008_after.png": "b14d8b9402b81774ed13cc4d0b47956252d2ea54412f2d6405f69d0a5f12057b",
-  "steps/step_008_before.png": "1bc7f89daaad362b59777806d2acc7312e7ed7c969c1ba527925bab6c45358c4",
-  "steps/step_009_after.png": "b6ee4c11e302ec2103675add5f693471fd56035e1e55690dc6934da1d82b26f1",
-  "steps/step_009_before.png": "b14d8b9402b81774ed13cc4d0b47956252d2ea54412f2d6405f69d0a5f12057b",
-  "steps/step_010_after.png": "0ebcd362b90dcc7373c13b8b570272facdf3dad65666174144f388fcf7613f9e",
-  "steps/step_010_before.png": "e1279f4bc5f9d5aed67409a63ea016fed425884ebbbfdd314f0d19503820e6f4"
+  "steps/step_005_before.png": "0cf5a5011ed7f8fa456398dc5e2a9ae679813decd68ce9e78ff7dd4f79006269"
  },
  "environment": {
   "platform": "linux",
@@ -70,38 +41,13 @@
   "bundle_content_digest": "f84b6fcbbae3daf1bd845728988bb3324d89c13307f7c493a151670bce3cfefc",
   "business_decision_evidence": [],
   "canceled": false,
-  "change_ledger": [
-   {
-    "attempt_state": "delivered",
-    "effects": [],
-    "intent": "click 'Save Encounter'",
-    "may_need_undo": true,
-    "position": 11,
-    "status": "unknown",
-    "step_id": "step_010",
-    "undo_id": null
-   }
-  ],
-  "effect_journal": [
-   {
-    "approved_unverified": false,
-    "attempt_state": "delivered",
-    "collateral_reconciliation_actions": 0,
-    "consequential": true,
-    "effect_verified": null,
-    "intended_effect_contract_hashes": [],
-    "intent": "click 'Save Encounter'",
-    "observed_at": null,
-    "observed_effect": "unknown",
-    "step_id": "step_010",
-    "verification_performed": false
-   }
-  ],
+  "change_ledger": [],
+  "effect_journal": [],
   "est_model_cost_usd": 0.0,
-  "execution_completed": true,
+  "execution_completed": false,
   "execution_entry_url": null,
   "execution_origin": null,
-  "execution_outcome": "COMPLETED_UNVERIFIED",
+  "execution_outcome": "HALTED",
   "execution_profile": "demo",
   "execution_target_kind": null,
   "external_network_calls": "unknown",
@@ -127,8 +73,28 @@
   "governed_qualification_run_id_sha256": null,
   "governed_qualified_effect_requirements": [],
   "governed_runtime_inputs_digest": null,
-  "halt": null,
-  "heal_count": 8,
+  "halt": {
+   "completed_intents": [
+    "click recorded visual target",
+    "type 'nurse.demo'",
+    "click recorded visual target",
+    "type 'mockmed-demo-pass'",
+    "click 'Sign In'"
+   ],
+   "intent": "click 'Open'",
+   "observed_texts": [
+    "MockMed",
+    "Clinical demo —- all data is fake",
+    "Jane Sample—MRN P1—DOB 1980-01-01",
+    "New Encounter",
+    "Encounters",
+    "No encounters yet."
+   ],
+   "outcome": "halt",
+   "reason": "heal quarantined for step 'step_005': identity regression: refreshed context band no longer verifies the recorded target identity (band verdict 'abstain')",
+   "state_id": "step_005"
+  },
+  "heal_count": 3,
   "idempotency_key": null,
   "idempotent_replay": false,
   "identity_applicable_steps": 8,
@@ -158,15 +124,15 @@
     "identity",
     "postcondition"
    ],
-   "execution_completed": true,
+   "execution_completed": false,
    "external_network_calls": "unknown",
    "model_calls": 0,
-   "outcome": "COMPLETED_UNVERIFIED",
+   "outcome": "HALTED",
    "passed_contracts": {
     "authorization": 0,
     "effect": 0,
     "identity": 0,
-    "postcondition": 18
+    "postcondition": 11
    },
    "postcondition_evidence": [
     {
@@ -174,216 +140,132 @@
      "actuation_path": "gui",
      "contract_index": 0,
      "contract_kind": "explicit_predicate",
-     "contract_sha256": "69485ae49e68882e07249b4b0ff063effca088d457adbd6c79822c76f2c37306",
+     "contract_sha256": "f220b3c07766f98e29928e61b7f518e1c5c4f55bbd14df07403f1f2a4a096417",
      "result_index": 0,
-     "step_contract_sha256": "c5dceae6d117e949611b99599a092bf58647bff4b549d0920dd12ed754f8428a",
+     "step_contract_sha256": "c0962ee57126f1450f73d2aadd5f9b9e9fa2b54777041c8519e65f41473d0171",
      "step_index": 0,
      "verdict": "passed",
-     "workflow_contract_sha256": "1bd76ecc389c25f2e89d47a8c87f24841ca8c9f72fa7e8aa797b7fc1b65c3dc2"
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
     },
     {
      "action_kind": "type",
      "actuation_path": "gui",
      "contract_index": 0,
      "contract_kind": "explicit_predicate",
-     "contract_sha256": "ab2fb337608f0f7beed30b2063f64ef0e8a4f8ae17e880493b72c8fa712f3f9f",
+     "contract_sha256": "c7797506f96fcbb63a0d4b802e8294cfe61f33c3265ca63145a1dc1704a82e1a",
      "result_index": 1,
-     "step_contract_sha256": "8aeffb861710d930d6be7996164ade9fe29a0e8763057d0ecdc8fb34d7a1839f",
+     "step_contract_sha256": "d8ac256bc58a6e14d2d8ffccd6b1938bf964f19cd92f4d84c571c980635920e8",
      "step_index": 1,
      "verdict": "passed",
-     "workflow_contract_sha256": "1bd76ecc389c25f2e89d47a8c87f24841ca8c9f72fa7e8aa797b7fc1b65c3dc2"
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
     },
     {
      "action_kind": "type",
      "actuation_path": "gui",
      "contract_index": 1,
      "contract_kind": "explicit_predicate",
-     "contract_sha256": "56ba0e4f001f3944f712aba72198caa2624218bca821768a29af5d98ad11ba3a",
+     "contract_sha256": "f3d618a48ca1bd5de009daf1e62d6f68365cda62c53f2b903345ee0605a07e36",
      "result_index": 1,
-     "step_contract_sha256": "8aeffb861710d930d6be7996164ade9fe29a0e8763057d0ecdc8fb34d7a1839f",
+     "step_contract_sha256": "d8ac256bc58a6e14d2d8ffccd6b1938bf964f19cd92f4d84c571c980635920e8",
      "step_index": 1,
      "verdict": "passed",
-     "workflow_contract_sha256": "1bd76ecc389c25f2e89d47a8c87f24841ca8c9f72fa7e8aa797b7fc1b65c3dc2"
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
     },
     {
      "action_kind": "type",
      "actuation_path": "gui",
      "contract_index": 0,
      "contract_kind": "intrinsic_input_readback",
-     "contract_sha256": "910db23b853f960f23e39ff6bb0d27a19f7d24358b386fec469c78702799e481",
+     "contract_sha256": "2654d05f576c48b687027895b3b3b04bf5b334c85ec260c2f942e54bb3b950de",
      "result_index": 1,
-     "step_contract_sha256": "8aeffb861710d930d6be7996164ade9fe29a0e8763057d0ecdc8fb34d7a1839f",
+     "step_contract_sha256": "d8ac256bc58a6e14d2d8ffccd6b1938bf964f19cd92f4d84c571c980635920e8",
      "step_index": 1,
      "verdict": "passed",
-     "workflow_contract_sha256": "1bd76ecc389c25f2e89d47a8c87f24841ca8c9f72fa7e8aa797b7fc1b65c3dc2"
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
     },
     {
      "action_kind": "click",
      "actuation_path": "gui",
      "contract_index": 0,
      "contract_kind": "explicit_predicate",
-     "contract_sha256": "e8902d0fac6a445fe5e804d1ae4b3c034db906cce72059e9f151ae307f1b774d",
+     "contract_sha256": "2fce9a94839ea520fb8e9cedc7fdadff874b6350ac06075e3d2c4701f8061c1c",
      "result_index": 2,
-     "step_contract_sha256": "1b88be78b6bf5f197cd927e284704e7af92d2808d07cb87617775c08b0e6e0d2",
+     "step_contract_sha256": "c2b74ae73c5afefbf5fa03ba2e67b44d1a7a93ea59577b9b2f81522667c35baa",
      "step_index": 2,
      "verdict": "passed",
-     "workflow_contract_sha256": "1bd76ecc389c25f2e89d47a8c87f24841ca8c9f72fa7e8aa797b7fc1b65c3dc2"
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
     },
     {
      "action_kind": "type",
      "actuation_path": "gui",
      "contract_index": 0,
      "contract_kind": "explicit_predicate",
-     "contract_sha256": "d2eb6a2b4b47b6a5ee5ee53ec883c0a9aa904f2da2955ffeb471252c7777d55d",
+     "contract_sha256": "31582e64269bf713de0da077ecde3fa566636f8c4bf4c571e300dd91f20f98a8",
      "result_index": 3,
-     "step_contract_sha256": "d077022100316978a9094d82c9f73d7254fd2d3d454bae594a38bb84da92360c",
+     "step_contract_sha256": "41916688420a0472362353a8708ab077f56d36ea1bfcfd2448e6219b84c74c87",
      "step_index": 3,
      "verdict": "passed",
-     "workflow_contract_sha256": "1bd76ecc389c25f2e89d47a8c87f24841ca8c9f72fa7e8aa797b7fc1b65c3dc2"
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
     },
     {
      "action_kind": "type",
      "actuation_path": "gui",
      "contract_index": 0,
      "contract_kind": "intrinsic_input_readback",
-     "contract_sha256": "743153d4967b8aedb33833c16f22016fa2a585a18aa580fa88829cac303d3cc6",
+     "contract_sha256": "0a5911e3a6b674129dfb35394b22c0808d30d009c15c95d8d8ba227a3cb5a056",
      "result_index": 3,
-     "step_contract_sha256": "d077022100316978a9094d82c9f73d7254fd2d3d454bae594a38bb84da92360c",
+     "step_contract_sha256": "41916688420a0472362353a8708ab077f56d36ea1bfcfd2448e6219b84c74c87",
      "step_index": 3,
      "verdict": "passed",
-     "workflow_contract_sha256": "1bd76ecc389c25f2e89d47a8c87f24841ca8c9f72fa7e8aa797b7fc1b65c3dc2"
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
     },
     {
      "action_kind": "click",
      "actuation_path": "gui",
      "contract_index": 0,
      "contract_kind": "explicit_predicate",
-     "contract_sha256": "b6e54618fd478a375e5aa5cf38d03b44323c21b0ee9ad773f9cafeb39b2a3fb6",
+     "contract_sha256": "fb1a399bed7f95cd6b1cf3c0b2d1bb3b2133bc121472126910f9db7d560ad0bc",
      "result_index": 4,
-     "step_contract_sha256": "7e34f7d548bc1ce96ee0c139e8983aecad5feee8c5c84acf117fc1e45b23840d",
+     "step_contract_sha256": "2d852d7d64f213a9d1d47350823d455fb0f80edca17179da2316b7763ccf347e",
      "step_index": 4,
      "verdict": "passed",
-     "workflow_contract_sha256": "1bd76ecc389c25f2e89d47a8c87f24841ca8c9f72fa7e8aa797b7fc1b65c3dc2"
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
     },
     {
      "action_kind": "click",
      "actuation_path": "gui",
      "contract_index": 1,
      "contract_kind": "explicit_predicate",
-     "contract_sha256": "b84edcd9880bbf57b267ebb3622432fcadce06b1bb7de42f274a5b8e21f545ec",
+     "contract_sha256": "738a2942fd4c097cc48e9612707770d11d111f8d4375995d2252f079210628f5",
      "result_index": 4,
-     "step_contract_sha256": "7e34f7d548bc1ce96ee0c139e8983aecad5feee8c5c84acf117fc1e45b23840d",
+     "step_contract_sha256": "2d852d7d64f213a9d1d47350823d455fb0f80edca17179da2316b7763ccf347e",
      "step_index": 4,
      "verdict": "passed",
-     "workflow_contract_sha256": "1bd76ecc389c25f2e89d47a8c87f24841ca8c9f72fa7e8aa797b7fc1b65c3dc2"
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
     },
     {
      "action_kind": "click",
      "actuation_path": "gui",
      "contract_index": 0,
      "contract_kind": "explicit_predicate",
-     "contract_sha256": "784adaed7711d45d35f57d971a64e39ca8e7714cb8c312df990fe295e9fab8d4",
+     "contract_sha256": "146f42385da20584d6518f39dfc8a86e1eb4b112934c9bdd09a25c94ecf79965",
      "result_index": 5,
-     "step_contract_sha256": "87787a32a0ea011bbc0310b8b9595b0174dd024811038e7af11afe3be5220a9e",
+     "step_contract_sha256": "c9ebea68c639e137964f56255e28b9ad1b10e79c7f94015221b3761bd7b34f35",
      "step_index": 5,
      "verdict": "passed",
-     "workflow_contract_sha256": "1bd76ecc389c25f2e89d47a8c87f24841ca8c9f72fa7e8aa797b7fc1b65c3dc2"
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
     },
     {
      "action_kind": "click",
      "actuation_path": "gui",
      "contract_index": 1,
      "contract_kind": "explicit_predicate",
-     "contract_sha256": "ade12c4e27eb40e75ecaf0526b09f5242eee10f14b4d2fe50dcbbbafb66637dc",
+     "contract_sha256": "93da9d76dee1132e6f643646be0eac89e140e7d2a974a3f193b33f5dfd0309ba",
      "result_index": 5,
-     "step_contract_sha256": "87787a32a0ea011bbc0310b8b9595b0174dd024811038e7af11afe3be5220a9e",
+     "step_contract_sha256": "c9ebea68c639e137964f56255e28b9ad1b10e79c7f94015221b3761bd7b34f35",
      "step_index": 5,
      "verdict": "passed",
-     "workflow_contract_sha256": "1bd76ecc389c25f2e89d47a8c87f24841ca8c9f72fa7e8aa797b7fc1b65c3dc2"
-    },
-    {
-     "action_kind": "click",
-     "actuation_path": "gui",
-     "contract_index": 0,
-     "contract_kind": "explicit_predicate",
-     "contract_sha256": "70cbe9b59c67c1a988c40b52c527c1308a440f0aec740d9458797007ca0f3901",
-     "result_index": 6,
-     "step_contract_sha256": "c6c511dd0d8dd6e7bdfe32c068c394690e178048973ff1ff44335c7f114ad464",
-     "step_index": 6,
-     "verdict": "passed",
-     "workflow_contract_sha256": "1bd76ecc389c25f2e89d47a8c87f24841ca8c9f72fa7e8aa797b7fc1b65c3dc2"
-    },
-    {
-     "action_kind": "click",
-     "actuation_path": "gui",
-     "contract_index": 1,
-     "contract_kind": "explicit_predicate",
-     "contract_sha256": "cb572dad7b215757dcbff4ba17adb76ec780126c60668768bcbb0225c2c8072a",
-     "result_index": 6,
-     "step_contract_sha256": "c6c511dd0d8dd6e7bdfe32c068c394690e178048973ff1ff44335c7f114ad464",
-     "step_index": 6,
-     "verdict": "passed",
-     "workflow_contract_sha256": "1bd76ecc389c25f2e89d47a8c87f24841ca8c9f72fa7e8aa797b7fc1b65c3dc2"
-    },
-    {
-     "action_kind": "click",
-     "actuation_path": "gui",
-     "contract_index": 0,
-     "contract_kind": "explicit_predicate",
-     "contract_sha256": "9edec4e60fe67d7c3ea5f9b2373fe468393ae94c74c0a614d136f41854e6f9e4",
-     "result_index": 7,
-     "step_contract_sha256": "e79ac4858ca71223d8ccdb24c0349fefbcc1e8971f4ca7d1ec128dabf4c613a8",
-     "step_index": 7,
-     "verdict": "passed",
-     "workflow_contract_sha256": "1bd76ecc389c25f2e89d47a8c87f24841ca8c9f72fa7e8aa797b7fc1b65c3dc2"
-    },
-    {
-     "action_kind": "click",
-     "actuation_path": "gui",
-     "contract_index": 0,
-     "contract_kind": "explicit_predicate",
-     "contract_sha256": "868c76106364c7f44c056a49022890d22e4ed80eabd9d4fea453288e2fd3c686",
-     "result_index": 8,
-     "step_contract_sha256": "4046eb722b01251dd35beaab7585b419b30da08bfd4005de371cb7dc1b79b2ed",
-     "step_index": 8,
-     "verdict": "passed",
-     "workflow_contract_sha256": "1bd76ecc389c25f2e89d47a8c87f24841ca8c9f72fa7e8aa797b7fc1b65c3dc2"
-    },
-    {
-     "action_kind": "type",
-     "actuation_path": "gui",
-     "contract_index": 0,
-     "contract_kind": "intrinsic_input_readback",
-     "contract_sha256": "fa862e98f89462dc4d7c33e7ff4cefe243858d122a861c075737e522ff94f0bc",
-     "result_index": 9,
-     "step_contract_sha256": "17e5ffc845a5e66f849822640e4e912032ce45a20c83de1cc1fcc2b409166476",
-     "step_index": 9,
-     "verdict": "passed",
-     "workflow_contract_sha256": "1bd76ecc389c25f2e89d47a8c87f24841ca8c9f72fa7e8aa797b7fc1b65c3dc2"
-    },
-    {
-     "action_kind": "click",
-     "actuation_path": "gui",
-     "contract_index": 0,
-     "contract_kind": "explicit_predicate",
-     "contract_sha256": "d6b5f4f1244b17b81e72158845f9adef70a7b1db68fab94b05e3adfb68e6cb90",
-     "result_index": 10,
-     "step_contract_sha256": "99c651c92a8ff913b67ff16d94d5372831b40162e04e6f4e74411887400956a2",
-     "step_index": 10,
-     "verdict": "passed",
-     "workflow_contract_sha256": "1bd76ecc389c25f2e89d47a8c87f24841ca8c9f72fa7e8aa797b7fc1b65c3dc2"
-    },
-    {
-     "action_kind": "click",
-     "actuation_path": "gui",
-     "contract_index": 1,
-     "contract_kind": "explicit_predicate",
-     "contract_sha256": "0b375a744f23671bbb2c555ef9223c7a8cfbcbcc0eb9614d2c80afabee7d07c5",
-     "result_index": 10,
-     "step_contract_sha256": "99c651c92a8ff913b67ff16d94d5372831b40162e04e6f4e74411887400956a2",
-     "step_index": 10,
-     "verdict": "passed",
-     "workflow_contract_sha256": "1bd76ecc389c25f2e89d47a8c87f24841ca8c9f72fa7e8aa797b7fc1b65c3dc2"
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
     }
    ],
    "production_eligible": false,
@@ -392,10 +274,10 @@
     "authorization": 0,
     "effect": 0,
     "identity": 0,
-    "postcondition": 18
+    "postcondition": 11
    },
    "version": "openadapt.execution-outcome/v1",
-   "workflow_contract_sha256": "1bd76ecc389c25f2e89d47a8c87f24841ca8c9f72fa7e8aa797b7fc1b65c3dc2"
+   "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
   },
   "parameter_schema_sha256": "b9706e023d1b70651493a1b2b68bb1939f7173f74b5e574d4f9fa57acc89fc6d",
   "params": {
@@ -1053,560 +935,12 @@
     "effect_results": [],
     "effect_verified": null,
     "elapsed_ms": "<elapsed_ms>",
-    "error": null,
+    "error": "heal quarantined for step 'step_005': identity regression: refreshed context band no longer verifies the recorded target identity (band verdict 'abstain')",
     "exception_handled": false,
-    "failure_category": null,
+    "failure_category": "safety_halt",
     "field_read": null,
     "fresh_actuation_events": [],
-    "heal": {
-     "applied": true,
-     "kind": "anchor_refresh",
-     "new_anchor": {
-      "click_point": [
-       777,
-       186
-      ],
-      "context_text": "Jane Sample Knee pain referral High",
-      "form_identity": null,
-      "identifier_crop": null,
-      "identifier_region": null,
-      "identity_template": {
-       "band_len": 30,
-       "concats": [
-        {
-         "c": "c8f3afe51e54101a",
-         "digit": false,
-         "i": 0,
-         "n": 10,
-         "name": true,
-         "r": "c8f3afe51e54101a",
-         "size": 2
-        },
-        {
-         "c": "889b7b67936cc714",
-         "digit": false,
-         "i": 0,
-         "n": 14,
-         "name": true,
-         "r": "889b7b67936cc714",
-         "size": 3
-        },
-        {
-         "c": "ec3cdd51930bbe48",
-         "digit": false,
-         "i": 0,
-         "n": 18,
-         "name": true,
-         "r": "012c14f98d142b52",
-         "size": 4
-        },
-        {
-         "c": "f568044c153a789d",
-         "digit": false,
-         "i": 1,
-         "n": 10,
-         "name": true,
-         "r": "f568044c153a789d",
-         "size": 2
-        },
-        {
-         "c": "39c3c847d0c00e09",
-         "digit": false,
-         "i": 1,
-         "n": 14,
-         "name": true,
-         "r": "1df7bb2273b3df1e",
-         "size": 3
-        },
-        {
-         "c": "70fa34d51b5f7d24",
-         "digit": false,
-         "i": 1,
-         "n": 22,
-         "name": true,
-         "r": "3f8bfbc445a153ce",
-         "size": 4
-        },
-        {
-         "c": "a489e05dc4e788cd",
-         "digit": false,
-         "i": 2,
-         "n": 8,
-         "name": true,
-         "r": "952951299539c02a",
-         "size": 2
-        },
-        {
-         "c": "a17b2d971bc7336e",
-         "digit": false,
-         "i": 2,
-         "n": 16,
-         "name": true,
-         "r": "b6031ab669bb21d4",
-         "size": 3
-        },
-        {
-         "c": "554e958767924e9f",
-         "digit": false,
-         "i": 2,
-         "n": 20,
-         "name": true,
-         "r": "8cb792749b8c4a26",
-         "size": 4
-        },
-        {
-         "c": "fb3767c825cca1e4",
-         "digit": false,
-         "i": 3,
-         "n": 12,
-         "name": true,
-         "r": "f8736267c1e29056",
-         "size": 2
-        },
-        {
-         "c": "85136127f9b54bf1",
-         "digit": false,
-         "i": 3,
-         "n": 16,
-         "name": true,
-         "r": "9cb6424db9c1775c",
-         "size": 3
-        },
-        {
-         "c": "08d9cd2536340e25",
-         "digit": false,
-         "i": 4,
-         "n": 12,
-         "name": true,
-         "r": "3c24468959fd3d49",
-         "size": 2
-        }
-       ],
-       "param_token_indices": {},
-       "rests_on_confusable_identifier": false,
-       "salt": "9588ca8dd8f70661010db0bc535ec9bf",
-       "schema_version": 1,
-       "signal_hashes": {
-        "captured_context|exact|": "9fd083f46bf21da787072325bc4c4f55d41c35af66b3a8bfe5362801f5b79b4c",
-        "captured_context|normalized|casefold": "05a02917cd8e13ffe911f9158935250d6b60c03075af384ac806817eefe99fa0",
-        "captured_context|normalized|casefold,collapse_whitespace": "05a02917cd8e13ffe911f9158935250d6b60c03075af384ac806817eefe99fa0",
-        "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "05a02917cd8e13ffe911f9158935250d6b60c03075af384ac806817eefe99fa0",
-        "captured_context|normalized|casefold,strip_punctuation": "05a02917cd8e13ffe911f9158935250d6b60c03075af384ac806817eefe99fa0",
-        "captured_context|normalized|collapse_whitespace": "9fd083f46bf21da787072325bc4c4f55d41c35af66b3a8bfe5362801f5b79b4c",
-        "captured_context|normalized|collapse_whitespace,strip_punctuation": "9fd083f46bf21da787072325bc4c4f55d41c35af66b3a8bfe5362801f5b79b4c",
-        "captured_context|normalized|strip_punctuation": "9fd083f46bf21da787072325bc4c4f55d41c35af66b3a8bfe5362801f5b79b4c",
-        "captured_context|normalized|unicode_nfkc": "9fd083f46bf21da787072325bc4c4f55d41c35af66b3a8bfe5362801f5b79b4c",
-        "captured_context|normalized|unicode_nfkc,casefold": "05a02917cd8e13ffe911f9158935250d6b60c03075af384ac806817eefe99fa0",
-        "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "05a02917cd8e13ffe911f9158935250d6b60c03075af384ac806817eefe99fa0",
-        "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "05a02917cd8e13ffe911f9158935250d6b60c03075af384ac806817eefe99fa0",
-        "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "05a02917cd8e13ffe911f9158935250d6b60c03075af384ac806817eefe99fa0",
-        "captured_context|normalized|unicode_nfkc,collapse_whitespace": "9fd083f46bf21da787072325bc4c4f55d41c35af66b3a8bfe5362801f5b79b4c",
-        "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "9fd083f46bf21da787072325bc4c4f55d41c35af66b3a8bfe5362801f5b79b4c",
-        "captured_context|normalized|unicode_nfkc,strip_punctuation": "9fd083f46bf21da787072325bc4c4f55d41c35af66b3a8bfe5362801f5b79b4c",
-        "structured|exact|": "8d821561269d698e53786efe5136f65e976aa53e3a7d592e12b29615dfb99338",
-        "structured|normalized|casefold": "f54030eb9739c9513a637823369916e41bf4968e9ed046f34275bd91d40d530f",
-        "structured|normalized|casefold,collapse_whitespace": "f54030eb9739c9513a637823369916e41bf4968e9ed046f34275bd91d40d530f",
-        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "f54030eb9739c9513a637823369916e41bf4968e9ed046f34275bd91d40d530f",
-        "structured|normalized|casefold,strip_punctuation": "f54030eb9739c9513a637823369916e41bf4968e9ed046f34275bd91d40d530f",
-        "structured|normalized|collapse_whitespace": "8d821561269d698e53786efe5136f65e976aa53e3a7d592e12b29615dfb99338",
-        "structured|normalized|collapse_whitespace,strip_punctuation": "8d821561269d698e53786efe5136f65e976aa53e3a7d592e12b29615dfb99338",
-        "structured|normalized|strip_punctuation": "8d821561269d698e53786efe5136f65e976aa53e3a7d592e12b29615dfb99338",
-        "structured|normalized|unicode_nfkc": "8d821561269d698e53786efe5136f65e976aa53e3a7d592e12b29615dfb99338",
-        "structured|normalized|unicode_nfkc,casefold": "f54030eb9739c9513a637823369916e41bf4968e9ed046f34275bd91d40d530f",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "f54030eb9739c9513a637823369916e41bf4968e9ed046f34275bd91d40d530f",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "f54030eb9739c9513a637823369916e41bf4968e9ed046f34275bd91d40d530f",
-        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "f54030eb9739c9513a637823369916e41bf4968e9ed046f34275bd91d40d530f",
-        "structured|normalized|unicode_nfkc,collapse_whitespace": "8d821561269d698e53786efe5136f65e976aa53e3a7d592e12b29615dfb99338",
-        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "8d821561269d698e53786efe5136f65e976aa53e3a7d592e12b29615dfb99338",
-        "structured|normalized|unicode_nfkc,strip_punctuation": "8d821561269d698e53786efe5136f65e976aa53e3a7d592e12b29615dfb99338"
-       },
-       "structured": "f54030eb9739c951",
-       "structured_row": true,
-       "tokens": [
-        {
-         "alpha": true,
-         "bearing": null,
-         "c": "c3f03513b97ac375",
-         "digit": false,
-         "gen": false,
-         "glyph": false,
-         "idsh": false,
-         "n": 4,
-         "name": true,
-         "r": "c3f03513b97ac375"
-        },
-        {
-         "alpha": true,
-         "bearing": null,
-         "c": "9ee71e296b9f12b0",
-         "digit": false,
-         "gen": false,
-         "glyph": false,
-         "idsh": false,
-         "n": 6,
-         "name": true,
-         "r": "9ee71e296b9f12b0"
-        },
-        {
-         "alpha": true,
-         "bearing": null,
-         "c": "474017e2662aec63",
-         "digit": false,
-         "gen": false,
-         "glyph": false,
-         "idsh": false,
-         "n": 4,
-         "name": true,
-         "r": "474017e2662aec63"
-        },
-        {
-         "alpha": true,
-         "bearing": null,
-         "c": "e2c9d9dd2be64c93",
-         "digit": false,
-         "gen": false,
-         "glyph": false,
-         "idsh": false,
-         "n": 4,
-         "name": true,
-         "r": "dbeb4aa0ff7e457c"
-        },
-        {
-         "alpha": true,
-         "bearing": null,
-         "c": "e85574407f1c63d2",
-         "digit": false,
-         "gen": false,
-         "glyph": false,
-         "idsh": false,
-         "n": 8,
-         "name": true,
-         "r": "e85574407f1c63d2"
-        },
-        {
-         "alpha": true,
-         "bearing": null,
-         "c": "f0d7c32ddfe55ff9",
-         "digit": false,
-         "gen": false,
-         "glyph": false,
-         "idsh": false,
-         "n": 4,
-         "name": true,
-         "r": "291356604e133bf5"
-        }
-       ]
-      },
-      "landmarks": [
-       {
-        "distance_px": 52,
-        "dx_px": 21,
-        "dy_px": 48,
-        "ocr_text": "Action",
-        "relation": "above"
-       },
-       {
-        "distance_px": 58,
-        "dx_px": -2,
-        "dy_px": -58,
-        "ocr_text": "Open",
-        "relation": "below"
-       }
-      ],
-      "ocr_text": "Open",
-      "region": [
-       697,
-       154,
-       160,
-       64
-      ],
-      "search_pad": 80,
-      "structural": {
-       "automation_id": null,
-       "frame_path": null,
-       "name": "Open",
-       "role": "button",
-       "selector": "#open-p1",
-       "window_name": null
-      },
-      "structured_identity": null,
-      "template": "templates/step_005.png"
-     },
-     "old_anchor": {
-      "click_point": [
-       775,
-       186
-      ],
-      "context_text": null,
-      "form_identity": null,
-      "identifier_crop": null,
-      "identifier_region": null,
-      "identity_template": {
-       "band_len": 30,
-       "concats": [
-        {
-         "c": "c8f3afe51e54101a",
-         "digit": false,
-         "i": 0,
-         "n": 10,
-         "name": true,
-         "r": "c8f3afe51e54101a",
-         "size": 2
-        },
-        {
-         "c": "889b7b67936cc714",
-         "digit": false,
-         "i": 0,
-         "n": 14,
-         "name": true,
-         "r": "889b7b67936cc714",
-         "size": 3
-        },
-        {
-         "c": "ec3cdd51930bbe48",
-         "digit": false,
-         "i": 0,
-         "n": 18,
-         "name": true,
-         "r": "012c14f98d142b52",
-         "size": 4
-        },
-        {
-         "c": "f568044c153a789d",
-         "digit": false,
-         "i": 1,
-         "n": 10,
-         "name": true,
-         "r": "f568044c153a789d",
-         "size": 2
-        },
-        {
-         "c": "39c3c847d0c00e09",
-         "digit": false,
-         "i": 1,
-         "n": 14,
-         "name": true,
-         "r": "1df7bb2273b3df1e",
-         "size": 3
-        },
-        {
-         "c": "70fa34d51b5f7d24",
-         "digit": false,
-         "i": 1,
-         "n": 22,
-         "name": true,
-         "r": "3f8bfbc445a153ce",
-         "size": 4
-        },
-        {
-         "c": "a489e05dc4e788cd",
-         "digit": false,
-         "i": 2,
-         "n": 8,
-         "name": true,
-         "r": "952951299539c02a",
-         "size": 2
-        },
-        {
-         "c": "a17b2d971bc7336e",
-         "digit": false,
-         "i": 2,
-         "n": 16,
-         "name": true,
-         "r": "b6031ab669bb21d4",
-         "size": 3
-        },
-        {
-         "c": "554e958767924e9f",
-         "digit": false,
-         "i": 2,
-         "n": 20,
-         "name": true,
-         "r": "8cb792749b8c4a26",
-         "size": 4
-        },
-        {
-         "c": "fb3767c825cca1e4",
-         "digit": false,
-         "i": 3,
-         "n": 12,
-         "name": true,
-         "r": "f8736267c1e29056",
-         "size": 2
-        },
-        {
-         "c": "85136127f9b54bf1",
-         "digit": false,
-         "i": 3,
-         "n": 16,
-         "name": true,
-         "r": "9cb6424db9c1775c",
-         "size": 3
-        },
-        {
-         "c": "08d9cd2536340e25",
-         "digit": false,
-         "i": 4,
-         "n": 12,
-         "name": true,
-         "r": "3c24468959fd3d49",
-         "size": 2
-        }
-       ],
-       "param_token_indices": {},
-       "rests_on_confusable_identifier": false,
-       "salt": "9588ca8dd8f70661010db0bc535ec9bf",
-       "schema_version": 1,
-       "signal_hashes": {
-        "captured_context|exact|": "9fd083f46bf21da787072325bc4c4f55d41c35af66b3a8bfe5362801f5b79b4c",
-        "captured_context|normalized|casefold": "05a02917cd8e13ffe911f9158935250d6b60c03075af384ac806817eefe99fa0",
-        "captured_context|normalized|casefold,collapse_whitespace": "05a02917cd8e13ffe911f9158935250d6b60c03075af384ac806817eefe99fa0",
-        "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "05a02917cd8e13ffe911f9158935250d6b60c03075af384ac806817eefe99fa0",
-        "captured_context|normalized|casefold,strip_punctuation": "05a02917cd8e13ffe911f9158935250d6b60c03075af384ac806817eefe99fa0",
-        "captured_context|normalized|collapse_whitespace": "9fd083f46bf21da787072325bc4c4f55d41c35af66b3a8bfe5362801f5b79b4c",
-        "captured_context|normalized|collapse_whitespace,strip_punctuation": "9fd083f46bf21da787072325bc4c4f55d41c35af66b3a8bfe5362801f5b79b4c",
-        "captured_context|normalized|strip_punctuation": "9fd083f46bf21da787072325bc4c4f55d41c35af66b3a8bfe5362801f5b79b4c",
-        "captured_context|normalized|unicode_nfkc": "9fd083f46bf21da787072325bc4c4f55d41c35af66b3a8bfe5362801f5b79b4c",
-        "captured_context|normalized|unicode_nfkc,casefold": "05a02917cd8e13ffe911f9158935250d6b60c03075af384ac806817eefe99fa0",
-        "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "05a02917cd8e13ffe911f9158935250d6b60c03075af384ac806817eefe99fa0",
-        "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "05a02917cd8e13ffe911f9158935250d6b60c03075af384ac806817eefe99fa0",
-        "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "05a02917cd8e13ffe911f9158935250d6b60c03075af384ac806817eefe99fa0",
-        "captured_context|normalized|unicode_nfkc,collapse_whitespace": "9fd083f46bf21da787072325bc4c4f55d41c35af66b3a8bfe5362801f5b79b4c",
-        "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "9fd083f46bf21da787072325bc4c4f55d41c35af66b3a8bfe5362801f5b79b4c",
-        "captured_context|normalized|unicode_nfkc,strip_punctuation": "9fd083f46bf21da787072325bc4c4f55d41c35af66b3a8bfe5362801f5b79b4c",
-        "structured|exact|": "8d821561269d698e53786efe5136f65e976aa53e3a7d592e12b29615dfb99338",
-        "structured|normalized|casefold": "f54030eb9739c9513a637823369916e41bf4968e9ed046f34275bd91d40d530f",
-        "structured|normalized|casefold,collapse_whitespace": "f54030eb9739c9513a637823369916e41bf4968e9ed046f34275bd91d40d530f",
-        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "f54030eb9739c9513a637823369916e41bf4968e9ed046f34275bd91d40d530f",
-        "structured|normalized|casefold,strip_punctuation": "f54030eb9739c9513a637823369916e41bf4968e9ed046f34275bd91d40d530f",
-        "structured|normalized|collapse_whitespace": "8d821561269d698e53786efe5136f65e976aa53e3a7d592e12b29615dfb99338",
-        "structured|normalized|collapse_whitespace,strip_punctuation": "8d821561269d698e53786efe5136f65e976aa53e3a7d592e12b29615dfb99338",
-        "structured|normalized|strip_punctuation": "8d821561269d698e53786efe5136f65e976aa53e3a7d592e12b29615dfb99338",
-        "structured|normalized|unicode_nfkc": "8d821561269d698e53786efe5136f65e976aa53e3a7d592e12b29615dfb99338",
-        "structured|normalized|unicode_nfkc,casefold": "f54030eb9739c9513a637823369916e41bf4968e9ed046f34275bd91d40d530f",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "f54030eb9739c9513a637823369916e41bf4968e9ed046f34275bd91d40d530f",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "f54030eb9739c9513a637823369916e41bf4968e9ed046f34275bd91d40d530f",
-        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "f54030eb9739c9513a637823369916e41bf4968e9ed046f34275bd91d40d530f",
-        "structured|normalized|unicode_nfkc,collapse_whitespace": "8d821561269d698e53786efe5136f65e976aa53e3a7d592e12b29615dfb99338",
-        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "8d821561269d698e53786efe5136f65e976aa53e3a7d592e12b29615dfb99338",
-        "structured|normalized|unicode_nfkc,strip_punctuation": "8d821561269d698e53786efe5136f65e976aa53e3a7d592e12b29615dfb99338"
-       },
-       "structured": "f54030eb9739c951",
-       "structured_row": true,
-       "tokens": [
-        {
-         "alpha": true,
-         "bearing": null,
-         "c": "c3f03513b97ac375",
-         "digit": false,
-         "gen": false,
-         "glyph": false,
-         "idsh": false,
-         "n": 4,
-         "name": true,
-         "r": "c3f03513b97ac375"
-        },
-        {
-         "alpha": true,
-         "bearing": null,
-         "c": "9ee71e296b9f12b0",
-         "digit": false,
-         "gen": false,
-         "glyph": false,
-         "idsh": false,
-         "n": 6,
-         "name": true,
-         "r": "9ee71e296b9f12b0"
-        },
-        {
-         "alpha": true,
-         "bearing": null,
-         "c": "474017e2662aec63",
-         "digit": false,
-         "gen": false,
-         "glyph": false,
-         "idsh": false,
-         "n": 4,
-         "name": true,
-         "r": "474017e2662aec63"
-        },
-        {
-         "alpha": true,
-         "bearing": null,
-         "c": "e2c9d9dd2be64c93",
-         "digit": false,
-         "gen": false,
-         "glyph": false,
-         "idsh": false,
-         "n": 4,
-         "name": true,
-         "r": "dbeb4aa0ff7e457c"
-        },
-        {
-         "alpha": true,
-         "bearing": null,
-         "c": "e85574407f1c63d2",
-         "digit": false,
-         "gen": false,
-         "glyph": false,
-         "idsh": false,
-         "n": 8,
-         "name": true,
-         "r": "e85574407f1c63d2"
-        },
-        {
-         "alpha": true,
-         "bearing": null,
-         "c": "f0d7c32ddfe55ff9",
-         "digit": false,
-         "gen": false,
-         "glyph": false,
-         "idsh": false,
-         "n": 4,
-         "name": true,
-         "r": "291356604e133bf5"
-        }
-       ]
-      },
-      "landmarks": [
-       {
-        "distance_px": 52,
-        "dx_px": 21,
-        "dy_px": 48,
-        "ocr_text": "Action",
-        "relation": "above"
-       },
-       {
-        "distance_px": 58,
-        "dx_px": -2,
-        "dy_px": -58,
-        "ocr_text": "Open",
-        "relation": "below"
-       }
-      ],
-      "ocr_text": "Open",
-      "region": [
-       695,
-       154,
-       160,
-       64
-      ],
-      "search_pad": 80,
-      "structural": {
-       "automation_id": null,
-       "frame_path": null,
-       "name": "Open",
-       "role": "button",
-       "selector": "#open-p1",
-       "window_name": null
-      },
-      "structured_identity": null,
-      "template": "templates/step_005.png"
-     },
-     "rung_used": "ocr",
-     "screenshot": "heals/step_005/screen.png",
-     "step_id": "step_005"
-    },
+    "heal": null,
     "identity": {
      "abstain_reason": null,
      "candidate_count": 1,
@@ -1633,7 +967,7 @@
     "input_verified": null,
     "intent": "click 'Open'",
     "interstitial_actions": [],
-    "ok": true,
+    "ok": false,
     "postcondition_drift_rescues": [],
     "postcondition_page_scale": null,
     "postconditions_ok": true,
@@ -1651,988 +985,29 @@
     "risk": "reversible",
     "risk_explanation": "control label has no retained consequential-write signal",
     "risk_review_required": false,
-    "safety_halt": false,
+    "safety_halt": true,
     "safety_refusal_evidence": null,
     "skipped": false,
     "starting_state_settled": null,
     "step_id": "step_005",
     "submit_binding_verified": null,
     "timings": "<timings>"
-   },
-   {
-    "actuation": null,
-    "after_png": "steps/step_006_after.png",
-    "api_fallback": null,
-    "before_png": "steps/step_006_before.png",
-    "delivery_attempted": true,
-    "delivery_receipt": null,
-    "delivery_uncertainty": null,
-    "drag_end_resolution": null,
-    "drift_oracle_calls": 0,
-    "effect_approved_unverified": false,
-    "effect_contract_hashes": [],
-    "effect_evidence": [],
-    "effect_results": [],
-    "effect_verified": null,
-    "elapsed_ms": "<elapsed_ms>",
-    "error": null,
-    "exception_handled": false,
-    "failure_category": null,
-    "field_read": null,
-    "fresh_actuation_events": [],
-    "heal": {
-     "applied": true,
-     "kind": "anchor_refresh",
-     "new_anchor": {
-      "click_point": [
-       113,
-       159
-      ],
-      "context_text": null,
-      "form_identity": null,
-      "identifier_crop": null,
-      "identifier_region": null,
-      "identity_template": {
-       "band_len": 0,
-       "concats": [],
-       "param_token_indices": {},
-       "rests_on_confusable_identifier": false,
-       "salt": "9588ca8dd8f70661010db0bc535ec9bf",
-       "schema_version": 1,
-       "signal_hashes": {
-        "structured|exact|": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|casefold": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|casefold,collapse_whitespace": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|casefold,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|collapse_whitespace": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|collapse_whitespace,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|unicode_nfkc": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|unicode_nfkc,casefold": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|unicode_nfkc,collapse_whitespace": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|unicode_nfkc,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3"
-       },
-       "structured": "503fb2093ed582b9",
-       "structured_row": true,
-       "tokens": []
-      },
-      "landmarks": [
-       {
-        "distance_px": 62,
-        "dx_px": 34,
-        "dy_px": -52,
-        "ocr_text": "Encounters",
-        "relation": "below"
-       },
-       {
-        "distance_px": 85,
-        "dx_px": 24,
-        "dy_px": -82,
-        "ocr_text": "No encounters yet.",
-        "relation": "below"
-       }
-      ],
-      "ocr_text": "New Encounter",
-      "region": [
-       33,
-       127,
-       160,
-       64
-      ],
-      "search_pad": 80,
-      "structural": {
-       "automation_id": null,
-       "frame_path": null,
-       "name": "New Encounter",
-       "role": "button",
-       "selector": "#new-encounter",
-       "window_name": null
-      },
-      "structured_identity": null,
-      "template": "templates/step_006.png"
-     },
-     "old_anchor": {
-      "click_point": [
-       114,
-       159
-      ],
-      "context_text": null,
-      "form_identity": null,
-      "identifier_crop": null,
-      "identifier_region": null,
-      "identity_template": {
-       "band_len": 0,
-       "concats": [],
-       "param_token_indices": {},
-       "rests_on_confusable_identifier": false,
-       "salt": "9588ca8dd8f70661010db0bc535ec9bf",
-       "schema_version": 1,
-       "signal_hashes": {
-        "structured|exact|": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|casefold": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|casefold,collapse_whitespace": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|casefold,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|collapse_whitespace": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|collapse_whitespace,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|unicode_nfkc": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|unicode_nfkc,casefold": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|unicode_nfkc,collapse_whitespace": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|unicode_nfkc,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3"
-       },
-       "structured": "503fb2093ed582b9",
-       "structured_row": true,
-       "tokens": []
-      },
-      "landmarks": [
-       {
-        "distance_px": 62,
-        "dx_px": 34,
-        "dy_px": -52,
-        "ocr_text": "Encounters",
-        "relation": "below"
-       },
-       {
-        "distance_px": 85,
-        "dx_px": 24,
-        "dy_px": -82,
-        "ocr_text": "No encounters yet.",
-        "relation": "below"
-       }
-      ],
-      "ocr_text": "New Encounter",
-      "region": [
-       34,
-       127,
-       160,
-       64
-      ],
-      "search_pad": 80,
-      "structural": {
-       "automation_id": null,
-       "frame_path": null,
-       "name": "New Encounter",
-       "role": "button",
-       "selector": "#new-encounter",
-       "window_name": null
-      },
-      "structured_identity": null,
-      "template": "templates/step_006.png"
-     },
-     "rung_used": "ocr",
-     "screenshot": "heals/step_006/screen.png",
-     "step_id": "step_006"
-    },
-    "identity": {
-     "abstain_reason": null,
-     "candidate_count": 1,
-     "coverage": 1.0,
-     "expected": "<structured identity template>",
-     "hover": null,
-     "known_id_evidence": null,
-     "known_id_halt": null,
-     "look_halt": null,
-     "looks": [],
-     "mode": "structured",
-     "observed": "Jane Sample — MRN P1 — DOB 1980-01-01",
-     "param": null,
-     "pixel_evidence": null,
-     "quorum_required": null,
-     "quorum_verified": null,
-     "signal_evidence": [],
-     "status": "verified"
-    },
-    "identity_first_frame_png": null,
-    "identity_first_read": null,
-    "identity_reobserved": false,
-    "input_retried": false,
-    "input_verified": null,
-    "intent": "click 'New Encounter'",
-    "interstitial_actions": [],
-    "ok": true,
-    "postcondition_drift_rescues": [],
-    "postcondition_page_scale": null,
-    "postconditions_ok": true,
-    "program_scope": [],
-    "resolution": {
-     "confidence": 1.0,
-     "elapsed_ms": "<elapsed_ms>",
-     "point": [
-      113,
-      159
-     ],
-     "rung": "ocr",
-     "structural_handle": null
-    },
-    "risk": "reversible",
-    "risk_explanation": "control label has no retained consequential-write signal",
-    "risk_review_required": false,
-    "safety_halt": false,
-    "safety_refusal_evidence": null,
-    "skipped": false,
-    "starting_state_settled": null,
-    "step_id": "step_006",
-    "submit_binding_verified": null,
-    "timings": "<timings>"
-   },
-   {
-    "actuation": null,
-    "after_png": "steps/step_007_after.png",
-    "api_fallback": null,
-    "before_png": "steps/step_007_before.png",
-    "delivery_attempted": true,
-    "delivery_receipt": null,
-    "delivery_uncertainty": null,
-    "drag_end_resolution": null,
-    "drift_oracle_calls": 0,
-    "effect_approved_unverified": false,
-    "effect_contract_hashes": [],
-    "effect_evidence": [],
-    "effect_results": [],
-    "effect_verified": null,
-    "elapsed_ms": "<elapsed_ms>",
-    "error": null,
-    "exception_handled": false,
-    "failure_category": null,
-    "field_read": null,
-    "fresh_actuation_events": [],
-    "heal": {
-     "applied": true,
-     "kind": "anchor_refresh",
-     "new_anchor": {
-      "click_point": [
-       85,
-       214
-      ],
-      "context_text": null,
-      "form_identity": null,
-      "identifier_crop": null,
-      "identifier_region": null,
-      "identity_template": {
-       "band_len": 0,
-       "concats": [],
-       "param_token_indices": {},
-       "rests_on_confusable_identifier": false,
-       "salt": "9588ca8dd8f70661010db0bc535ec9bf",
-       "schema_version": 1,
-       "signal_hashes": {
-        "structured|exact|": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|casefold": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|casefold,collapse_whitespace": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|casefold,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|collapse_whitespace": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|collapse_whitespace,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|unicode_nfkc": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|unicode_nfkc,casefold": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|unicode_nfkc,collapse_whitespace": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|unicode_nfkc,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3"
-       },
-       "structured": "503fb2093ed582b9",
-       "structured_row": true,
-       "tokens": []
-      },
-      "landmarks": [
-       {
-        "distance_px": 71,
-        "dx_px": 44,
-        "dy_px": -56,
-        "ocr_text": "Note",
-        "relation": "below"
-       },
-       {
-        "distance_px": 76,
-        "dx_px": -27,
-        "dy_px": 71,
-        "ocr_text": "New Encounter",
-        "relation": "above"
-       }
-      ],
-      "ocr_text": "Triage",
-      "region": [
-       5,
-       182,
-       160,
-       64
-      ],
-      "search_pad": 80,
-      "structural": {
-       "automation_id": null,
-       "frame_path": null,
-       "name": "Triage",
-       "role": "button",
-       "selector": "#type-triage",
-       "window_name": null
-      },
-      "structured_identity": null,
-      "template": "templates/step_007.png"
-     },
-     "old_anchor": {
-      "click_point": [
-       85,
-       214
-      ],
-      "context_text": null,
-      "form_identity": null,
-      "identifier_crop": null,
-      "identifier_region": null,
-      "identity_template": {
-       "band_len": 0,
-       "concats": [],
-       "param_token_indices": {},
-       "rests_on_confusable_identifier": false,
-       "salt": "9588ca8dd8f70661010db0bc535ec9bf",
-       "schema_version": 1,
-       "signal_hashes": {
-        "structured|exact|": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|casefold": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|casefold,collapse_whitespace": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|casefold,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|collapse_whitespace": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|collapse_whitespace,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|unicode_nfkc": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|unicode_nfkc,casefold": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|unicode_nfkc,collapse_whitespace": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|unicode_nfkc,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3"
-       },
-       "structured": "503fb2093ed582b9",
-       "structured_row": true,
-       "tokens": []
-      },
-      "landmarks": [
-       {
-        "distance_px": 71,
-        "dx_px": 44,
-        "dy_px": -56,
-        "ocr_text": "Note",
-        "relation": "below"
-       },
-       {
-        "distance_px": 76,
-        "dx_px": -27,
-        "dy_px": 71,
-        "ocr_text": "New Encounter",
-        "relation": "above"
-       }
-      ],
-      "ocr_text": "Triage",
-      "region": [
-       5,
-       182,
-       160,
-       64
-      ],
-      "search_pad": 80,
-      "structural": {
-       "automation_id": null,
-       "frame_path": null,
-       "name": "Triage",
-       "role": "button",
-       "selector": "#type-triage",
-       "window_name": null
-      },
-      "structured_identity": null,
-      "template": "templates/step_007.png"
-     },
-     "rung_used": "ocr",
-     "screenshot": "heals/step_007/screen.png",
-     "step_id": "step_007"
-    },
-    "identity": {
-     "abstain_reason": null,
-     "candidate_count": 1,
-     "coverage": 1.0,
-     "expected": "<structured identity template>",
-     "hover": null,
-     "known_id_evidence": null,
-     "known_id_halt": null,
-     "look_halt": null,
-     "looks": [],
-     "mode": "structured",
-     "observed": "Jane Sample — MRN P1 — DOB 1980-01-01",
-     "param": null,
-     "pixel_evidence": null,
-     "quorum_required": null,
-     "quorum_verified": null,
-     "signal_evidence": [],
-     "status": "verified"
-    },
-    "identity_first_frame_png": null,
-    "identity_first_read": null,
-    "identity_reobserved": false,
-    "input_retried": false,
-    "input_verified": null,
-    "intent": "click 'Triage'",
-    "interstitial_actions": [],
-    "ok": true,
-    "postcondition_drift_rescues": [],
-    "postcondition_page_scale": null,
-    "postconditions_ok": true,
-    "program_scope": [],
-    "resolution": {
-     "confidence": 1.0,
-     "elapsed_ms": "<elapsed_ms>",
-     "point": [
-      85,
-      214
-     ],
-     "rung": "ocr",
-     "structural_handle": null
-    },
-    "risk": "reversible",
-    "risk_explanation": "control label has no retained consequential-write signal",
-    "risk_review_required": false,
-    "safety_halt": false,
-    "safety_refusal_evidence": null,
-    "skipped": false,
-    "starting_state_settled": null,
-    "step_id": "step_007",
-    "submit_binding_verified": null,
-    "timings": "<timings>"
-   },
-   {
-    "actuation": null,
-    "after_png": "steps/step_008_after.png",
-    "api_fallback": null,
-    "before_png": "steps/step_008_before.png",
-    "delivery_attempted": true,
-    "delivery_receipt": null,
-    "delivery_uncertainty": null,
-    "drag_end_resolution": null,
-    "drift_oracle_calls": 0,
-    "effect_approved_unverified": false,
-    "effect_contract_hashes": [],
-    "effect_evidence": [],
-    "effect_results": [],
-    "effect_verified": null,
-    "elapsed_ms": "<elapsed_ms>",
-    "error": null,
-    "exception_handled": false,
-    "failure_category": null,
-    "field_read": null,
-    "fresh_actuation_events": [],
-    "heal": {
-     "applied": true,
-     "kind": "anchor_refresh",
-     "new_anchor": {
-      "click_point": [
-       344,
-       350
-      ],
-      "context_text": null,
-      "form_identity": null,
-      "identifier_crop": null,
-      "identifier_region": null,
-      "identity_template": {
-       "band_len": 0,
-       "concats": [],
-       "param_token_indices": {},
-       "rests_on_confusable_identifier": false,
-       "salt": "9588ca8dd8f70661010db0bc535ec9bf",
-       "schema_version": 1,
-       "signal_hashes": {
-        "structured|exact|": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|casefold": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|casefold,collapse_whitespace": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|casefold,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|collapse_whitespace": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|collapse_whitespace,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|unicode_nfkc": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|unicode_nfkc,casefold": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|unicode_nfkc,collapse_whitespace": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|unicode_nfkc,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3"
-       },
-       "structured": "503fb2093ed582b9",
-       "structured_row": true,
-       "tokens": []
-      },
-      "landmarks": [
-       {
-        "distance_px": 194,
-        "dx_px": 138,
-        "dy_px": 137,
-        "ocr_text": "Consult",
-        "relation": "left_of"
-       },
-       {
-        "distance_px": 286,
-        "dx_px": 135,
-        "dy_px": 252,
-        "ocr_text": "Jane Sample — MRN P1 — DOB 1980-01-01",
-        "relation": "above"
-       }
-      ],
-      "ocr_text": null,
-      "region": [
-       104,
-       254,
-       480,
-       192
-      ],
-      "search_pad": 80,
-      "structural": {
-       "automation_id": null,
-       "frame_path": null,
-       "name": "Note",
-       "role": "textbox",
-       "selector": "#note",
-       "window_name": null
-      },
-      "structured_identity": null,
-      "template": "templates/step_008.png"
-     },
-     "old_anchor": {
-      "click_point": [
-       344,
-       350
-      ],
-      "context_text": null,
-      "form_identity": null,
-      "identifier_crop": null,
-      "identifier_region": null,
-      "identity_template": {
-       "band_len": 0,
-       "concats": [],
-       "param_token_indices": {},
-       "rests_on_confusable_identifier": false,
-       "salt": "9588ca8dd8f70661010db0bc535ec9bf",
-       "schema_version": 1,
-       "signal_hashes": {
-        "structured|exact|": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|casefold": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|casefold,collapse_whitespace": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|casefold,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|collapse_whitespace": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|collapse_whitespace,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|unicode_nfkc": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|unicode_nfkc,casefold": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|unicode_nfkc,collapse_whitespace": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|unicode_nfkc,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3"
-       },
-       "structured": "503fb2093ed582b9",
-       "structured_row": true,
-       "tokens": []
-      },
-      "landmarks": [
-       {
-        "distance_px": 194,
-        "dx_px": 138,
-        "dy_px": 137,
-        "ocr_text": "Consult",
-        "relation": "left_of"
-       },
-       {
-        "distance_px": 286,
-        "dx_px": 135,
-        "dy_px": 252,
-        "ocr_text": "Jane Sample — MRN P1 — DOB 1980-01-01",
-        "relation": "above"
-       }
-      ],
-      "ocr_text": null,
-      "region": [
-       104,
-       254,
-       480,
-       192
-      ],
-      "search_pad": 80,
-      "structural": {
-       "automation_id": null,
-       "frame_path": null,
-       "name": "Note",
-       "role": "textbox",
-       "selector": "#note",
-       "window_name": null
-      },
-      "structured_identity": null,
-      "template": "templates/step_008.png"
-     },
-     "rung_used": "geometry",
-     "screenshot": "heals/step_008/screen.png",
-     "step_id": "step_008"
-    },
-    "identity": {
-     "abstain_reason": null,
-     "candidate_count": 1,
-     "coverage": 1.0,
-     "expected": "<structured identity template>",
-     "hover": null,
-     "known_id_evidence": null,
-     "known_id_halt": null,
-     "look_halt": null,
-     "looks": [],
-     "mode": "structured",
-     "observed": "Jane Sample — MRN P1 — DOB 1980-01-01",
-     "param": null,
-     "pixel_evidence": null,
-     "quorum_required": null,
-     "quorum_verified": null,
-     "signal_evidence": [],
-     "status": "verified"
-    },
-    "identity_first_frame_png": null,
-    "identity_first_read": null,
-    "identity_reobserved": false,
-    "input_retried": false,
-    "input_verified": null,
-    "intent": "click recorded visual target",
-    "interstitial_actions": [],
-    "ok": true,
-    "postcondition_drift_rescues": [],
-    "postcondition_page_scale": null,
-    "postconditions_ok": true,
-    "program_scope": [],
-    "resolution": {
-     "confidence": 0.881,
-     "elapsed_ms": "<elapsed_ms>",
-     "point": [
-      344,
-      350
-     ],
-     "rung": "geometry",
-     "structural_handle": null
-    },
-    "risk": "reversible",
-    "risk_explanation": "control label has no retained consequential-write signal",
-    "risk_review_required": false,
-    "safety_halt": false,
-    "safety_refusal_evidence": null,
-    "skipped": false,
-    "starting_state_settled": null,
-    "step_id": "step_008",
-    "submit_binding_verified": null,
-    "timings": "<timings>"
-   },
-   {
-    "actuation": null,
-    "after_png": "steps/step_009_after.png",
-    "api_fallback": null,
-    "before_png": "steps/step_009_before.png",
-    "delivery_attempted": true,
-    "delivery_receipt": null,
-    "delivery_uncertainty": null,
-    "drag_end_resolution": null,
-    "drift_oracle_calls": 0,
-    "effect_approved_unverified": false,
-    "effect_contract_hashes": [],
-    "effect_evidence": [],
-    "effect_results": [],
-    "effect_verified": null,
-    "elapsed_ms": "<elapsed_ms>",
-    "error": null,
-    "exception_handled": false,
-    "failure_category": null,
-    "field_read": null,
-    "fresh_actuation_events": [],
-    "heal": null,
-    "identity": null,
-    "identity_first_frame_png": null,
-    "identity_first_read": null,
-    "identity_reobserved": false,
-    "input_retried": false,
-    "input_verified": true,
-    "intent": "type <note>",
-    "interstitial_actions": [],
-    "ok": true,
-    "postcondition_drift_rescues": [],
-    "postcondition_page_scale": null,
-    "postconditions_ok": null,
-    "program_scope": [],
-    "resolution": null,
-    "risk": "reversible",
-    "risk_explanation": "action has no retained consequential commit signal",
-    "risk_review_required": false,
-    "safety_halt": false,
-    "safety_refusal_evidence": null,
-    "skipped": false,
-    "starting_state_settled": null,
-    "step_id": "step_009",
-    "submit_binding_verified": null,
-    "timings": "<timings>"
-   },
-   {
-    "actuation": "guarded_coordinate",
-    "after_png": "steps/step_010_after.png",
-    "api_fallback": null,
-    "before_png": "steps/step_010_before.png",
-    "delivery_attempted": true,
-    "delivery_receipt": {
-     "delivered_at": "<delivered_at>",
-     "native": false,
-     "operation": "guarded_coordinate_click",
-     "outcome_verified": false,
-     "receipt_id": "<receipt_id#1>",
-     "status": "delivered",
-     "target_fingerprint": "<target_fingerprint#1>"
-    },
-    "delivery_uncertainty": null,
-    "drag_end_resolution": null,
-    "drift_oracle_calls": 0,
-    "effect_approved_unverified": false,
-    "effect_contract_hashes": [],
-    "effect_evidence": [],
-    "effect_results": [],
-    "effect_verified": null,
-    "elapsed_ms": "<elapsed_ms>",
-    "error": null,
-    "exception_handled": false,
-    "failure_category": null,
-    "field_read": null,
-    "fresh_actuation_events": [],
-    "heal": {
-     "applied": true,
-     "kind": "anchor_refresh",
-     "new_anchor": {
-      "click_point": [
-       134,
-       457
-      ],
-      "context_text": null,
-      "form_identity": null,
-      "identifier_crop": null,
-      "identifier_region": null,
-      "identity_template": {
-       "band_len": 0,
-       "concats": [],
-       "param_token_indices": {},
-       "rests_on_confusable_identifier": false,
-       "salt": "9588ca8dd8f70661010db0bc535ec9bf",
-       "schema_version": 1,
-       "signal_hashes": {
-        "structured|exact|": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|casefold": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|casefold,collapse_whitespace": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|casefold,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|collapse_whitespace": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|collapse_whitespace,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|unicode_nfkc": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|unicode_nfkc,casefold": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|unicode_nfkc,collapse_whitespace": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|unicode_nfkc,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3"
-       },
-       "structured": "503fb2093ed582b9",
-       "structured_row": true,
-       "tokens": []
-      },
-      "landmarks": [
-       {
-        "distance_px": 210,
-        "dx_px": 94,
-        "dy_px": 188,
-        "ocr_text": "Note",
-        "relation": "above"
-       },
-       {
-        "distance_px": 254,
-        "dx_px": -72,
-        "dy_px": 244,
-        "ocr_text": "Consult",
-        "relation": "above"
-       }
-      ],
-      "ocr_text": "Save Encounter",
-      "region": [
-       54,
-       425,
-       160,
-       64
-      ],
-      "search_pad": 80,
-      "structural": {
-       "automation_id": null,
-       "frame_path": null,
-       "name": "Save Encounter",
-       "role": "button",
-       "selector": "#save-encounter",
-       "window_name": null
-      },
-      "structured_identity": null,
-      "template": "templates/step_010.png"
-     },
-     "old_anchor": {
-      "click_point": [
-       134,
-       457
-      ],
-      "context_text": null,
-      "form_identity": null,
-      "identifier_crop": null,
-      "identifier_region": null,
-      "identity_template": {
-       "band_len": 0,
-       "concats": [],
-       "param_token_indices": {},
-       "rests_on_confusable_identifier": false,
-       "salt": "9588ca8dd8f70661010db0bc535ec9bf",
-       "schema_version": 1,
-       "signal_hashes": {
-        "structured|exact|": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|casefold": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|casefold,collapse_whitespace": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|casefold,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|collapse_whitespace": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|collapse_whitespace,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|unicode_nfkc": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|unicode_nfkc,casefold": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "503fb2093ed582b9b541f011a9a4a385869a623f3abb1a9a48cc74dfa3228627",
-        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "f0fd40595afc38e7633e42e23ca5d6b4f062fdbfecea41942112656a350e68eb",
-        "structured|normalized|unicode_nfkc,collapse_whitespace": "f189545cc4d03ef9477287fe81be842ac1cdf27732e907d82e62f792457f7f50",
-        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3",
-        "structured|normalized|unicode_nfkc,strip_punctuation": "a08db70cad85ce9f925fa222da36213dbd747b8a7ed691c967ceabab72c9cba3"
-       },
-       "structured": "503fb2093ed582b9",
-       "structured_row": true,
-       "tokens": []
-      },
-      "landmarks": [
-       {
-        "distance_px": 210,
-        "dx_px": 94,
-        "dy_px": 188,
-        "ocr_text": "Note",
-        "relation": "above"
-       },
-       {
-        "distance_px": 254,
-        "dx_px": -72,
-        "dy_px": 244,
-        "ocr_text": "Consult",
-        "relation": "above"
-       }
-      ],
-      "ocr_text": "Save Encounter",
-      "region": [
-       54,
-       425,
-       160,
-       64
-      ],
-      "search_pad": 80,
-      "structural": {
-       "automation_id": null,
-       "frame_path": null,
-       "name": "Save Encounter",
-       "role": "button",
-       "selector": "#save-encounter",
-       "window_name": null
-      },
-      "structured_identity": null,
-      "template": "templates/step_010.png"
-     },
-     "rung_used": "ocr",
-     "screenshot": "heals/step_010/screen.png",
-     "step_id": "step_010"
-    },
-    "identity": {
-     "abstain_reason": null,
-     "candidate_count": 1,
-     "coverage": 1.0,
-     "expected": "<structured identity template>",
-     "hover": null,
-     "known_id_evidence": null,
-     "known_id_halt": null,
-     "look_halt": null,
-     "looks": [],
-     "mode": "structured",
-     "observed": "Jane Sample — MRN P1 — DOB 1980-01-01",
-     "param": null,
-     "pixel_evidence": null,
-     "quorum_required": null,
-     "quorum_verified": null,
-     "signal_evidence": [],
-     "status": "verified"
-    },
-    "identity_first_frame_png": null,
-    "identity_first_read": null,
-    "identity_reobserved": false,
-    "input_retried": false,
-    "input_verified": null,
-    "intent": "click 'Save Encounter'",
-    "interstitial_actions": [],
-    "ok": true,
-    "postcondition_drift_rescues": [],
-    "postcondition_page_scale": null,
-    "postconditions_ok": true,
-    "program_scope": [],
-    "resolution": {
-     "confidence": 1.0,
-     "elapsed_ms": "<elapsed_ms>",
-     "point": [
-      134,
-      457
-     ],
-     "rung": "ocr",
-     "structural_handle": null
-    },
-    "risk": "irreversible",
-    "risk_explanation": "retained action context names a consequential state change",
-    "risk_review_required": false,
-    "safety_halt": false,
-    "safety_refusal_evidence": null,
-    "skipped": false,
-    "starting_state_settled": null,
-    "step_id": "step_010",
-    "submit_binding_verified": null,
-    "timings": "<timings>"
    }
   ],
   "run_id_sha256": "<run_id_sha256>",
   "rung_counts": {
-   "geometry": 3,
-   "ocr": 5
+   "geometry": 2,
+   "ocr": 1
   },
   "screenshots_may_leave_box": false,
   "source_recording_sha256": null,
   "started_at": "<started_at>",
-  "success": true,
+  "success": false,
   "surface_override": false,
   "terminal_outcome": null,
   "total_ms": "<total_ms>",
   "transaction_billable": false,
-  "transaction_outcome": "COMPLETED_UNVERIFIED",
+  "transaction_outcome": "HALTED_BEFORE_EFFECT",
   "transaction_platform_fault": false,
   "visited_states": [],
   "workflow_contract_sha256": "03ef68277e63dded9141d8ab2d8460b0742d9a184e5f69161d70c7415ceb6494",
@@ -2695,66 +1070,6 @@
    "call": "click",
    "kwargs": {
     "double": false
-   }
-  },
-  {
-   "args": [
-    113,
-    159
-   ],
-   "call": "click",
-   "kwargs": {
-    "double": false
-   }
-  },
-  {
-   "args": [
-    85,
-    214
-   ],
-   "call": "click",
-   "kwargs": {
-    "double": false
-   }
-  },
-  {
-   "args": [
-    344,
-    350
-   ],
-   "call": "click",
-   "kwargs": {
-    "double": false
-   }
-  },
-  {
-   "args": [
-    "Golden triage booking three months"
-   ],
-   "call": "type_text"
-  },
-  {
-   "call": "cancel_pending_structural_guards"
-  },
-  {
-   "args": [
-    134,
-    457
-   ],
-   "call": "arm_guarded_coordinate"
-  },
-  {
-   "call": "cancel_guarded_coordinate"
-  },
-  {
-   "args": [
-    134,
-    457
-   ],
-   "call": "act_guarded_coordinate",
-   "kwargs": {
-    "double": false,
-    "expected_frame_sha256": "e1279f4bc5f9d5aed67409a63ea016fed425884ebbbfdd314f0d19503820e6f4"
    }
   },
   {
