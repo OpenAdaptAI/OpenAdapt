@@ -58,6 +58,7 @@ from openadapt_flow.jit.compile_agent import (
 )
 from openadapt_flow.jit.keys import CustomerModelKey
 from openadapt_flow.jit.signature import TaskSignature
+from openadapt_flow.privacy import task_bindings
 
 __all__ = [
     "BACKENDS",
@@ -311,6 +312,7 @@ class _HarnessedAgent:
         keep: Sequence[str],
         evidence_dir: Path,
         principal_id: Optional[str],
+        bindings: Optional[Mapping[str, str]] = None,
         readback: Optional[Callable[[], Any]] = None,
         metadata_url: Optional[str] = None,
     ) -> None:
@@ -320,6 +322,7 @@ class _HarnessedAgent:
         self.dialect = str(inner.dialect)
         self.gate = gate
         self.keep = list(keep)
+        self.bindings = dict(bindings or {})
         self.evidence_dir = evidence_dir
         self.principal_id = principal_id
         self.harness: Optional[Union[Harness, SurfaceHarness]] = None
@@ -342,6 +345,7 @@ class _HarnessedAgent:
             keep=self.keep,
             evidence_dir=self.evidence_dir,
             readback=self.readback,
+            bindings=self.bindings,
         )
         from openadapt_flow.compile_agent.network_metadata import NetworkMetadata
 
@@ -698,7 +702,10 @@ class FirstRunCompiler:
             agent,
             metadata_url=self.url,
             gate=SaveGate(self.on_screen, hold),
-            keep=[*self.on_screen, *values.values(), *self.expect.values()],
+            # The record identity and the inputs reach the model only as
+            # typed placeholders; the gate and read-back check the values.
+            keep=[*self.expect.values()],
+            bindings=task_bindings(identity=self.on_screen, params=values),
             evidence_dir=attempt / "gates",
             principal_id=principal_id or getattr(agent, "principal_id", None),
             # Every save in run 1 is read back from the system of record and
