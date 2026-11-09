@@ -743,7 +743,13 @@ session and re-reads every due record in it, so a batch costs one sign-in:
 | nothing before `deadline_hours` | `RECONCILIATION_REQUIRED` |
 
 `after_s` is the quiet window: the final read doesn't run before it, so a
-late change has to land before the read that settles the save. Set it from the
+late change has to land before the read that settles the save. A view that
+lags the record (a replica or an index) can serve a copy older than a late
+change, with an ordinary HTTP 200, that still matches the provisional read.
+With `index_lag_s` set, a record settles `VERIFIED` only from a second read
+that starts at least that long after the settle session opened; a change seen
+on either read reconciles. Without it, a stale copy can't be told from a
+fresh one, so declare the lag for any view that has one. Set it from the
 application's observed behavior. A rejected status at the provisional read is
 REFUTED at once. `openadapt-flow deferred status RUN` gives the run's settled
 outcome.

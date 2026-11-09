@@ -2255,6 +2255,11 @@ def settle_ui_readback(
       or (first, before any read) a deadline that passed;
     - still waiting: a status still pending, or a page that couldn't be read.
 
+    With ``index_lag_s`` set, an entry verifies only from a second read that
+    starts at least that long after the session opened, so a lagging view
+    can't certify an old copy of a record changed before the settle. A lag
+    the deployment doesn't declare can't be seen past.
+
     Returns the :class:`~.deferred_report.Settlement` list.
     """
 
@@ -2298,80 +2303,98 @@ def settle_ui_readback(
         return settled
     exclude = (final.status_field,) if final.status_field else ()
 
-    def work(session: ReadbackSession) -> list[tuple[Any, Any, str, str]]:
-        decisions = []
-        for entry, target in due:
-            raw = session.read(target)  # type: ignore[call-arg]
-            independence = assess_independence(
-                own_browser=session.facts.own_browser,
-                fresh_context=session.facts.fresh_context,
-                signed_in=session.facts.signed_in,
-                fetched=raw.fetched,
-                read_url=raw.view_url or target.record_url,
-                acting_url=None,
-                acting_bound=False,
-                acting_has_url=False,
+    def judge(
+        session: ReadbackSession, entry: Any, target: ResolvedReadback
+    ) -> Optional[tuple[Any, str, str, str]]:
+        """One read of one entry: a decision, or None to keep it waiting."""
+
+        raw = session.read(target)  # type: ignore[call-arg]
+        independence = assess_independence(
+            own_browser=session.facts.own_browser,
+            fresh_context=session.facts.fresh_context,
+            signed_in=session.facts.signed_in,
+            fetched=raw.fetched,
+            read_url=raw.view_url or target.record_url,
+            acting_url=None,
+            acting_bound=False,
+            acting_has_url=False,
+        )
+        if not independence.qualifies:
+            return None  # refused document: keep waiting until the deadline
+        page = verifier._normalize(raw, target)
+        if not page.readable:
+            return None  # can't tell now; the deadline still applies
+        if page.not_found or not page.records:
+            return (
+                entry,
+                "reconciliation_required",
+                "gone",
+                "the record page no longer shows the record",
             )
-            if not independence.qualifies:
-                continue  # refused document: keep waiting until the deadline
-            page = verifier._normalize(raw, target)
-            if not page.readable:
-                continue  # can't tell now; the deadline still applies
-            if page.not_found or not page.records:
-                decisions.append(
-                    (
-                        entry,
-                        "reconciliation_required",
-                        "gone",
-                        "the record page no longer shows the record",
-                    )
-                )
-                continue
-            if final.status_field is not None:
-                kinds = {
-                    final.status_of(r.get(final.status_field)) for r in page.records
-                }
-                if kinds == {"pending"}:
-                    continue
-                if kinds != {"final"}:
-                    decisions.append(
-                        (
-                            entry,
-                            "reconciliation_required",
-                            "status",
-                            "the record shows a rejected or undeclared status",
-                        )
-                    )
-                    continue
-            if page.uncertain:
-                continue
-            mac = ledger.key_digest(
-                record_digest_payload(page.records, exclude=exclude)
-            )
-            if mac != entry.record_mac:
-                decisions.append(
-                    (
-                        entry,
-                        "reconciliation_required",
-                        "changed",
-                        "the record changed after the provisional check",
-                    )
-                )
-                continue
-            decisions.append(
-                (
+        if final.status_field is not None:
+            kinds = {final.status_of(r.get(final.status_field)) for r in page.records}
+            if kinds == {"pending"}:
+                return None
+            if kinds != {"final"}:
+                return (
                     entry,
-                    "verified",
-                    "final",
-                    "the final read shows the record unchanged"
-                    + (" with a final status" if final.status_field else ""),
+                    "reconciliation_required",
+                    "status",
+                    "the record shows a rejected or undeclared status",
                 )
+        if page.uncertain:
+            return None
+        mac = ledger.key_digest(record_digest_payload(page.records, exclude=exclude))
+        if mac != entry.record_mac:
+            return (
+                entry,
+                "reconciliation_required",
+                "changed",
+                "the record changed after the provisional check",
             )
+        return (
+            entry,
+            "verified",
+            "final",
+            "the final read shows the record unchanged"
+            + (" with a final status" if final.status_field else ""),
+        )
+
+    lag_s = spec.index_lag_s
+
+    def work(session: ReadbackSession) -> list[tuple[Any, Any, str, str]]:
+        # A view that lags the record (a replica or an index) can serve a
+        # copy older than a late change with an ordinary HTTP 200, and that
+        # copy matches the provisional read. A read reflects the record only
+        # as of ``index_lag_s`` before it, so VERIFIED needs a read that
+        # starts at least that long after this session opened: every change
+        # made before the settle began is then in what the read shows. A
+        # change seen on any read reconciles; a later read never undoes it.
+        opened = time.monotonic()
+        decisions = []
+        unchanged = []
+        for entry, target in due:
+            decision = judge(session, entry, target)
+            if decision is None:
+                continue
+            if decision[1] == "verified" and lag_s > 0:
+                unchanged.append((entry, target))
+                continue
+            decisions.append(decision)
+        if unchanged:
+            wait = opened + lag_s - time.monotonic()
+            if wait > 0:
+                time.sleep(wait)
+            for entry, target in unchanged:
+                decision = judge(session, entry, target)
+                if decision is not None:
+                    decisions.append(decision)
         return decisions
 
     decisions, failure, facts = verifier._in_session(
         work,
-        budget_s=verifier._session_budget() + len(due) * spec.navigation_timeout_s,
+        budget_s=verifier._session_budget(lag_s)
+        + 2 * len(due) * spec.navigation_timeout_s,
         target=due[0][1],
     )
     if decisions is None:

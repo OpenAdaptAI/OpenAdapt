@@ -276,3 +276,43 @@ def test_legacy_null_digest_waiting_entry_needs_positive_other_target(
     if legacy != "other_target":
         assert restarted.requires_readable_pre_state_for(_note()) is True
         assert "still provisional" in before.detail["reason"]
+
+
+def _lagging_provisional(tmp_path):
+    spec = _spec(final=_final(tmp_path), index_lag_s=0.05)
+    first = _verifier(
+        Driver([_page(_row(status="Pending review"))]), spec, backend=DesktopBackend()
+    ).verify(_note(), EMPTY_BEFORE)
+    assert first.deferred_check
+    return spec, first
+
+
+def test_stale_replica_cannot_settle_after_a_late_change(tmp_path) -> None:
+    """A lagging view serves the old copy (HTTP 200) on the first final read;
+    the canonical late change shows once the declared lag has passed."""
+
+    spec, first = _lagging_provisional(tmp_path)
+    stale = _page(_row(status="Approved"))
+    fresh = _page(_row(note="edited later", status="Approved"))
+    driver = Driver([stale, fresh])
+    settled = settle_ui_readback(spec, driver=driver, environ=ENV)
+    assert [(s.id, s.state, s.code) for s in settled] == [
+        (first.deferred_check, "reconciliation_required", "changed")
+    ]
+    assert len(driver.sessions) == 1 and len(driver.sessions[0].reads) == 2
+
+
+def test_lagging_view_verifies_only_after_the_lag_rereads(tmp_path) -> None:
+    spec, first = _lagging_provisional(tmp_path)
+    driver = Driver([_page(_row(status="Approved"))])
+    settled = settle_ui_readback(spec, driver=driver, environ=ENV)
+    assert [(s.id, s.state) for s in settled] == [(first.deferred_check, "verified")]
+    assert len(driver.sessions[0].reads) == 2
+
+
+def test_lagging_view_unreadable_reread_keeps_waiting(tmp_path) -> None:
+    spec, first = _lagging_provisional(tmp_path)
+    ok = _page(_row(status="Approved"))
+    driver = Driver([ok, replace(ok, ok=False)])
+    assert settle_ui_readback(spec, driver=driver, environ=ENV) == []
+    assert PendingLedger(spec.final.ledger).get(first.deferred_check).state == "waiting"
