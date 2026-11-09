@@ -65,8 +65,9 @@ fault cases, and deployment policy before production use.
 ## Record a workflow
 
 Recording is the same on every surface; only the target differs: `--url`
-for a web app, `--window` for a desktop app or a local RDP or Citrix client
-window.
+for a web app, `--window` for a Windows or macOS app window or a local RDP or
+Citrix client window. Linux and network RDP record the whole local desktop, so
+they take no target.
 
 ```bash
 openadapt flow record --backend <web|windows|macos|linux|rdp|citrix> <target> --out rec
@@ -78,7 +79,9 @@ openadapt flow record --backend web --url https://your-app.example --out rec
 openadapt flow compile rec --out bundle --name my-workflow
 openadapt flow replay bundle --url https://your-app.example --run-dir run
 
-# A desktop app (macOS here; Windows and Citrix take --window too)
+# A desktop app (macOS here; Windows and Citrix take --window too).
+# Desktop recording and macOS replay are separate extras.
+python -m pip install --upgrade 'openadapt[capture,macos]'
 openadapt flow record --backend macos --window "Your App" --out rec
 openadapt flow compile rec --out bundle --name my-workflow
 openadapt flow replay bundle --macos-app "Your App" --run-dir run

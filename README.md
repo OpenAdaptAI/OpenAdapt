@@ -174,8 +174,9 @@ covers other clients.
 ### Record a task by hand
 
 Recording works the same way on every surface; only the target differs:
-`--url` for a web app, `--window` (and `--window-title`) for a desktop app or a
-local RDP or Citrix client window.
+`--url` for a web app, `--window` (and `--window-title`) for a Windows or macOS
+app window or a local RDP or Citrix client window. Linux and network RDP record
+the whole local desktop, so they take no target.
 
 ```bash
 python -m pip install --upgrade openadapt
@@ -186,7 +187,9 @@ openadapt flow record --backend web --url https://staging.your-app.example --out
 openadapt flow compile rec --out bundle --name my-first-workflow
 openadapt flow replay bundle --url https://staging.your-app.example --run-dir run
 
-# A desktop app (macOS here; Windows and Citrix take --window too)
+# A desktop app (macOS here; Windows and Citrix take --window too).
+# Desktop recording and macOS replay are separate extras.
+python -m pip install --upgrade 'openadapt[capture,macos]'
 openadapt flow record --backend macos --window "Your App" --out rec
 openadapt flow compile rec --out bundle --name my-first-workflow
 openadapt flow replay bundle --macos-app "Your App" --run-dir run
