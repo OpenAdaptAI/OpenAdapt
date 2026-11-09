@@ -289,7 +289,9 @@ def test_actual_write_can_also_satisfy_confirmation_screen_evidence(
                 round(box["x"] + box["width"] / 2),
                 round(box["y"] + box["height"] / 2),
             )
-            page.wait_for_function("document.querySelector('#count').textContent === '1'")
+            page.wait_for_function(
+                "document.querySelector('#count').textContent === '1'"
+            )
             assert rows == [{"id": 1}]
             assert page.get_by_role("dialog").is_visible()
             assert page.get_by_role("button", name="Confirm", exact=True).is_visible()
