@@ -1,0 +1,39 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_05a7082d018c279a016ae964b0e07087d2bf67366fe57fe1a4",
+     "call_id": "call_BvDbPjuEMVkxhbKpKFtr0Uad",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Medplum is displaying the sign-in screen; I cannot access the records without authentication.",
+   "calls": []
+  }
+ ],
+ "actions": [],
+ "usage": [
+  {
+   "in": 2314,
+   "out": 17,
+   "usd": 0.000638,
+   "cached": 2311
+  },
+  {
+   "in": 3531,
+   "out": 44,
+   "usd": 0.001152,
+   "cached": 3528
+  }
+ ]
+}

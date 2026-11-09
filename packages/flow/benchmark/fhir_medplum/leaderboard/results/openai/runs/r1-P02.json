@@ -1,0 +1,89 @@
+{
+ "id": "P02",
+ "class": "clean",
+ "type": "patient",
+ "expect": "found",
+ "note": "The person is already registered; nothing should be written.",
+ "agent_s": 12.7,
+ "cost_usd": 0.019324,
+ "claim": {
+  "status": "done",
+  "id": "Patient/f6c95241-6fd6-4d4d-8357-0580b5c09a88",
+  "note": "RESULT: DONE Patient/f6c95241-6fd6-4d4d-8357-0580b5c09a88",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/Patient/f6c95241-6fd6-4d4d-8357-0580b5c09a88/json",
+  "final_text": "RESULT: DONE Patient/f6c95241-6fd6-4d4d-8357-0580b5c09a88",
+  "model_calls": 5,
+  "actions": 2,
+  "tokens_in": 23956,
+  "tokens_out": 142
+ },
+ "verifier": {
+  "outcome": "found_existing",
+  "id": "f6c95241-6fd6-4d4d-8357-0580b5c09a88",
+  "reasons": [
+   "one record was already the person"
+  ],
+  "evidence": {
+   "before_matches": 1,
+   "after_matches": 1,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": []
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "found_existing",
+  "id": "f6c95241-6fd6-4d4d-8357-0580b5c09a88",
+  "reasons": [
+   "one record was already the person"
+  ],
+  "evidence": {
+   "before_matches": 1,
+   "after_matches": 1,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": []
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.3,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/f6c95241-6fd6-4d4d-8357-0580b5c09a88"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1
+}

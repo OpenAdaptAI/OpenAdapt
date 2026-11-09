@@ -27,12 +27,14 @@ import platform
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Optional
 
 import httpx
 
+from openadapt_flow.rl_env import lifecycle
 from openadapt_flow.rl_env.agents import RandomAgent, scripted
 from openadapt_flow.rl_env.tasks import EnvDirectory, Task, load_environment
 
@@ -47,7 +49,13 @@ def _free_port() -> int:
 
 
 def start_server(env_dir: Path, port: int) -> subprocess.Popen[bytes]:
-    proc = subprocess.Popen(
+    """Start a server in its own process group; stop it with ``lifecycle.stop``.
+
+    Its log goes to a temporary file, not a pipe nobody reads, so a long run
+    cannot fill the pipe and block the server.
+    """
+    log = tempfile.TemporaryFile()
+    proc = lifecycle.spawn(
         [
             sys.executable,
             "-m",
@@ -57,25 +65,34 @@ def start_server(env_dir: Path, port: int) -> subprocess.Popen[bytes]:
             str(port),
         ],
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
+        stderr=log,
     )
     deadline = time.monotonic() + 60
-    while time.monotonic() < deadline:
-        if proc.poll() is not None:
-            raise RuntimeError(
-                proc.stderr.read().decode() if proc.stderr else "server died"
-            )
-        try:
-            if (
-                httpx.get(f"http://127.0.0.1:{port}/health", timeout=2).status_code
-                == 200
-            ):
-                return proc
-        except httpx.HTTPError:
-            pass
-        time.sleep(0.5)
-    proc.kill()
-    raise RuntimeError("server did not become healthy in 60 s")
+    try:
+        while time.monotonic() < deadline:
+            if proc.poll() is not None:
+                raise RuntimeError(f"server exited with {proc.returncode}")
+            try:
+                if (
+                    httpx.get(f"http://127.0.0.1:{port}/health", timeout=2).status_code
+                    == 200
+                ):
+                    log.close()  # the server holds its own copy of the file
+                    return proc
+            except httpx.HTTPError:
+                pass
+            time.sleep(0.5)
+        raise RuntimeError("server did not become healthy in 60 s")
+    except RuntimeError as exc:
+        lifecycle.stop(proc)
+        log.seek(0)
+        tail = log.read()[-4000:].decode(errors="replace")
+        log.close()
+        raise RuntimeError(f"{exc}\n{tail}") from None
+    except BaseException:
+        lifecycle.stop(proc)
+        log.close()
+        raise
 
 
 def run_episode(client: Any, task: Task, agent: str, seed: int) -> dict[str, Any]:
@@ -216,8 +233,7 @@ def validate(
                 )
     finally:
         if proc is not None:
-            proc.terminate()
-            proc.wait(timeout=30)
+            lifecycle.stop(proc)
     summary = summarize(env.model_copy(update={"tasks": tasks}), rows)
     summary["pack_sha256"] = env.pack_sha256
     summary["run"] = {

@@ -1,0 +1,116 @@
+{
+ "id": "A07",
+ "class": "duplicate",
+ "type": "allergy",
+ "expect": "create",
+ "note": "The write path sends the create twice.",
+ "agent_s": 2405.7,
+ "cost_usd": 0.0,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "Directly open the FHIR resource URL for the allergyintolerance to verify it exists and gather its details.",
+  "claim_line": false,
+  "stopped": "time cap: 2400 s",
+  "end_url": "http://localhost:9821/Patient/3f7ffc29-a79e-4a9a-b897-7f0a7883774d/details",
+  "final_text": "Directly open the FHIR resource URL for the allergyintolerance to verify it exists and gather its details.",
+  "model_calls": 53,
+  "actions": 52,
+  "tokens_in": 490097,
+  "tokens_out": 4276
+ },
+ "verifier": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "no record is the person and the agent created none"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 0,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [],
+   "window_until": "2026-11-04T23:58:16+00:00"
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "no record is the person and the agent created none"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 0,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [],
+   "window_until": "2026-11-04T23:58:18+00:00"
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.3,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no AllergyIntolerance was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 2,
+ "host_load": {
+  "start": 10.2,
+  "end": 3.6,
+  "waited_s": 0
+ }
+}

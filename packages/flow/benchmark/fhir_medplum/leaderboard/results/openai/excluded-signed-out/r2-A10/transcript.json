@@ -1,0 +1,66 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d057df3467b091016ae96419f28887d2bbdf902768b9470f",
+     "call_id": "call_KQ8iakrChaoHvdyRL6VYjAoR",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d057df3467b091016ae9641d377c87d2a36e1b976ff2b148",
+     "call_id": "call_GOpKRMMHuQQIzSYJR92r0vMI",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Medplum is showing the sign-in page; I cannot access the patient record without authentication.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "wait",
+   "s": 1.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 2343,
+   "out": 22,
+   "usd": 0.000694,
+   "cached": 2340
+  },
+  {
+   "in": 3560,
+   "out": 36,
+   "usd": 0.001077,
+   "cached": 3557
+  },
+  {
+   "in": 4817,
+   "out": 27,
+   "usd": 0.003501,
+   "cached": 3557
+  }
+ ]
+}

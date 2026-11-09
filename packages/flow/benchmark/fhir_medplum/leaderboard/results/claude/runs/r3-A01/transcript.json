@@ -1,0 +1,1225 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost:3000/AllergyIntolerance?patient=Patient/460780d1-2e37-4616-b7d6-2e603314ac88\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      221,
+      297
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      640,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 10
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      200,
+      33
+     ]
+    },
+    {
+     "text": "AllergyIntolerance"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      290,
+      33
+     ]
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "coordinate": [
+      32,
+      31
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      124,
+      90
+     ]
+    },
+    {
+     "text": "AllergyIntolerance"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      40,
+      90
+     ]
+    },
+    {
+     "text": "End"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      84,
+      138
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1231,
+      167
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Use the JSON tab.",
+   "actions": [
+    {
+     "coordinate": [
+      349,
+      131
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      760,
+      400
+     ]
+    },
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/460780d1-2e37-4616-b7d6-2e603314ac88\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+    },
+    {
+     "coordinate": [
+      1182,
+      718
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      760,
+      500
+     ]
+    },
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/460780d1-2e37-4616-b7d6-2e603314ac88\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+Home"
+    },
+    {
+     "text": "ctrl+shift+End"
+    },
+    {
+     "text": "Delete"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      124,
+      90
+     ]
+    },
+    {
+     "text": "AllergyIntolerance"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      84,
+      138
+     ]
+    },
+    {
+     "duration": 6
+    },
+    {
+     "coordinate": [
+      1231,
+      167
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      349,
+      131
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "start_coordinate": [
+      322,
+      205
+     ],
+     "coordinate": [
+      1190,
+      450
+     ]
+    },
+    {
+     "text": "Delete"
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Cleared. Now type.",
+   "actions": [
+    {
+     "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/460780d1-2e37-4616-b7d6-2e603314ac88\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1182,
+      718
+     ]
+    },
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Parsed. Scroll to find the Create button.",
+   "actions": [
+    {
+     "coordinate": [
+      760,
+      600
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 15
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1182,
+      733
+     ]
+    },
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      124,
+      90
+     ]
+    },
+    {
+     "text": "AllergyIntolerance"
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      84,
+      138
+     ]
+    },
+    {
+     "duration": 10
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Possibly still loading; wait.",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I recorded the penicillin allergy for Rosa Delgado (born 1979-06-14, Patient/460780d1-2e37-4616-b7d6-2e603314ac88). There was no existing AllergyIntolerance for her, so I created one.\n\nThe patient list showed only one Rosa Delgado, and her birth date matches. The AllergyIntolerance list was empty before I added this record, and it now shows exactly one.\n\nThe new record has only the five requested fields:\n- **Patient:** Patient/460780d1-2e37-4616-b7d6-2e603314ac88\n- **Code:** SNOMED CT 91936005 (system http://snomed.info/sct)\n- **Criticality:** high\n- **Clinical status:** active\n- **Verification status:** confirmed\n\nRESULT: DONE AllergyIntolerance/dcacf4af-88a5-4acf-89dd-3b1ae041f532",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost:3000/AllergyIntolerance?patient=Patient/460780d1-2e37-4616-b7d6-2e603314ac88\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 221,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 500,
+   "dx": 0,
+   "dy": 1200
+  },
+  {
+   "a": "click",
+   "x": 200,
+   "y": 33,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 290,
+   "y": 33,
+   "button": "left",
+   "count": 3,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 32,
+   "y": 31,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 40,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "End"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 84,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 1231,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 349,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 760,
+   "y": 400,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/460780d1-2e37-4616-b7d6-2e603314ac88\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 760,
+   "y": 500,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/460780d1-2e37-4616-b7d6-2e603314ac88\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "Home"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "shift",
+    "End"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 84,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 6.0
+  },
+  {
+   "a": "click",
+   "x": 1231,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 349,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "drag",
+   "path": [
+    [
+     322,
+     205
+    ],
+    [
+     1190,
+     450
+    ]
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "type",
+   "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/460780d1-2e37-4616-b7d6-2e603314ac88\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "scroll",
+   "x": 760,
+   "y": 600,
+   "dx": 0,
+   "dy": 1800
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 733,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 84,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6357,
+   "out": 59,
+   "usd": 0.016481,
+   "cached": 0
+  },
+  {
+   "in": 7789,
+   "out": 260,
+   "usd": 0.00746,
+   "cached": 6353
+  },
+  {
+   "in": 9448,
+   "out": 137,
+   "usd": 0.007079,
+   "cached": 7787
+  },
+  {
+   "in": 10975,
+   "out": 193,
+   "usd": 0.007641,
+   "cached": 9446
+  },
+  {
+   "in": 12558,
+   "out": 267,
+   "usd": 0.008826,
+   "cached": 10973
+  },
+  {
+   "in": 14226,
+   "out": 83,
+   "usd": 0.007515,
+   "cached": 12556
+  },
+  {
+   "in": 15686,
+   "out": 208,
+   "usd": 0.008579,
+   "cached": 14224
+  },
+  {
+   "in": 17317,
+   "out": 129,
+   "usd": 0.008508,
+   "cached": 15684
+  },
+  {
+   "in": 18847,
+   "out": 160,
+   "usd": 0.008892,
+   "cached": 17315
+  },
+  {
+   "in": 20416,
+   "out": 98,
+   "usd": 0.008675,
+   "cached": 18845
+  },
+  {
+   "in": 21912,
+   "out": 75,
+   "usd": 0.008577,
+   "cached": 20414
+  },
+  {
+   "in": 23372,
+   "out": 75,
+   "usd": 0.008786,
+   "cached": 21910
+  },
+  {
+   "in": 24832,
+   "out": 80,
+   "usd": 0.009128,
+   "cached": 23370
+  },
+  {
+   "in": 26297,
+   "out": 241,
+   "usd": 0.011043,
+   "cached": 24830
+  },
+  {
+   "in": 27936,
+   "out": 113,
+   "usd": 0.01049,
+   "cached": 26295
+  },
+  {
+   "in": 29447,
+   "out": 435,
+   "usd": 0.013718,
+   "cached": 27934
+  },
+  {
+   "in": 31315,
+   "out": 183,
+   "usd": 0.012393,
+   "cached": 29445
+  },
+  {
+   "in": 32906,
+   "out": 102,
+   "usd": 0.011264,
+   "cached": 31313
+  },
+  {
+   "in": 34393,
+   "out": 513,
+   "usd": 0.015432,
+   "cached": 32904
+  },
+  {
+   "in": 36313,
+   "out": 198,
+   "usd": 0.013662,
+   "cached": 34391
+  },
+  {
+   "in": 37929,
+   "out": 112,
+   "usd": 0.012426,
+   "cached": 36311
+  },
+  {
+   "in": 39426,
+   "out": 415,
+   "usd": 0.015482,
+   "cached": 37927
+  },
+  {
+   "in": 41325,
+   "out": 175,
+   "usd": 0.014386,
+   "cached": 39424
+  },
+  {
+   "in": 42885,
+   "out": 193,
+   "usd": 0.014099,
+   "cached": 41323
+  },
+  {
+   "in": 44490,
+   "out": 378,
+   "usd": 0.016373,
+   "cached": 42883
+  },
+  {
+   "in": 46264,
+   "out": 104,
+   "usd": 0.014377,
+   "cached": 44488
+  },
+  {
+   "in": 47766,
+   "out": 141,
+   "usd": 0.014421,
+   "cached": 46262
+  },
+  {
+   "in": 49305,
+   "out": 154,
+   "usd": 0.014944,
+   "cached": 47764
+  },
+  {
+   "in": 50857,
+   "out": 120,
+   "usd": 0.014945,
+   "cached": 49303
+  },
+  {
+   "in": 52362,
+   "out": 207,
+   "usd": 0.016008,
+   "cached": 50855
+  },
+  {
+   "in": 53978,
+   "out": 115,
+   "usd": 0.015666,
+   "cached": 52360
+  },
+  {
+   "in": 55478,
+   "out": 103,
+   "usd": 0.015579,
+   "cached": 53976
+  },
+  {
+   "in": 56979,
+   "out": 92,
+   "usd": 0.015772,
+   "cached": 55476
+  },
+  {
+   "in": 58456,
+   "out": 350,
+   "usd": 0.018592,
+   "cached": 56977
+  }
+ ]
+}

@@ -1,0 +1,44 @@
+{
+  "about": "Import layers for openadapt_flow, checked by tests/test_import_layers.py. Core modules are the runtime and the verifier. They must not import app-specific, benchmark, desktop-UI, or lab and harness code, directly or through any chain of openadapt_flow imports, including lazy imports inside functions. Fix a violating import rather than loosening this file. An edge that cannot be removed yet goes in exceptions with its reason and an issue link.",
+  "core": [
+    "openadapt_flow.backend",
+    "openadapt_flow.ensure_record",
+    "openadapt_flow.fault_gate",
+    "openadapt_flow.ir",
+    "openadapt_flow.provenance",
+    "openadapt_flow.readback_ladder",
+    "openadapt_flow.receipt",
+    "openadapt_flow.record_sor",
+    "openadapt_flow.runtime",
+    "openadapt_flow.verification",
+    "openadapt_flow.verifier",
+    "openadapt_flow.verify",
+    "openadapt_flow.verify_run",
+    "openadapt_flow.write_receipt"
+  ],
+  "forbidden": {
+    "app-specific": [
+      "openadapt_flow.demo_driver",
+      "openadapt_flow.demo_proof",
+      "openadapt_flow.mockloan",
+      "openadapt_flow.mockmed",
+      "openadapt_flow.tutorial"
+    ],
+    "benchmark": [
+      "benchmark",
+      "openadapt_flow.bench"
+    ],
+    "desktop-UI": [
+      "openadapt_flow.adapters",
+      "openadapt_flow.console.app",
+      "openadapt_flow.console.server",
+      "openadapt_flow.desktop_record",
+      "openadapt_flow.interactive_recorder"
+    ],
+    "lab and harness": [
+      "openadapt_flow.rl_env",
+      "openadapt_flow.teach_authorization_fixture"
+    ]
+  },
+  "exceptions": []
+}

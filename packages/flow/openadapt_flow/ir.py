@@ -3879,6 +3879,7 @@ class Workflow(BaseModel):
                 from openadapt_flow.qualification import (
                     QualificationError,
                     build_governed_authorization_template,
+                    record_certified_contract_form,
                 )
 
                 try:
@@ -3893,6 +3894,7 @@ class Workflow(BaseModel):
                         "governed authorization template does not match the "
                         "sealed workflow and certification"
                     )
+                record_certified_contract_form(wf)
 
         if wf.manifest is None:
             wf.manifest = _bv.build_manifest(wf, bundle)

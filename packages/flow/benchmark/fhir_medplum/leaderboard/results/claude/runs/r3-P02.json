@@ -1,0 +1,74 @@
+{
+ "id": "P02",
+ "class": "clean",
+ "type": "patient",
+ "expect": "found",
+ "note": "The person is already registered; nothing should be written.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 13.8,
+ "cost_usd": 0.030976,
+ "claim": {
+  "status": "done",
+  "id": "Patient/1482ce90-1f08-4b3f-9733-ff31f727c4c4",
+  "note": "RESULT: DONE Patient/1482ce90-1f08-4b3f-9733-ff31f727c4c4",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/Patient/1482ce90-1f08-4b3f-9733-ff31f727c4c4/json",
+  "final_text": "Lena Okafor already has a Patient record, so I didn't create another. It was the only Patient on the server, and its details match the task:\n- Name: Lena Okafor\n- Date of birth: 1988-04-22\n- Gender: female\n- Phone: 413-555-0187\n- Email: lena.okafor@example.org\n- Address: 14 Birch Lane, Springfield, MA 01103\n\nI didn't change anything.\n\nRESULT: DONE Patient/1482ce90-1f08-4b3f-9733-ff31f727c4c4",
+  "model_calls": 3,
+  "actions": 4,
+  "tokens_in": 23516,
+  "tokens_out": 471
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/1482ce90-1f08-4b3f-9733-ff31f727c4c4"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 8.1,
+  "end": 7.3,
+  "waited_s": 0
+ }
+}

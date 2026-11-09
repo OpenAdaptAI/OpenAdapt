@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 
 from openadapt_flow.api_footprint import diff_dumps, footprint_verdict
@@ -131,3 +133,62 @@ def test_changed_rows_with_equal_new_values_still_compare_prior_states():
     )
     assert not verdict["equivalent"]
     assert any("before.counter" in d for d in verdict["differences"])
+
+
+# An ``id`` column is not proof of a row key: it can be one part of a
+# composite key or be null. Dumps come from real SQLite tables here.
+
+
+def _sqlite_dump(conn) -> dict:
+    conn.row_factory = sqlite3.Row
+    return {
+        "item": [dict(r) for r in conn.execute("SELECT * FROM item ORDER BY rowid")]
+    }
+
+
+def _composite_save(update: str | None, *, nullable: bool = False) -> dict:
+    """Changes of one save on a table whose ``id`` does not identify a row."""
+
+    conn = sqlite3.connect(":memory:")
+    if nullable:
+        conn.execute("CREATE TABLE item (tenant TEXT, id INTEGER, status TEXT)")
+        rows = [("A", None, "new"), ("B", None, "new"), ("C", None, "new")]
+    else:
+        conn.execute(
+            "CREATE TABLE item (tenant TEXT, id INTEGER, status TEXT,"
+            " PRIMARY KEY (tenant, id))"
+        )
+        rows = [("A", 7, "new"), ("B", 7, "new"), ("C", 7, "new")]
+    conn.executemany("INSERT INTO item VALUES (?, ?, ?)", rows)
+    before = _sqlite_dump(conn)
+    if update is not None:
+        conn.execute("UPDATE item SET status = 'saved' WHERE tenant = ?", (update,))
+    after = _sqlite_dump(conn)
+    return diff_dumps(before, after)
+
+
+@pytest.mark.parametrize("nullable", [False, True], ids=["composite", "null_id"])
+@pytest.mark.parametrize("api_update", [None, "B"], ids=["omitted", "wrong_row"])
+def test_a_non_unique_id_column_does_not_hide_writes(nullable, api_update):
+    gui = [_composite_save("A", nullable=nullable) for _ in range(2)]
+    api = [_composite_save(api_update, nullable=nullable) for _ in range(2)]
+    assert gui[0], "the GUI save's write must be visible in the diff"
+    verdict = footprint_verdict(gui, api, ["g1", "g2"], ["a1", "a2"])
+    assert not verdict["equivalent"]
+
+
+@pytest.mark.parametrize("nullable", [False, True], ids=["composite", "null_id"])
+def test_a_non_unique_id_column_still_admits_the_same_write(nullable):
+    gui = [_composite_save("A", nullable=nullable) for _ in range(2)]
+    api = [_composite_save("A", nullable=nullable) for _ in range(2)]
+    verdict = footprint_verdict(gui, api, ["g1", "g2"], ["a1", "a2"])
+    assert verdict["equivalent"], verdict["differences"]
+
+
+def test_duplicate_whole_rows_keep_their_multiplicity():
+    row = {"id": 7, "status": "new"}
+    before = {"item": [row, row]}
+    gui = diff_dumps(before, {"item": [row, row, row]})
+    api = diff_dumps(before, {"item": [row, row]})
+    assert gui == {"item": {"added": [row], "removed": [], "changed": []}}
+    assert api == {}
