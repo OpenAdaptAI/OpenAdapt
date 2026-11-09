@@ -757,13 +757,15 @@ class Recording:
 
         def mark_identity(recording_dir: Path) -> None:
             # No DOM names the record next to each control here: mark where
-            # the screen shows the record's identity, so every click checks
-            # it. Not found, nothing is marked and the gate refuses.
+            # the screen shows the record's identifiers, so every click
+            # checks them. Not all found, nothing is marked and the gate
+            # refuses.
             if mark_identity_band(recording_dir, owner.on_screen) is None:
                 if owner.on_warning is not None:
                     owner.on_warning(
-                        "the record's identity (on_screen) was not found on the "
-                        "recorded screen; its clicks carry no identity band"
+                        "the record's identifiers (the ids and dates in "
+                        "on_screen) were not all found on the recorded screen; "
+                        "its clicks carry no identity band"
                     )
 
         try:
@@ -1105,17 +1107,8 @@ class CompiledAgent:
                 f"the teach scope is for task {scope.task_id!r}, not "
                 f"{self.task.task_id!r}"
             )
-        if (
-            authorized is not None
-            and self.app.kind != "web"
-            and self.app.origin not in authorized.origins
-        ):
-            # No browser guard sees a desktop or remote app: the signed
-            # authorization must name the app this run is on.
-            raise ValueError(
-                f"the teach authorization does not name this app "
-                f"({self.app.origin}); it names {', '.join(authorized.origins)}"
-            )
+        if self.app.kind != "web":
+            scope = self._bind_surface_target(scope, authorized)
         # Every declared input is a value the scope declares, so the agent
         # can type it. Nothing else is typed.
         missing = sorted(
@@ -1134,6 +1127,43 @@ class CompiledAgent:
                 "read-back) or a write adapter (to check writes before they go)"
             )
         return scope
+
+    def _bind_surface_target(
+        self, scope: TeachScope, authorized: Optional[TeachScope]
+    ) -> TeachScope:
+        """Bind a desktop or remote app's teach scope to the app taught.
+
+        No browser guard sees a desktop or remote app, so the scope must name
+        the app the run is on (``<kind>://<target>``). A signed authorization
+        must name it, and a narrower scope may not name only other apps:
+        either is refused here, before anything is recorded or signed. The
+        returned scope names exactly this app, so a signed scope never omits
+        the target it authorizes.
+        """
+
+        import dataclasses
+
+        from openadapt_flow.teach_scope import scope_origin
+
+        target = scope_origin(self.app.origin)
+        if target is None:
+            raise ValueError(
+                f"this app's origin ({self.app.origin}) is not one a teach "
+                "scope can name; nothing is taught"
+            )
+        if authorized is not None and target not in authorized.origins:
+            raise ValueError(
+                f"the teach authorization does not name this app ({target}); "
+                f"it names {', '.join(authorized.origins) or 'no app'}"
+            )
+        if scope.origins and target not in scope.origins:
+            raise ValueError(
+                f"the teach scope does not name this app ({target}); it names "
+                f"{', '.join(scope.origins)}"
+            )
+        if scope.origins == (target,):
+            return scope
+        return dataclasses.replace(scope, origins=(target,))
 
     def _check_model_key(self) -> None:
         from openadapt_flow.jit.keys import MissingModelKey
@@ -1700,8 +1730,20 @@ def _stamp() -> str:
     )
 
 
-def _squash(text: str) -> str:
-    return "".join(str(text).split()).casefold()
+_TOKEN_EDGE = ".,;:()[]{}<>\"'"
+
+
+def _declared_ids(texts: Sequence[str]) -> set[str]:
+    """The identifier tokens (ids, dates: digit-bearing) in ``texts``,
+    casefolded with edge punctuation stripped, as each must appear raw."""
+
+    out = set()
+    for text in texts:
+        for raw in str(text).split():
+            token = raw.strip(_TOKEN_EDGE).casefold()
+            if any(c.isdigit() for c in token):
+                out.add(token)
+    return out
 
 
 def mark_identity_band(
@@ -1709,11 +1751,17 @@ def mark_identity_band(
 ) -> Optional[list[int]]:
     """Mark where a desktop or remote recording shows the record's identity.
 
-    Reads the frame before the first click (OCR), finds the lines that show
-    an ``on_screen`` text, and stamps their bounding box, padded, as the
+    Reads the frame before the first click (OCR) and stamps the bounding box,
+    padded, of the lines that show the record's declared identifiers as the
     recording's ``identifier_region`` in ``meta.json``: the band the compiler
-    gives every click, which each run checks before it acts. Returns the box,
-    or None when no ``on_screen`` text is on that frame (nothing is stamped).
+    gives every click, which each run checks before it acts.
+
+    The identifiers are the digit-bearing tokens of ``on_screen`` (an MRN, a
+    date of birth). As at run time, an id must match raw: each one must be a
+    whole OCR token on the frame, never part of one. A name alone identifies
+    no record, so with no declared identifier, or any declared identifier
+    missing from the frame, this abstains: it returns None and stamps
+    nothing, and the run gate then refuses the unbanded clicks.
     """
 
     import json
@@ -1732,13 +1780,17 @@ def mark_identity_band(
     frame = recording_dir / "frames" / f"{int(first['i']):04d}_before.png"
     if not frame.is_file():
         return None
-    wanted = [_squash(t) for t in on_screen if len(_squash(t)) >= 4]
+    declared = _declared_ids(on_screen)
+    if not declared:
+        return None
+    seen: set[str] = set()
     boxes = []
     for found in ocr(frame.read_bytes()):
-        text = _squash(found.text)
-        if len(text) >= 4 and any(text == w or text in w or w in text for w in wanted):
+        tokens = _declared_ids([found.text]) & declared
+        if tokens:
+            seen |= tokens
             boxes.append(tuple(int(v) for v in found.region))
-    if not boxes:
+    if not boxes or seen != declared:
         return None
     left = min(b[0] for b in boxes) - pad
     top = min(b[1] for b in boxes) - pad

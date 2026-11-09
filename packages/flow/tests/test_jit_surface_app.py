@@ -408,3 +408,169 @@ def test_the_identity_band_is_marked_from_the_recorded_screen(
     (rec / "meta.json").write_text(json.dumps({"surface": "macos"}))
     assert mark_identity_band(rec, ["MRN P9 Someone Else"]) is None
     assert "identifier_region" not in json.loads((rec / "meta.json").read_text())
+
+
+TAUGHT_KINDS = ("macos", "windows", "rdp", "citrix", "linux")
+
+
+def _taught(
+    tmp_path: Path, monkeypatch, kind: str, folder: str, origins: list[str], scope=None
+) -> Any:
+    from tests._teach_authorization_support import authority
+
+    app = SurfaceApp(SECTIONS[kind], record_reader=lambda: [])
+    task = TaskSignature("taught.chart_note", "Add {note}", {"note": str})
+    return compile_agent(
+        task=task,
+        app=app,
+        verifier=IndependentVerifier(),
+        policy="clinical-write",
+        cache_dir=tmp_path / folder,
+        teach_scope=scope,
+        teach_authorization=authority(
+            tmp_path / "keys",
+            tmp_path / folder / "statement",
+            task.task_id,
+            monkeypatch,
+            origins=origins,
+            record={"patient_id": "p1"},
+            fields={"note": "Recheck"},
+            inputs={"note": "Recheck"},
+        ),
+    )
+
+
+def _caller_scope(origins: tuple[str, ...]) -> Any:
+    from openadapt_flow.teach_scope import TeachScope
+
+    return TeachScope.for_task(
+        "taught.chart_note",
+        origins=origins,
+        record={"patient_id": "p1"},
+        inputs={"note": "Recheck"},
+        fields={"note": "Recheck"},
+    )
+
+
+@pytest.mark.parametrize("kind", TAUGHT_KINDS)
+def test_a_narrowed_signed_scope_always_names_the_taught_app(
+    tmp_path: Path, monkeypatch, kind: str
+) -> None:
+    """The scope a teach signs contains the app taught, or teaching refuses."""
+
+    target = ORIGINS[kind]
+    other = "macos://elsewhere"
+    signed = [target, other]
+
+    # A caller scope that names no app is bound to the app taught.
+    jit = _taught(tmp_path, monkeypatch, kind, "empty", signed, _caller_scope(()))
+    scope = jit._teach_scope({"note": "Recheck"})
+    assert scope is not None and scope.origins == (target,)
+    assert scope.authorization is not None
+
+    # The signed scope alone is bound to the app taught, not its other apps.
+    scope = _taught(tmp_path, monkeypatch, kind, "signed", signed)._teach_scope(
+        {"note": "Recheck"}
+    )
+    assert scope is not None and scope.origins == (target,)
+
+    # A narrowing that drops the app taught is refused, nothing returned.
+    narrowed_away = _taught(
+        tmp_path, monkeypatch, kind, "away", signed, _caller_scope((other,))
+    )
+    with pytest.raises(ValueError, match=r"teach scope does not name this app"):
+        narrowed_away._teach_scope({"note": "Recheck"})
+
+    # A signature for another app only is refused.
+    unsigned_app = _taught(tmp_path, monkeypatch, kind, "unsigned", [other])
+    with pytest.raises(ValueError, match=r"authorization does not name this app"):
+        unsigned_app._teach_scope({"note": "Recheck"})
+
+
+def test_a_common_name_without_its_identifier_marks_no_identity_band(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A name alone identifies no record: the band needs every declared id raw."""
+
+    import json
+
+    import openadapt_flow.vision as vision
+    from openadapt_flow.jit.compile_agent import mark_identity_band
+
+    class Line:
+        def __init__(self, text: str, region: tuple[int, int, int, int]) -> None:
+            self.text, self.region = text, region
+
+    screens: dict[str, list[Line]] = {}
+    monkeypatch.setattr(vision, "ocr", lambda png: screens["now"])
+    rec = tmp_path / "recording"
+    (rec / "frames").mkdir(parents=True)
+    (rec / "frames" / "0000_before.png").write_bytes(b"png")
+    (rec / "events.jsonl").write_text(json.dumps({"i": 0, "kind": "click"}) + "\n")
+    declared = ["MRN RC79284 Okafor, Philip born 1966-02-17"]
+
+    def band(lines: list[Line], on_screen: list[str] = declared) -> Any:
+        (rec / "meta.json").write_text(json.dumps({"surface": "macos"}))
+        screens["now"] = lines
+        out = mark_identity_band(rec, on_screen)
+        stamped = json.loads((rec / "meta.json").read_text())
+        assert ("identifier_region" in stamped) == (out is not None)
+        return out
+
+    # The common name is on screen; the declared MRN is not.
+    assert band([Line("Okafor, Philip", (52, 123, 300, 37))]) is None
+    assert band([Line("MRN Okafor, Philip born", (52, 123, 600, 37))]) is None
+    # Another record's MRN beside the same name.
+    assert band([Line("MRN RC11111 Okafor, Philip", (52, 123, 600, 37))]) is None
+    # The MRN only inside a longer token is not a raw match.
+    assert band([Line("MRN RC792840 Okafor, Philip", (52, 123, 600, 37))]) is None
+    # One declared id present, the other missing.
+    assert band([Line("MRN RC79284 Okafor, Philip", (52, 123, 600, 37))]) is None
+    # A declaration with no identifier at all: a name never counts.
+    assert (
+        band([Line("Okafor, Philip", (52, 123, 300, 37))], ["Okafor, Philip"]) is None
+    )
+    # The full identity is still marked.
+    assert band(
+        [
+            Line("MRN RC79284 Okafor, Philip", (52, 123, 600, 37)),
+            Line("born 1966-02-17", (660, 123, 170, 37)),
+            Line("Okafor, Philip", (52, 400, 300, 37)),
+        ]
+    ) == [46, 117, 790, 49]
+
+
+def test_a_linux_app_whose_name_is_escaped_is_still_taught_on_it(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """An escaped app name (``%2F``) normalizes to the origin a scope names."""
+
+    from openadapt_flow.teach_scope import scope_origin
+    from tests._teach_authorization_support import authority
+
+    app = SurfaceApp(
+        {"kind": "linux", "linux_app": "org/chart", "linux_window_title": "Chart"},
+        record_reader=lambda: [],
+    )
+    target = scope_origin(app.origin)
+    assert target == "linux://org%2fchart"
+    task = TaskSignature("taught.chart_note", "Add {note}", {"note": str})
+    jit = compile_agent(
+        task=task,
+        app=app,
+        verifier=IndependentVerifier(),
+        policy="clinical-write",
+        cache_dir=tmp_path / "escaped",
+        teach_authorization=authority(
+            tmp_path / "keys",
+            tmp_path / "escaped" / "statement",
+            task.task_id,
+            monkeypatch,
+            origins=[target],
+            record={"patient_id": "p1"},
+            fields={"note": "Recheck"},
+            inputs={"note": "Recheck"},
+        ),
+    )
+    scope = jit._teach_scope({"note": "Recheck"})
+    assert scope is not None and scope.origins == (target,)
