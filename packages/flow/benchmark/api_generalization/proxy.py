@@ -31,7 +31,15 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-HOP = {"connection", "keep-alive", "proxy-connection", "transfer-encoding", "te", "trailer", "upgrade"}
+HOP = {
+    "connection",
+    "keep-alive",
+    "proxy-connection",
+    "transfer-encoding",
+    "te",
+    "trailer",
+    "upgrade",
+}
 
 
 class Control:
@@ -51,12 +59,22 @@ class Control:
             except (OSError, ValueError):
                 return "pass", False
             text = body.decode("latin-1")
-            is_save = (method == "POST" and bool(re.search(mode.get("path_regex", "$^"), path))
-                       and not (mode.get("body_exclude") and re.search(mode["body_exclude"], text))
-                       and not (mode.get("body_require") and not re.search(mode["body_require"], text)))
+            is_save = (
+                method == "POST"
+                and bool(re.search(mode.get("path_regex", "$^"), path))
+                and not (
+                    mode.get("body_exclude") and re.search(mode["body_exclude"], text)
+                )
+                and not (
+                    mode.get("body_require")
+                    and not re.search(mode["body_require"], text)
+                )
+            )
             if mode.get("mode", "pass") == "pass" or not is_save:
                 return "pass", is_save
-            self.mode_path.write_text(json.dumps({**mode, "mode": "pass", "consumed": mode["mode"]}))
+            self.mode_path.write_text(
+                json.dumps({**mode, "mode": "pass", "consumed": mode["mode"]})
+            )
             return str(mode["mode"]), True
 
     def log(self, row: dict) -> None:
@@ -71,18 +89,27 @@ def make_handler(upstream_host: str, upstream_port: int, control: Control):
         def log_message(self, *args) -> None:  # quiet
             pass
 
-        def _forward(self, body: bytes) -> tuple[int, str, list[tuple[str, str]], bytes]:
+        def _forward(
+            self, body: bytes
+        ) -> tuple[int, str, list[tuple[str, str]], bytes]:
             conn = http.client.HTTPConnection(upstream_host, upstream_port, timeout=120)
             headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP}
             headers["Connection"] = "close"
             conn.request(self.command, self.path, body=body or None, headers=headers)
             r = conn.getresponse()
             data = r.read()
-            out = (r.status, r.reason, [(k, v) for k, v in r.getheaders() if k.lower() not in HOP], data)
+            out = (
+                r.status,
+                r.reason,
+                [(k, v) for k, v in r.getheaders() if k.lower() not in HOP],
+                data,
+            )
             conn.close()
             return out
 
-        def _reply(self, status: int, reason: str, headers: list[tuple[str, str]], data: bytes) -> None:
+        def _reply(
+            self, status: int, reason: str, headers: list[tuple[str, str]], data: bytes
+        ) -> None:
             self.send_response(status, reason)
             for k, v in headers:
                 if k.lower() != "content-length":
@@ -103,10 +130,17 @@ def make_handler(upstream_host: str, upstream_port: int, control: Control):
             try:
                 if fault == "reject":
                     status = 503
-                    self._reply(503, "Service Unavailable", [("Content-Type", "text/plain")], b"injected fault: reject")
+                    self._reply(
+                        503,
+                        "Service Unavailable",
+                        [("Content-Type", "text/plain")],
+                        b"injected fault: reject",
+                    )
                 elif fault == "partial":
                     status, *_ = self._forward(body)
-                    self._reply(502, "Bad Gateway", [("Content-Type", "text/plain")], b"")
+                    self._reply(
+                        502, "Bad Gateway", [("Content-Type", "text/plain")], b""
+                    )
                     status = f"{status}->502"
                 elif fault == "duplicate":
                     first, *_ = self._forward(body)
@@ -118,24 +152,39 @@ def make_handler(upstream_host: str, upstream_port: int, control: Control):
                     self._reply(st, reason, headers, data)
                     status = st
             finally:
-                control.log({"t": round(t0, 3), "method": self.command, "path": self.path.split("?")[0],
-                             "save": is_save, "fault": fault, "status": status, "ms": round((time.time() - t0) * 1000)})
+                control.log(
+                    {
+                        "t": round(t0, 3),
+                        "method": self.command,
+                        "path": self.path.split("?")[0],
+                        "save": is_save,
+                        "fault": fault,
+                        "status": status,
+                        "ms": round((time.time() - t0) * 1000),
+                    }
+                )
 
-        do_GET = do_POST = do_HEAD = do_PUT = do_PATCH = do_DELETE = do_OPTIONS = _handle
+        do_GET = do_POST = do_HEAD = do_PUT = do_PATCH = do_DELETE = do_OPTIONS = (
+            _handle
+        )
 
     return Handler
 
 
-def serve(listen: int, upstream: int, state: Path, upstream_host: str = "127.0.0.1") -> ThreadingHTTPServer:
+def serve(
+    listen: int, upstream: int, state: Path, upstream_host: str = "127.0.0.1"
+) -> ThreadingHTTPServer:
     state.mkdir(parents=True, exist_ok=True)
-    srv = ThreadingHTTPServer(("127.0.0.1", listen), make_handler(upstream_host, upstream, Control(state)))
+    srv = ThreadingHTTPServer(
+        ("127.0.0.1", listen), make_handler(upstream_host, upstream, Control(state))
+    )
     srv.daemon_threads = True
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return srv
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--listen", type=int, required=True)
     ap.add_argument("--upstream", type=int, required=True)
     ap.add_argument("--state", required=True)

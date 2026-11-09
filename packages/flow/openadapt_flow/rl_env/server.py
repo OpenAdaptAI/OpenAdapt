@@ -59,7 +59,9 @@ def build_app(env_dir: str | Path, *, max_concurrent_envs: int = 8) -> Any:
 def main(argv: list[str] | None = None) -> int:
     import uvicorn
 
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("env_dir", nargs="?", default=os.environ.get(ENV_DIR_VAR))
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)

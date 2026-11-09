@@ -273,6 +273,7 @@ def _verifier(arm: str, scenario: Scenario, base_url: str) -> Any:
             base_url,
             records_path="/api/ui/last-save",
             records_key="records",
+            records_complete=True,
             timeout_s=EFFECT_TIMEOUT_S,
             poll_interval_s=0.02,
         )
@@ -281,6 +282,7 @@ def _verifier(arm: str, scenario: Scenario, base_url: str) -> Any:
             base_url,
             records_path="/api/records",
             records_key="records",
+            records_complete=True,
             timeout_s=EFFECT_TIMEOUT_S,
             poll_interval_s=0.02,
         )

@@ -2568,6 +2568,8 @@ def _carry_admission(
     approved_by: Optional[str] = None,
     route: Optional[str] = None,
     probe_only: bool = False,
+    key_dir: Optional[Path] = None,
+    approver_root: Optional[str] = None,
 ) -> None:
     """Carry an agent-compiled program's admission to its repaired copy.
 
@@ -2591,6 +2593,8 @@ def _carry_admission(
             approved_by=approved_by,
             route=route,
             probe_only=probe_only,
+            key_dir=key_dir,
+            approver_root=approver_root,
         )
     except lifecycle.AdmissionError as exc:
         raise SelfRepairRefused(

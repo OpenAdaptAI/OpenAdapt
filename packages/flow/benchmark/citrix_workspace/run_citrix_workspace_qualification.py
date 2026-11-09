@@ -40,13 +40,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from PIL import Image
-
 from openadapt_flow.backends.citrix_workspace import (
     CitrixWorkspaceBackend,
     default_citrix_owner,
 )
 from openadapt_flow.backends.remote_display import WindowInfo
+from PIL import Image
 
 # Reuse the Part-1 fixture geometry, drift, oracle, and reset so the two proofs
 # are identical except for the backend under test.
@@ -279,11 +278,10 @@ def run_qualification(
     ``citrix``), the path an agent uses to drive the recording, instead of a
     bare :class:`Recorder`. Input, frames, and replay are otherwise the same.
     """
-    from playwright.sync_api import sync_playwright
-
     from openadapt_flow.compiler import compile_recording
     from openadapt_flow.recorder import Recorder
     from openadapt_flow.runtime.replayer import Replayer
+    from playwright.sync_api import sync_playwright
 
     _validate_source_provenance(candidate_commit, base_commit)
     cm = _load_canvas_harness()
@@ -545,7 +543,7 @@ def run_qualification(
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     ap.add_argument(
         "--container",
         default=os.environ.get(
