@@ -132,8 +132,9 @@ def test_a_pure_move_into_a_mixin_passes(repo: Path) -> None:
     )
     stubs = {unit.qualname for unit in result.new_stubs}
     assert {"_IdentityHost.run"} <= stubs
-    # Docstrings and attribute declarations, even with nested types, are stubs.
-    assert len(result.new_stubs) == 5
+    # Docstrings and attribute declarations, even with nested types, are stubs,
+    # and so are both branches of the ``if TYPE_CHECKING`` base alias.
+    assert len(result.new_stubs) == 7
     assert verify_moved_code.main(["--root", str(repo), "--base", "HEAD"]) == 0
 
 
@@ -215,3 +216,115 @@ def test_a_patched_import_the_moved_code_reads_is_flagged_until_retargeted(
     )
     _write(tmp_path, "packages/demo/tests/test_demo.py", retargeted)
     assert _verify(tmp_path).stale_patches == []
+
+
+def _init(tmp_path: Path, files: dict[str, str]) -> Path:
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "config", "user.email", "t@example.com")
+    _git(tmp_path, "config", "user.name", "t")
+    for rel, text in files.items():
+        _write(tmp_path, rel, text)
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "base")
+    return tmp_path
+
+
+def _fails_as_new_code(repo: Path, qualname_part: str) -> None:
+    result = _verify(repo)
+    assert any(qualname_part in u.qualname for u in result.new_bodies), (
+        result.new_bodies,
+        result.new_stubs,
+    )
+    assert verify_moved_code.main(["--root", str(repo), "--base", "HEAD"]) == 1
+
+
+def test_code_in_a_type_checking_else_branch_is_new_code(repo: Path) -> None:
+    """The ``else`` branch runs at import time; it is not skipped with the block."""
+    added = (
+        "\nfrom typing import TYPE_CHECKING\n\n"
+        "if TYPE_CHECKING:\n    import json\nelse:\n    os.getcwd()\n"
+    )
+    _write(repo, f"{PKG}/replayer.py", BASE + added)
+    _fails_as_new_code(repo, "<statement line")
+
+
+def test_code_in_a_type_checking_branch_must_survive_a_move(tmp_path: Path) -> None:
+    base = BASE + (
+        "\nfrom typing import TYPE_CHECKING\n\n"
+        "if TYPE_CHECKING:\n    import json\nelse:\n    os.getcwd()\n"
+    )
+    repo = _init(tmp_path, {f"{PKG}/replayer.py": base, f"{PKG}/__init__.py": ""})
+    _write(repo, f"{PKG}/replayer.py", BASE)
+
+    assert [u.qualname for u in _verify(repo).missing] == ["<statement line 27>"]
+
+
+def test_a_call_behind_an_attribute_is_not_a_reexport(repo: Path) -> None:
+    _write(repo, f"{PKG}/replayer.py", BASE + "\nexported = os.getcwd().upper\n")
+    _fails_as_new_code(repo, "<statement line")
+
+
+def test_a_dotted_name_is_still_a_reexport(repo: Path) -> None:
+    _write(repo, f"{PKG}/replayer.py", BASE + "\nexported = os.path.join\n")
+
+    result = _verify(repo)
+
+    assert result.ok, result.new_bodies
+    assert len(result.new_stubs) == 1
+
+
+@pytest.mark.parametrize(
+    "added",
+    [
+        "@os.getcwd()\ndef stub(): ...\n",
+        "def stub(x=os.getcwd()): ...\n",
+        "def stub() -> os.getcwd(): ...\n",
+        "class Made(os.getcwd()):\n    x: int\n",
+        "class Made(metaclass=os.getcwd()):\n    x: int\n",
+        "class Made:\n    x: os.getcwd()\n",
+    ],
+    ids=["decorator", "default", "returns", "base", "metaclass", "annotation"],
+)
+def test_a_call_in_a_stub_or_class_header_is_new_code(repo: Path, added: str) -> None:
+    """Stubs and declarations are allowed only while they run no code."""
+    _write(repo, f"{PKG}/replayer.py", BASE + "\n\n" + added)
+    result = _verify(repo)
+    assert result.new_bodies, result.new_stubs
+    assert verify_moved_code.main(["--root", str(repo), "--base", "HEAD"]) == 1
+
+
+TWINS = """\
+class First:
+    def same(self):
+        return 1
+
+
+class Second:
+    def same(self):
+        return 1
+"""
+
+
+def test_a_surviving_identical_copy_does_not_hide_a_deletion(
+    tmp_path: Path,
+) -> None:
+    repo = _init(tmp_path, {f"{PKG}/twins.py": TWINS, f"{PKG}/__init__.py": ""})
+    _write(repo, f"{PKG}/twins.py", TWINS.split("\n\n\n")[0] + "\n")
+
+    result = _verify(repo)
+
+    assert [u.qualname for u in result.missing] == ["Second.same"]
+    assert verify_moved_code.main(["--root", str(repo), "--base", "HEAD"]) == 1
+
+
+def test_identical_copies_moved_to_two_files_pass(tmp_path: Path) -> None:
+    repo = _init(tmp_path, {f"{PKG}/twins.py": TWINS, f"{PKG}/__init__.py": ""})
+    first, second = TWINS.split("\n\n\n")
+    _write(repo, f"{PKG}/twins.py", "from .a import First\nfrom .b import Second\n")
+    _write(repo, f"{PKG}/a.py", first + "\n")
+    _write(repo, f"{PKG}/b.py", second + "\n")
+
+    result = _verify(repo)
+
+    assert result.ok, (result.missing, result.new_bodies)
+    assert result.moved == 2

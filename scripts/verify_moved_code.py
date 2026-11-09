@@ -75,9 +75,16 @@ def _dump(node: ast.AST) -> str:
 
 
 def _is_import(node: ast.stmt) -> bool:
-    if isinstance(node, (ast.Import, ast.ImportFrom)):
-        return True
-    # ``if TYPE_CHECKING:`` blocks hold imports and the mixin base alias.
+    return isinstance(node, (ast.Import, ast.ImportFrom))
+
+
+def _is_type_checking_block(node: ast.stmt) -> bool:
+    """``if TYPE_CHECKING:``. Its branches are compared statement by statement.
+
+    Such blocks hold imports and the mixin base alias. The ``else`` branch runs
+    at import time, so neither branch is skipped as a whole: imports in it are
+    ignored and every other statement is a unit like any other.
+    """
     return (
         isinstance(node, ast.If)
         and isinstance(node.test, ast.Name)
@@ -85,17 +92,42 @@ def _is_import(node: ast.stmt) -> bool:
     )
 
 
+def _has_call(nodes: list[ast.AST]) -> bool:
+    """True if any of ``nodes`` contains a call, which runs code."""
+    return any(
+        isinstance(sub, (ast.Call, ast.Await, ast.Yield, ast.YieldFrom, ast.NamedExpr))
+        for node in nodes
+        for sub in ast.walk(node)
+    )
+
+
+def _is_dotted_name(node: ast.expr) -> bool:
+    """``name`` or ``module.sub.name``, with no call or subscript anywhere."""
+    while isinstance(node, ast.Attribute):
+        node = node.value
+    return isinstance(node, ast.Name)
+
+
 def _is_reexport(node: ast.stmt) -> bool:
-    """``name = module.name`` or ``name = other_name``: a re-export, not logic."""
+    """``name = module.name`` or ``name = other_name``: a re-export, not logic.
+
+    ``name = make().value`` is not one: the call runs at import time.
+    """
     return (
         isinstance(node, ast.Assign)
         and len(node.targets) == 1
         and isinstance(node.targets[0], ast.Name)
-        and isinstance(node.value, (ast.Name, ast.Attribute))
+        and _is_dotted_name(node.value)
     )
 
 
 def _is_stub(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    # Decorators, defaults and annotations run when the ``def`` runs.
+    header: list[ast.AST] = [*node.decorator_list, node.args]
+    if node.returns is not None:
+        header.append(node.returns)
+    if _has_call(header):
+        return False
     body = list(node.body)
     if (
         body
@@ -121,6 +153,10 @@ def units(source: str, file: str) -> tuple[list[Unit], dict[str, list[str]]]:
         for node in body:
             if _is_import(node):
                 continue
+            if _is_type_checking_block(node):
+                walk(node.body, prefix)
+                walk(node.orelse, prefix)
+                continue
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 reads = frozenset(
                     sub.id
@@ -142,6 +178,19 @@ def units(source: str, file: str) -> tuple[list[Unit], dict[str, list[str]]]:
                 bases[name] = [ast.unparse(b) for b in node.bases] + [
                     ast.unparse(k) for k in node.keywords
                 ]
+                header = [*node.bases, *node.keywords]
+                if _has_call(header):
+                    # A base built by a call runs code when the class is made,
+                    # so it must survive a move unchanged like any statement.
+                    out.append(
+                        Unit(
+                            file,
+                            f"{name}(<bases>)",
+                            node.lineno,
+                            "\n".join(_dump(n) for n in header),
+                            False,
+                        )
+                    )
                 for deco in node.decorator_list:
                     out.append(
                         Unit(
@@ -156,11 +205,17 @@ def units(source: str, file: str) -> tuple[list[Unit], dict[str, list[str]]]:
             else:
                 label = f"{prefix}<statement line {node.lineno}>"
                 declaration = (
-                    isinstance(node, ast.AnnAssign) and node.value is None
-                ) or (
-                    isinstance(node, ast.Expr)
-                    and isinstance(node.value, ast.Constant)
-                    and isinstance(node.value.value, str)
+                    (
+                        isinstance(node, ast.AnnAssign)
+                        and node.value is None
+                        and not _has_call([node.annotation])
+                    )
+                    or isinstance(node, ast.Pass)
+                    or (
+                        isinstance(node, ast.Expr)
+                        and isinstance(node.value, ast.Constant)
+                        and isinstance(node.value.value, str)
+                    )
                 )
                 out.append(
                     Unit(file, label, node.lineno, _dump(node), False, declaration)
@@ -206,7 +261,12 @@ def verify(root: Path, base: str, search: list[str]) -> Result:
     result = Result()
     changed = changed_python_files(root, base, search)
 
-    head_units: Counter[str] = Counter()
+    # Code in the working tree that the base did not have, in changed or new files.
+    untracked = _git(root, "ls-files", "--others", "--exclude-standard", "--", "*.py")
+    all_changed = set(changed) | {
+        n for n in untracked.split() if _in_roots(n, search) and "/tests/" not in n
+    }
+
     head_by_dump: dict[str, list[Unit]] = {}
     for search_root in search:
         for path in sorted((root / search_root).rglob("*.py")):
@@ -218,8 +278,26 @@ def verify(root: Path, base: str, search: list[str]) -> Result:
             except (SyntaxError, UnicodeDecodeError):
                 continue
             for unit in found:
-                head_units[unit.dump] += 1
                 head_by_dump.setdefault(unit.dump, []).append(unit)
+
+    # Each old unit must be matched by its own copy in the working tree: a
+    # surviving identical copy must not hide the deletion of another one.
+    # Unchanged files are identical in both trees, so only the changed and new
+    # files can supply copies. A unit that stayed in its file uses that file's
+    # copy first; the copies left over can receive units moved from elsewhere.
+    leftover: Counter[str] = Counter()
+    stayed: dict[str, Counter[str]] = {}
+    for path in sorted(all_changed):
+        new_file = root / path
+        if not new_file.is_file():
+            continue
+        new_counts = Counter(
+            u.dump for u in units(new_file.read_text(encoding="utf-8"), path)[0]
+        )
+        old = base_source(root, base, path)
+        old_counts = Counter(u.dump for u in units(old, path)[0]) if old else Counter()
+        stayed[path] = new_counts & old_counts
+        leftover.update(new_counts - old_counts)
 
     base_units: Counter[str] = Counter()
     # (old module, name) -> modules whose moved code now reads that name.
@@ -230,18 +308,20 @@ def verify(root: Path, base: str, search: list[str]) -> Result:
             continue
         old_units, old_bases = units(old, path)
         new_file = root / path
-        new_units: list[Unit] = []
         new_bases: dict[str, list[str]] = {}
         if new_file.is_file():
-            new_units, new_bases = units(new_file.read_text(encoding="utf-8"), path)
-        new_here = {u.dump for u in new_units}
+            _, new_bases = units(new_file.read_text(encoding="utf-8"), path)
+        here = stayed.get(path, Counter())
         old_module = _module_name(path)
         module_level = _module_level_names(old)
         for unit in old_units:
-            if unit.dump not in head_units:
+            if here[unit.dump] > 0:
+                here[unit.dump] -= 1  # still in this file
+            elif leftover[unit.dump] <= 0:
                 result.missing.append(unit)
-            elif unit.dump not in new_here:
-                base_units[unit.dump] += 1  # left this file; may land elsewhere
+            else:
+                leftover[unit.dump] -= 1
+                base_units[unit.dump] += 1  # left this file; landed elsewhere
                 result.moved += 1
                 landed = [
                     m
@@ -261,11 +341,6 @@ def verify(root: Path, base: str, search: list[str]) -> Result:
                     f"({', '.join(new_bases[cls])})"
                 )
 
-    # Code in the working tree that the base did not have, in changed or new files.
-    untracked = _git(root, "ls-files", "--others", "--exclude-standard", "--", "*.py")
-    all_changed = set(changed) | {
-        n for n in untracked.split() if _in_roots(n, search) and "/tests/" not in n
-    }
     for path in sorted(all_changed):
         new_file = root / path
         if not new_file.is_file():
