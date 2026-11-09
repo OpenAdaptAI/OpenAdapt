@@ -70,6 +70,7 @@ def _load(name: str, path: Path) -> Any:
 
 
 fx = _load("x12_fixtures", HERE / "x12_fixtures.py")
+mf = _load("make_fixtures", HERE / "make_fixtures.py")
 medplum = _load("medplum_fixture", FLOW / "benchmark/fhir_medplum/fixture.py")
 
 
@@ -395,8 +396,15 @@ def seed(fixtures: dict, start: datetime, inbox: Path, log: list) -> dict[int, d
             if not pa:
                 if fault == "drop_clearinghouse" and w_sid == sid:
                     continue
+                category, code_ = mf.STATUS.get(fault, ("A1", "20"))
                 status = fx.ClaimStatus(
-                    w_sid, x_member, x_code, x_day, payer_claim_number=f"PCN{n:05d}"
+                    w_sid,
+                    x_member,
+                    x_code,
+                    x_day,
+                    category=category,
+                    status=code_,
+                    payer_claim_number=f"PCN{n:05d}",
                 )
                 write_x12(f"c{n:03d}-{w_sid}.x12", "277", fx.status_set([status]))
                 if fault == "duplicate_clearinghouse":
@@ -605,7 +613,7 @@ def run(out: Path, only: Optional[set[int]] = None) -> None:
 
 
 def main(argv: Optional[list[str]] = None) -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("command", choices=["build-pas", "up", "run", "down"])
     parser.add_argument("--out", type=Path, default=STATE / "run")
     parser.add_argument(

@@ -6,11 +6,15 @@ clearinghouse's inbound mirror, or files a person exported) and flattens
 each unit of work in them into one record:
 
 - a 278: one record per patient event (``HL`` code ``EV``), with its trace,
-  member, the first service's code, date and review decision (``HCR``), and
-  the authorization number;
+  member, service code, date and review decision (``HCR``), and the
+  authorization number;
 - a 277: one record per claim status (each ``TRN`` under a subscriber or
   dependent ``HL``), with its trace, member, status category and code, the
-  payer's claim number, service date and first service line code.
+  payer's claim number, service date and service line code.
+
+A slot that repeated segments give two different values (two ``STC``
+categories, two service codes) is ambiguous, never the first one; see
+:mod:`openadapt_flow.reconcile.resolve`.
 
 :class:`X12Verifier` hands those records to the verifier's shared
 ``judge_records``, so a 277 or 278 is judged with exactly the rules a FHIR
@@ -33,6 +37,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+from openadapt_flow.reconcile.resolve import resolve
 from openadapt_flow.runtime.effects._common import judge_records
 from openadapt_flow.runtime.effects.adapter import (
     VerifierAdapterBase,
@@ -162,17 +167,42 @@ def _code(composite: str, component: str) -> Optional[str]:
     return parts[1] if len(parts) > 1 and parts[1] else None
 
 
+#: Slots a level's NM1 or DMG names, inherited by the units under it.
+_NAMED = ("member_id", "patient_id", "payer_id", "provider_id", "family", "birth_date")
+#: Slots a unit's own segments fill.
+_OWN = (
+    "service_code",
+    "service_date",
+    "service_date_end",
+    "decision",
+    "auth_number",
+    "status_category",
+    "status_code",
+    "status_date",
+    "payer_claim_number",
+)
+
+
 def _records(body: list[list[str]], component: str, ref: str) -> list[dict[str, Any]]:
-    """Flatten one 277 or 278 transaction set into its units of work."""
+    """Flatten one 277 or 278 transaction set into its units of work.
+
+    Each slot collects every candidate its segments give (a repeated
+    ``STC``, ``REF``, ``HCR``, ``DTP``, service line, ``NM1`` or ``DMG``)
+    and is resolved once, by :func:`~openadapt_flow.reconcile.resolve.resolve`:
+    identical repeats collapse and conflicting ones are ambiguous. No
+    segment wins by its position.
+    """
 
     kind = body[0][1]
     bht = next((s for s in body if s[0] == "BHT"), None)
     purpose = bht[2] if bht is not None and len(bht) > 2 else None
-    #: HL id -> (parent id, level code), and what each level named.
+    #: HL id -> (parent id, level code), and the candidates each level named.
     tree: dict[str, tuple[str, str]] = {}
-    names: dict[str, dict[str, Optional[str]]] = {}
+    names: dict[str, dict[str, list[Any]]] = {}
     records: list[dict[str, Any]] = []
-    current: Optional[dict[str, Any]] = None
+    found: list[dict[str, list[Any]]] = []
+    current: Optional[dict[str, list[Any]]] = None
+    current_rec: dict[str, Any] = {}
     hl = ""
     owner = ""  # the HL that opened ``current``
     person = ""  # the HL of the last subscriber or patient named
@@ -184,13 +214,15 @@ def _records(body: list[list[str]], component: str, ref: str) -> list[dict[str, 
             node = tree[node][0]
         return chain
 
-    def inherited(name: str) -> Optional[str]:
+    def inherited(name: str) -> list[Any]:
+        """The candidates the nearest level that named ``name`` gave."""
         for node in ancestors(hl):
             if name in names.get(node, {}):
-                return names[node][name]
-        return None
+                return list(names[node][name])
+        return []
 
-    def open_record() -> dict[str, Any]:
+    def open_record() -> dict[str, list[Any]]:
+        nonlocal current_rec
         rec: dict[str, Any] = {
             "id": f"{ref}.{len(records) + 1}",
             "transaction": kind,
@@ -198,27 +230,23 @@ def _records(body: list[list[str]], component: str, ref: str) -> list[dict[str, 
             "level": tree.get(hl, ("", ""))[1],
             "trace": None,
             "trace_originator": None,
-            "member_id": inherited("member_id"),
-            "patient_id": inherited("patient_id"),
-            "payer_id": inherited("payer_id"),
-            "provider_id": inherited("provider_id"),
             # The patient's (a dependent's, else the subscriber's) last name
-            # and birth date.
-            "family": inherited("family"),
-            "birth_date": inherited("birth_date"),
-            "service_code": None,
-            "service_date": None,
-            "service_date_end": None,
+            # and birth date come with the member and party ids.
+            **{slot: None for slot in _NAMED},
             "service_count": 0,
-            "decision": None,
-            "auth_number": None,
-            "status_category": None,
-            "status_code": None,
-            "status_date": None,
-            "payer_claim_number": None,
+            **{slot: None for slot in _OWN},
         }
+        cands: dict[str, list[Any]] = {slot: inherited(slot) for slot in _NAMED}
+        cands.update({slot: [] for slot in (*_OWN, "trace1", "trace2")})
         records.append(rec)
-        return rec
+        found.append(cands)
+        current_rec = rec
+        return cands
+
+    def name(node: str, key: str, value: Any) -> None:
+        names.setdefault(node, {}).setdefault(key, []).append(value)
+        if current is not None:
+            current[key].append(value)
 
     for seg in body[1:-1]:
         tag = seg[0]
@@ -249,21 +277,15 @@ def _records(body: list[list[str]], component: str, ref: str) -> list[dict[str, 
                 "FA": "provider_id",
                 "85": "provider_id",
             }.get(entity)
-            found = {slot: number} if slot and number else {}
+            if slot and number:
+                name(hl, slot, number)
             if entity in ("IL", "QC"):
                 person = hl
                 if el[3]:
-                    found["family"] = el[3]
-            for key, value in found.items():
-                names.setdefault(hl, {})[key] = value
-                if current is not None and current.get(key) is None:
-                    current[key] = value
+                    name(hl, "family", el[3])
             continue
         if tag == "DMG" and el[1] == "D8" and person:
-            born = _date("D8", el[2])[0]
-            names.setdefault(person, {})["birth_date"] = born
-            if current is not None and current.get("birth_date") is None:
-                current["birth_date"] = born
+            name(person, "birth_date", _date("D8", el[2])[0])
             continue
         if tag == "TRN":
             if kind == "277":
@@ -274,33 +296,40 @@ def _records(body: list[list[str]], component: str, ref: str) -> list[dict[str, 
                 continue  # a 278 service level's own trace is not the event's
             # The referenced trace (TRN01 2) is the submitter's; it wins over
             # the payer's own (TRN01 1).
-            if current is not None and (current["trace"] is None or el[1] == "2"):
-                current["trace"] = el[2] or None
-                current["trace_originator"] = el[3] or None
+            if current is not None:
+                current["trace2" if el[1] == "2" else "trace1"].append(
+                    (el[2] or None, el[3] or None)
+                )
             continue
         if current is None:
             continue
-        if tag == "STC" and current["status_category"] is None:
+        if tag == "STC":
             cat, _, rest = el[1].partition(component)
-            current["status_category"] = cat or None
-            current["status_code"] = rest.split(component)[0] or None
-            if el[2]:
-                current["status_date"] = _date("D8", el[2])[0]
+            current["status_category"].append(cat or None)
+            current["status_code"].append(rest.split(component)[0] or None)
+            current["status_date"].append(_date("D8", el[2])[0] if el[2] else None)
         elif tag == "REF":
-            if el[1] == "1K" and current["payer_claim_number"] is None:
-                current["payer_claim_number"] = el[2] or None
-            elif el[1] in ("BB", "NT") and current["auth_number"] is None:
-                current["auth_number"] = el[2] or None
-        elif tag == "DTP" and el[1] == "472" and current["service_date"] is None:
-            current["service_date"], current["service_date_end"] = _date(el[2], el[3])
+            if el[1] == "1K":
+                current["payer_claim_number"].append(el[2] or None)
+            elif el[1] in ("BB", "NT"):
+                current["auth_number"].append(el[2] or None)
+        elif tag == "DTP" and el[1] == "472":
+            start, end = _date(el[2], el[3])
+            current["service_date"].append(start)
+            current["service_date_end"].append(end)
         elif tag in ("SV1", "SV2", "SV3", "SVC"):
-            current["service_count"] += 1
-            if current["service_code"] is None:
-                current["service_code"] = _code(el[1], component)
-        elif tag == "HCR" and current["decision"] is None:
-            current["decision"] = el[1] or None
-            if el[2] and current["auth_number"] is None:
-                current["auth_number"] = el[2]
+            current_rec["service_count"] += 1
+            current["service_code"].append(_code(el[1], component))
+        elif tag == "HCR":
+            current["decision"].append(el[1] or None)
+            if el[2]:
+                current["auth_number"].append(el[2])
+    for rec, cands in zip(records, found):
+        traces = cands["trace2"] or cands["trace1"]
+        rec["trace"] = resolve(t for t, _ in traces)
+        rec["trace_originator"] = resolve(o for _, o in traces)
+        for slot in (*_NAMED, *_OWN):
+            rec[slot] = resolve(cands[slot])
     return records
 
 

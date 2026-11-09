@@ -39,12 +39,18 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
 from openadapt_flow.reconcile import x12
-from openadapt_flow.runtime.effects._common import judge_records
+from openadapt_flow.reconcile.resolve import (
+    candidates,
+    is_ambiguous,
+    resolve,
+)
+from openadapt_flow.runtime.effects._common import TYPED_SUBSTRATES, judge_records
 from openadapt_flow.runtime.effects.effect import (
     EffectState,
     EffectVerdict,
     ValueExpr,
     Verdict,
+    record_matches,
 )
 from openadapt_flow.verifier import (
     READ_PATHS,
@@ -66,7 +72,9 @@ __all__ = [
 
 SCHEMA: Final = "openadapt.reconcile/v1"
 Role = Literal["ehr", "clearinghouse", "payer", "writeback"]
-BreakKind = Literal["not_received", "mismatch", "not_written_back", "duplicate"]
+BreakKind = Literal[
+    "not_received", "mismatch", "not_written_back", "duplicate", "not_accepted"
+]
 
 x12.register()
 
@@ -132,6 +140,25 @@ class Provide(BaseModel):
     map: dict[str, str] = Field(min_length=1)
 
 
+class Accept(BaseModel):
+    """A field of the one matched record that must be one of ``values`` (a
+    claim status category that says the claim was acknowledged or
+    accepted). A value in ``refute`` (rejected, returned) is a
+    ``not_accepted`` break, REFUTED. Any other value, none, or conflicting
+    values can't be told: UNCERTAIN, never CONFIRMED."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    values: list[str] = Field(min_length=1)
+    refute: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _apart(self) -> "Accept":
+        if set(self.values) & set(self.refute):
+            raise ValueError("a value can't be both accepted and refuted")
+        return self
+
+
 class Leg(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -149,6 +176,8 @@ class Leg(BaseModel):
     #: Values later legs read as ``{param: "<leg>.<name>"}``: name -> field.
     provides: dict[str, Union[str, Provide]] = Field(default_factory=dict)
     join: dict[str, Join] = Field(default_factory=dict)
+    #: Fields of the one matched record that must hold an accepted value.
+    accept: dict[str, Accept] = Field(default_factory=dict)
     due: Optional[Due] = None
     required_when: Optional[RequiredWhen] = None
     #: A store that keeps every status of a unit (a 277 acknowledgement,
@@ -434,21 +463,16 @@ def _joined(
     records: list[dict[str, Any]], join: Mapping[str, Join]
 ) -> Optional[list[dict[str, Any]]]:
     """``records`` with each join applied, or None when a referenced record
-    isn't in the read."""
+    isn't in the read, or the read holds two different records under the
+    reference (:func:`resolve`: record order names neither)."""
 
     if not join:
         return records
-    by_ref: dict[str, dict[str, Any]] = {}
-    conflicting: set[str] = set()
+    by_ref: dict[str, list[dict[str, Any]]] = {}
     for r in records:
         kind, rid = r.get("resourceType"), r.get("id")
         if kind and rid is not None:
-            key = f"{kind}/{rid}"
-            # Two different records under one reference: the read can't say
-            # which one the reference names, and record order is no answer.
-            if key in by_ref and by_ref[key] != r:
-                conflicting.add(key)
-            by_ref.setdefault(key, r)
+            by_ref.setdefault(f"{kind}/{rid}", []).append(r)
     out = []
     for r in records:
         r = dict(r)
@@ -456,8 +480,10 @@ def _joined(
             ref = r.get(rule.via)
             if ref is None:
                 continue  # a record that references nothing (the joined one)
-            target = by_ref.get(str(ref))
-            if target is None or str(ref) in conflicting:
+            if is_ambiguous(ref):
+                return None
+            target = resolve(by_ref.get(str(ref), []))
+            if not isinstance(target, Mapping):
                 return None
             r[name] = target.get(rule.field)
         out.append(r)
@@ -515,33 +541,68 @@ def _effect_params(effect: Any) -> set[str]:
     return out
 
 
-def _latest(records: list[dict[str, Any]], leg: Leg) -> list[dict[str, Any]]:
+def _latest(
+    records: list[dict[str, Any]], leg: Leg
+) -> tuple[list[dict[str, Any]], set[int]]:
     """Each ``group_by`` group's records at its latest ``latest_by``. A
-    group whose marks can't be put in time order is kept whole."""
+    group whose marks can't be put in time order is kept whole.
+
+    Also the ``id()`` of each record whose place can't be told because a
+    group key, mark or ``distinct_by`` value it or a member of its group
+    holds is :class:`Ambiguous`: its group is kept whole, and those records
+    may or may not be the latest, so they never count as the one record."""
 
     if not leg.group_by or leg.latest_by is None:
-        return records
+        return records, set()
     groups: dict[Any, list[dict[str, Any]]] = {}
     out: list[dict[str, Any]] = []
+    loose: list[dict[str, Any]] = []
     for r in records:
         key = tuple(r.get(f) for f in leg.group_by)
-        if any(k is None for k in key):
+        if any(is_ambiguous(k) for k in key):
+            loose.append(r)
+        elif any(k is None for k in key):
             out.append(r)
         else:
             groups.setdefault(tuple(str(k) for k in key), []).append(r)
-    for members in groups.values():
-        marks = [m.get(leg.latest_by) for m in members]
+    unsure: set[Any] = set()
+    for r in loose:
+        options: list[tuple[str, ...]] = [()]
+        for f in leg.group_by:
+            options = [(*o, str(c)) for o in options for c in candidates(r.get(f))]
+        unsure.update(o for o in options if o in groups)
+    maybe = {id(r) for r in loose}
+    out.extend(loose)
+    for key, members in groups.items():
+        # Two different non-empty values of a distinct_by field: two
+        # submissions, not one history (policy: kept whole, a duplicate).
+        # Kept whole whatever an ambiguous value or record adds, so its
+        # members stay definite.
         split = any(
-            len({str(m[f]) for m in members if m.get(f) is not None}) > 1
+            is_ambiguous(
+                resolve(
+                    str(m[f])
+                    for m in members
+                    if m.get(f) is not None and not is_ambiguous(m[f])
+                )
+            )
             for f in leg.distinct_by
         )
-        order = None if split else _order(marks)
+        fields = [leg.latest_by, *leg.distinct_by]
+        if not split and (
+            key in unsure
+            or any(is_ambiguous(m.get(f)) for m in members for f in fields)
+        ):
+            maybe.update(id(m) for m in members)
+            out.extend(members)
+            continue
+        order = None if split else _order([m.get(leg.latest_by) for m in members])
         if order is None:
             out.extend(members)
             continue
         top = max(order)
         out.extend(m for m, mark in zip(members, order) if mark == top)
-    return out
+    return out, maybe
 
 
 def _order(marks: list[Any]) -> Optional[list[Any]]:
@@ -570,6 +631,28 @@ def _x12_clock(mark: str) -> bool:
     except ValueError:
         return False
     return len(mark) == 12 or int(mark[12:14]) <= 59
+
+
+def _could_match(
+    record: dict[str, Any], selector: Mapping[str, Any], *, numbers: bool
+) -> bool:
+    """Whether some candidate of each of ``record``'s fields matches
+    ``selector``: a record that :func:`record_matches` may reject only
+    because a field is :class:`Ambiguous`."""
+
+    for key, want in selector.items():
+        value = record.get(key)
+        options = candidates(value) if is_ambiguous(value) else (value,)
+        if not any(
+            record_matches(
+                {**record, key: option} if key in record else record,
+                {key: want},
+                text_numbers=numbers,
+            )
+            for option in options
+        ):
+            return False
+    return True
 
 
 def _check_leg(
@@ -645,21 +728,39 @@ def _check_leg(
         result.reasons.append(_clean(f"the store could not be read: {problem}"))
         result.scope = _scope_of(leg, substrate, tier, read_at, unread=True)
         return result
-    records = _latest(records, leg)
+    records, maybe = _latest(records, leg)
     result.scope = _scope_of(leg, substrate, tier, read_at, unread=False)
+
+    # One rule for which record is "the" one (see ``resolve``): a record
+    # definitely matches a selector, or matches it only through a candidate
+    # of an Ambiguous field or a group whose latest can't be told. Only the
+    # definite ones are judged; any other one that could match means the
+    # selection can't be CONFIRMED.
+    numbers = substrate in TYPED_SUBSTRATES
+    definite = [r for r in records if id(r) not in maybe]
+
+    def unsure(selector: dict[str, Any]) -> list[dict[str, Any]]:
+        return [
+            r
+            for r in records
+            if (id(r) in maybe or not record_matches(r, selector, text_numbers=numbers))
+            and _could_match(r, selector, numbers=numbers)
+        ]
 
     empty = EffectState(substrate=substrate, reachable=True, records=[])
     verdicts: list[tuple[str, Optional[EffectVerdict]]] = []
+    unsure_by: dict[str, list[dict[str, Any]]] = {}
     for effect, probe in zip(effects, probes):
         if any(p not in params for p in _effect_params(effect)):
             verdicts.append((probe, None))  # a compare whose value is unknown
             continue
+        bound_effect = effect.resolve(params)
+        if probe in ("presence", "duplicates"):
+            unsure_by[probe] = unsure(bound_effect.match)
         verdicts.append(
             (
                 probe,
-                judge_records(
-                    effect.resolve(params), empty, records, substrate=substrate
-                ),
+                judge_records(bound_effect, empty, definite, substrate=substrate),
             )
         )
 
@@ -688,6 +789,29 @@ def _check_leg(
     if presence.verdict is Verdict.INDETERMINATE:
         result.checked["presence"] = "not_checked"
         result.reasons.append(_clean(presence.reason))
+        outcomes.append(Outcome.UNCERTAIN)
+    elif count is not None and count > 1:
+        result.checked["presence"] = "refuted"
+        why = f"{count} records match this unit of work's identity"
+        breaks.append(
+            Break(
+                "duplicate",
+                name,
+                leg.role,
+                Outcome.REFUTED,
+                records=result.records,
+                observed_count=count,
+                reason=why,
+            )
+        )
+        result.reasons.append(why)
+        outcomes.append(Outcome.REFUTED)
+    elif unsure_by.get("presence"):
+        result.checked["presence"] = "not_checked"
+        result.reasons.append(
+            "which record is this unit's can't be told: a record that may match "
+            "holds conflicting values"
+        )
         outcomes.append(Outcome.UNCERTAIN)
     elif count == 0:
         result.checked["presence"] = "refuted"
@@ -719,30 +843,20 @@ def _check_leg(
             )
             result.reasons.append(why)
             outcomes.append(outcome)
-    elif count is not None and count > 1:
-        result.checked["presence"] = "refuted"
-        why = f"{count} records match this unit of work's identity"
-        breaks.append(
-            Break(
-                "duplicate",
-                name,
-                leg.role,
-                Outcome.REFUTED,
-                records=result.records,
-                observed_count=count,
-                reason=why,
-            )
-        )
-        result.reasons.append(why)
-        outcomes.append(Outcome.REFUTED)
     else:
         result.checked["presence"] = "held"
         record = matched[0]
         for key, source in leg.provides.items():
-            if isinstance(source, str):
-                params[f"{name}.{key}"] = record.get(source)
+            field_name = source if isinstance(source, str) else source.field
+            value = record.get(field_name)
+            if is_ambiguous(value):
+                params.pop(f"{name}.{key}", None)
+                result.reasons.append(f"{key}: the record holds conflicting values")
+                outcomes.append(Outcome.UNCERTAIN)
                 continue
-            value = record.get(source.field)
+            if isinstance(source, str):
+                params[f"{name}.{key}"] = value
+                continue
             mapped = source.map.get(str(value)) if value is not None else None
             if mapped is None:
                 params.pop(f"{name}.{key}", None)
@@ -778,11 +892,24 @@ def _check_leg(
                     )
                     result.reasons.append(why)
                 outcomes.append(Outcome.REFUTED)
+            elif unsure_by.get("duplicates"):
+                result.checked["duplicates"] = "not_checked"
+                result.reasons.append(
+                    "whether another submission shares this unit's key can't be "
+                    "told: a record that may share it holds conflicting values"
+                )
+                outcomes.append(Outcome.UNCERTAIN)
             else:
                 result.checked["duplicates"] = "held"
             continue
         if not one:
             result.checked[probe] = "not_checked"
+            continue
+        field_name = probe.split(":", 1)[1]
+        if is_ambiguous(matched[0].get(field_name)):
+            result.checked[probe] = "not_checked"
+            result.reasons.append(f"{field_name}: the record holds conflicting values")
+            outcomes.append(Outcome.UNCERTAIN)
             continue
         if verdict is None:
             result.checked[probe] = "not_checked"
@@ -824,6 +951,41 @@ def _check_leg(
         )
         result.reasons.append(why)
         outcomes.append(outcome)
+    for field_name, rule in leg.accept.items():
+        probe = f"accept:{field_name}"
+        if not one:
+            result.checked[probe] = "not_checked"
+            continue
+        value = matched[0].get(field_name)
+        if is_ambiguous(value):
+            result.checked[probe] = "not_checked"
+            result.reasons.append(f"{field_name}: the record holds conflicting values")
+            outcomes.append(Outcome.UNCERTAIN)
+        elif value is not None and str(value) in rule.values:
+            result.checked[probe] = "held"
+        else:
+            refuted = value is not None and str(value) in rule.refute
+            result.checked[probe] = "refuted" if refuted else "not_checked"
+            outcome = Outcome.REFUTED if refuted else Outcome.UNCERTAIN
+            why = (
+                f"{field_name} says the unit was not accepted"
+                if refuted
+                else f"{field_name} is not a value that says the unit was accepted"
+            )
+            breaks.append(
+                Break(
+                    "not_accepted",
+                    name,
+                    leg.role,
+                    outcome,
+                    fields=(field_name,),
+                    records=result.records,
+                    observed_count=1,
+                    reason=why,
+                )
+            )
+            result.reasons.append(why)
+            outcomes.append(outcome)
     if anchor and one:
         unset = [k for k in leg.provides if params.get(f"{name}.{k}") is None]
         if unset:

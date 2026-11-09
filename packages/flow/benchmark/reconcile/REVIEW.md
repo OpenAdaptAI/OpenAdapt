@@ -56,3 +56,36 @@ disposition mapped to HCR01.
 - **Confirmed as claimed:** an unmapped or missing value is unbound, never
   null. Compares are left unchecked, and `required_when` and `due` stay
   fail-closed.
+
+## Round 4 (fixed in `4c1c596b3`)
+
+- **False `CONFIRMED`:** a join kept whichever of two different `Patient/p`
+  records came last. Two different records under one reference now make
+  the leg unreadable.
+- **False `CONFIRMED`:** a FHIR search match of another resource type
+  (an Observation for a Claim) was read as the requested record. A match
+  must be the requested type, or a Bundle whose every field is projected
+  from an entry of that type.
+- **Unsafe history:** an impossible X12 clock (`999913992359`) ordered a
+  group. It now orders nothing, and the group is kept whole.
+
+## Round 5
+
+- **False `CONFIRMED`:** the claim spec never checked the 277 status
+  category, so a rejected claim (`STC A7:21`) agreed. The claim leg now has
+  an `accept` rule: rejected, returned or not found is a `not_accepted`
+  break, `REFUTED`; any other category is `UNCERTAIN`. The fixture set
+  plants a rejected, a returned and an unknown-status 277.
+- **Fails open:** repeated X12 segments were first-wins (`STC`, `REF 1K`,
+  `REF BB/NT`, `HCR`, `DTP 472`, service lines, `NM1`, `DMG`). Each slot now
+  collects every candidate and is resolved once; conflicting repeats are
+  ambiguous.
+- **The class, not the site:** every round found one more place that chose
+  "the" record or value when the read held several. One rule
+  (`reconcile/resolve.py`) now resolves every judged slot (selection,
+  values, joins, `latest_by`, `distinct_by`, segment repeats, FHIR lists),
+  and a Hypothesis property test generates reads with a conflict in one
+  judged slot and checks the verdict is never `CONFIRMED`: `UNCERTAIN` for
+  an ambiguity, `REFUTED` only for two certain records.
+- **CI:** the `reconcile` subparser and both benchmark scripts now set
+  `allow_abbrev=False`.

@@ -22,6 +22,7 @@ from pathlib import Path
 def register(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser(
         "reconcile",
+        allow_abbrev=False,
         help="Check that the EHR, clearinghouse and payer agree on a prior "
         "authorization or claim, and report each break",
     )

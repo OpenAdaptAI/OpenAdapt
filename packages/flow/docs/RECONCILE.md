@@ -140,6 +140,43 @@ records carry two different values of a `distinct_by` field (two payer
 claim numbers under one trace) is two submissions and is kept whole, so a
 resubmission is still a `duplicate`.
 
+`accept` names a field of the one matched record that must hold a value
+saying the unit went through, such as a 277's status category (STC01-1):
+
+```yaml
+    accept:
+      status_category:
+        values: [A0, A1, A2, P0, P1, P2, P3, P4, P5, F0, F1, F2, F3, F4]
+        refute: [A3, A4, A6, A7, A8]   # returned, not found, rejected
+```
+
+A value in `refute` is a `not_accepted` break, `REFUTED`. Any other value,
+or none, is a `not_accepted` break, `UNCERTAIN`: a claim the clearinghouse
+rejected is never `CONFIRMED` because its member, code and date match.
+
+## One record, one value
+
+Every slot the reconciler judges is resolved by one rule
+(`openadapt_flow.reconcile.resolve`): the record an identity selects, a
+value read from repeated X12 segments (`STC`, `REF`, `HCR`, `DTP`, service
+lines, `NM1`, `DMG`) or from a FHIR list, a join's target, and the group key,
+`latest_by` mark and `distinct_by` value that pick a unit's latest record.
+Identical candidates collapse to one. Two or more distinct candidates are
+ambiguous; position never picks one. A leg with an ambiguous judged slot is
+never `CONFIRMED`:
+
+- a value that is ambiguous is not compared, accepted or provided to a later
+  leg: `UNCERTAIN`;
+- a record that may be the unit's only through an ambiguous value, or whose
+  group's latest record can't be told, makes the selection `UNCERTAIN`,
+  not `not_received`;
+- two records that certainly match are still a `duplicate`, `REFUTED`,
+  whatever else is ambiguous;
+- two different records under one join reference make the leg unreadable.
+
+A FHIR leg reads every element of a list a field path reaches, so two
+service lines with different codes are ambiguous rather than the first.
+
 The decision is compared as a code, not inferred from an auth number: the
 payer's review action (X12 HCR01: A1 certified, A3 not certified, A4
 pended) must equal the 278's and the EHR copy's, so a denial and a pend
@@ -184,9 +221,9 @@ to the systems themselves.
 ## What it doesn't cover
 
 - Who made a record, or when: it reads the stores' current state.
-- Service lines the spec doesn't name. FHIR paths take the first list element
-  unless filtered (`item[sequence=2]...`), so a multi-line request needs a
-  field per line.
+- Service lines the spec doesn't name. A field path that reaches several
+  lines with different values is ambiguous, so a multi-line request needs a
+  filtered field per line (`item[sequence=2]...`) to be `CONFIRMED`.
 - Stores it doesn't read: a payer portal, faxes, a second clearinghouse.
 - Which payer Claim a decision answers. The PAS reference implementation's
   decision is found by the submission identifier it echoes, not by its

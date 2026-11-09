@@ -45,7 +45,7 @@ mirrors the real FHIR wire shape, never MockMed's screen.
 from __future__ import annotations
 
 import time
-from typing import Any, Optional, Protocol
+from typing import Any, Callable, Optional, Protocol
 
 from openadapt_flow.fhir_read import (
     check_collection_search,
@@ -193,6 +193,42 @@ def extract_path(resource: dict[str, Any], dotted: str) -> Any:
     return node
 
 
+def extract_all(resource: dict[str, Any], dotted: str) -> list[Any]:
+    """Every value ``dotted`` reaches in ``resource``: :func:`extract_path`
+    with each list fanned out instead of cut to its first element. A filter
+    keeps its rule (exactly one match, else no value), and a branch that
+    reaches nothing gives ``None``."""
+
+    nodes: list[Any] = [resource]
+    for seg in split_path(dotted):
+        name, want = seg, None
+        if seg.endswith("]") and "[" in seg:
+            name, _, cond = seg[:-1].partition("[")
+            want = parse_filter(cond)
+            if want is None:
+                return [None]
+        nxt: list[Any] = []
+        for node in nodes:
+            for item in node if isinstance(node, list) else [node]:
+                if not isinstance(item, dict):
+                    nxt.append(None)
+                    continue
+                value = item.get(name)
+                if want is not None:
+                    items = value if isinstance(value, list) else [value]
+                    matches = [i for i in items if filter_matches(i, want)]
+                    value = matches[0] if len(matches) == 1 else None
+                nxt.append(value)
+        nodes = nxt
+    out: list[Any] = []
+    for node in nodes:
+        if isinstance(node, list):
+            out.extend(node if node else [None])
+        else:
+            out.append(node)
+    return out
+
+
 class FhirEffectVerifier(VerifierAdapterBase):
     """Verify effects against a FHIR R4 system of record.
 
@@ -320,10 +356,24 @@ class FhirEffectVerifier(VerifierAdapterBase):
             headers["Authorization"] = f"Bearer {token}"
         return headers
 
+    #: How a field that reaches several values is read. ``None`` keeps
+    #: :func:`extract_path`'s first-element rule; a resolver (the
+    #: reconciler's ``resolve``) is given every value :func:`extract_all`
+    #: reaches and returns the one value they agree on.
+    value_resolver: Optional[Callable[[list[Any]], Any]] = None
+
     def _flatten(self, resource: dict[str, Any]) -> dict[str, Any]:
-        flat = {
-            key: extract_path(resource, path) for key, path in self.field_paths.items()
-        }
+        if self.value_resolver is not None:
+            resolver = self.value_resolver
+            flat = {
+                key: resolver(extract_all(resource, path))
+                for key, path in self.field_paths.items()
+            }
+        else:
+            flat = {
+                key: extract_path(resource, path)
+                for key, path in self.field_paths.items()
+            }
         # Always carry a stable id for delta / collateral accounting.
         if "id" not in flat or flat["id"] is None:
             flat["id"] = resource.get("id")

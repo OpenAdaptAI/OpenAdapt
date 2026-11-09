@@ -823,6 +823,63 @@
    "service_date": "2026-12-20",
    "submission_id": "CLM-SYN-047",
    "unit": "claim"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "not_accepted",
+     "clearinghouse",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic048",
+   "fault": "rejected_clearinghouse",
+   "member_id": "SYNM00048",
+   "n": 48,
+   "near_code": "99214",
+   "service_code": "99213",
+   "service_date": "2026-12-21",
+   "submission_id": "CLM-SYN-048",
+   "unit": "claim"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "not_accepted",
+     "clearinghouse",
+     "REFUTED"
+    ]
+   ],
+   "family": "Synthetic049",
+   "fault": "returned_clearinghouse",
+   "member_id": "SYNM00049",
+   "n": 49,
+   "near_code": "99215",
+   "service_code": "99214",
+   "service_date": "2026-12-22",
+   "submission_id": "CLM-SYN-049",
+   "unit": "claim"
+  },
+  {
+   "category": "fault",
+   "expected": [
+    [
+     "not_accepted",
+     "clearinghouse",
+     "UNCERTAIN"
+    ]
+   ],
+   "family": "Synthetic050",
+   "fault": "unknown_status_clearinghouse",
+   "member_id": "SYNM00050",
+   "n": 50,
+   "near_code": "93005",
+   "service_code": "93000",
+   "service_date": "2026-12-23",
+   "submission_id": "CLM-SYN-050",
+   "unit": "claim"
   }
  ]
 }

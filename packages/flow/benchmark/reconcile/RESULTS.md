@@ -75,3 +75,9 @@ These are found in its source and in the live run:
   every request. The unit tests cover denial and pend against SQLite stores.
 - Claims at a payer. Claim units reconcile the EHR against the 277 only.
 - Any production payer, clearinghouse or EHR.
+- The 277 status units. Units 48 to 50 (a rejected, a returned and an
+  unknown-status 277) were added to the fixture set after this run, with
+  the claim leg's `accept` rule. Unit tests cover them against X12 files;
+  this run's numbers are for units 1 to 47, from the fixture set with
+  sha256 `f75c31b6…3d933278d`. The current set's sha256 is
+  `9cecf3f3…dbbf96c7`.

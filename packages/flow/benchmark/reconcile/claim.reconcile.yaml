@@ -50,6 +50,15 @@ legs:
       service_code: {param: ehr.service_code}
       service_date: {param: ehr.service_date}
     duplicate_key: *same
+    # The claim must have been acknowledged or accepted (X12 277 STC01-1
+    # category). Rejected (A6, A7, A8), returned as unprocessable (A3) or
+    # not found (A4) is a break; any other category (a request for
+    # information, an error response, a split claim) can't be told, so the
+    # unit is UNCERTAIN, never CONFIRMED.
+    accept:
+      status_category:
+        values: [A0, A1, A2, P0, P1, P2, P3, P4, P5, F0, F1, F2, F3, F4]
+        refute: [A3, A4, A6, A7, A8]
     # An acknowledgement and a later status share a trace: judge the latest.
     group_by: [trace]
     latest_by: sent_at

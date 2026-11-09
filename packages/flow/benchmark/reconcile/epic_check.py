@@ -84,7 +84,7 @@ SPEC = {
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     sys.path.insert(0, str(FLOW))

@@ -57,6 +57,11 @@ CLAIM_PLAN = [
     ("fault", "date_clearinghouse", 1),
     ("fault", "member_clearinghouse", 1),
     ("fault", "duplicate_clearinghouse", 2),
+    # Review round 5: the 277 says the claim was rejected, returned, or
+    # something that says neither.
+    ("fault", "rejected_clearinghouse", 1),
+    ("fault", "returned_clearinghouse", 1),
+    ("fault", "unknown_status_clearinghouse", 1),
 ]
 
 R, U = "REFUTED", "UNCERTAIN"
@@ -78,6 +83,16 @@ EXPECTED = {
     "wrong_writeback": [["not_written_back", "writeback", R]],
     "duplicate_payer": [["duplicate", "payer", R]],
     "duplicate_clearinghouse": [["duplicate", "clearinghouse", R]],
+    "rejected_clearinghouse": [["not_accepted", "clearinghouse", R]],
+    "returned_clearinghouse": [["not_accepted", "clearinghouse", R]],
+    "unknown_status_clearinghouse": [["not_accepted", "clearinghouse", U]],
+}
+
+#: The 277 status (STC01-1 category, STC01-2 code) each claim fault writes.
+STATUS = {
+    "rejected_clearinghouse": ("A7", "21"),
+    "returned_clearinghouse": ("A3", "21"),
+    "unknown_status_clearinghouse": ("E0", "0"),
 }
 
 
