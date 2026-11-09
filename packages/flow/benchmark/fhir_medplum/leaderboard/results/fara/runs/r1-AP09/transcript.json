@@ -1,0 +1,1119 @@
+{
+ "transcript": [
+  {
+   "reply": "We need to locate the Patient record for Tomasz Wren. Search the server for his name and date of birth.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [204, 32], \"text\": \"Tomasz Wren 1966-01-30\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Patient detail page to confirm the record and obtain its ID before scheduling the appointment.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [222, 302]}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to retain the Patient resource details (id, name, dob) to reference later when reporting the record and when searching for or referencing the practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Patient record: id = 20cc4a23-5696-44bc-a4b2-a05d4a7934b7, name = Tomasz Wren, dob = 1966-01-30.\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Need to locate the Practitioner resource for Dr Ama Osei to add as participant in the appointment.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [204, 32], \"text\": \"Dr Ama Osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the Practitioner search query to locate the provider resource.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [276, 32], \"text\": \"Dr Ama Osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "The previous enter key did not trigger search; click the Search button to execute the search for the practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [83, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "Navigate to the Practitioner search results page to locate the provider record for Dr Ama Osei.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1185, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'OpenAdapt synthetic clinic' site selector to switch to the Practitioner search context.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1185, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'OpenAdapt synthetic clinic' site selector to switch to the Practitioner search context.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1185, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "Directly navigate to the Practitioner search results page to locate the provider record for Dr Ama Osei, since the site selector did not switch contexts.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Practitioner?_count=20&_fields=id,_lastUpdated,name&_sort=-_lastUpdated\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the detail page for the practitioner named Dr Ama Osei to obtain the ID and status.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [222, 345]}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to remember the practitioner resource details (id, name) to reference when scheduling the appointment and when reporting back to the user.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Practitioner record: id = 8bfb415b-f3af-4726-b2ef-6043f4fc1fb8, name = Dr Ama Osei.\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the JSON view to inspect the practitioner's resource and confirm its current booking status.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [475, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Close the JSON modal to return to the practitioner detail page so we can navigate to the Appointments section.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1062, 746]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the OK button to close the JSON modal and return to the practitioner detail page.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1062, 746]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Apps' tab to open the apps panel and look for the Appointments module to view the practitioner's appointments.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [545, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Timeline' tab to open the practitioner's timeline and check if there is an existing appointment for the requested date/time.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [42, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Apps panel to locate and click the 'Appointments' module for the practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [545, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Timeline' tab to open the practitioner's timeline and look for any existing appointment on 2026-11-17T14:00Z.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [42, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Apps panel to locate and click the 'Appointments' module for the practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [545, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Event' tab to open the practitioner's event stream and look for any existing appointment on 2026-11-17T14:00Z.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [253, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Apps panel to locate and click the 'Appointments' module for the practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [545, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Timeline' tab to open the practitioner's timeline and inspect for any existing appointment on 2026-11-17T14:00Z.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [42, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Apps panel to locate and click the 'Appointments' module for the practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [545, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Apps' tab to open the apps panel and locate the 'Appointments' module.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [545, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Timeline' tab to open the practitioner's timeline and inspect for any existing appointment on 2026-11-17T14:00Z.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [42, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Apps panel to locate and click the 'Appointments' module for the practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [545, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Timeline' tab to open the practitioner's timeline and inspect for any existing appointment on 2026-11-17T14:00Z.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [42, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Apps panel to locate and click the 'Appointments' module for the practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [545, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Timeline' tab to open the practitioner's timeline and inspect for any existing appointment on 2026-11-17T14:00Z.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [42, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Apps panel to locate and click the 'Appointments' module for the practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [545, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search the server for any Appointment resources that reference practitioner dr_osei, to determine if an appointment already exists on 2026-11-17T14:00Z.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [204, 32], \"text\": \"Appointment?pr=dr_osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search for any Appointment resources that reference practitioner dr_osei, to determine if an appointment already exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [293, 32], \"text\": \"Appointment?pr=dr_osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search for any Appointment resources that reference patient Tomasz Wren, to verify if an appointment already exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [293, 32], \"text\": \"Appointment?patient=20cc4a23-5696-44bc-a4b2-a05d4a7934b7\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search for any Appointment resources that reference patient tomasz_wren, to verify if an appointment already exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [293, 32], \"text\": \"Appointment?patient=tomasz_wren\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search for any Appointment resources that reference the patient's identifier, to verify if an appointment already exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [293, 32], \"text\": \"Appointment?patient=20cc4a23-5696-44bc-a4b2-a05d4a7934b7\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the JSON view of the practitioner to inspect the 'participant' field and confirm whether an existing appointment participant exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [545, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the practitioner's JSON view to inspect the participant field for existing appointments.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [475, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Close the JSON modal to return to the practitioner detail page so we can inspect the Apps tab for any appointment participant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1062, 746]}}\n</tool_call>"
+  },
+  {
+   "reply": "Close the JSON modal to return to the practitioner detail page so we can proceed with finding the Appointments module.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1062, 746]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Apps' tab to open the apps panel and locate the 'Appointments' module.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [545, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the global search interface to search for existing Appointment resources that reference the patient and practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [204, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search for any Appointment resources that reference the practitioner, to verify if an appointment already exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [276, 32], \"text\": \"Appointment?pr=dr_osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the global search interface so I can search for any existing Appointment resources involving the patient and practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [204, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search for any Appointment resources that reference the practitioner, to verify if an appointment already exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [276, 32], \"text\": \"Appointment?pr=dr_osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the global search interface so I can search for any existing Appointment resources involving the patient and practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [204, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search for any Appointment resources that reference the practitioner, to verify if an appointment already exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [276, 32], \"text\": \"Appointment?pr=dr_osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the global search interface so I can search for any existing Appointment resources that reference the patient and practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [204, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search for any Appointment resources that reference the practitioner, to verify if an appointment already exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [293, 32], \"text\": \"Appointment?pr=dr_osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the global search interface so I can search for any existing Appointment resources that reference the patient and practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [204, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to search for any Appointment resources that reference the practitioner, to verify if an appointment already exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [293, 32], \"text\": \"Appointment?pr=dr_osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the global search interface so I can search for any existing Appointment resources that reference the patient and practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [204, 32]}}\n</tool_call>"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Tomasz Wren 1966-01-30"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 220.62111801242236,
+   "y": 297.5369458128079,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Dr Ama Osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 274.2857142857143,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Dr Ama Osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 82.48447204968944,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1177.639751552795,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1177.639751552795,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1177.639751552795,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Practitioner?_count=20&_fields=id,_lastUpdated,name&_sort=-_lastUpdated"
+  },
+  {
+   "a": "click",
+   "x": 220.62111801242236,
+   "y": 339.90147783251234,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 472.0496894409938,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1055.4037267080746,
+   "y": 734.9753694581281,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1055.4037267080746,
+   "y": 734.9753694581281,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 541.6149068322982,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 41.73913043478261,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 541.6149068322982,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 41.73913043478261,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 541.6149068322982,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 251.42857142857142,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 541.6149068322982,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 41.73913043478261,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 541.6149068322982,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 541.6149068322982,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 41.73913043478261,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 541.6149068322982,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 41.73913043478261,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 541.6149068322982,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 41.73913043478261,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 541.6149068322982,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Appointment?pr=dr_osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 291.1801242236025,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Appointment?pr=dr_osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 291.1801242236025,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Appointment?patient=20cc4a23-5696-44bc-a4b2-a05d4a7934b7"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 291.1801242236025,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Appointment?patient=tomasz_wren"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 291.1801242236025,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Appointment?patient=20cc4a23-5696-44bc-a4b2-a05d4a7934b7"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 541.6149068322982,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 472.0496894409938,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1055.4037267080746,
+   "y": 734.9753694581281,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1055.4037267080746,
+   "y": 734.9753694581281,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 541.6149068322982,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 274.2857142857143,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Appointment?pr=dr_osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 274.2857142857143,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Appointment?pr=dr_osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 274.2857142857143,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Appointment?pr=dr_osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 291.1801242236025,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Appointment?pr=dr_osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 291.1801242236025,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Appointment?pr=dr_osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 3038,
+   "out": 90,
+   "usd": 0.0
+  },
+  {
+   "in": 4524,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 5982,
+   "out": 121,
+   "usd": 0.0
+  },
+  {
+   "in": 6172,
+   "out": 76,
+   "usd": 0.0
+  },
+  {
+   "in": 6317,
+   "out": 67,
+   "usd": 0.0
+  },
+  {
+   "in": 6453,
+   "out": 54,
+   "usd": 0.0
+  },
+  {
+   "in": 6576,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 6700,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 6824,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 6948,
+   "out": 88,
+   "usd": 0.0
+  },
+  {
+   "in": 7093,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 7216,
+   "out": 103,
+   "usd": 0.0
+  },
+  {
+   "in": 7387,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 7508,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 7634,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 7756,
+   "out": 60,
+   "usd": 0.0
+  },
+  {
+   "in": 7885,
+   "out": 60,
+   "usd": 0.0
+  },
+  {
+   "in": 8015,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 8137,
+   "out": 72,
+   "usd": 0.0
+  },
+  {
+   "in": 8279,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 8401,
+   "out": 74,
+   "usd": 0.0
+  },
+  {
+   "in": 8544,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 8666,
+   "out": 72,
+   "usd": 0.0
+  },
+  {
+   "in": 8808,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 8930,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 9054,
+   "out": 72,
+   "usd": 0.0
+  },
+  {
+   "in": 9196,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 9318,
+   "out": 72,
+   "usd": 0.0
+  },
+  {
+   "in": 9460,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 9582,
+   "out": 72,
+   "usd": 0.0
+  },
+  {
+   "in": 9724,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 9846,
+   "out": 106,
+   "usd": 0.0
+  },
+  {
+   "in": 10021,
+   "out": 85,
+   "usd": 0.0
+  },
+  {
+   "in": 10175,
+   "out": 113,
+   "usd": 0.0
+  },
+  {
+   "in": 10357,
+   "out": 86,
+   "usd": 0.0
+  },
+  {
+   "in": 10512,
+   "out": 112,
+   "usd": 0.0
+  },
+  {
+   "in": 10693,
+   "out": 58,
+   "usd": 0.0
+  },
+  {
+   "in": 10820,
+   "out": 50,
+   "usd": 0.0
+  },
+  {
+   "in": 10939,
+   "out": 59,
+   "usd": 0.0
+  },
+  {
+   "in": 11067,
+   "out": 58,
+   "usd": 0.0
+  },
+  {
+   "in": 11194,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 11318,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 11439,
+   "out": 82,
+   "usd": 0.0
+  },
+  {
+   "in": 11590,
+   "out": 54,
+   "usd": 0.0
+  },
+  {
+   "in": 11713,
+   "out": 82,
+   "usd": 0.0
+  },
+  {
+   "in": 11864,
+   "out": 54,
+   "usd": 0.0
+  },
+  {
+   "in": 11987,
+   "out": 82,
+   "usd": 0.0
+  },
+  {
+   "in": 12138,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 12262,
+   "out": 82,
+   "usd": 0.0
+  },
+  {
+   "in": 12413,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 12537,
+   "out": 82,
+   "usd": 0.0
+  },
+  {
+   "in": 12688,
+   "out": 55,
+   "usd": 0.0
+  }
+ ]
+}

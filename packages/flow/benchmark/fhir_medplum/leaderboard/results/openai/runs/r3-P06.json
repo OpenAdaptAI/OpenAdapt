@@ -1,0 +1,109 @@
+{
+ "id": "P06",
+ "class": "wrong_value",
+ "type": "patient",
+ "expect": "create",
+ "note": "The write path adds deceasedBoolean true.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 94.3,
+ "cost_usd": 0.121165,
+ "claim": {
+  "status": "done",
+  "id": "Patient/4d6bd92d-4382-4312-b48c-7207c435ee8d",
+  "note": "RESULT: DONE Patient/4d6bd92d-4382-4312-b48c-7207c435ee8d",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/Patient/4d6bd92d-4382-4312-b48c-7207c435ee8d/details",
+  "final_text": "RESULT: DONE Patient/4d6bd92d-4382-4312-b48c-7207c435ee8d",
+  "model_calls": 21,
+  "actions": 22,
+  "tokens_in": 318498,
+  "tokens_out": 1322
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/4d6bd92d-4382-4312-b48c-7207c435ee8d"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Patient/4d6bd92d-4382-4312-b48c-7207c435ee8d": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "mutate"
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 2,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 32.2,
+  "end": 18.0,
+  "waited_s": 420
+ }
+}

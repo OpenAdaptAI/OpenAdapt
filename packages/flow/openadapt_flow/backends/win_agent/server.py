@@ -13,6 +13,8 @@ matching the Windows Agent Arena Flask contract (the WAADirect pattern):
     POST /uia/locator-at    -> stable UIA locator at a demonstrated point
     POST /uia/element-identity-at -> role, name, AutomationId, window path and
                                process of the element at a point
+    POST /uia/authoring-tree -> the foreground app's controls, each with its
+                               element-identity-at identity
     POST /uia/text-at-point -> structured row text for identity verification
     POST /uia/identity-candidates-at -> rows that read the same as that row
     POST /uia/find          -> zero / unique / ambiguous exact candidates
@@ -694,6 +696,161 @@ def _element_identity(control: object) -> Optional[dict[str, Any]]:
     }
 
 
+#: UIA control type -> the authoring observation's role vocabulary (the one
+#: the browser tree uses). Only types ``element-identity-at`` resolves to
+#: themselves are listed, so a click on a listed control reads back the
+#: identity the tree gave it.
+_AUTHORING_ROLES = {
+    "ButtonControl": "button",
+    "SplitButtonControl": "button",
+    "HyperlinkControl": "link",
+    "MenuItemControl": "menu_item",
+    "TabItemControl": "tab",
+    "ListItemControl": "list_item",
+    "CheckBoxControl": "checkbox",
+    "RadioButtonControl": "radio",
+    "EditControl": "text_input",
+}
+_MAX_AUTHORING_NODES = 200
+_AUTHORING_DEADLINE_S = 8.0
+
+
+def _authoring_root(auto: Any) -> Optional[object]:
+    """The outermost window below the desktop that holds the foreground window."""
+    try:
+        node = auto.GetForegroundControl()
+    except Exception:  # noqa: BLE001 - no foreground window is an empty tree
+        return None
+    window: Optional[object] = None
+    for _ in range(_MAX_UIA_DEPTH):
+        if node is None:
+            break
+        if str(_control_value(node, "ControlTypeName", "")) == "WindowControl":
+            window = node
+        node = _parent(node)
+    return window
+
+
+def _top_level_window(user32: Any, control: object) -> Optional[dict[str, int]]:
+    """``{hwnd, pid}`` of the top-level window ``control`` is in, or None.
+
+    The same window ``/window/root-at`` names for a point over the control
+    (``GetAncestor(GA_ROOT)``): a click by node is refused when the window
+    under its point is another one, such as a second window of the same app
+    with the same title. None without Win32 or on any failure.
+    """
+    if user32 is None:
+        return None
+    try:
+        hwnd = _window_handle(control)
+        root = (user32.ancestor(hwnd, _GA_ROOT) or hwnd) if hwnd else 0
+        pid = user32.pid_of(root) if root else 0
+    except Exception:  # noqa: BLE001 - an unreadable window is no window
+        return None
+    if not root or not pid:
+        return None
+    return {"hwnd": int(root), "pid": int(pid)}
+
+
+def _authoring_tree(auto: Any) -> dict[str, Any]:
+    """The foreground app's controls, each with its ``element-identity-at`` identity.
+
+    Lists, in tree order, the controls of the roles in ``_AUTHORING_ROLES``
+    that have an identity (an AutomationId, or a role and a name), at most
+    ``_MAX_AUTHORING_NODES`` on screen and as many off screen. ``identity`` is
+    exactly what ``/uia/element-identity-at`` returns for that control, and
+    ``window`` its top-level window (:func:`_top_level_window`). An
+    off-screen control (scrolled out of view) has ``offscreen: true`` and no
+    pixels: it can't be clicked, but it counts when a caller checks that an
+    identity is unique. Bounds are screen pixels ``{x, y, w, h}``.
+    ``truncated`` is true when a cap, the visit budget or the deadline cut the
+    walk short.
+    """
+    root = _authoring_root(auto)
+    if root is None:
+        return {"status": "ok", "tree": [], "window": None, "truncated": False}
+    user32 = _user32_factory() if os.name == "nt" else None
+    started = time.monotonic()
+    nodes: list[dict[str, Any]] = []
+    shown = hidden = 0
+    truncated = False
+    visited = 0
+    stack: list[tuple[object, int]] = [(root, 0)]
+    while stack:
+        control, depth = stack.pop()
+        visited += 1
+        if (
+            visited > _MAX_UIA_NODES
+            or shown >= _MAX_AUTHORING_NODES
+            or hidden >= _MAX_AUTHORING_NODES
+            or time.monotonic() - started > _AUTHORING_DEADLINE_S
+        ):
+            truncated = True
+            break
+        control_type = str(_control_value(control, "ControlTypeName", ""))
+        role = _AUTHORING_ROLES.get(control_type)
+        if role is not None:
+            identity = _element_identity(control)
+            bounds = _bounds(control)
+            offscreen = bounds is None or bool(
+                _control_value(control, "IsOffscreen", False)
+            )
+            if identity is not None:
+                if offscreen:
+                    hidden += 1
+                else:
+                    shown += 1
+                nodes.append(
+                    {
+                        "role": role,
+                        "control_type": control_type,
+                        "automation_id": identity["automation_id"],
+                        "class_name": str(
+                            _control_value(control, "ClassName", "") or ""
+                        )[:64]
+                        or None,
+                        "name": identity["name"],
+                        "enabled": bool(_control_value(control, "IsEnabled", True)),
+                        "focused": bool(
+                            _control_value(control, "HasKeyboardFocus", False)
+                        ),
+                        "backend_pixels": (
+                            None
+                            if offscreen or bounds is None
+                            else {
+                                "x": bounds[0],
+                                "y": bounds[1],
+                                "w": bounds[2] - bounds[0],
+                                "h": bounds[3] - bounds[1],
+                            }
+                        ),
+                        "offscreen": offscreen,
+                        "identity": identity,
+                        "window": _top_level_window(user32, control),
+                    }
+                )
+        if depth < _MAX_UIA_DEPTH:
+            stack.extend((c, depth + 1) for c in reversed(_children(control)))
+    window_bounds = _bounds(root)
+    process_id = _control_value(root, "ProcessId", 0)
+    window: dict[str, Any] = {
+        "process_name": _process_image_identifier(
+            process_id if isinstance(process_id, int) else 0
+        ),
+        "bounds": (
+            {
+                "x": window_bounds[0],
+                "y": window_bounds[1],
+                "w": window_bounds[2] - window_bounds[0],
+                "h": window_bounds[3] - window_bounds[1],
+            }
+            if window_bounds is not None
+            else None
+        ),
+    }
+    return {"status": "ok", "tree": nodes, "window": window, "truncated": truncated}
+
+
 def _locator_payload(value: object) -> dict[str, Any]:
     data = _exact_object(
         value,
@@ -1277,6 +1434,9 @@ def _perform_uia_initialized(
     auto: Any, operation: str, payload: dict[str, Any]
 ) -> dict[str, Any]:
     """Perform one typed UIA operation in an initialized COM apartment."""
+    if operation == "authoring-tree":
+        _exact_object(payload, label=operation)
+        return _authoring_tree(auto)
     if operation in {
         "locator-at",
         "element-identity-at",
@@ -2631,6 +2791,7 @@ def make_handler_class(
                             "guarded_input_v1",
                             "uia_v1",
                             "uia_read_v1",
+                            "uia_authoring_tree_v1",
                             *(
                                 ["legacy_waa_input_v1"]
                                 if config.allow_legacy_exec
@@ -2668,6 +2829,7 @@ def make_handler_class(
                 "/context/identity": ("context", "identity"),
                 "/uia/locator-at": ("uia", "locator-at"),
                 "/uia/element-identity-at": ("uia", "element-identity-at"),
+                "/uia/authoring-tree": ("uia", "authoring-tree"),
                 "/window/root-at": ("uia", "window-root-at"),
                 "/window/owned-over": ("uia", "owned-window-over"),
                 "/uia/text-at-point": ("uia", "text-at-point"),
