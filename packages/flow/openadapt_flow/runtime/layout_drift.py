@@ -35,7 +35,7 @@ import statistics
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, Mapping, Optional, Sequence
 
-from openadapt_flow.runtime.identity import squash
+from openadapt_flow.runtime.identity import comparison_squash as squash
 
 DriftReason = Literal[
     "resolution_changed",
