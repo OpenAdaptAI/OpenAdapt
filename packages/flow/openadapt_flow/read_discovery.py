@@ -596,6 +596,10 @@ def cover(
             row["outcome"] = "not one whole response: " + "; ".join(target.incomplete)
             why.append(f"GET {row['path']}: {row['outcome']}")
             continue
+        if any(listing.kind != "rest" for listing in listings):
+            row["outcome"] = "holds a list the REST check can't read"
+            why.append(f"GET {row['path']}: {row['outcome']}")
+            continue
         # Promote: the root replaces the collection; every list it returns
         # is read (the saved record's may gain one row, the others none).
         safe = row["path"]
@@ -605,8 +609,6 @@ def cover(
         guarded: list[rcs.Surface] = []
         for listing in listings:
             if listing is target_listing:
-                continue
-            if listing.kind != "rest":
                 continue
             records = [dict(r) for r in listing.resources]
             config: dict[str, Any] = {
