@@ -10,6 +10,8 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from openadapt_flow.verify_run import capture_baseline, parse_verify_config, verify_run
 
 
@@ -87,3 +89,129 @@ def test_an_unset_surface_keeps_the_contract_digest(tmp_path: Path) -> None:
     }
     effects = parse(single).effects
     assert all("surface:" not in (e.probe or "") for e in effects)
+
+
+# -- a composite duplicate key read through a selected surface ---------------
+#
+# The record's checks are judged by ``record.surface``'s read, so that read
+# must hold every record carrying the key. A non-key filter or a row limit on
+# the selected read hides an older same-key row; both parsers must refuse it,
+# not only when the read is the verifier's single read.
+
+_HIDING_READS = [
+    ("SELECT * FROM main_rows WHERE name = :name", "name"),
+    ("SELECT * FROM main_rows LIMIT 1000", "limits its rows"),
+]
+
+
+def _keyed(db: Path, main_query: str, surface: str | None = "main") -> dict:
+    record: dict = {
+        "name": "row",
+        "match": ["name"],
+        "duplicate_key": ["group_key"],
+        "fields": {"name": "name", "group_key": "group_key"},
+    }
+    if surface is not None:
+        record["surface"] = surface
+    return {
+        "schema_version": "openadapt.verify/v1",
+        "app": {
+            "name": "Synthetic",
+            "version": "1",
+            "url": "http://127.0.0.1:9301/",
+            "reset": {"command": "true"},
+        },
+        "verifier": {
+            "kind": "surfaces",
+            "surfaces": {
+                "main": {
+                    "kind": "sql",
+                    "sqlite_database": str(db),
+                    "sql_query": main_query,
+                },
+                "side": {
+                    "kind": "sql",
+                    "sqlite_database": str(db),
+                    "sql_query": "SELECT * FROM side_rows",
+                },
+            },
+        },
+        "record": record,
+    }
+
+
+def _verify_run_parse(data: dict):
+    from openadapt_flow.verify_run import parse_verify_config as parse
+
+    data = {k: v for k, v in data.items() if k != "app"}
+    return parse(data)
+
+
+@pytest.mark.parametrize(("query", "message"), _HIDING_READS)
+def test_verify_run_refuses_a_selected_read_that_may_miss_the_key(
+    tmp_path: Path, query: str, message: str
+) -> None:
+    from openadapt_flow.verify_run import VerifyRunError
+
+    with pytest.raises(VerifyRunError, match=message):
+        _verify_run_parse(_keyed(tmp_path / "s.db", query))
+
+
+@pytest.mark.parametrize(("query", "message"), _HIDING_READS)
+def test_qualify_refuses_a_selected_read_that_may_miss_the_key(
+    tmp_path: Path, query: str, message: str
+) -> None:
+    from openadapt_flow.qualify.config import QualifyConfigError
+    from openadapt_flow.qualify.config import parse_verify_config as parse
+
+    with pytest.raises(QualifyConfigError, match=message):
+        parse(_keyed(tmp_path / "s.db", query), env={})
+
+
+@pytest.mark.parametrize(
+    ("surface", "message"),
+    [(None, "record.surface"), ("nowhere", "nowhere")],
+)
+def test_a_key_read_through_surfaces_needs_a_known_surface(
+    tmp_path: Path, surface: str | None, message: str
+) -> None:
+    from openadapt_flow.qualify.config import QualifyConfigError
+    from openadapt_flow.qualify.config import parse_verify_config as parse
+    from openadapt_flow.verify_run import VerifyRunError
+
+    data = _keyed(tmp_path / "s.db", "SELECT * FROM main_rows", surface=surface)
+    with pytest.raises(VerifyRunError, match=message):
+        _verify_run_parse(data)
+    with pytest.raises(QualifyConfigError, match=message):
+        parse(data, env={})
+
+
+def test_a_complete_selected_read_finds_the_older_same_key_row(
+    tmp_path: Path,
+) -> None:
+    from openadapt_flow.qualify.config import parse_verify_config as parse
+
+    db = tmp_path / "s.db"
+    con = sqlite3.connect(db)
+    con.execute(
+        "CREATE TABLE main_rows (id INTEGER PRIMARY KEY, name TEXT, group_key TEXT)"
+    )
+    con.execute("CREATE TABLE side_rows (id INTEGER PRIMARY KEY, body TEXT)")
+    con.execute("INSERT INTO main_rows VALUES (1, 'older', 'g1')")
+    con.commit()
+    data = _keyed(db, "SELECT * FROM main_rows")
+    parse(data, env={})
+    cfg = _verify_run_parse(data)
+    params = {"name": "newer", "group_key": "g1"}
+    capture_baseline(cfg, params, tmp_path / "b.json")
+    con.execute("INSERT INTO main_rows VALUES (2, 'newer', 'g1')")
+    con.commit()
+    con.close()
+    outcome = verify_run(
+        cfg,
+        params=params,
+        run_record={"executor_kind": "agent", "executor_id": "bot"},
+        authorization_ref="t",
+        baseline_path=tmp_path / "b.json",
+    )["receipt"]["outcome"]
+    assert outcome == "reconciliation_required"
