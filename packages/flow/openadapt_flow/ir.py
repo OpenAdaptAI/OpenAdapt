@@ -262,9 +262,24 @@ class TokenTemplate(BaseModel):
     gen: bool = False
     bearing: Optional[bool] = Field(
         default=None,
+        strict=True,
         description="identity-bearing (identity.identity_bearing); None in "
         "bundles compiled before the flag, which count every token",
     )
+
+    label: Optional[bool] = Field(
+        default=None,
+        strict=True,
+        description="Writer-owned generic UI-label role from the same raw/"
+        "comparison token pair as bearing; unknown in older templates",
+    )
+
+    @model_serializer(mode="wrap")
+    def _serialize_roles(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.label is None:
+            data.pop("label", None)
+        return data
 
 
 class ConcatTemplate(BaseModel):
@@ -301,6 +316,18 @@ class IdentityTemplate(BaseModel):
     band_len: int = 0
     tokens: list[TokenTemplate] = Field(default_factory=list)
     concats: list[ConcatTemplate] = Field(default_factory=list)
+    punctuation_policy: Optional[str] = None
+    punctuation_indices: list[int] = Field(default_factory=list)
+    punctuation_body_keys: dict[int, str] = Field(default_factory=dict)
+    standalone_punctuation_indices: list[int] = Field(default_factory=list)
+    ocr_noise: Optional[IdentityTemplate] = Field(
+        default=None,
+        description=(
+            "Writer-owned salted noise hashes, schema0. Classification-only: "
+            "can supply glyph uncertainty but never identity authority. "
+            "Unavailable on parameterized calls."
+        ),
+    )
     structured: Optional[str] = Field(
         default=None, description="salted hash of the structured identity string"
     )
@@ -367,6 +394,16 @@ class IdentityTemplate(BaseModel):
         still sealing non-empty run-bound structured parameter metadata.
         """
         data: dict[str, Any] = handler(self)
+        if self.punctuation_policy is None:
+            data.pop("punctuation_policy", None)
+        if not self.punctuation_body_keys:
+            data.pop("punctuation_body_keys", None)
+        if not self.punctuation_indices:
+            data.pop("punctuation_indices", None)
+        if not self.standalone_punctuation_indices:
+            data.pop("standalone_punctuation_indices", None)
+        if self.ocr_noise is None:
+            data.pop("ocr_noise", None)
         if not self.structured_params:
             data.pop("structured_params", None)
         if not self.signal_hashes:

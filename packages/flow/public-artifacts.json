@@ -963,6 +963,7 @@
     "benchmark/skill_cache/apps/trac.verify.yaml",
     "benchmark/skill_cache/results/mockmed/summary.json",
     "benchmark/structural_action/structural_action.json",
+    "benchmark/teach_desktop/results/macos-20261104.json",
     "benchmark/ui_readback/results.json",
     "benchmark/undo_proposal/results/mockloan-fee-row.json",
     "benchmark/undo_proposal/results/mockloan.json",
