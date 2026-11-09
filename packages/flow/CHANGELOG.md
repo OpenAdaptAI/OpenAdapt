@@ -23,7 +23,15 @@
 
 ### Fixes
 
+- FHIR collection compatibility refuses query parameters in configured searches, requests, effective URLs, and self links. Capped or otherwise unqualified query results cannot establish complete readback; standard searchset paging is unchanged.
+- Record-frame setup can learn field-to-column correspondence from paired reads. Target columns without a binding are listed as unverified coverage, while bound values and changes to other records remain checked.
+- A headed browser launch no longer hangs before the browser opens. Flow's first-launch check held its guard while calling a function that takes the same guard, so every first headed launch with auto-install on (including `record --url`) waited forever.
+- Setup can learn the correspondence between a selected record reader and the database frame from their observed values. Missing or ambiguous identities refuse setup; later records use the learned column mapping without changing audit or collateral-write checks.
 - The OpenEMR contracts (`benchmark/lifecycle_proof/verify.yaml`, `benchmark/openemr_local/verify.yaml`) now declare how the New Patient form stores what was typed: street and city in capitals, names with each word capitalized. Without it the exact record check refuted 19 of 20 correct saves on the stand-in suites (#1811). A contract value's `stored` form gains `capitalize_words` (OpenEMR's "C" fields); the set stays closed and the check stays exact.
+
+### Features
+
+- Verifier audit: `python -m openadapt_flow.verifier_audit run --target module:factory --out DIR` tests an environment's own scorer rather than an agent. It replays a reference trajectory with mechanical faults (an unauthorized side effect, the wrong record, a wrong value, a duplicate write, a partial write, a write after the success claim, a claim with no write) plus an incidental-change positive control. It reads the end state independently and reports, per family, where the scorer accepted a wrong end state or rejected a legitimate one, with counterexamples and Wilson 95% intervals. Adapters for AgentDojo and AppWorld ship as examples; private family sets plug in with `--families-module`. Design: `docs/VERIFIER_AUDIT.md`.
 
 ## v2.6.0 (2026-11-04)
 

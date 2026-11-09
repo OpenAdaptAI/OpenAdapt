@@ -788,6 +788,13 @@ def _band_match_template_normalized(
             )
         )
     )
+    coverage, no_bearing = _id.identity_coverage(
+        [t.n for t in toks],
+        matched,
+        [True if t.bearing is None else t.bearing for t in toks],
+    )
+    if no_bearing or not _id._digit_floor_met([t.digit for t in toks], raw_matched):
+        evidence_short = True
 
     coverage, no_bearing = _id.identity_coverage(
         [t.n for t in toks],

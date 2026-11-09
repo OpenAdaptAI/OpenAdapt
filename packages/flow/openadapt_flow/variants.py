@@ -298,7 +298,7 @@ def _admitted_spec(item: VariantInput, out_dir: Path) -> VariantSpec:
 
     if not artifacts.is_file(item.admission):
         raise VariantSetError(
-            f"variant {item.name!r} has no QualificationAdmissionEnvelope at "
+            f"variant {item.name!r} has no signed run permission at "
             f"{item.admission}; each variant keeps its own admission"
         )
     try:
@@ -308,7 +308,7 @@ def _admitted_spec(item: VariantInput, out_dir: Path) -> VariantSpec:
     except Exception as exc:
         raise VariantSetError(
             f"variant {item.name!r} envelope is not a valid "
-            f"QualificationAdmissionEnvelope ({type(exc).__name__})"
+            f"signed run permission ({type(exc).__name__})"
         ) from exc
     try:
         workflow = _load_admitted_bundle(item.name, item.bundle)

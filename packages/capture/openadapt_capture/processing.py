@@ -79,6 +79,23 @@ def _modifier_for(event: KeyDownEvent | KeyUpEvent) -> str | None:
     return _MODIFIER_ALIASES.get(_keyboard_key(event))
 
 
+def _typed_character(event: KeyDownEvent | KeyUpEvent) -> str | None:
+    """Return the character a key press types, if any.
+
+    The macOS and X11 observers report the space bar as the named key
+    ``space`` with no character, so without this a space typed between
+    letters was dropped from the merged text and a lone space became an
+    empty KeyTypeEvent that downstream conversion could not map.
+    """
+
+    char = event.key_char or event.canonical_key_char
+    if char:
+        return char
+    if _keyboard_key(event) == "space":
+        return " "
+    return None
+
+
 def _first_structural_observation(
     events: list[ActionEvent],
 ) -> StructuralObservation | None:
@@ -298,9 +315,7 @@ def merge_consecutive_keyboard_events(events: list[ActionEvent]) -> list[ActionE
             and len(triggers) == 1
             and not (
                 modifiers == ["shift"]
-                and bool(
-                    triggers[0].canonical_key_char or triggers[0].key_char
-                )
+                and bool(_typed_character(triggers[0]))
             )
         )
         if is_single_shortcut:
@@ -320,9 +335,9 @@ def merge_consecutive_keyboard_events(events: list[ActionEvent]) -> list[ActionE
                 )
         else:
             text = "".join(
-                event.key_char or event.canonical_key_char
+                char
                 for event in down_events
-                if (event.key_char or event.canonical_key_char)
+                if (char := _typed_character(event)) is not None
                 and _modifier_for(event) is None
             )
             type_event = KeyTypeEvent(

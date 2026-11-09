@@ -148,6 +148,12 @@ class OpenEMRFixture:
         self.clients_path = self.state_dir / "oauth-clients.json"
         self.snapshot_path = self.state_dir / "baseline.sql"
         self.snapshot_hash_path = self.state_dir / "baseline.sql.sha256"
+        self._startup_stage = "not_started"
+
+    @property
+    def startup_stage(self) -> str:
+        """Fixed stage of the last startup attempt, without command or error data."""
+        return self._startup_stage
 
     def _protect_state_dir(self) -> None:
         """Create the fixture state directory without group/other access."""
@@ -517,12 +523,19 @@ class OpenEMRFixture:
 
     def up(self) -> None:
         """Start only pinned services, then verify image and source identity."""
+        self._startup_stage = "runtime_preflight"
         self.runtime_preflight()
+        self._startup_stage = "image_pull"
         self._compose("pull", timeout_s=600.0)
+        self._startup_stage = "image_identity"
         self.image_identity()
+        self._startup_stage = "compose_start"
         self._compose("up", "-d", timeout_s=600.0)
+        self._startup_stage = "health_ready"
         self._wait_ready()
+        self._startup_stage = "source_verify"
         self._verify_running_source()
+        self._startup_stage = "ready"
 
     def _db(
         self,

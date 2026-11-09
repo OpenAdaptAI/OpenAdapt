@@ -305,7 +305,7 @@ def _verify_with_wait(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--directory", type=Path, default=Path("dist"))
     parser.add_argument("--version", required=True)
     parser.add_argument("--wait-seconds", type=int, default=300)

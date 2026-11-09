@@ -8,28 +8,31 @@
 #   * the `clinic-lan` network is `internal: true` -> Docker installs no default
 #     gateway, so containers on it CANNOT reach the internet (only each other).
 #   * no ports are published to the host by the runner (nothing inbound either).
-#   * the image is built from a LOCAL wheelhouse (see Dockerfile) — no PyPI.
+#   * the image is built with no network from a signed release archive
+#     (bin/build-image.sh, see Dockerfile) and never pulled: pull_policy never.
 #
 # What is REAL vs STUB:
 #   [REAL]  the compose topology, internal network, volumes, fail-closed env.
 #   [REAL]  `runner` runs the shipped `openadapt-flow run` via bin/run-queue.sh.
-#   [STUB]  the images must be BUILT OFFLINE first (Dockerfile needs a staged
-#           ./wheels wheelhouse); this file does not fetch anything.
+#   [REAL]  the image: build it first with bin/build-image.sh (or `docker load`
+#           one built elsewhere) and name it in OPENADAPT_FLOW_IMAGE. CI builds
+#           it with no network and runs it on this file's internal network
+#           (bin/test-container.sh). This file does not build or fetch anything.
 #   [STUB]  `vlm` profile needs a real GPU box + a locally-staged model; the
 #           appliance is opt-in and LAN-only even here.
 #
-# Validate without building:   docker compose -f docker-compose.yml config
+# Every command needs the image name, e.g.
+#   export OPENADAPT_FLOW_IMAGE=openadapt-flow-onprem:<version>
+# Validate:                    docker compose -f docker-compose.yml config
 # Bring up the runner:         docker compose up -d runner
 # With the VLM appliance:      docker compose --profile vlm up -d
 
 services:
   runner:
-    build:
-      # Repo root is the build context so the engine source is available to the
-      # offline wheelhouse install. See ./Dockerfile.
-      context: ../..
-      dockerfile: deploy/on-prem/Dockerfile
-    image: openadapt-flow-onprem:local
+    # Built by bin/build-image.sh from a signed release. No default: running
+    # an unnamed or stale version is worse than refusing to start.
+    image: ${OPENADAPT_FLOW_IMAGE:?set OPENADAPT_FLOW_IMAGE to the image bin/build-image.sh built}
+    pull_policy: never
     restart: unless-stopped
     # Fail-closed PHI scrubbing + local storage/audit wiring. NO cloud keys.
     environment:
@@ -45,7 +48,7 @@ services:
       - type: bind
         source: ${OPENADAPT_ONPREM_STORAGE:-./storage}
         target: /srv/openadapt
-    command: ["bin/run-queue.sh", "watch"]
+    command: ["/opt/openadapt-flow/deploy/on-prem/bin/run-queue.sh", "watch"]
     networks:
       - clinic-lan
     # No `ports:` — nothing is published to the host or beyond.
@@ -55,10 +58,8 @@ services:
   # docs/deployment/ON_PREM_VLM.md. Enabled only with `--profile vlm`.
   vlm-appliance:
     profiles: ["vlm"]
-    build:
-      context: ../..
-      dockerfile: deploy/on-prem/Dockerfile
-    image: openadapt-flow-onprem:local
+    image: ${OPENADAPT_FLOW_IMAGE:?set OPENADAPT_FLOW_IMAGE to the image bin/build-image.sh built}
+    pull_policy: never
     restart: unless-stopped
     environment:
       VLM_BACKEND: "vllm"
