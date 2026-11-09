@@ -532,6 +532,7 @@ class FirstRunCompiler:
             if self.teach_authorization is not None
             else self.teach_scope,
             teach_authorization=self.teach_authorization,
+            on_screen=self.on_screen,
             before_capture=self.before_capture,
         )
 

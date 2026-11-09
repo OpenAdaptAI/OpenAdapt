@@ -11,7 +11,8 @@ JSON statement that names
 * the **inputs** the agent may type, each as a value or as the SHA-256 of
   the value the operator supplies at teach time (so the statement need not
   hold record data);
-* the app **origins** the browser may reach;
+* the app **origins**: the addresses the browser may reach, or the desktop
+  or remote app (``macos://chart``) the run must be on;
 * the permitted **writes**: the record kind, the identity rule for the one
   intended record (fields that must match exactly), the fields the save may
   write and their values, how many rows, and the app's write adapter;
@@ -252,13 +253,16 @@ class TeachAuthorizationV1(BaseModel):
     @field_validator("origins")
     @classmethod
     def _origins(cls, value: list[str]) -> list[str]:
-        from openadapt_flow.teach_scope import origin_of
+        from openadapt_flow.teach_scope import scope_origin
 
         out = []
         for raw in value:
-            origin = origin_of(raw)
+            origin = scope_origin(raw)
             if origin is None or origin != raw.rstrip("/"):
-                raise ValueError(f"an origin is scheme://host[:port]: {raw!r}")
+                raise ValueError(
+                    "an origin is scheme://host[:port], or <kind>://<target> "
+                    f"for a desktop or remote app: {raw!r}"
+                )
             out.append(origin)
         if len(set(out)) != len(out):
             raise ValueError("origins are unique")
