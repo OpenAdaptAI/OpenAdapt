@@ -65,7 +65,7 @@ class _FlowFirstGroup(click.Group):
         legacy = [
             (name, command.get_short_help_str())
             for name, command in sorted(self.commands.items())
-            if not command.hidden
+            if not command.hidden and name not in TASKS
         ]
         if legacy:
             with formatter.section("Legacy commands"):

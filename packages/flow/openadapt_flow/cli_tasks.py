@@ -207,7 +207,10 @@ def task_help(
             if len(route) > len(prefix) and tuple(route[: len(prefix)]) == tuple(prefix)
         }
     if entries:
-        group = view.add_subparsers(title="commands" if not prefix else "operations")
+        group = view.add_subparsers(
+            title="commands" if not prefix else "operations",
+            metavar="{command}" if not prefix else "{operation}",
+        )
         for name, help_text in entries.items():
             group.add_parser(name, help=help_text, allow_abbrev=False)
     if not prefix:
@@ -219,6 +222,22 @@ def task_help(
         if any(name.startswith("--") for name in entries):
             view.epilog += " An operation option must immediately follow the task name; use -- before a literal path beginning with '-'."
     return view
+
+
+class _TaskHelpFormatter(argparse.HelpFormatter):
+    """Wrap descriptions and epilogs while keeping legacy command blocks verbatim."""
+
+    def _fill_text(self, text: str, width: int, indent: str) -> str:
+        paragraphs = text.split("\n\n")
+        formatted: list[str] = []
+        for p in paragraphs:
+            if p.startswith("Legacy commands"):
+                formatted.append(
+                    "".join(indent + line for line in p.splitlines(keepends=True))
+                )
+            else:
+                formatted.append(super()._fill_text(p, width, indent))
+        return "\n\n".join(formatted)
 
 
 class TaskParser(argparse.ArgumentParser):
@@ -240,7 +259,7 @@ class TaskParser(argparse.ArgumentParser):
                     for name, parser in action.choices.items()
                     if parser not in hidden
                 )
-        view.formatter_class = argparse.RawDescriptionHelpFormatter
+        view.formatter_class = _TaskHelpFormatter
         legacy_help = "Legacy commands (original spellings):\n" + "\n".join(
             f"  {name}" for name in sorted(legacy)
         )
