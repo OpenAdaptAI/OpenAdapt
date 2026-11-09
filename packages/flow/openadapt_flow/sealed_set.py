@@ -420,7 +420,15 @@ def _disk_files(root: Path) -> list[str]:
     itself a sealed set (an undo run inside a run directory) is a separate,
     separately verified set and is skipped."""
     out: list[str] = []
-    for current, dirnames, filenames in os.walk(root, followlinks=False):
+
+    def unreadable(exc: OSError) -> None:
+        # A directory that can't be listed can't be checked against the
+        # index, so the set can't be verified.
+        raise SealedSetError(f"sealed set has an unreadable directory: {exc}")
+
+    for current, dirnames, filenames in os.walk(
+        root, onerror=unreadable, followlinks=False
+    ):
         here = Path(current)
         for name in dirnames:
             if (here / name).is_symlink():

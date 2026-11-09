@@ -86,22 +86,28 @@ RUN1_VALUES_FILE = "run1_values.json"
 
 _PLACEHOLDER_RE = re.compile(r"{([A-Za-z_][A-Za-z0-9_]*)}")
 
-#: The surfaces ``record --backend`` drives. compile-agent runs on ``web`` only
-#: so far: the JIT captures and runs through a Playwright browser, and the
-#: harness reads the page's DOM.
+#: The surfaces ``record --backend`` drives. A web app is named by its URL;
+#: every other surface by a deployment file's ``backend`` section, built by
+#: :func:`~openadapt_flow.backends.factory.build_backend`.
 BACKENDS = ("web", "windows", "macos", "linux", "rdp", "citrix")
+#: Backend fields that hold a credential: never written to the task spec.
+_SURFACE_SECRETS = ("agent_token", "rdp_password")
 
 
 class UnsupportedTarget(ValueError):
-    """The app is not a web app. compile-agent does not drive it yet, and never
-    falls back to a browser for it."""
+    """The target can't be driven as named. Nothing ran, and compile-agent never
+    falls back to a browser for a non-web app."""
 
 
 def check_target(url: str, backend: str = "web") -> None:
-    """Refuse any target that is not a web app at an http(s) URL.
+    """Refuse a target compile-agent can't drive as named.
+
+    A web app needs an http(s) URL. Any other surface needs its deployment
+    file's ``backend`` section (``--config``), which this check doesn't read.
 
     Raises:
-        UnsupportedTarget: a non-web backend, or a URL that is not http(s).
+        UnsupportedTarget: an unknown backend, a non-web backend named without
+            a deployment, or a URL that is not http(s).
     """
 
     from urllib.parse import urlsplit
@@ -110,13 +116,13 @@ def check_target(url: str, backend: str = "web") -> None:
         raise UnsupportedTarget(f"unknown backend {backend!r} (one of {BACKENDS})")
     if backend != "web":
         raise UnsupportedTarget(
-            f"compile-agent runs web apps only so far; the {backend!r} backend "
-            "(which record --backend drives) is not supported yet. Nothing ran."
+            f"the {backend!r} app is named by a deployment file: pass --config "
+            "deploy.yaml with its backend section. Nothing ran."
         )
     if urlsplit(url).scheme not in ("http", "https"):
         raise UnsupportedTarget(
-            f"{url!r} is not an http(s) URL. compile-agent runs web apps only so "
-            "far; a desktop, RDP or Citrix target is not supported yet. Nothing ran."
+            f"{url!r} is not an http(s) URL. Name a desktop, RDP or Citrix app "
+            "with --config deploy.yaml instead. Nothing ran."
         )
 
 
@@ -389,15 +395,31 @@ class FirstRunCompiler:
         model_key: Optional[CustomerModelKey] = None,
         backend: str = "web",
         surface: Optional[Mapping[str, Any]] = None,
+        surface_config: Optional[Union[str, Path]] = None,
         open_backend: Optional[Callable[[Any], Any]] = None,
         allow_origins: Sequence[str] = (),
         constants: Sequence[str] = (),
         write_adapter: Optional[Any] = None,
         teach_authorization: Optional[Any] = None,
+        before_capture: Optional[Callable[[Any], None]] = None,
     ) -> None:
         from openadapt_flow.record_sor import load_observer
 
+        if before_capture is not None and not callable(before_capture):
+            raise TypeError("before_capture must be callable")
+        self.before_capture = before_capture
         self.surface: Optional[Any] = None
+        #: The deployment file the surface comes from. Its credentials are read
+        #: from it on every load and never copied into the task spec.
+        self.surface_config = (
+            Path(surface_config).resolve() if surface_config is not None else None
+        )
+        if self.surface_config is not None:
+            from openadapt_flow.deployment import load_deployment
+
+            surface = load_deployment(
+                self.surface_config, allow_unresolved=True
+            ).backend.model_dump(mode="json", exclude_none=True)
         if surface is not None:
             # A deployment ``backend:`` section for a native or remote app.
             # Only an agent that drives the surface harness can record it
@@ -510,6 +532,8 @@ class FirstRunCompiler:
             if self.teach_authorization is not None
             else self.teach_scope,
             teach_authorization=self.teach_authorization,
+            on_screen=self.on_screen,
+            before_capture=self.before_capture,
         )
 
         # Resolve only the fixed task-local promoted-repair pointer.
@@ -568,9 +592,16 @@ class FirstRunCompiler:
                 },
                 "url": self.url,
                 "surface": (
-                    self.surface.model_dump(mode="json", exclude_none=True)
+                    self.surface.model_dump(
+                        mode="json",
+                        exclude_none=True,
+                        exclude=set(_SURFACE_SECRETS),
+                    )
                     if self.surface is not None
                     else None
+                ),
+                "surface_config": (
+                    str(self.surface_config) if self.surface_config else None
                 ),
                 "verify": str(self.verify_path),
                 "expect": self.expect,
@@ -591,6 +622,7 @@ class FirstRunCompiler:
         *,
         reset: Optional[Callable[[], None]] = None,
         open_backend: Optional[Callable[[Any], Any]] = None,
+        before_capture: Optional[Callable[[Any], None]] = None,
     ) -> "FirstRunCompiler":
         spec = json.loads((Path(task_dir) / SPEC_FILE).read_text())
         if spec.get("schema") != SPEC_SCHEMA:
@@ -600,8 +632,10 @@ class FirstRunCompiler:
             task["instruction"],
             params=task["params"],
             url=spec.get("url"),
-            surface=spec.get("surface"),
+            surface=None if spec.get("surface_config") else spec.get("surface"),
+            surface_config=spec.get("surface_config"),
             open_backend=open_backend,
+            before_capture=before_capture,
             verify=spec["verify"],
             expect=spec["expect"],
             on_screen=spec["on_screen"],
@@ -1324,11 +1358,13 @@ def compile_first_run(
     prompt: str,
     *,
     params: Mapping[str, Any],
-    url: str,
+    url: Optional[str] = None,
     verify: Union[str, Path],
     expect: Mapping[str, Any],
     on_screen: Sequence[str],
     agent: Any,
+    surface: Optional[Mapping[str, Any]] = None,
+    surface_config: Optional[Union[str, Path]] = None,
     confirm_checks: PersonOrCallback = None,
     drop_fields: Sequence[str] = (),
     admitter: Any = None,
@@ -1348,13 +1384,21 @@ def compile_first_run(
     constants: Sequence[str] = (),
     write_adapter: Optional[Any] = None,
     teach_authorization: Optional[Any] = None,
+    before_capture: Optional[Callable[[Any], None]] = None,
 ) -> CompileResult:
     """Turn an agent's first verified run of ``prompt`` into an admitted program.
 
     Args:
         prompt: The task, with ``{name}`` for each parameter.
         params: The values for run 1.
-        url: The app's entry URL.
+        url: The app's entry URL, for a web app.
+        surface: For any other app, the deployment ``backend`` section
+            (``kind`` plus its target) instead of ``url``. The backend is built
+            by :func:`~openadapt_flow.backends.factory.build_backend`, and the
+            agent drives it through the surface harness.
+        surface_config: Or the deployment file holding that section. Its
+            credentials are read from the file on every load and are never
+            copied into the task directory.
         verify: A ``verify.yaml`` whose ``verifier:`` section reads the system
             of record (rest, sql, fhir, graphql or file).
         expect: Fields the new record must have, such as ``{"patient_id": "p1"}``.
@@ -1379,6 +1423,9 @@ def compile_first_run(
             task names, so choose values that are safe there. Required.
         model_key: The customer's own model key, for a model-driven agent.
         reset: Called before every run to reset a test app. Tests only.
+        before_capture: Trusted Python preparation/preflight on the exact
+            owned backend, before recording or actor entry. Reserve a model
+            operation only after preflight succeeds. Not a canary/replay hook.
         allow_origins: More origins run 1's browser may reach besides the
             app's (a sign-in host, a CDN). Every other origin is refused.
         constants: More text the agent may type besides the inputs, the
@@ -1401,6 +1448,8 @@ def compile_first_run(
         verify=verify,
         expect=expect,
         on_screen=on_screen,
+        surface=surface,
+        surface_config=surface_config,
         task_id=task_id,
         policy=policy,
         cache_dir=cache_dir,
@@ -1413,6 +1462,7 @@ def compile_first_run(
         constants=constants,
         write_adapter=write_adapter,
         teach_authorization=teach_authorization,
+        before_capture=before_capture,
     )
     jit = compiler._jit()
     first: Optional[CompileResult] = None
