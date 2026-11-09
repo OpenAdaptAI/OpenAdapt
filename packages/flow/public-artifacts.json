@@ -660,6 +660,7 @@
     "import_layers.json",
     "import_layers_debt.json",
     "openadapt_flow/app_profiles/openemr.yaml",
+    "openadapt_flow/app_profiles/record_search/openemr.yaml",
     "openadapt_flow/console/static/console.css",
     "openadapt_flow/console/static/console.js",
     "openadapt_flow/console/static/index.html",
