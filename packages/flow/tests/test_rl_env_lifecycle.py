@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -143,8 +144,10 @@ def test_kill_child_tree_does_not_signal_an_already_reaped_pid(monkeypatch) -> N
     assert sent == []  # the pid may already belong to someone else
 
 
-def test_kill_child_tree_raises_when_the_child_cannot_be_reaped(monkeypatch) -> None:
-    proc = lifecycle.spawn([sys.executable, "-c", "import time; time.sleep(600)"])
+def test_kill_child_tree_raises_when_the_child_cannot_be_reaped(
+    monkeypatch, owned_processes
+) -> None:
+    proc = owned_processes(monkeypatch).proc
     real_killpg = os.killpg
     try:
         monkeypatch.setattr(lifecycle.os, "kill", lambda pid, sig: None)
@@ -173,28 +176,208 @@ def _environment():
     return OpenAdaptWebEnvironment(MOCKMED)
 
 
-#: The real teardowns, saved before any test patches them; the harness only
-#: ever cleans up through these.
+#: Capture the real routes before a test injects its expected failure.
 REAL_STOP_SUPERVISED = lifecycle.stop_supervised
 REAL_KILL_CHILD_TREE = lifecycle.kill_child_tree
 
-#: A driver stand-in that reports its own pid (it leads its own group) and
-#: exits by itself after 30 s, a backstop if every cleanup failed.
-SLEEPER = [
-    sys.executable,
-    "-c",
-    "import os, time; print(os.getpid(), flush=True); time.sleep(30)",
-]
+# The owner creates both channel names before calling any spawning API.
+# This fixed test command has no children and exits on release, including
+# when the parent failed before receiving the supervisor's handoff.
+RELEASABLE_SLEEPER = """
+import os, sys, time
+from pathlib import Path
+release, ready = map(Path, sys.argv[1:])
+temporary = ready.with_suffix('.tmp')
+temporary.write_text(str(os.getpid()))
+os.replace(temporary, ready)
+print(os.getpid(), flush=True)
+deadline = time.monotonic() + 30
+while not release.exists() and time.monotonic() < deadline:
+    time.sleep(0.02)
+"""
 
 
 class Driver:
-    """One acquired driver and what is needed to tear it down for real."""
+    """Own the release channel before acquisition, and retain native evidence."""
 
-    def __init__(self, proc: subprocess.Popen[bytes]) -> None:
-        self.proc = proc
-        self.pid = proc.pid  # what the environment sees as the driver
-        self.launch: "lifecycle.SupervisedLaunch | None" = None
-        self.command: "int | None" = None  # the sleeper; leads its own group
+    def __init__(self, directory: Path) -> None:
+        directory.mkdir()
+        self.release = directory / "release"
+        self.ready = directory / "ready"
+        self.proc: subprocess.Popen[bytes] | None = None
+        self.launch: lifecycle.SupervisedLaunch | None = None
+        self.cleanup_launch: lifecycle.SupervisedLaunch | None = None
+        self.monitor: int | None = None
+        self.command: int | None = None
+        self.exitcode: int | None = None
+        self.attempted = False
+        self.published = False
+        self.group_owned = True
+        self.cleanup_attempted = False
+        self.cleanup_problem = None
+        self.observer_error = False
+
+    @property
+    def pid(self) -> int:
+        assert self.proc is not None
+        return self.proc.pid
+
+    def waitid_result(self, fd: int, result) -> None:
+        if self.proc is None or result is None or result.si_pid != self.pid:
+            return
+        aliases = [self.monitor]
+        for launch in (self.launch, self.cleanup_launch):
+            if launch is not None:
+                aliases.append(launch.pidfd)
+        if fd not in aliases:
+            return
+        if result.si_code == os.CLD_EXITED:
+            self.exitcode = result.si_status
+        elif result.si_code in (os.CLD_KILLED, os.CLD_DUMPED):
+            self.exitcode = -result.si_status
+
+    def inactive(self, within: float = 35) -> bool:
+        if self.monitor is None:
+            return self.exitcode is not None
+        import select
+
+        poll = select.poll()
+        poll.register(self.monitor, select.POLLIN)
+        return bool(poll.poll(int(within * 1000)))
+
+    def acquire(self, monkeypatch, *, supervised: bool, direct: bool = False) -> None:
+        command = [
+            sys.executable,
+            "-c",
+            RELEASABLE_SLEEPER,
+            str(self.release),
+            str(self.ready),
+        ]
+        self.group_owned = not direct
+        real_spawn = lifecycle.spawn
+
+        def capture_spawn(args, **kwargs):
+            # This is a read-through of the one declared fixture acquisition,
+            # not a process census or a general Playwright startup observer.
+            assert list(args)[-len(command) :] == command
+            self.attempted = True
+            proc = real_spawn(args, **kwargs)
+            self.proc = proc  # BEFORE binding, readiness, registration or assert
+            return proc
+
+        if supervised:
+            with monkeypatch.context() as acquisition:
+                acquisition.setattr(lifecycle, "spawn", capture_spawn)
+                proc, launch = lifecycle.spawn_supervised(
+                    command, stdout=subprocess.PIPE
+                )
+                self.proc, self.launch = proc, launch
+            if launch.bound and launch.pidfd is not None:
+                # Duplicate only a genuinely accepted self-handed descriptor.
+                self.monitor = os.dup(launch.pidfd)
+                self.cleanup_launch = lifecycle.SupervisedLaunch(
+                    pid=launch.pid,
+                    nonce=launch.nonce,
+                    start=launch.start,
+                    pidfd=os.dup(launch.pidfd),
+                    bound=True,
+                )
+        elif direct:
+            self.attempted = True
+            self.proc = subprocess.Popen(command, stdout=subprocess.PIPE)
+        else:
+            capture_spawn(command, stdout=subprocess.PIPE)
+        if LINUX and self.monitor is None and self.proc is not None:
+            # Scalar Popen remains unpublished and has no async child watcher.
+            # This handle is liveness/reap evidence only, NEVER signal authority.
+            self.monitor = os.pidfd_open(self.pid)
+        deadline = time.monotonic() + 10
+        while not self.ready.is_file() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.command = int(self.ready.read_text())
+
+    def close(self) -> "str | None":
+        if self.cleanup_attempted:
+            return self.cleanup_problem
+        self.cleanup_attempted = True
+        self.cleanup_problem = "cleanup incomplete"
+        problems: list[str] = []
+        try:
+            self.release.touch()  # first, even if raw spawn/binding never returned
+        except OSError as exc:
+            problems.append("release failed: " + type(exc).__name__)
+        if self.proc is None:
+            self.cleanup_problem = (
+                "raw spawn did not expose ownership" if self.attempted else None
+            )
+            return self.cleanup_problem
+        try:
+            if self.cleanup_launch is not None and not self.inactive(0):
+                try:
+                    result = REAL_STOP_SUPERVISED(self.cleanup_launch, timeout=20)
+                    if not result.proven:
+                        problems.append("saved supervisor route did not prove teardown")
+                except Exception as exc:
+                    # Release was already committed; still verify native exit.
+                    problems.append("saved supervisor route: " + type(exc).__name__)
+            if self.monitor is not None:
+                if not self.inactive():
+                    problems.append("owned process did not exit after release")
+                else:
+                    try:
+                        result = os.waitid(
+                            os.P_PIDFD, self.monitor, os.WEXITED | os.WNOHANG
+                        )
+                        self.waitid_result(self.monitor, result)
+                    except ChildProcessError:
+                        pass  # exact fd is inactive; another real route reaped it
+            elif self.exitcode is None:
+                # Same release-first model without a pidfd. Do not trust a
+                # cached/guessed Popen.returncode: wait for an actual native
+                # child result. The scalar child is retained by this owner;
+                # fixture wait observers also retain another reaper's status.
+                deadline = time.monotonic() + 35
+                while self.exitcode is None:
+                    try:
+                        pid, status = os.waitpid(self.pid, os.WNOHANG)
+                    except ChildProcessError:
+                        problems.append("native child status unavailable after reap")
+                        break
+                    if pid == self.pid:
+                        self.exitcode = os.waitstatus_to_exitcode(status)
+                    elif time.monotonic() >= deadline:
+                        problems.append("owned process did not exit after release")
+                        break
+                    else:
+                        time.sleep(0.02)
+            if self.command is not None and self.group_owned:
+                if self.exitcode is None:
+                    problems.append("group check withheld without native reap")
+                elif not _group_gone(self.command):
+                    # Reap precedes this read-only check. Unknown/EPERM never
+                    # becomes authority for a mutating group signal.
+                    problems.append("command group absence not confirmed")
+            if self.observer_error:
+                problems.append("native result observation failed")
+            if self.exitcode is None:
+                problems.append("native exit status unavailable; bookkeeping unchanged")
+            if not problems:
+                # This value comes from actual waitid/waitpid, never a guess
+                # after a timeout. It prevents a later Popen destructor re-wait.
+                self.proc.returncode = self.exitcode
+        except Exception as exc:  # noqa: BLE001 - cleanup failure stays explicit
+            problems.append(type(exc).__name__)
+        finally:
+            for launch in (self.cleanup_launch, self.launch):
+                if launch is not None:
+                    launch.close()
+            if self.monitor is not None:
+                os.close(self.monitor)
+                self.monitor = None
+            if self.proc.stdout is not None:
+                self.proc.stdout.close()
+        self.cleanup_problem = "; ".join(problems) if problems else None
+        return self.cleanup_problem
 
 
 def _group_gone(pgid: int, within: float = 10.0) -> bool:
@@ -205,83 +388,88 @@ def _group_gone(pgid: int, within: float = 10.0) -> bool:
         except ProcessLookupError:
             return True
         except PermissionError:
-            pass  # only zombies left (macOS); wait for their reaper
+            pass  # unknown; wait, then fail WITHOUT sending a signal
         time.sleep(0.05)
     return False
 
 
 def _teardown_driver(driver: Driver) -> "str | None":
-    """Tear ``driver`` down through the saved real route and confirm its
-    command's tree is gone; the problem, or None."""
-    problem = None
-    try:
-        if driver.launch is not None:
-            if driver.launch.pidfd is not None:  # not torn down yet
-                result = REAL_STOP_SUPERVISED(
-                    driver.launch, proc=driver.proc, timeout=20
-                )
-                if not result.proven:
-                    problem = f"supervisor {driver.pid} teardown {result}"
-            # The supervisor is reaped: no unreaped child of ours has its pid.
-            try:
-                os.waitpid(driver.pid, os.WNOHANG)
-                problem = problem or f"supervisor {driver.pid} not reaped"
-            except ChildProcessError:
-                pass
-        else:
-            REAL_KILL_CHILD_TREE(driver.pid, timeout=20)
-    except Exception as exc:  # noqa: BLE001 - reported below
-        problem = f"teardown of {driver.pid} failed: {exc!r}"
-    if driver.command is not None and not _group_gone(driver.command):
-        # Last resort, then fail the test: the command outlived the teardown.
-        try:
-            os.killpg(driver.command, signal.SIGKILL)
-        except OSError:
-            pass
-        problem = problem or f"command group {driver.command} survived the teardown"
-    # Only now Popen bookkeeping: the process is gone, whoever reaped it.
-    if driver.proc.returncode is None:
-        try:
-            driver.proc.wait(timeout=0.1)
-        except (subprocess.TimeoutExpired, ChildProcessError):
-            driver.proc.returncode = -signal.SIGKILL
-    return problem
+    return driver.close()
 
 
 @pytest.fixture
-def drivers():
-    """``acquire(monkeypatch)`` registers a real driver on this platform's
-    own route: on Linux a bound supervised launch in the environment's
-    registry; elsewhere a plain child in its own group. Every acquisition is
-    recorded for cleanup before anything can fail or be asserted, and the
-    fixture tears each one down through the saved real route."""
+def owned_processes(monkeypatch, tmp_path):
     acquired: list[Driver] = []
+    problems: list[str] = []
+    stack = ExitStack()
+    native_waitid = getattr(os, "waitid", None)
+    native_waitpid = os.waitpid
 
+    def waitid(kind, fd, options):
+        result = native_waitid(kind, fd, options)
+        try:
+            if kind == getattr(os, "P_PIDFD", None):
+                for driver in acquired:
+                    driver.waitid_result(fd, result)
+        except Exception:
+            for driver in acquired:
+                driver.observer_error = True
+        return result  # exact native result, no fabricated errno/outcome
+
+    def waitpid(pid, options):
+        result = native_waitpid(pid, options)
+        try:
+            for driver in acquired:
+                if driver.proc is not None and result[0] == driver.pid:
+                    driver.exitcode = os.waitstatus_to_exitcode(result[1])
+        except Exception:
+            for driver in acquired:
+                driver.observer_error = True
+        return result
+
+    def close(driver):
+        try:
+            problem = _teardown_driver(driver)
+        except Exception as exc:
+            problem = type(exc).__name__
+        if problem is not None:
+            problems.append(problem)
+
+    def acquire(monkeypatch, *, supervised=False, direct=False):
+        driver = Driver(tmp_path / ("owned-" + str(len(acquired))))
+        acquired.append(driver)
+        stack.callback(close, driver)  # BEFORE any raw spawn or bound assertion
+        driver.acquire(monkeypatch, supervised=supervised, direct=direct)
+        driver.published = True
+        return driver
+
+    with monkeypatch.context() as observations:
+        if native_waitid is not None:
+            observations.setattr(os, "waitid", waitid)
+        observations.setattr(os, "waitpid", waitpid)
+        try:
+            yield acquire
+        finally:
+            stack.close()  # each partial acquisition is independently released
+            assert not problems, problems
+
+
+@pytest.fixture
+def drivers(owned_processes):
     def acquire(monkeypatch) -> Driver:
         from openadapt_flow.rl_env import environment as E
 
+        driver = owned_processes(monkeypatch, supervised=E.SUPERVISE_DRIVER)
         if E.SUPERVISE_DRIVER:
-            proc, launch = lifecycle.spawn_supervised(SLEEPER, stdout=subprocess.PIPE)
-            driver = Driver(proc)
-            driver.launch = launch
-            acquired.append(driver)
-            monkeypatch.setitem(E._SUPERVISED, proc.pid, launch)
-        else:
-            driver = Driver(lifecycle.spawn(SLEEPER, stdout=subprocess.PIPE))
-            acquired.append(driver)
+            monkeypatch.setitem(E._SUPERVISED, driver.pid, driver.launch)
         assert driver.proc.stdout is not None
-        line = driver.proc.stdout.readline()
-        driver.command = int(line) if line.strip() else None
         assert driver.command is not None, "the driver stand-in did not start"
         if driver.launch is not None:
             assert driver.launch.bound, "the supervisor did not hand over its pidfd"
+        driver.published = True
         return driver
 
-    try:
-        yield acquire
-    finally:
-        problems = [p for p in map(_teardown_driver, acquired) if p]
-        assert not problems, problems
+    yield acquire
 
 
 def _break_route(monkeypatch, exc: BaseException) -> None:
@@ -708,9 +896,11 @@ def test_without_a_subreaper_the_supervisor_reports_unproven() -> None:
         _kill_quietly(escaped)
 
 
-def test_a_supervisor_that_leaves_no_report_is_unknown() -> None:
+def test_a_supervisor_that_leaves_no_report_is_unknown(
+    monkeypatch, owned_processes
+) -> None:
     # Not a supervisor at all: SIGTERM ends it without a verdict.
-    proc = lifecycle.spawn([sys.executable, "-c", "import time; time.sleep(600)"])
+    proc = owned_processes(monkeypatch).proc
     proc.kill()
     proc.wait(timeout=30)
     proc, launch = _fake_supervisor()
@@ -963,22 +1153,32 @@ def test_a_timeout_inside_playwright_start_taints_later_episodes(monkeypatch) ->
 # -- signals go through a pidfd: a reaped process is ESRCH, never another pid --
 
 
+def _joined_native_status(
+    helper: threading.Thread, waited: list[tuple[int, int]], pid: int
+) -> int:
+    assert not helper.is_alive(), "native reaper did not finish"
+    assert len(waited) == 1 and waited[0][0] == pid, "native reap result missing"
+    return os.waitstatus_to_exitcode(waited[0][1])
+
+
 @pytest.mark.skipif(not LINUX, reason="pidfd is Linux-only")
 def test_a_pidfd_signal_after_another_reaper_collected_it_is_esrch(
-    monkeypatch,
+    monkeypatch, owned_processes
 ) -> None:
-    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+    proc = owned_processes(monkeypatch, direct=True).proc
     pidfd = os.pidfd_open(proc.pid)
     try:
         # Another reaper (as asyncio's watcher thread would) collects it.
+        waited: list[tuple[int, int]] = []
+
         def reap() -> None:
             os.kill(proc.pid, signal.SIGKILL)
-            os.waitpid(proc.pid, 0)
+            waited.append(os.waitpid(proc.pid, 0))
 
         helper = threading.Thread(target=reap)
         helper.start()
         helper.join(timeout=30)
-        proc.returncode = -signal.SIGKILL
+        proc.returncode = _joined_native_status(helper, waited, proc.pid)
         sent: list[int] = []
         monkeypatch.setattr(lifecycle.os, "kill", lambda p, s: sent.append(p))
         monkeypatch.setattr(lifecycle.os, "killpg", lambda p, s: sent.append(p))
@@ -994,12 +1194,16 @@ def test_stop_supervised_after_a_concurrent_reap_signals_no_pid(monkeypatch) -> 
     proc, launch = _fake_supervisor()
     assert launch.pidfd is not None
     _write(launch.report, _receipt(launch))
-    helper = threading.Thread(
-        target=lambda: (os.kill(proc.pid, signal.SIGKILL), os.waitpid(proc.pid, 0))
-    )
+    waited: list[tuple[int, int]] = []
+
+    def reap() -> None:
+        os.kill(proc.pid, signal.SIGKILL)
+        waited.append(os.waitpid(proc.pid, 0))
+
+    helper = threading.Thread(target=reap)
     helper.start()
     helper.join(timeout=30)
-    proc.returncode = -signal.SIGKILL
+    proc.returncode = _joined_native_status(helper, waited, proc.pid)
     sent: list[int] = []
     monkeypatch.setattr(lifecycle.os, "kill", lambda p, s: sent.append(p))
     monkeypatch.setattr(lifecycle.os, "killpg", lambda p, s: sent.append(p))
@@ -1039,10 +1243,11 @@ def _no_signals(monkeypatch) -> list[tuple[str, int]]:
 
 
 @pytest.mark.skipif(not LINUX, reason="pidfd handoff is Linux-only")
-def test_the_handoff_binds_the_launch_and_teardown_is_proven() -> None:
-    proc, launch = lifecycle.spawn_supervised(
-        [sys.executable, "-c", "import time; time.sleep(600)"]
-    )
+def test_the_handoff_binds_the_launch_and_teardown_is_proven(
+    monkeypatch, owned_processes
+) -> None:
+    driver = owned_processes(monkeypatch, supervised=True)
+    proc, launch = driver.proc, driver.launch
     assert launch.bound and launch.pidfd is not None
     assert lifecycle._pidfd_target(launch.pidfd) == proc.pid
     assert launch.start is not None
@@ -1101,10 +1306,12 @@ def test_an_unbound_driver_taints_the_environment_and_is_not_signalled(
 
 
 @pytest.mark.skipif(not LINUX, reason="pidfd handoff is Linux-only")
-def test_a_pid_now_held_by_another_live_child_is_never_signalled(monkeypatch) -> None:
+def test_a_pid_now_held_by_another_live_child_is_never_signalled(
+    monkeypatch, owned_processes
+) -> None:
     # As if the supervisor's pid were reused by another child of this
     # process: an unbound launch naming that pid must not touch it.
-    other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+    other = owned_processes(monkeypatch, direct=True).proc
     try:
         stale = lifecycle.SupervisedLaunch(
             pid=other.pid, nonce=lifecycle.new_nonce(), start=None
@@ -1122,13 +1329,10 @@ def test_a_pid_now_held_by_another_live_child_is_never_signalled(monkeypatch) ->
 # -- the harness itself: cleanup goes through the saved real teardown --------
 
 
-def test_the_harness_cleans_up_a_driver_whose_route_was_broken(monkeypatch) -> None:
-    if LINUX:
-        proc, launch = lifecycle.spawn_supervised(SLEEPER, stdout=subprocess.PIPE)
-        driver = Driver(proc)
-        driver.launch = launch
-    else:
-        driver = Driver(lifecycle.spawn(SLEEPER, stdout=subprocess.PIPE))
+def test_the_harness_cleans_up_a_driver_whose_route_was_broken(
+    monkeypatch, owned_processes
+) -> None:
+    driver = owned_processes(monkeypatch, supervised=LINUX)
     assert driver.proc.stdout is not None
     driver.command = int(driver.proc.stdout.readline())
 
