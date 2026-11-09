@@ -145,14 +145,22 @@ class AppConfig(BaseModel):
     #: disabled and that pixels-only result decides qualification.
     surface: Optional[DeclaredSurface] = None
     name: str = Field(min_length=1, max_length=256)
-    #: The application's address. Its origin is the identity the runtime
-    #: checks before every input.
-    url: str
+    #: The application's address. Web campaigns bind its origin; native
+    #: campaigns use the observer's application identity instead.
+    url: Optional[str] = None
     #: Where a trial starts (default: ``url``).
     entry_url: Optional[str] = None
     #: The application version you are qualifying. The page cannot report it;
     #: it is bound into the environment digest.
     version: str = Field(min_length=1, max_length=128)
+    #: Optional exact live identity expectation for native targets. It is
+    #: compared with the environment observer and never used as evidence.
+    application_identity: Optional[str] = Field(
+        default=None, min_length=1, max_length=320
+    )
+    #: Native campaigns may require capabilities reported by the opened
+    #: backend. Configured names are expectations, not proof that they exist.
+    required_capabilities: list[str] = Field(default_factory=list)
     headless: bool = True
     viewport: tuple[int, int] = (1280, 800)
     #: A Playwright storage-state file for a signed-in session (web only).
@@ -161,6 +169,14 @@ class AppConfig(BaseModel):
     #: whose sign-in cannot be expressed by ``storage_state``.
     session: Optional[str] = None
     reset: Optional[ResetConfig] = None
+
+    @field_validator("required_capabilities")
+    @classmethod
+    def _unique_capabilities(cls, value: list[str]) -> list[str]:
+        cleaned = sorted({item.strip() for item in value if item.strip()})
+        if len(cleaned) != len(value):
+            raise ValueError("required_capabilities must be unique and non-empty")
+        return cleaned
 
     @field_validator("session")
     @classmethod
@@ -171,6 +187,8 @@ class AppConfig(BaseModel):
     def origin(self) -> str:
         from urllib.parse import urlsplit
 
+        if self.url is None:
+            return ""
         parts = urlsplit(self.url)
         if parts.scheme and parts.netloc:
             return f"{parts.scheme}://{parts.netloc}"

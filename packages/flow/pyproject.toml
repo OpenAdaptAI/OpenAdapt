@@ -379,6 +379,7 @@ exclude = [
 "openadapt_flow/py.typed" = "openadapt_flow/py.typed"
 "schemas" = "openadapt_flow/schemas"
 "public-artifacts.json" = "openadapt_flow/public-artifacts.json"
+"openadapt_flow/qualify/qualification_pixel_fault_overlay.ps1" = "openadapt_flow/qualify/qualification_pixel_fault_overlay.ps1"
 # NOTE: the operator console's static UI (openadapt_flow/console/static/) is
 # package data hatchling already ships by default -- do NOT force-include it
 # (a duplicate-path entry fails the wheel build).

@@ -223,6 +223,161 @@ What each part does:
 `${NAME}` and `${NAME:-default}` read environment variables. A missing
 variable without a default is an error.
 
+## Windows and RDP sessions
+
+Native campaigns need an application-owned Python hook. In the `app` block
+of your existing `verify.yaml`, supply the target, expected live identity and
+version, session hook, and reset. Keep the independent `verifier`, record
+checks, and campaign settings described above.
+
+```yaml
+app:
+  target: windows
+  name: Synthetic desktop application
+  application_identity: ${EXPECTED_APPLICATION_ID}
+  version: ${EXPECTED_APPLICATION_VERSION}
+  surface: remote_in_session
+  session: your_package.qualification:open_session
+  reset:
+    python: your_package.qualification:reset
+  required_capabilities:
+    - pixel_frame_capture
+    - pixel_input
+```
+
+`your_package.qualification` is a module you provide and install in the same
+Python environment as Flow. Its `open_session(config)` must return
+`(backend, close)`; `reset()` takes no arguments. For RDP, use `target: rdp`,
+`surface: remote_display`, and the hook that owns your RDP session. A Windows
+agent running inside a remote session uses `remote_in_session`; use `local`
+when that is the actual deployment surface. Native sessions do not need
+`app.url`.
+
+The identity, version and capability names are expectations checked against
+the opened backend. They cannot supply missing observations. Windows reads
+one agent snapshot containing the foreground executable identity, its
+`sha256:…` image version, the logon-session digest and machine/OS digest.
+For an interpreter-hosted application, that image version covers the host
+executable; it does not verify the script or application code. RDP requires
+positive application, version and stable environment probes on the captured
+frame, plus the live transport identity.
+
+### Own the backend and its cleanup
+
+The hook is called for preflight, project binding and each trial. Each call
+must reach the same application start state, establish its own session, and
+return a close callback. The campaign calls that callback in `finally`;
+the hook must also release resources it acquired if opening fails.
+
+For Windows, install Flow with its `windows` extra and use the concrete
+`WindowsBackend` with your authenticated agent channel and its TLS policy.
+After your hook owns both the backend and the guest command channel, attach
+the controller from its live observation:
+
+```python
+from openadapt_flow.qualify.windows_pixel_fault_controller import (
+    attach_windows_qualification_pixel_fault_controller,
+)
+
+controller = attach_windows_qualification_pixel_fault_controller(
+    backend, guest_channel, guest_dir=owned_guest_directory
+)
+
+def close():
+    try:
+        controller.close()
+    finally:
+        close_owned_session()
+
+# Return from your open_session(config) hook:
+return backend, close
+```
+
+Here `close_owned_session` is your existing owner callback for the agent
+client and application resources. Close only resources that call owns, and
+propagate cleanup failures. Attaching a controller does not make the campaign
+own a separately created guest session.
+
+For RDP, first connect an owned `XFreeRDPTransport`. The Linux client needs
+FreeRDP, Xvfb, xdotool and Pillow's XCB support. The transport takes its
+password through a callable supplied by your session owner. Inside the hook,
+pass that same transport and guest channel to the installed factory:
+
+```python
+from openadapt_flow.qualify.rdp_pixel_fault_controller import (
+    open_rdp_qualification_session,
+)
+
+return open_rdp_qualification_session(
+    transport, guest_channel,
+    application_marker=config.app.application_identity,
+    application_probe=probe_application,
+    application_version_marker=config.app.version,
+    application_version_probe=probe_version,
+    environment_marker=stable_environment_marker,
+    environment_probe=probe_environment,
+    witness_region=witness_region,
+    excluded_regions=recorded_protected_regions,
+    guest_dir=owned_guest_directory,
+    close_owner=close_owned_session,
+    lifetime_seconds=60,
+)
+```
+
+Supply the probes and geometry from your application integration. The witness
+is exactly 52×52 pixels, outside every recorded action, identity and protected
+region. The factory checks the original probes before launching the witness,
+then binds the independently observed guest session to that exact transport
+frame before attaching a fault controller. Keep the stable environment
+marker across trials; each session gets a fresh witness nonce. Its 1–300 second
+lifetime starts before guest launch and is checked during pairing and fault
+staging. Expiry refuses further use. Use the actual session profile and codec
+when measuring a campaign; the witness requires exact pixel equality.
+
+After validating its arguments, the RDP factory closes its owned tasks and
+calls `close_owner` on setup failure or close. Supply an idempotent callback
+for your owned session; argument-validation failures leave that ownership
+with the caller. Keep the returned session open for its trial.
+
+For a Linux X11 guest owned by the same Python session, pass a callable
+`task_owner_factory(binding)` to `open_rdp_qualification_session`. It creates
+`LinuxPixelTasks` with the actual X-server `Popen`, its owned application and
+shadow-server children, display, viewport, owned runtime directory, and the
+supplied `session_binding_sha256`. Pass `None` for the unused guest channel
+and an empty `guest_dir`. This factory is a Python session integration; it is
+not a YAML command or import setting. Omitting it retains the Windows guest
+channel implementation above.
+
+`LinuxPixelTasks` and `linux_pixel_fault_renderer` ship in the Flow wheel.
+The Linux guest needs system Python with Tk, xdotool and ImageMagick. The
+renderer observes the X-server's Unix-socket peer and process/socket generation
+independently. That identity describes the owned display, not a login session.
+It renders a finite witness or fault without changing input focus. The
+existing application/version/environment probes, exact frame witness and
+cleanup callback still apply; supplying a display name does not establish
+those observations. Keep application setup, visible markers and independent
+record checks in your session integration, then qualify on the actual route.
+
+### What the installation supplies
+
+The Flow wheel includes both backends, the qualification controller/factory
+modules above, `rdp_pairing`, `qualification_pixel_fault_task`, and the
+packaged `qualification_pixel_fault_overlay.ps1` renderer. The guest command
+channel is an external integration. It must provide:
+
+- `user`: the Windows interactive principal owned by the session;
+- `push_file(local_path, remote_path)`: upload a file to the guest;
+- `run_ps(script, *, check=True, timeout_s=600.0, operation=...)`: execute
+  PowerShell with the requested timeout, returning `status`, `stdout` and
+  `stderr`, and raising on nonzero status when `check=True`.
+
+The repository's `scripts/desktop/winrm_lab.py` is one implementation of that
+interface; it is not installed in the Flow wheel. Flow does not provision the
+guest connection, account, authentication or application hook. The controller
+uses unique request/task identities and disposes only its matching owned
+resources. Qualify on the real Windows or RDP environment before using its
+result as evidence of native acceptance.
+
 ## What you get
 
 ```
@@ -300,10 +455,9 @@ certified bundle once, as the runner would, into `runs/qual-1/certified-run/`.
 
 ## Limits
 
-- Web only today. The ambiguity, wrong-identity and stale-identity faults are
-  staged in the browser, on the save button the bundle's own selector finds.
-  A fault driver for pixel surfaces (Windows, RDP, Citrix) is the next piece;
-  until it exists, `qualify` refuses `app.target` other than `web`. The two
+- Windows and RDP campaigns require the concrete backend, a live environment
+  observation and the matching session-owned pixel fault controller described
+  above. Other native targets, including Citrix, remain refused. The two
   effect faults do not depend on the surface.
 - A web workflow can't yet be qualified for a remote-display surface. With
   `app.surface: remote_display` the cases run with structure lookups off, and

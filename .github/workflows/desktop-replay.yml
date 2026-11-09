@@ -6,7 +6,8 @@ name: Desktop replay
 # - replay: records, compiles and replays the in-tree WinForms Patient Notes
 #   app through WindowsBackend and the real win_agent on Windows, and judges
 #   every replay from the app's SQLite record
-#   (packages/flow/tests/e2e/test_windows_hosted_replay.py).
+#   (packages/flow/tests/e2e/test_windows_hosted_replay.py), then runs the
+#   six-case native campaign against the same synthetic application.
 # - freerdp: a FreeRDP transport round trip on Linux, not a replay. xfreerdp3
 #   connects over loopback to freerdp-shadow-cli3 serving an Xvfb display, and
 #   FreeRDPBackend looks up three accounts in a synthetic read-only ledger app
@@ -21,7 +22,16 @@ on:
       - packages/flow/scripts/desktop/pn_db.py
       - packages/flow/scripts/desktop/patient_notes.ps1
       - packages/flow/tests/e2e/test_windows_hosted_replay.py
+      - packages/flow/tests/e2e/test_windows_hosted_campaign.py
+      - packages/flow/tests/e2e/test_windows_hosted_caret.py
+      - packages/flow/tests/e2e/windows_caret_diagnostic.py
+      - packages/flow/tests/test_windows_caret_diagnostics.py
+      - packages/flow/tests/e2e/win_agent_capture_telemetry.py
       - packages/flow/tests/test_xfreerdp.py
+      - packages/flow/tests/e2e/test_linux_rdp_campaign.py
+      - packages/flow/tests/e2e/rdp_campaign_fixture.py
+      - packages/flow/tests/fixtures/rdp_write_app.py
+      - packages/flow/tests/e2e/rdp_fixture_focus.py
       - packages/flow/tests/test_windows_attempt_ledger.py
       - packages/flow/benchmark/rdp_pool/**
       - packages/flow/pyproject.toml
@@ -84,19 +94,72 @@ jobs:
           mkdir -p runs
           pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/wr" \
             tests/e2e/test_windows_hosted_replay.py --junitxml=runs/windows-replay-junit.xml
-      - name: The replay ran (no skips)
+      - name: Owned caret and frame correlation (read-only calibration)
+        env:
+          OAFLOW_WINDOWS_HOSTED_E2E: "1"
+        run: |
+          mkdir -p runs
+          pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/wd" \
+            tests/e2e/test_windows_hosted_caret.py::test_owned_caret_frame_correlation \
+            --junitxml=runs/windows-caret-junit.xml
+      - name: The owned caret measurement ran (no skips)
+        run: |
+          python - <<'PYTHON'
+          import json
+          import os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          cases = list(ET.parse("runs/windows-caret-junit.xml").getroot().iter("testcase"))
+          assert len(cases) == 1 and cases[0].get("name") == "test_owned_caret_frame_correlation"
+          assert all(cases[0].find(k) is None for k in ("skipped", "failure", "error"))
+          root = (Path(os.environ["RUNNER_TEMP"]) / "wd").resolve(strict=True)
+          paths = {p.resolve(strict=True) for p in root.glob("**/owned-caret/caret-evidence.json")}
+          assert len(paths) == 1 and all(p.is_relative_to(root) for p in paths)
+          summary = json.loads(paths.pop().read_text())
+          assert summary["schema"] == "openadapt.test-owned-caret/v1" and summary["status"] == "PASSED"
+          assert summary["capture_count"] == 8 and summary["database_unchanged"] is True
+          assert summary["static_fixture_handle_checks"] is True and summary["process_creation_bound"] is True
+          assert all(value is True for value in summary["cleanup"].values())
+          assert summary["diagnostic"]["status"] in {"UNKNOWN", "CARET_CORRELATED"}
+          PYTHON
+      - name: Native Windows campaign, judged from the record
+        env:
+          OAFLOW_WINDOWS_HOSTED_E2E: "1"
+        run: |
+          mkdir -p runs
+          pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/wc" \
+            tests/e2e/test_windows_hosted_campaign.py::test_windows_hosted_six_case_campaign \
+            --junitxml=runs/windows-campaign-junit.xml
+      - name: The replay and campaign ran (no skips)
         run: |
           python - <<'PY'
+          import json
+          import os
           import sys
           import xml.etree.ElementTree as ET
-          cases = [
-              case
-              for name in ("windows-guards", "windows-replay")
-              for case in ET.parse(f"runs/{name}-junit.xml").getroot().iter("testcase")
-          ]
+          from pathlib import Path
+          cases = []
+          for name in ("windows-guards", "windows-replay", "windows-campaign"):
+              selected = list(ET.parse(f"runs/{name}-junit.xml").getroot().iter("testcase"))
+              if not selected:
+                  sys.exit(f"{name} did not run: no test cases")
+              cases.extend(selected)
           skipped = [c for c in cases if c.find("skipped") is not None]
           if not cases or skipped:
               sys.exit(f"windows replay did not run: {len(cases)} cases, {len(skipped)} skipped")
+          summary_root = (Path(os.environ["RUNNER_TEMP"]) / "wc").resolve(strict=True)
+          summaries = set()
+          for candidate in summary_root.glob("**/hosted-campaign/campaign-evidence.json"):
+              resolved = candidate.resolve(strict=True)
+              if not resolved.is_relative_to(summary_root):
+                  sys.exit("windows campaign outcome summary is outside its owned directory")
+              summaries.add(resolved)
+          if len(summaries) != 1:
+              sys.exit("windows campaign did not produce exactly one safe outcome summary")
+          (summary_path,) = summaries
+          summary = json.loads(summary_path.read_text(encoding="utf-8"))
+          if not isinstance(summary, dict) or not summary:
+              sys.exit("windows campaign outcome summary is empty")
           PY
       - name: Keep the evidence
         if: always()
@@ -108,6 +171,29 @@ jobs:
             ${{ runner.temp }}/wr/**/*.png
             ${{ runner.temp }}/wr/**/agent.log
             ${{ runner.temp }}/wr/**/report.json
+            packages/flow/runs/windows-guards-junit.xml
+            packages/flow/runs/windows-replay-junit.xml
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Keep the campaign evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-campaign-evidence
+          path: |
+            ${{ runner.temp }}/wc/**/hosted-campaign/campaign-evidence.json
+            packages/flow/runs/windows-campaign-junit.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Keep only safe caret measurement evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-caret-evidence
+          path: |
+            ${{ runner.temp }}/wd/**/owned-caret/caret-evidence.json
+            packages/flow/runs/windows-caret-junit.xml
           if-no-files-found: ignore
           retention-days: 14
 
@@ -157,3 +243,85 @@ jobs:
           if len(cases) != 1 or skipped:
               sys.exit(f"freerdp round trip did not run: {len(cases)} cases, {len(skipped)} skipped")
           PY
+      - name: Fixture startup owns real X focus (parent and candidate)
+        timeout-minutes: 2
+        run: |
+          mkdir -p runs
+          pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/rf" \
+            tests/e2e/rdp_fixture_focus.py --junitxml=runs/rdp-focus-junit.xml
+      - name: Both focus conditions ran (no skips)
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          cases = list(ET.parse("runs/rdp-focus-junit.xml").getroot().iter("testcase"))
+          assert len(cases) == 2 and {case.get("name") for case in cases} == {
+              "test_literal_parent_retains_pointer_root", "test_fixture_startup_owns_raw_focus"
+          }
+          assert all(case.find(kind) is None for case in cases for kind in ("skipped", "failure", "error"))
+          root = (Path(os.environ["RUNNER_TEMP"]) / "rf").resolve(strict=True)
+          paths = {p.resolve(strict=True) for p in root.glob("**/fixture-focus/focus-evidence.json")}
+          assert len(paths) == 2 and all(p.is_relative_to(root) for p in paths)
+          summaries = [json.loads(p.read_text()) for p in paths]
+          assert {s["condition"] for s in summaries} == {"literal_parent", "candidate"}
+          assert all(s["status"] == "PASSED" for s in summaries)
+          assert all(c["started"] is True and c["waited"] is True for s in summaries for c in s["cleanup"].values())
+          PY
+      - name: Six primary pixel cases through loopback RDP
+        env:
+          OAFLOW_RDP_CAMPAIGN_E2E: "1"
+        run: |
+          mkdir -p runs
+          pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/rc" \
+            tests/e2e/test_linux_rdp_campaign.py::test_loopback_six_primary_pixel_cases \
+            --junitxml=runs/rdp-campaign-junit.xml
+      - name: The six primary RDP cases qualified (no skips)
+        run: |
+          python - <<'PYTHON'
+          import json
+          import os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          from openadapt_flow.qualify.config import CASE_IDS
+          cases = list(ET.parse("runs/rdp-campaign-junit.xml").getroot().iter("testcase"))
+          assert len(cases) == 1 and cases[0].get("name") == "test_loopback_six_primary_pixel_cases"
+          assert all(cases[0].find(kind) is None for kind in ("skipped", "failure", "error"))
+          root = (Path(os.environ["RUNNER_TEMP"]) / "rc").resolve(strict=True)
+          summaries = set()
+          for candidate in root.glob("**/rdp-campaign/campaign-evidence.json"):
+              path = candidate.resolve(strict=True)
+              assert path.is_relative_to(root), "RDP summary escaped owned root"
+              summaries.add(path)
+          assert len(summaries) == 1, "exactly one physical RDP summary required"
+          summary = json.loads(summaries.pop().read_text())
+          assert summary["status"] == "PASSED" and summary["qualification_passed"] is True
+          assert summary["certified"] is False and summary["certification_requested"] is False
+          assert summary["primary_planned"] == summary["primary_completed"] == 6
+          assert summary["informational_planned"] == summary["informational_completed"] == 0
+          oracles = summary["oracles"]
+          assert len(oracles) == 6 and {row["case_id"] for row in oracles} == set(CASE_IDS)
+          assert all(row["passed"] is True and row["fault_detector_error"] is None for row in oracles)
+          assert summary["sessions"] and all(row["closed"] is True and row["cleanup_failed"] is False for row in summary["sessions"])
+          PYTHON
+      - name: Keep the fixture focus evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rdp-focus-evidence
+          path: |
+            ${{ runner.temp }}/rf/**/fixture-focus/focus-evidence.json
+            packages/flow/runs/rdp-focus-junit.xml
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Keep the RDP campaign evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rdp-campaign-evidence
+          path: |
+            ${{ runner.temp }}/rc/**/rdp-campaign/campaign-evidence.json
+            packages/flow/runs/rdp-campaign-junit.xml
+          if-no-files-found: ignore
+          retention-days: 14

@@ -78,6 +78,7 @@ class _Host:
             text=True,
             timeout=60,
             check=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         return done.stdout
 
@@ -117,7 +118,7 @@ class _Host:
             self.app.wait(timeout=30)
         self.app = None
 
-    def start_agent(self):
+    def start_agent(self, *, capture_telemetry_sidecar: Path | None = None):
         from openadapt_flow.backends.win_agent.tls import generate_self_signed_cert
         from openadapt_flow.backends.windows_backend import WindowsBackend
 
@@ -125,11 +126,26 @@ class _Host:
         token = secrets.token_hex(16)
         port = _free_port()
         log = open(self.root / "agent.log", "wb")  # noqa: SIM115
-        self.agent = subprocess.Popen(
+        command = [
+            sys.executable,
+            "-m",
+            (
+                "tests.e2e.win_agent_capture_telemetry"
+                if capture_telemetry_sidecar is not None
+                else "openadapt_flow.backends.win_agent.server"
+            ),
+        ]
+        if capture_telemetry_sidecar is not None:
+            if (
+                capture_telemetry_sidecar.exists()
+                or capture_telemetry_sidecar.is_symlink()
+            ):
+                raise AssertionError("capture telemetry sidecar must be new")
+            command.extend(
+                ["--capture-telemetry-sidecar", str(capture_telemetry_sidecar)]
+            )
+        command.extend(
             [
-                sys.executable,
-                "-m",
-                "openadapt_flow.backends.win_agent.server",
                 "--port",
                 str(port),
                 "--token",
@@ -138,7 +154,10 @@ class _Host:
                 cert.certfile,
                 "--keyfile",
                 cert.keyfile,
-            ],
+            ]
+        )
+        self.agent = subprocess.Popen(
+            command,
             stdout=log,
             stderr=subprocess.STDOUT,
         )

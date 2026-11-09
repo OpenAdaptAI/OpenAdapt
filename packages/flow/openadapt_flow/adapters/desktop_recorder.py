@@ -45,6 +45,7 @@ harness can assert the live path is armed and quantify the offline gap.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 
@@ -64,6 +65,7 @@ def record_desktop_demo(
     driver: Callable[["Recorder"], None],
     *,
     app_url: Optional[str] = None,
+    identifier_region: Optional[tuple[int, int, int, int]] = None,
     settle_interval_s: float = 0.1,
     settle_stable_frames: int = 2,
     settle_timeout_s: float = 3.0,
@@ -85,6 +87,12 @@ def record_desktop_demo(
             ``r.finish()`` inside it — this function does.
         app_url: Optional app identifier written to ``meta.json`` (native
             desktop apps usually leave this None).
+        identifier_region: Optional operator-marked record-identifying region
+            ``(x, y, width, height)`` in the backend's pixel coordinate space.
+            When supplied, the rectangle is validated before recording starts
+            and stamped into ``meta.json`` for the compiler to derive identity
+            evidence from each event's actual before-frame. No region is
+            inferred or selected automatically.
         settle_interval_s: Recorder frame-settle poll interval.
         settle_stable_frames: Consecutive stable frames required to settle.
         settle_timeout_s: Max seconds to wait for the frame to settle.
@@ -92,6 +100,30 @@ def record_desktop_demo(
     Returns:
         The recording directory path (compile-ready).
     """
+    marked_region: Optional[tuple[int, int, int, int]] = None
+    if identifier_region is not None:
+        if (
+            not isinstance(identifier_region, tuple)
+            or len(identifier_region) != 4
+            or any(type(value) is not int for value in identifier_region)
+        ):
+            raise ValueError(
+                "identifier_region must be four integer coordinates "
+                "(x, y, width, height)"
+            )
+        x, y, width, height = identifier_region
+        viewport = backend.viewport
+        if (
+            x < 0
+            or y < 0
+            or width <= 0
+            or height <= 0
+            or x + width > viewport[0]
+            or y + height > viewport[1]
+        ):
+            raise ValueError("identifier_region must fit inside the backend viewport")
+        marked_region = (x, y, width, height)
+
     from openadapt_flow.recorder import Recorder
 
     recorder = Recorder(
@@ -101,9 +133,36 @@ def record_desktop_demo(
         settle_interval_s=settle_interval_s,
         settle_stable_frames=settle_stable_frames,
         settle_timeout_s=settle_timeout_s,
+        finalize_on_finish=marked_region is None,
     )
-    driver(recorder)
-    return recorder.finish()
+    if marked_region is None:
+        driver(recorder)
+        return recorder.finish()
+
+    # Keep the writer registered until after the additive metadata update. This
+    # lets sealed_set route both operations through an enclosing or recorder-
+    # owned sealed writer without ever opening meta.json as plaintext.
+    from openadapt_flow import sealed_set
+
+    try:
+        driver(recorder)
+        recording = recorder.finish()
+        meta_path = recording / "meta.json"
+        meta = json.loads(sealed_set.read_text(meta_path))
+        meta["identifier_region"] = list(marked_region)
+        sealed_set.write_text(meta_path, json.dumps(meta, indent=2))
+        recorder.finalize_encryption()
+    except BaseException:
+        try:
+            recorder.abandon_encryption()
+        except BaseException:
+            # Preserve the original driver, recorder, metadata, or finalizer
+            # exception. ``abandon_encryption`` only unregisters this
+            # Recorder's writer; an enclosing sealed_set writer remains owned
+            # by its context manager.
+            pass
+        raise
+    return recording
 
 
 def structural_armed_coverage(workflow: "Workflow") -> dict:

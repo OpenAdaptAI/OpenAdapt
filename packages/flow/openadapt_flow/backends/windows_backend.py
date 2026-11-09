@@ -246,6 +246,14 @@ class WindowsBackend:
     #: point across every window on the desktop (``ControlFromPoint``), so it
     #: names whatever is on top there: a dialog, another app, nothing.
     hit_test_sees_every_window = True
+    qualification_target_kind = "windows"
+
+    def qualification_capabilities(self) -> frozenset[str]:
+        """Capabilities reported by the live agent plus this pixel backend."""
+
+        return self.agent_capabilities() | frozenset(
+            {"pixel_frame_capture", "pixel_input"}
+        )
 
     def __init__(
         self,
