@@ -463,7 +463,7 @@ if _unreachable_v2_owners:  # pragma: no cover - import-time format guard
 def _source_v2_omissions(content: object, owner: str = "Workflow") -> None:
     if not isinstance(content, dict):
         return
-    for rule in _SEALED_CANONICAL_OMISSIONS_BY_VERSION[2]:
+    for rule in _SEALED_CANONICAL_OMISSIONS_BY_VERSION.get(2, ()):
         if (
             rule.owner.__name__ == owner
             and rule.field_name in content
