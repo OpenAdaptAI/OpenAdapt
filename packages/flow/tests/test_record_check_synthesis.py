@@ -203,6 +203,7 @@ def test_mockmed_complete_read_declared_passes_the_live_suite(tmp_path, mockmed)
 
     plain = synthesize(rec)
     assert plain.search.surfaces[0].config["records_path"] == "/api/db"
+    assert plain.search.surfaces[0].complete_basis == "observed"
     assert not plain.working
     assert any("collateral_unaudited" in miss for miss in plain.misses)
 
