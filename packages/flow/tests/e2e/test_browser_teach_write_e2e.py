@@ -82,6 +82,8 @@ def _contract(base: str) -> WriteContract:
                 "base_url": base,
                 "records_path": "/api/orders",
                 "records_key": "records",
+                # The fixture returns its whole store on one page.
+                "records_complete": True,
             },
             "effects": [
                 {

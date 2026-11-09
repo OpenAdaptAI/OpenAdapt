@@ -16,13 +16,13 @@ import pytest
 
 from openadapt_flow import teach_authorization as ta
 from openadapt_flow.jit.adapters import Op
+from openadapt_flow.teach_authorization_fixture import LocalAuthorizer
+from openadapt_flow.teach_scope import ScopeViolation, TeachGuard, TeachScope
 from tests._teach_scope import (
     EncounterWrites,
     encounter_authorization_spec,
     encounter_scope,
 )
-from openadapt_flow.teach_authorization_fixture import LocalAuthorizer
-from openadapt_flow.teach_scope import ScopeViolation, TeachGuard, TeachScope
 
 BASE = "http://127.0.0.1:8765"
 NOTE = "Synthetic follow-up in two weeks"
