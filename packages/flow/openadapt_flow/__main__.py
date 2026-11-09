@@ -13050,6 +13050,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _register_learn(sub)
 
+    from openadapt_flow.cli_reconcile import register as _register_reconcile
+
+    _register_reconcile(sub)
+
     from openadapt_flow.cli_cleanup import register as _register_cleanup
 
     _register_cleanup(sub)
