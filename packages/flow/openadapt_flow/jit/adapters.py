@@ -660,6 +660,9 @@ class CaptureComputer:
             self._guard.check_ops(ops, page=self._page, pointer=self._pointer)
         notes: list[str] = []
         for op in ops:
+            if self._guard is not None:
+                # Where the key lands is known only now: focus may have moved.
+                self._guard.check_key(op, self._page)
             note = self._perform(op, node_id=node_id)
             if note:
                 notes.append(note)

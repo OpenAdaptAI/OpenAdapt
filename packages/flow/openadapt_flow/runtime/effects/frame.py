@@ -90,6 +90,7 @@ from openadapt_flow.runtime.effects.frame_identity import (
     FrameIdentityError,
     canonical_field_value,
 )
+from openadapt_flow.runtime.effects.history import FrameHistory
 from openadapt_flow.runtime.effects.learned import (
     NOT_COMPARED,
     LearnedFrame,
@@ -515,6 +516,8 @@ class FrameSpec(BaseModel):
     #: (``versions.FrameVersions``): a version in the window that isn't the
     #: agent's own is a lost update.
     versions: Optional[FrameVersions] = None
+    #: Complete type/table change feeds for a provisional then final verdict.
+    history: Optional[FrameHistory] = None
     #: Moves a person approved from ``openadapt-flow learn``
     #: (``learned.LearnedFrame``): the app's own writes on the acting user's
     #: row or the write's own rows, by table, column and change.
@@ -525,6 +528,8 @@ class FrameSpec(BaseModel):
         # Unset, ``versions`` is left out, so a contract that doesn't use it
         # keeps its digests (``frame_sha256``, the check digest).
         data: dict[str, Any] = handler(self)
+        if data.get("history") is None:
+            data.pop("history", None)
         if not data.get("identities"):
             data.pop("identities", None)
         if data.get("versions") is None:
@@ -538,6 +543,12 @@ class FrameSpec(BaseModel):
     @model_validator(mode="after")
     def _database_attribution(self) -> "FrameSpec":
         a = self.attribution
+        if (
+            self.history is not None
+            and self.database is not None
+            and self.database.recheck_after_s is not None
+        ):
+            raise ValueError("choose history or database recheck scheduling, not both")
         if (
             self.database is not None
             and a is not None

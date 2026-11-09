@@ -104,12 +104,12 @@ has the method, the raw runs and the cost.
 ## Try it in one command
 
 ```bash
-uvx --python 3.12 openadapt quickstart --break-it
+uvx --python 3.12 openadapt demo quickstart --break-it
 ```
 
 No account or API key. [uv](https://docs.astral.sh/uv/getting-started/installation/)
 fetches Python 3.12 if you need it; with Python 3.10 to 3.12 already installed,
-`python -m pip install --upgrade openadapt` then `openadapt quickstart --break-it`
+`python -m pip install --upgrade openadapt` then `openadapt demo quickstart --break-it`
 does the same.
 
 ### What it shows
@@ -174,41 +174,72 @@ Each compiled workflow becomes one tool call. The agent decides what to enter;
 OpenAdapt makes the entry, checks it, and returns an outcome instead of the
 agent driving the screen. With no bundles, the server offers a synthetic
 sandbox workflow that returns every outcome. To serve your own workflows, run
-`openadapt agent serve --mode production --bundles ./bundles`; without
+`openadapt services agent serve --mode production --bundles ./bundles`; without
 `--mode production` the agent can list them but not run them.
 `openadapt-agent emit-skill <bundle>` writes an Agent Skill for one workflow,
-and `openadapt flow verify-run` judges a write made by any agent or script
+and `openadapt verify effect` judges a write made by any agent or script
 against the system of record. [Connect an agent](https://docs.openadapt.ai/how-to/connect-an-agent/)
 covers other clients.
 
 ### Record a task by hand
 
+Recording works the same way on every surface; only the target differs:
+`--url` for a web app, `--window` (and `--window-title`) for a Windows or macOS
+app window or a local RDP or Citrix client window. Linux and network RDP record
+the whole local desktop, so they take no target.
+
 ```bash
 python -m pip install --upgrade openadapt
-openadapt flow record --url https://staging.your-app.example --out rec
-openadapt flow compile rec --out bundle --name my-first-workflow
-openadapt flow replay bundle --url https://staging.your-app.example --run-dir run
+openadapt record --backend <web|windows|macos|linux|rdp|citrix> <target> --out rec
+
+# A web app
+openadapt record --backend web --url https://staging.your-app.example --out rec
+openadapt compile rec --out bundle --name my-first-workflow
+openadapt run --replay bundle --url https://staging.your-app.example --run-dir run
+
+# A desktop app (macOS here; Windows and Citrix take --window too).
+# Desktop recording and macOS replay are separate extras.
+python -m pip install --upgrade 'openadapt[capture,macos]'
+openadapt record --backend macos --window "Your App" --out rec
+openadapt compile rec --out bundle --name my-first-workflow
+openadapt run --replay bundle --macos-app "Your App" --run-dir run
 ```
 
-`replay` drives the app at `--url` and performs every recorded action,
+`run --replay` drives the app and performs every recorded action,
 including saves you can't undo. It doesn't ask first and doesn't check the
 saved record. Point it at a test or staging copy, never at production data.
 
+The commands for every surface, including Linux, RDP and Citrix, are in
+[SURFACES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SURFACES.md#first-workflow-per-surface).
+
+The existing engine command remains available for scripts:
+
+```bash
+openadapt flow replay bundle --url https://staging.your-app.example --run-dir run
+```
+
+`flow replay` performs every recorded action, including real saves. Use a test
+or staging copy; it does not ask for approval or check the saved record.
+
 A program that writes to a real system also needs record checks, a deployment
-file, certification, qualification, and an admission; then `openadapt flow run`
+file, certification, qualification, and an admission; then `openadapt run`
 runs it. By default each save waits for a person to approve it in OpenAdapt
 Desktop or on a paired phone. [Your first workflow](https://docs.openadapt.ai/tutorials/first-workflow/)
 walks through it. Several recordings of the same task can become one program
-with branches and loops (`openadapt flow induce`).
+with branches and loops (`openadapt compile --induce`).
 
 To record a desktop app, install the recorder and your operating system's
 adapter, for example `python -m pip install "openadapt[capture,windows]"`, or
 use [OpenAdapt Desktop](https://openadapt.ai/download).
 
+`openadapt --help` lists the task commands. `openadapt wrap --help` shows the
+options for running an agent task once and reusing its checked compiled tool.
+The [CLI reference](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/docs/cli.md) lists task paths and their original aliases.
+
 ### Judge or train any agent
 
-`openadapt flow verify-run` judges a write made by any agent or script against
-the system of record. `openadapt-flow serve-reward` turns the same check into a
+`openadapt verify effect` judges a write made by any agent or script against
+the system of record. `openadapt-flow services reward` turns the same check into a
 reward for training or evaluating computer-use agents
 ([REWARD_WORKER.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/REWARD_WORKER.md)).
 
@@ -308,7 +339,7 @@ the right record is on screen, makes the entry, and reads the record back.
 | Stopped before saving | `HALTED_BEFORE_EFFECT` | `needs_review` | Fix the cause, or show the program the fix, and run again. |
 | Check the record | `RECONCILIATION_REQUIRED` | `not_sure_if_saved` | A save may have gone through. A person checks the record before anything is retried. |
 | Finished, not checked | `COMPLETED_UNVERIFIED` | `not_sure_if_saved` | Fine for testing; not a production success. |
-| Saved, waiting for its check | `SAVED_AWAITING_CHECK` | `not_sure_if_saved` | The save's check is a later report (a claim acknowledgment, an export). Don't rerun it. `openadapt-flow deferred settle` counts it as done only when the report confirms it. |
+| Saved, waiting for its check | `SAVED_AWAITING_CHECK` | `not_sure_if_saved` | The save's check is a later report (a claim acknowledgment, an export). Don't rerun it. `openadapt-flow verify deferred settle` counts it as done only when the report confirms it. |
 | Didn't run | `REJECTED_POLICY`, `CANCELED`, `FAILED_PLATFORM` | `did_not_run` | Fix the gate or the environment and run again. |
 
 The console's last line can read `HALTED` for both the second and third rows.
@@ -694,17 +725,17 @@ improvising or retrying when something is off.
 | Code as action is the default run-1 agent (compile-agent, and `teach_run` in the MCP teach tools): one terminal tool (structure first, actions by role and name, a sandboxed read-only shell, screenshots on request); every action is a structured step checked against the compiled program, and every save the gate detects is read back from the system of record | Released ([#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)) | Real app (local OpenEMR) and synthetic | `ClaudeAgent(vision="code")`, `CODE_AS_ACTION.md` ([#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)) |
 | Admit a draft by a person, an admitter key, or an agent under a person-signed policy, including self-admission when the policy allows it | Released | Unit tests | [JIT_ADMISSION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/JIT_ADMISSION.md) |
 | MCP server: your agent decides what to enter, OpenAdapt makes the entry and checks it | Released | Synthetic sandbox | `openadapt-agent`, [packages/agent](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/README.md) |
-| Teach over MCP: an agent does a new task once through OpenAdapt; the run is read back, compiled and admitted (a person confirms the record check; the agent admits only under a person-signed policy), and becomes a tool it calls with no model calls. Web, and Windows, macOS, Linux, RDP and Citrix with a person approving each save | On main ([#1335](https://github.com/OpenAdaptAI/OpenAdapt/pull/1335)) | Synthetic (MockMed over MCP, and through the real RDP and Citrix backends) | `openadapt-agent serve --teach`, [packages/agent](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/README.md#teach-a-new-workflow-from-your-agent) |
+| Teach over MCP: an agent does a new task once through OpenAdapt; the run is read back, compiled and admitted (a person confirms the record check; the agent admits only under a person-signed policy), and becomes a tool it calls with no model calls. Web, and Windows, macOS, Linux, RDP and Citrix with a person approving each save | On main ([#1335](https://github.com/OpenAdaptAI/OpenAdapt/pull/1335)) | Synthetic (MockMed over MCP, and through the real RDP and Citrix backends); a native Cocoa app with SQLite through `MacOSBackend`, taught, confirmed, admitted under a signed policy and called (canary and taught run `VERIFIED`, 0 model calls; [teach_desktop](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/teach_desktop/README.md)) | `openadapt-agent serve --teach`, [packages/agent](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/README.md#teach-a-new-workflow-from-your-agent) |
 | Turn a read-only browser task into a tool for the coding agent you already use: `openadapt setup` registers the MCP server and a skill in Claude Code, Cursor, Codex and Gemini CLI (idempotent, `--dry-run`, `--undo`); the agent does the task once through `teach_start`/`teach_act`/`teach_finish`, the task must end in a download, the file is checked (columns, a column between two inputs or equal to one, fewest rows), the compiled steps are replayed once with no model, and the agent gets a `taught_<name>` tool that downloads a checked file with new inputs. The browser sends no POST, PUT, PATCH or DELETE and stays on one site; a compiled run stops when a control is missing, matches more than one element, or is relabelled | Released ([#1502](https://github.com/OpenAdaptAI/OpenAdapt/pull/1502)) | Real headless Chromium on the local example portal (scripted MCP client, in CI); a real Claude Code agent taught the export from the guide's prompt and called the tool with new dates (2026-10-24, one run) | `openadapt setup`, `openadapt-agent serve --teach-browser`, [FIRST_TOOL.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/FIRST_TOOL.md) |
 | Verify any agent's own writes: `openadapt verify` reads the system of record before and after a write, against a contract the operator owns (REST, FHIR, SQL, GraphQL), and returns a verified receipt (`openadapt.effect-receipt/v1`) or a refusal (`REFUTED`, `UNCERTAIN`), never an unverified success. Python SDK (`openadapt.verify`, which is `openadapt_flow.verifier`: `begin_write`, `verify_write`, `verified_write`) wraps a write in any agent framework; the MCP server (`openadapt verify serve`) offers `verify_begin`, `verify_check` and `verify_recheck` to any MCP client | Released ([#1589](https://github.com/OpenAdaptAI/OpenAdapt/pull/1589)) | Synthetic (MockMed's fault server over real HTTP: correct write, wrong record, not saved, saved twice, unreadable store) | `openadapt verify`, [VERIFY_WRITES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFY_WRITES.md) |
 | See what your own agent gets wrong, with no risk: `openadapt shadow` is a loopback pass-through proxy beside the agent. It checks each write against the system of record (FHIR through `ensure_record`; SQL through the verifier's whole-database frame), checks each `CONFIRMED` again later, and writes `report.html` and `report.json`. It never blocks, changes or resends a write; the only delay is the read before a write (at most `hold_ms`) | [#1678](https://github.com/OpenAdaptAI/OpenAdapt/pull/1678) | Real app (Medplum 5.2.8, 37 cases through a fault proxy: scripted agent 18 of 18 harms caught, 0 correct writes refuted; Claude Sonnet 5.5 9 of 9 caught, 4 correct but corrected writes refuted; 0 writes by the shadow; 15 to 25 ms median added per write; setup 76.5 s machine time, 3 decisions); real app, SQL mode (Dolibarr 21 on MariaDB 11.4, 13 cases: 8 of 8 harms caught, 5 of 5 correct writes confirmed, 292 ms median added); synthetic (SQLite) | `openadapt shadow`, [SHADOW_MODE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SHADOW_MODE.md), [SHADOW_RESULTS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/fhir_medplum/public/SHADOW_RESULTS.md) |
 | Skill cache for framework agents: an agent in any framework does a browser task through compile-agent's harness as plain tools (`BrowserTools`); when the system of record shows exactly the task's record and the operator confirms the checks, the run is canaried, admitted and emitted as an MCP server. A repeat of the same task (instruction, record, app, contract, environment) calls that tool instead of the agent: no model calls, the program's checks and this task's record check on every run, eviction after a failed run | Released | Synthetic (MockMed, LangGraph on `claude-sonnet-5-5`, 3 trials, repeats on the same record: run 1 6 model calls and $0.022; runs 2 to 10 27/27 VERIFIED, 0 model calls, 7.8 s median); Trac 1.6: run 1 verified, not admitted | `openadapt_flow.integrations.agents.skills`, [benchmark/skill_cache](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/skill_cache/README.md) |
 | Verified write tools for agent frameworks: `verified(tool, contract=...)` wraps a Claude Agent SDK, OpenAI Agents SDK, LangGraph or CrewAI write tool in one line. The contract and any values the operator pins come from the operator, never the agent's arguments; the store is read before and after; the agent gets a receipt or a refusal, and a refused write is held instead of retried | Released | Synthetic (each framework's own agent loop with a scripted model, writing through the example app's order form over real HTTP: verified save, a save the app drops, a save it keeps twice); one real-model run per framework, opt-in | `openadapt_flow.integrations.agents`, extras `claude-agent-sdk`, `openai-agents`, `langgraph` (CrewAI: install `crewai` beside it); [AGENT_FRAMEWORKS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/AGENT_FRAMEWORKS.md) |
-| Browser teach refuses taught writes: a write an agent teaches needs a person's signed teach authorization, and this lane can't bind one, so `teach_start` with a contract is refused and an existing write tool doesn't run. Writes are taught through `serve --teach --teach-authorization`. The read-only lane (downloads) is unchanged | On main ([#1589](https://github.com/OpenAdaptAI/OpenAdapt/pull/1589), [#1436](https://github.com/OpenAdaptAI/OpenAdapt/pull/1436)) | Unit test of the refusal | `openadapt-agent serve --teach-browser`, [TEACH_AUTHORIZATION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/TEACH_AUTHORIZATION.md) |
+| Teach a browser write as a verified tool: with write contracts and a person's signed teach authorization (`serve --teach-browser --contracts DIR --teach-authorization STATEMENT`), the agent teaches a save once. Run 1 starts only when the statement covers the write (origin, contract, write adapter, the record's fields and values) and runs under it; it is verified in the system of record before the `taught_<name>` tool exists. Every call checks the statement and the tool's signature again, makes the write and returns a verified receipt or a refusal. Sign-in values come from the server's environment and never reach the agent or the program. Controls in named iframes are found through their frame | On main ([#1589](https://github.com/OpenAdaptAI/OpenAdapt/pull/1589), [#1763](https://github.com/OpenAdaptAI/OpenAdapt/pull/1763)) | Synthetic (the example app's sign-in and order form in headless Chromium over MCP: verified save, a save the app drops, a save it keeps twice, a page that swaps the record during run 1; refusals for a missing, uncovering, expired, edited or wrongly signed statement) | `openadapt-agent serve --teach-browser --contracts --teach-authorization`, [VERIFY_WRITES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFY_WRITES.md#teach-a-write-as-a-tool) |
 | Guard an agent you already run: attach to its own Chromium over CDP (one added line), hold each save until the record on screen is the one the task names, block it and tell the agent why when it isn't, read the save back; a run that reads back correctly becomes a draft program with a record check from scaffold-verifier, which a person confirms and admits, then a `taught_*` tool with no model calls. `--observe-only` never blocks | Released ([#1357](https://github.com/OpenAdaptAI/OpenAdapt/pull/1357), stacked on [#1335](https://github.com/OpenAdaptAI/OpenAdapt/pull/1335)) | Synthetic (MockMed, scripted Playwright agent, `effect_e2e` faults) | `openadapt-flow guard`, [GUARD_AN_AGENT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/GUARD_AN_AGENT.md) |
 | Task ledger per job: rules locked when the job opens and enforced on every run, item status set only from OpenAdapt's own results, and yes-or-no questions a person answers on the phone or in Desktop, including when a run stops | Released ([#1332](https://github.com/OpenAdaptAI/OpenAdapt/pull/1332)) | Synthetic (30-item MockMed worklist, scripted agent, no model calls) | MCP tools `open_job`, `get_job`, `add_items`, `record_evidence`, `ask_user`, `get_answer`, `change_constraint`, `close_job`; [Track a long job](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/README.md#track-a-long-job) |
 | Limit a teaching agent to the declared task on every teach path (`compile_agent`, `compile-agent`, teach over MCP, the airbag guard): typed text must be a declared value, links and browser requests to other origins are refused, writes are checked before they are sent, and the record is read back before a draft exists. Injected instructions in record notes, banners, tooltips, alt text and server responses are blocked or caught on MockMed through each path (scripted agent; a live-model mode is off by default). Self-repair refuses a control that leaves the app | Released ([#1359](https://github.com/OpenAdaptAI/OpenAdapt/pull/1359), [#1386](https://github.com/OpenAdaptAI/OpenAdapt/pull/1386)) | Synthetic | `openadapt_flow.teach_scope`, [THREAT_MODEL.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/THREAT_MODEL.md) |
-| Teach authorization: a person signs what a teaching agent may do (task, origins, inputs, the one write, forbidden actions and controls) with their approver key, and every teach path is bound to it or refused. Verified with the approver roster's own verifier, so an unknown, removed or wrong key, an unpinned root, a changed statement or another task refuses. Admission of every JIT draft needs one (`teach_auth_not_recorded` otherwise), as do an agent-demonstrated fix's approval and self-repair of an agent-taught program; the airbag handoff's drafts and browser-teach writes are refused | On main ([#1436](https://github.com/OpenAdaptAI/OpenAdapt/pull/1436)) | Synthetic (real approver keys, real roster, real admission) | `openadapt-flow teach-authorization`, [TEACH_AUTHORIZATION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/TEACH_AUTHORIZATION.md) |
+| Teach authorization: a person signs what a teaching agent may do (task, origins, inputs, the one write, forbidden actions and controls) with their approver key, and every teach path is bound to it or refused. Verified with the approver roster's own verifier, so an unknown, removed or wrong key, an unpinned root, a changed statement or another task refuses. Admission of every JIT draft needs one (`teach_auth_not_recorded` otherwise), as do an agent-demonstrated fix's approval and self-repair of an agent-taught program; browser-teach writes are bound to it, and the airbag handoff's drafts are refused | On main ([#1436](https://github.com/OpenAdaptAI/OpenAdapt/pull/1436)) | Synthetic (real approver keys, real roster, real admission) | `openadapt-flow teach-authorization`, [TEACH_AUTHORIZATION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/TEACH_AUTHORIZATION.md) |
 | Compile an agent's first verified run from a prompt (`compile-agent`), and a code-as-action authoring agent | Released ([#1277](https://github.com/OpenAdaptAI/OpenAdapt/pull/1277), [#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)); the agent harness behind it runs on every backend, on main ([#1283](https://github.com/OpenAdaptAI/OpenAdapt/pull/1283)) | Synthetic | `compile-agent` |
 | An agent records a native app by control: `AuthoringSession.observe()` lists the app's controls from UI Automation (Windows), Accessibility (macOS) or AT-SPI (Linux), each with its element identity (role, name, ancestry, window, process); a click by node is re-read before input and refused when that identity changed, has a twin in the window, or the tree was cut short. `compile-agent --config` and `serve-execute --config` build the app from the deployment's backend | [#1870](https://github.com/OpenAdaptAI/OpenAdapt/pull/1870) | Windows 11 Pro x64, Patient Notes (in-tree WinForms, synthetic SQLite): 11 of 11 identities re-read equal, five clicks recorded by UIA locator, the note read back from SQLite; macOS Calculator, read only: 20 of 20; Linux, the GTK3 fixture in Xvfb: recorded by control, the effect file as oracle, a click on one of two identical buttons refused ([benchmark/native_authoring](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/native_authoring/README.md)) | `openadapt_flow/authoring.py`, `authoring_tree()` on each native backend |
 | Score harness optimizers (Harness², Meta-Harness) on GUI tasks with the record read-back as the reward, with full trace export | Released ([#1299](https://github.com/OpenAdaptAI/OpenAdapt/pull/1299), [#1300](https://github.com/OpenAdaptAI/OpenAdapt/pull/1300), [#1301](https://github.com/OpenAdaptAI/OpenAdapt/pull/1301)) | Synthetic (scripted proposer) | `benchmark/harness/harness2/` (source checkout) |
@@ -2311,6 +2342,17 @@ refuses a write when the record or its outcome cannot be established.
   to its recorded identity band.
 
 ### Features
+
+- A teach authorization's forbidden controls are read from Chromium's accessibility tree, not by a script in the page. Every key (Enter, Space, any key, typing) is checked against the control that has focus when it arrives, in any frame, and Enter in a form field against the form's default button too, so a forbidden control reached by Tab or by implicit submission is refused like a click. Key chords are refused while controls are forbidden. A click is matched by every name its target goes by: the accessible name, the text of a control with no role (a `div` with a click handler), and the control a `<label>` is for; the default button is the browser's own (`:default`), read in an isolated world. Behaviour change: on surfaces without a web page, a statement that forbids any control now refuses clicks and keys.
+
+- Browser teach writes again, bound to a person's signed teach authorization (`serve --teach-browser --teach-authorization`), for task `browser-tool.<name>`. Run 1 opens no WebSocket and reaches only the statement's origins. Run 1 of a write starts only when the statement covers it: the app's origin, the contract as its record kind, a write adapter, run 1's inputs, and exactly the record fields the contract checks, with run 1's values. During run 1 the write adapter reads every write before it is sent. A taught tool keeps the statement and is signed with the local admission key; every call checks the statement again (signature, roster, purpose, task, expiry). The example app ships its write adapter (`openadapt_flow.agent.example_app:OrderWrites`). Docs: `docs/TEACH_AUTHORIZATION.md`, `docs/VERIFY_WRITES.md`.
+
+  Teaching and every later call stop on missing worker containment or an
+  observed worker violation and connect no WebSocket. Redirect hops receive
+  the wire check, and declared GET writes pin query field names, including
+  empty fields. Requests from independently targeted frames are refused.
+  Guarded clicks use the exact fragment point checked; keyboard checks also
+  read visible text.
 
 - A code-as-action agent is now the default for the first run. Every save is
   read back before that run becomes a replayable program. Form scripts can run

@@ -378,9 +378,7 @@ class WindowActionReservation:
                 keyboard_focus_at_receipt=self._keyboard_focus_at_receipt,
             )
         else:
-            evidence = self._window_scope.assert_input_on_target(
-                self._geometry[0], point=point
-            )
+            evidence = self._window_scope.assert_input_on_target(self._geometry[0], point=point)
         self._admitted = True
         return evidence
 
@@ -816,6 +814,7 @@ def _stable_recorder_error_code(exc: BaseException, stage: str) -> str:
         "worker_health": "recording_worker_failed",
     }.get(stage, "recording_failed")
 
+
 # A writer announces readiness only after its first database write returns, so
 # the database's wait for the write lock is spent inside the deadline above.
 # Check the two against each other here rather than trusting a comment beside
@@ -1089,8 +1088,7 @@ def _require_pympler() -> type["SummaryTracker"]:
         from pympler.tracker import SummaryTracker
     except ImportError as exc:
         raise ImportError(
-            "log_memory needs Pympler. Install it with: "
-            "pip install 'openadapt-capture[profile]'"
+            "log_memory needs Pympler. Install it with: pip install 'openadapt-capture[profile]'"
         ) from exc
     return SummaryTracker
 
@@ -1232,14 +1230,10 @@ def process_events(
         """Bind pending actions to this first ordinal-later retained frame."""
         for action_event in pending_action_events:
             action_event.data["after_screenshot_timestamp"] = after_screen_event.timestamp
-            action_event.data["after_screenshot_source_ordinal"] = (
-                after_screen_event.source_ordinal
-            )
+            action_event.data["after_screenshot_source_ordinal"] = after_screen_event.source_ordinal
             action_generation = action_event.data.get("window_geometry_generation")
             if after_window_event is not None:
-                action_event.data["after_window_event_timestamp"] = (
-                    after_window_event.timestamp
-                )
+                action_event.data["after_window_event_timestamp"] = after_window_event.timestamp
                 action_event.data["after_window_event_source_ordinal"] = (
                     after_window_event.source_ordinal
                 )
@@ -1249,8 +1243,7 @@ def process_events(
                 action_event.data["after_window_geometry_generation"] = after_generation
                 if (
                     after_window_event.timestamp != after_screen_event.timestamp
-                    or after_window_event.source_ordinal
-                    != after_screen_event.source_ordinal
+                    or after_window_event.source_ordinal != after_screen_event.source_ordinal
                 ):
                     raise WindowCaptureError(
                         "the action after frame and native geometry are not one atomic pair"
@@ -1298,8 +1291,7 @@ def process_events(
                 # Every producer exited before this wait, so nothing can
                 # complete the reservation at the head of the journal.
                 raise EventJournalReservationError(
-                    "a source producer exited without completing its reserved "
-                    "journal position"
+                    "a source producer exited without completing its reserved journal position"
                 )
             continue
         if not started:
@@ -1697,9 +1689,11 @@ def video_pre_callback(
         db: The database session.
         recording: The recording object.
         video_dir: Directory for video files.
-        frame_size: Explicit (width, height) for the video stream. Used by
-            window-scoped capture, whose frames are the target window's pixels
-            rather than the monitor's. Defaults to the full-screen size.
+        frame_size: Captured (width, height) for the video stream. Recording
+            startup supplies the initial retained frame's size for both desktop
+            and window scopes, without a second framebuffer read. Direct callers
+            that omit it keep the legacy platform-metrics/fallback behavior;
+            main-display metrics need not cover a multi-display desktop.
         provision: Parent-preflighted encoder contract. Passing this immutable
             value keeps spawn-based writers on the exact executable and codec.
         timeout_seconds: Bound for final encoding and verification.
@@ -1711,8 +1705,14 @@ def video_pre_callback(
     if frame_size is not None:
         monitor_width, monitor_height = frame_size
     else:
-        # TODO XXX replace with utils.get_monitor_dims() once fixed
-        monitor_width, monitor_height = utils.take_screenshot().size
+        # Physical pixels of the main display, without a framebuffer read.
+        # take_screenshot().size matches on a single display, but the grab
+        # can stall for tens of seconds in a macOS VM guest and blow the
+        # writer startup budget (#1883). get_monitor_dims() stays logical.
+        try:
+            monitor_width, monitor_height = platform.get_screen_dimensions()
+        except platform.DisplayMetricsUnavailable:
+            monitor_width, monitor_height = utils.take_screenshot().size
     video_container, video_stream, video_start_timestamp = video.initialize_video_writer(
         video_file_path,
         monitor_width,
@@ -2169,9 +2169,7 @@ def read_screen_events(
             return None
         t_start = time.perf_counter()
         terminal_deadline = (
-            time.monotonic() + TERMINAL_FRAME_SEAL_TIMEOUT_SECONDS
-            if seal_input
-            else None
+            time.monotonic() + TERMINAL_FRAME_SEAL_TIMEOUT_SECONDS if seal_input else None
         )
         try:
             if window_scope is not None or desktop_scope is not None:
@@ -2179,16 +2177,16 @@ def read_screen_events(
                     raise WindowCaptureError(
                         "terminal native capture requires the native input boundary"
                     )
-            # Do not hold the observation boundary during pixel acquisition.
-            # An OS input callback that arrives while the grab is in flight must
-            # reserve and bind the previously published frame before this new
-            # frame enters the journal. The frame can contain pixels rendered
-            # after that input, so publishing it first would make a post-action
-            # image look like the action's before evidence.
-            #
-            # Any failed capture terminates the session. Retrying would omit a
-            # frame while input continues and could produce complete-looking
-            # evidence with a missing interval.
+                # Do not hold the observation boundary during pixel acquisition.
+                # An OS input callback that arrives while the grab is in flight must
+                # reserve and bind the previously published frame before this new
+                # frame enters the journal. The frame can contain pixels rendered
+                # after that input, so publishing it first would make a post-action
+                # image look like the action's before evidence.
+                #
+                # Any failed capture terminates the session. Retrying would omit a
+                # frame while input continues and could produce complete-looking
+                # evidence with a missing interval.
                 while True:
                     boundary_use = None
                     if input_frame_boundary is not None and require_input_boundary:
@@ -2198,14 +2196,12 @@ def read_screen_events(
                             return None
                     try:
                         if window_scope is not None:
-                            screenshot, _window_changed = window_scope.capture_frame(
-                                publish=False
-                            )
+                            screenshot, _window_changed = window_scope.capture_frame(publish=False)
                         else:
                             assert desktop_scope is not None
-                        # A monitor can move or change scale while the combined
-                        # frame keeps the same dimensions. Check both sides of
-                        # the grab so the pixels and input use one topology.
+                            # A monitor can move or change scale while the combined
+                            # frame keeps the same dimensions. Check both sides of
+                            # the grab so the pixels and input use one topology.
                             desktop_scope.assert_current(force=True)
                             screenshot = utils.take_screenshot()
                             desktop_scope.assert_current(force=True)
@@ -2350,9 +2346,7 @@ def read_screen_events(
     if authentication is not None and authentication.protected:
         if terminal_frame_cancelled is not None:
             terminal_frame_cancelled.set()
-    terminal_cancelled = (
-        terminal_frame_cancelled is not None and terminal_frame_cancelled.is_set()
-    )
+    terminal_cancelled = terminal_frame_cancelled is not None and terminal_frame_cancelled.is_set()
     if (
         (window_scope is not None or desktop_scope is not None)
         and terminal_frame_finished is not None
@@ -2371,9 +2365,7 @@ def read_screen_events(
     elif (
         not (authentication is not None and authentication.protected)
         and (window_scope is not None or desktop_scope is not None)
-        and (
-        input_finished is not None
-        )
+        and (input_finished is not None)
     ):
         input_finished.wait()
         timing = capture_one(require_input_boundary=False)
@@ -2938,8 +2930,7 @@ def read_input_events(
         if started and observer is not None:
             terminal_error = None
             terminal_cancelled = (
-                terminal_frame_cancelled is not None
-                and terminal_frame_cancelled.is_set()
+                terminal_frame_cancelled is not None and terminal_frame_cancelled.is_set()
             )
             if (
                 terminal_frame_finished is not None
@@ -2952,10 +2943,7 @@ def read_input_events(
                 )
                 terminal_deadline = time.monotonic() + terminal_timeout
                 while not terminal_frame_finished.wait(timeout=0.1):
-                    if (
-                        terminal_frame_cancelled is not None
-                        and terminal_frame_cancelled.is_set()
-                    ):
+                    if terminal_frame_cancelled is not None and terminal_frame_cancelled.is_set():
                         terminal_cancelled = True
                         break
                     if time.monotonic() >= terminal_deadline:
@@ -3056,14 +3044,10 @@ def record_audio(
         # arrives during the callback cannot commit the copied samples.
         with callback_boundary:
             suppressed_before = (
-                authentication_suppressed is not None
-                and authentication_suppressed.is_set()
+                authentication_suppressed is not None and authentication_suppressed.is_set()
             )
             captured = np.zeros_like(indata) if suppressed_before else indata.copy()
-            if (
-                authentication_suppressed is not None
-                and authentication_suppressed.is_set()
-            ):
+            if authentication_suppressed is not None and authentication_suppressed.is_set():
                 captured.fill(0)
             audio_frames.append(captured)
 
@@ -3353,12 +3337,8 @@ def record(
         recording, db_path = create_recording(
             task_description,
             capture_dir,
-            window_capture_info=(
-                window_scope.snapshot() if window_scope is not None else None
-            ),
-            desktop_capture_info=(
-                desktop_scope.snapshot() if desktop_scope is not None else None
-            ),
+            window_capture_info=(window_scope.snapshot() if window_scope is not None else None),
+            desktop_capture_info=(desktop_scope.snapshot() if desktop_scope is not None else None),
         )
         recording_timestamp = recording.timestamp
         if authentication is None:
@@ -3399,6 +3379,7 @@ def record(
                 window_scope,
                 initial_generation,
             )
+            initial_video_frame_size = initial_window_frame.size
         else:
             assert desktop_scope is not None
             # Publish one clean before-frame before the native observer can accept
@@ -3409,6 +3390,7 @@ def record(
             desktop_scope.assert_current(force=True)
             if initial_desktop_frame is None:
                 raise WindowCaptureError("the initial desktop screenshot was empty")
+            initial_video_frame_size = initial_desktop_frame.size
             event_q.put(
                 Event(
                     utils.get_timestamp(),
@@ -3451,7 +3433,6 @@ def record(
     # the failure. The same applies to each queue's feeder thread once the
     # process at the far end is gone.
     try:
-
         # In window-scoped mode the screen reader emits the target window's
         # bounds timeline itself; the active-window poller would record a
         # DIFFERENT window (whichever is focused), so it stays off.
@@ -3656,11 +3637,9 @@ def record(
                     partial(
                         video_pre_callback,
                         video_dir=capture_dir,
-                        # Window-scoped frames are the window's pixels, not the
-                        # monitor's: size the stream from the initial frame.
-                        frame_size=(
-                            initial_window_frame.size if initial_window_frame is not None else None
-                        ),
+                        # Use the same retained pixels as the stream, including
+                        # the combined desktop across every captured monitor.
+                        frame_size=initial_video_frame_size,
                         provision=video_provision,
                         timeout_seconds=config.VIDEO_FFMPEG_TIMEOUT_SECONDS,
                     ),
@@ -3687,9 +3666,7 @@ def record(
 
         terminate_perf_event = multiprocessing.Event()
         perf_stats_writer = multiprocessing.Process(
-            target=utils.WrapStdout(
-                performance_stats_writer, "perf_stats_writer", process_errors
-            ),
+            target=utils.WrapStdout(performance_stats_writer, "perf_stats_writer", process_errors),
             args=(
                 perf_q,
                 recording,
@@ -4113,9 +4090,7 @@ class Recorder:
                 "process_started_at": self._process_started_at,
                 "capture_dir": self.capture_dir,
                 "phase": self._control_phase,
-                "ready": (
-                    self._control_phase == "recording" and self._ready_event.is_set()
-                ),
+                "ready": (self._control_phase == "recording" and self._ready_event.is_set()),
                 "complete": self._control_complete,
                 "integrity_verified": self._control_integrity_verified,
                 "error_code": self._control_error_code,
@@ -4443,9 +4418,7 @@ class Recorder:
 
         if not isinstance(payload, dict) or set(payload) != {"interval_id", "outcome"}:
             raise ValueError("invalid authentication end payload")
-        if not isinstance(payload["interval_id"], str) or not isinstance(
-            payload["outcome"], str
-        ):
+        if not isinstance(payload["interval_id"], str) or not isinstance(payload["outcome"], str):
             raise ValueError("authentication end identifiers must be strings")
         interval_id = str(uuid.UUID(str(payload["interval_id"])))
         handoff = self.end_authentication(
@@ -4544,9 +4517,7 @@ class Recorder:
                 # Every writer has exited by here, so fold the write log back
                 # into the database before anything reads or inventories it.
                 failure_stage = "database_finalization"
-                finalize_capture_database(
-                    os.path.join(self.capture_dir, "recording.db")
-                )
+                finalize_capture_database(os.path.join(self.capture_dir, "recording.db"))
                 failure_stage = "capture_verification"
                 self._verify_completed_capture()
                 failure_stage = "terminal_metadata"
@@ -4590,12 +4561,8 @@ class Recorder:
             self._finalized_event.set()
 
     def __enter__(self) -> "Recorder":
-        if (
-            sys.platform == "darwin"
-            and (
-                self._recording_config.window_owner
-                or self._recording_config.window_title
-            )
+        if sys.platform == "darwin" and (
+            self._recording_config.window_owner or self._recording_config.window_title
         ):
             # Cocoa initialization must occur on the caller's main thread.
             # The persistent ScreenCaptureKit stream starts later in the
@@ -4722,9 +4689,7 @@ class Recorder:
         """
 
         if not self._ready_event.is_set() or not self.is_recording:
-            raise AuthenticationHandoffError(
-                "recorder must be ready before authentication begins"
-            )
+            raise AuthenticationHandoffError("recorder must be ready before authentication begins")
         try:
             return self._authentication.begin(
                 methods=methods,
@@ -4748,9 +4713,7 @@ class Recorder:
         """Retain a fresh exact frame, then resume normal source capture."""
 
         if not self.is_recording:
-            raise AuthenticationHandoffError(
-                "recorder stopped before authentication could resume"
-            )
+            raise AuthenticationHandoffError("recorder stopped before authentication could resume")
         if outcome not in {"completed", "cancelled", "failed"}:
             raise ValueError("authentication outcome must be completed, cancelled, or failed")
         return self._authentication.end(
