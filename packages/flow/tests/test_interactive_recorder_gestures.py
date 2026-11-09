@@ -319,12 +319,16 @@ def test_native_select_replay_refuses_a_missing_label(
     assert keys == 0
 
 
-def _choose_in_select(options_html: str, label: str) -> tuple[Any, str, int]:
+def _choose_in_select(options_html: str, label: str) -> tuple[Any, str, int, list[str]]:
     """Focus ``#s`` built from ``options_html`` and ask the backend to choose
     ``label``: (the chooser's result or the exception it raised, the select's
-    value afterwards, how many change events fired)."""
+    value afterwards, how many change events fired, each option's label as
+    the recorder stores it)."""
 
-    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+    from openadapt_flow.backends.playwright_backend import (
+        NATIVE_OPTION_LABEL_JS,
+        PlaywrightBackend,
+    )
 
     sync_api = pytest.importorskip("playwright.sync_api")
     with sync_api.sync_playwright() as pw:
@@ -338,6 +342,10 @@ def _choose_in_select(options_html: str, label: str) -> tuple[Any, str, int]:
                 "document.getElementById('s').addEventListener('change',"
                 " () => { window.__changes += 1; });</script>"
             )
+            stored = page.evaluate(
+                "Array.from(document.getElementById('s').options).slice(1)"
+                f".map({NATIVE_OPTION_LABEL_JS})"
+            )
             page.focus("#s")
             outcome: Any
             try:
@@ -348,80 +356,105 @@ def _choose_in_select(options_html: str, label: str) -> tuple[Any, str, int]:
             changes = page.evaluate("window.__changes")
         finally:
             browser.close()
-    return outcome, value, changes
+    return outcome, value, changes, stored
 
 
-_DECOY_TEXT = '<option value="v-shadow">Label  Alpha</option>'
-_DECOY_ATTR = '<option value="v-shadow" label="Label  Alpha">x</option>'
-
-
-@pytest.mark.parametrize("decoy", [_DECOY_TEXT, _DECOY_ATTR], ids=["text", "attr"])
-def test_native_select_choice_skips_a_whitespace_decoy(decoy: str) -> None:
-    # Playwright's select_option(label=) and option.label both collapse
-    # whitespace, so "Label  Alpha" would pass for "Label Alpha". The match
-    # is on the raw label: the later exact option is the one chosen.
-    outcome, value, changes = _choose_in_select(
-        decoy + '<option value="v-alpha">Label Alpha</option>', "Label Alpha"
-    )
-    assert outcome is True
-    assert value == "v-alpha"
-    assert changes == 1
-
-
-@pytest.mark.parametrize(
-    "options",
-    [
-        _DECOY_TEXT,
-        _DECOY_ATTR,
-        # Two exact duplicates: replay can't tell which was meant.
-        '<option value="v-1">Label Alpha</option>'
-        '<option value="v-2">Label Alpha</option>',
-        '<option value="v-lead"> Label Alpha</option>',
-        '<option value="v-trail">Label Alpha </option>',
-        '<option value="v-nbsp">Label&nbsp;Alpha</option>',
-        '<option value="v-attr" label=" Label Alpha">x</option>',
-        # The one exact option is disabled.
-        '<option value="v-off" disabled>Label Alpha</option>',
-    ],
-    ids=[
-        "decoy-text",
-        "decoy-attr",
-        "duplicates",
-        "leading",
-        "trailing",
-        "nbsp",
-        "attr-leading",
-        "disabled",
-    ],
-)
-def test_native_select_choice_without_one_exact_label_refuses(options: str) -> None:
+def _assert_refused(outcome: Any, value: str, changes: int) -> None:
     from openadapt_flow.backend import StructuralResolutionRefused
 
-    outcome, value, changes = _choose_in_select(options, "Label Alpha")
     assert isinstance(outcome, StructuralResolutionRefused), outcome
     assert value == ""
     assert changes == 0
 
 
+_EXACT = '<option value="v-alpha">Label Alpha</option>'
+
+
 @pytest.mark.parametrize(
-    ("variant", "label"),
+    "decoy",
     [
-        ('<option value="v-lead"> Label Alpha</option>', " Label Alpha"),
-        ('<option value="v-trail">Label Alpha </option>', "Label Alpha "),
-        ('<option value="v-nbsp">Label&nbsp;Alpha</option>', "Label\u00a0Alpha"),
+        '<option value="v-shadow">Label  Alpha</option>',
+        '<option value="v-shadow" label="Label  Alpha">x</option>',
     ],
-    ids=["leading", "trailing", "nbsp"],
+    ids=["text", "attr"],
 )
-def test_native_select_choice_matches_whitespace_variants_exactly(
-    variant: str, label: str
-) -> None:
-    # Each variant is chosen only by its own exact string, never by the plain
-    # "Label Alpha" option beside it.
-    outcome, value, _changes = _choose_in_select(
-        '<option value="v-alpha">Label Alpha</option>' + variant, label
+def test_native_select_choice_refuses_a_whitespace_decoy(decoy: str) -> None:
+    # Recording and replay squash whitespace alike, so "Label  Alpha" and
+    # "Label Alpha" are one label: two matches, refused (the recorder refuses
+    # such a select too). Never a wrong-option success.
+    outcome, value, changes, stored = _choose_in_select(decoy + _EXACT, "Label Alpha")
+    assert stored == ["Label Alpha", "Label Alpha"]
+    _assert_refused(outcome, value, changes)
+
+
+def test_native_select_choice_refuses_duplicates() -> None:
+    outcome, value, changes, _stored = _choose_in_select(
+        '<option value="v-1">Label Alpha</option>'
+        '<option value="v-2">Label Alpha</option>',
+        "Label Alpha",
     )
+    _assert_refused(outcome, value, changes)
+
+
+def test_native_select_choice_refuses_a_disabled_match() -> None:
+    outcome, value, changes, _stored = _choose_in_select(
+        '<option value="v-off" disabled>Label Alpha</option>', "Label Alpha"
+    )
+    _assert_refused(outcome, value, changes)
+
+
+def test_native_select_choice_selects_a_multiline_option() -> None:
+    outcome, value, changes, stored = _choose_in_select(
+        '<option value="v-dog">\n    Dog\n  </option>'
+        '<option value="v-cat">Cat</option>',
+        "Dog",
+    )
+    assert stored == ["Dog", "Cat"]
     assert outcome is True
-    assert value == variant.split('"')[1]
+    assert value == "v-dog"
+    assert changes == 1
+
+
+# One case per whitespace class, as the recorder stores it (JavaScript \s,
+# squashed and trimmed) and replay therefore matches it.
+@pytest.mark.parametrize(
+    ("option_html", "stored_label"),
+    [
+        ('<option value="v">Label  Alpha</option>', "Label Alpha"),
+        ('<option value="v">Label\tAlpha</option>', "Label Alpha"),
+        ('<option value="v">Label\nAlpha</option>', "Label Alpha"),
+        ('<option value="v"> Label Alpha </option>', "Label Alpha"),
+        ('<option value="v">Label&nbsp;Alpha</option>', "Label Alpha"),
+        ('<option value="v">Label&#x2003;Alpha</option>', "Label Alpha"),
+        ('<option value="v" label=" Label  Alpha ">x</option>', "Label Alpha"),
+        # Zero-width space is not \s: it stays, so "Label Alpha" is no match.
+        ('<option value="v">Label&#x200b; Alpha</option>', "Label\u200b Alpha"),
+        # Case is kept: the recorder stores it as shown.
+        ('<option value="v">label alpha</option>', "label alpha"),
+    ],
+    ids=[
+        "double-space",
+        "tab",
+        "newline",
+        "leading-trailing",
+        "nbsp",
+        "em-space",
+        "label-attr",
+        "zero-width-space",
+        "case",
+    ],
+)
+def test_native_select_choice_follows_the_recorders_whitespace(
+    option_html: str, stored_label: str
+) -> None:
+    outcome, value, changes, stored = _choose_in_select(option_html, "Label Alpha")
+    assert stored == [stored_label]
+    if stored_label == "Label Alpha":
+        assert outcome is True
+        assert value == "v"
+        assert changes == 1
+    else:
+        _assert_refused(outcome, value, changes)
 
 
 def test_native_select_with_a_shared_label_is_refused(

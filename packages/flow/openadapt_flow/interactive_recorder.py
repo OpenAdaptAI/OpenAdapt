@@ -90,6 +90,7 @@ from PIL import Image
 from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.backends.playwright_backend import (
     GUARDED_ACTIONABLE_SELECTOR,
+    NATIVE_OPTION_LABEL_JS,
     PlaywrightBackend,
 )
 from openadapt_flow.ir import StructuralLocator, structural_locator_is_locatable
@@ -2043,12 +2044,12 @@ _INIT_JS = r"""
     if (!e.isTrusted) return;
     const fs = frameSpace();
     if (fs === null) { refuseFrame(); return; }
-    // The label is what the select shows and what replay reads back
-    // (option.label: the label attribute, else the text). Replay can only
-    // choose by label, so a label two options share (case aside) is refused:
-    // type-ahead would pick the first of them.
+    // The label is what the select shows, whitespace squashed, and the one
+    // replay matches (NATIVE_OPTION_LABEL_JS, shared with the backend).
+    // Replay can only choose by label, so a label two options share (case
+    // aside) is refused: replay could not tell them apart.
     const option = el.multiple ? null : el.options[el.selectedIndex];
-    const squashLabel = (o) => String(o.label || o.text || '').replace(/\s+/g, ' ').trim();
+    const squashLabel = __NATIVE_OPTION_LABEL__;
     const text = option ? squashLabel(option) : '';
     const sameLabel = text ? Array.from(el.options).filter(
       (o) => squashLabel(o).toLowerCase() === text.toLowerCase()).length : 0;
@@ -2258,6 +2259,7 @@ _INIT_JS = (
     .replace("__SUBMIT_FIELD__", json.dumps(SUBMIT_BINDING_FIELD_SELECTOR))
     .replace("__OBSERVE_SUBMIT_BINDING__", OBSERVE_SUBMIT_BINDING_JS)
     .replace("__SECTION_CONTEXT__", SECTION_CONTEXT_JS)
+    .replace("__NATIVE_OPTION_LABEL__", NATIVE_OPTION_LABEL_JS)
 )
 
 

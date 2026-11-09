@@ -1158,18 +1158,18 @@ def _fill_iso_date(target: Any, text: str) -> bool:
     return True
 
 
-#: A native option's raw label: its ``label`` attribute when set and not
-#: empty, else its ``textContent``, byte for byte. ``option.label`` would not
-#: do: it strips and collapses whitespace, so "Label  Alpha" reads as
-#: "Label Alpha" (and Playwright's ``select_option(label=)`` normalizes too).
-_RAW_OPTION_LABEL_JS = r"""(o) => {
-        const attr = o.getAttribute('label');
-        return attr !== null && attr !== '' ? attr : o.textContent;
-    }"""
+#: A native option's label as the interactive recorder stores it and as
+#: replay matches it: ``option.label`` (the label attribute, else the text),
+#: every run of JavaScript whitespace (``\s``: tab, newline, no-break space
+#: and the other Unicode spaces) made one space, then trimmed. Case is kept.
+#: One function for both, so a recorded label and the option it names agree.
+NATIVE_OPTION_LABEL_JS = (
+    r"(o) => String(o.label || o.text || '').replace(/\s+/g, ' ').trim()"
+)
 
-#: Choose, in a native single ``<select>``, the one option whose raw label is
-#: exactly ``label``, and fire ``input`` and ``change`` as
-#: ``select_option`` does. Returns ``{kind: 'none'}`` when the target is no
+#: Choose, in a native single ``<select>``, the one option whose label
+#: (``NATIVE_OPTION_LABEL_JS``) is exactly ``label``, and fire ``input`` and
+#: ``change`` as ``select_option`` does. Returns ``{kind: 'none'}`` when the target is no
 #: native select, ``{kind: 'refused'}`` (nothing changed) when it is a
 #: multiple or disabled select or not exactly one option matches (or the one
 #: match is disabled), else ``{kind: 'selected', index, value}``.
@@ -1177,12 +1177,12 @@ _SELECT_EXACT_LABEL_JS = (
     r"""(e, label) => {
     if (e.tagName !== 'SELECT') return {kind: 'none'};
     if (e.multiple || e.disabled) return {kind: 'refused'};
-    const raw = """
-    + _RAW_OPTION_LABEL_JS
+    const optionLabel = """
+    + NATIVE_OPTION_LABEL_JS
     + r""";
     const matches = [];
     Array.from(e.options).forEach((o, i) => {
-        if (raw(o) === label) matches.push(i);
+        if (optionLabel(o) === label) matches.push(i);
     });
     if (matches.length !== 1) return {kind: 'refused'};
     const index = matches[0];
@@ -1195,13 +1195,13 @@ _SELECT_EXACT_LABEL_JS = (
 )
 
 #: The selected option of a native select, read again after the events ran.
-_SELECTED_RAW_OPTION_JS = (
+_SELECTED_OPTION_JS = (
     r"""(e) => {
-    const raw = """
-    + _RAW_OPTION_LABEL_JS
+    const optionLabel = """
+    + NATIVE_OPTION_LABEL_JS
     + r""";
     const o = e.selectedIndex >= 0 ? e.options[e.selectedIndex] : null;
-    return o ? {index: e.selectedIndex, label: raw(o), value: o.value} : null;
+    return o ? {index: e.selectedIndex, label: optionLabel(o), value: o.value} : null;
 }"""
 )
 
@@ -1213,14 +1213,16 @@ def _select_native_option(target: Any, text: str) -> bool:
     popup for it (Linux Chromium), and commits nothing until the popup
     closes; Enter to commit could submit a form. The option is chosen on the
     element itself, by index, firing ``input`` and ``change`` with no key
-    events. The match is on the raw label (see ``_RAW_OPTION_LABEL_JS``),
-    byte for byte: "Label  Alpha", " Label Alpha" or a no-break space never
-    match "Label Alpha". ``target`` is an element handle. Returns ``False``,
-    with nothing delivered, when the target is no native select. Once it is,
-    zero or several exact matches, a disabled match, or a multiple or
-    disabled select are refused with nothing delivered: replay never falls
-    back to typing. After the choice the selected option is read again, and
-    anything but that option with exactly that label is refused. The
+    events. The match is on the label as the recorder stores it
+    (``NATIVE_OPTION_LABEL_JS``), so a multi-line ``<option>`` recorded as
+    "Dog" matches, and an option that only differs in whitespace from another
+    ("Label  Alpha" beside "Label Alpha") makes two matches. ``target`` is an
+    element handle. Returns ``False``, with nothing delivered, when the
+    target is no native select. Once it is, zero or several matches, a
+    disabled match, or a multiple or disabled select are refused with nothing
+    delivered: replay never falls back to typing. After the choice the
+    selected option is read again, and anything but that option (index,
+    value, and exactly that label) is refused. The
     caller's read-back still checks the shown label.
     """
 
@@ -1233,7 +1235,7 @@ def _select_native_option(target: Any, text: str) -> bool:
             "the focused native <select> has no single enabled option labelled "
             "exactly as the step's value; refusing to choose one"
         )
-    chosen = target.evaluate(_SELECTED_RAW_OPTION_JS)
+    chosen = target.evaluate(_SELECTED_OPTION_JS)
     if not (
         isinstance(chosen, dict)
         and chosen.get("index") == outcome.get("index")

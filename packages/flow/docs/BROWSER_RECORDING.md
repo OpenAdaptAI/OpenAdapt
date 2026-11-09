@@ -398,9 +398,12 @@ gesture compiles to one `DOUBLE_CLICK` step), right click, drag, text entry
 shortcuts, and wheel scrolling.
 
 A native `<select>` choice, by mouse or by typing, is recorded as the chosen
-option's label typed into the select. Replay chooses the option with exactly
-that label, with no keystrokes, and reads the select's chosen option back; a
-select that ends on another option stops the run. Parameterize it like any
+option's label typed into the select (whitespace runs made one space, case
+kept). Replay compares each option's label squashed the same way, chooses
+the one option that matches, with no keystrokes, and reads the select's
+chosen option back. No match, or two options that only differ in
+whitespace, stops the run before anything is chosen; a select that ends on
+another option stops it too. Parameterize it like any
 field (`--param` with the select's `name`) to choose a different option on
 each run; a value that is no option's exact label stops the run before
 anything is chosen. No Enter is recorded for it. A choice made from a widget drawn over a
