@@ -17,7 +17,8 @@ record check reads an in-memory table with FHIR search semantics
 (`TableSource`): a case-insensitive prefix of the stored name text, as a
 server compares it, and an exact birth date. (Re-measured on 2026-11-03 after
 the search began sending names as typed as well as normalized; the numbers
-below did not change.)
+below did not change; nor did they on 2026-11-08, after first names began
+matching by their parts and names began keeping letters of every script.)
 
 ## The exact numbers
 

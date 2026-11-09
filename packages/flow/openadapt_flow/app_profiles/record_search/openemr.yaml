@@ -29,6 +29,7 @@ rest:
   fields:
     record_id: [uuid, pid, id]
     fname: [fname]
+    mname: [mname]
     lname: [lname]
     dob: [DOB]
     mrn: [pubpid]
@@ -44,6 +45,7 @@ sql:
   columns:
     record_id: pid
     fname: fname
+    mname: mname
     lname: lname
     dob: DOB
     mrn: pubpid

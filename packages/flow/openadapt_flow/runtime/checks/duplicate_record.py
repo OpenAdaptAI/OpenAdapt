@@ -75,6 +75,13 @@ class PatientRecord:
     email: str = ""
     #: Earlier names, (first, last): a birth or maiden name, a previous name.
     prior_names: tuple[tuple[str, str], ...] = ()
+    #: Given names after the first (FHIR ``given[1:]``, a middle name).
+    mname: str = ""
+    #: Every other phone number on the chart (mobile, work).
+    other_phones: tuple[str, ...] = ()
+
+    def phones(self) -> list[str]:
+        return [p for p in (self.phone, *self.other_phones) if p]
 
 
 @dataclass
@@ -126,11 +133,17 @@ class PatientSource(Protocol):
 
 
 def norm_name(value: str) -> str:
-    """Case, accents, spaces and punctuation removed (hyphens kept)."""
+    """Case, accents, spaces and punctuation removed (hyphens kept).
+
+    Letters of every script are kept (Cyrillic, Greek, CJK, "ł", "ø"), so
+    two different names written outside Latin never normalize to the same
+    empty string."""
 
     text = unicodedata.normalize("NFKD", value or "")
     text = "".join(c for c in text if not unicodedata.combining(c)).casefold()
-    text = re.sub(r"[^a-z\- ]", "", text)
+    text = "".join(
+        c if c.isalpha() or c == "-" else " " if c.isspace() else "" for c in text
+    )
     return re.sub(r"\s+", " ", text).strip()
 
 
@@ -169,8 +182,10 @@ def edit_distance(a: str, b: str) -> int:
 
 
 def soundex(value: str) -> str:
-    letters = re.sub(r"[^a-z]", "", norm_name(value))
-    if not letters:
+    """The Soundex code of a Latin-letter name; "" for any other name."""
+
+    letters = norm_name(value).replace("-", "").replace(" ", "")
+    if not letters or not re.fullmatch(r"[a-z]+", letters):
         return ""
     codes = {
         c: str(n)
@@ -198,7 +213,8 @@ def similar_name(a: str, b: str) -> bool:
     limit = 1 if min(len(x), len(y)) <= 5 else 2
     if edit_distance(x, y) <= limit:
         return True
-    return len(x) > 3 and len(y) > 3 and soundex(x) == soundex(y)
+    code = soundex(x)
+    return len(x) > 3 and len(y) > 3 and bool(code) and code == soundex(y)
 
 
 def swapped(dob: str) -> Optional[str]:
@@ -289,9 +305,14 @@ for _group in _NICKNAME_GROUPS:
 
 
 def same_given(a: str, b: str) -> bool:
-    """The same first name: similar spelling, an initial, or a known nickname."""
+    """The same first name: similar spelling, an initial, a known nickname,
+    or one name's parts all among the other's ("Mary" and "Mary Ann",
+    "Maria José" and "Maria")."""
 
     if similar_name(a, b):
+        return True
+    pa, pb = name_parts(a), name_parts(b)
+    if pa and pb and (pa <= pb or pb <= pa):
         return True
     x, y = norm_name(a), norm_name(b)
     # An initial ("J." for James) stands for any name with that first letter.
@@ -314,17 +335,22 @@ def _digits(value: str) -> str:
 
 
 def _street(value: str) -> str:
-    return re.sub(
-        r"\s+", " ", re.sub(r"[^0-9a-z ]", "", (value or "").casefold())
-    ).strip()
+    text = "".join(
+        c if c.isalnum() or c == " " else "" for c in (value or "").casefold()
+    )
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _same_phone(want: Mapping[str, str], record: PatientRecord) -> bool:
+    phone = _digits(want.get("phone_home") or "")
+    return len(phone) >= 7 and any(phone == _digits(p) for p in record.phones())
 
 
 def contacts_shared(want: Mapping[str, str], record: PatientRecord) -> list[str]:
     """Every contact detail the referral and the chart share."""
 
     out = []
-    phone = _digits(want.get("phone_home") or "")
-    if len(phone) >= 7 and phone == _digits(record.phone):
+    if _same_phone(want, record):
         out.append("same phone")
     email = (want.get("email") or "").strip().casefold()
     if email and email == record.email.strip().casefold():
@@ -338,8 +364,7 @@ def contacts_shared(want: Mapping[str, str], record: PatientRecord) -> list[str]
 def tie_breaker(want: Mapping[str, str], record: PatientRecord) -> Optional[str]:
     """A contact detail the referral and the chart share, if any."""
 
-    phone = _digits(want.get("phone_home") or "")
-    if len(phone) >= 7 and phone == _digits(record.phone):
+    if _same_phone(want, record):
         return "same phone"
     email = (want.get("email") or "").strip().casefold()
     if email and email == record.email.strip().casefold():
@@ -364,9 +389,10 @@ def classify(want: Mapping[str, str], record: PatientRecord) -> Optional[Candida
     mrn = (want.get("mrn") or "").strip()
     if mrn and record.mrn and mrn == record.mrn.strip():
         return Candidate(record, "exact", "same MRN")
-    names = [(record.fname, record.lname), *record.prior_names]
-    for i, (first, last) in enumerate(names):
-        found = _classify_name(want, record, first, last)
+    names = [(record.fname, record.lname, record.mname)]
+    names += [(first, last, "") for first, last in record.prior_names]
+    for i, (first, last, middle) in enumerate(names):
+        found = _classify_name(want, record, first, last, middle)
         if found is not None:
             if i:
                 found.why += " (a prior name on the chart)"
@@ -394,16 +420,23 @@ def classify(want: Mapping[str, str], record: PatientRecord) -> Optional[Candida
 
 
 def _classify_name(
-    want: Mapping[str, str], record: PatientRecord, first: str, last: str
+    want: Mapping[str, str],
+    record: PatientRecord,
+    first: str,
+    last: str,
+    middle: str = "",
 ) -> Optional[Candidate]:
     fname, lname, dob = want["fname"], want["lname"], want["DOB"]
-    same_first = norm_name(fname) == norm_name(first)
+    # The chart's first name alone, and with its other given names: the run
+    # may carry "Mary Ann" where the chart splits "Mary" and "Ann".
+    firsts = [first] + ([f"{first} {middle}"] if middle.strip() else [])
+    same_first = any(norm_name(fname) == norm_name(f) for f in firsts)
     same_last = norm_name(lname) == norm_name(last)
     if same_first and same_last and dob == record.dob:
         return Candidate(
             record, "exact", "same first name, last name and date of birth"
         )
-    first_like = same_given(fname, first)
+    first_like = any(same_given(fname, f) for f in firsts)
     last_like = similar_name(lname, last) or bool(name_parts(lname) & name_parts(last))
     near = dob_near(dob, record.dob)
     if first_like and last_like:
@@ -488,7 +521,8 @@ def check_duplicate(
         )
     ]
     queries += [
-        (source.by_given, given) for given in sorted({fname, norm_name(fname)} - {""})
+        (source.by_given, given)
+        for given in sorted(({fname, norm_name(fname)} | name_parts(fname)) - {""})
     ]
     if (want.get("mrn") or "").strip():
         queries.append((source.by_identifier, want["mrn"].strip()))
@@ -669,6 +703,11 @@ class FhirPatientSource:
             given = n.get("given") or []
             return (str(given[0]) if given else "", str(n.get("family") or ""))
 
+        # Every given name after the first (a middle name, a second given
+        # name), so "Mary Ann" is compared with all of it.
+        official_given = official.get("given") or []
+        mname = " ".join(str(g) for g in official_given[1:] if str(g).strip())
+
         mrn = ""
         for ident in resource.get("identifier") or []:
             if not isinstance(ident, dict):
@@ -682,14 +721,20 @@ class FhirPatientSource:
                 mrn = str(ident.get("value") or "")
                 break
         telecom = [t for t in resource.get("telecom") or [] if isinstance(t, dict)]
-        phone = next(
-            (
-                str(t.get("value") or "")
-                for t in telecom
-                if t.get("system") == "phone" and t.get("use") in (None, "home")
-            ),
-            "",
-        )
+        phones = [
+            str(t.get("value") or "")
+            for t in telecom
+            if t.get("system") == "phone" and str(t.get("value") or "").strip()
+        ]
+        home = [
+            str(t.get("value") or "")
+            for t in telecom
+            if t.get("system") == "phone"
+            and t.get("use") in (None, "home")
+            and str(t.get("value") or "").strip()
+        ]
+        phone = home[0] if home else (phones[0] if phones else "")
+        other_phones = tuple(p for p in phones if p != phone)
         email = next(
             (str(t.get("value") or "") for t in telecom if t.get("system") == "email"),
             "",
@@ -712,6 +757,8 @@ class FhirPatientSource:
             street=str(lines[0]) if lines else "",
             email=email,
             prior_names=prior,
+            mname=mname,
+            other_phones=other_phones,
         )
 
     def by_birthdate(self, dob: str) -> list[PatientRecord]:
@@ -765,13 +812,23 @@ class TableSource:
 
     def by_given(self, given: str) -> list[PatientRecord]:
         self.pages_read += 1
+        # As FHIR compares ``given``: any given name, case aside, by prefix.
         prefix = given.casefold()
-        return [r for r in self.records if r.fname.casefold().startswith(prefix)]
+        return [
+            r
+            for r in self.records
+            if any(
+                g.casefold().startswith(prefix)
+                for g in (r.fname, *r.mname.split(), r.fname + " " + r.mname)
+            )
+        ]
 
     def by_phone(self, phone: str) -> list[PatientRecord]:
         self.pages_read += 1
         return [
-            r for r in self.records if r.phone and _digits(r.phone) == _digits(phone)
+            r
+            for r in self.records
+            if any(_digits(p) == _digits(phone) for p in r.phones())
         ]
 
     def by_email(self, email: str) -> list[PatientRecord]:

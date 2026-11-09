@@ -39,6 +39,7 @@ SEARCHES = ("birthdate", "family", "identifier", "given", "phone", "email")
 FIELDS = (
     "record_id",
     "fname",
+    "mname",
     "lname",
     "dob",
     "mrn",
@@ -216,6 +217,7 @@ class SqlPatientSource:
                     str(v["street"] or ""),
                     str(v["email"] or ""),
                     prior,
+                    mname=str(v["mname"] or ""),
                 )
             )
         return out
@@ -301,6 +303,7 @@ class RestPatientSource:
             street=get("street"),
             email=get("email"),
             prior_names=((get("birth_fname"), birth_lname),) if birth_lname else (),
+            mname=get("mname"),
         )
 
     def search(self, params: dict[str, str]) -> list[PatientRecord]:

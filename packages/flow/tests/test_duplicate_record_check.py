@@ -258,17 +258,18 @@ def test_sql_fallback(tmp_path: Path) -> None:
     con = sqlite3.connect(db)
     con.execute(
         # OpenEMR's patient_data columns the fallback reads.
-        "CREATE TABLE patient_data (pid INTEGER, fname TEXT, lname TEXT, DOB TEXT, "
+        "CREATE TABLE patient_data (pid INTEGER, fname TEXT, mname TEXT, "
+        "lname TEXT, DOB TEXT, "
         "pubpid TEXT, phone_home TEXT, street TEXT, email TEXT, birth_fname TEXT, "
         "birth_lname TEXT)"
     )
     con.execute(
-        "INSERT INTO patient_data VALUES (4, 'Rosalind', 'Jesswood-Okafor', "
+        "INSERT INTO patient_data VALUES (4, 'Rosalind', '', 'Jesswood-Okafor', "
         "'1990-04-09', '4', '', '', '', NULL, NULL)"
     )
     # A chart stored under a married name, with the birth name kept.
     con.execute(
-        "INSERT INTO patient_data VALUES (5, 'Rosalind', 'Okafor', '1990-04-10', "
+        "INSERT INTO patient_data VALUES (5, 'Rosalind', '', 'Okafor', '1990-04-10', "
         "'5', '', '', '', 'Rosalind', 'Jesswood')"
     )
     con.commit()
@@ -551,3 +552,117 @@ def test_fhir_full_page_with_no_next_link_is_unreadable(serve, monkeypatch) -> N
 
     server = serve(capped)
     assert check_duplicate(FhirPatientSource(server.url), WANT).decision == "unreadable"
+
+
+# -- given names, scripts and phones (review of f13cea29) ------------------------
+
+
+@pytest.mark.parametrize(
+    ("want_first", "chart_first"),
+    [
+        ("Mary Ann", "Mary"),
+        ("Mary", "Mary Ann"),
+        ("Maria José", "Maria"),
+        ("Maria", "Maria José"),
+        ("Mary-Ann", "Mary"),
+    ],
+)
+def test_a_second_given_name_is_a_close_match(want_first, chart_first) -> None:
+    want = {"fname": want_first, "lname": "Jesswood", "DOB": "1990-04-09"}
+    result = check_duplicate(
+        TableSource([rec(chart_first, "Jesswood", "1990-04-09")]), want
+    )
+    assert result.decision == "close", result.reason
+
+
+def test_fhir_keeps_every_given_name(serve) -> None:
+    resource = patient("21", "Mary", "Jesswood", "1990-04-09")
+    resource["name"][0]["given"] = ["Mary", "Ann"]
+    server = serve(
+        lambda p, q: (
+            200,
+            {"resourceType": "Bundle", "total": 1, "entry": [{"resource": resource}]},
+        )
+    )
+    source = FhirPatientSource(server.url)
+    # The whole given name on the run is the chart's whole given name.
+    want = {"fname": "Mary Ann", "lname": "Jesswood", "DOB": "1990-04-09"}
+    result = check_duplicate(source, want)
+    assert result.decision == "exact"
+    assert result.candidates[0].record.mname == "Ann"
+    # The first given name alone still matches the chart exactly.
+    assert check_duplicate(source, {**want, "fname": "Mary"}).decision == "exact"
+    # The second given name alone is a close match, never "none".
+    assert check_duplicate(source, {**want, "fname": "Ann"}).decision == "close"
+
+
+def test_rest_reads_the_middle_name(serve) -> None:
+    row = {
+        "uuid": "u1",
+        "fname": "Maria",
+        "mname": "José",
+        "lname": "Jesswood",
+        "DOB": "1990-04-09",
+    }
+    server = serve(lambda p, q: (200, {"data": [row], "links": {}}))
+    source = RestPatientSource(server.url, APP.rest, path="/api/patient")
+    want = {"fname": "Maria José", "lname": "Jesswood", "DOB": "1990-04-09"}
+    assert check_duplicate(source, want).decision == "exact"
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        (("Иван", "Петров"), ("Ольга", "Смирнова")),
+        (("伟", "王"), ("芳", "李")),
+        (("Αλέξανδρος", "Παπαδόπουλος"), ("Ελένη", "Νικολάου")),
+    ],
+)
+def test_different_names_in_another_script_are_not_the_same(a, b) -> None:
+    want = {"fname": a[0], "lname": a[1], "DOB": "1990-04-09"}
+    found = classify(want, rec(b[0], b[1], "1990-04-09"))
+    assert found is None or found.match != "exact"
+    if found is not None:
+        assert "same first name, last name" not in found.why
+
+
+def test_the_same_name_in_another_script_is_exact() -> None:
+    want = {"fname": "Иван", "lname": "Петров", "DOB": "1990-04-09"}
+    found = classify(want, rec("ИВАН", "Петров", "1990-04-09"))
+    assert found is not None and found.match == "exact"
+    # One day off is a mistyped date, not swapped names.
+    near = classify(want, rec("Иван", "Петров", "1990-04-10"))
+    assert near is not None and near.match == "close"
+    assert "swapped" not in near.why
+
+
+def test_letters_without_a_decomposition_are_kept() -> None:
+    from openadapt_flow.runtime.checks.duplicate_record import norm_name
+
+    assert norm_name("Łukasz") == "łukasz"
+    assert norm_name("Søren") == "søren"
+    assert norm_name("Straße") == "strasse"
+    assert norm_name("O'Brien") == "obrien"
+
+
+def test_a_mobile_phone_ties_a_renamed_chart(serve) -> None:
+    resource = patient("31", "Rosa", "Okafor", "1990-04-09")
+    resource["telecom"] = [
+        {"system": "phone", "use": "mobile", "value": "617-555-0142"},
+        {"system": "email", "value": "r@example.org"},
+    ]
+    server = serve(
+        lambda p, q: (
+            200,
+            {"resourceType": "Bundle", "total": 1, "entry": [{"resource": resource}]},
+        )
+    )
+    want = {
+        "fname": "Linda",
+        "lname": "Jesswood",
+        "DOB": "1990-04-09",
+        "phone_home": "(617) 555-0142",
+    }
+    result = check_duplicate(FhirPatientSource(server.url), want)
+    assert result.decision == "close"
+    assert "same phone" in result.candidates[0].why

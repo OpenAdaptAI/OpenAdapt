@@ -174,14 +174,21 @@ It reads every page, and it decides from whole records:
 | `unreadable` | see the list below | stop (fail closed) |
 
 A record is `close` when it has:
-- the same or a similar name, a nickname, an initial or the chart's prior
-  name, with day and month swapped, or with the date of birth one field off
+- the same or a similar name, a nickname, an initial, a first name whose
+  parts are all among the other's ("Mary" and "Mary Ann"), or the chart's
+  prior name, with day and month swapped, or with the date of birth one field off
   and at most one name part differing (or a shared phone, email or street);
 - the same date of birth with a similar name or a shared surname part;
 - first and last name swapped;
 - the same date of birth and first name under another last name;
 - another name with the same date of birth and a shared contact detail, or a
   near date of birth and two.
+
+The chart's first name is compared alone and with its other given names
+(FHIR `given[1:]`, the REST and SQL `mname` field), so "Mary Ann" against a
+chart of "Mary" + "Ann" is `exact`. A phone on the referral matches any phone
+on the chart (home, mobile or work). Names keep letters of every script, so
+two different names written in Cyrillic, Greek or CJK are not the same name.
 
 A record date that is only a year or a year and month counts as no date of
 birth, so a name match is `close`, never a non-match.
@@ -219,6 +226,11 @@ Not catchable from the referral alone: a person whose name changed, who moved,
 and whose date of birth is mistyped or merely shared. Nothing the referral
 carries ties them to the chart; that needs an MRN, an insurance id, or a
 person.
+
+Names are not transliterated: a referral written in Latin letters and a chart
+in Cyrillic (or the reverse) don't match by name. With the same date of birth
+the chart is still read, but it is `close` only through a shared MRN or
+contact detail.
 
 Measured offline on the production soak's seed-7 stream, with true
 duplicates planted: `benchmark/dup_check/README.md`.
