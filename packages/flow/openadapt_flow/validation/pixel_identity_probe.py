@@ -302,7 +302,9 @@ def render_value_crops(
     dsf = spec.dsf
     crops: dict[str, np.ndarray] = {}
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
+        from openadapt_flow._browser_readiness import launch_rendering_ready
+
+        browser = launch_rendering_ready(pw.chromium, headless=True)
         page = browser.new_page(
             viewport={"width": viewport_w, "height": 1600},
             device_scale_factor=dsf,
@@ -709,7 +711,9 @@ def run_font_floor(fonts: list[str]) -> list[dict]:
 
     rows: list[dict] = []
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
+        from openadapt_flow._browser_readiness import launch_rendering_ready
+
+        browser = launch_rendering_ready(pw.chromium, headless=True)
         page = browser.new_page(device_scale_factor=2)
         for ff in fonts:
             g = {c: _glyph_crop(page, c, ff) for c in ("O", "0", "l", "1", "I")}

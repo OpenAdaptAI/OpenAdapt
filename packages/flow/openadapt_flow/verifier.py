@@ -644,6 +644,19 @@ class WriteResult:
         return self.verified and bool(self.recheck_due_at)
 
     @property
+    def final(self) -> bool:
+        """Whether this verdict is resolved, with no owed final recheck.
+
+        An uncertain read does not settle the verdict. A final refutation
+        remains a negative verdict, not verification or permission to retry.
+        """
+
+        return (
+            self.outcome in (Outcome.CONFIRMED, Outcome.REFUTED)
+            and not self.provisional
+        )
+
+    @property
     def verdict(self) -> str:
         """The outcome under its old name (``VERIFIED``, ``REFUTED``,
         ``RECONCILIATION_REQUIRED``)."""
@@ -688,6 +701,7 @@ class WriteResult:
             "review": self.review,
             "recheck_due_at": self.recheck_due_at,
             "provisional": self.provisional,
+            "final": self.final,
             "write_receipt": self.write_receipt,
             "write_receipt_path": self.write_receipt_path,
         }
@@ -784,6 +798,16 @@ class RecheckResult:
         """True only when the earlier verdict still stands."""
 
         return self.outcome == "CONFIRMED"
+
+    @property
+    def final(self) -> bool:
+        """A completed proof through read_at, with no unread history gap."""
+
+        return (
+            self.outcome in ("CONFIRMED", "REFUTED")
+            and bool(self.read_at)
+            and self.frame in ("held", "refuted")
+        )
 
     @property
     def late(self) -> bool:
@@ -1064,7 +1088,37 @@ def _capture(
     database = contract.config.frame.database if contract.config.frame else None
     if database is not None and FRAME_DB_DETAIL not in (state.get("detail") or {}):
         raise BaselineUnreadable(_frame_db_unread(state))
+    if contract.config.frame is not None and contract.config.frame.history is not None:
+        from openadapt_flow.runtime.effects.history import DETAIL, checkpoint_problem
+
+        if (
+            checkpoint_problem(
+                (state.get("detail") or {}).get(DETAIL), contract.config.frame.history
+            )
+            is not None
+        ):
+            raise BaselineUnreadable(
+                "complete change history could not be read before the write"
+            )
     return pending
+
+
+def _sql_history_coverage(contract: Contract) -> Optional[dict[str, str]]:
+    """The model and actual frame bound by a current SQL-history proof."""
+    spec = contract.config.frame
+    if spec is None:
+        return None
+    history = spec.history
+    if history is None:
+        return None
+    kinds = {feed.read.get("kind") for feed in history.feeds.values()}
+    if not kinds <= {"sql", "fhir"}:
+        raise ValueError("history feed kind is unresolved")
+    if "sql" not in kinds:
+        return None
+    from openadapt_flow.runtime.effects.history import SQL_INVENTORY
+
+    return {"model": SQL_INVENTORY, "frame_sha256": spec.digest()}
 
 
 def _settle(
@@ -1092,9 +1146,19 @@ def _settle(
         result = dict(attempt.resolved.get("result") or {})
         result["not_sent_again"] = True
         if attempt.rechecked is not None:
+            coverage = _sql_history_coverage(contract)
+            if (
+                coverage is not None
+                and attempt.rechecked.get("history_coverage") != coverage
+            ):
+                raise WriteHeld(
+                    "the earlier SQL history proof lacks the current retained-event inventory; a person must reconcile it",
+                    key=key,
+                )
             # A recheck confirmed it since: no longer provisional, and no
             # recheck is due.
             result["provisional"] = False
+            result["final"] = True
             result["recheck_due_at"] = None
             result["rechecked_at"] = attempt.rechecked.get("at")
         if not attempt.delivered:
@@ -2313,12 +2377,15 @@ def recheck(
     if late.outcome != "CONFIRMED":
         late = _hold_after_recheck(ledger, write, late, trusted=trusted)
     else:
-        _mark_rechecked(ledger, write, late)
+        _mark_rechecked(ledger, write, late, contract)
     return late
 
 
 def _mark_rechecked(
-    ledger: Any, write: WriteResult | RecheckState, late: RecheckResult
+    ledger: Any,
+    write: WriteResult | RecheckState,
+    late: RecheckResult,
+    contract: Contract,
 ) -> None:
     """Record on the write's ledger attempt that a recheck confirmed it, so
     ``openadapt verify ledger list`` no longer shows a recheck owed and a
@@ -2348,12 +2415,16 @@ def _mark_rechecked(
             return
         if (attempt.resolved or {}).get("outcome") != "CONFIRMED":
             return
+        # Only reached after this contract's authenticated checkpoint and
+        # actual recheck confirmed. Never upgrade an old ledger entry in place.
+        coverage = _sql_history_coverage(contract)
         led.rechecked(
             key,
             write_id,
             outcome=late.outcome,
             read_at=late.read_at,
             receipt_sha256=late.receipt_sha256 or None,
+            **({"history_coverage": coverage} if coverage is not None else {}),
         )
     except Exception:  # noqa: BLE001 - the list keeps showing it owed
         return
@@ -2516,7 +2587,7 @@ def _judge_recheck(
     ):
         raise VerifierError(
             "this write scheduled no recheck: it was not verified, or the "
-            "contract doesn't set frame.database.recheck_after_s"
+            "contract schedules no history or database recheck"
         )
     run_record = actor.run_record()
     cfg = contract.config
