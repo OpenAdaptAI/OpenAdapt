@@ -202,6 +202,8 @@ def scaffold(recording: Path, out: Path, extra: list[str]) -> dict[str, Any]:
     elif draft.is_file():
         result["file"] = draft
         result["generator_status"] = "todo-draft"
+    else:
+        result["generator_status"] = "refused"
     discovery = out / "read_discovery.json"
     if discovery.is_file():
         result["read_discovery"] = json.loads(discovery.read_text())
@@ -211,8 +213,6 @@ def scaffold(recording: Path, out: Path, extra: list[str]) -> dict[str, Any]:
         )
         if found:
             result["read_discovery"] = found
-    else:
-        result["generator_status"] = "refused"
     return result
 
 
