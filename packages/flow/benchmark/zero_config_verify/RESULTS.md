@@ -23,14 +23,19 @@ at the end:
 
 ## Verdict
 
-**The protocol's rule is met, with a caveat that matters.** On both apps, at
-least one zero-config (`Z-*`) arm passes all three kill thresholds. The rule
-asks for at least one, so this counts as ready on these fixtures.
+**The protocol's rule is met on these fixtures only through an assisted arm
+whose file the generator labels a draft.**
 
-The arm that passes on both apps is `Z-net-read`. Its demonstration also
-loads the store's record list (`GET /api/db`) before and after the save. No
-person writes any verifier text for it. However, neither app makes that read
-by itself, so it is an assisted demonstration.
+- `Z-net-read` passes all three kill thresholds on both apps. Its
+  demonstration also loads the store's record list (`GET /api/db`) before
+  and after the save. Neither app makes that read by itself, so this is an
+  assisted demonstration.
+- The generator labels the resulting file a draft. It runs only because the
+  protocol deletes the `needs_operator_confirmation` lines.
+- With the app's own traffic alone (`Z-net`, `Z-net-probed`), no zero-config
+  arm is ready on either app.
+- The only unassisted pass is `Z-db` and `Z-db-gate` on MockLoan, whose store
+  is a file the generator can read.
 
 The new arm, `Z-net-probed`, uses only the app's own traffic. It has **no
 runnable verifier on either app, and so no false accepts**:

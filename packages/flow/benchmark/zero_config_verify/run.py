@@ -518,10 +518,13 @@ def kill_check(arm: dict[str, Any], hand: dict[str, Any]) -> dict[str, Any]:
 def scrub(text: str, origin: str, work: Path, sqlite: Optional[Path]) -> str:
     text = text.replace(origin, "${APP_URL}")
     if sqlite is not None:
+        # Any spelling of a path inside the store's own temp directory (as
+        # given, resolved or shortened) is the store.
+        store_dir = re.escape(Path(sqlite).parent.name)
+        text = re.sub(rf"/[^\s'\"]*{store_dir}[^\s'\"]*", "${STORE_DB}", text)
         text = text.replace(str(sqlite), "${STORE_DB}")
     text = text.replace(str(work.resolve()), "<work>").replace(str(work), "<work>")
     text = re.sub(r"http://127\.0\.0\.1:\d+", "${APP_URL}", text)
-    text = re.sub(r"/[^\s'\"]*openadapt-mockloan-[^\s'\"]*", "${STORE_DB}", text)
     # Pydantic shortens long values ("/var/fol...xyz"), so the exact paths
     # above can miss; any remaining temp path becomes <work>.
     text = re.sub(r"/(?:var/folders|private/var|tmp)/[^\s'\"]*", "<work>", text)

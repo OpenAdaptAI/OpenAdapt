@@ -212,3 +212,17 @@ them together. Only `Z-net-probed` can change; the others' generator paths
 did not change. The second run's data is kept as `results-run2.json`. The
 thresholds, the baselines, the ground truth and the trial cases are
 unchanged.
+
+### 2026-11-09, after the third run (scope of the third deviation's ruling)
+
+The ruling in the third deviation reads as if it covers every generated
+check. What the engine enforces (#2129, 32997eeac) is narrower. It refuses
+only a **probed** read (found by `--probe-reads`) whose fault test shows a
+write outside the read would pass, or whose capture holds a write no read
+covers.
+
+A read observed in the recording's own traffic (`Z-net-read`,
+`P-scaffold-verifier`) with the same open miss is still written as a draft
+check. It runs under this protocol once the flags are deleted. That case is
+left to a follow-up issue. The third run's numbers are unchanged by this
+note.
