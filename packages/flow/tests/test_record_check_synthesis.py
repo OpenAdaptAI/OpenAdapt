@@ -28,9 +28,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from openadapt_flow.__main__ import main
+from benchmark.record_check_proof import main, prove_live
 from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
-from openadapt_flow.record_check_proof import prove_live
 from openadapt_flow.record_check_synthesis import (
     PROOF_NAME,
     PROPOSED_NAME,

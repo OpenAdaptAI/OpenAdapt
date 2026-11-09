@@ -70,4 +70,4 @@ class _AliasFinder(importlib.abc.MetaPathFinder):
 if not any(isinstance(f, _AliasFinder) for f in sys.meta_path):
     sys.meta_path.insert(0, _AliasFinder())
 
-sys.modules[_OLD] = importlib.import_module(_NEW)
+sys.modules[_OLD] = importlib.import_module("openadapt_types")

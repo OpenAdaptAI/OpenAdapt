@@ -328,8 +328,18 @@ it before a person reviews it.
 openadapt-flow scaffold-verifier rec/                      # network capture only
 openadapt-flow scaffold-verifier rec/ --db app.sqlite      # plus every table
 openadapt-flow scaffold-verifier rec/ --verifier verify.yaml --bundle bundle/
-openadapt-flow scaffold-verifier rec/ --db app.sqlite --prove effect-e2e
+python -m benchmark.record_check_proof scaffold-verifier rec/ --db app.sqlite --prove effect-e2e
 ```
+
+The repository's benchmark entry point supplies the named fault fixture.
+The core proof runner receives an explicit caller-owned `Fixture`; neither it
+nor the engine CLI discovers demo or benchmark sources. A direct core CLI
+`--prove` request without an injected source refuses before proof execution or
+output. It never falls back to an unproved check. Programmatic callers pass
+`proof_source=...` to `prove_live` or `build_record_check`; CLI composition passes
+`record_check_proof_source=...` to `main`. These are process-local dependencies,
+not serialized callbacks or approval authority. The existing proof still uses
+the real replayer, the declared verifier and the fixture's independent judge.
 
 ### Finding the read
 

@@ -44,7 +44,7 @@ from __future__ import annotations
 import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from openadapt_flow import artifacts as _artifacts
 from openadapt_flow import sealed_set as _sealed
@@ -58,6 +58,9 @@ RECORDING_MARKER = "events.jsonl"
 CONTRACT_FILENAME = "effect_contract.yaml"
 #: What ``--probe-reads`` tried when no probe confirmed a read.
 READ_DISCOVERY_FILE = "read_discovery.json"
+
+if TYPE_CHECKING:
+    from openadapt_flow.record_check_proof import Fixture
 
 
 class ScaffoldRefused(SystemExit):
@@ -663,6 +666,7 @@ def build_record_check(
     db: Optional[Path] = None,
     verifier: Optional[Path] = None,
     prove: Optional[str] = None,
+    proof_source: Optional[Fixture] = None,
     recording: Optional[Path] = None,
     bundle: Optional[Path] = None,
     complete_read: bool = False,
@@ -691,6 +695,16 @@ def build_record_check(
     """
 
     import tempfile
+
+    from openadapt_flow.record_check_proof import ProofUnavailable, require_fixture
+
+    if prove is not None:
+        try:
+            require_fixture(prove, proof_source)
+        except ProofUnavailable as exc:
+            raise ScaffoldRefused(f"scaffold-verifier --prove: {exc}") from exc
+    elif proof_source is not None:
+        raise ScaffoldRefused("scaffold-verifier: a proof source requires --prove")
 
     from openadapt_flow import record_check_synthesis as rcs
 
@@ -777,7 +791,7 @@ def build_record_check(
         )
         return None
     if prove:
-        from openadapt_flow.record_check_proof import ProofUnavailable, prove_live
+        from openadapt_flow.record_check_proof import prove_live
 
         try:
             with tempfile.TemporaryDirectory(prefix="record-check-proof-") as tmp:
@@ -788,6 +802,7 @@ def build_record_check(
                     proposal.params,
                     write_requests=proposal.search.write_requests,
                     work_dir=Path(tmp),
+                    proof_source=proof_source,
                 )
         except ProofUnavailable as exc:
             raise ScaffoldRefused(f"scaffold-verifier --prove: {exc}") from exc
