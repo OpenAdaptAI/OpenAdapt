@@ -28,13 +28,15 @@ What it never does:
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 import time
 import uuid
 from dataclasses import dataclass, field
+from inspect import CORO_CREATED, getcoroutinestate
 from pathlib import Path
-from types import TracebackType
+from types import CoroutineType, TracebackType
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -207,8 +209,10 @@ class WebApp:
         if self.setup is not None:
             try:
                 self.setup(backend.page)
-            except BaseException:
-                close()
+            except BaseException as error:
+                from openadapt_flow.backends._owned import close_owned
+
+                close_owned((close,), primary=error)
                 raise
         return backend, close
 
@@ -521,6 +525,7 @@ class Recording:
 
     def __enter__(self) -> "Recording":
         from openadapt_flow.authoring import AuthoringSession
+        from openadapt_flow.backends._owned import close_owned
 
         owner = self._owner
         if owner.admitted or owner.candidate() is not None:
@@ -563,6 +568,27 @@ class Recording:
         else:
             backend, self._close = owner.app.open()
         try:
+            if owner.before_capture is not None:
+                # The public callback returns None. Widen only this runtime
+                # view so Python callers cannot silently return an awaitable.
+                callback: Callable[[Any], object] = owner.before_capture
+                prepared = callback(backend)
+                if prepared is not None:
+                    invalid_return = TypeError(
+                        "before_capture must return None synchronously"
+                    )
+
+                    def discard_unstarted_coroutine() -> None:
+                        # Never await/schedule, call an arbitrary .close, or
+                        # run a suspended coroutine's finally as hygiene.
+                        if (
+                            type(prepared) is CoroutineType
+                            and getcoroutinestate(prepared) == CORO_CREATED
+                        ):
+                            prepared.close()
+
+                    close_owned((discard_unstarted_coroutine,), primary=invalid_return)
+                    raise invalid_return
             if self.guard is not None and owner.app.record_reader is not None:
                 self._baseline = owner.app.record_reader()
             self._session = AuthoringSession(
@@ -587,8 +613,11 @@ class Recording:
             self.dispatcher = RecordingDispatcher(self)
             self.computer.dispatcher = self.dispatcher
             self._session.start_record()
-        except BaseException:
-            self._close()
+        except BaseException as error:
+            callbacks = [self._close]
+            if self.dispatcher is not None:
+                callbacks.insert(0, self.dispatcher.close)
+            close_owned(callbacks, primary=error)
             raise
         return self
 
@@ -598,16 +627,66 @@ class Recording:
         exc: Optional[BaseException],
         tb: Optional[TracebackType],
     ) -> bool:
-        assert self.computer is not None and self._close is not None
-        try:
-            self.result = self._finish(exc)
-        finally:
-            if self.dispatcher is not None:
-                self.dispatcher.close()
-            self._close()
-        return isinstance(exc, UnsupportedAction)
+        from openadapt_flow.backends._owned import close_owned, note_failure
 
-    def _finish(self, exc: Optional[BaseException]) -> JitResult:
+        assert self.computer is not None and self._close is not None
+        callbacks = [self._close]
+        if self.dispatcher is not None:
+            callbacks.insert(0, self.dispatcher.close)
+        try:
+            pending = self._finish(exc)
+        except BaseException as error:
+            primary = exc if exc is not None else error
+            if primary is not error:
+                note_failure(primary, error)
+            self.result = None
+            close_owned(
+                [*callbacks, lambda: self._keep_failed_capture("finish", primary)],
+                primary=primary,
+            )
+            raise primary
+        suppress = isinstance(exc, UnsupportedAction)
+        try:
+            close_owned(callbacks, primary=None if suppress else exc)
+        except BaseException as error:
+            self.result = None
+            cleanup_error = error
+
+            def keep_failed_cleanup() -> None:
+                self._keep_failed_capture("cleanup", cleanup_error)
+
+            close_owned((keep_failed_cleanup,), primary=cleanup_error)
+            raise
+        try:
+            # Compilation is staged; only completed owned cleanup permits
+            # signing and publication as a discoverable normal candidate.
+            self.result = pending() if callable(pending) else pending
+        except BaseException as error:
+            primary = exc if exc is not None else error
+            if primary is not error:
+                note_failure(primary, error)
+            self.result = None
+            close_owned(
+                (lambda: self._keep_failed_capture("publication", primary),),
+                primary=primary,
+            )
+            raise primary
+        return suppress
+
+    def _keep_failed_capture(self, stage: str, error: BaseException) -> None:
+        """Retain failed staged/publication data outside normal discovery."""
+        if self._owner.program_dir.exists():
+            assert self.computer is not None
+            self._owner._capture_refused(
+                "capture_failed",
+                f"capture_{stage}_failed:{type(error).__name__}",
+                self.computer,
+                guard=self.guard,
+            )
+
+    def _finish(
+        self, exc: Optional[BaseException]
+    ) -> Union[JitResult, Callable[[], JitResult]]:
         from openadapt_flow.authoring import AuthoringError
         from openadapt_flow.teach_scope import ScopeViolation
 
@@ -697,7 +776,7 @@ class Recording:
             for line in lines:
                 if owner.on_warning is not None:
                     owner.on_warning(line)
-        return owner._write_draft(
+        return lambda: owner._write_draft(
             session,
             compiled,
             computer,
@@ -729,6 +808,7 @@ class RecordingDispatcher:
         self._closers: list[Callable[[], None]] = []
         self._finish_state: Literal["open", "running", "complete", "failed"] = "open"
         self._finish_error: Optional[BaseException] = None
+        self._close_error: Optional[BaseException] = None
         self._closed = False
 
     @property
@@ -821,16 +901,17 @@ class RecordingDispatcher:
 
     def close(self) -> None:
         if self._closed:
+            if self._close_error is not None:
+                raise self._close_error
             return
         self._closed = True
-        errors: list[Exception] = []
-        for callback in reversed(self._closers):
-            try:
-                callback()
-            except Exception as exc:  # noqa: BLE001 - close remaining resources
-                errors.append(exc)
-        if errors and self._recording.result is None:
-            raise errors[0]
+        from openadapt_flow.backends._owned import close_owned
+
+        try:
+            close_owned(reversed(self._closers))
+        except BaseException as error:
+            self._close_error = error
+            raise
 
 
 @dataclass
@@ -855,6 +936,9 @@ class CompiledAgent:
     #: one, the recording's scope is bound from it; ``teach_scope`` may only
     #: narrow it. Without one the draft can't be admitted.
     teach_authorization: Any = None
+    #: Trusted process-local preparation/preflight on the capture backend.
+    #: Not a canary/replay hook, an approval or a serialized task option.
+    before_capture: Optional[Callable[[Any], None]] = field(default=None, repr=False)
     _sleep: Callable[[float], None] = field(default=time.sleep, repr=False)
 
     # Enabled only by the compile-agent task loader, never a raw bundle path.
@@ -1107,15 +1191,25 @@ class CompiledAgent:
         # candidate.json can't turn the recorder into someone else.
         candidate = lifecycle.sign_recorder(program, candidate, key_dir=self.key_dir)
         (program / "capture.json").write_text(json.dumps(computer.log, indent=2) + "\n")
-        (program / CANDIDATE_FILE).write_text(json.dumps(candidate, indent=2) + "\n")
-        lifecycle._event(program, "draft", recorded_by=candidate["recorded_by"])
-        return JitResult(
+        # Stage the signed record, then finish fallible retention before the
+        # one atomic publication. A failed event never exposes a candidate.
+        staged = program / f"candidate-pending-{uuid.uuid4().hex}.json"
+        descriptor = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w") as stream:
+            json.dump(candidate, stream, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        result = JitResult(
             status=NEEDS_HUMAN_ADMIT,
             task_key=self.task.key,
             cache="miss",
             agent_called=self.agent is not None,
             candidate=candidate,
         )
+        lifecycle._event(program, "draft", recorded_by=candidate["recorded_by"])
+        staged.replace(program / CANDIDATE_FILE)
+        return result
 
     def _capture_refused(
         self,
@@ -1590,6 +1684,7 @@ def compile_agent(
     require_distinct_reviewer_and_admitter: bool = False,
     teach_scope: Optional[TeachScopeSource] = None,
     teach_authorization: Any = None,
+    before_capture: Optional[Callable[[Any], None]] = None,
 ) -> CompiledAgent:
     """Wrap ``agent`` so a task is explored once and then run as a program.
 
@@ -1621,6 +1716,11 @@ def compile_agent(
             warning is printed to stderr either way.
         require_distinct_reviewer_and_admitter: Refuse an admission by the
             principal who reviewed the draft. Off by default.
+        before_capture: Trusted Python callback receiving the exact owned
+            backend after guarded opening and before recording or actor entry.
+            Prepare and check the state before reserving a model operation.
+            A failure closes the backend. This capture-only callback is not
+            persisted and does not run on canaries, replay or cache hits.
         teach_scope: What the recording run may do, declared before the agent
             reads any page: a :class:`~openadapt_flow.teach_scope.TeachScope`,
             or a function from the run's inputs to one. Typed text, links,
@@ -1635,6 +1735,8 @@ def compile_agent(
             one.
     """
 
+    if before_capture is not None and not callable(before_capture):
+        raise TypeError("before_capture must be callable")
     if agent is not None:
         dialect = getattr(agent, "dialect", None)
         if dialect is None:
@@ -1663,4 +1765,5 @@ def compile_agent(
         require_distinct_reviewer_and_admitter=require_distinct_reviewer_and_admitter,
         teach_scope=teach_scope,
         teach_authorization=teach_authorization,
+        before_capture=before_capture,
     )

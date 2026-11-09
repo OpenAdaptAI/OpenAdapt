@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import threading
@@ -72,6 +73,7 @@ class ExecuteService:
         runner: Runner | None = None,
         process_inline: bool = True,
         seed_mockmed: bool = False,
+        deployment: Path | str | None = None,
     ) -> None:
         self.data_dir = Path(data_dir).expanduser()
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -79,7 +81,10 @@ class ExecuteService:
         self._key: Ed25519PrivateKey = load_or_create_private_key(self.data_dir)
         self.token = load_or_create_token(self.data_dir, token)
         self.fingerprint = fingerprint_of(self._key.public_key())
-        self.runner = runner or default_runner
+        self.runner = runner or functools.partial(
+            default_runner,
+            deployment=Path(deployment).expanduser() if deployment else None,
+        )
         self.process_inline = process_inline
         if seed_mockmed:
             seed_mockmed_admissions(self.data_dir)
