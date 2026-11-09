@@ -172,7 +172,14 @@ COLUMNS: list[tuple[str, str, str, str]] = [
     ("c_varchar", "VARCHAR(20)", "'a '", "'a'"),
     ("c_text", "TEXT", "'x'", "'X'"),
     ("c_longtext", "LONGTEXT", '\'{"b": 1, "a": 2}\'', '\'{"a": 2, "b": 1}\''),
-    ("c_json", "JSON", "'{\"b\": 1.10}'", "'{\"b\": 1.1}'"),
+    # MySQL 8 stores JSON parsed (1.10 and 1.1 are one value there), MariaDB
+    # as text: two doubles one step apart differ on both.
+    (
+        "c_json",
+        "JSON",
+        "'{\"b\": 0.30000000000000004}'",
+        "'{\"b\": 0.3}'",
+    ),
     ("c_enum", "ENUM('x','y')", "'x'", "'y'"),
     ("c_set", "SET('a','b')", "'a,b'", "'a'"),
     ("c_binary", "BINARY(2)", "x'00ff'", "x'00fe'"),

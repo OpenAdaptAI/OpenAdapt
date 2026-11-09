@@ -12,7 +12,9 @@ the read-back contract, the same shape ``verify-run`` reads:
   screen. Exactly the deployment ``effects`` section (``kind: rest``, ``sql``,
   ``fhir``, ``graphql`` or a plugin kind). ``none`` and ``onscreen`` are
   refused. ``session`` (``module:function``) may add an authenticated client
-  for ``kind: rest``; it is not part of the verifier's identity;
+  for ``kind: rest``, ``fhir`` or ``graphql``, built again for every trial's
+  read-back so an expiring token is renewed; it is not part of the
+  verifier's identity;
 - ``effects``: the effect contract list (``effect_contract.yaml``
   ``effects:``), bound to the save step. Or ``record``, a shorthand that
   expands to that list (record fields from inputs, the selecting fields, the
@@ -175,11 +177,16 @@ class AppConfig(BaseModel):
         return self.url.rstrip("/")
 
 
+#: The read-back kinds a ``verifier.session`` hook can authenticate.
+SESSION_KINDS = ("rest", "fhir", "graphql")
+
+
 class SystemOfRecordConfig(BaseModel):
     """The independent read-back, as a deployment ``effects`` section.
 
     ``session`` (``module:function``) may supply an authenticated HTTP client
-    for ``kind: rest`` when ``auth`` cannot (for example an OAuth flow).
+    for ``kind: rest``, ``fhir`` or ``graphql`` when ``auth`` cannot (for
+    example an OAuth flow). It is called again for every trial's read-back.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -205,8 +212,10 @@ class SystemOfRecordConfig(BaseModel):
                 "(rest, sql, fhir, graphql, ui_readback or a plugin), not "
                 f"{self.verifier.kind!r}"
             )
-        if self.session is not None and self.verifier.kind != "rest":
-            raise ValueError("verifier.session is supported for kind: rest")
+        if self.session is not None and self.verifier.kind not in SESSION_KINDS:
+            raise ValueError(
+                "verifier.session is supported for kind: " + ", ".join(SESSION_KINDS)
+            )
         return self
 
 

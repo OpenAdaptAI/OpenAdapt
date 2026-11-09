@@ -1702,7 +1702,7 @@ def validate_distribution_directory(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--sync", action="store_true")
     parser.add_argument("--require-dist", action="store_true")
     parser.add_argument(

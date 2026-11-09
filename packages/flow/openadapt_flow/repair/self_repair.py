@@ -2568,6 +2568,8 @@ def _carry_admission(
     approved_by: Optional[str] = None,
     route: Optional[str] = None,
     probe_only: bool = False,
+    key_dir: Optional[Path] = None,
+    approver_root: Optional[str] = None,
 ) -> None:
     """Carry an agent-compiled program's admission to its repaired copy.
 
@@ -2591,6 +2593,8 @@ def _carry_admission(
             approved_by=approved_by,
             route=route,
             probe_only=probe_only,
+            key_dir=key_dir,
+            approver_root=approver_root,
         )
     except lifecycle.AdmissionError as exc:
         raise SelfRepairRefused(
@@ -3148,8 +3152,14 @@ def _uncovered_band_matches(step: Step, observed: str, recorded: Optional[str]) 
         return False
     if not band[len(read) - 1].startswith(read[-1]):
         return False
+    whole = observed
+    if read[-1] != band[len(read) - 1]:
+        # The word the dialog cuts is checked above as a prefix of the
+        # recorded word; the template weighs whole words only, so a cut
+        # date or id ("1984-") is not read as a different value.
+        whole = " ".join(observed.split()[:-1])
     try:
-        match = _band_match_template(template, observed)
+        match = _band_match_template(template, whole)
     except Exception:  # noqa: BLE001 - an unreadable match is doubt
         return False
     return (

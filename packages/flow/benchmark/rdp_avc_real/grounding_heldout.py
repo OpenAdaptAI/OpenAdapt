@@ -65,7 +65,7 @@ def _verified_points(campaign: Path, trials: list[dict], condition: str) -> dict
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("campaigns", nargs="+", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()

@@ -33,6 +33,7 @@ from openadapt_flow.verify_run import (
     parse_verify_config,
     verify_run,
 )
+from tests._rest_read_contract_fixtures import mockmed_effects_config
 
 NOTE = "Follow-up in two weeks"
 
@@ -53,7 +54,7 @@ def _verify_file(tmp_path: Path, verifier: dict) -> Path:
 
 
 def _rest(base: str) -> dict:
-    return {"kind": "rest", "base_url": base, "records_path": "/api/db"}
+    return mockmed_effects_config(base)
 
 
 def _write(base: str, note: str = NOTE, patient: str = "p1") -> None:

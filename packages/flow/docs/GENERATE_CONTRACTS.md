@@ -292,9 +292,12 @@ is a log from its name.
 
 **Changes the app makes to existing rows.** A column of an existing row that
 the demonstrations changed with no task value is excused only on that row:
-the target itself, a row with the same key in every demonstration (a counter
-row), or the row the task's values name through a key of the main record
-(the account a contact belongs to). It is never excused by name on other
+the target itself, the row the task's values name through a key of the main
+record (the account a contact belongs to), or a row with the same key in
+every demonstration (a counter row). A row the task's values name is named
+by them even when every demonstration happened to touch the same one (both
+demonstrations were in one project), so a correct write in another project
+is not stopped. It is never excused by name on other
 rows or tables. Time stamps set during the write, counters that went up and
 columns set to the acting user are proposed; anything else is listed and
 excused only if the person adds it (`columns_add`). A changed row the
@@ -349,7 +352,8 @@ saves. Only the main record is a target (`target_surface`). A target
 the read before the write doesn't show as new is treated as existing, and
 with no version before the write it stops as `missing` (a record saved
 before the trail began, or outside the app). With neither, the update has no
-version check, and `report.json` shows `versions: null`. If the app stops
+version check: `report.json` shows `versions: null`, and `QUESTIONS.md`
+says so under the kind. If the app stops
 writing the trail (an agenda setting turned off), the agent's own save has
 no new version, and the verifier stops the write rather than pass it.
 

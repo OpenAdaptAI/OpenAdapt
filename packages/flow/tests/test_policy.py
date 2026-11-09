@@ -5,6 +5,8 @@ and the shipped example policies parse.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from openadapt_flow.ir import (
@@ -27,6 +29,7 @@ from openadapt_flow.policy import (
     is_vacuous,
     lint_workflow,
     load_policy,
+    policy_contract_sha256,
     step_confidence,
 )
 from openadapt_flow.runtime.effects import Effect, EffectKind, ValueExpr
@@ -302,8 +305,9 @@ class TestPolicyLoading:
         names = builtin_policy_names()
         assert "permissive" in names
         assert "clinical-write" in names
+        assert "record-write" in names
 
-    @pytest.mark.parametrize("name", ["permissive", "clinical-write"])
+    @pytest.mark.parametrize("name", ["permissive", "clinical-write", "record-write"])
     def test_example_policies_parse(self, name):
         pol = load_policy(name)
         assert isinstance(pol, Policy)
@@ -331,6 +335,31 @@ class TestPolicyLoading:
         # Integration: the shipped strict policy refuses a gappy bundle.
         report = evaluate_policy(_gappy_workflow(), load_policy("clinical-write"))
         assert not report.passed
+
+    def test_record_write_asks_for_exactly_what_clinical_write_asks(self):
+        # The general write policy is for non-clinical systems of record. It
+        # must never be a weaker gate, so its rules are pinned to clinical-write.
+        def rules(policy: Policy) -> dict:
+            return policy.model_dump(exclude={"name", "description"})
+
+        record, clinical = load_policy("record-write"), load_policy("clinical-write")
+        assert rules(record) == rules(clinical)
+        assert policy_contract_sha256(record) != policy_contract_sha256(clinical)
+        assert not re.search(r"clinic|patient|emr\b", record.description, re.I)
+
+    def test_record_write_refuses_what_clinical_write_refuses(self):
+        def refusals(name: str) -> list[tuple[str, str | None]]:
+            report = evaluate_policy(_gappy_workflow(), load_policy(name))
+            return [(v.rule, v.step_id) for v in report.violations]
+
+        assert refusals("record-write")
+        assert refusals("record-write") == refusals("clinical-write")
+
+    def test_an_app_selects_record_write_in_its_verify_yaml(self):
+        from openadapt_flow.qualify.config import CampaignConfig
+
+        campaign = CampaignConfig.model_validate({"policy": "record-write"})
+        assert load_policy(campaign.policy).name == "record-write"
 
     def test_string_marker_cannot_suppress_inferred_write(self):
         step = _click(

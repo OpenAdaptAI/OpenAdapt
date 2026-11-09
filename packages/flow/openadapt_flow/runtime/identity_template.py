@@ -117,8 +117,11 @@ def new_salt_hex() -> str:
 # ---------------------------------------------------------------------------
 
 
-def _token_template(salt: bytes, squashed: str) -> TokenTemplate:
+def _token_template(
+    salt: bytes, squashed: str, bearing: Optional[bool] = None
+) -> TokenTemplate:
     return TokenTemplate(
+        bearing=bearing,
         c=_hash(salt, _id.ocr_canonical(squashed)),
         r=_hash(salt, squashed),
         n=len(squashed),
@@ -291,8 +294,12 @@ def build_identity_template(
             names=context_names,
         )
         squashed_tokens = _id.tokenize(context_text)
+        raw_tokens = [tok for tok in context_text.split() if _id.squash(tok)]
         tmpl.band_len = len(_id.squash(context_text))
-        tmpl.tokens = [_token_template(salt, t) for t in squashed_tokens]
+        tmpl.tokens = [
+            _token_template(salt, t, _id.identity_bearing(r, t))
+            for r, t in zip(raw_tokens, squashed_tokens)
+        ]
         # Split-window concat keys (recorded tokens the live OCR may glue).
         for i in range(len(squashed_tokens)):
             for size in (2, 3, 4):
@@ -438,21 +445,49 @@ def _match_tokens_template(
         ):
             suspect_evidence[i] = True
 
-    # single-token equivalence
+    # single-token equivalence; a digit-bearing recorded token takes one
+    # observed copy of its own (parity with identity._match_tokens).
+    digit_used: set[int] = set()
     for i, t in enumerate(toks):
+        if not t.digit:
+            continue
         for j in range(no):
-            if t.c == obs_c[j]:
+            if t.r == obs_r[j] and j not in digit_used:
                 mark(i, obs_r[j], obs[j])
                 explained[j] = True
+                digit_used.add(j)
+                break
+    for i, t in enumerate(toks):
+        if t.digit and matched[i]:
+            continue
+        for j in range(no):
+            if t.c != obs_c[j] or (t.digit and j in digit_used):
+                continue
+            if (
+                not t.digit
+                and _id._has_digit(obs[j])
+                and not _id._alpha_dominated(obs[j])
+            ):
+                continue
+            mark(i, obs_r[j], obs[j])
+            explained[j] = True
+            if t.digit:
+                digit_used.add(j)
+                break
 
     # split: consecutive recorded tokens -> one observed token
+    digit_glued: set[int] = set()
     for ct in tmpl.concats:
         if all(matched[ct.i : ct.i + ct.size]):
             continue
+        window = toks[ct.i : ct.i + ct.size]
+        glued = any(a.digit and b.digit for a, b in zip(window, window[1:]))
         for j in range(no):
             if obs_c[j] == ct.c:
                 rawok = ct.r == obs_r[j]
                 for m in range(ct.i, ct.i + ct.size):
+                    if glued:
+                        digit_glued.add(m)
                     matched[m] = True
                     if rawok:
                         raw_matched[m] = True
@@ -472,6 +507,8 @@ def _match_tokens_template(
                 concat_raw = "".join(obs[j : j + size])
                 if canon(concat_raw) == t.c:
                     mark(i, raw(concat_raw), concat_raw)
+                    if _id._glues_digits(obs[j : j + size]):
+                        digit_glued.add(i)
                     for m in range(j, j + size):
                         explained[m] = True
                     done = True
@@ -482,6 +519,8 @@ def _match_tokens_template(
     # Unified glyph-vulnerable-identifier flag (raw match + recorded glyph shape)
     for i, t in enumerate(toks):
         if raw_matched[i] and t.glyph:
+            glyph_ambiguous_id[i] = True
+        if i in digit_glued:
             glyph_ambiguous_id[i] = True
     return matched, explained, raw_matched, suspect_evidence, glyph_ambiguous_id
 
@@ -517,7 +556,7 @@ def _contradicted_template(
     toks = tmpl.tokens
     contradicted = [False] * len(toks)
     unexplained_alpha = any(
-        not explained[j] and len(o) >= _id.MIN_BLOCK and _id._alpha_dominated(o)
+        not explained[j] and len(o) >= 2 and _id._alpha_dominated(o)
         for j, o in enumerate(obs)
     )
     unexplained_ident = any(
@@ -526,10 +565,19 @@ def _contradicted_template(
     obs_suffix_unexplained = any(
         not explained[j] and _id._is_generational_suffix(o) for j, o in enumerate(obs)
     )
+    unexplained_digit = any(
+        not explained[j] and _id._has_digit(o) for j, o in enumerate(obs)
+    )
     for i, t in enumerate(toks):
         if matched[i]:
             continue
         if t.gen:
+            contradicted[i] = True
+            continue
+        if t.digit and unexplained_digit:
+            # Parity with identity._contradicted: an unmatched digit-bearing
+            # recorded token (id, date, age) of any length, with another
+            # digit-bearing token unexplained in the live band.
             contradicted[i] = True
             continue
         if t.n < _id.MIN_BLOCK:
@@ -624,17 +672,37 @@ def _band_match_template(tmpl: IdentityTemplate, observed_text: str) -> _id.Band
         if not explained[j] and _id._name_shaped(raw_tok, obs[j])
     )
 
-    evidence_short = _id.identity_evidence_shortfall(
-        [_template_identity_kind(t, canon) for t in toks],
-        matched,
-        raw_matched,
-        # No plaintext to inspect: every token counts as look-alike, the
-        # conservative side of identity_evidence_shortfall's rule.
-        [True] * len(toks),
+    evidence_short = (
+        _id.identity_evidence_shortfall(
+            [_template_identity_kind(t, canon) for t in toks],
+            matched,
+            raw_matched,
+            # No plaintext to inspect: every token counts as look-alike, the
+            # conservative side of identity_evidence_shortfall's rule.
+            [True] * len(toks),
+        )
+        or any(not m and t.digit for t, m in zip(toks, matched))
+        or (
+            any(t.digit for t in toks)
+            and any(not explained[j] and _id._has_digit(o) for j, o in enumerate(obs))
+        )
+        or (
+            any(not m and t.alpha for t, m in zip(toks, matched))
+            and any(
+                not explained[j] and _id._alpha_dominated(o) for j, o in enumerate(obs)
+            )
+        )
     )
+    coverage, no_bearing = _id.identity_coverage(
+        [t.n for t in toks],
+        matched,
+        [True if t.bearing is None else t.bearing for t in toks],
+    )
+    if no_bearing or not _id._digit_floor_met([t.digit for t in toks], raw_matched):
+        evidence_short = True
 
     return _id.BandMatch(
-        matched_chars / total_chars if total_chars else 0.0,
+        coverage,
         max(uncovered_runs, default=0),
         contradicted_chars,
         suspect_chars,
@@ -726,8 +794,11 @@ def verify_template_identity(
         run_value_tokens: list[TokenTemplate] = []
         for name in in_band:
             value = params.get(name, param_examples.get(name, ""))
-            for tok in _id.tokenize(value):
-                run_value_tokens.append(_token_template(salt, tok))
+            raw_tokens = [tok for tok in value.split() if _id.squash(tok)]
+            for raw_tok, tok in zip(raw_tokens, _id.tokenize(value)):
+                run_value_tokens.append(
+                    _token_template(salt, tok, _id.identity_bearing(raw_tok, tok))
+                )
         sub_tmpl = IdentityTemplate(
             salt=tmpl.salt,
             band_len=tmpl.band_len,

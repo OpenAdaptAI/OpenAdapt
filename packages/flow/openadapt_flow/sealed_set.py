@@ -5,8 +5,9 @@ those files can hold patient data: screen pixels, typed values, page text,
 request and response bodies. This module encrypts all of them.
 
 A *sealed set* is a directory with a plaintext header file,
-``.openadapt-sealed.json``. The header holds the scrypt salt and parameters and
-an *index* sealed with AES-256-GCM under the derived key. The index lists every
+``.openadapt-sealed.json``. A v1 header holds the scrypt salt and
+parameters; a v2 header holds an authenticated wrapped data key and its fresh
+set identity. Both carry an *index* sealed with AES-256-GCM under the data key. The index lists every
 other file in the directory with the SHA-256 of its bytes on disk. Opening a
 sealed set:
 
@@ -58,11 +59,15 @@ from pathlib import Path, PurePosixPath
 from typing import Final, Iterator, Literal, Optional
 
 from openadapt_flow import crypto
+from openadapt_flow.sealed_maintenance import mutation_lock
 
 HEADER: Final[str] = ".openadapt-sealed.json"
 FORMAT: Final[str] = "openadapt-flow-sealed-set"
 FORMAT_VERSION: Final[int] = 1
 SEALED_SUFFIX: Final[str] = ".enc"
+_LEGACY_DERIVATION_FIELDS: Final[frozenset[str]] = frozenset(
+    {"salt", "kdf", "kdf_n", "kdf_r", "kdf_p"}
+)
 
 Kind = Literal["bundle", "recording", "run", "library", "sanitized"]
 Codec = Literal["set", "plain", "external"]
@@ -449,7 +454,7 @@ def read_header(root: Path | str) -> dict[str, object]:
         raise SealedSetError(f"unreadable sealed-set header: {exc}") from exc
     if not isinstance(header, dict) or header.get("format") != FORMAT:
         raise SealedSetError("not an openadapt-flow sealed set")
-    if header.get("version") != FORMAT_VERSION:
+    if header.get("version") not in (FORMAT_VERSION, 2):
         raise SealedSetError(
             f"sealed-set format version {header.get('version')!r} is not supported"
         )
@@ -462,10 +467,41 @@ def header_kind(root: Path | str) -> Kind:
     return read_header(root)["kind"]  # type: ignore[return-value]
 
 
-def _derive(header: dict[str, object], passphrase: str) -> crypto.SetKey:
+def _wrapping_aad(header: dict[str, object]) -> bytes:
+    """Bind a v2 envelope to its fresh set identity and wrapping-key label."""
+    names = ("format", "version", "kind", "cipher", "data_key_id", "key_id")
+    return b"openadapt-flow/sealed-set/wrapped-key/v2\0" + json.dumps(
+        {name: header[name] for name in names}, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+
+
+def _data_key(header: dict[str, object], passphrase: str) -> bytes:
+    """Unwrapped data keys stay in memory; no fallback key resolution here."""
     try:
+        if header.get("version") == 2:
+            wrapped = header.get("wrapped_key")
+            key_id = header.get("key_id")
+            data_key_id = header.get("data_key_id")
+            if (
+                not isinstance(wrapped, str)
+                or not isinstance(key_id, str)
+                or not key_id
+                or not isinstance(data_key_id, str)
+                or len(data_key_id) != 32
+                or any(char not in "0123456789abcdef" for char in data_key_id)
+                or _LEGACY_DERIVATION_FIELDS.intersection(header)
+            ):
+                raise SealedSetError("sealed-set wrapping metadata is malformed")
+            result = crypto.decrypt_bytes(
+                base64.b64decode(wrapped, validate=True),
+                passphrase,
+                aad=_wrapping_aad(header),
+            )
+            if len(result) != 32:
+                raise SealedSetError("sealed-set wrapped data key is malformed")
+            return result
         salt = base64.b64decode(str(header["salt"]), validate=True)
-        return crypto.SetKey.derive(
+        return crypto.derive_data_key(
             passphrase,
             salt,
             n=int(header["kdf_n"]),  # type: ignore[call-overload]
@@ -473,7 +509,11 @@ def _derive(header: dict[str, object], passphrase: str) -> crypto.SetKey:
             p=int(header["kdf_p"]),  # type: ignore[call-overload]
         )
     except (KeyError, TypeError, ValueError) as exc:
-        raise SealedSetError(f"sealed-set header is malformed: {exc}") from exc
+        raise SealedSetError("sealed-set key header is malformed") from exc
+
+
+def _derive(header: dict[str, object], passphrase: str) -> crypto.SetKey:
+    return crypto.SetKey(_data_key(header, passphrase))
 
 
 def _open_index(
@@ -676,10 +716,17 @@ class SealedSetWriter:
         self._hashes: dict[str, str] = {}
         self._lines: dict[str, list[bytes]] = {}
         self._lock = threading.RLock()
+        self.root.mkdir(parents=True, exist_ok=True)
+        with mutation_lock(self.root):
+            self._initialize(passphrase, resume=resume)
+
+    def _initialize(self, passphrase: str, *, resume: bool) -> None:
+        kind = self.kind
         if resume and is_sealed(self.root):
             opened = SealedSet.open(self.root, passphrase, expect=kind)
             self._header: dict[str, object] = dict(opened._header)
             self._key = opened._key
+            self._header_revision = _sha256((self.root / HEADER).read_bytes())
             for rel, entry in opened._files.items():
                 self._codecs[rel] = entry["codec"]  # type: ignore[assignment]
                 self._hashes[rel] = entry["sha256"]
@@ -701,10 +748,24 @@ class SealedSetWriter:
         self._write_header()
 
     def _write_header(self) -> None:
-        _atomic_write(
-            self.root / HEADER,
-            json.dumps(self._header, indent=2, sort_keys=True).encode("utf-8"),
-        )
+        raw = json.dumps(self._header, indent=2, sort_keys=True).encode("utf-8")
+        _atomic_write(self.root / HEADER, raw)
+        self._header_revision = _sha256(raw)
+
+    @contextmanager
+    def _mutation(self) -> Iterator[None]:
+        with self._lock, mutation_lock(self.root):
+            try:
+                current = _sha256((self.root / HEADER).read_bytes())
+            except OSError as exc:
+                raise SealedSetError(
+                    "sealed-set header disappeared under writer"
+                ) from exc
+            if current != self._header_revision:
+                raise SealedSetError(
+                    "sealed-set header changed under writer; reopen before writing"
+                )
+            yield
 
     def _classified(self, rel: str) -> FileKind:
         rel = _check_rel(rel)
@@ -719,7 +780,7 @@ class SealedSetWriter:
     def write(self, rel: str, data: bytes) -> None:
         """Seal ``data`` as ``rel``; a structural file stays plaintext."""
         entry = self._classified(rel)
-        with self._lock:
+        with self._mutation():
             old = self._codecs.get(rel)
             if entry.classification == "structural":
                 codec: Codec = "plain"
@@ -750,7 +811,7 @@ class SealedSetWriter:
             self.write(rel, b"".join(lines))
 
     def unlink(self, rel: str, *, missing_ok: bool = False) -> None:
-        with self._lock:
+        with self._mutation():
             codec = self._codecs.pop(rel, None)
             self._hashes.pop(rel, None)
             self._lines.pop(rel, None)
@@ -814,7 +875,7 @@ class SealedSetWriter:
         keyed store (durable checkpoints, :func:`crypto.is_encrypted`). Any
         other file is plaintext that escaped the writer and is refused.
         """
-        with self._lock:
+        with self._mutation():
             if adopt_external:
                 self._adopt_external()
             expected = {_physical(rel, c): rel for rel, c in self._codecs.items()}
@@ -933,9 +994,10 @@ def open_set(root: Path | str, key: Optional[str] = None) -> SealedSet:
     base = _abs(root)
     header = read_header(base)
     passphrase = _require_passphrase(Path(base), str(header["kind"]), key)
-    # Keyed by the sealed index, never by any digest of the passphrase; a
+    # Keyed by the complete header so a DEK rewrap invalidates old-key entries.
+    # Never keyed by any digest of the passphrase; a
     # cached set is reused only for the same passphrase (constant-time check).
-    cache_key = (base, str(header.get("index")))
+    cache_key = (base, _sha256(json.dumps(header, sort_keys=True).encode("utf-8")))
     with _STATE_LOCK:
         cached = _OPENED.get(cache_key)
     if cached is not None and hmac.compare_digest(

@@ -95,7 +95,7 @@ def load_release_component_versions(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--launcher-version", required=True)
     args = parser.parse_args()
