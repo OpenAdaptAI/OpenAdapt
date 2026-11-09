@@ -151,7 +151,15 @@ def suppress_alias_notices() -> Iterator[None]:
 
 def alias_notice(argv: Sequence[str], names: Mapping[str, str], prog: str) -> None:
     """Keep redirected streams and machine protocols byte-compatible."""
-    if not _alias_notices.get() or not argv or names.get(argv[0], argv[0]) == argv[0]:
+    if not _alias_notices.get() or not argv:
+        return
+    # Select display labels from the trusted registry, never from argv values.
+    for alias, canonical in names.items():
+        if argv[0] == alias:
+            if canonical == alias:
+                return
+            break
+    else:
         return
     if any(not stream.isatty() for stream in (sys.stdin, sys.stdout, sys.stderr)):
         return
@@ -174,7 +182,7 @@ def alias_notice(argv: Sequence[str], names: Mapping[str, str], prog: str) -> No
     ):
         return
     print(
-        f"{prog} {argv[0]} is also available as {prog} {names[argv[0]]}",
+        f"{prog} {alias} is also available as {prog} {canonical}",
         file=sys.stderr,
     )
 

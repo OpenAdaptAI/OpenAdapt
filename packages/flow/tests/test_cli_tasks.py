@@ -8,6 +8,7 @@ import sys
 from contextlib import redirect_stderr, redirect_stdout
 
 import pytest
+from hypothesis import given, settings, strategies
 
 from openadapt_flow import __main__ as cli
 from openadapt_flow import cli_tasks
@@ -249,3 +250,120 @@ def test_nested_legacy_help_shows_its_task_replacement(parsers):
     code, out, err = _capture(parser.parse_args, ["receipt", "verify", "--help"])
     assert code == 0 and not err
     assert "Also available as: openadapt-flow verify receipt verify" in out
+
+
+class _UntrustedNoticeSpelling(str):
+    """A valid command token must not control how the notice renders it."""
+
+    def __str__(self):
+        raise AssertionError("Untrusted argv rendering reached the notice")
+
+    def __format__(self, _format_spec):
+        raise AssertionError("Untrusted argv formatting reached the notice")
+
+
+def _capture_alias_notice(surface, argv, *, tty=True):
+    from openadapt import cli_tasks as launcher_tasks
+
+    streams = [io.StringIO() for _ in range(3)]
+    with pytest.MonkeyPatch.context() as patch:
+        for name, stream in zip(("stdin", "stdout", "stderr"), streams):
+            stream.isatty = lambda: tty
+            patch.setattr(sys, name, stream)
+        if surface == "flow":
+            cli_tasks.alias_notice(argv, cli_tasks.FLOW_NAMES, "openadapt-flow")
+        else:
+            launcher_tasks.alias_notice(["flow", *argv], "openadapt")
+    return streams[1].getvalue(), streams[2].getvalue()
+
+
+@pytest.mark.parametrize("surface", ["flow", "launcher"])
+@pytest.mark.parametrize("wrapped", [False, True])
+@settings(max_examples=32, deadline=None)
+@given(
+    alias=strategies.sampled_from(
+        sorted(
+            name
+            for name, canonical in cli_tasks.FLOW_NAMES.items()
+            if name != canonical
+        )
+    ),
+    tail=strategies.text(max_size=80),
+)
+def test_alias_notice_uses_registered_labels_and_never_argument_rendering(
+    surface, wrapped, alias, tail
+):
+    canonical = cli_tasks.FLOW_NAMES[alias]
+    token = _UntrustedNoticeSpelling(alias) if wrapped else alias
+    synthetic_secret = "SYNTHETIC-TAIL-VALUE=" + tail
+    stdout, stderr = _capture_alias_notice(surface, [token, synthetic_secret])
+    program = "openadapt-flow" if surface == "flow" else "openadapt"
+    legacy_prefix = alias if surface == "flow" else "flow " + alias
+    assert stdout == ""
+    assert (
+        stderr
+        == f"{program} {legacy_prefix} is also available as {program} {canonical}\n"
+    )
+    assert synthetic_secret not in stderr
+
+
+@pytest.mark.parametrize("surface", ["flow", "launcher"])
+@pytest.mark.parametrize(
+    "protocol",
+    [
+        "--json",
+        "--jsonl",
+        "--stdio",
+        "stdio",
+        "json",
+        "jsonl",
+        "--format=json",
+        "--output-format=json",
+        "--transport=stdio",
+    ],
+)
+def test_trusted_notice_label_selection_retains_protocol_silence(surface, protocol):
+    stdout, stderr = _capture_alias_notice(
+        surface,
+        [_UntrustedNoticeSpelling("replay"), "SYNTHETIC-TAIL-VALUE", protocol],
+    )
+    assert stdout == stderr == ""
+
+
+@pytest.mark.parametrize("surface", ["flow", "launcher"])
+def test_trusted_notice_label_selection_retains_redirected_silence(surface):
+    stdout, stderr = _capture_alias_notice(
+        surface,
+        [_UntrustedNoticeSpelling("replay"), "SYNTHETIC-TAIL-VALUE"],
+        tty=False,
+    )
+    assert stdout == stderr == ""
+
+
+@pytest.mark.parametrize("surface", ["flow", "launcher"])
+@pytest.mark.parametrize("command", ["run", "unregistered-synthetic-command"])
+def test_same_name_and_unregistered_commands_still_have_no_alias_notice(
+    surface, command
+):
+    stdout, stderr = _capture_alias_notice(surface, [_UntrustedNoticeSpelling(command)])
+    assert stdout == stderr == ""
+
+
+def test_launcher_native_alias_labels_and_help_already_come_from_registered_routes():
+    from openadapt import cli_tasks as launcher_tasks
+
+    for canonical, legacy in launcher_tasks.NATIVE_ROUTES.items():
+        if canonical == legacy or legacy == ("setup",):
+            continue
+        argv = [_UntrustedNoticeSpelling(token) for token in legacy]
+        assert launcher_tasks.legacy_names([*argv, "SYNTHETIC-TAIL-VALUE"]) == (
+            " ".join(legacy),
+            " ".join(canonical),
+        )
+    assert (
+        launcher_tasks.alias_help(
+            ["flow", _UntrustedNoticeSpelling("replay"), "--help"],
+            "openadapt",
+        )
+        == "Also available as: openadapt run --replay"
+    )

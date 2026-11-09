@@ -206,9 +206,11 @@ def alias_notice(argv: Sequence[str], prog: str) -> None:
 def legacy_names(argv: Sequence[str]) -> tuple[str, str] | None:
     """Return the old and new display prefixes without including user values."""
     if argv[:1] == ["flow"] and len(argv) > 1:
-        old = argv[1]
-        canonical = FLOW_NAMES.get(old, old)
-        return (f"flow {old}", canonical) if canonical != old else None
+        # Equality chooses a registered label; user text is never rendered.
+        for alias, canonical in FLOW_NAMES.items():
+            if argv[1] == alias:
+                return (f"flow {alias}", canonical) if canonical != alias else None
+        return None
     for native_canonical, native_old in NATIVE_ROUTES.items():
         if (
             native_old != native_canonical
