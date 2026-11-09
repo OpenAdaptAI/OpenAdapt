@@ -1467,10 +1467,21 @@ class EffectState(BaseModel):
     #: dict in the substrate's native shape (a FaultDB row, a FHIR resource, a
     #: filesystem descriptor). Empty when unreachable.
     records: list[dict[str, Any]] = Field(default_factory=list)
+    #: Whether the snapshot contains the complete declared read scope. None
+    #: means the verifier did not establish completeness; False means the
+    #: configured read was observed to be incomplete.
+    readback_complete: Optional[bool] = None
     captured_at: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
     detail: dict[str, Any] = Field(default_factory=dict)
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.readback_complete is None:
+            data.pop("readback_complete", None)
+        return data
 
 
 class Verdict(str, Enum):
@@ -1507,6 +1518,10 @@ class EffectVerdict(BaseModel):
     #: the read cannot certify the CURRENT state -> STALE, an INDETERMINATE
     #: refinement, never a pass. Additive; default False.
     stale: bool = False
+    #: Whether the current record read covered its declared scope. A partial
+    #: or undeclared read cannot establish absence, duplicates, or collateral
+    #: loss, so REST verifiers leave this unset/false and return indeterminate.
+    readback_complete: Optional[bool] = None
     #: The pending entry a later report settles, when this effect's check is
     #: a declared deferred report (the verdict is then INDETERMINATE).
     deferred_check: Optional[str] = None
@@ -1516,6 +1531,13 @@ class EffectVerdict(BaseModel):
     assurance: Optional[
         Literal["independent_readback", "screen_readback", "unchecked"]
     ] = None
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.readback_complete is None:
+            data.pop("readback_complete", None)
+        return data
 
     @property
     def should_halt(self) -> bool:

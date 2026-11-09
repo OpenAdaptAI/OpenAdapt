@@ -75,6 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Your AI agent decides what to enter. OpenAdapt enters it in the app "
             "and checks that it saved. 'serve' with no flags starts a sandbox."
         ),
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--version", action="version", version=f"%(prog)s {__version__}"
@@ -87,6 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Serve workflows to your AI agent over MCP (stdio). With no flags, "
             "serve the sandbox."
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--mode",
@@ -608,11 +610,13 @@ def build_parser() -> argparse.ArgumentParser:
     repair = sub.add_parser(
         "repair",
         help="Control whether calling agents may help repair halted runs (local only).",
+        allow_abbrev=False,
     )
     repair_sub = repair.add_subparsers(dest="repair_command", required=True)
     access = repair_sub.add_parser(
         "access",
         help="Set screen access for repairs for one workflow or the whole organization.",
+        allow_abbrev=False,
     )
     scope = access.add_mutually_exclusive_group(required=True)
     scope.add_argument("--workflow", help="Workflow name from list_workflows")
@@ -630,6 +634,7 @@ def build_parser() -> argparse.ArgumentParser:
     approve = repair_sub.add_parser(
         "approve-screen",
         help="Look at the exact screen a calling agent would get for one repair, and approve it.",
+        allow_abbrev=False,
     )
     approve.add_argument("token_id", help="token_id from the needs_repair result")
     approve.add_argument(
@@ -645,6 +650,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Hosted authoring mailbox client (ChatGPT.com / Claude.ai). "
             "Outbound HTTPS only; not an HTTP listener."
         ),
+        allow_abbrev=False,
     )
     authoring_sub = authoring.add_subparsers(dest="authoring_command", required=True)
     connect = authoring_sub.add_parser(
@@ -659,6 +665,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Desktop-only. Continue uses record_observed; it does not type "
             "secrets. This process only makes outbound HTTPS."
         ),
+        allow_abbrev=False,
     )
     connect.add_argument(
         "target",
@@ -688,6 +695,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Run a small reports portal on this computer to teach a first task "
             "on: a date-filtered sales report with an Export CSV link."
         ),
+        allow_abbrev=False,
     )
     p.add_argument("--port", type=int, default=8765, help="Port (default 8765)")
     p.set_defaults(func=_cmd_example_app)
@@ -698,6 +706,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Write an Agent Skill for one workflow: what it does, its inputs, and "
             "how to read the result. No recorded values, step text, or secrets."
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument("--out", required=True, help="Parent directory for the skill folder")

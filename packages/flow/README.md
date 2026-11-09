@@ -60,6 +60,16 @@ or Edge. Without either, it downloads Playwright's headless Chromium once
 [OpenAdapt launcher](https://github.com/OpenAdaptAI/OpenAdapt) installed,
 `openadapt flow demo` runs the same command.
 
+Browser startup requires two advancing animation-frame callbacks before an
+application is opened or driven. A new browser is checked on its own blank
+page. An attached browser is checked on the explicitly selected page without
+navigation, focus changes or DOM changes. If progress or cleanup cannot be
+established, startup refuses with `browser_rendering_unavailable` or
+`browser_readiness_unavailable`. The probe never closes an attached browser or
+its existing pages. This checks startup callback progress; it does not replace
+actionability checks or record verification, and an attached page's RAF API
+is not a native rendering attestation.
+
 On macOS, most of a first run in a new environment goes to loading OpenCV,
 which RapidOCR, the default OCR engine, needs. macOS checks each copy of a
 native library the first time it loads, and by default uv gives every new
@@ -265,7 +275,9 @@ no implicit browser default in production; with a hand-written config, set
 `backend.kind` or pass `--backend`.
 
 `certify` checks the bundle against a policy. `clinical-write` is the strict
-built-in policy, and `permissive` is a smoke check. A new recording usually
+built-in policy, `record-write` asks for the same evidence for a system of
+record that is not clinical (claims or back-office, say), and `permissive` is
+a smoke check. A new recording usually
 fails `clinical-write` until its contracts are complete; `lint` lists the
 gaps. `run --profile standard` checks the policy again, replays, and reads the
 record back.

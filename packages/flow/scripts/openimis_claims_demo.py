@@ -328,7 +328,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument(
         "--port",
         type=int,
@@ -337,15 +337,21 @@ def main() -> int:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("up", help="start the pinned stack and wait until ready")
+    p = sub.add_parser(
+        "up", help="start the pinned stack and wait until ready", allow_abbrev=False
+    )
     p.set_defaults(func=cmd_up)
 
     p = sub.add_parser(
-        "bootstrap", help="create the synthetic policyholder (idempotent)"
+        "bootstrap",
+        help="create the synthetic policyholder (idempotent)",
+        allow_abbrev=False,
     )
     p.set_defaults(func=cmd_bootstrap)
 
-    p = sub.add_parser("record", help="record the scripted claims-intake demo")
+    p = sub.add_parser(
+        "record", help="record the scripted claims-intake demo", allow_abbrev=False
+    )
     p.add_argument("--out", required=True, help="recording output directory")
     p.add_argument(
         "--claim-code",
@@ -361,12 +367,16 @@ def main() -> int:
     )
     p.set_defaults(func=cmd_record)
 
-    p = sub.add_parser("compile", help="compile a recording into a bundle")
+    p = sub.add_parser(
+        "compile", help="compile a recording into a bundle", allow_abbrev=False
+    )
     p.add_argument("--recording", required=True)
     p.add_argument("--bundle", required=True)
     p.set_defaults(func=cmd_compile)
 
-    p = sub.add_parser("replay", help="replay the bundle with a fresh claim number")
+    p = sub.add_parser(
+        "replay", help="replay the bundle with a fresh claim number", allow_abbrev=False
+    )
     p.add_argument("--bundle", required=True)
     p.add_argument(
         "--claim-code",
@@ -383,7 +393,7 @@ def main() -> int:
     )
     p.set_defaults(func=cmd_replay)
 
-    p = sub.add_parser("down", help="stop the stack")
+    p = sub.add_parser("down", help="stop the stack", allow_abbrev=False)
     p.add_argument("--volumes", action="store_true", help="also remove data volumes")
     p.set_defaults(func=cmd_down)
 

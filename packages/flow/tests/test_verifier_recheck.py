@@ -14,13 +14,15 @@ import json
 import os
 import sqlite3
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from openadapt_flow import verifier
+from openadapt_flow import verifier, verify_run
 from openadapt_flow.runtime.effects.frame import FrameSpec
+from openadapt_flow.runtime.effects.late_write import format_time, parse_time
 from openadapt_flow.verifier import (
     Actor,
     Contract,
@@ -68,9 +70,28 @@ def _used_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.fixture
 def due_now(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The recheck is due: the tests don't wait out the window."""
+    """Advance one coherent test clock to the issued deadline before reading."""
 
-    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+    utc_start = datetime.now(timezone.utc)
+    monotonic_start = time.monotonic()
+    advance = timedelta()
+
+    def now() -> datetime:
+        return (
+            utc_start + timedelta(seconds=time.monotonic() - monotonic_start) + advance
+        )
+
+    def reach_due(due: str) -> float:
+        nonlocal advance
+        remaining = (parse_time(due) - now()).total_seconds()
+        if remaining > 0:
+            advance += timedelta(seconds=remaining)
+        return (parse_time(due) - now()).total_seconds()
+
+    # Baseline, settled-post-state, receipt issuance and recheck read stamps
+    # all use this clock. Ledger event/lease/retry-age wall times stay real.
+    monkeypatch.setattr(verify_run, "_now", lambda: format_time(now()))
+    monkeypatch.setattr(verifier, "seconds_until", reach_due)
 
 
 def _db(tmp_path: Path) -> Path:
@@ -319,6 +340,7 @@ def test_what_refuted_a_later_write_leaves_the_earlier_one_uncertain(
     # refute the earlier one; but the harm may be the earlier write's.
     late = _recheck(contract, first, excused_by=[second])
     assert late.outcome == "UNCERTAIN", late.reasons
+    assert not late.verified and not late.final
     assert "may be what refuted it" in late.reasons[0]
     # A change no later write accounts for still refutes the earlier one.
     _sql(db, "INSERT INTO calendar (pid, title) VALUES (1, 'Follow-up')")
@@ -368,6 +390,7 @@ def test_p3_the_earlier_writes_late_harm_inside_a_later_window_is_uncertain(
     assert second.status == "refuted"
     late = _recheck(contract, first, excused_by=[second])
     assert late.outcome == "UNCERTAIN", late.reasons
+    assert not late.verified and not late.final
 
 
 def test_p4_a_removal_a_later_window_reported_is_uncertain(
@@ -380,6 +403,7 @@ def test_p4_a_removal_a_later_window_reported_is_uncertain(
     assert second.status == "refuted"
     late = _recheck(contract, first, excused_by=[second])
     assert late.outcome == "UNCERTAIN", late.reasons
+    assert not late.verified and not late.final
 
 
 def test_a_removal_a_verified_later_window_explained_is_excused(
@@ -551,6 +575,7 @@ def test_a_mismatched_state_is_uncertain(
     tamper(payload)
     late = _recheck(contract, RecheckState(payload))
     assert late.outcome == "UNCERTAIN", late.reasons
+    assert not late.verified and not late.final
     assert "can't be rechecked" in late.reasons[0]
 
 
@@ -674,6 +699,7 @@ def test_a_confirmed_write_downgraded_to_uncertain_cannot_be_rechecked_as_verifi
     for state in (down, first, first.recheck):
         late = _recheck(contract, state)
         assert late.outcome == "UNCERTAIN", late.reasons
+        assert not late.verified and not late.final
         assert "downgraded" in late.reasons[0]
 
 
@@ -855,6 +881,7 @@ def test_an_uncertain_recheck_is_not_handed_back_as_confirmed(
     db.unlink()  # the database can't be read again
     late = _recheck(contract, result)
     assert late.outcome == "UNCERTAIN"
+    assert not late.verified and not late.final
     with pytest.raises(verifier.WriteBlocked) as raised:
         begin_write(contract, _params(2), actor=BOT, write_key="order-78")
     assert not isinstance(raised.value, verifier.AlreadyWritten)
@@ -868,6 +895,9 @@ def test_a_confirming_recheck_leaves_the_ledger_as_it_was(
     with pytest.raises(verifier.AlreadyWritten) as raised:
         begin_write(contract, _params(2), actor=BOT, write_key="order-79")
     assert raised.value.result["outcome"] == "CONFIRMED"
+    assert raised.value.result["verified"] is True
+    assert raised.value.result["final"] is True
+    assert raised.value.result["provisional"] is False
 
 
 def test_a_recheck_without_a_ledger_changes_no_ledger(
@@ -960,6 +990,7 @@ def test_a_later_write_whose_frame_was_not_judged_leaves_the_earlier_uncertain(
     monkeypatch.setattr(verify_run, "_later_window", lambda state: None)
     late = _recheck(contract, first, excused_by=[second])
     assert late.outcome == "UNCERTAIN", late.reasons
+    assert not late.verified and not late.final
     assert "frame was not judged" in late.reasons[0]
 
 

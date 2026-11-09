@@ -85,6 +85,12 @@ from openadapt_flow.runtime.effects.effect import (
     selector_value,
     stable_id,
 )
+from openadapt_flow.runtime.effects.frame_identity import (
+    FrameIdentity,
+    FrameIdentityError,
+    canonical_field_value,
+)
+from openadapt_flow.runtime.effects.history import FrameHistory
 from openadapt_flow.runtime.effects.learned import (
     NOT_COMPARED,
     LearnedFrame,
@@ -488,6 +494,8 @@ class FrameSpec(BaseModel):
     #: Records are compared by this field. Unset: :func:`stable_id` (``id``
     #: when present, else the whole record).
     identity_field: Optional[str] = None
+    #: Learned per-surface correspondence; omitted for legacy contracts.
+    identities: dict[str, FrameIdentity] = Field(default_factory=dict)
     #: Fields that change on their own on every record (a last-seen time).
     ignore_fields: list[str] = Field(default_factory=list)
     #: Fields of a pre-existing target record the save may change. Unset:
@@ -508,6 +516,8 @@ class FrameSpec(BaseModel):
     #: (``versions.FrameVersions``): a version in the window that isn't the
     #: agent's own is a lost update.
     versions: Optional[FrameVersions] = None
+    #: Complete type/table change feeds for a provisional then final verdict.
+    history: Optional[FrameHistory] = None
     #: Moves a person approved from ``openadapt-flow learn``
     #: (``learned.LearnedFrame``): the app's own writes on the acting user's
     #: row or the write's own rows, by table, column and change.
@@ -518,6 +528,10 @@ class FrameSpec(BaseModel):
         # Unset, ``versions`` is left out, so a contract that doesn't use it
         # keeps its digests (``frame_sha256``, the check digest).
         data: dict[str, Any] = handler(self)
+        if data.get("history") is None:
+            data.pop("history", None)
+        if not data.get("identities"):
+            data.pop("identities", None)
         if data.get("versions") is None:
             data.pop("versions", None)
         if data.get("learned") is None:
@@ -529,6 +543,12 @@ class FrameSpec(BaseModel):
     @model_validator(mode="after")
     def _database_attribution(self) -> "FrameSpec":
         a = self.attribution
+        if (
+            self.history is not None
+            and self.database is not None
+            and self.database.recheck_after_s is not None
+        ):
+            raise ValueError("choose history or database recheck scheduling, not both")
         if (
             self.database is not None
             and a is not None
@@ -682,6 +702,8 @@ class FrameVerdict:
     moves: Optional[list[dict[str, Any]]] = None
     #: ``frame.learned`` only: the learned excuses that excused a row.
     learned_used: set[str] = field(default_factory=set)
+    #: Names only. Unbound cells of a declared target were not verified.
+    unverified_columns: dict[str, list[str]] = field(default_factory=dict)
     #: In memory only, set when the frame held and ``recheck_after_s`` is
     #: set: what a later recheck compares with (the settled post-save
     #: snapshot as keyed MACs, the audit entries seen then as keyed hashes,
@@ -712,6 +734,11 @@ class FrameVerdict:
                 1 for c in self.collateral if c.other_on_target
             ),
             **({"database": self.database} if self.database is not None else {}),
+            **(
+                {"coverage": {"unverified_columns": self.unverified_columns}}
+                if self.unverified_columns
+                else {}
+            ),
             **(
                 {"versions": self.versions.evidence()}
                 if self.versions is not None
@@ -856,6 +883,7 @@ def judge_frame(
     ] = None,
     user_ids: Optional[Mapping[str, str]] = None,
     declared_rows: Optional[Mapping[str, Collection[str]]] = None,
+    column_values: Optional[Mapping[str, Mapping[str, Mapping[str, Any]]]] = None,
 ) -> FrameVerdict:
     """Judge the frame of ``effects`` over ``slices``.
 
@@ -929,7 +957,42 @@ def judge_frame(
     if attribution is not None and attribution.kind == "record_field":
         # Server-set bookkeeping moves on every write; it says who, not what.
         surface_ignore |= set(attribution.server_set)
+    correspondences = {
+        binding.table: (surface, binding)
+        for surface, binding in spec.identities.items()
+        if binding.field_bindings is not None
+    }
+    unverified_columns: dict[str, list[str]] = {
+        table: sorted(
+            set(binding.field_columns or ())
+            - {cell.column for cell in (binding.field_bindings or {}).values()}
+        )
+        for table, (_surface, binding) in correspondences.items()
+        if (column_values or {}).get(table)
+    }
     written = declared_fields(effects)
+
+    def stored_fields(name: str, fields: set[str]) -> set[str]:
+        item = correspondences.get(name)
+        if item is None:
+            return fields
+        binding = item[1]
+        return {
+            cell.column
+            for field, cell in (binding.field_bindings or {}).items()
+            if field in fields
+        }
+
+    def declared_fields_for(name: str) -> set[str]:
+        surface = correspondences[name][0]
+        return declared_fields(
+            [
+                effect
+                for i, effect in enumerate(effects)
+                if routes is None or surface in routes.get(str(i), ())
+            ]
+        )
+
     may_change = set(spec.target_fields) if spec.target_fields is not None else written
     if spec.target_fields_by_surface is not None:
         # Every field any declared row may change, for the attribution check.
@@ -958,6 +1021,8 @@ def judge_frame(
     def identity_of(name: str) -> Optional[str]:
         if identities is not None and name in identities:
             return identities[name]
+        if name in spec.identities:
+            return spec.identities[name].surface_field
         return spec.identity_field
 
     def key_of(record: Mapping[str, Any], name: str = "") -> Any:
@@ -999,7 +1064,17 @@ def judge_frame(
         if defaults is None:
             return []
         allowed = (
-            written
+            stored_fields(name, declared_fields_for(name))
+            if name in correspondences
+            else written
+        )
+        if name in correspondences:
+            binding = correspondences[name][1]
+            known = {cell.column for cell in (binding.field_bindings or {}).values()}
+            allowed |= set(record) - known
+            allowed.add(binding.column)
+        allowed = (
+            allowed
             | set(row_fields.get(name, ()))
             | ignore_for(name)
             | {ROW}
@@ -1468,15 +1543,26 @@ def judge_frame(
     #: Table -> the surface that declares its rows (``database.judged_by``).
     judged_of = dict(database.judged_by) if database is not None else {}
     surface_declared = {t: set(k) for t, k in (declared_rows or {}).items()}
+    mapped_tables = {b.table for b in spec.identities.values()}
 
     def may_change_for(name: str) -> set[str]:
         by_surface = spec.target_fields_by_surface
         if by_surface is None:
-            return may_change
-        if name in by_surface:
-            return set(by_surface[name])
-        surface = views_of.get(name) or judged_of.get(name, "")
-        return set(by_surface.get(surface, []))
+            fields = (
+                (
+                    set(spec.target_fields)
+                    if spec.target_fields is not None
+                    else declared_fields_for(name)
+                )
+                if name in correspondences
+                else may_change
+            )
+        elif name in by_surface:
+            fields = set(by_surface[name])
+        else:
+            surface = views_of.get(name) or judged_of.get(name, "")
+            fields = set(by_surface.get(surface, []))
+        return stored_fields(name, fields)
 
     declared_keys: set[str] = set()
     #: What an audit entry names for each compared record (``ref_of``).
@@ -1551,13 +1637,18 @@ def judge_frame(
                     of_hasher(side.of_field, value) if of_hasher else str(value)
                 ) in taken:
                     continue
-                if any(
-                    record_matches(
-                        dict(record),
-                        s,
-                        text_numbers=before_state.substrate == "sql",
+                if (
+                    key_of(record, side.of_surface)
+                    in surface_declared.get(side.of_surface, ())
+                    if side.of_surface in mapped_tables
+                    else any(
+                        record_matches(
+                            dict(record),
+                            s,
+                            text_numbers=before_state.substrate == "sql",
+                        )
+                        for s in sels
                     )
-                    for s in sels
                 ):
                     links.add(str(value))
                 elif inserted_by_other(
@@ -1586,6 +1677,8 @@ def judge_frame(
         typed = before_state.substrate == "sql"
 
         def declared(record: Mapping[str, Any], hashed: bool = False) -> bool:
+            if name in mapped_tables:
+                return False  # Only the selected surface's mapped row keys declare it.
             if hashed and hasher is not None:
                 return any(
                     all(
@@ -1664,6 +1757,61 @@ def judge_frame(
             )
             refs[(name, str(key))] = ref_of(name, key, before, after)
             if is_declared:
+                unknown: set[str] = set()
+                known_compared = False
+                if after is not None and name in correspondences:
+                    binding = correspondences[name][1]
+                    cells = binding.field_bindings or {}
+                    reader_values = (column_values or {}).get(name, {}).get(str(key))
+                    if reader_values is None:
+                        return _not_checked(
+                            "declared target has no paired current read", mode
+                        )
+                    known = {cell.column for cell in cells.values()}
+                    if name not in hashers or (
+                        before is not None and not known.issubset(before)
+                    ):
+                        return _not_checked(
+                            "bound target columns lack baseline cell comparisons", mode
+                        )
+                    known_compared = True
+                    unknown = set(after) - known - {KEY, ROW}
+                    unverified_columns[name] = sorted(
+                        set(unverified_columns.get(name, ())) | unknown
+                    )
+                    wrong = []
+                    for surface_field in declared_fields_for(name):
+                        cell = cells.get(surface_field)
+                        if cell is None:
+                            continue
+                        if (
+                            surface_field not in reader_values
+                            or cell.column not in after
+                        ):
+                            return _not_checked(
+                                "bound target field is unavailable", mode
+                            )
+                        try:
+                            equal = canonical_field_value(
+                                after[cell.column], cell.canonicaliser
+                            ) == canonical_field_value(
+                                reader_values[surface_field], cell.canonicaliser
+                            )
+                        except FrameIdentityError:
+                            equal = False
+                        if not equal:
+                            wrong.append(cell.column)
+                    if wrong:
+                        collateral.append(
+                            FrameChange(
+                                name,
+                                "changed" if before else "added",
+                                "self",
+                                sorted(set(wrong)),
+                                on_target=True,
+                                key=key,
+                            )
+                        )
                 ref = refs[(name, str(key))][0]
                 if ref is None:
                     return _not_checked(
@@ -1702,7 +1850,13 @@ def judge_frame(
                     continue  # a removed target: the delta check's case
                 fields = changed(name, before, after)  # type: ignore[arg-type]
                 row_may = may_change_for(name)
-                stray = [f for f in fields if f not in row_may]
+                stray = [
+                    f
+                    for f in fields
+                    if f not in row_may
+                    and f not in unknown
+                    and not (known_compared and f == "(columns not compared)")
+                ]
                 if other_on_target(name, key, before, after):
                     ref, field = ref_of(name, key, before, after)
                     if (
@@ -1990,6 +2144,7 @@ def judge_frame(
         if collateral
         else None,
         learned_used=learned_used,
+        unverified_columns=unverified_columns,
     )
     verdict.reason = _reason(verdict)
     return verdict

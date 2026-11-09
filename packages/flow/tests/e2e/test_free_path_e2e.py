@@ -50,7 +50,9 @@ from .tutorial_golden import compare_or_update, golden_shape
 
 
 @pytest.fixture(scope="module")
-def free_path(tmp_path_factory: pytest.TempPathFactory) -> TutorialResult:
+def free_path(
+    tmp_path_factory: pytest.TempPathFactory, module_durable_authority
+) -> TutorialResult:
     """Run the documented free path once for the whole module."""
 
     return run_tutorial(tmp_path_factory.mktemp("free-path"))
@@ -244,7 +246,16 @@ def test_demo_replay_still_cannot_reach_verified(
 
     run_dir = tmp_path / "demo-run"
     assert (
-        cli_main(["replay", str(free_path.bundle_dir), "--run-dir", str(run_dir)]) == 1
+        cli_main(
+            [
+                "replay",
+                str(free_path.bundle_dir),
+                "--demo-app",
+                "--run-dir",
+                str(run_dir),
+            ]
+        )
+        == 1
     )
     report = _report(run_dir)
     assert report.execution_profile == "demo"

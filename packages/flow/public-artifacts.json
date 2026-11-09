@@ -489,7 +489,6 @@
     "benchmark/rdp_multiapp/campaign.json",
     "benchmark/rdp_multiapp/policy.yaml",
     "benchmark/rdp_pool/results.json",
-    "benchmark/record_check_proof.py",
     "benchmark/reliability/summary.json",
     "benchmark/repair_every_backend/results/linux-atspi-20261103.json",
     "benchmark/repair_every_backend/results/linux-atspi-fixture-20261103.json",
