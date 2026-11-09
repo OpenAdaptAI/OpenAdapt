@@ -160,8 +160,19 @@ def test_help_has_fifteen_tasks_verify_second_and_no_unmerged_features(parsers):
     assert len(cli_tasks.TASKS) == 15
     for name in cli_tasks.TASKS:
         assert name in help_text
-    for name in ("pilot", "audit", "replay", "serve-execute", "demo-record"):
-        assert name not in help_text
+    legacy_help = help_text.partition("Legacy commands (original spellings):")[2]
+    hidden = {
+        action.choices[choice.dest]
+        for action in parser._actions
+        if isinstance(action, argparse._SubParsersAction)
+        for choice in action._choices_actions
+        if choice.help == argparse.SUPPRESS
+    }
+    visible = {name for name, child in _children(parser).items() if child not in hidden}
+    for name in ("pilot", "audit"):
+        assert (name in legacy_help) == (name in visible)
+    for name in visible:
+        assert f"  {name}\n" in legacy_help
     result = _capture(parser.parse_args, ["verify", "--help"])
     assert result[0] == 0
     assert "receipt" in result[1]
@@ -367,3 +378,48 @@ def test_launcher_native_alias_labels_and_help_already_come_from_registered_rout
         )
         == "Also available as: openadapt run --replay"
     )
+
+
+@pytest.mark.parametrize("request_kind", ["format", "parse-help"])
+@settings(max_examples=16, deadline=None)
+@given(
+    names=strategies.lists(
+        strategies.from_regex(r"[a-z][a-z0-9]{0,12}", fullmatch=True),
+        min_size=1,
+        max_size=5,
+        unique=True,
+    )
+)
+def test_registered_public_legacy_help_is_complete_without_running_handlers(
+    request_kind, names
+):
+    parser = cli_tasks.TaskParser(prog="synthetic-flow")
+    sub = parser.add_subparsers(parser_class=argparse.ArgumentParser)
+    calls = []
+    public_names = ["legacy-" + name for name in names]
+    for name in public_names:
+        command = sub.add_parser(name, help="Synthetic public operation")
+        command.set_defaults(func=lambda: calls.append("unexpected handler"))
+    sub.add_parser(
+        "internal-synthetic", aliases=["internal-alias"], help=argparse.SUPPRESS
+    )
+    parser.add_task_help()
+    if request_kind == "format":
+        text = parser.format_help()
+    else:
+        code, text, stderr = _capture(parser.parse_args, ["--help"])
+        assert code == 0 and not stderr
+    legacy = text.partition("Legacy commands (original spellings):")[2]
+    for name in public_names:
+        assert f"  {name}\n" in legacy
+    assert "internal-synthetic" not in legacy
+    assert "internal-alias" not in legacy
+    assert calls == []
+
+
+def test_public_legacy_help_keeps_intentionally_hidden_leaf_options_hidden(parsers):
+    parser, _ = parsers
+    root_help = parser.format_help()
+    assert "--admitted-bundle-sha256" not in root_help
+    assert "--managed-dispatch-file" not in root_help
+    assert "--execute-token" not in root_help

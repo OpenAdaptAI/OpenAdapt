@@ -48,7 +48,9 @@ def test_wrap_help_is_discovered_as_an_actual_launcher_command():
     assert launcher.exit_code == 0, launcher.output
     names = [
         line.split()[0]
-        for line in launcher.stdout.split("Commands:\n", 1)[1].splitlines()
+        for line in launcher.stdout.split("Commands:\n", 1)[1]
+        .split("\nLegacy commands:\n", 1)[0]
+        .splitlines()
         if line.startswith("  ")
     ]
     assert "wrap" in names

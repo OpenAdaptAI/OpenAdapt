@@ -61,6 +61,14 @@ class _FlowFirstGroup(click.Group):
 
         with formatter.section("Commands"):
             formatter.write_dl(list(TASKS.items()))
+        legacy = [
+            (name, command.get_short_help_str())
+            for name, command in sorted(self.commands.items())
+            if not command.hidden
+        ]
+        if legacy:
+            with formatter.section("Legacy commands"):
+                formatter.write_dl(legacy)
 
     def invoke(self, ctx):
         try:

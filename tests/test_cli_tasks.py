@@ -200,3 +200,45 @@ def test_literal_help_filename_does_not_request_an_alias_footer():
     from openadapt.cli_tasks import alias_help
 
     assert alias_help(["flow", "replay", "--", "--help"], "openadapt") is None
+
+
+@pytest.mark.parametrize("width", [40, 80, 120])
+def test_root_help_lists_every_registered_public_legacy_command_without_dispatch(
+    monkeypatch, width
+):
+    def unexpected(_argv):
+        raise AssertionError("Root help must not run a Flow handler")
+
+    monkeypatch.setattr(cli, "_invoke_flow", unexpected)
+    result = CliRunner().invoke(cli.main, ["--help"], terminal_width=width)
+    assert result.exit_code == 0 and not result.stderr
+    legacy = result.stdout.partition("Legacy commands:")[2]
+    assert legacy
+    for name, command in cli.main.commands.items():
+        if not command.hidden:
+            assert any(
+                line.strip().split()[0] == name
+                for line in legacy.splitlines()
+                if line.strip()
+            )
+
+
+@pytest.mark.parametrize("hidden", [False, True])
+def test_later_registered_native_help_obeys_public_visibility_without_dispatch(
+    monkeypatch, hidden
+):
+    import click
+
+    calls = []
+    command = click.Command(
+        "synthetic-later-command",
+        help="Later synthetic native command",
+        hidden=hidden,
+        callback=lambda: calls.append("unexpected handler"),
+    )
+    monkeypatch.setitem(cli.main.commands, command.name, command)
+    result = CliRunner().invoke(cli.main, ["--help"])
+    assert result.exit_code == 0 and not result.stderr
+    legacy = result.stdout.partition("Legacy commands:")[2]
+    assert (command.name in legacy) is not hidden
+    assert calls == []

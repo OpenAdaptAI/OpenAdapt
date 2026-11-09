@@ -836,7 +836,9 @@ def test_top_level_help_lists_shared_tasks_and_native_wrap():
 
     result = CliRunner().invoke(cli_main, ["--help"])
     assert result.exit_code == 0
-    section = result.output.split("Commands:\n", 1)[1]
+    section = result.output.split("Commands:\n", 1)[1].split("\nLegacy commands:\n", 1)[
+        0
+    ]
     names = [line.split()[0] for line in section.splitlines() if line.startswith("  ")]
     assert names == list(TASKS)
     assert len(names) == 16

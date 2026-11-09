@@ -224,7 +224,24 @@ class TaskParser(argparse.ArgumentParser):
     def format_help(self) -> str:
         view = task_help(self.prog, (), self.task_routes)
         view.description = self.description
-        view.epilog = self.epilog
+        legacy: list[str] = []
+        for action in self._actions:
+            if isinstance(action, argparse._SubParsersAction):
+                hidden = {
+                    action.choices[choice.dest]
+                    for choice in action._choices_actions
+                    if choice.help == argparse.SUPPRESS
+                }
+                legacy.extend(
+                    name
+                    for name, parser in action.choices.items()
+                    if parser not in hidden
+                )
+        view.formatter_class = argparse.RawDescriptionHelpFormatter
+        legacy_help = "Legacy commands (original spellings):\n" + "\n".join(
+            f"  {name}" for name in sorted(legacy)
+        )
+        view.epilog = "\n\n".join(filter(None, [self.epilog, legacy_help]))
         return view.format_help()
 
     def parse_known_args(self, args=None, namespace=None):
