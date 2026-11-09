@@ -1,0 +1,263 @@
+{
+ "id": "A03",
+ "class": "clean",
+ "type": "allergy",
+ "expect": "create",
+ "note": "A look-alike patient exists; the allergy belongs on the one born 1979.",
+ "agent_s": 648.3,
+ "cost_usd": 1.202228,
+ "claim": {
+  "status": "not_done",
+  "id": "Patient/0dd475a2-58bd-43f0-9371-8aee97ab5da0.",
+  "note": "RESULT: NOT DONE Medplum signed me out partway through and I have no credentials. I could not confirm whether the AllergyIntolerance was created for Patient/0dd475a2-58bd-43f0-9371-8aee97ab5da0.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2FAllergyIntolerance%2Fnew",
+  "final_text": "I couldn't finish this task, and I don't know whether the allergy record exists now. Medplum signed me out partway through, and I don't have credentials to sign back in.\n\n- **Patient:** The Rosa Delgado born 1979-06-14 is Patient/0dd475a2-58bd-43f0-9371-8aee97ab5da0. The other Rosa Delgado was born 1980-06-14.\n- **Existing allergy:** Before I tried to add anything, the AllergyIntolerance list showed no results, so there was nothing to report as already recorded.\n- **Create attempts:** I tried to create the penicillin allergy through the JSON tab and then the Form tab. Neither attempt showed a success page or a new record ID. One Create click on an empty form produced a validation error, which I believe was only because that form was empty.\n- **Later checks:** The AllergyIntolerance list showed no results on later checks, but a stale view or the expiring session may have affected those checks, so I can't confirm the record wasn't created.\n- **Current state:** The app is now at the Medplum sign-in page. Someone with login access should check the AllergyIntolerance list for this patient before trying again, so it isn't recorded twice.\n\nRESULT: NOT DONE Medplum signed me out partway through and I have no credentials. I could not confirm whether the AllergyIntolerance was created for Patient/0dd475a2-58bd-43f0-9371-8aee97ab5da0.",
+  "model_calls": 66,
+  "actions": 675,
+  "tokens_in": 3940815,
+  "tokens_out": 15218
+ },
+ "verifier": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AuditEvent returned HTTP 401"
+  ],
+  "evidence": {
+   "unreadable": true
+  },
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AuditEvent returned HTTP 401"
+  ],
+  "evidence": {
+   "unreadable": true
+  },
+  "unreadable": true
+ },
+ "verify_s": 5.8,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "AllergyIntolerance/92c74260-2ca5-4028-b571-64fbd8f4bf64": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "AllergyIntolerance",
+   "write": 1,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "AllergyIntolerance",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1,
+ "host_load": {
+  "start": 33.5,
+  "end": 30.7,
+  "waited_s": 0
+ }
+}
