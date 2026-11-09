@@ -622,8 +622,14 @@ class CaptureComputer:
 
         return self._session
 
-    def execute(self, native: Mapping[str, Any]) -> Observation:
+    def execute(
+        self, native: Mapping[str, Any], *, node_id: Optional[str] = None
+    ) -> Observation:
         """Perform one native action and return the new frame.
+
+        ``node_id`` binds a single click to an observed authoring node, so
+        the session re-reads its identity before input. It never falls back
+        to clicking the supplied coordinates if the node is refused.
 
         Raises:
             UnsupportedAction: the action has no faithful step. Nothing in it
@@ -631,12 +637,30 @@ class CaptureComputer:
         """
 
         ops = [self._resolve(op) for op in translate(self.dialect, native)]
+        if node_id is not None and (
+            not isinstance(node_id, str)
+            or not node_id
+            or len(ops) != 1
+            or ops[0].kind != "click"
+        ):
+            raise UnsupportedAction(
+                self.dialect, "node_id", "an observed node requires one click"
+            )
+        if node_id is not None:
+            point = self._session.node_center(node_id)
+            if point is None:
+                raise UnsupportedAction(
+                    self.dialect, "node_id", "the observed node has no current center"
+                )
+            # Scope checks and pointer state must name the point the session
+            # will actually click, rather than caller-supplied coordinates.
+            ops = [Op("click", x=point[0], y=point[1])]
         self._check(ops)
         if self._guard is not None:
             self._guard.check_ops(ops, page=self._page, pointer=self._pointer)
         notes: list[str] = []
         for op in ops:
-            note = self._perform(op)
+            note = self._perform(op, node_id=node_id)
             if note:
                 notes.append(note)
         self.actions += 1
@@ -734,7 +758,7 @@ class CaptureComputer:
                         "step",
                     )
 
-    def _perform(self, op: Op) -> Optional[str]:
+    def _perform(self, op: Op, *, node_id: Optional[str] = None) -> Optional[str]:
         s = self._session
         if op.kind == "observe":
             return op.note
@@ -744,11 +768,14 @@ class CaptureComputer:
         if op.kind in ("click", "double_click", "right_click"):
             x, y = (op.x, op.y) if op.x is not None else self._pointer  # type: ignore[misc]
             assert x is not None and y is not None
-            {
-                "click": s.click,
-                "double_click": s.double_click,
-                "right_click": s.right_click,
-            }[op.kind](int(x), int(y))
+            if node_id is not None:
+                s.click(node_id=node_id)
+            else:
+                {
+                    "click": s.click,
+                    "double_click": s.double_click,
+                    "right_click": s.right_click,
+                }[op.kind](int(x), int(y))
             self._pointer = (int(x), int(y))
         elif op.kind == "drag":
             assert op.x is not None and op.y is not None

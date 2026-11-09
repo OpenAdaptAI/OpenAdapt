@@ -783,6 +783,11 @@ def _ref_columns(cfg: VerifyConfig) -> list[str]:
         return []
     cols = {frame.identity_field} if frame.identity_field else set()
     cols.update(binding.column for binding in frame.identities.values())
+    cols.update(
+        cell.column
+        for binding in frame.identities.values()
+        for cell in (binding.field_bindings or {}).values()
+    )
     a = frame.attribution
     if a is not None:
         cols |= {a.record_key} if a.record_key else set()
@@ -1326,12 +1331,13 @@ def _map_frame_rows(
     before: EffectState,
     after: Any,
     db: _DatabaseFrame,
-    slices: Mapping[str, tuple[EffectState, Optional[list[dict[str, Any]]]]],
+    slices: dict[str, tuple[EffectState, Optional[list[dict[str, Any]]]]],
     effects: Sequence[Effect],
     routes: Mapping[str, Sequence[str]],
     salt: bytes,
     declared: dict[str, set[str]],
     params: Mapping[str, object],
+    column_values: dict[str, dict[str, dict[str, Any]]],
 ) -> None:
     from openadapt_flow.runtime.effects.effect import record_matches
     from openadapt_flow.runtime.effects.frame import declared_selectors
@@ -1416,6 +1422,47 @@ def _map_frame_rows(
             ):
                 keys.add(row_key)
         declared[binding.table] = keys
+        if binding.field_bindings is not None:
+            # Pair actual current reader values to the frame's own row keys.
+            # Intent is checked by the ordinary effect verdict; the frame
+            # independently checks the bound stored cells against this read.
+            column_values[binding.table] = {
+                row_key: dict(record)
+                for record, row_key in zip(post_records, row_keys)
+                if row_key in keys
+            }
+            # The database diff ordinarily carries changed rows only. Cell
+            # verification also needs an unchanged target: a misleading read
+            # must not certify a requested update that never reached storage.
+            from openadapt_flow.runtime.effects.db_snapshot import KEY, ROW, unpack
+
+            table = db.post.tables[binding.table]
+            baseline, now = slices[binding.table]
+            if now is None:
+                raise VerifyRunError("mapped table has no current row slice")
+            present = {record[KEY] for record in now}
+            previous_rows = list(baseline.records)
+            current_rows = list(now)
+            for row_key in column_values[binding.table]:
+                if row_key in present:
+                    continue
+                current_rows.append(
+                    {KEY: row_key, ROW: table.rows[row_key][0], **table.values[row_key]}
+                )
+                if row_key in old_table.rows:
+                    previous_rows.append(
+                        {
+                            KEY: row_key,
+                            ROW: old_table.rows[row_key][0],
+                            **unpack(
+                                old_table.cell_columns, old_table.rows[row_key][1]
+                            ),
+                        }
+                    )
+            slices[binding.table] = (
+                baseline.model_copy(update={"records": previous_rows}),
+                current_rows,
+            )
 
 
 def judge_run_frame(
@@ -1501,6 +1548,7 @@ def judge_run_frame(
     }
     #: Table -> row key MACs its ``judged_by`` surface declares.
     declared_rows: dict[str, set[str]] = {}
+    column_values: dict[str, dict[str, dict[str, Any]]] = {}
     if db is not None and db.still_moving:
         tries = db.evidence.get("settle_attempts", 1)
         return FrameVerdict(
@@ -1560,6 +1608,7 @@ def judge_run_frame(
                     salt,
                     declared_rows,
                     params,
+                    column_values,
                 )
             except (ValueError, TypeError) as exc:
                 return FrameVerdict(
@@ -1644,6 +1693,7 @@ def judge_run_frame(
         excuse=excuse,
         user_ids=None if db is None else db.users_map,
         declared_rows=declared_rows,
+        column_values=column_values,
     )
     profile = db.evidence.get("profile") if db is not None else None
     if profile is not None:
@@ -1923,6 +1973,27 @@ def learn_frame_identities(
     *,
     read_provider: Optional[CompleteReadProvider] = None,
 ) -> VerifyConfig:
+    """Compatibility API: learn row identity, retaining strict legacy columns."""
+    return _learn_frame_correspondence(cfg, params, read_provider, fields=False)
+
+
+def learn_frame_correspondence(
+    cfg: VerifyConfig,
+    params: Mapping[str, object],
+    *,
+    read_provider: Optional[CompleteReadProvider] = None,
+) -> VerifyConfig:
+    """Setup: learn row and field/column correspondence from the same reads."""
+    return _learn_frame_correspondence(cfg, params, read_provider, fields=True)
+
+
+def _learn_frame_correspondence(
+    cfg: VerifyConfig,
+    params: Mapping[str, object],
+    read_provider: Optional[CompleteReadProvider],
+    *,
+    fields: bool,
+) -> VerifyConfig:
     """Learn row correspondence during setup, before the contract is frozen.
 
     Uses the frame's own complete snapshot, not a supplied column descriptor.
@@ -1932,6 +2003,7 @@ def learn_frame_identities(
     from openadapt_flow.runtime.effects.db_snapshot import settled_state
     from openadapt_flow.runtime.effects.frame_identity import (
         FrameIdentityError,
+        learn_field_bindings,
         learn_identity,
     )
 
@@ -1978,6 +2050,16 @@ def learn_frame_identities(
                 table=table_name,
                 read_config=read.model_dump(mode="json"),
             )
+            if fields:
+                binding = bindings[surface]
+                bindings[surface] = binding.model_copy(
+                    update={
+                        "field_bindings": learn_field_bindings(
+                            binding, records, list(table.values.values())
+                        ),
+                        "field_columns": sorted(table.columns),
+                    }
+                )
     except FrameIdentityError as exc:
         raise VerifyRunError(f"frame identity setup refused: {exc}") from exc
     frame = cfg.frame.model_copy(update={"identities": bindings})
@@ -2016,6 +2098,10 @@ def _frame_identity_indexes(
                     "identity binding belongs to another read configuration"
                 )
             table = snapshot.tables.get(binding.table) if snapshot is not None else None
+            if binding.field_bindings is not None and (
+                table is None or sorted(table.columns) != binding.field_columns
+            ):
+                raise FrameIdentityError("stored-column inventory no longer matches")
             index = snapshot_index(binding, table, _mac_key(salt))
             match_records(
                 binding, _surface_records(state, surface), index, _mac_key(salt)
