@@ -28,6 +28,7 @@ import { GearMenu, PageHead } from "./ui/simple";
 import { Login } from "./screens/Login";
 import { Onboarding } from "./screens/Onboarding";
 import { Welcome } from "./screens/Welcome";
+import { UpdateNotice, UsageStatsPrompt } from "./ui/PrivacyNotices";
 import { Tasks } from "./screens/Tasks";
 import { NeedsYou } from "./screens/NeedsYou";
 import { Stops } from "./screens/Stops";
@@ -858,6 +859,7 @@ export default function App() {
       {authoringNotice}
       {atRestNotice}
       {firstWorkflowStageNotice}
+      <UpdateNotice engineUp={engineUp} />
       <ItemApprovalDialog />
       <div className="app">
         <header className="desktop-shell">
@@ -937,6 +939,7 @@ export default function App() {
         </header>
 
         <main>
+        <UsageStatsPrompt engineUp={engineUp} />
         <ShadowPromptBanner status={shadow} />
         {route.name === "tasks" && (
           <Tasks

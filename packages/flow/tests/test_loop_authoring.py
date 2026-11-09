@@ -55,6 +55,7 @@ from openadapt_flow.runtime.effects import (
     ValueExpr,
 )
 from openadapt_flow.runtime.replayer import Replayer
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 
 # Reuse the scripted fakes from the main replayer unit tests (pytest's prepend
 # import mode puts tests/ on sys.path).
@@ -379,9 +380,7 @@ def test_healthy_loop_confirms_each_record_zero_model_calls(dirs):
         report = Replayer(
             backend,
             vision=_vision_confirms_saved(),
-            effect_verifier=RestRecordVerifier(
-                url, records_path="/api/db", records_key="records"
-            ),
+            effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
             poll_interval_s=0.01,
         ).run(looped, bundle_dir=bundle, run_dir=run_dir)
 
@@ -427,9 +426,7 @@ def test_poisoned_record_effect_refute_halts_no_silent_skip(dirs):
         report = Replayer(
             backend,
             vision=_vision_confirms_saved(),
-            effect_verifier=RestRecordVerifier(
-                url, records_path="/api/db", records_key="records"
-            ),
+            effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
             poll_interval_s=0.01,
         ).run(looped, bundle_dir=bundle, run_dir=run_dir)
 
@@ -504,9 +501,7 @@ def test_committed_encounter_showcase_loop_replays_through_the_interpreter(tmp_p
         report = Replayer(
             backend,
             vision=_vision_confirms_saved(),
-            effect_verifier=RestRecordVerifier(
-                url, records_path="/api/db", records_key="records"
-            ),
+            effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
             poll_interval_s=0.01,
         ).run(wf, bundle_dir=bundle, run_dir=run_dir)
 

@@ -1031,7 +1031,7 @@ def render_markdown(
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--out", default="benchmark/pixel_identity")
     parser.add_argument(
         "--no-ocr",

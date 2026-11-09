@@ -217,7 +217,9 @@ def _summary(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--env-file", type=Path, required=True)
     parser.add_argument("--trials", type=int, default=3)
     parser.add_argument("--replays", type=int, default=5)

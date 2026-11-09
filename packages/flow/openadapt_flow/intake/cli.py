@@ -117,6 +117,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser(
         "intake",
         help="Fill a workflow's parameters from a referral PDF, fax image, or email",
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument("document", help="PDF, image (.png/.tif/...), .eml, or .txt")
