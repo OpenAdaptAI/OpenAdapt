@@ -23,6 +23,7 @@
 
 ### Fixes
 
+- FHIR collection compatibility refuses query parameters in configured searches, requests, effective URLs, and self links. Capped or otherwise unqualified query results cannot establish complete readback; standard searchset paging is unchanged.
 - Record-frame setup can learn field-to-column correspondence from paired reads. Target columns without a binding are listed as unverified coverage, while bound values and changes to other records remain checked.
 - A headed browser launch no longer hangs before the browser opens. Flow's first-launch check held its guard while calling a function that takes the same guard, so every first headed launch with auto-install on (including `record --url`) waited forever.
 - Setup can learn the correspondence between a selected record reader and the database frame from their observed values. Missing or ambiguous identities refuse setup; later records use the learned column mapping without changing audit or collateral-write checks.
