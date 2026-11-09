@@ -228,3 +228,38 @@ def test_family_spec_is_shareable_json():
     ids = {f["id"] for f in spec["families"]}
     assert set(spec["server_fault_modes"].values()) <= ids
     json.dumps(spec)
+
+
+def test_sqlite_delta_counts_duplicate_rows_in_a_table_without_a_key(tmp_path):
+    import sqlite3
+
+    from openadapt_flow.verifier_audit.targets.appworld_worker import _delta
+
+    for name in ("seed", "end"):
+        (tmp_path / name).mkdir()
+        conn = sqlite3.connect(tmp_path / name / "app.db")
+        conn.execute("CREATE TABLE queue (song INTEGER)")
+        conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)")
+        conn.execute("INSERT INTO queue VALUES (1)")
+        if name == "end":
+            conn.execute("INSERT INTO queue VALUES (7)")
+            conn.execute("INSERT INTO queue VALUES (7)")
+            conn.execute("INSERT INTO users VALUES (1, 'ann')")
+        conn.commit()
+        conn.close()
+    rows = _delta(tmp_path / "seed", tmp_path / "end")
+    assert sum(r["table"] == "app.queue" and r["op"] == "added" for r in rows) == 2
+    users = [json.loads(r["row"]) for r in rows if r["table"] == "app.users"]
+    assert users == [{"id": 1, "name": "ann"}]
+
+
+def test_clock_free_handles_timezone_aware_stamps():
+    from datetime import datetime, timedelta, timezone
+
+    from openadapt_flow.verifier_audit.targets.agentdojo import _clock_free
+
+    now = datetime.now()
+    window = (now - timedelta(seconds=5), now + timedelta(seconds=5))
+    aware = datetime.now(timezone.utc).isoformat()
+    assert _clock_free(aware, window) == "<run-clock>"
+    assert _clock_free("2020-01-01T00:00:00+00:00", window) != "<run-clock>"
