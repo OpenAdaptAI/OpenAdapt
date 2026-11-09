@@ -326,13 +326,19 @@ Install the extras for the surface that records and replays the workflow:
 each surface, and [docs/PRODUCT_STATUS.md](docs/PRODUCT_STATUS.md) lists the
 evidence for each one. A bundle is bound to the surface it was recorded on.
 
-A bundle drives one surface by default: one browser tab, one desktop app, or
-one remote desktop session. A bundle can also declare more than one surface:
-popups and new tabs it opens, or another backend it switches to with an
-explicit, identity-checked step. See [docs/MULTI_SURFACE.md](docs/MULTI_SURFACE.md)
-for this and its limits. Otherwise, record one bundle per surface and chain
-them with `openadapt-flow compose`. Each child starts
-only after the one before it ends with a checked save, unless you allow a
+A bundle can span several surfaces: popups and tabs a web app opens, and
+other windows the work moves to, such as a native app or a remote desktop.
+Record it in one session and switch windows as you normally do:
+
+```bash
+openadapt-flow record --url https://portal.example --surface chart=linux:Chart --out rec
+```
+
+Each change of window becomes an identity-checked switch step, and an action
+in a window you did not declare stops the recording. See
+[docs/MULTI_SURFACE.md](docs/MULTI_SURFACE.md). Separately recorded bundles
+can also be chained with `openadapt-flow compose`. Each child starts only
+after the one before it ends with a checked save, unless you allow a
 specific stop with `--allow-halt`.
 
 ## Give your agent a program, not a mouse

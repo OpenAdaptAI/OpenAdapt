@@ -220,16 +220,29 @@ def test_a_worker_killed_before_the_send_is_held_until_released(
     assert verify_write(pending).verified and _landed(db) == 1
 
 
-def test_a_settle_time_releases_an_attempt_the_store_never_showed(
+def test_a_settle_time_cannot_release_an_attempt_the_store_never_showed(
     sor, ledger_dir: Path
 ) -> None:
     base, db = sor
     dead = _worker(base, "die_before_send", ledger_dir)
     dead.communicate(timeout=120)
     ledger = Ledger(FileLedger(ledger_dir), settle_s=0)
-    pending = begin_write(_contract(base), VALUES, actor=BOT, ledger=ledger)
-    FakeAgent(base).click_save("p1", NOTE)
-    assert verify_write(pending).verified and _landed(db) == 1
+    for _ in range(2):
+        with pytest.raises(WriteHeld, match="may still land"):
+            begin_write(_contract(base), VALUES, actor=BOT, ledger=ledger)
+    assert _landed(db) == 0
+    assert len(ledger.attempts()) == 1
+    [(key, retained)] = ledger.unresolved()
+    assert retained.resolved is not None
+    assert retained.resolved["retry_safe"] is False
+    reopened = Ledger(FileLedger(ledger_dir), settle_s=0).latest(key)
+    assert reopened is not None and reopened.state == "uncertain"
+    observations = [e for e in reopened.events if e["event"] == "resolved"]
+    assert len(observations) == 2
+    assert all(
+        e["retry_safe"] is False and e["via"] == "reconcile" for e in observations
+    )
+    assert all(e["result"]["observed"] == "absent" for e in observations)
 
 
 def test_a_late_write_found_on_reconcile_is_never_resent(sor, ledger_dir: Path) -> None:

@@ -109,11 +109,17 @@ sys.addaudithook(_WATCH)
 def watching_disk() -> Iterator[_DiskWatch]:
     _WATCH.written.clear()
     _WATCH.transient.clear()
+    # A module imported lazily inside the watch would otherwise write its
+    # bytecode, and source constants such as the PNG signature would read
+    # as a leak. The command's own writes are still all watched.
+    dont_write_bytecode = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
     _WATCH.armed = True
     try:
         yield _WATCH
     finally:
         _WATCH.armed = False
+        sys.dont_write_bytecode = dont_write_bytecode
 
 
 def _files(root: Path) -> dict[str, bytes]:

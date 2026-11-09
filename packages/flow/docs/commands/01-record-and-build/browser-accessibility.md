@@ -1,0 +1,1 @@
+On Linux, make Chrome, Chromium, Edge and Brave start with their page readable to accessibility tools, so `record` can read what you click in your everyday browser. It writes launcher entries in your own `~/.local/share/applications` only; `--disable` removes them. On Windows and macOS, `record` does this by itself.

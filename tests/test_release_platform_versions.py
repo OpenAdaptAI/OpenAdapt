@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import re
 from pathlib import Path
 
 import pytest
@@ -92,3 +94,14 @@ def test_release_allows_new_launcher_with_reviewed_published_defaults() -> None:
 def test_release_refuses_launcher_older_than_published_platform() -> None:
     with pytest.raises(ValueError, match="must not be older"):
         MODULE.release_component_versions(_manifest(), "1.9.9")
+
+
+def test_committed_manifest_selects_a_release_for_the_launcher_version() -> None:
+    document = json.loads((ROOT / "platform-manifest.json").read_text())
+    pyproject = (ROOT / "pyproject.toml").read_text()
+    match = re.search(r'^version = "([^"]+)"$', pyproject, re.MULTILINE)
+    assert match
+
+    versions = MODULE.release_component_versions(document, match.group(1))
+
+    assert versions["launcher"] == match.group(1)
