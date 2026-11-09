@@ -6237,10 +6237,37 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
         bundle=optional_path("bundle"),
         complete_read=bool(getattr(args, "complete_read", False)),
         fault_gate=bool(getattr(args, "fault_gate", False)),
+        probe_reads=bool(getattr(args, "probe_reads", False)),
+        probe_base=getattr(args, "probe_base", None),
     )
     if built is not None:
         print(built.summary)
         return 0 if built.working else 1
+    if getattr(args, "probe_reads", False):
+        import json as _json
+
+        from openadapt_flow import sealed_set as _sealed_set
+        from openadapt_flow.scaffold_verifier import READ_DISCOVERY_FILE
+
+        found = (out_dir or Path(args.source)) / READ_DISCOVERY_FILE
+        status, reason = "unavailable", ""
+        try:
+            data = _json.loads(_sealed_set.read_text(found))
+            status, reason = str(data.get("status")), str(data.get("reason") or "")
+        except (OSError, ValueError, _sealed_set.SealedSetError):
+            pass
+        if status == "refused":
+            print(
+                "Read discovery: REFUSED. A probed read confirmed the written "
+                f"values but can't see the whole save, so no check was written: "
+                f"{reason} ({found})."
+            )
+        else:
+            print(
+                "Read discovery: UNAVAILABLE. No probed read confirmed the "
+                "written values, so no read was proposed; a person must name "
+                f"one ({found})."
+            )
     out, count = write_draft(Path(args.source), out_dir)
     print(
         "No read in the recording returns the saved record (no network capture, "
@@ -11271,6 +11298,25 @@ def build_parser() -> argparse.ArgumentParser:
             "With --db: write each bad save to a copy of the database and let "
             "the check read it through its own read (the fault gate). A fault "
             "the read can't see keeps the check a draft"
+        ),
+    )
+    p.add_argument(
+        "--probe-reads",
+        action="store_true",
+        help=(
+            "When the recording never reads the saved record back, derive "
+            "reads from the captured write and probe them with GET on a local "
+            "copy of the app; use one only when it returns the written values. "
+            "Every probe is recorded in the proof"
+        ),
+    )
+    p.add_argument(
+        "--probe-base",
+        default=None,
+        metavar="URL",
+        help=(
+            "With --probe-reads: the local copy of the app to probe (default: "
+            "the recorded origin, which must be the local machine)"
         ),
     )
     p.add_argument(
