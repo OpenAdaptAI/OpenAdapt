@@ -236,13 +236,11 @@ def test_a_stuck_step_that_wakes_later_cannot_touch_the_next_episode(
         assert httpx.get(env._app_url + "/api/db").json()["records"] == []
         for action in task.solution:
             obs = env.step(WebAction(**action))
-        if linux:
-            assert (obs.verdict, obs.reward) == ("CONFIRMED", 1.0)
-        else:
-            # What survived the unproven teardown might still write, so no
-            # later episode of this environment is trusted.
-            assert (obs.verdict, obs.reward) == ("INDETERMINATE", 0.0)
-            assert "unproven" in obs.metadata["judgement"]["error"]
+        # The episode itself runs cleanly on a fresh app copy, but the
+        # abandoned worker taints this environment for good, proven teardown
+        # or not: no later episode is trusted.
+        assert (obs.verdict, obs.reward) == ("INDETERMINATE", 0.0)
+        assert "unproven" in obs.metadata["judgement"]["error"]
     finally:
         env.close()
 

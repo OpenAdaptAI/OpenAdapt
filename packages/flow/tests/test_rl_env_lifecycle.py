@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import os
+import secrets
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -525,7 +528,7 @@ def test_an_omitted_escaped_descendant_is_never_reported_proven(monkeypatch) -> 
 
 @pytest.mark.skipif(not LINUX, reason="PR_SET_CHILD_SUBREAPER is Linux-only")
 def test_the_subreaper_supervisor_reaps_an_orphaned_setsid_descendant() -> None:
-    proc = lifecycle.spawn_supervised(
+    proc, launch = lifecycle.spawn_supervised(
         [sys.executable, "-c", ORPHANING + "import time; time.sleep(600)\n"],
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
@@ -534,7 +537,7 @@ def test_the_subreaper_supervisor_reaps_an_orphaned_setsid_descendant() -> None:
     escaped = int(proc.stdout.readline())
     try:
         assert os.getpgid(escaped) == escaped
-        result = lifecycle.stop_supervised(proc.pid, timeout=20)
+        result = lifecycle.stop_supervised(launch, proc=proc, timeout=20)
         assert result == lifecycle.Teardown("killed", proven=True), (
             "PR_SET_CHILD_SUBREAPER could not be set or did not reap the escapee"
         )
@@ -549,7 +552,7 @@ def test_the_subreaper_supervisor_reaps_an_already_orphaned_escapee() -> None:
     # The intermediate exits first: the escapee is orphaned and, under the
     # subreaper, comes back to the supervisor instead of init, which kills
     # and reaps it as soon as the command has exited.
-    proc = lifecycle.spawn_supervised(
+    proc, launch = lifecycle.spawn_supervised(
         [sys.executable, "-c", ORPHANING],
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
@@ -558,7 +561,7 @@ def test_the_subreaper_supervisor_reaps_an_already_orphaned_escapee() -> None:
     escaped = int(proc.stdout.readline())
     try:
         # The command has exited, so the supervisor tears down on its own.
-        assert lifecycle.stop_supervised(proc.pid, timeout=20).proven is True
+        assert lifecycle.stop_supervised(launch, proc=proc, timeout=20).proven is True
         assert not _running(escaped)
     finally:
         proc.returncode = proc.returncode or 0
@@ -567,7 +570,7 @@ def test_the_subreaper_supervisor_reaps_an_already_orphaned_escapee() -> None:
 
 @pytest.mark.skipif(LINUX, reason="the unproven path is the non-Linux one")
 def test_without_a_subreaper_the_supervisor_reports_unproven() -> None:
-    proc = lifecycle.spawn_supervised(
+    proc, launch = lifecycle.spawn_supervised(
         [sys.executable, "-c", ORPHANING + "import time; time.sleep(600)\n"],
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
@@ -575,7 +578,7 @@ def test_without_a_subreaper_the_supervisor_reports_unproven() -> None:
     assert proc.stdout is not None
     escaped = int(proc.stdout.readline())
     try:
-        result = lifecycle.stop_supervised(proc.pid, timeout=20)
+        result = lifecycle.stop_supervised(launch, proc=proc, timeout=20)
         # Killed what it could reach, but never claims the escapee is gone.
         assert result == UNPROVEN_KILL
     finally:
@@ -586,9 +589,9 @@ def test_without_a_subreaper_the_supervisor_reports_unproven() -> None:
 def test_a_supervisor_that_leaves_no_report_is_unknown() -> None:
     # Not a supervisor at all: SIGTERM ends it without a verdict.
     proc = lifecycle.spawn([sys.executable, "-c", "import time; time.sleep(600)"])
+    launch = lifecycle.SupervisedLaunch.of(proc.pid, secrets.token_hex(16))
     with pytest.raises(lifecycle.DescendantsUnknown, match="reported nothing"):
-        lifecycle.stop_supervised(proc.pid, timeout=10)
-    proc.returncode = -signal.SIGTERM
+        lifecycle.stop_supervised(launch, proc=proc, timeout=10)
 
 
 def test_an_unproven_teardown_makes_later_episodes_indeterminate(monkeypatch) -> None:
@@ -613,6 +616,18 @@ def test_an_unproven_teardown_makes_later_episodes_indeterminate(monkeypatch) ->
 # -- a malformed supervisor report, or any teardown failure, is never proof ---
 
 
+def _fake_supervisor() -> tuple[subprocess.Popen[bytes], lifecycle.SupervisedLaunch]:
+    """A process that stands in for a supervisor; its report is written by
+    the test."""
+    proc = lifecycle.spawn([sys.executable, "-c", "import time; time.sleep(600)"])
+    return proc, lifecycle.SupervisedLaunch.of(proc.pid, secrets.token_hex(16))
+
+
+def _write(path: str, body: object) -> None:
+    with open(path, "w") as handle:
+        handle.write(body if isinstance(body, str) else json.dumps(body))
+
+
 @pytest.mark.parametrize(
     "report",
     [
@@ -628,22 +643,78 @@ def test_an_unproven_teardown_makes_later_episodes_indeterminate(monkeypatch) ->
     ],
 )
 def test_a_malformed_supervisor_report_is_unknown(report: str) -> None:
-    proc = lifecycle.spawn([sys.executable, "-c", "import time; time.sleep(600)"])
-    with open(os.path.join(lifecycle._report_dir(), str(proc.pid)), "w") as handle:
-        handle.write(report)
+    proc, launch = _fake_supervisor()
+    _write(launch.report, report)
     with pytest.raises(lifecycle.DescendantsUnknown, match="reported"):
-        lifecycle.stop_supervised(proc.pid, timeout=10)
-    proc.returncode = -signal.SIGTERM
+        lifecycle.stop_supervised(launch, proc=proc, timeout=10)
+    assert not os.path.exists(launch.report)
+
+
+def _receipt(launch: lifecycle.SupervisedLaunch, **change: object) -> dict:
+    body = {
+        "nonce": launch.nonce,
+        "pid": launch.pid,
+        "start": launch.start,
+        "verdict": "proven",
+        "subreaper": True,
+    }
+    body.update(change)
+    return body
 
 
 def test_a_well_formed_proven_report_is_read_as_proven() -> None:
-    proc = lifecycle.spawn([sys.executable, "-c", "import time; time.sleep(600)"])
-    with open(os.path.join(lifecycle._report_dir(), str(proc.pid)), "w") as handle:
-        handle.write('{"verdict": "proven", "subreaper": true}')
-    assert lifecycle.stop_supervised(proc.pid, timeout=10) == lifecycle.Teardown(
-        "killed", proven=True
+    proc, launch = _fake_supervisor()
+    assert launch.start is not None
+    _write(launch.report, _receipt(launch))
+    assert lifecycle.stop_supervised(launch, proc=proc, timeout=10) == (
+        lifecycle.Teardown("killed", proven=True)
     )
-    proc.returncode = -signal.SIGTERM
+    assert not os.path.exists(launch.report)  # consumed once
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"nonce": "0" * 32},  # another launch's receipt
+        {"pid": 1},  # written by another process
+        {"start": "linux:1"},  # an earlier process that had this pid
+        {"start": None},
+    ],
+)
+def test_a_stale_or_foreign_proven_receipt_is_not_accepted(change: dict) -> None:
+    proc, launch = _fake_supervisor()
+    _write(launch.report, _receipt(launch, **change))
+    with pytest.raises(lifecycle.DescendantsUnknown):
+        lifecycle.stop_supervised(launch, proc=proc, timeout=10)
+
+
+def test_a_receipt_left_under_the_pid_is_never_read() -> None:
+    proc, launch = _fake_supervisor()
+    # The old naming, as a natural exit could have left it: ignored.
+    _write(os.path.join(lifecycle._report_dir(), str(proc.pid)), _receipt(launch))
+    _write(os.path.join(lifecycle._report_dir(), f"{proc.pid}.json"), _receipt(launch))
+    with pytest.raises(lifecycle.DescendantsUnknown):
+        lifecycle.stop_supervised(launch, proc=proc, timeout=10)
+
+
+def test_a_launch_whose_start_is_unknown_is_never_proven() -> None:
+    proc, launch = _fake_supervisor()
+    blind = lifecycle.SupervisedLaunch(pid=launch.pid, nonce=launch.nonce, start=None)
+    _write(blind.report, _receipt(blind))
+    with pytest.raises(lifecycle.DescendantsUnknown):
+        lifecycle.stop_supervised(blind, proc=proc, timeout=10)
+
+
+def test_a_reaped_supervisor_is_never_signalled(monkeypatch) -> None:
+    proc, launch = _fake_supervisor()
+    proc.kill()
+    proc.wait(timeout=30)  # reaped: its pid may now belong to anyone
+    sent: list[tuple[str, int]] = []
+    monkeypatch.setattr(lifecycle.os, "kill", lambda p, s: sent.append(("kill", p)))
+    monkeypatch.setattr(lifecycle.os, "killpg", lambda p, s: sent.append(("killpg", p)))
+    with pytest.raises(lifecycle.DescendantsUnknown):
+        lifecycle.stop_supervised(launch, proc=proc, timeout=5)
+    assert sent == []
 
 
 class _Confirming:
@@ -682,9 +753,7 @@ def test_any_teardown_failure_leaves_later_episodes_indeterminate(
     assert (out["verdict"], out["reward"]) == ("INDETERMINATE", 0.0)
 
 
-def test_only_a_proven_teardown_lifts_its_taint_and_never_an_earlier_one(
-    monkeypatch,
-) -> None:
+def test_a_later_proven_teardown_never_lifts_the_taint(monkeypatch) -> None:
     env = _environment()
     from openadapt_flow.rl_env import environment as E
 
@@ -693,10 +762,37 @@ def test_only_a_proven_teardown_lifts_its_taint_and_never_an_earlier_one(
     )
     env._pw, env._driver_pid = object(), 424242
     env._abandon_worker()
-    assert env._unproven is None
-    assert _judged(env, monkeypatch)["verdict"] == "CONFIRMED"
-
-    env._unproven = "an earlier browser was not proven gone"
+    # Proven, and still tainted: the abandoned worker may have started more
+    # than the driver this code saw.
+    assert env._teardown == {"driver_pid": 424242, "driver": "killed", "proven": True}
+    assert env._unproven is not None
+    first = env._unproven
     env._pw, env._driver_pid = object(), 424243
     env._abandon_worker()
-    assert env._unproven == "an earlier browser was not proven gone"
+    assert env._unproven == first
+    out = _judged(env, monkeypatch)
+    assert (out["verdict"], out["reward"]) == ("INDETERMINATE", 0.0)
+
+
+def test_a_timeout_inside_playwright_start_taints_later_episodes(monkeypatch) -> None:
+    env = _environment()
+    from openadapt_flow.rl_env import environment as E
+
+    started = threading.Event()
+
+    def stuck_start(*_a, **_k):
+        # Like a timeout while Playwright.start has spawned its driver but not
+        # returned: neither _pw nor the driver pid is visible yet.
+        started.set()
+        time.sleep(2)
+
+    monkeypatch.setattr(E, "RESET_TIMEOUT_S", 0.3)
+    monkeypatch.setattr(env, "_reset", stuck_start)
+    with pytest.raises(RuntimeError, match="reset took longer"):
+        env.reset(task_id="mockmed-01")
+    assert started.is_set()
+    assert env._pw is None and env._driver_pid is None and env._teardown is None
+    assert env._unproven is not None
+    monkeypatch.undo()
+    out = _judged(env, monkeypatch)
+    assert (out["verdict"], out["reward"]) == ("INDETERMINATE", 0.0)

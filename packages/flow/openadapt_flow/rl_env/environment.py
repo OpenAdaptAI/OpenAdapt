@@ -289,10 +289,11 @@ class _NewSessionAsyncio:
         if supervised:
             # A child subreaper above the driver: the only way a stuck
             # browser's whole tree can be proven gone (lifecycle docstring).
-            args = tuple(lifecycle.supervised_command([str(a) for a in args]))
+            command, nonce = lifecycle.supervised_command([str(a) for a in args])
+            args = tuple(command)
         proc = await self._real.create_subprocess_exec(*args, **kwargs)
         if supervised:
-            _SUPERVISED.add(proc.pid)
+            _SUPERVISED[proc.pid] = lifecycle.SupervisedLaunch.of(proc.pid, nonce)
         return proc
 
 
@@ -301,7 +302,7 @@ _SESSION_LOCK = threading.Lock()
 #: a stuck browser's whole tree gone (see ``lifecycle``).
 SUPERVISE_DRIVER = sys.platform.startswith("linux")
 #: Driver pids started under the subreaper supervisor.
-_SUPERVISED: set[int] = set()
+_SUPERVISED: dict[int, lifecycle.SupervisedLaunch] = {}
 
 
 def _driver_in_own_session() -> None:
@@ -375,8 +376,8 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         self._records_stop: Optional[Callable[[], None]] = None
         #: How the last abandoned browser was stopped, once it is reaped.
         self._teardown: Optional[dict[str, Any]] = None
-        #: Why a stuck browser could not be proven gone; every later episode
-        #: is then INDETERMINATE, since what survived might still write.
+        #: Set once any stuck worker is abandoned and never cleared: every
+        #: later episode is INDETERMINATE, since what it started might write.
         self._unproven: Optional[str] = None
 
     def _on_worker(
@@ -403,21 +404,23 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         """
         driver, self._driver_pid = self._driver_pid, None
         had_browser, self._teardown = self._pw is not None, None
-        # Pessimistic: the environment is tainted (every later episode is
-        # INDETERMINATE) before any teardown step can fail, and the taint
-        # this teardown adds is lifted only on positive proof. An earlier
-        # unproven teardown stays: what it left might still write.
-        earlier = self._unproven
-        if had_browser or driver is not None:
-            self._unproven = f"the stuck browser (driver {driver}) was not proven gone"
+        # Monotone taint: an abandoned worker may have started a browser this
+        # code never saw (a timeout before Playwright.start returned), and a
+        # proof covers only what was seen. So every abandon taints this
+        # environment for good: all later episodes are INDETERMINATE, and no
+        # later teardown, proven or not, lifts it.
+        self._unproven = self._unproven or (
+            f"a stuck worker was abandoned (driver {driver}); what it started "
+            "may still be running"
+        )
         try:
             # The browser goes first, so it cannot write after this point.
             # The episode is over only once the driver is reaped and Chromium
             # is gone; otherwise this raises rather than claim it is.
             if driver is not None:
-                if driver in _SUPERVISED:
-                    _SUPERVISED.discard(driver)
-                    result = lifecycle.stop_supervised(driver)
+                launch = _SUPERVISED.pop(driver, None)
+                if launch is not None:
+                    result = lifecycle.stop_supervised(launch)
                 else:
                     result = kill_child_tree(driver)
                 self._teardown = {
@@ -425,13 +428,6 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
                     "driver": result.how,
                     "proven": result.proven,
                 }
-                if result.proven is True:
-                    self._unproven = earlier
-                else:
-                    self._unproven = (
-                        f"the stuck browser (driver {driver}) was killed, but "
-                        "its descendants could not be proven gone on this platform"
-                    )
             elif had_browser:
                 raise ProcessNotReaped(
                     "the browser driver's process id is unknown, so the stuck "
@@ -601,7 +597,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
 
     def close(self) -> None:
         if self._driver_pid is not None:
-            _SUPERVISED.discard(self._driver_pid)
+            _SUPERVISED.pop(self._driver_pid, None)
         if self._worker is None:
             return
         try:

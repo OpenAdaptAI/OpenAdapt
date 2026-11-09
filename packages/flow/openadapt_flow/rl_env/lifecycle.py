@@ -376,71 +376,132 @@ def _report_dir() -> str:
     return _REPORT_DIR
 
 
-def supervised_command(args: Sequence[str]) -> list[str]:
-    """``args`` run under the subreaper supervisor (``_supervisor.py``).
+@dataclass(frozen=True)
+class SupervisedLaunch:
+    """One supervisor launch: its pid, the nonce its report must carry, and
+    its start identity, read right after it started. A report counts only
+    when all three match, so a stale report, or one left by an earlier
+    process that had this pid, is never read as this launch's."""
 
-    Start the result in a new session; stop it with :func:`stop_supervised`.
+    pid: int
+    nonce: str
+    start: Optional[str]
+
+    @classmethod
+    def of(cls, pid: int, nonce: str) -> "SupervisedLaunch":
+        from openadapt_flow.rl_env._supervisor import start_identity
+
+        return cls(pid=pid, nonce=nonce, start=start_identity(pid))
+
+    @property
+    def report(self) -> str:
+        return os.path.join(_report_dir(), f"{self.nonce}.json")
+
+
+def supervised_command(args: Sequence[str]) -> tuple[list[str], str]:
+    """``args`` run under the subreaper supervisor (``_supervisor.py``), and
+    the launch's fresh random nonce.
+
+    Start the command in a new session, record
+    ``SupervisedLaunch.of(pid, nonce)`` at once, and stop it with
+    :func:`stop_supervised`.
     """
+    import secrets
     import sys
 
-    return [sys.executable, "-I", SUPERVISOR, _report_dir(), "--", *args]
+    nonce = secrets.token_hex(16)
+    command = [sys.executable, "-I", SUPERVISOR, _report_dir(), nonce, "--", *args]
+    return command, nonce
 
 
-def spawn_supervised(args: Sequence[str], **kwargs: Any) -> subprocess.Popen[bytes]:
-    """:func:`spawn` of ``args`` under the supervisor."""
-    return spawn(supervised_command(args), **kwargs)
+def spawn_supervised(
+    args: Sequence[str], **kwargs: Any
+) -> tuple[subprocess.Popen[bytes], SupervisedLaunch]:
+    """:func:`spawn` of ``args`` under the supervisor, with its launch."""
+    command, nonce = supervised_command(args)
+    proc = spawn(command, **kwargs)
+    return proc, SupervisedLaunch.of(proc.pid, nonce)
 
 
 #: The verdicts ``_supervisor.py`` writes.
 VERDICTS = ("proven", "unproven", "survivors")
 
 
-def _read_verdict(report: str) -> Optional[str]:
-    """The supervisor's verdict, or None for a missing, unreadable or
-    malformed report (anything but an object with a known ``verdict``)."""
+def _read_verdict(launch: SupervisedLaunch) -> Optional[str]:
+    """The launch's verdict, or None for a report that is missing,
+    unreadable, malformed (anything but an object with a known verdict) or
+    not this launch's (nonce, pid or start identity differ). The report is
+    deleted once read."""
     try:
-        with open(report) as handle:
+        with open(launch.report) as handle:
             data = json.load(handle)
     except (OSError, ValueError):
         return None
     finally:
         try:
-            os.unlink(report)
+            os.unlink(launch.report)
         except OSError:
             pass
     if not isinstance(data, dict):
+        return None
+    if (
+        launch.start is None
+        or data.get("nonce") != launch.nonce
+        or data.get("pid") != launch.pid
+        or data.get("start") != launch.start
+    ):
         return None
     verdict = data.get("verdict")
     return verdict if isinstance(verdict, str) and verdict in VERDICTS else None
 
 
-def stop_supervised(pid: int, *, timeout: float = KILL_TIMEOUT_S * 2) -> Teardown:
+def stop_supervised(
+    launch: SupervisedLaunch,
+    *,
+    proc: Optional[subprocess.Popen[bytes]] = None,
+    timeout: float = KILL_TIMEOUT_S * 2,
+) -> Teardown:
     """Stop a supervisor started from :func:`supervised_command`.
 
     SIGTERM asks it to kill and reap the command's whole tree; it reports
     the verdict in a file before it exits. ``proven`` only for a supervisor
-    that is gone (reaped, its group empty) and reported ``proven``. A
-    supervisor that does not finish in time is SIGKILLed with its group and
-    :class:`ProcessNotReaped` is raised; one that reports survivors or no
-    report raises :class:`DescendantsUnknown`.
+    that is reaped and reported ``proven`` for this launch. A supervisor
+    that does not finish in time is SIGKILLed with its group and
+    :class:`ProcessNotReaped` is raised; a report that is missing, malformed,
+    not this launch's or reports survivors raises
+    :class:`DescendantsUnknown`.
+
+    It signals the supervisor (and its group) only while it is this
+    process's unreaped child, checked first with ``proc.poll()`` (or a
+    non-blocking ``waitpid``): an unreaped child's pid, and the group it
+    leads, cannot be reused. Once it is reaped nothing is signalled. The one
+    window left is another reaper in this process (such as asyncio's child
+    watcher thread) collecting it between that check and the signal.
     """
-    report = os.path.join(_report_dir(), str(pid))
+    pid = launch.pid
+
+    def reaped() -> bool:
+        return proc.poll() is not None if proc is not None else _reap_child(pid)
+
     deadline = time.monotonic() + timeout
-    _signal(pid, signal.SIGTERM)
-    while not _reap_child(pid) or _group_alive(pid):
+    done = reaped()
+    if not done:
+        _signal(pid, signal.SIGTERM)
+    while not done:
         if time.monotonic() > deadline:
-            _killpg(pid, signal.SIGKILL)
+            _killpg(pid, signal.SIGKILL)  # still our unreaped child: ours
             _signal(pid, signal.SIGKILL)
             raise ProcessNotReaped(
                 f"supervisor {pid} did not finish its teardown in {timeout:.0f} s"
             )
         time.sleep(0.02)
-    verdict = _read_verdict(report)
+        done = reaped()
+    verdict = _read_verdict(launch)
     if verdict == "proven":
         return Teardown("killed", proven=True)
     if verdict == "unproven":
         return Teardown("killed", proven=False)
     raise DescendantsUnknown(
-        f"supervisor {pid} reported {verdict or 'nothing'}: its command's "
-        "descendants may still be running"
+        f"supervisor {pid} reported {verdict or 'nothing usable'}: its "
+        "command's descendants may still be running"
     )
