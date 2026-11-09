@@ -712,6 +712,13 @@ def _check_leg(
         verifier = build_effect_verifier(contract.config.verifier, params)
         if verifier is None:
             raise VerifierError("the leg has no reader")
+        # A FHIR field that reaches several list elements is resolved by the
+        # one rule, never cut to its first element. A FHIR reader without
+        # the hook can't be read that way, so the leg is unreadable.
+        if substrate == "fhir" or hasattr(verifier, "value_resolver"):
+            if not hasattr(verifier, "value_resolver"):
+                raise VerifierError("the FHIR reader can't resolve list values")
+            verifier.value_resolver = resolve
         state = verifier.capture_pre_state()
     except Exception as exc:  # noqa: BLE001 - a leg that can't be read is UNCERTAIN
         result.reasons.append(f"the store could not be read: {type(exc).__name__}")

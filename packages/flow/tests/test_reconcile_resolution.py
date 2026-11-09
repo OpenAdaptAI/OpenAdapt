@@ -600,3 +600,112 @@ def test_ambiguity_never_downgrades_a_definite_refutation() -> None:
     twin = dict(record, id="h1", payer_claim_number="PCN2")
     loose = dict(record, id="h2", trace=Ambiguous(["S1", "S9"]))
     assert _run({"ehr": ehr, "ch": [record, twin, loose]}) is Outcome.REFUTED
+
+
+# -- the reconciler resolves FHIR lists on its legs ------------------------------
+
+
+def _serve_claim(items: list[dict[str, Any]]):
+    """A loopback FHIR server whose Claim search returns one synthetic Claim."""
+
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    claim = {
+        "resourceType": "Claim",
+        "id": "c1",
+        "use": "claim",
+        "identifier": [{"system": "urn:openadapt:synthetic:submission", "value": "S1"}],
+        "item": items,
+    }
+    body = json.dumps(
+        {
+            "resourceType": "Bundle",
+            "type": "searchset",
+            "total": 1,
+            "entry": [{"resource": claim, "search": {"mode": "match"}}],
+        }
+    ).encode()
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802 - http.server's name
+            self.send_response(200)
+            self.send_header("Content-Type", "application/fhir+json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args: Any) -> None:
+            return None
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def _item(code: str) -> dict[str, Any]:
+    return {"productOrService": {"coding": [{"code": code}]}}
+
+
+@pytest.mark.parametrize(
+    ("codes", "ehr_outcome"),
+    [
+        (["99213", "99214"], Outcome.UNCERTAIN),  # which line is "the" code?
+        (["99213", "99213"], Outcome.CONFIRMED),  # identical lines collapse
+    ],
+)
+def test_a_multi_line_ehr_claim_is_resolved_not_first_wins(
+    monkeypatch, codes, ehr_outcome
+) -> None:
+    monkeypatch.setenv("RECON_TEST_TOKEN", "synthetic-test-token")
+    server = _serve_claim([_item(c) for c in codes])
+    try:
+        spec = ReconcileSpec.model_validate(
+            {
+                "unit": "claim",
+                "anchor": "ehr",
+                "legs": {
+                    "ehr": {
+                        "role": "ehr",
+                        "verifier": {
+                            "kind": "fhir",
+                            "base_url": f"http://127.0.0.1:{server.server_port}/fhir",
+                            "access_token_env": "RECON_TEST_TOKEN",
+                            "resource_type": "Claim",
+                            "search_param_exprs": {
+                                "identifier": {"param": "submission_id"}
+                            },
+                            "field_paths": {
+                                "resourceType": "resourceType",
+                                "id": "id",
+                                "submission_id": "identifier[system="
+                                "urn:openadapt:synthetic:submission].value",
+                                "use": "use",
+                                "service_code": "item.productOrService.coding.code",
+                            },
+                        },
+                        "identity": {
+                            "submission_id": {"param": "submission_id"},
+                            "use": "claim",
+                        },
+                        "provides": {"service_code": "service_code"},
+                    },
+                    "clearinghouse": {
+                        "role": "clearinghouse",
+                        "verifier": {"kind": "memory-test", "options": {"key": "ch"}},
+                        "identity": {"trace": {"param": "submission_id"}},
+                        "compare": {"service_code": {"param": "ehr.service_code"}},
+                    },
+                },
+            }
+        )
+        _STORE.clear()
+        _STORE["ch"] = [{"id": "h0", "trace": "S1", "service_code": "99213"}]
+        result = reconcile(spec, {"submission_id": "S1"}, now=NOW)
+    finally:
+        server.shutdown()
+        server.server_close()
+    ehr = result.legs[0]
+    assert ehr.outcome is ehr_outcome, ehr.reasons
+    assert result.outcome is ehr_outcome, result.reasons
