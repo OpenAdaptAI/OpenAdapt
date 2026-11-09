@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -93,9 +94,21 @@ def test_standalone_cli_constructor_inventory_also_disables_abbreviations():
         repository / "packages/agent",
         repository / "scripts",
     )
+    # Only tracked sources: CI's pytest --basetemp lives inside packages/flow,
+    # so a walk of the tree would also read other tests' temporary files.
+    tracked = {
+        repository / line
+        for line in subprocess.run(
+            ["git", "-C", str(repository), "ls-files", "-z", "--", "*.py"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.split("\0")
+        if line
+    }
     constructors = 0
     for root in roots:
-        for source in root.rglob("*.py"):
+        for source in sorted(p for p in tracked if p.is_relative_to(root)):
             relative = source.relative_to(root)
             if (
                 any(part in ("test", "tests") for part in relative.parts)

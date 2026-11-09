@@ -15,10 +15,18 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from openadapt_flow.runtime.effects.db_snapshot import SqliteBlob, SqliteText
+
 Canonicaliser = Literal["exact", "uuid"]
 _UUID = re.compile(
     r"(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})\Z"
 )
+
+
+# SQLite snapshot cells carry their storage class: text is a SqliteText and a
+# blob a SqliteBlob (its upper-case hex, the text the JSON read gave before).
+# Both are read as text here, as before; a SqliteReal is not.
+_TEXT = (str, SqliteText, SqliteBlob)
 
 
 class FrameIdentityError(ValueError):
@@ -49,10 +57,10 @@ def canonical_identity(value: Any, canonicaliser: Canonicaliser) -> str:
     if canonicaliser == "uuid":
         if isinstance(value, bytes) and len(value) == 16:
             return value.hex()
-        if type(value) is str and _UUID.fullmatch(value):
+        if type(value) in _TEXT and _UUID.fullmatch(value):
             return value.replace("-", "").lower()
         raise FrameIdentityError("identity is not a canonicalisable UUID")
-    if type(value) is str and value:
+    if type(value) in _TEXT and value:
         return "text:" + value
     if type(value) is int:
         return "integer:" + str(value)

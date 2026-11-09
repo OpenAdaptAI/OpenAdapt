@@ -391,3 +391,23 @@ def test_opt_out_bypasses_the_library_gate(monkeypatch):
     bs.ensure_chromium_installed()
 
     assert calls == []
+
+
+def test_headed_bundled_launch_does_not_deadlock(monkeypatch):
+    """A headed launch takes the guard, then ensure_chromium_installed takes it
+    again. With a plain Lock that second acquire never returned, so every
+    first headed launch (record --url) hung before the browser opened."""
+    import threading
+
+    monkeypatch.setattr(bs, "_chromium_present", lambda: True)
+    monkeypatch.setattr(bs, "require_browser_support", lambda: None)
+    monkeypatch.setattr(bs, "_bundled_ready", set())
+    done = threading.Event()
+
+    def launch():
+        bs.ensure_bundled_chromium(headless=False)
+        done.set()
+
+    threading.Thread(target=launch, daemon=True).start()
+    assert done.wait(timeout=10), "ensure_bundled_chromium(headless=False) hung"
+    assert False in bs._bundled_ready
