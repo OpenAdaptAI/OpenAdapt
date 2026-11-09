@@ -319,6 +319,111 @@ def test_native_select_replay_refuses_a_missing_label(
     assert keys == 0
 
 
+def _choose_in_select(options_html: str, label: str) -> tuple[Any, str, int]:
+    """Focus ``#s`` built from ``options_html`` and ask the backend to choose
+    ``label``: (the chooser's result or the exception it raised, the select's
+    value afterwards, how many change events fired)."""
+
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    sync_api = pytest.importorskip("playwright.sync_api")
+    with sync_api.sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            page.set_content(
+                '<select id="s"><option value="">Choose</option>'
+                + options_html
+                + "</select><script>window.__changes = 0;"
+                "document.getElementById('s').addEventListener('change',"
+                " () => { window.__changes += 1; });</script>"
+            )
+            page.focus("#s")
+            outcome: Any
+            try:
+                outcome = PlaywrightBackend(page).select_focused_native_option(label)
+            except Exception as exc:  # noqa: BLE001 - the refusal is the result
+                outcome = exc
+            value = page.evaluate("document.getElementById('s').value")
+            changes = page.evaluate("window.__changes")
+        finally:
+            browser.close()
+    return outcome, value, changes
+
+
+_DECOY_TEXT = '<option value="v-shadow">Label  Alpha</option>'
+_DECOY_ATTR = '<option value="v-shadow" label="Label  Alpha">x</option>'
+
+
+@pytest.mark.parametrize("decoy", [_DECOY_TEXT, _DECOY_ATTR], ids=["text", "attr"])
+def test_native_select_choice_skips_a_whitespace_decoy(decoy: str) -> None:
+    # Playwright's select_option(label=) and option.label both collapse
+    # whitespace, so "Label  Alpha" would pass for "Label Alpha". The match
+    # is on the raw label: the later exact option is the one chosen.
+    outcome, value, changes = _choose_in_select(
+        decoy + '<option value="v-alpha">Label Alpha</option>', "Label Alpha"
+    )
+    assert outcome is True
+    assert value == "v-alpha"
+    assert changes == 1
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        _DECOY_TEXT,
+        _DECOY_ATTR,
+        # Two exact duplicates: replay can't tell which was meant.
+        '<option value="v-1">Label Alpha</option>'
+        '<option value="v-2">Label Alpha</option>',
+        '<option value="v-lead"> Label Alpha</option>',
+        '<option value="v-trail">Label Alpha </option>',
+        '<option value="v-nbsp">Label&nbsp;Alpha</option>',
+        '<option value="v-attr" label=" Label Alpha">x</option>',
+        # The one exact option is disabled.
+        '<option value="v-off" disabled>Label Alpha</option>',
+    ],
+    ids=[
+        "decoy-text",
+        "decoy-attr",
+        "duplicates",
+        "leading",
+        "trailing",
+        "nbsp",
+        "attr-leading",
+        "disabled",
+    ],
+)
+def test_native_select_choice_without_one_exact_label_refuses(options: str) -> None:
+    from openadapt_flow.backend import StructuralResolutionRefused
+
+    outcome, value, changes = _choose_in_select(options, "Label Alpha")
+    assert isinstance(outcome, StructuralResolutionRefused), outcome
+    assert value == ""
+    assert changes == 0
+
+
+@pytest.mark.parametrize(
+    ("variant", "label"),
+    [
+        ('<option value="v-lead"> Label Alpha</option>', " Label Alpha"),
+        ('<option value="v-trail">Label Alpha </option>', "Label Alpha "),
+        ('<option value="v-nbsp">Label&nbsp;Alpha</option>', "Label\u00a0Alpha"),
+    ],
+    ids=["leading", "trailing", "nbsp"],
+)
+def test_native_select_choice_matches_whitespace_variants_exactly(
+    variant: str, label: str
+) -> None:
+    # Each variant is chosen only by its own exact string, never by the plain
+    # "Label Alpha" option beside it.
+    outcome, value, _changes = _choose_in_select(
+        '<option value="v-alpha">Label Alpha</option>' + variant, label
+    )
+    assert outcome is True
+    assert value == variant.split('"')[1]
+
+
 def test_native_select_with_a_shared_label_is_refused(
     fixture_url: str, tmp_path: Path
 ) -> None:

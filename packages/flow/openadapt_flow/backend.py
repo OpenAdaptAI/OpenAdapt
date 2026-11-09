@@ -44,6 +44,16 @@ class StructuralElementNotActionable(StructuralResolutionRefused):
     """
 
 
+class StructuralRefusalAfterDelivery(StructuralResolutionRefused):
+    """A safety refusal raised after the backend already delivered input.
+
+    The backend acted and then found the result is not exactly what the step
+    asked for (a native select that did not keep the exactly labelled
+    option). It halts like any :class:`StructuralResolutionRefused`, but the
+    step's delivery is reported as attempted: an input edge was crossed.
+    """
+
+
 class ActionDeliveryUncertain(RuntimeError):
     """An action API failed after delivery may already have begun.
 

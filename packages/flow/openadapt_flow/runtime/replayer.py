@@ -89,6 +89,7 @@ from openadapt_flow.backend import (
     SelectOptionBackend,
     StructuralBackend,
     StructuralElementNotActionable,
+    StructuralRefusalAfterDelivery,
     StructuralResolutionRefused,
     SubmitBindingBackend,
 )
@@ -12382,6 +12383,9 @@ class Replayer:
         self._active_delivery_acknowledgers = ()
         try:
             delivered = call()
+        except StructuralRefusalAfterDelivery:
+            result.delivery_attempted = True
+            raise
         except (FreshActuationRequired, StructuralResolutionRefused):
             result.delivery_attempted = attempted_before
             raise

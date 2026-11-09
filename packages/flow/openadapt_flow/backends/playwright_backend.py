@@ -31,6 +31,7 @@ if TYPE_CHECKING:  # pragma: no cover
 from openadapt_flow.backend import (
     ActionDeliveryUncertain,
     StructuralElementNotActionable,
+    StructuralRefusalAfterDelivery,
     StructuralResolutionRefused,
 )
 from openadapt_flow.ir import (
@@ -1157,16 +1158,52 @@ def _fill_iso_date(target: Any, text: str) -> bool:
     return True
 
 
-#: How many enabled options of a native single ``<select>`` carry exactly
-#: ``label`` (``option.label``, which Playwright's ``select_option(label=)``
-#: also matches exactly). ``null`` when the target is not a native select;
-#: ``-1`` when it is one that a label cannot choose (multiple or disabled).
-_NATIVE_SELECT_LABEL_COUNT_JS = r"""(e, label) => {
-    if (e.tagName !== 'SELECT') return null;
-    if (e.multiple || e.disabled) return -1;
-    return Array.from(e.options).filter(
-        (o) => o.label === label && !o.disabled).length;
+#: A native option's raw label: its ``label`` attribute when set and not
+#: empty, else its ``textContent``, byte for byte. ``option.label`` would not
+#: do: it strips and collapses whitespace, so "Label  Alpha" reads as
+#: "Label Alpha" (and Playwright's ``select_option(label=)`` normalizes too).
+_RAW_OPTION_LABEL_JS = r"""(o) => {
+        const attr = o.getAttribute('label');
+        return attr !== null && attr !== '' ? attr : o.textContent;
+    }"""
+
+#: Choose, in a native single ``<select>``, the one option whose raw label is
+#: exactly ``label``, and fire ``input`` and ``change`` as
+#: ``select_option`` does. Returns ``{kind: 'none'}`` when the target is no
+#: native select, ``{kind: 'refused'}`` (nothing changed) when it is a
+#: multiple or disabled select or not exactly one option matches (or the one
+#: match is disabled), else ``{kind: 'selected', index, value}``.
+_SELECT_EXACT_LABEL_JS = (
+    r"""(e, label) => {
+    if (e.tagName !== 'SELECT') return {kind: 'none'};
+    if (e.multiple || e.disabled) return {kind: 'refused'};
+    const raw = """
+    + _RAW_OPTION_LABEL_JS
+    + r""";
+    const matches = [];
+    Array.from(e.options).forEach((o, i) => {
+        if (raw(o) === label) matches.push(i);
+    });
+    if (matches.length !== 1) return {kind: 'refused'};
+    const index = matches[0];
+    if (e.options[index].disabled) return {kind: 'refused'};
+    e.selectedIndex = index;
+    e.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
+    e.dispatchEvent(new Event('change', {bubbles: true}));
+    return {kind: 'selected', index: index, value: e.options[index].value};
 }"""
+)
+
+#: The selected option of a native select, read again after the events ran.
+_SELECTED_RAW_OPTION_JS = (
+    r"""(e) => {
+    const raw = """
+    + _RAW_OPTION_LABEL_JS
+    + r""";
+    const o = e.selectedIndex >= 0 ? e.options[e.selectedIndex] : null;
+    return o ? {index: e.selectedIndex, label: raw(o), value: o.value} : null;
+}"""
+)
 
 
 def _select_native_option(target: Any, text: str) -> bool:
@@ -1174,24 +1211,39 @@ def _select_native_option(target: Any, text: str) -> bool:
 
     Typing into a select only highlights an option where the browser opens a
     popup for it (Linux Chromium), and commits nothing until the popup
-    closes; Enter to commit could submit a form. ``select_option(label=)``
-    sets the choice on the element itself and fires ``input`` and
-    ``change``, with no key events. ``target`` is an element handle. Returns
-    ``False``, with nothing delivered, when the target is no native select.
-    Once it is, a label that names no single enabled option (or a multiple or
-    disabled select) is refused with nothing delivered: replay never falls
-    back to typing. The caller's read-back still checks the shown label.
+    closes; Enter to commit could submit a form. The option is chosen on the
+    element itself, by index, firing ``input`` and ``change`` with no key
+    events. The match is on the raw label (see ``_RAW_OPTION_LABEL_JS``),
+    byte for byte: "Label  Alpha", " Label Alpha" or a no-break space never
+    match "Label Alpha". ``target`` is an element handle. Returns ``False``,
+    with nothing delivered, when the target is no native select. Once it is,
+    zero or several exact matches, a disabled match, or a multiple or
+    disabled select are refused with nothing delivered: replay never falls
+    back to typing. After the choice the selected option is read again, and
+    anything but that option with exactly that label is refused. The
+    caller's read-back still checks the shown label.
     """
 
-    count = target.evaluate(_NATIVE_SELECT_LABEL_COUNT_JS, text)
-    if count is None:
+    outcome = target.evaluate(_SELECT_EXACT_LABEL_JS, text)
+    kind = outcome.get("kind") if isinstance(outcome, dict) else None
+    if kind == "none":
         return False
-    if count != 1:
+    if kind != "selected":
         raise StructuralResolutionRefused(
             "the focused native <select> has no single enabled option labelled "
             "exactly as the step's value; refusing to choose one"
         )
-    target.select_option(label=text, timeout=1000)
+    chosen = target.evaluate(_SELECTED_RAW_OPTION_JS)
+    if not (
+        isinstance(chosen, dict)
+        and chosen.get("index") == outcome.get("index")
+        and chosen.get("label") == text
+        and chosen.get("value") == outcome.get("value")
+    ):
+        raise StructuralRefusalAfterDelivery(
+            "the native <select> did not keep the option labelled exactly as "
+            "the step's value after it was chosen"
+        )
     return True
 
 
@@ -4973,6 +5025,11 @@ class PlaywrightBackend:
             self._assert_qualification_environment_current()
             try:
                 deliver(token_locator)
+            except StructuralResolutionRefused:
+                # A typed refusal from the delivery itself (a native select
+                # with no exactly labelled option) says what was delivered:
+                # nothing, or, as StructuralRefusalAfterDelivery, something.
+                raise
             except Exception as exc:
                 raise ActionDeliveryUncertain(
                     operation=operation,
