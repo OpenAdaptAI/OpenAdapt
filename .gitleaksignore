@@ -71,3 +71,5 @@ ccc7c617e5cd8082909b455ec6176a5e4c0dd4f0:packages/flow/tests/test_extension_netw
 ccc7c617e5cd8082909b455ec6176a5e4c0dd4f0:packages/flow/tests/test_extension_network_browser.py:generic-api-key:24
 # PR #1862: a test key file path (files / "agent.pem") passed to principal_from_key, not a key.
 b712804d6a80dde61588980f11e9b4d5a478f39e:packages/flow/tests/e2e/test_mcp_teach_desktop_e2e.py:generic-api-key:144
+# The same line after #1862 was squash-merged into main.
+be3584b446cc4c2b576d69ffc9d7a6d60f6fcb92:packages/flow/tests/e2e/test_mcp_teach_desktop_e2e.py:generic-api-key:144
