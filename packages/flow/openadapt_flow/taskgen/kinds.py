@@ -165,7 +165,7 @@ def person_row(
     fn, ln = (first, last) if first and last else s.name()
     n = prof.names
     row: dict[str, Any] = {
-        P.key: key or s.key(),
+        P.key_field: key or s.key(),
         n["first"]: fn,
         n["last"]: ln,
         n["birth"]: dob or s.dob(),
@@ -181,7 +181,7 @@ def child_row(
     s: Sampler, prof: Profile, parent_alias: str, *, used: set[str]
 ) -> dict[str, Any]:
     C = prof.entity(prof.child)
-    row: dict[str, Any] = {C.parent[1]: f"${parent_alias}"}
+    row: dict[str, Any] = {C.parent_ref[1]: f"${parent_alias}"}
     for f in C.editable:
         v = s.value(C, f.name)
         if f.name == C.identify_by:
@@ -285,11 +285,11 @@ def make_write(
 
     P, C = prof.entity(prof.person), prof.entity(prof.child)
     person = w.get(prof.person, person_id)
-    key = person[P.key]
+    key = person[P.key_field]
     new = dict(new or {})
     ck = contract_kind(prof, kind)
     if kind == "create":
-        values = {P.key: key, **new}
+        values = {P.key_field: key, **new}
         steps = [{"kind": "click", "selector": f"#new-{C.name}"}] + form_fill(C, new)
         return Write(
             ck,
@@ -299,7 +299,7 @@ def make_write(
             f"/e/{C.name}/new?parent={person_id}",
         )
     if kind == "update":
-        values = {P.key: key, **{f"new_{k}": v for k, v in new.items()}}
+        values = {P.key_field: key, **{f"new_{k}": v for k, v in new.items()}}
         steps = [{"kind": "click", "selector": "#edit"}] + form_fill(P, new)
         return Write(
             ck,
@@ -308,13 +308,12 @@ def make_write(
             {"kind": "click", "selector": "#save"},
             f"/e/{P.name}/{person_id}/edit",
         )
-    assert child_id is not None or kind == "merge"
     if kind == "merge":
         assert survivor_id is not None
-        skey = w.get(prof.person, survivor_id)[P.key]
+        skey = w.get(prof.person, survivor_id)[P.key_field]
         m = P.merge
         values = {
-            P.key: key,
+            P.key_field: key,
             f"new_{m['status_field']}": m["status_value"],
             f"new_{m['into_field']}": skey,
         }
@@ -329,12 +328,13 @@ def make_write(
             {"kind": "click", "selector": "#confirm-merge"},
             f"/e/{P.name}/{person_id}/merge",
         )
+    assert child_id is not None
     child = w.get(prof.child, child_id)
-    ident = C.identify_by
+    ident = C.identity_field
     open_child = [{"kind": "click", "selector": f"#open-{C.name}-{child_id}"}]
     if kind == "update_child":
         values = {
-            P.key: key,
+            P.key_field: key,
             ident: child[ident],
             **{f"new_{k}": v for k, v in new.items()},
         }
@@ -352,7 +352,7 @@ def make_write(
         cf = C.cancel
         reason = new[cf["reason_field"]]
         values = {
-            P.key: key,
+            P.key_field: key,
             ident: child[ident],
             f"new_{cf['status_field']}": cf["status_value"],
             f"new_{cf['reason_field']}": reason,

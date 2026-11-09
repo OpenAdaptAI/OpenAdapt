@@ -87,7 +87,7 @@ def ddl(profile: Profile) -> list[str]:
         for f in e.fields:
             col = f"{_q(f.name)} {f.sql_type}"
             if f.type == "ref":
-                col += f" REFERENCES {_q(profile.entity(f.entity).table)}(id)"
+                col += f" REFERENCES {_q(profile.entity(f.ref_entity).table)}(id)"
             if f.default is not None:
                 col += f" NOT NULL DEFAULT '{f.default}'"
             out_col = col
@@ -678,7 +678,7 @@ class Handler(BaseHTTPRequestHandler):
         items = []
         for f in e.fields:
             val = (
-                self._ref_text(f.entity, row[f.name])
+                self._ref_text(f.ref_entity, row[f.name])
                 if f.type == "ref"
                 else _text(row[f.name])
             )
@@ -786,7 +786,7 @@ class Handler(BaseHTTPRequestHandler):
                 (rid, e.merge["status_value"]),
             )
             opts = "".join(
-                f'<option value="{_e(o[e.key])}">{_e(o[e.key])} · {_e(self._title(e, o))}'
+                f'<option value="{_e(o[e.key_field])}">{_e(o[e.key_field])} · {_e(self._title(e, o))}'
                 + (
                     f" · {_e(o[wb.profile.names['birth']])}"
                     if wb.profile.names["birth"] in o
@@ -884,7 +884,9 @@ class Handler(BaseHTTPRequestHandler):
                 ).strip(),
             }
         elif op == "merge":
-            into = wb.store.find(name, f"{_q(e.key)} = %s", (form.get("into", ""),))
+            into = wb.store.find(
+                name, f"{_q(e.key_field)} = %s", (form.get("into", ""),)
+            )
             if not into:
                 return self._send(
                     400,
@@ -975,7 +977,9 @@ def serve_env() -> tuple[str, Workbench, Callable[[], None]]:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     ap.add_argument("profile")
     ap.add_argument("--dsn", required=True)
     ap.add_argument("--port", type=int, default=0)

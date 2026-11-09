@@ -49,7 +49,7 @@ def demo_plan(prof: Profile, w: K.World, s: K.Sampler) -> list[K.Write]:
     out: list[K.Write] = []
     people = [i + 1 for i in range(len(w.rows[prof.person]))]
     kids = {
-        pid: [cid for cid, _ in w.find(prof.child, **{C.parent[1]: f"$p{pid}"})]
+        pid: [cid for cid, _ in w.find(prof.child, **{C.parent_ref[1]: f"$p{pid}"})]
         for pid in people
     }
     for n, pid in enumerate(people[:2]):
@@ -129,13 +129,13 @@ def demonstrate_and_propose(
             pid = next(
                 n
                 for n, r in w.find(prof.person)
-                if r[prof.entity(prof.person).key]
-                == write.values[prof.entity(prof.person).key]
+                if r[prof.entity(prof.person).key_field]
+                == write.values[prof.entity(prof.person).key_field]
             )
             browser.open(url + "/login")
             browser.run(
                 K.sign_in(prof)
-                + K.open_person(prof, write.values[prof.entity(prof.person).key])
+                + K.open_person(prof, write.values[prof.entity(prof.person).key_field])
                 + write.actions
             )
             vc.main(
