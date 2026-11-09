@@ -1317,3 +1317,51 @@ def test_ambiguous_title_selector_is_refused_before_pinning() -> None:
 
     with pytest.raises(RemoteDisplayError, match="ambiguous"):
         backend.screenshot()
+
+
+def test_hover_jitter_reprepare_goes_through_the_real_remote_lease(tmp_path) -> None:
+    """The jitter re-prepare (#1708) on the real backend's prepared-pointer lease.
+
+    The first fresh resolve lands one pixel off. The runtime prepares the
+    pointer again at the fresh point; the backend validates and consumes the
+    first lease before moving, and the click goes out at exactly the second
+    prepared point.
+    """
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.runtime.replayer import Replayer
+    from tests.test_replayer import FakeVision, Match, click_step, make_png
+
+    client = FakeClient(
+        window=WindowInfo(
+            window_id=1,
+            owner="Parallels Desktop",
+            title="Windows 11",
+            pid=99,
+            bounds=(0.0, 0.0, 300.0, 200.0),
+            on_screen=True,
+        ),
+        px=(300, 200),
+    )
+    backend = RemoteDisplayBackend(client=client, settle_s=0.0)
+    vision = FakeVision()
+    # The resolver puts the click at the match box plus the recorded offset.
+    vision.template_results = [
+        Match(point=(0, 0), region=(100, 100, 50, 20), confidence=0.95),
+        Match(point=(0, 0), region=(101, 101, 50, 20), confidence=0.95),
+        Match(point=(0, 0), region=(101, 101, 50, 20), confidence=0.95),
+    ]
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True)
+    (bundle / "templates" / "btn.png").write_bytes(make_png((50, 20)))
+
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="jitter-real-lease", steps=[click_step(risk="irreversible")]),
+        bundle_dir=bundle,
+        run_dir=tmp_path / "run",
+    )
+
+    assert report.success is True, report.results[0].error
+    moves = [call[1:] for call in client.calls if call[0] == "move"]
+    presses = [call[1:3] for call in client.calls if call[0] == "mouse"]
+    assert moves[-2:] == [(110.0, 105.0), (111.0, 106.0)]
+    assert presses and set(presses) == {(111.0, 106.0)}

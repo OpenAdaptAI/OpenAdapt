@@ -315,15 +315,22 @@ SALT_LEN: Final[int] = _SALT_LEN
 NONCE_LEN: Final[int] = _NONCE_LEN
 
 
-def derive_data_key(passphrase: str, salt: bytes) -> bytes:
+def derive_data_key(
+    passphrase: str,
+    salt: bytes,
+    *,
+    n: int = _SCRYPT_N,
+    r: int = _SCRYPT_R,
+    p: int = _SCRYPT_P,
+) -> bytes:
     """The 256-bit scrypt key for ``passphrase`` and ``salt``, at the work
-    factors new containers record. A caller that derives once and caches the
-    key must keep it in memory only."""
+    factors new containers record unless explicit legacy parameters are given.
+    A caller that caches the key must keep it in memory only."""
     if not passphrase:
         raise MissingKeyError("no encryption passphrase configured")
     if len(salt) != _SALT_LEN:
         raise CryptoError("a data-key salt must be 16 bytes")
-    return _derive(passphrase, salt, n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P)
+    return _derive(passphrase, salt, n=n, r=r, p=p)
 
 
 def kdf_parameters() -> dict[str, int]:

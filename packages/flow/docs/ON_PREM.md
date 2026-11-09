@@ -189,8 +189,10 @@ sudo systemctl enable --now openadapt-flow-runner.path
 OPENADAPT_FLOW_SCRUB=on ./bin/verify-airgap.sh --config onprem.yaml --probe
 ```
 
-Containers instead of systemd: `docker compose -f docker-compose.yml config`
-(validate), then `docker compose up -d runner`. See
+Containers instead of systemd: build the image from a signed release with
+`bin/build-image.sh` (no network; `docker save` / `docker load` it across),
+set `OPENADAPT_FLOW_IMAGE` to its tag, then `docker compose -f
+docker-compose.yml config` (validate) and `docker compose up -d runner`. See
 [`deploy/on-prem/README.md`](../deploy/on-prem/README.md) and
 [`deploy/on-prem/UPDATE.md`](../deploy/on-prem/UPDATE.md) for the runnable
 package and update/rollback runbook, and
