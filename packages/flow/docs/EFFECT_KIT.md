@@ -456,7 +456,13 @@ recorded origin when it is local, or `--probe-base <local URL>`. No cookies or
 credentials are sent and redirects are not followed.
 
 A collection read is used only when it returns a record holding every
-parameter value the write sent. An item read that does is recorded but not
+parameter value the write sent. A probe finds the collection the save wrote,
+not the store, so a probed read that would pass a write outside it (the
+fault test's `collateral_unaudited`, or a captured write no read covers) is
+refused: no runnable check is written, the TODO draft is, and
+`read_discovery.json` and `record_check.proof.json` say `refused` with the
+reason and `needs_operator_confirmation: true`. `--complete-read` (the read
+is the whole store) or `--db` lifts it. An item read that does is recorded but not
 used, because it can't count new records. When no probe confirms, nothing is
 proposed: `read_discovery.json` lists every probe, marks the read
 `unavailable` and `needs_operator_confirmation: true`, and the TODO draft is

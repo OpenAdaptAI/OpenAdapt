@@ -1849,7 +1849,15 @@ class Proposal:
         return out
 
     @property
+    def refused(self) -> bool:
+        """A probed read was found but can't see the whole save: no check."""
+        found = self.search.read_discovery or {}
+        return found.get("status") == "refused"
+
+    @property
     def working(self) -> bool:
+        if self.refused:
+            return False
         if not self.effects or not any(s.is_target for s in self.search.surfaces):
             return False
         if self.live is not None and not self.live.get("passed"):
@@ -1895,7 +1903,9 @@ class Proposal:
                 )
         return {
             "schema": PROOF_SCHEMA,
-            "status": "working" if self.working else "draft",
+            "status": (
+                "refused" if self.refused else "working" if self.working else "draft"
+            ),
             "approved": False,
             "reads": reads,
             **(
@@ -2022,12 +2032,49 @@ def synthesize(
         closed_world=search.closed_world,
     )
     proposal = Proposal(params, search, effects, section, faults)
+    _refuse_partial_probed_read(proposal)
     cfg = gate_config(proposal)
     if fault_gate and db_path is not None:
         proposal.coverage = gate_on_database(proposal, Path(db_path), cfg)
     if proposal.coverage is None and cfg is not None:
         proposal.coverage = coverage_from_recorded(proposal.faults, cfg)
     return proposal
+
+
+def _refuse_partial_probed_read(proposal: Proposal) -> None:
+    """Refuse a check built on a probed read that can't see the whole save.
+
+    A probe finds the collection the save wrote, not the store. When the
+    fault test shows a write outside the reads would pass
+    (``collateral_unaudited``), or the capture holds a write no read covers,
+    a CONFIRMED from that check could hide a wrong write elsewhere. So no
+    runnable check is emitted: the read stays proposed only, with the reason,
+    and a person decides (``--complete-read``, ``--db`` or a fuller read).
+    """
+
+    found = proposal.search.read_discovery
+    if not found or found.get("status") != "promoted":
+        return
+    unaudited = [
+        f"{r.fault}: {r.detail}"
+        for r in proposal.faults
+        if r.fault == "collateral_unaudited" and not r.ok
+    ] + [f"not covered: {item}" for item in proposal.search.uncovered]
+    if not unaudited:
+        return
+    found.update(
+        status="refused",
+        needs_operator_confirmation=True,
+        reason=(
+            f"the probed read {found.get('read')} covers only the written "
+            "collection, and a write outside it would pass the check ("
+            + "; ".join(unaudited)
+            + "). No runnable check was written; confirm the read covers "
+            "everything the save can change (--complete-read), give --db, or "
+            "name a fuller read"
+        ),
+    )
+    proposal.search.notes.append(f"read discovery: {found['reason']}")
 
 
 # ---------------------------------------------------------------------------
