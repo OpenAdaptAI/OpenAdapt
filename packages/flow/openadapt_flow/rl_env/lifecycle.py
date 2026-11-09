@@ -19,6 +19,14 @@ On macOS and Windows, and for anything not started under the supervisor,
 teardown kills what it can find and reports ``proven=False``; callers must
 treat that as unknown, never as gone. :func:`stop` covers a server's own
 process group only.
+
+Signalling. On Linux every signal to a supervisor goes through a pidfd
+opened at spawn (``pidfd_send_signal``), so it cannot reach a process that
+reused the pid, even when another reaper (asyncio's child watcher) collects
+the supervisor first. Without a pidfd (macOS, Windows, or ``pidfd_open``
+refused) a signal is sent by pid after a liveness check and can race a
+concurrent reaper; that is a development-platform limit, and teardown there
+is never proven.
 """
 
 from __future__ import annotations
@@ -376,26 +384,79 @@ def _report_dir() -> str:
     return _REPORT_DIR
 
 
-@dataclass(frozen=True)
+@dataclass
 class SupervisedLaunch:
-    """One supervisor launch: its pid, the nonce its report must carry, and
-    its start identity, read right after it started. A report counts only
-    when all three match, so a stale report, or one left by an earlier
-    process that had this pid, is never read as this launch's."""
+    """One supervisor launch: its pid, the nonce its report must carry, its
+    start identity, and (Linux) a pidfd opened at spawn.
+
+    A report counts only when nonce, pid and start all match, so a stale
+    report, or one left by an earlier process that had this pid, is never
+    read as this launch's. Every signal goes through the pidfd, so it can
+    only reach this process: once it is gone the kernel answers ESRCH, even
+    if another reaper collected it and the pid was reused. Without a pidfd
+    (macOS, Windows, or ``pidfd_open`` refused) the teardown is never proven.
+    """
 
     pid: int
     nonce: str
     start: Optional[str]
+    pidfd: Optional[int] = None
 
     @classmethod
     def of(cls, pid: int, nonce: str) -> "SupervisedLaunch":
         from openadapt_flow.rl_env._supervisor import start_identity
 
-        return cls(pid=pid, nonce=nonce, start=start_identity(pid))
+        return cls(
+            pid=pid, nonce=nonce, start=start_identity(pid), pidfd=_pidfd_open(pid)
+        )
 
     @property
     def report(self) -> str:
         return os.path.join(_report_dir(), f"{self.nonce}.json")
+
+    def close(self) -> None:
+        """Close the pidfd (once; the attribute is cleared)."""
+        fd, self.pidfd = self.pidfd, None
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+
+
+def _pidfd_open(pid: int) -> Optional[int]:
+    opener = getattr(os, "pidfd_open", None)
+    if opener is None:
+        return None
+    try:
+        return int(opener(pid))
+    except OSError:
+        return None
+
+
+def _pidfd_signal(pidfd: int, sig: int) -> bool:
+    """Signal the process behind ``pidfd``; False once it is gone (ESRCH),
+    whoever reaped it. No other process can be reached."""
+    try:
+        getattr(signal, "pidfd_send_signal")(pidfd, sig)
+    except ProcessLookupError:
+        return False
+    except OSError as exc:
+        raise ProcessNotReaped(f"pidfd signal failed: {exc}") from exc
+    return True
+
+
+def _pidfd_reaped(pidfd: int) -> bool:
+    """Reap the child behind ``pidfd`` if it has exited. True once it is
+    reaped, by this call or by another reaper."""
+    try:
+        waitid = getattr(os, "waitid")
+        result = waitid(getattr(os, "P_PIDFD"), pidfd, os.WEXITED | os.WNOHANG)
+    except ChildProcessError:
+        return True
+    except OSError as exc:
+        raise ProcessNotReaped(f"pidfd wait failed: {exc}") from exc
+    return result is not None
 
 
 def supervised_command(args: Sequence[str]) -> tuple[list[str], str]:
@@ -465,40 +526,53 @@ def stop_supervised(
 
     SIGTERM asks it to kill and reap the command's whole tree; it reports
     the verdict in a file before it exits. ``proven`` only for a supervisor
-    that is reaped and reported ``proven`` for this launch. A supervisor
-    that does not finish in time is SIGKILLed with its group and
-    :class:`ProcessNotReaped` is raised; a report that is missing, malformed,
-    not this launch's or reports survivors raises
-    :class:`DescendantsUnknown`.
+    with a pidfd that is reaped and reported ``proven`` for this launch. A
+    supervisor that does not finish in time is SIGKILLed and
+    :class:`ProcessNotReaped` is raised; a report that is missing,
+    malformed, not this launch's or reports survivors raises
+    :class:`DescendantsUnknown`. The pidfd is closed at the end.
 
-    It signals the supervisor (and its group) only while it is this
-    process's unreaped child, checked first with ``proc.poll()`` (or a
-    non-blocking ``waitpid``): an unreaped child's pid, and the group it
-    leads, cannot be reused. Once it is reaped nothing is signalled. The one
-    window left is another reaper in this process (such as asyncio's child
-    watcher thread) collecting it between that check and the signal.
+    Signals go through the launch's pidfd (Linux), which cannot reach any
+    other process. Without one, a signal is sent by pid only after
+    ``proc.poll()`` (or a non-blocking ``waitpid``) shows the supervisor
+    still unreaped, and a concurrent reaper in this process (such as
+    asyncio's child watcher) can still collect it in between; that path is
+    therefore never proven.
     """
-    pid = launch.pid
+    pid, pidfd = launch.pid, launch.pidfd
 
     def reaped() -> bool:
+        if pidfd is not None:
+            done = _pidfd_reaped(pidfd)
+            if done and proc is not None and proc.returncode is None:
+                proc.returncode = -signal.SIGTERM  # collected via the pidfd
+            return done
         return proc.poll() is not None if proc is not None else _reap_child(pid)
 
-    deadline = time.monotonic() + timeout
-    done = reaped()
-    if not done:
-        _signal(pid, signal.SIGTERM)
-    while not done:
-        if time.monotonic() > deadline:
-            _killpg(pid, signal.SIGKILL)  # still our unreaped child: ours
-            _signal(pid, signal.SIGKILL)
-            raise ProcessNotReaped(
-                f"supervisor {pid} did not finish its teardown in {timeout:.0f} s"
-            )
-        time.sleep(0.02)
+    def send(sig: int) -> None:
+        if pidfd is not None:
+            _pidfd_signal(pidfd, sig)
+        elif not reaped():
+            _signal(pid, sig)  # poll-guarded; may race a concurrent reaper
+
+    try:
+        deadline = time.monotonic() + timeout
         done = reaped()
+        if not done:
+            send(signal.SIGTERM)
+        while not done:
+            if time.monotonic() > deadline:
+                send(signal.SIGKILL)
+                raise ProcessNotReaped(
+                    f"supervisor {pid} did not finish its teardown in {timeout:.0f} s"
+                )
+            time.sleep(0.02)
+            done = reaped()
+    finally:
+        launch.close()
     verdict = _read_verdict(launch)
     if verdict == "proven":
-        return Teardown("killed", proven=True)
+        return Teardown("killed", proven=pidfd is not None)
     if verdict == "unproven":
         return Teardown("killed", proven=False)
     raise DescendantsUnknown(

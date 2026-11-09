@@ -30,6 +30,7 @@ signals other processes only while they are its own unreaped children
 command's exit with ``waitid(WNOWAIT)``, which leaves the zombie in place.
 Where that is unavailable (macOS) it reaps the command to notice the exit
 and then no longer signals that group; that platform is ``unproven`` anyway.
+The command itself is signalled through a pidfd where Linux provides one.
 """
 
 from __future__ import annotations
@@ -102,21 +103,40 @@ def _own_children() -> list[int]:
     return found
 
 
-def _exited_unreaped(pid: int) -> Optional[bool]:
-    """Whether ``pid`` (our child) has exited, leaving it unreaped; None
+def _pidfd(pid: int) -> Optional[int]:
+    opener = getattr(os, "pidfd_open", None)
+    if opener is None:
+        return None
+    try:
+        return int(opener(pid))
+    except OSError:
+        return None
+
+
+def _exited_unreaped(pid: int, pidfd: Optional[int]) -> Optional[bool]:
+    """Whether the command (our child) has exited, leaving it unreaped; None
     where the platform cannot look without reaping."""
     waitid = getattr(os, "waitid", None)
     if waitid is None:
         return None
     flags = os.WEXITED | os.WNOHANG | os.WNOWAIT
     try:
+        if pidfd is not None:
+            return waitid(getattr(os, "P_PIDFD"), pidfd, flags) is not None
         return waitid(os.P_PID, pid, flags) is not None
     except ChildProcessError:
         return True
 
 
-def _teardown(command: int, group_owned: bool, subreaper: bool) -> str:
+def _teardown(
+    command: int, pidfd: Optional[int], group_owned: bool, subreaper: bool
+) -> str:
     deadline = time.monotonic() + TEARDOWN_S
+    if pidfd is not None:
+        try:
+            getattr(signal, "pidfd_send_signal")(pidfd, signal.SIGKILL)
+        except OSError:
+            pass  # already exited
     if group_owned:
         # The command is unreaped, so its group id is still ours.
         try:
@@ -155,9 +175,12 @@ def main(argv: list[str]) -> int:
 
     signal.signal(signal.SIGTERM, on_term)
     child = subprocess.Popen(command, start_new_session=True)
+    # Only this process reaps its children, so the pid is the command's until
+    # the teardown below; the pidfd makes that hold for signals too.
+    pidfd = _pidfd(child.pid)
     group_owned = True
     while not stop["requested"]:
-        exited = _exited_unreaped(child.pid)
+        exited = _exited_unreaped(child.pid, pidfd)
         if exited is None:
             # No way to look without reaping: reap, and stop owning the group.
             if child.poll() is not None:
@@ -166,7 +189,9 @@ def main(argv: list[str]) -> int:
         elif exited:
             break
         time.sleep(0.1)
-    verdict = _teardown(child.pid, group_owned, subreaper)
+    verdict = _teardown(child.pid, pidfd, group_owned, subreaper)
+    if pidfd is not None:
+        os.close(pidfd)
     if child.returncode is None:
         child.returncode = -9  # reaped by the teardown; keep Popen from waiting
     path = os.path.join(report_dir, f"{nonce}.json")

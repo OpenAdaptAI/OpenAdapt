@@ -597,7 +597,9 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
 
     def close(self) -> None:
         if self._driver_pid is not None:
-            _SUPERVISED.pop(self._driver_pid, None)
+            launch = _SUPERVISED.pop(self._driver_pid, None)
+            if launch is not None:
+                launch.close()
         if self._worker is None:
             return
         try:

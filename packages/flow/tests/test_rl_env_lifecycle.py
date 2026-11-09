@@ -666,10 +666,13 @@ def test_a_well_formed_proven_report_is_read_as_proven() -> None:
     proc, launch = _fake_supervisor()
     assert launch.start is not None
     _write(launch.report, _receipt(launch))
+    # Proven only where the launch has a pidfd (Linux); elsewhere a signal
+    # can race a concurrent reaper, so the teardown is never proven.
     assert lifecycle.stop_supervised(launch, proc=proc, timeout=10) == (
-        lifecycle.Teardown("killed", proven=True)
+        lifecycle.Teardown("killed", proven=LINUX)
     )
     assert not os.path.exists(launch.report)  # consumed once
+    assert launch.pidfd is None  # closed after the final reap
 
 
 @pytest.mark.parametrize(
@@ -796,3 +799,69 @@ def test_a_timeout_inside_playwright_start_taints_later_episodes(monkeypatch) ->
     monkeypatch.undo()
     out = _judged(env, monkeypatch)
     assert (out["verdict"], out["reward"]) == ("INDETERMINATE", 0.0)
+
+
+# -- signals go through a pidfd: a reaped process is ESRCH, never another pid --
+
+
+@pytest.mark.skipif(not LINUX, reason="pidfd is Linux-only")
+def test_a_pidfd_signal_after_another_reaper_collected_it_is_esrch(
+    monkeypatch,
+) -> None:
+    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+    pidfd = lifecycle._pidfd_open(proc.pid)
+    assert pidfd is not None
+    try:
+        # Another reaper (as asyncio's watcher thread would) collects it.
+        def reap() -> None:
+            os.kill(proc.pid, signal.SIGKILL)
+            os.waitpid(proc.pid, 0)
+
+        helper = threading.Thread(target=reap)
+        helper.start()
+        helper.join(timeout=30)
+        proc.returncode = -signal.SIGKILL
+        sent: list[int] = []
+        monkeypatch.setattr(lifecycle.os, "kill", lambda p, s: sent.append(p))
+        monkeypatch.setattr(lifecycle.os, "killpg", lambda p, s: sent.append(p))
+        assert lifecycle._pidfd_signal(pidfd, signal.SIGTERM) is False
+        assert lifecycle._pidfd_reaped(pidfd) is True
+        assert sent == []  # nothing went out by pid
+    finally:
+        os.close(pidfd)
+
+
+@pytest.mark.skipif(not LINUX, reason="pidfd is Linux-only")
+def test_stop_supervised_after_a_concurrent_reap_signals_no_pid(monkeypatch) -> None:
+    proc, launch = _fake_supervisor()
+    assert launch.pidfd is not None
+    _write(launch.report, _receipt(launch))
+    helper = threading.Thread(
+        target=lambda: (os.kill(proc.pid, signal.SIGKILL), os.waitpid(proc.pid, 0))
+    )
+    helper.start()
+    helper.join(timeout=30)
+    proc.returncode = -signal.SIGKILL
+    sent: list[int] = []
+    monkeypatch.setattr(lifecycle.os, "kill", lambda p, s: sent.append(p))
+    monkeypatch.setattr(lifecycle.os, "killpg", lambda p, s: sent.append(p))
+    real_pidfd_signal = lifecycle._pidfd_signal
+    via_pidfd: list[bool] = []
+
+    def recording(fd: int, sig: int) -> bool:
+        via_pidfd.append(real_pidfd_signal(fd, sig))
+        return via_pidfd[-1]
+
+    monkeypatch.setattr(lifecycle, "_pidfd_signal", recording)
+    # Reaped already, so nothing is signalled at all; the receipt still reads.
+    assert lifecycle.stop_supervised(launch, timeout=5).how == "killed"
+    assert sent == [] and via_pidfd == []
+    assert launch.pidfd is None
+
+
+@pytest.mark.skipif(LINUX, reason="the no-pidfd path is the non-Linux one")
+def test_without_a_pidfd_a_proven_receipt_is_still_unproven() -> None:
+    proc, launch = _fake_supervisor()
+    assert launch.pidfd is None
+    _write(launch.report, _receipt(launch))
+    assert lifecycle.stop_supervised(launch, proc=proc, timeout=10) == UNPROVEN_KILL
