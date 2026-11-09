@@ -112,6 +112,7 @@ def load_task(
     key_dir: str | Path | None = None,
     teach_authorization: Any = None,
     write_adapter: Any = None,
+    before_capture: Optional[Callable[[Any], None]] = None,
 ) -> TaskSetup:
     """Build one ordinary SkillCache from bounded operator-owned JSON.
 
@@ -121,6 +122,9 @@ def load_task(
     effect confirmation or admission.
     ``verifier`` uses the existing EffectsConfig fields; missing source/read
     semantics must be resolved by the app-pack generator, not guessed here.
+    ``before_capture`` is trusted Python configuration, never task JSON. It
+    receives the recording's owned backend before the actor starts and is not
+    part of task identity, persisted setup or admission.
     """
     source = Path(path).expanduser().resolve()
     try:
@@ -259,6 +263,7 @@ def load_task(
         ("hold", hold),
         ("teach_authorization", teach_authorization),
         ("write_adapter", write_adapter),
+        ("before_capture", before_capture),
     ]:
         if value is not None:
             options[name] = value

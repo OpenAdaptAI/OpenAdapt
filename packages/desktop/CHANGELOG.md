@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.29.3 (2026-11-08)
+
+### Bug Fixes
+
+- **flow**: refuse browser startup when animation frames cannot advance
+
+
+
 ## v0.29.2 (2026-11-08)
 
 ### Bug Fixes
