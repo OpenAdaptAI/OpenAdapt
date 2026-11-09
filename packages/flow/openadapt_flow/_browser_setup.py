@@ -110,7 +110,9 @@ def require_browser_support() -> None:
 # Guards so the probe runs at most once per process even under concurrent
 # first-launch attempts from multiple threads.
 _ensured = False
-_lock = threading.Lock()
+# Reentrant: ensure_bundled_chromium holds it while calling
+# ensure_chromium_installed, which takes it too.
+_lock = threading.RLock()
 
 
 def _opted_out() -> bool:

@@ -17437,10 +17437,17 @@ class Replayer:
                 )
                 for known, known_res, known_region, _ in eligible
             ]
-            for (_, known_res, _, known_identity), known_changed in zip(
-                eligible, changes
+            for back, ((_, known_res, _, known_identity), known_changed) in enumerate(
+                zip(eligible, changes)
             ):
                 if not known_changed:
+                    if back:
+                        # Matched an earlier confirmed frame, not the latest.
+                        result.check_to_click.append(
+                            CheckToClickRecheck(
+                                changed=[], outcome="settled", settled_on=back
+                            )
+                        )
                     if known_res is not resolution:
                         result.resolution = known_res
                     # The step's identity evidence is the check on this frame.

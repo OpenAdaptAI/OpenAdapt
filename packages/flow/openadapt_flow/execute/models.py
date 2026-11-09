@@ -69,6 +69,13 @@ class AdmittedBundle(_Strict):
     minimum_effect_strength: StrictStr
     bundle_dir: StrictStr | None = None
     target_url: StrictStr | None = None
+    #: Deployment file a bundle recorded off the web runs under (its
+    #: ``backend:`` section). None uses ``serve-execute --config``.
+    deployment: StrictStr | None = None
+    #: The Production qualification authority a bundle recorded off the web
+    #: runs under (``openadapt-flow run --qualification-authority-file``).
+    #: Standard actuation off the web is refused without one.
+    qualification_authority_file: StrictStr | None = None
     synthetic: StrictBool = False
     break_it: StrictBool = False
     policy: StrictStr = "clinical-write"
