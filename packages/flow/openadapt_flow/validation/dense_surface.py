@@ -864,7 +864,9 @@ def _needs_fresh_read(obs: ReplayObservation) -> bool:
 # Trial runner
 # ---------------------------------------------------------------------------
 
-from openadapt_flow.runtime.identity import longest_run, squash  # noqa: E402
+from openadapt_flow.runtime.identity import comparison_squash, longest_run  # noqa: E402
+
+squash = comparison_squash
 
 
 def _nearest_row_index(region: Region, points: dict) -> int:
