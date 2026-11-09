@@ -152,8 +152,15 @@ of those exact versions (`--subroutine-workflow-id`, default the workflow
 name), writing the library back. Without the library, or when any use is
 refused, certification fails with `subroutine_not_admitted`. A bundle with no
 subroutines is certified exactly as before. `openadapt-flow qualify <bundle>
---verify verify.yaml --certify` takes the same flag and refuses before running
-any case when it is missing.
+--verify verify.yaml` takes the same flag and refuses before running any case
+when it is missing, with or without `--certify`.
+
+Certification is not the last check. Every `openadapt-flow run` of such a
+bundle re-admits its subroutines against the current library
+(`--subroutine-library`, and `--subroutine-workflow-id` when it was
+registered under another id). If a newer version of a subroutine was
+published after certification, the run is refused with `superseded` until
+the bundle embeds the new version and is certified again.
 
 `qualify run` imports typed results from Desktop or another local,
 customer-controlled executor. Unsigned, stale, missing, symlinked, or

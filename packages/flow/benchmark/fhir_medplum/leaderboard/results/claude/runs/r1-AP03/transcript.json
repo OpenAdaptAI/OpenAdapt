@@ -1,0 +1,1515 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost:3000/Appointment?patient=Patient/bbb82627-39a3-4562-aa82-366f9914f1d2\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      220,
+      297
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      640,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      32,
+      31
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      124,
+      90
+     ]
+    },
+    {
+     "text": "Appointment"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      67,
+      138
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 10
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      84,
+      216
+     ]
+    },
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 10
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 15
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 30
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "region": [
+      266,
+      320,
+      766,
+      360
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      124,
+      90
+     ]
+    },
+    {
+     "text": "Appointment"
+    },
+    {
+     "duration": 5
+    },
+    {
+     "coordinate": [
+      67,
+      138
+     ]
+    },
+    {
+     "duration": 30
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Confirmed none exist. Create new.",
+   "actions": [
+    {
+     "coordinate": [
+      1231,
+      167
+     ]
+    },
+    {
+     "duration": 10
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Use the JSON tab.",
+   "actions": [
+    {
+     "coordinate": [
+      349,
+      131
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      430
+     ]
+    },
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "{\"resourceType\":\"Appointment\",\"status\":\"booked\",\"start\":\"2026-11-17T14:00:00Z\",\"end\":\"2026-11-17T14:30:00Z\",\"participant\":[{\"actor\":{\"reference\":\"Patient/bbb82627-39a3-4562-aa82-366f9914f1d2\"},\"status\":\"accepted\"},{\"actor\":{\"reference\":\"Practitioner/7956ce69-8370-4227-b792-f74fd475026a\"},\"status\":\"accepted\"}]}"
+    },
+    {
+     "coordinate": [
+      1182,
+      718
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      500
+     ]
+    },
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      450
+     ]
+    },
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "Delete"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+Home"
+    },
+    {
+     "text": "ctrl+shift+End"
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+Home"
+    },
+    {
+     "text": "Delete",
+     "repeat": 31
+    },
+    {
+     "text": "ctrl+End"
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+Home"
+    },
+    {
+     "text": "{"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      318,
+      200,
+      1212,
+      270
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+End"
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      318,
+      200,
+      1212,
+      270
+     ],
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+Home"
+    },
+    {
+     "text": "{"
+    },
+    {
+     "coordinate": [
+      1100,
+      251
+     ]
+    },
+    {
+     "text": "End"
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "region": [
+      318,
+      200,
+      1212,
+      270
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1182,
+      718
+     ]
+    },
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Parsed. Now scroll to find the Create button on the Form tab.",
+   "actions": [
+    {
+     "coordinate": [
+      282,
+      131
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      764,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 60
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      300
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 60
+    },
+    {
+     "coordinate": [
+      124,
+      90
+     ]
+    },
+    {
+     "text": "Appointment"
+    },
+    {
+     "duration": 5
+    },
+    {
+     "coordinate": [
+      67,
+      138
+     ]
+    },
+    {
+     "duration": 30
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Let me verify the list shows exactly one.",
+   "actions": [
+    {
+     "coordinate": [
+      67,
+      138
+     ]
+    },
+    {
+     "duration": 30
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "coordinate": [
+      1147,
+      167
+     ]
+    },
+    {
+     "duration": 20
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 45
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I booked the appointment. There is now exactly one Appointment for Tomasz Wren on the server, and it is the one I created.\n\nThe Appointment list was empty when I checked, so I created a new record rather than reporting an existing one. The list was slow and showed stale results at first, but after a reload it showed just this one record, with nothing before it.\n\nThe record is Appointment/64dfe4f8-575a-41bd-826c-249bc5ac5626. It has:\n- **Status:** booked.\n- **Time:** start 2026-11-17T14:00:00Z, end 2026-11-17T14:30:00Z. The page shows 10:00\u201310:30 AM because it displays local time.\n- **Participants:** Patient/bbb82627-39a3-4562-aa82-366f9914f1d2 (Tomasz Wren) and Practitioner/7956ce69-8370-4227-b792-f74fd475026a (Dr Ama Osei), each with status accepted.\n\nI wrote only status, start, end and participant.\n\nRESULT: DONE Appointment/64dfe4f8-575a-41bd-826c-249bc5ac5626",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost:3000/Appointment?patient=Patient/bbb82627-39a3-4562-aa82-366f9914f1d2\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 220,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 500,
+   "dx": 0,
+   "dy": 600
+  },
+  {
+   "a": "click",
+   "x": 32,
+   "y": 31,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Appointment"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 67,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  },
+  {
+   "a": "click",
+   "x": 84,
+   "y": 216,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  },
+  {
+   "a": "wait",
+   "s": 15.0
+  },
+  {
+   "a": "wait",
+   "s": 30.0
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Appointment"
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 67,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 30.0
+  },
+  {
+   "a": "click",
+   "x": 1231,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  },
+  {
+   "a": "click",
+   "x": 349,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 764,
+   "y": 430,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\"resourceType\":\"Appointment\",\"status\":\"booked\",\"start\":\"2026-11-17T14:00:00Z\",\"end\":\"2026-11-17T14:30:00Z\",\"participant\":[{\"actor\":{\"reference\":\"Patient/bbb82627-39a3-4562-aa82-366f9914f1d2\"},\"status\":\"accepted\"},{\"actor\":{\"reference\":\"Practitioner/7956ce69-8370-4227-b792-f74fd475026a\"},\"status\":\"accepted\"}]}"
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 764,
+   "y": 500,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 764,
+   "y": 450,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "Home"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "shift",
+    "End"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "Home"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "End"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "Home"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "End"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "Home"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{"
+  },
+  {
+   "a": "click",
+   "x": 1100,
+   "y": 251,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "End"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 282,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 500,
+   "dx": 0,
+   "dy": 7200
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 300,
+   "dx": 0,
+   "dy": -7200
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Appointment"
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 67,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 30.0
+  },
+  {
+   "a": "click",
+   "x": 67,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 30.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 1147,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 20.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 45.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6283,
+   "out": 148,
+   "usd": 0.017185,
+   "cached": 0
+  },
+  {
+   "in": 7845,
+   "out": 162,
+   "usd": 0.00679,
+   "cached": 6279
+  },
+  {
+   "in": 9397,
+   "out": 208,
+   "usd": 0.007533,
+   "cached": 7843
+  },
+  {
+   "in": 11003,
+   "out": 188,
+   "usd": 0.007778,
+   "cached": 9395
+  },
+  {
+   "in": 12581,
+   "out": 124,
+   "usd": 0.007389,
+   "cached": 11001
+  },
+  {
+   "in": 14106,
+   "out": 83,
+   "usd": 0.007162,
+   "cached": 12579
+  },
+  {
+   "in": 15566,
+   "out": 98,
+   "usd": 0.007455,
+   "cached": 14104
+  },
+  {
+   "in": 17062,
+   "out": 75,
+   "usd": 0.007607,
+   "cached": 15564
+  },
+  {
+   "in": 18522,
+   "out": 80,
+   "usd": 0.007866,
+   "cached": 17060
+  },
+  {
+   "in": 19987,
+   "out": 75,
+   "usd": 0.00812,
+   "cached": 18520
+  },
+  {
+   "in": 21447,
+   "out": 167,
+   "usd": 0.009321,
+   "cached": 19985
+  },
+  {
+   "in": 23012,
+   "out": 75,
+   "usd": 0.008955,
+   "cached": 21445
+  },
+  {
+   "in": 24472,
+   "out": 75,
+   "usd": 0.009006,
+   "cached": 23010
+  },
+  {
+   "in": 25932,
+   "out": 75,
+   "usd": 0.009298,
+   "cached": 24470
+  },
+  {
+   "in": 27392,
+   "out": 73,
+   "usd": 0.00957,
+   "cached": 25930
+  },
+  {
+   "in": 28837,
+   "out": 251,
+   "usd": 0.011605,
+   "cached": 27390
+  },
+  {
+   "in": 30522,
+   "out": 118,
+   "usd": 0.011163,
+   "cached": 28835
+  },
+  {
+   "in": 32038,
+   "out": 113,
+   "usd": 0.011028,
+   "cached": 30520
+  },
+  {
+   "in": 33549,
+   "out": 365,
+   "usd": 0.013839,
+   "cached": 32036
+  },
+  {
+   "in": 35347,
+   "out": 181,
+   "usd": 0.013018,
+   "cached": 33547
+  },
+  {
+   "in": 36936,
+   "out": 124,
+   "usd": 0.012285,
+   "cached": 35345
+  },
+  {
+   "in": 38445,
+   "out": 336,
+   "usd": 0.014523,
+   "cached": 36934
+  },
+  {
+   "in": 40201,
+   "out": 224,
+   "usd": 0.014323,
+   "cached": 38443
+  },
+  {
+   "in": 41843,
+   "out": 548,
+   "usd": 0.017629,
+   "cached": 40199
+  },
+  {
+   "in": 43820,
+   "out": 379,
+   "usd": 0.017105,
+   "cached": 41841
+  },
+  {
+   "in": 45605,
+   "out": 216,
+   "usd": 0.01539,
+   "cached": 43818
+  },
+  {
+   "in": 47227,
+   "out": 137,
+   "usd": 0.01455,
+   "cached": 45603
+  },
+  {
+   "in": 48749,
+   "out": 609,
+   "usd": 0.019344,
+   "cached": 47225
+  },
+  {
+   "in": 50799,
+   "out": 146,
+   "usd": 0.016338,
+   "cached": 48747
+  },
+  {
+   "in": 52343,
+   "out": 182,
+   "usd": 0.015843,
+   "cached": 50797
+  },
+  {
+   "in": 53948,
+   "out": 318,
+   "usd": 0.017665,
+   "cached": 52341
+  },
+  {
+   "in": 55713,
+   "out": 118,
+   "usd": 0.016386,
+   "cached": 53946
+  },
+  {
+   "in": 57229,
+   "out": 143,
+   "usd": 0.016366,
+   "cached": 55711
+  },
+  {
+   "in": 58782,
+   "out": 294,
+   "usd": 0.018272,
+   "cached": 57227
+  },
+  {
+   "in": 60472,
+   "out": 370,
+   "usd": 0.019685,
+   "cached": 58780
+  }
+ ]
+}

@@ -1,0 +1,212 @@
+{
+ "id": "AP11",
+ "class": "wrong_patient",
+ "type": "appointment",
+ "expect": "create",
+ "note": "The write path books the slot for another patient.",
+ "agent_s": 2457.9,
+ "cost_usd": 0.0,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "Open Tomasz Wren's Patient record to examine his events for any existing appointment.",
+  "claim_line": false,
+  "stopped": "time cap: 2400 s",
+  "end_url": "http://localhost:9821/Patient/fcec10e6-4c87-484d-8974-1b20fe7a4eaa",
+  "final_text": "Open Tomasz Wren's Patient record to examine his events for any existing appointment.",
+  "model_calls": 34,
+  "actions": 34,
+  "tokens_in": 260133,
+  "tokens_out": 2120
+ },
+ "verifier": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "no record is the person and the agent created none"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 0,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [],
+   "window_until": "2026-11-05T10:22:23+00:00"
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "no record is the person and the agent created none"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 0,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [],
+   "window_until": "2026-11-05T10:22:26+00:00"
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.5,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Appointment was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Practitioner",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AuditEvent",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 2,
+ "host_load": {
+  "start": 10.4,
+  "end": 13.4,
+  "waited_s": 0
+ }
+}

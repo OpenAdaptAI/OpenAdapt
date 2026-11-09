@@ -1,0 +1,61 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't check for or create a Patient record for Lena Okafor. Medplum is showing its sign-in page instead of a signed-in session, even though I was told I was already signed in. I reloaded the page and got the same result. I have no login credentials, and registering a new account isn't something I should do, so I made no changes.\n\nRESULT: NOT DONE Medplum is showing the sign-in page and I have no credentials, so I couldn't search for or create the patient record.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6285,
+   "out": 103,
+   "usd": 0.002294,
+   "cached": 6281
+  },
+  {
+   "in": 7761,
+   "out": 146,
+   "usd": 0.006415,
+   "cached": 6281
+  },
+  {
+   "in": 9308,
+   "out": 150,
+   "usd": 0.006923,
+   "cached": 7759
+  }
+ ]
+}

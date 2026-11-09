@@ -1,0 +1,100 @@
+{
+ "id": "P12",
+ "class": "clean",
+ "type": "patient",
+ "expect": "create",
+ "note": "A plain registration, without the sentence that says which elements to write.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 662.4,
+ "cost_usd": 0.089087,
+ "claim": {
+  "status": "done",
+  "id": "Patient/310e24c4-8184-433e-bf3f-9a180be28ecb",
+  "note": "RESULT: DONE Patient/310e24c4-8184-433e-bf3f-9a180be28ecb",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/Patient/310e24c4-8184-433e-bf3f-9a180be28ecb/json",
+  "final_text": "RESULT: DONE Patient/310e24c4-8184-433e-bf3f-9a180be28ecb",
+  "model_calls": 17,
+  "actions": 18,
+  "tokens_in": 213207,
+  "tokens_out": 952
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/310e24c4-8184-433e-bf3f-9a180be28ecb"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Patient/310e24c4-8184-433e-bf3f-9a180be28ecb": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 5.7,
+  "end": 26.2,
+  "waited_s": 0
+ }
+}

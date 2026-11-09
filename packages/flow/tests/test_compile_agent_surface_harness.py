@@ -68,7 +68,17 @@ class FakeSession:
     def node_center(self, node_id: str) -> Optional[tuple[int, int]]:
         return next((n["c"] for n in self.nodes if n["node_id"] == node_id), None)
 
-    def click(self, x: int, y: int) -> None:
+    def click(
+        self,
+        x: Optional[int] = None,
+        y: Optional[int] = None,
+        *,
+        node_id: Optional[str] = None,
+    ) -> None:
+        if node_id is not None:
+            point = self.node_center(node_id)
+            assert point is not None
+            x, y = point
         self.performed.append(("click", x, y))
 
     def double_click(self, x: int, y: int) -> None:
@@ -277,7 +287,11 @@ def _verify(tmp_path: Path) -> Path:
 
 
 def test_only_an_agent_that_drives_surfaces_records_one(tmp_path: Path) -> None:
-    from openadapt_flow.compile_agent import FirstRunCompiler, ScriptedAgent
+    from openadapt_flow.compile_agent import (
+        ClaudeAgent,
+        FirstRunCompiler,
+        ScriptedAgent,
+    )
     from openadapt_flow.compile_agent.pipeline import UnsupportedTarget
 
     compiler = FirstRunCompiler(
@@ -291,7 +305,9 @@ def test_only_an_agent_that_drives_surfaces_records_one(tmp_path: Path) -> None:
     )
     assert compiler.backend_kind == "macos" and compiler.url is None
     with pytest.raises(UnsupportedTarget, match="surface harness"):
-        compiler.record(ScriptedAgent(steps=[]), {"note": "x"})
+        compiler.record(ClaudeAgent(vision="code", client=object()), {"note": "x"})
+    # Scripted steps name controls, which the surface harness lists too.
+    assert ScriptedAgent(steps=[]).drives_surfaces is True
     # The spec round-trips with its surface, for runs after a restart.
     compiler.save_spec()
     again = FirstRunCompiler.load(compiler.dir)
@@ -315,3 +331,143 @@ def test_the_teach_server_admits_only_as_an_agent_under_a_policy(
     no_policy = SimpleNamespace(kind="agent", policy=None, principal_id="agent:x")
     with pytest.raises(ValueError, match="registered agent under a signed"):
         TeachConfig(**common, url="http://x", admitter=no_policy)
+
+
+@pytest.mark.parametrize(
+    ("condition", "code"),
+    [
+        ("different_control", "stale_node"),
+        ("unreadable_identity", "stale_node"),
+        ("unknown_process", "stale_node"),
+        ("twins", "ambiguous_node"),
+        ("offscreen_twin", "ambiguous_node"),
+        ("truncated", "tree_truncated"),
+        ("other_window", "stale_node"),
+    ],
+)
+@pytest.mark.parametrize("path", ["click", "native_for", "type_text", "driven"])
+def test_native_ref_refusals_reach_the_authoring_session(
+    tmp_path: Path, condition: str, code: str, path: str
+) -> None:
+    from concurrent.futures import Future
+
+    from openadapt_flow.authoring import AuthoringError
+    from openadapt_flow.compile_agent.driven import _Command
+    from tests.test_authoring import (
+        _identity,
+        _native_session,
+        _WindowedTreeBackend,
+        _windowed,
+    )
+
+    class Backend(_WindowedTreeBackend):
+        def authoring_tree(self) -> dict[str, Any]:
+            return {
+                **super().authoring_tree(),
+                "truncated": condition == "truncated",
+            }
+
+    node = _windowed("Open", 100, {"hwnd": 11, "pid": 7})
+    if path == "type_text":
+        node["role"] = "text_input"
+    nodes = [node]
+    if condition == "twins":
+        nodes.append({**node, "backend_pixels": {"x": 300, "y": 100, "w": 40, "h": 20}})
+    elif condition == "offscreen_twin":
+        nodes.append(
+            {"role": node["role"], "offscreen": True, "identity": node["identity"]}
+        )
+    backend = Backend(nodes)
+    backend.live[(120, 110)] = {
+        "different_control": _identity("Delete"),
+        "unreadable_identity": None,
+        "unknown_process": _identity("Open", process=None),
+    }.get(condition, _identity("Open"))
+    backend.window_at[(120, 110)] = (12 if condition == "other_window" else 11, 7)
+    session = _native_session(tmp_path, backend)
+    computer = CaptureComputer(session, dialect="generic", sleep=lambda s: None)
+    harness = SurfaceHarness(computer, SaveGate([]))
+    ref = next(iter(harness.observe().controls))
+    session.start_record()
+    try:
+        with pytest.raises(AuthoringError) as excinfo:
+            if path == "click":
+                harness.click(ref)
+            elif path == "native_for":
+                native, selected = harness.native_for({"ref": ref})
+                harness.act(native, selected)
+            elif path == "type_text":
+                harness.type_text("synthetic note", ref=ref)
+            else:
+                agent = DrivenAgent()
+                agent.harness = harness
+                agent.request = SimpleNamespace(inputs={})
+                agent._handle(
+                    _Command("act", {"action": "click", "ref": ref}, Future())
+                )
+        assert excinfo.value.code == code
+        assert not any(call[0] in {"click", "type_text"} for call in backend.calls)
+        assert computer.pointer is None
+        assert computer.actions == harness.stats.actions == 0
+        assert computer.log == []
+    finally:
+        session.stop_record()
+
+
+def test_native_ref_with_matching_identity_is_recorded(tmp_path: Path) -> None:
+    from tests.test_authoring import (
+        _identity,
+        _native_node,
+        _native_session,
+        _NativeTreeBackend,
+    )
+
+    backend = _NativeTreeBackend([_native_node("Open", 100)])
+    backend.live[(120, 110)] = _identity("Open")
+    session = _native_session(tmp_path, backend)
+    computer = CaptureComputer(session, dialect="generic", sleep=lambda s: None)
+    harness = SurfaceHarness(computer, SaveGate([]))
+    ref = next(iter(harness.observe().controls))
+    session.start_record()
+    try:
+        harness.click(ref)
+        reread = backend.calls.index(("element_identity_at", 120, 110))
+        click = backend.calls.index(("click", 120, 110, False))
+        assert reread < click
+        assert computer.pointer == (120, 110)
+        assert computer.actions == harness.stats.actions == 1
+    finally:
+        session.stop_record()
+
+
+def test_a_native_save_rechecks_identity_after_the_person_approves(
+    tmp_path: Path,
+) -> None:
+    from openadapt_flow.authoring import AuthoringError
+    from tests.test_authoring import (
+        _identity,
+        _native_node,
+        _native_session,
+        _NativeTreeBackend,
+    )
+
+    backend = _NativeTreeBackend([_native_node("Save", 100)])
+    backend.live[(120, 110)] = _identity("Save")
+    session = _native_session(tmp_path, backend)
+
+    def approve(_request: GateRequest) -> bool:
+        backend.live[(120, 110)] = _identity("Delete")
+        return True
+
+    computer = CaptureComputer(session, dialect="generic", sleep=lambda s: None)
+    harness = SurfaceHarness(computer, SaveGate([], hold=approve))
+    ref = next(iter(harness.observe().controls))
+    session.start_record()
+    try:
+        with pytest.raises(AuthoringError) as excinfo:
+            harness.click(ref)
+        assert excinfo.value.code == "stale_node"
+        assert harness.gate_log[-1]["decision"] == "approved_by_hold"
+        assert not any(call[0] == "click" for call in backend.calls)
+    finally:
+        session.stop_record()

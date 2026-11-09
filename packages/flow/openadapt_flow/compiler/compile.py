@@ -1051,6 +1051,9 @@ def _new_text_postcondition(
         A TEXT_PRESENT postcondition, or None if there is no suitable
         stable new text.
     """
+    # A field may restate a row and still confirm a save. OCR layout and
+    # an off-row click do not establish selection semantics, so they cannot
+    # remove an otherwise eligible positive text check.
     before_norm = {normalize_text(l.text) for l in before_lines}
     before_squashed = [_squash(l.text) for l in before_lines if l.text.strip()]
 

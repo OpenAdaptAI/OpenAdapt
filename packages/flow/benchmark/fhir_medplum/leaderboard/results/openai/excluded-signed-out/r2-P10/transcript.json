@@ -1,0 +1,39 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_037743a50d1c4a71016ae95deaf5c887d2bf4648ef77fe8078",
+     "call_id": "call_A1EylajtlGc1M5IEdMqfpCsw",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Medplum is showing the sign-in page, so I cannot check for or create the Patient record.",
+   "calls": []
+  }
+ ],
+ "actions": [],
+ "usage": [
+  {
+   "in": 2316,
+   "out": 36,
+   "usd": 0.000829,
+   "cached": 2313
+  },
+  {
+   "in": 3533,
+   "out": 57,
+   "usd": 0.001282,
+   "cached": 3530
+  }
+ ]
+}
