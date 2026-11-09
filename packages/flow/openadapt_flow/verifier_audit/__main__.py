@@ -35,11 +35,15 @@ def _factory(spec: str):
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m openadapt_flow.verifier_audit")
+    parser = argparse.ArgumentParser(
+        prog="python -m openadapt_flow.verifier_audit", allow_abbrev=False
+    )
     sub = parser.add_subparsers(dest="cmd", required=True)
-    fam = sub.add_parser("families", help="print the family set as JSON")
+    fam = sub.add_parser(
+        "families", help="print the family set as JSON", allow_abbrev=False
+    )
     fam.add_argument("--families-module")
-    run = sub.add_parser("run", help="audit a target")
+    run = sub.add_parser("run", help="audit a target", allow_abbrev=False)
     run.add_argument("--target", required=True)
     run.add_argument("--target-arg", action="append", default=[])
     run.add_argument("--out", type=Path, required=True)
