@@ -423,9 +423,41 @@ _SOURCE_V2_CHILDREN = {
     },
     "Guard": {"predicate": ("Predicate", "one")},
     "Predicate": {"anchor": ("Anchor", "one"), "operands": ("Predicate", "list")},
-    "Anchor": {"structural": ("StructuralLocator", "one")},
+    "Anchor": {
+        "structural": ("StructuralLocator", "one"),
+        "identity_template": ("IdentityTemplate", "one"),
+    },
+    "IdentityTemplate": {
+        "tokens": ("TokenTemplate", "list"),
+        "ocr_noise": ("IdentityTemplate", "one"),
+    },
     "ApiBinding": {"effects": ("Effect", "list")},
 }
+
+
+def _source_v2_reachable_owners() -> set[str]:
+    seen, pending = set(), ["Workflow"]
+    while pending:
+        owner = pending.pop()
+        if owner not in seen:
+            seen.add(owner)
+            pending.extend(
+                child for child, _ in _SOURCE_V2_CHILDREN.get(owner, {}).values()
+            )
+    return seen
+
+
+# Every v2 omission rule must be reachable from the source walk, or a field the
+# current serializer emits (and compute_content_digest omits) would stay in the
+# source projection and every re-save of an upgraded bundle would refuse.
+_unreachable_v2_owners = {
+    rule.owner.__name__ for rule in _SEALED_CANONICAL_OMISSIONS_BY_VERSION[2]
+} - _source_v2_reachable_owners()
+if _unreachable_v2_owners:  # pragma: no cover - import-time format guard
+    raise RuntimeError(
+        "schema-2 omission owners missing from _SOURCE_V2_CHILDREN: "
+        + ", ".join(sorted(_unreachable_v2_owners))
+    )
 
 
 def _source_v2_omissions(content: object, owner: str = "Workflow") -> None:
