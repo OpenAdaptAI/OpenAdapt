@@ -111,9 +111,9 @@
     {
       "module": "openadapt_flow.deployment",
       "path": "packages/flow/openadapt_flow/deployment.py",
-      "line": 2492,
+      "line": 2489,
       "edge_kind": "transitive",
-      "diagnostic": "openadapt_flow.deployment:2492: unresolvable dynamic import (nonliteral or unresolved import target)",
+      "diagnostic": "openadapt_flow.deployment:2489: unresolvable dynamic import (nonliteral or unresolved import target)",
       "reason": "unbounded-config",
       "follow_up": "unresolved-import-provider-migration",
       "source_statement_sha256": "80e7f8f4414906b23171823e392bace356b7432ae492e0b56ad794d1b8f65d1b"
