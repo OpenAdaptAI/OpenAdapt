@@ -15,8 +15,6 @@ from __future__ import annotations
 
 import hashlib
 import io
-import time
-from typing import Any
 
 import pytest
 from PIL import Image
