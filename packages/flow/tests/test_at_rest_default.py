@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import secrets
 import stat
 from pathlib import Path
 
@@ -17,6 +18,7 @@ import pytest
 from openadapt_flow import at_rest, crypto, sealed_set
 from openadapt_flow.__main__ import _recording_encryption_key, main
 from openadapt_flow.ir import Workflow
+from tests._sealed_markers import assert_sealed_marker_absent
 from tests.test_sealed_at_rest import (
     PNG_SIGNATURE,
     _assert_ciphertext_only,
@@ -377,10 +379,20 @@ def test_default_mode_checkpoints_are_encrypted_on_disk(
         pass
     assert replayer.checkpoint_key == at_rest.local_key()
     store = CheckpointStore(run_dir, key=replayer.checkpoint_key)
-    store._write_model(run_dir / "checkpoints" / "probe.json", Workflow(name="x"))
+    marker = secrets.token_hex(16)
+    probe = run_dir / "checkpoints" / "probe.json"
+    store._write_model(probe, Workflow(name=marker))
     on_disk = sorted(p.name for p in (run_dir / "checkpoints").iterdir())
     assert on_disk == ["probe.json.enc"]
-    assert b"probe" not in (run_dir / "checkpoints" / "probe.json.enc").read_bytes()
+    assert_sealed_marker_absent(
+        probe.with_name("probe.json.enc").read_bytes(), marker.encode("ascii")
+    )
+    restored = store._read_json(probe)
+    assert restored is not None
+    assert Workflow.model_validate(restored).name == marker
+    wrong_store = CheckpointStore(run_dir, key="synthetic-wrong-checkpoint-key")
+    with pytest.raises(crypto.DecryptionError):
+        wrong_store._read_json(probe)
 
 
 def test_a_recording_only_key_reads_back_from_the_environment(
