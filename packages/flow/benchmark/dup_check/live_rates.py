@@ -52,7 +52,9 @@ API_FIELDS = (
 def main() -> int:
     from verification_coverage.independent import live  # the fixture helpers
 
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--long-items", type=int, default=500)
     parser.add_argument("--budget-s", type=float, default=3000.0)
