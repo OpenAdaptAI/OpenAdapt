@@ -592,14 +592,7 @@ jobs:
           # shellcheck disable=SC2086 # COVERAGE_ARGS is empty or two flags.
           pytest -n logical --dist loadfile -v --durations=20 --basetemp=runs/ci \
             $COVERAGE_ARGS --junitxml=runs/flow-unit-shard-${{ matrix.shard }}-of-${{ matrix.of }}.xml "${files[@]}"
-      - name: Retain this shard's claims evidence
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: flow-unit-junit-${{ matrix.shard }}-of-${{ matrix.of }}
-          path: packages/flow/runs/flow-unit-shard-${{ matrix.shard }}-of-${{ matrix.of }}.xml
-          if-no-files-found: error
-          retention-days: 7
+      # Before the claims upload, which tests expect to be the last step.
       - name: Upload coverage data
         if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -608,6 +601,14 @@ jobs:
           path: packages/flow/runs/coverage-shard-${{ matrix.shard }}.data
           if-no-files-found: warn
           retention-days: 14
+      - name: Retain this shard's claims evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flow-unit-junit-${{ matrix.shard }}-of-${{ matrix.of }}
+          path: packages/flow/runs/flow-unit-shard-${{ matrix.shard }}-of-${{ matrix.of }}.xml
+          if-no-files-found: error
+          retention-days: 7
 
   flow-coverage:
     # Measures safety-path coverage and reports it in the job summary. It does
