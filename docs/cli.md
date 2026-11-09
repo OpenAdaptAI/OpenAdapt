@@ -115,7 +115,7 @@ openadapt flow replay bundle --url https://portal.example --surface chart=linux:
 `macos`, `linux`, `rdp` or `citrix`) and part of its window title. Switch
 windows as you normally would; each change becomes a checked switch step.
 An action in a window you did not declare stops the recording. See
-[MULTI_SURFACE.md](../packages/flow/docs/MULTI_SURFACE.md#recording-across-windows-record---surface).
+[MULTI_SURFACE.md](../packages/flow/docs/MULTI_SURFACE.md#recording-across-windows-record).
 
 ## Launcher diagnostics
 
