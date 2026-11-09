@@ -2496,7 +2496,7 @@ def verify_run(
             )
 
             stored_history = baseline["state"]["detail"].get(DETAIL)
-            if checkpoint_problem(stored_history) is not None:
+            if checkpoint_problem(stored_history, history_spec) is not None:
                 raise ValueError("history baseline is unavailable")
             history_checkpoint, _history_rows = _read_history(
                 cfg, params, stored_history["since"], salt
@@ -2958,6 +2958,20 @@ def recheck_problem(
     problem = late_write.state_problem(state)
     if problem is not None:
         return problem
+    history_spec = cfg.frame.history if cfg.frame is not None else None
+    if history_spec is not None:
+        from openadapt_flow.runtime.effects.history import (
+            DETAIL,
+            checkpoint_pair_problem,
+        )
+
+        baseline_history = (
+            (state["baseline"].get("state") or {}).get("detail") or {}
+        ).get(DETAIL)
+        post_history = state["post_state"].get("history")
+        problem = checkpoint_pair_problem(baseline_history, post_history, history_spec)
+        if problem is not None:
+            return problem
     receipt, evidence = dict(state["receipt"]), dict(state["evidence"])
     if receipt_problem(receipt) or evidence_problem(evidence, receipt):
         return "the recheck state's receipt and evidence don't match"
@@ -3151,7 +3165,22 @@ def recheck_run(
             raise VerifyRunError(
                 "history rechecks require source provenance; later-write windows cannot excuse events"
             )
-        checkpoint = post["history"]
+        from openadapt_flow.runtime.effects.history import (
+            DETAIL,
+            checkpoint_pair_problem,
+        )
+
+        checkpoint = post.get("history")
+        baseline_history = (
+            (state.get("baseline") or {}).get("state", {}).get("detail") or {}
+        ).get(DETAIL)
+        problem = checkpoint_pair_problem(
+            baseline_history, checkpoint, cfg.frame.history
+        )
+        if problem is not None:
+            raise VerifyRunError(problem)
+        if not isinstance(checkpoint, dict):
+            raise VerifyRunError("the history checkpoint is malformed")
         now, rows = _read_history(
             cfg, params, checkpoint["since"], bytes.fromhex(str(state["salt"]))
         )

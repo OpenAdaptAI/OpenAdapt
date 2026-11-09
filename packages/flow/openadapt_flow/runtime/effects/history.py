@@ -24,6 +24,7 @@ from openadapt_flow.runtime.effects.effect import ValueExpr
 
 HISTORY_SCHEMA = "openadapt.history-checkpoint/v1"
 DETAIL = "openadapt:frame_history"
+SQL_INVENTORY = "all-retained-events/v1"
 _ID = re.compile(r"^[A-Za-z0-9\-.]{1,64}$")
 
 
@@ -366,18 +367,26 @@ def read_history(
             when = instant(row["occurred_at"])
             if feed.read["kind"] == "sql" and when > through:
                 raise ValueError("history event is newer than its coverage boundary")
-            if when < instant(since):
-                continue
+            # Event time does not establish when an identity became visible.
+            # In particular, SQL transaction-start timestamps may predate
+            # this attempt even when the commit appears after its baseline.
+            # Keep every returned identity; the existing budget bounds it.
             event = _mac(key, [name, row["event_id"]])
             if event in events:
                 raise ValueError("history repeats an event identity")
             events[event] = _mac(key, row)
             raw[event] = {**row, "scope": name, "authoritative": feed.author_server_set}
         feeds[name] = {"through": through.isoformat(), "events": events}
+        if feed.read["kind"] == "sql":
+            # Older checkpoints omitted pre-since rows. They cannot be
+            # silently reinterpreted as complete retained-event inventories.
+            feeds[name]["inventory"] = SQL_INVENTORY
     return {"schema_version": HISTORY_SCHEMA, "since": since, "feeds": feeds}, raw
 
 
-def checkpoint_problem(checkpoint: Any) -> Optional[str]:
+def checkpoint_problem(
+    checkpoint: Any, spec: Optional[FrameHistory] = None
+) -> Optional[str]:
     if (
         not isinstance(checkpoint, dict)
         or set(checkpoint) != {"schema_version", "since", "feeds"}
@@ -388,12 +397,25 @@ def checkpoint_problem(checkpoint: Any) -> Optional[str]:
         instant(checkpoint["since"])
         if not isinstance(checkpoint["feeds"], dict) or not checkpoint["feeds"]:
             raise ValueError()
-        for feed in checkpoint["feeds"].values():
-            if set(feed) != {"through", "events"} or not isinstance(
-                feed["events"], dict
-            ):
+        if spec is not None and set(checkpoint["feeds"]) != set(spec.feeds):
+            raise ValueError()
+        for name, feed in checkpoint["feeds"].items():
+            keys = {"through", "events"}
+            if "inventory" in feed:
+                keys.add("inventory")
+                if feed["inventory"] != SQL_INVENTORY:
+                    raise ValueError()
+            if set(feed) != keys or not isinstance(feed["events"], dict):
                 raise ValueError()
-            instant(feed["through"])
+            if spec is not None:
+                kind = spec.feeds[name].read.get("kind")
+                if kind not in ("sql", "fhir"):
+                    raise ValueError()
+                expected = SQL_INVENTORY if kind == "sql" else None
+                if feed.get("inventory") != expected:
+                    return "the history checkpoint lacks a complete retained-event inventory"
+            if instant(feed["through"]) < instant(checkpoint["since"]):
+                raise ValueError()
             if any(
                 not re.fullmatch(r"[a-f0-9]{64}", value)
                 for pair in feed["events"].items()
@@ -402,6 +424,17 @@ def checkpoint_problem(checkpoint: Any) -> Optional[str]:
                 raise ValueError()
     except (ValueError, TypeError, KeyError, AttributeError):
         return "the history checkpoint is malformed"
+    return None
+
+
+def checkpoint_pair_problem(before: Any, now: Any, spec: FrameHistory) -> Optional[str]:
+    """One coverage and attempt-window rule for every history consumer."""
+    for checkpoint in (before, now):
+        problem = checkpoint_problem(checkpoint, spec)
+        if problem is not None:
+            return problem
+    if instant(before["since"]) != instant(now["since"]):
+        return "history checkpoints name different attempt boundaries"
     return None
 
 
@@ -416,10 +449,9 @@ def judge_history(
 ) -> Any:
     from openadapt_flow.runtime.effects.frame import FrameChange, FrameVerdict
 
-    if set(checkpoint["feeds"]) != set(spec.feeds) or set(now["feeds"]) != set(
-        spec.feeds
-    ):
-        return FrameVerdict("not_checked", "history scope is incomplete")
+    problem = checkpoint_pair_problem(checkpoint, now, spec)
+    if problem is not None:
+        return FrameVerdict("not_checked", problem)
     mine = {str(x.resolve(params) or "") for x in spec.self_actors}
     if "" in mine:
         return FrameVerdict("not_checked", "history self identity is unresolved")
@@ -490,6 +522,12 @@ def judge_initial_history(
     Only the declared record's one write is removed from the late judge;
     additional versions or deletes remain collateral even on that record.
     """
+    from openadapt_flow.runtime.effects.frame import FrameVerdict
+
+    problem = checkpoint_pair_problem(before, now, spec)
+    if problem is not None:
+        return FrameVerdict("not_checked", problem)
+    started = instant(before["since"])
     pruned = {
         **now,
         "feeds": {
@@ -507,6 +545,9 @@ def judge_initial_history(
             if (
                 target in targets
                 and target not in used
+                # Discovery after a checkpoint does not authorize a write
+                # whose own event time predates this attempt's start.
+                and instant(row["occurred_at"]) >= started
                 and str(row["operation"]).upper()
                 in ("POST", "PUT", "PATCH", "INSERT", "UPDATE")
             ):
@@ -517,8 +558,6 @@ def judge_initial_history(
                 # target is a conflicting write, even by a colleague.
                 remaining[event] = {**row, "authoritative": False}
     if targets - used:
-        from openadapt_flow.runtime.effects.frame import FrameVerdict
-
         return FrameVerdict(
             "not_checked", "a saved target has no corresponding history event"
         )

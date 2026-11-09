@@ -489,7 +489,38 @@ independent coverage query in one read-only transaction. The coverage query
 returns `retained_since`, `through`, and `event_count`; it must describe the
 source's complete retained history, independently of the event query. The
 SQL event query returns `event_id`, `record_id`, `operation`, `author`, and
-`occurred_at`. Both time columns and event times include a timezone.
+`occurred_at`. Both time columns and event times are timezone-bearing ISO
+strings. SQL checkpoints retain every returned event identity, including
+events dated before the attempt; the independent count and existing budget
+bound that inventory. A new identity is judged even when its timestamp is
+old. Earlier SQL checkpoints lack the per-feed retained-inventory marker and
+cannot authorize an initial or final verdict under this model; they remain
+unresolved rather than being upgraded or rebaselined.
+
+A SQL-history confirmation recorded by an older ledger cannot be promoted
+to a final result during a retry handoff unless the recheck recorded the
+current inventory model and the same frame contract. The current recheck
+writer records that tag only after validating and confirming the issued
+checkpoint. Missing or different tags hold the cached result for review;
+old entries are never retagged. This cannot revoke a result already delivered
+by an older runtime, and it does not reconstruct a missing old inventory.
+
+Event visibility and event attribution are separate. A newly discovered event
+dated before the attempt cannot count as its intended target write. A known
+historical event stays in the baseline, and a changed or missing historical
+event prevents confirmation. The same checks apply before provisional
+success and during recheck.
+
+FHIR `_since` selects resource-version creation time. The reader uses the
+history entry's server `response.lastModified`, falling back to the resource's
+server-managed `meta.lastUpdated`; a domain timestamp such as
+`Provenance.recorded` does not set this boundary. Every returned history row
+is retained. Setup must qualify version visibility, retention and the coverage
+frontier for the actual endpoint. A source that omits versions that become
+visible later with older version timestamps cannot establish complete
+coverage from a timestamp-filtered history response alone. No client-side
+quiet window proves that source property, and unsupported coverage must not
+be presented as a complete finality proof.
 
 A confirmed initial check has `provisional: true` and `final: false` while its
 recheck is owed. A consumer that requires a final verdict calls
