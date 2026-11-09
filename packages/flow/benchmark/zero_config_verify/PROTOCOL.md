@@ -256,3 +256,15 @@ arm cannot change.
 The fourth run re-runs every arm on the same cases. The third run's data is
 kept as `results-run3.json`. The thresholds, the baselines, the ground truth
 and the trial cases are unchanged.
+
+### 2026-11-09, before the fourth run (review fix)
+
+Review of the change above found a false CONFIRMED: a root list that was empty
+when probed (`"fees": []`), or a collection the root left out while empty, got
+no read, so a stray row written there later passed. The fix, made before the
+fourth run: the check reads every top-level list the root returns, empty ones
+included; one more read takes every list under a key the probe did not see,
+and the save may add no row there; a reviewed list that disappears makes the
+read unreadable. The fault test injects a stray row into each of these. Nothing
+else in this protocol changes, and the expected MockLoan outcome (refused,
+`GET /api` returns 404) is the same.

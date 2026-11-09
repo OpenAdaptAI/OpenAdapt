@@ -600,34 +600,72 @@ def cover(
             row["outcome"] = "holds a list the REST check can't read"
             why.append(f"GET {row['path']}: {row['outcome']}")
             continue
+        # Every top-level list is a collection the check must read, an empty
+        # one included (``_listings`` skips lists that hold no object).
+        lists: dict[str, list[Any]] = (
+            {str(k): v for k, v in body.items() if isinstance(v, list)}
+            if isinstance(body, dict)
+            else {}
+        )
+        odd = sorted(
+            k for k, v in lists.items() if any(not isinstance(i, dict) for i in v)
+        )
+        if odd:
+            row["outcome"] = "holds a list of non-records under " + ", ".join(odd)
+            why.append(f"GET {row['path']}: {row['outcome']}")
+            continue
         # Promote: the root replaces the collection; every list it returns
-        # is read (the saved record's may gain one row, the others none).
+        # is read (the saved record's may gain one row, the others none), and
+        # a list under any other key makes the read unreadable.
         safe = row["path"]
         taken.update({target.name, target.content_name})
         target.source = f"probe GET {safe} (read-only, after the save)"
         target.store_wide = True
+        if isinstance(body, dict):
+            target.config["records_list_keys"] = sorted(lists)
         guarded: list[rcs.Surface] = []
-        for listing in listings:
-            if listing is target_listing:
+        for key in sorted(lists):
+            if key == target_listing.records_key:
                 continue
-            records = [dict(r) for r in listing.resources]
+            records = [dict(r) for r in lists[key]]
             config: dict[str, Any] = {
                 "kind": "rest",
                 "base_url": target.config["base_url"],
                 "records_path": target.config["records_path"],
-                "records_key": listing.records_key,
+                "records_key": key,
+                "records_list_keys": sorted(lists),
             }
             guarded.append(
                 rcs.Surface(
-                    name=rcs._unique_name(
-                        f"{target.name}_{listing.records_key or 'records'}", taken
-                    ),
+                    name=rcs._unique_name(f"{target.name}_{key}", taken),
                     config=config,
                     after=records,
                     before=[dict(r) for r in records],
                     before_recorded=False,
-                    source=f"probe GET {safe} (read-only, after the save), "
-                    f"list {listing.records_key!r}",
+                    source=f"probe GET {safe} (read-only, after the save), list {key!r}",
+                    observed_complete=target.observed_complete,
+                    incomplete=[],
+                )
+            )
+        if isinstance(body, dict):
+            # Any list under a key the probe did not see: a collection that
+            # appeared later. The save may add no row there.
+            guarded.append(
+                rcs.Surface(
+                    name=rcs._unique_name(f"{target.name}_other_lists", taken),
+                    config={
+                        "kind": "rest",
+                        "base_url": target.config["base_url"],
+                        "records_path": target.config["records_path"],
+                        "records_key": None,
+                        "records_list_keys": sorted(lists),
+                        "records_other_lists": True,
+                    },
+                    after=[],
+                    before=[],
+                    before_recorded=False,
+                    source=f"probe GET {safe} (read-only, after the save), every "
+                    "list not seen when probed",
                     observed_complete=target.observed_complete,
                     incomplete=[],
                 )
@@ -644,7 +682,7 @@ def cover(
         covering.update(
             status="promoted",
             read=safe,
-            lists=[listing.records_key for listing in listings],
+            lists=sorted(lists) if isinstance(body, dict) else [None],
             basis=(
                 f"GET {safe} is the root of every captured write; it holds the "
                 "written record and every record of "

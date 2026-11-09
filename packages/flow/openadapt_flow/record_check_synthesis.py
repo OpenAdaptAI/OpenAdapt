@@ -1803,7 +1803,12 @@ def prove_against_faults(
                 stray["_stray"] = "1"
             run(
                 "collateral_unaudited",
-                f"a stray row written to {surface.name}",
+                (
+                    f"a stray row written to a collection {surface.name} did not "
+                    "show when probed (a new list in the store read)"
+                    if surface.config.get("records_other_lists")
+                    else f"a stray row written to {surface.name}"
+                ),
                 {**base, surface.name: (before, after + [stray])},
             )
 

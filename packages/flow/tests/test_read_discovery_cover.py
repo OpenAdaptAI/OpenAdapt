@@ -85,6 +85,12 @@ class StoreApp:
                     self._send(200, {"records": app.fees})
                 elif path in ("/api", "/api/") and root == "split":
                     self._send(200, {"transfers": app.transfers, "fees": app.fees})
+                elif path in ("/api", "/api/") and root == "omit_empty":
+                    # A collection with no rows is left out of the body.
+                    body = {"transfers": app.transfers}
+                    if app.fees:
+                        body["fees"] = app.fees
+                    self._send(200, body)
                 elif path in ("/api", "/api/") and root == "merged":
                     self._send(200, {"records": self._everything()})
                 elif path in ("/api", "/api/") and root == "partial":
@@ -109,7 +115,7 @@ class StoreApp:
                 if app.stray:
                     app.fees.append(
                         {
-                            "id": max(r["id"] for r in app.fees) + 1,
+                            "id": max([r["id"] for r in app.fees], default=500) + 1,
                             "account": body.get("account"),
                             "fee": "9.99",
                         }
@@ -230,6 +236,58 @@ def test_root_that_covers_the_save_is_promoted_and_catches_a_stray_row(
     app.stray = True
     bad = {"account": "acct-4004", "memo": "Synthetic memo: stray fee run"}
     assert _judge(proposal, app, bad) == "REFUTED"
+
+
+@pytest.mark.parametrize("root", ["split", "omit_empty"])
+def test_a_stray_row_in_an_empty_or_absent_collection_is_refuted(
+    tmp_path, make_app, root
+):
+    """Regression: an empty sibling list (``"fees": []``) or a collection the
+    root left out while empty must still be read, so a stray fee written
+    there after the probe is REFUTED, not CONFIRMED."""
+
+    app = make_app(root=root)
+    app.fees = []
+    rec = _recording(tmp_path / "rec", app)
+    proposal = synthesize(rec, probe_reads=True)
+    assert proposal.working, proposal.misses
+    found = proposal.search.read_discovery
+    assert found["read"] == "/api"
+    names = {s.config.get("records_key") for s in proposal.search.surfaces}
+    if root == "split":
+        assert "fees" in names
+    other = [s for s in proposal.search.surfaces if s.config.get("records_other_lists")]
+    assert len(other) == 1
+    details = [
+        r["detail"] for r in proposal.proof()["faults"] if r["result"] == "caught"
+    ]
+    assert any("did not show when probed" in d for d in details)
+    if root == "split":
+        assert any(d.endswith("_fees") for d in details)
+
+    good = {"account": "acct-3003", "memo": "Synthetic memo: covered run"}
+    assert _judge(proposal, app, good) == "CONFIRMED"
+    app.stray = True
+    bad = {"account": "acct-4004", "memo": "Synthetic memo: stray fee run"}
+    assert _judge(proposal, app, bad) == "REFUTED"
+
+
+def test_a_reviewed_list_that_disappears_reads_as_unreadable(make_app):
+    from openadapt_flow.runtime.effects.rest import RestRecordVerifier
+
+    app = make_app(root="omit_empty")
+    reader = RestRecordVerifier(
+        app.url,
+        records_path="/api",
+        records_key="transfers",
+        records_complete=True,
+        list_keys=("fees", "transfers"),
+    )
+    app.fees = []
+    assert reader._fetch_records() is None
+    assert "fees" in (reader.read_problem or "")
+    app.fees = [{"id": 501, "account": "acct-0001", "fee": "2.50"}]
+    assert reader._fetch_records() is not None
 
 
 def test_promoted_covering_read_is_written_to_read_discovery_json(tmp_path, make_app):

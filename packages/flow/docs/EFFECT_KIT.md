@@ -1086,7 +1086,7 @@ Per-kind required fields:
 | `ui_readback` | `ui_readback` section: `record_url`, `sign_in` (env-var names for the read-back account), `ready_selector`, `row_selector`, `fields`, `identity` | `url_params`, `empty_selector`, `not_found_selector`, `read_post_paths`, per-field `attribute` / `date_format` / `casefold`, `truncation_markers`, `navigation_timeout_s` |
 | `desktop_readback` | `desktop_readback` section: `session` (a `backend:`-style config for the read-back session), `search` (`box`, `query`), `ready`, `identity`, `fields` | `credentials` (env-var names), `sign_in`, `search.submit`, `open.results`, `not_found`, per-control `shows` / `region` / `at`, per-field `date_format` / `casefold`, `min_ocr_confidence`, `navigation_timeout_s`, `settle_s` |
 | `deferred_report` | `deferred_report` section: `report` (`format`, and for csv/text its columns or pattern and `accept`), `key`, `deadline_hours`, `ledger` | `report.reject`, `describe` |
-| `rest` | `base_url` | `records_path` (may contain `{placeholder}`s), `records_key`, `records_next_path`, `records_total_path`, `records_complete`, `records_snapshot_path`, `path_params`, `auth`, `records_drop_fields` |
+| `rest` | `base_url` | `records_path` (may contain `{placeholder}`s), `records_key`, `records_next_path`, `records_total_path`, `records_complete`, `records_list_keys`, `records_other_lists`, `records_snapshot_path`, `path_params`, `auth`, `records_drop_fields` |
 | `graphql` | `base_url` + `graphql_query` | `graphql_variables` (`{param: ...}` entity binding), `graphql_records_path`, `graphql_freshness_field` + `graphql_freshness_window_s`, `auth` |
 | `fhir` | `base_url` | `resource_type`, `search_params`, `search_param_exprs`, `field_paths`, `access_token_env` or `smart_backend`, `verify_tls`, `records_drop_fields`, `records_snapshot_path` |
 | `sql` | `sql_query` + (`sqlite_database` or `sql_driver`) | `sql_query_params`, `sql_connect_args`, `sql_password_env`, `records_drop_fields` |
@@ -1138,6 +1138,15 @@ response body, such as `meta.total`), a read whose distinct record count differs
 whose pages disagree on the total, or whose body omits it is unreadable. Without a total, a configured
 next-page chain must reach its declared terminal marker; an unpaged read
 requires a validated `records_complete: true` declaration.
+
+`records_list_keys` names the top-level keys whose value is a list, for a
+whole-store read that returns one list per collection. A body without a list
+under one of them is unreadable. A read with `records_other_lists: true` (and
+no `records_key`) returns the records of every list under any other key, so a
+row written to a collection that appeared after review is seen. `scaffold-verifier
+--probe-reads` sets both on a prefix-root read it uses in place of a collection
+read: one read per list it saw (empty lists included), plus one for any other
+list, where the save may add no row.
 
 A redirect is a failed read: the configured auth headers never follow it to
 another host. Why a read was unreadable is in the verdict's reason and the
