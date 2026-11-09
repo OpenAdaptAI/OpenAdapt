@@ -94,7 +94,9 @@ def _reported(output: str) -> dict[str, float | str | None]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument(
         "--cold", type=int, default=1, help="cold runs (fixture removed first)"
     )
