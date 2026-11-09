@@ -487,56 +487,136 @@ def test_a_narrowed_signed_scope_always_names_the_taught_app(
         unsigned_app._teach_scope({"note": "Recheck"})
 
 
-def test_a_common_name_without_its_identifier_marks_no_identity_band(
-    tmp_path: Path, monkeypatch
-) -> None:
-    """A name alone identifies no record: the band needs every declared id raw."""
+class _OcrLine:
+    def __init__(self, text: str, region: tuple[int, int, int, int]) -> None:
+        self.text, self.region = text, region
+
+
+def _band_on_own_frame(
+    tmp_path: Path,
+    monkeypatch,
+    name: str,
+    lines: list[tuple[str, tuple[int, int, int, int]]],
+    on_screen: list[str],
+) -> Any:
+    """Mark a band on a recording of its own, whose frame OCR reads as ``lines``.
+
+    Each case gets a distinct recording and distinct frame bytes, so one
+    case's screen can never answer another's.
+    """
 
     import json
 
     import openadapt_flow.vision as vision
     from openadapt_flow.jit.compile_agent import mark_identity_band
 
-    class Line:
-        def __init__(self, text: str, region: tuple[int, int, int, int]) -> None:
-            self.text, self.region = text, region
-
-    screens: dict[str, list[Line]] = {}
-    monkeypatch.setattr(vision, "ocr", lambda png: screens["now"])
-    rec = tmp_path / "recording"
+    screens = getattr(monkeypatch, "_screens", None)
+    if screens is None:
+        screens = {}
+        monkeypatch._screens = screens
+        monkeypatch.setattr(vision, "ocr", lambda png: screens[bytes(png)])
+    frame = f"frame:{name}".encode()
+    screens[frame] = [_OcrLine(t, r) for t, r in lines]
+    rec = tmp_path / name
     (rec / "frames").mkdir(parents=True)
-    (rec / "frames" / "0000_before.png").write_bytes(b"png")
+    (rec / "frames" / "0000_before.png").write_bytes(frame)
     (rec / "events.jsonl").write_text(json.dumps({"i": 0, "kind": "click"}) + "\n")
-    declared = ["MRN RC79284 Okafor, Philip born 1966-02-17"]
+    (rec / "meta.json").write_text(json.dumps({"surface": "macos"}))
+    band = mark_identity_band(rec, on_screen)
+    stamped = json.loads((rec / "meta.json").read_text())
+    assert ("identifier_region" in stamped) == (band is not None)
+    return band
 
-    def band(lines: list[Line], on_screen: list[str] = declared) -> Any:
-        (rec / "meta.json").write_text(json.dumps({"surface": "macos"}))
-        screens["now"] = lines
-        out = mark_identity_band(rec, on_screen)
-        stamped = json.loads((rec / "meta.json").read_text())
-        assert ("identifier_region" in stamped) == (out is not None)
-        return out
+
+def test_an_identifier_matches_a_whole_token_or_a_whole_digit_run() -> None:
+    from openadapt_flow.jit.compile_agent import _id_matches
+
+    # Matches: the token itself, or exactly one of its maximal digit runs.
+    for token in ("1234", "mrn1234", "mrn#1234", "12-1234"):
+        assert _id_matches(token, "1234"), token
+    assert _id_matches("12-34", "34") and _id_matches("12-34", "12")
+    # A longer digit run is another number.
+    for token in ("12345", "91234", "mrn12345", "mrn123", "1-23-4"):
+        assert not _id_matches(token, "1234"), token
+    # A date matches as a whole normalized date, never by one of its parts.
+    assert _id_matches("born1966-02-17", "1966-02-17")
+    assert _id_matches("1966/02/17", "1966-02-17")
+    assert not _id_matches("1966-02-18", "1966-02-17")
+    assert not _id_matches("1966-02-17", "17")
+    # An alphanumeric id matches only as its whole token.
+    assert _id_matches("rc79284", "rc79284")
+    assert not _id_matches("rc792840", "rc79284")
+
+
+def test_a_common_name_without_its_identifier_marks_no_identity_band(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A name alone identifies no record: the band needs every declared id."""
+
+    declared = ["MRN 1234 Okafor, Philip born 1966-02-17"]
+    name = (52, 123, 300, 37)
+
+    def band(case: str, lines: list, on_screen: list[str] = declared) -> Any:
+        return _band_on_own_frame(tmp_path, monkeypatch, case, lines, on_screen)
 
     # The common name is on screen; the declared MRN is not.
-    assert band([Line("Okafor, Philip", (52, 123, 300, 37))]) is None
-    assert band([Line("MRN Okafor, Philip born", (52, 123, 600, 37))]) is None
-    # Another record's MRN beside the same name.
-    assert band([Line("MRN RC11111 Okafor, Philip", (52, 123, 600, 37))]) is None
-    # The MRN only inside a longer token is not a raw match.
-    assert band([Line("MRN RC792840 Okafor, Philip", (52, 123, 600, 37))]) is None
+    assert band("name-only", [("Okafor, Philip", name)]) is None
+    assert band("label-no-id", [("MRN Okafor, Philip born", name)]) is None
+    # Another record's MRN beside the same name, split or joined.
+    assert band("other-mrn", [("MRN 5678 Okafor, Philip 1966-02-17", name)]) is None
+    assert band("other-joined", [("MRN5678 Okafor, Philip 1966-02-17", name)]) is None
+    # The MRN only inside a longer digit run is another number.
+    assert band("longer-run", [("MRN12345 Okafor, Philip 1966-02-17", name)]) is None
+    assert band("prefix-run", [("MRN 91234 Okafor, Philip 1966-02-17", name)]) is None
     # One declared id present, the other missing.
-    assert band([Line("MRN RC79284 Okafor, Philip", (52, 123, 600, 37))]) is None
+    assert band("missing-dob", [("MRN1234 Okafor, Philip", name)]) is None
+    assert band("missing-id", [("Okafor, Philip born 1966-02-17", name)]) is None
     # A declaration with no identifier at all: a name never counts.
-    assert (
-        band([Line("Okafor, Philip", (52, 123, 300, 37))], ["Okafor, Philip"]) is None
-    )
-    # The full identity is still marked.
-    assert band(
-        [
-            Line("MRN RC79284 Okafor, Philip", (52, 123, 600, 37)),
-            Line("born 1966-02-17", (660, 123, 170, 37)),
-            Line("Okafor, Philip", (52, 400, 300, 37)),
-        ]
+    assert band("name-declared", [("Okafor, Philip", name)], ["Okafor, Philip"]) is None
+
+
+def test_the_full_identity_is_marked_split_or_joined(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The positives, each on its own frame.
+
+    Before the digit-run rule, the whole-token rule failed the joined case:
+    real OCR reads "MRN1234" as one token, so no token was "1234" and the
+    full-identity positive marked nothing (Codex diagnostic on #1862).
+    """
+
+    declared = ["MRN 1234 Okafor, Philip born 1966-02-17"]
+    joined = [
+        ("MRN1234 Okafor, Philip", (52, 123, 600, 37)),
+        ("born 1966-02-17", (660, 123, 170, 37)),
+        ("New note", (127, 247, 121, 30)),
+    ]
+    assert _band_on_own_frame(tmp_path, monkeypatch, "joined", joined, declared) == [
+        46,
+        117,
+        790,
+        49,
+    ]
+    separate = [
+        ("MRN", (52, 123, 60, 37)),
+        ("1234", (120, 123, 80, 37)),
+        ("Okafor, Philip", (210, 123, 300, 37)),
+        ("born1966/02/17", (660, 123, 170, 37)),
+    ]
+    assert _band_on_own_frame(
+        tmp_path, monkeypatch, "separate", separate, declared
+    ) == [114, 117, 722, 49]
+    full = [
+        ("MRN RC79284 Okafor, Philip", (52, 123, 600, 37)),
+        ("born 1966-02-17", (660, 123, 170, 37)),
+        ("Okafor, Philip", (52, 400, 300, 37)),
+    ]
+    assert _band_on_own_frame(
+        tmp_path,
+        monkeypatch,
+        "full",
+        full,
+        ["MRN RC79284 Okafor, Philip born 1966-02-17"],
     ) == [46, 117, 790, 49]
 
 

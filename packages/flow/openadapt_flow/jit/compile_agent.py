@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -1731,11 +1732,13 @@ def _stamp() -> str:
 
 
 _TOKEN_EDGE = ".,;:()[]{}<>\"'"
+_DIGIT_RUN = re.compile(r"\d+")
+_DATE = re.compile(r"(?<!\d)(\d{1,4})[-/.](\d{1,2})[-/.](\d{1,4})(?!\d)")
 
 
 def _declared_ids(texts: Sequence[str]) -> set[str]:
     """The identifier tokens (ids, dates: digit-bearing) in ``texts``,
-    casefolded with edge punctuation stripped, as each must appear raw."""
+    casefolded with edge punctuation stripped."""
 
     out = set()
     for text in texts:
@@ -1744,6 +1747,33 @@ def _declared_ids(texts: Sequence[str]) -> set[str]:
             if any(c.isdigit() for c in token):
                 out.add(token)
     return out
+
+
+def _date_key(match: "re.Match[str]") -> str:
+    return "-".join(match.groups())
+
+
+def _id_matches(token: str, declared: str) -> bool:
+    """Whether one OCR token shows a declared identifier exactly (#1773).
+
+    The token matches when it equals the identifier, or when one of its
+    maximal digit runs does: OCR often joins a label to its number
+    ("MRN1234"), so that token shows 1234, but "12345", "91234" and
+    "MRN12345" do not (the run is longer). A date compares as a whole
+    normalized date (``1966-02-17``, ``1966/02/17``), and a digit run inside
+    a date never stands for another identifier.
+    """
+
+    if token == declared:
+        return True
+    whole_date = _DATE.fullmatch(declared)
+    if whole_date is not None:
+        want = _date_key(whole_date)
+        return any(_date_key(m) == want for m in _DATE.finditer(token))
+    if not declared.isdigit():
+        return False
+    undated = _DATE.sub(" ", token)
+    return declared in _DIGIT_RUN.findall(undated)
 
 
 def mark_identity_band(
@@ -1757,8 +1787,10 @@ def mark_identity_band(
     gives every click, which each run checks before it acts.
 
     The identifiers are the digit-bearing tokens of ``on_screen`` (an MRN, a
-    date of birth). As at run time, an id must match raw: each one must be a
-    whole OCR token on the frame, never part of one. A name alone identifies
+    date of birth). As at run time, an id must match raw: an OCR token shows
+    it only when the token, or one of its maximal digit runs, equals it
+    exactly (:func:`_id_matches`), never a longer number that contains it. A
+    name alone identifies
     no record, so with no declared identifier, or any declared identifier
     missing from the frame, this abstains: it returns None and stamps
     nothing, and the run gate then refuses the unbanded clicks.
@@ -1786,7 +1818,8 @@ def mark_identity_band(
     seen: set[str] = set()
     boxes = []
     for found in ocr(frame.read_bytes()):
-        tokens = _declared_ids([found.text]) & declared
+        shown = _declared_ids([found.text])
+        tokens = {d for d in declared if any(_id_matches(t, d) for t in shown)}
         if tokens:
             seen |= tokens
             boxes.append(tuple(int(v) for v in found.region))
