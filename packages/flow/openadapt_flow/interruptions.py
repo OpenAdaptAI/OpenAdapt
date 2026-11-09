@@ -12,7 +12,10 @@ a. **Identity.** It matches the class by what it says and what its control
 b. **A non-committing action.** The dismissal is Escape or a control whose
    label is in a closed set (:data:`NON_COMMITTING_LABEL`): close, dismiss,
    not now, continue session, and the like. "OK", "Continue", "Yes",
-   "Accept" and any write word are outside it.
+   "Accept" and any write word are outside it. The label is the live
+   control's, not only the declared one: before the click, the backend must
+   show that the element the selector or id resolved to is the one control
+   with the declared role and accessible name (:func:`live_control_error`).
 c. **No write.** The dismissal runs under the run's write watchers
    (:mod:`openadapt_flow.runtime.effect_watch`): the browser's write fence
    and the system-of-record read-back. A watcher that sees a write, or a run
@@ -234,6 +237,71 @@ def interruption_class_error(interstitial: "Interstitial") -> Optional[str]:
     )
     if not has_identity:
         return "the dismiss control must be found by its identity, not its position"
+    if (
+        structural is None
+        or not (structural.role or "").strip()
+        or not (structural.name or "").strip()
+    ):
+        # The label that is checked must be the label of the control that is
+        # clicked. Only a declared role and accessible name can be compared
+        # with the live control (:func:`live_control_error`); an OCR text or
+        # a template can't.
+        return (
+            "the dismiss control must declare its structural role and "
+            "accessible name, so its identity can be checked on the live "
+            "control before the click"
+        )
+    return None
+
+
+def live_control_error(
+    interstitial: "Interstitial", backend: Any, handle: Any
+) -> Optional[str]:
+    """Why the control ``handle`` resolved to is not the declared dismiss
+    control, or None when it is.
+
+    The closed-set label check (:func:`interruption_class_error`) is made on
+    the *declared* name. A selector or automation id resolves first and may
+    point at any control, so the declared name proves nothing until the
+    live control is shown to carry it: the backend's
+    ``structural_control_is(locator, handle, role=, name=)`` must confirm that
+    the very element bound by ``handle`` is the one control in its scope with
+    the declared role and exact accessible name. A backend that can't say,
+    a missing handle, or any error halts before the click.
+    """
+
+    anchor = interstitial.dismiss_anchor
+    if anchor is None:
+        return None  # a key dismissal (Escape only) has no control
+    locator = anchor.structural
+    role = (locator.role or "").strip() if locator is not None else ""
+    name = (locator.name or "").strip() if locator is not None else ""
+    if locator is None or not role or not name:
+        return "the dismiss control declares no role and name to check"
+    if not is_non_committing_label(name):
+        return f"the dismiss control {name!r} is not a non-committing label"
+    if handle is None:
+        return (
+            "the dismiss control was not bound to one live element, so its "
+            "label can't be checked"
+        )
+    check = getattr(backend, "structural_control_is", None)
+    if not callable(check):
+        return (
+            "this backend can't read the live control's role and name, so "
+            "the control that would be clicked can't be shown to be "
+            f"{name!r}"
+        )
+    try:
+        same = check(locator, handle, role=role, name=name) is True
+    except Exception:  # noqa: BLE001 - unreadable means unproven
+        same = False
+    if not same:
+        return (
+            f"the control that would be clicked is not the {role} {name!r} the "
+            "class declares (its selector or id resolves to a different "
+            "control)"
+        )
     return None
 
 
@@ -460,6 +528,9 @@ def learn_interruption(
     handle = locate(locator)
     if handle is None:
         raise LearnRefused(f"{dismiss_label(interstitial)!r} did not resolve uniquely")
+    control_error = live_control_error(interstitial, backend, handle)
+    if control_error is not None:
+        raise LearnRefused(control_error)
     with watch_effects(backend, effect_verifier) as report:
         if report.refusal is not None:
             raise LearnRefused(f"the dismissal can't be watched: {report.refusal}")

@@ -17,6 +17,7 @@ disguised      session text + "Apply template to patient?"      halt, no click
 steal-hover    a popup covers Save as the pointer arrives       halt, no write
 steal-press    a popup covers Save between press and release    halt, no write
 unknown        an unlisted dialog                               halt, no click
+mislabeled     class says "Close", its selector is "Sign out"   halt, no click
 =============  ===============================================  ============
 """
 
@@ -83,6 +84,9 @@ if (kind === 'session') {
   }, {once: true});
 } else if (kind === 'unknown') {
   dialog('Unexpected error 42 occurred', 'Close', () => {});
+} else if (kind === 'mislabeled') {
+  dialog('Update available now', 'Sign out', () => fetch('/logout-everywhere'));
+  document.querySelector('[role=dialog] button').id = 'danger';
 } else if (kind === 'banner') {
   const b = document.createElement('div');
   b.style = 'position:fixed;top:0;left:0;right:0;height:120px;background:#ffd;'
@@ -143,7 +147,7 @@ def server() -> Iterator[str]:
         srv.shutdown()
 
 
-def _run(url: str, kind: str, tmp_path: Any) -> Any:
+def _run(url: str, kind: str, tmp_path: Any, classes: Any = None) -> Any:
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
     from openadapt_flow.runtime.replayer import Replayer
 
@@ -168,7 +172,7 @@ def _run(url: str, kind: str, tmp_path: Any) -> Any:
                 risk="reversible",
             )
         ],
-        interstitials=CLASSES,
+        interstitials=CLASSES if classes is None else classes,
     )
     bundle = tmp_path / "bundle"
     bundle.mkdir()
@@ -241,3 +245,25 @@ def test_a_popup_that_steals_the_click_halts_and_nothing_is_written(
         assert "pre-dispatch" in (result.error or "")
     # Neither the save nor anything on the popup went through.
     assert not any(seen.startswith("POST") for seen in _Server.seen), _Server.seen
+
+
+def test_a_selector_that_points_at_another_control_halts_without_a_click(
+    server: str, tmp_path: Any
+) -> None:
+    # The class declares a "Close" button, but its selector resolves to a
+    # "Sign out" button whose handler signs out with a GET the fence passes.
+    mislabeled = interruption_from_data(
+        {
+            "name": "update dialog",
+            "texts": ["Update available"],
+            "dismiss": {
+                "control": {"selector": "#danger", "role": "button", "name": "Close"}
+            },
+        }
+    )
+    report = _run(server, "mislabeled", tmp_path, classes=[mislabeled])
+    assert report.success is False
+    assert "not the button 'Close'" in (report.results[0].error or "")
+    assert report.results[0].interstitial_actions == []
+    assert not any("/logout-everywhere" in seen for seen in _Server.seen)
+    assert not any(seen.startswith("POST") for seen in _Server.seen)

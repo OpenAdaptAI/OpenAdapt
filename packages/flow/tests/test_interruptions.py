@@ -74,8 +74,15 @@ class WatchedBackend(FakeBackend):
         writes=(),
         whole="Your session will expire in 5 minutes. Stay signed in",
         title="",
+        live=None,
+        can_read_live=True,
     ):
         super().__init__()
+        # The live control's (role, name); None means the declared one.
+        self._live = live
+        self.live_checks: list[tuple[str, str]] = []
+        if not can_read_live:
+            self.structural_control_is = None  # type: ignore[assignment]
         self._whole = whole
         self._title = title
         self._fence = fence
@@ -90,6 +97,11 @@ class WatchedBackend(FakeBackend):
         if self._whole is None:
             return None
         return {"text": self._whole, "title": self._title, "window": ""}
+
+    def structural_control_is(self, locator, handle, *, role, name):
+        self.live_checks.append((role, name))
+        live = self._live or (locator.role, locator.name)
+        return tuple(live) == (role, name)
 
     def locate_structural(self, locator):
         return StructuralHandle(
@@ -454,3 +466,69 @@ def test_a_class_that_mentions_business_content_is_refused():
     entry = dict(SESSION, texts=["Apply template to patient"])
     with pytest.raises(InterruptionClassError, match="business question"):
         interruption_from_data(entry)
+
+
+# -- the clicked control is the declared one --------------------------------------
+
+
+def test_a_selector_that_resolves_to_another_control_halts_before_any_input(
+    bundle, run_dir
+):
+    # Declared "Close", but the selector resolves to a "Sign out" button.
+    entry = dict(
+        SESSION,
+        dismiss={"control": {"selector": "#danger", "role": "button", "name": "Close"}},
+    )
+    backend = WatchedBackend(
+        whole="Your session will expire in 5 minutes. Sign out",
+        live=("button", "Sign out"),
+    )
+    report = _run(backend, _vision(), bundle, run_dir, [interruption_from_data(entry)])
+    assert report.success is False
+    assert "not the button 'Close'" in (report.results[0].error or "")
+    assert report.results[0].interstitial_actions == []
+    assert backend.actions == []
+    assert backend.live_checks == [("button", "Close")]
+
+
+def test_a_backend_that_cannot_read_the_live_control_halts(bundle, run_dir):
+    backend = WatchedBackend(can_read_live=False)
+    report = _run(
+        backend, _vision(), bundle, run_dir, [interruption_from_data(SESSION)]
+    )
+    assert report.success is False
+    assert "can't read the live control" in (report.results[0].error or "")
+    assert backend.actions == []
+
+
+def test_the_live_control_is_checked_again_at_delivery(bundle, run_dir):
+    # The label changes between the first check and the click.
+    backend = WatchedBackend()
+    answers = iter([True, False])
+    backend.structural_control_is = (  # type: ignore[method-assign]
+        lambda locator, handle, *, role, name: next(answers)
+    )
+    report = _run(
+        backend, _vision(), bundle, run_dir, [interruption_from_data(SESSION)]
+    )
+    assert report.success is False
+    assert not any(a[0] == "act_structural" for a in backend.actions)
+
+
+def test_a_class_without_a_declared_role_and_name_is_refused():
+    entry = dict(SESSION, dismiss={"control": {"selector": "#x", "name": "Close"}})
+    with pytest.raises(InterruptionClassError, match="role and accessible name"):
+        interruption_from_data(entry)
+
+
+def test_learning_refuses_a_control_whose_live_label_differs_without_clicking():
+    backend = WatchedBackend(live=("button", "Sign out"))
+    with pytest.raises(LearnRefused, match="not the button 'Close'"):
+        learn_interruption(
+            name="n",
+            texts=["t"],
+            control={"selector": "#danger", "role": "button", "name": "Close"},
+            backend=backend,
+            shows=lambda text: True,
+        )
+    assert backend.actions == []

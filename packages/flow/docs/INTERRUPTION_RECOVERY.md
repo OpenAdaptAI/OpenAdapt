@@ -35,6 +35,17 @@ A run clears an interruption only when all four of these hold:
    (`NON_COMMITTING_LABEL` in `openadapt_flow/interruptions.py`). "OK",
    "Continue", "Yes", "Accept" and any write word are outside the set, so a
    class that uses one is refused when it loads.
+
+   The label checked is the label of the control that gets clicked. A
+   control class declares its role and accessible name, and a class without
+   both is refused when it loads. A selector or automation id may resolve to
+   any control, so before the click, and again at the last moment before
+   input, the backend must show that the resolved element is the one
+   control with the declared role and exact accessible name. If the class
+   says "Close" and its selector finds "Sign out", the run halts with no
+   click. So does a backend that can't read the live control
+   (`structural_control_is`), which today means every backend except the
+   browser.
 3. **No watcher sees a write.** The dismissal runs under every write watcher
    the run has (`openadapt_flow/runtime/effect_watch.py`):
    - in a browser, the write fence. It is the same hold that guards a

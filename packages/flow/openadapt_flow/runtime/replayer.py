@@ -101,6 +101,7 @@ from openadapt_flow.identity_signals import (
 from openadapt_flow.interruptions import (
     class_texts,
     dismiss_label,
+    live_control_error,
     whole_interruption_error,
 )
 from openadapt_flow.ir import (
@@ -14617,6 +14618,20 @@ class Replayer:
         )
         return validated, canonical
 
+    def _interruption_control_error(
+        self, it: Interstitial, resolution: Optional[Resolution]
+    ) -> Optional[str]:
+        """Why an interruption class's resolved dismiss control can't be shown
+        to be the declared one, or None. Only a structural resolution, bound
+        to one live element, can be checked; anything else halts."""
+
+        if resolution is None or resolution.rung != "structural":
+            return (
+                "the dismiss control did not resolve structurally, so the "
+                "control that would be clicked can't be checked"
+            )
+        return live_control_error(it, self.backend, resolution.structural_handle)
+
     def _interstitial_declaration_mutation(
         self, workflow: Optional[Workflow]
     ) -> Optional[str]:
@@ -15251,6 +15266,10 @@ class Replayer:
                 except Exception:  # noqa: BLE001 - unreadable means unproven
                     whole = None
                 class_error = whole_interruption_error(it, whole)
+                if class_error is None and it.dismiss_anchor is not None:
+                    # The declared label proves nothing until the control
+                    # that will be clicked is shown to carry it.
+                    class_error = self._interruption_control_error(it, resolution)
                 if class_error is not None:
                     return before_png, (
                         f"Interruption '{it.name}' was not cleared: {class_error} "
@@ -15344,6 +15363,14 @@ class Replayer:
                                     "structural dismissal cannot be delivered "
                                     "natively without a stable element handle"
                                 )
+                            if it.effect_watch:
+                                # Again at the last no-input boundary: the
+                                # label may have changed since the check.
+                                control_error = self._interruption_control_error(
+                                    it, resolution
+                                )
+                                if control_error is not None:
+                                    raise StructuralResolutionRefused(control_error)
                             self._require_qualification_environment_current()
                             self._deliver_backend_call(
                                 result,

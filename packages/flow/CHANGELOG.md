@@ -23,7 +23,7 @@
 
 ### Features
 
-- Interruption classes: a run clears a known interruption, such as a session warning, a banner or a tour, by itself, but only when the dismissal is provably read-only. The class must match by its text and control, the control's label must be in a closed non-committing set, and no write watcher may see a write. On the web the watcher is the browser write fence; on any backend, including desktop and RDP, it is the system-of-record read-back. Afterwards the step's normal identity check must pass. Classes are per-app data (`runtime.interruptions_path`) or learned from a halt (`learn_interruption`). Each dismissal is in the run report. See `docs/INTERRUPTION_RECOVERY.md`.
+- Interruption classes: a run clears a known interruption, such as a session warning, a banner or a tour, by itself, but only when the dismissal is provably read-only. The class must match by its text and control, the control's label must be in a closed non-committing set and be the live label of the control that is clicked, and no write watcher may see a write. On the web the watcher is the browser write fence; on any backend, including desktop and RDP, it is the system-of-record read-back. Afterwards the step's normal identity check must pass. Classes are per-app data (`runtime.interruptions_path`) or learned from a halt (`learn_interruption`). Each dismissal is in the run report. See `docs/INTERRUPTION_RECOVERY.md`.
 
 ### Fixes
 

@@ -3479,6 +3479,42 @@ class PlaywrightBackend:
             return None
         return {k: str(found.get(k) or "") for k in ("text", "title", "window")}
 
+    def structural_control_is(
+        self,
+        locator: StructuralLocator,
+        handle: StructuralHandle,
+        *,
+        role: str,
+        name: str,
+    ) -> bool:
+        """Whether the element ``handle`` is bound to is the one control in
+        its scope with ARIA ``role`` and exact accessible ``name``.
+
+        Uses the browser's own accessible-name computation (Playwright's
+        ``get_by_role(..., exact=True)``), so a selector that resolves to a
+        control named something else is told apart from the declared one.
+        Does not consume the handle. Any doubt (a stale handle, no match, more
+        than one, a different element, an error) is False.
+        """
+
+        try:
+            guard = self._structural_tokens.get(handle.target_fingerprint or "")
+            if guard is None or tuple(locator.frame_path or ()) != guard.frame_path:
+                return False
+            bound = self._token_locator(guard.token, guard.scope)
+            named = guard.scope.get_by_role(role, name=name, exact=True)
+            if bound.count() != 1 or named.count() != 1:
+                return False
+            other = named.element_handle(timeout=1000)
+            if other is None:
+                return False
+            try:
+                return bool(bound.evaluate("(el, other) => el === other", other))
+            finally:
+                other.dispose()
+        except Exception:  # noqa: BLE001 - unreadable means unproven
+            return False
+
     @contextlib.contextmanager
     def write_fence(self) -> Iterator["WriteFenceReport"]:
         """Run the ``with`` body while nothing on the page can write.
