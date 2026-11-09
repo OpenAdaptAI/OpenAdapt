@@ -173,22 +173,58 @@ def _environment():
     return OpenAdaptWebEnvironment(MOCKMED)
 
 
+SLEEPER = [sys.executable, "-c", "import time; time.sleep(600)"]
+
+
+def _registered_driver(monkeypatch) -> subprocess.Popen[bytes]:
+    """A real driver stand-in on this platform's own route: on Linux a bound
+    supervised launch registered for its pid (the only route that is ever
+    signalled there); elsewhere a plain child in its own group."""
+    from openadapt_flow.rl_env import environment as E
+
+    if E.SUPERVISE_DRIVER:
+        proc, launch = lifecycle.spawn_supervised(SLEEPER)
+        assert launch.bound, "the supervisor did not hand over its pidfd"
+        monkeypatch.setitem(E._SUPERVISED, proc.pid, launch)
+        return proc
+    return lifecycle.spawn(SLEEPER)
+
+
+def _break_route(monkeypatch, exc: BaseException) -> None:
+    """Make this platform's teardown route raise ``exc``."""
+    from openadapt_flow.rl_env import environment as E
+
+    def broken(*_a: object, **_k: object) -> lifecycle.Teardown:
+        raise exc
+
+    if E.SUPERVISE_DRIVER:
+        monkeypatch.setattr(lifecycle, "stop_supervised", broken)
+    else:
+        monkeypatch.setattr(E, "kill_child_tree", broken)
+
+
+def _discard(proc: subprocess.Popen[bytes]) -> None:
+    if proc.poll() is None:
+        proc.kill()
+        proc.wait(timeout=30)
+
+
 def test_an_abandoned_browser_that_cannot_be_reaped_is_not_reported_closed(
     monkeypatch,
 ) -> None:
     env = _environment()
-    from openadapt_flow.rl_env import environment as E
-
-    def stuck(pid: int, **_: object) -> str:
-        raise lifecycle.ProcessNotReaped(f"process {pid} still running")
-
-    monkeypatch.setattr(E, "kill_child_tree", stuck)
-    env._pw, env._driver_pid = object(), 424242
-    with pytest.raises(lifecycle.ProcessNotReaped):
-        env._abandon_worker()
-    # The episode is torn down, but nothing claims the browser stopped.
-    assert env._teardown is None and env._driver_pid is None
-    assert env.state.done is True and env._pw is None
+    driver = _registered_driver(monkeypatch)
+    try:
+        _break_route(monkeypatch, lifecycle.ProcessNotReaped("still running"))
+        env._pw, env._driver_pid = object(), driver.pid
+        with pytest.raises(lifecycle.ProcessNotReaped):
+            env._abandon_worker()
+        # The episode is torn down, but nothing claims the browser stopped.
+        assert env._teardown is None and env._driver_pid is None
+        assert env.state.done is True and env._pw is None
+        assert env._unproven is not None
+    finally:
+        _discard(driver)
 
 
 def test_an_abandoned_browser_with_an_unknown_driver_pid_raises() -> None:
@@ -206,13 +242,14 @@ def test_an_abandoned_worker_without_a_browser_has_nothing_to_kill() -> None:
 
 def test_an_abandoned_browser_reports_how_its_driver_was_stopped(monkeypatch) -> None:
     env = _environment()
-    child = lifecycle.spawn([sys.executable, "-c", "import time; time.sleep(600)"])
+    child = _registered_driver(monkeypatch)
     env._pw, env._driver_pid = object(), child.pid
     env._abandon_worker()
+    # Proven only through a bound supervisor (Linux); still tainted either way.
     assert env._teardown == {
         "driver_pid": child.pid,
         "driver": "killed",
-        "proven": False,
+        "proven": LINUX,
     }
     assert env._unproven is not None  # later episodes are INDETERMINATE
     with pytest.raises(ChildProcessError):
@@ -777,39 +814,46 @@ def test_any_teardown_failure_leaves_later_episodes_indeterminate(
     monkeypatch,
 ) -> None:
     env = _environment()
-    from openadapt_flow.rl_env import environment as E
-
-    def broken(pid: int, **_: object) -> lifecycle.Teardown:
-        raise RuntimeError("kill failed in an unexpected way")
-
-    monkeypatch.setattr(E, "kill_child_tree", broken)
-    env._pw, env._driver_pid = object(), 424242
-    with pytest.raises(RuntimeError, match="unexpected"):
-        env._abandon_worker()
-    assert env._unproven is not None and env._teardown is None
-    out = _judged(env, monkeypatch)
-    assert (out["verdict"], out["reward"]) == ("INDETERMINATE", 0.0)
+    driver = _registered_driver(monkeypatch)
+    try:
+        _break_route(monkeypatch, RuntimeError("kill failed in an unexpected way"))
+        env._pw, env._driver_pid = object(), driver.pid
+        with pytest.raises(RuntimeError, match="unexpected"):
+            env._abandon_worker()
+        assert env._unproven is not None and env._teardown is None
+        out = _judged(env, monkeypatch)
+        assert (out["verdict"], out["reward"]) == ("INDETERMINATE", 0.0)
+    finally:
+        _discard(driver)
 
 
 def test_a_later_proven_teardown_never_lifts_the_taint(monkeypatch) -> None:
     env = _environment()
-    from openadapt_flow.rl_env import environment as E
-
-    monkeypatch.setattr(
-        E, "kill_child_tree", lambda pid, **_: lifecycle.Teardown("killed", True)
-    )
-    env._pw, env._driver_pid = object(), 424242
-    env._abandon_worker()
-    # Proven, and still tainted: the abandoned worker may have started more
-    # than the driver this code saw.
-    assert env._teardown == {"driver_pid": 424242, "driver": "killed", "proven": True}
-    assert env._unproven is not None
-    first = env._unproven
-    env._pw, env._driver_pid = object(), 424243
-    env._abandon_worker()
-    assert env._unproven == first
-    out = _judged(env, monkeypatch)
-    assert (out["verdict"], out["reward"]) == ("INDETERMINATE", 0.0)
+    drivers = [_registered_driver(monkeypatch) for _ in range(2)]
+    try:
+        env._pw, env._driver_pid = object(), drivers[0].pid
+        env._abandon_worker()
+        # On Linux a genuinely proven teardown through a bound supervisor;
+        # elsewhere the unproven one. Tainted either way: the abandoned
+        # worker may have started more than the driver this code saw.
+        assert env._teardown == {
+            "driver_pid": drivers[0].pid,
+            "driver": "killed",
+            "proven": LINUX,
+        }
+        assert env._unproven is not None
+        first = env._unproven
+        env._pw, env._driver_pid = object(), drivers[1].pid
+        env._abandon_worker()
+        assert env._teardown is not None
+        assert env._teardown["proven"] is LINUX
+        assert env._unproven == first  # never lifted, never replaced
+        out = _judged(env, monkeypatch)
+        assert (out["verdict"], out["reward"]) == ("INDETERMINATE", 0.0)
+    finally:
+        for driver in drivers:
+            if driver.returncode is None:
+                driver.returncode = -signal.SIGTERM  # reaped by the teardown
 
 
 def test_a_timeout_inside_playwright_start_taints_later_episodes(monkeypatch) -> None:
