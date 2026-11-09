@@ -24,11 +24,37 @@ class DarwinPlatform:
     """
 
     @staticmethod
+    def _main_display_pixel_size() -> tuple[int, int]:
+        """Physical pixel size of the main display via Quartz (no framebuffer read).
+
+        ``CGDisplayPixelsWide`` / ``High`` follow the looking-glass size on
+        scaled Retina modes; ``CGDisplayModeGetPixelWidth`` / ``Height`` are
+        the framebuffer dimensions that match ``mss`` / ``ImageGrab`` grabs.
+        """
+        import Quartz
+
+        main_display = Quartz.CGMainDisplayID()
+        mode = Quartz.CGDisplayCopyDisplayMode(main_display)
+        if mode is None:
+            raise DisplayMetricsUnavailable(
+                "Quartz did not report a display mode for the main display"
+            )
+        width = int(Quartz.CGDisplayModeGetPixelWidth(mode))
+        height = int(Quartz.CGDisplayModeGetPixelHeight(mode))
+        if width <= 0 or height <= 0:
+            raise DisplayMetricsUnavailable(
+                "Quartz reported a non-positive main-display pixel size: "
+                f"{width}x{height}"
+            )
+        return width, height
+
+    @staticmethod
     def get_screen_dimensions() -> tuple[int, int]:
         """Get screen dimensions in physical pixels.
 
         On Retina displays, this returns the actual pixel dimensions,
-        not the scaled logical dimensions.
+        not the scaled logical dimensions. Prefers Quartz mode metadata so
+        callers (video startup) never wait on a full-screen framebuffer read.
 
         Returns:
             Tuple of (width, height) in physical pixels.
@@ -37,89 +63,84 @@ class DarwinPlatform:
             DisplayMetricsUnavailable: If the screen could not be measured.
         """
         try:
-            from PIL import ImageGrab
-            screenshot = ImageGrab.grab()
-            return screenshot.size
-        except Exception as grab_exc:
-            # Fallback using Quartz
+            return DarwinPlatform._main_display_pixel_size()
+        except DisplayMetricsUnavailable:
+            raise
+        except Exception as quartz_exc:
             try:
-                import Quartz
+                from PIL import ImageGrab
 
-                main_display = Quartz.CGMainDisplayID()
-                width = Quartz.CGDisplayPixelsWide(main_display)
-                height = Quartz.CGDisplayPixelsHigh(main_display)
-                return (width, height)
-            except Exception as quartz_exc:
+                screenshot = ImageGrab.grab()
+                if screenshot.size[0] > 0 and screenshot.size[1] > 0:
+                    return screenshot.size
+                raise DisplayMetricsUnavailable(
+                    "ImageGrab returned a non-positive screen size: "
+                    f"{screenshot.size}"
+                )
+            except DisplayMetricsUnavailable:
+                raise
+            except Exception as grab_exc:
                 raise DisplayMetricsUnavailable(
                     "Could not measure macOS screen dimensions: "
-                    f"ImageGrab failed ({grab_exc}) and Quartz failed "
-                    f"({quartz_exc})"
-                ) from quartz_exc
+                    f"Quartz failed ({quartz_exc}) and ImageGrab failed "
+                    f"({grab_exc})"
+                ) from grab_exc
 
     @staticmethod
     def get_display_pixel_ratio() -> float:
         """Get the display pixel ratio for Retina displays.
 
         Returns 2.0 for Retina displays, 1.0 for standard displays.
+        Prefers Quartz mode metadata so recording startup never waits on a
+        full-screen framebuffer read.
 
         Returns:
             Pixel ratio (physical pixels / logical pixels).
         """
         try:
-            import mss
-            from PIL import ImageGrab
+            import Quartz
 
-            # Get physical dimensions from screenshot
-            screenshot = ImageGrab.grab()
-            physical_width = screenshot.size[0]
-
-            # Get logical dimensions from mss
-            with mss.mss() as sct:
-                # monitors[1] is typically the primary monitor
-                monitor = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
-                logical_width = monitor["width"]
-
-            if logical_width > 0:
-                return physical_width / logical_width
-
-            raise DisplayMetricsUnavailable(
-                "macOS reported a non-positive logical display width; "
-                "the pixel ratio could not be measured"
-            )
-        except ImportError as import_exc:
-            # Try using Quartz directly
-            try:
-                import Quartz
-
-                main_display = Quartz.CGMainDisplayID()
-
-                # Get physical dimensions
-                physical_width = Quartz.CGDisplayPixelsWide(main_display)
-
-                # Get logical dimensions using display mode
-                mode = Quartz.CGDisplayCopyDisplayMode(main_display)
-                if mode:
-                    logical_width = Quartz.CGDisplayModeGetWidth(mode)
-                    if logical_width > 0:
-                        return physical_width / logical_width
-
+            main_display = Quartz.CGMainDisplayID()
+            mode = Quartz.CGDisplayCopyDisplayMode(main_display)
+            if mode is None:
                 raise DisplayMetricsUnavailable(
-                    "Quartz did not report a usable display mode; "
-                    "the pixel ratio could not be measured"
+                    "Quartz did not report a display mode for the main display"
+                )
+            physical_width = float(Quartz.CGDisplayModeGetPixelWidth(mode))
+            logical_width = float(Quartz.CGDisplayModeGetWidth(mode))
+            if logical_width <= 0 or physical_width <= 0:
+                raise DisplayMetricsUnavailable(
+                    "Quartz reported a non-positive display width while "
+                    f"measuring pixel ratio: physical={physical_width} "
+                    f"logical={logical_width}"
+                )
+            return physical_width / logical_width
+        except DisplayMetricsUnavailable:
+            raise
+        except Exception as quartz_exc:
+            try:
+                import mss
+                from PIL import ImageGrab
+
+                screenshot = ImageGrab.grab()
+                physical_width = screenshot.size[0]
+                with mss.mss() as sct:
+                    monitor = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
+                    logical_width = monitor["width"]
+                if logical_width > 0 and physical_width > 0:
+                    return physical_width / logical_width
+                raise DisplayMetricsUnavailable(
+                    "macOS reported a non-positive display width while "
+                    "measuring pixel ratio from a screenshot fallback"
                 )
             except DisplayMetricsUnavailable:
                 raise
-            except Exception as quartz_exc:
+            except Exception as grab_exc:
                 raise DisplayMetricsUnavailable(
-                    "Could not measure the macOS pixel ratio: mss/PIL missing "
-                    f"({import_exc}) and Quartz failed ({quartz_exc})"
-                ) from quartz_exc
-        except DisplayMetricsUnavailable:
-            raise
-        except Exception as exc:
-            raise DisplayMetricsUnavailable(
-                f"Could not measure the macOS pixel ratio: {exc}"
-            ) from exc
+                    "Could not measure the macOS pixel ratio: "
+                    f"Quartz failed ({quartz_exc}) and the screenshot "
+                    f"fallback failed ({grab_exc})"
+                ) from grab_exc
 
     @staticmethod
     def is_accessibility_enabled() -> bool | None:

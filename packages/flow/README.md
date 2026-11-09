@@ -18,6 +18,17 @@ openadapt-flow compile rec --out bundle --name my-task                          
 openadapt-flow replay bundle --url https://your-test-app.example                     # 3. run
 ```
 
+A desktop app records the same way, with `--window` as its target:
+
+```bash
+pip install 'openadapt-flow[capture,macos]'
+openadapt-flow record --backend macos --window "Your App" --out rec
+openadapt-flow compile rec --out bundle --name my-task
+openadapt-flow replay bundle --macos-app "Your App"
+```
+
+Windows, Linux, RDP and Citrix: [SURFACES.md](docs/SURFACES.md#first-workflow-per-surface).
+
 `replay` is a rehearsal that doesn't read the record back. A production run
 (`openadapt-flow run`) also checks each save; see
 [Try it on your app](#try-it-on-your-app).

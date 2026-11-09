@@ -108,7 +108,8 @@ class LandmarkMatch:
 
 
 def _canonical(text: str) -> str:
-    from openadapt_flow.runtime.identity import ocr_canonical, squash
+    from openadapt_flow.runtime.identity import comparison_squash as squash
+    from openadapt_flow.runtime.identity import ocr_canonical
 
     return ocr_canonical("".join(ch for ch in squash(text) if ch.isalnum()))
 

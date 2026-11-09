@@ -1,0 +1,31 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't do the task. Medplum is showing the \"Sign in to Medplum\" page and asking for an email address, so the session is not signed in as the task said it would be. I have no credentials, and I won't guess or register a new account. Because of that, I haven't looked for Rosa Delgado's record or checked for an existing penicillin allergy, and I haven't changed anything.\n\nRESULT: NOT DONE Medplum shows a sign-in page and I have no credentials, so I couldn't access any patient records.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [],
+ "usage": [
+  {
+   "in": 6357,
+   "out": 101,
+   "usd": 0.002289,
+   "cached": 6353
+  },
+  {
+   "in": 7831,
+   "out": 244,
+   "usd": 0.00401,
+   "cached": 7829
+  }
+ ]
+}

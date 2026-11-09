@@ -81,6 +81,7 @@ FLOW_NAMES = {
     "push": "workflow push",
     "qualify": "qualify",
     "receipt": "verify receipt",
+    "reconcile": "verify reconcile",
     "record": "record",
     "redact-report": "inspect redact-report",
     "repair": "repair",

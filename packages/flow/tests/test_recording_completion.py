@@ -51,8 +51,9 @@ def _recording(tmp_path):
         return JitResult(status, "synthetic-task", "miss", False)
 
     owner = SimpleNamespace(
-        app=SimpleNamespace(record_reader=lambda: after),
+        app=SimpleNamespace(kind="web", record_reader=lambda: after),
         bundle_dir=tmp_path / "bundle",
+        on_screen=(),
         task=SimpleNamespace(task_id=scope.task_id),
         on_warning=None,
         _write_draft=write_draft,

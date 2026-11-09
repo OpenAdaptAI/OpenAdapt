@@ -1,0 +1,74 @@
+{
+  "schema": "openadapt.teach-desktop-e2e/v1",
+  "test": "tests/e2e/test_mcp_teach_desktop_e2e.py",
+  "host": "macOS 15.7 guest (Tart, headless), MacOSBackend (AX + OS input)",
+  "app": "tests/native_apps/Chart.swift (Cocoa, SQLite)",
+  "git_sha": "7c0b0ee21dbb4119ef9d6b0f9844734502994c41",
+  "at": "2026-11-04",
+  "result": "passed",
+  "draft_parameters": {
+    "inputs": [
+      "note"
+    ],
+    "lifted": [
+      "note"
+    ],
+    "not_lifted": {}
+  },
+  "admit": {
+    "status": "admitted",
+    "task_key": "taught.chart_note-c6e694dba97d",
+    "detail": null,
+    "canaries": [
+      {
+        "status": "VERIFIED",
+        "receipt": "VERIFIED",
+        "model_calls": 0
+      }
+    ],
+    "workflow": "chart_note",
+    "tool": "taught_chart_note",
+    "mode": "agent_policy",
+    "admitted_by": "agent:mcp-teach-desktop",
+    "next": "call taught_chart_note, or run_workflow with this workflow"
+  },
+  "taught_run": {
+    "contract_version": "openadapt.run-result/v1",
+    "label": "Done and checked",
+    "mode": "production",
+    "model_calls": 0,
+    "next_action": "Nothing more to do for this request. Don't run it again for the same work.",
+    "next_step": "none",
+    "outcome": "done",
+    "proof": "local",
+    "reason": "saved_and_checked",
+    "record_changed": "yes",
+    "request_id": "desktop-teach-0001",
+    "run_id": "run-7a16968af5454f4d9354e071",
+    "safe_to_retry": false,
+    "seconds": 43.7,
+    "technical": {
+      "execution_outcome": "VERIFIED",
+      "transaction_outcome": "VERIFIED"
+    },
+    "what_happened": "Saved the change and read the record back to confirm it. The check ran on this computer, so there's no signed receipt.",
+    "workflow": "chart_note"
+  },
+  "found_controls_by": [
+    "screen"
+  ],
+  "rows": [
+    [
+      "rc79284",
+      "FOLLOW UP IN TWO WEEKS"
+    ],
+    [
+      "rc79284",
+      "CANARY CHECK NOTE"
+    ],
+    [
+      "rc79284",
+      "FOLLOW UP IN SIX WEEKS"
+    ]
+  ]
+}
