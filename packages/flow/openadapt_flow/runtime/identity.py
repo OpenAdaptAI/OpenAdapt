@@ -141,17 +141,20 @@ SPLIT_SIZES = tuple(range(2, 9))
 # -> "Hintenter"), so a split also tries each fragment but the last without
 # its trailing punctuation -- only between two digit-free words. Beside
 # a digit the mark carries identity: "1." "23456" is a row number and MRN
-# 23456, not MRN 123456; "12." "50" is 12.50, not 1250. A fragment that is
-# only punctuation is not a word: the words on either side are the nearest
-# fragments with other text, so "RC79" "." "." "284" keeps both marks
-# (RC79..284 is not RC79.284).
+# 23456, not MRN 123456; "12." "50" is 12.50, not 1250. A fragment with no
+# letter or digit (any punctuation: ". - / # _") is not a word: the words on
+# either side of the whole punctuation run are the nearest fragments with a
+# letter or digit, so "RC79" "." "-" "." "284" keeps every mark (RC79.-.284
+# is not RC79.-284) and a changed id never shares the recorded glued form.
 _GLUE_PUNCT = ":;,."
 
 
 def glued_forms(tokens: list[str]) -> list[str]:
     """The forms OCR may read ``tokens`` as once it glues them into one."""
     plain = "".join(tokens)
-    words = [index for index, token in enumerate(tokens) if token.strip(_GLUE_PUNCT)]
+    words = [
+        index for index, token in enumerate(tokens) if any(ch.isalnum() for ch in token)
+    ]
     parts = []
     for index, token in enumerate(tokens):
         before = [w for w in words if w <= index]

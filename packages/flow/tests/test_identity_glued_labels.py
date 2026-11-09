@@ -143,3 +143,39 @@ def test_glued_forms_keep_punctuation_runs_beside_digits(mark: str) -> None:
         f"hint{mark}{mark}enter",
         "hintenter",
     ]
+
+
+# Review blocker 3 (Codex, PR 1742): a fragment of other punctuation ("-",
+# "/", "#", "_") inside the run counted as a word, so it hid the id
+# fragments and a removable mark between two of them was dropped:
+# "RC79 . - . - . 284" glued to "RC79.--.284". Each removable mark against
+# each bridge mark, on both the plaintext and the template path.
+_MIXED = [(mark, bridge) for mark in ".,:;" for bridge in "-/#_"]
+
+
+@pytest.mark.parametrize("mark,bridge", _MIXED)
+def test_mixed_punctuation_run_between_id_fragments_is_kept(
+    mark: str, bridge: str
+) -> None:
+    run = [mark, bridge, mark, bridge, mark]
+    recorded = f"Ashford Jane 02/23/1975 RC79 {' '.join(run)} 284 Active"
+    changed = f"Ashford Jane 02/23/1975 RC79{mark}{bridge}{bridge}{mark}284 Active"
+    plain, hashed = _both(recorded, changed)
+    assert plain != "verified"
+    assert hashed != "verified"
+    assert I.glued_forms(["RC79", *run, "284"]) == ["RC79" + "".join(run) + "284"]
+
+
+@pytest.mark.parametrize("mark,bridge", _MIXED)
+def test_mixed_punctuation_run_unchanged_still_verifies(mark: str, bridge: str) -> None:
+    run = mark + bridge + mark + bridge + mark
+    recorded = f"Ashford Jane 02/23/1975 RC79 {' '.join(run)} 284 Active"
+    unchanged = f"Ashford Jane 02/23/1975 RC79{run}284 Active"
+    assert _both(recorded, unchanged) == ("verified", "verified")
+
+
+def test_mixed_punctuation_between_words_still_glues() -> None:
+    assert I.glued_forms(["hint", ".", "-", ":", "enter"]) == [
+        "hint.-:enter",
+        "hint-enter",
+    ]
