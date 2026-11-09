@@ -1,0 +1,50 @@
+# Record check built by `openadapt-flow scaffold-verifier` from the reads the
+# app made after the save. It caught every injected bad write in its fault test
+# and passed the clean save (recorded-state faults). It is NOT approved: a person must
+#   - confirm each read is the system of record, with its own read-only
+#     credential (the recording's reads used the browser's sign-in);
+#   - check that each {param: ...} is the input that should fill that field;
+#   - delete every `needs_operator_confirmation: true` line.
+# verify-run refuses this file, and qualify reports a problem, until then.
+schema_version: openadapt.verify/v1
+verifier:
+  kind: surfaces
+  surfaces:
+    api_db:
+      kind: rest
+      base_url: ${APP_URL}
+      records_path: /api/db
+      records_key: records
+      records_complete: true
+    api_db.content:
+      kind: rest
+      base_url: ${APP_URL}
+      records_path: /api/db
+      records_key: records
+      records_complete: true
+      records_drop_fields:
+      - id
+effects:
+- kind: record_written
+  match:
+    note:
+      param: note
+    patient_id:
+      param: patient_id
+    type:
+      param: type
+  count_new_only: true
+  risk: irreversible
+  probe: surface=api_db|exactly one new record with the run's values; no record that
+    was there before may disappear
+  needs_operator_confirmation: true
+- kind: record_written
+  match:
+    _openadapt_no_such_field:
+      literal: '-'
+  expected_count: 0
+  count_new_only: true
+  risk: irreversible
+  probe: surface=api_db.content|no record that was there before changes or disappears
+    (records compared by content, not id)
+  needs_operator_confirmation: true
