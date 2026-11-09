@@ -536,7 +536,7 @@ def separation(same: list[float], diff: list[float]) -> dict:
 
 
 def ocr_string(bgr: np.ndarray) -> str:
-    from openadapt_flow.runtime.identity import squash
+    from openadapt_flow.runtime.identity import comparison_squash as squash
     from openadapt_flow.vision.ocr import ocr
 
     ok, png = cv2.imencode(".png", bgr)

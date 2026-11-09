@@ -69,6 +69,7 @@ from collections import Counter
 from datetime import date
 from typing import (
     Any,
+    Callable,
     Iterable,
     Literal,
     Mapping,
@@ -364,31 +365,112 @@ ROW_PROXIMITY_MIN_PX = 4
 
 
 def squash(text: str) -> str:
-    """Lowercase and drop whitespace and OCR-volatile name punctuation.
+    """Legacy punctuation-noise utility; never use for positive authority.
 
-    Comma and period on letter tokens are stripped because thin identity-band
-    crops routinely make RapidOCR read ``Smith,`` as ``Smith.`` (and the
-    reverse). Leaving them in the comparison form turned a glyph-collapse
-    ABSTAIN into a false affirmative MISMATCH on native Windows while Mac
-    stayed consistent.
-
-    Periods that separate digits (``01.01.1900``) are kept: collapsing them
-    turns a date into a digit run that the glyph-vulnerable-identifier gate
-    then mistreats as an MRN-like token and spuriously abstains.
+    Positive comparisons use comparison_squash instead.
+    Thin-band OCR can read ``Smith,`` as ``Smith.``. This tolerance applies
+    only to digit-free tokens. Every comma and period in a digit-bearing
+    token is retained for compatibility, including leading and trailing punctuation:
+    ``RC.79284`` remains distinct from ``RC79284``. Dates retain
+    their separators under the same rule.
     """
-    lowered = text.lower()
-    out: list[str] = []
-    for i, ch in enumerate(lowered):
-        if ch.isspace():
-            continue
-        if ch in ",.":
-            prev = lowered[i - 1] if i else ""
-            nxt = lowered[i + 1] if i + 1 < len(lowered) else ""
-            if prev.isdigit() and nxt.isdigit():
-                out.append(ch)  # date / decimal separator
-            continue
-        out.append(ch)
-    return "".join(out)
+    return "".join(
+        token
+        if any(ch.isdigit() for ch in token)
+        else token.replace(",", "").replace(".", "")
+        for token in text.lower().split()
+    )
+
+
+def comparison_squash(text: str) -> str:
+    """Punctuation-sensitive comparison form used for positive authority.
+
+    ``squash`` remains a legacy/noise utility. Its lossy output is never the
+    positive identity comparison form. Only the explicit uncertainty fallback
+    below may inspect a comparison made with that utility.
+    """
+    return "".join(text.lower().split())
+
+
+def _punctuation_token(token: str) -> bool:
+    return any(not ch.isalnum() for ch in token)
+
+
+def _standalone_punctuation(token: str) -> bool:
+    return bool(token) and not any(ch.isalnum() for ch in token)
+
+
+def _punctuation_signature(
+    keys: list[str],
+    body_keys: list[str],
+    numeric: list[bool],
+    punctuation: list[int],
+    standalone: list[int],
+    names: Optional[list[bool]] = None,
+) -> Optional[Counter[tuple[str, str, str, str]]]:
+    """Share the same finite structural witness in plain and salted space.
+
+    Record bands bind attached punctuation to its neighbors. Standalone
+    marks in those bands have unknown field ownership and refuse. Text-only
+    bands retain order-insensitive matching, but preserve every punctuation
+    token and its multiplicity. A repeated name body needs a complete ordered
+    token witness; short repeated prefixes cannot claim that exception.
+    """
+    if (
+        len(keys) != len(numeric)
+        or len(keys) != len(body_keys)
+        or (names is not None and len(keys) != len(names))
+        or len(punctuation) != len(set(punctuation))
+        or any(i < 0 or i >= len(keys) for i in punctuation)
+        or len(standalone) != len(set(standalone))
+        or any(i not in punctuation for i in standalone)
+        or (standalone and any(numeric))
+    ):
+        return None
+    bodies = Counter(body_keys[i] for i in range(len(keys)) if not numeric[i])
+    repeated = {
+        body_keys[i]
+        for i in punctuation
+        if i not in standalone and not numeric[i] and bodies[body_keys[i]] != 1
+    }
+    if repeated:
+        if names is None or any(
+            not names[i]
+            for i in range(len(keys))
+            if not numeric[i] and body_keys[i] in repeated
+        ):
+            return None
+        # Length framing keeps sequences injective in either key space.
+        ordered = "".join(f"{len(key)}:{key}" for key in keys)
+        return Counter({("ordered", ordered, "", ""): 1})
+    if not any(numeric):
+        return Counter(("text", keys[i], "", "") for i in punctuation)
+    return Counter(
+        ("numeric", keys[i], "", "")
+        if numeric[i]
+        else (
+            "context",
+            keys[i],
+            keys[i - 1] if i else "",
+            keys[i + 1] if i + 1 < len(keys) else "",
+        )
+        for i in punctuation
+    )
+
+
+def _punctuation_tokens_agree(expected: list[str], observed: list[str]) -> bool:
+    def witness(words: list[str]) -> Optional[Counter[tuple[str, str, str, str]]]:
+        return _punctuation_signature(
+            [ocr_canonical(t) for t in words],
+            [ocr_canonical("".join(ch for ch in t if ch.isalnum())) for t in words],
+            [_has_digit(t) for t in words],
+            [i for i, t in enumerate(words) if _punctuation_token(t)],
+            [i for i, t in enumerate(words) if _standalone_punctuation(t)],
+            [_is_discriminative_name(t) for t in words],
+        )
+
+    expected_witness = witness(expected)
+    return expected_witness is not None and expected_witness == witness(observed)
 
 
 def band_region(point: Point, band_height: int, viewport: tuple[int, int]) -> Region:
@@ -555,7 +637,7 @@ def context_from_lines(
         return None
     kept.sort(key=lambda item: item[0])
     joined = " ".join(text for _, _, text in kept)
-    if len(squash(joined)) < MIN_CONTEXT_CHARS:
+    if len(comparison_squash(joined)) < MIN_CONTEXT_CHARS:
         return None
     return joined
 
@@ -593,7 +675,7 @@ def identifier_text_from_lines(
         kept.append((int(y), int(x), text))
     kept.sort()
     joined = " ".join(text for _, _, text in kept)
-    return joined if len(squash(joined)) >= MIN_CONTEXT_CHARS else None
+    return joined if len(comparison_squash(joined)) >= MIN_CONTEXT_CHARS else None
 
 
 def _kept_context_lines(
@@ -720,7 +802,7 @@ def coverage(needle: str, hay: str) -> float:
 
 def tokenize(text: str) -> list[str]:
     """Split on whitespace and squash each token (lowercase, no spaces)."""
-    return [squash(tok) for tok in text.split() if squash(tok)]
+    return [comparison_squash(tok) for tok in text.split() if comparison_squash(tok)]
 
 
 def ocr_canonical(token: str) -> str:
@@ -987,6 +1069,63 @@ class BandMatch(NamedTuple):
     #: :func:`identity_evidence_shortfall` requires. Makes the OCR tier
     #: ABSTAIN when every other budget passes; never affects ``mismatch``.
     identity_evidence_short: bool = False
+
+
+class _DiagnosticBandMatch(BandMatch):
+    """Strict tuple items with legacy named diagnostic scores.
+
+    All eight tuple items remain strict evidence. Conversion, tuple copying
+    and serialization therefore cannot turn diagnostic scores into authority.
+    Only named properties expose diagnostics, and every status/budget gate
+    reconstructs strict items before reading them. Templates never return this
+    subclass. Missing or malformed diagnostic state falls back to strict data.
+    """
+
+    diagnostic_match: BandMatch
+
+    def _diagnostics(self) -> BandMatch:
+        diagnostics = getattr(self, "diagnostic_match", None)
+        return diagnostics if type(diagnostics) is BandMatch else BandMatch(*self)
+
+    @property
+    def coverage(self) -> float:
+        return self._diagnostics().coverage
+
+    @property
+    def max_uncovered_run(self) -> int:
+        return self._diagnostics().max_uncovered_run
+
+    @property
+    def contradicted_chars(self) -> int:
+        return self._diagnostics().contradicted_chars
+
+    @property
+    def suspect_chars(self) -> int:
+        return self._diagnostics().suspect_chars
+
+    @property
+    def unexplained_name_tokens(self) -> int:
+        return self._diagnostics().unexplained_name_tokens
+
+    @property
+    def max_absent_alpha_token(self) -> int:
+        return self._diagnostics().max_absent_alpha_token
+
+    @property
+    def glyph_ambiguous_id_chars(self) -> int:
+        return self._diagnostics().glyph_ambiguous_id_chars
+
+    @property
+    def identity_evidence_short(self) -> bool:
+        return self._diagnostics().identity_evidence_short
+
+
+def _authoritative_band_match(match: BandMatch) -> BandMatch:
+    if type(match) is BandMatch:
+        return match
+    if type(match) is _DiagnosticBandMatch:
+        return BandMatch(*match)
+    return BandMatch(0.0, 0, 0, identity_evidence_short=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1398,11 +1537,13 @@ def _name_token_replaced(
     )
 
 
-def band_match(
+def _band_match_normalized(
     expected_text: str,
     observed_text: str,
     *,
     contradiction_sim: float = CONTRADICTION_SIM,
+    normalizer: Callable[[str], str],
+    punctuation_witness: bool,
 ) -> BandMatch:
     """Match a recorded band against a live band, token-wise.
 
@@ -1436,11 +1577,11 @@ def band_match(
         contradicted_chars, suspect_chars, unexplained_name_tokens,
         max_absent_alpha_token, glyph_ambiguous_id_chars).
     """
-    exp = tokenize(expected_text)
+    exp = [normalizer(t) for t in expected_text.split() if normalizer(t)]
     if not exp:
         return BandMatch(0.0, 0, 0)
-    obs_raw = [tok for tok in observed_text.split() if squash(tok)]
-    obs = [squash(tok) for tok in obs_raw]
+    obs_raw = [tok for tok in observed_text.split() if normalizer(tok)]
+    obs = [normalizer(tok) for tok in obs_raw]
     exp_c = [ocr_canonical(t) for t in exp]
     obs_c_all = [ocr_canonical(t) for t in obs]
     (
@@ -1549,7 +1690,8 @@ def band_match(
     # cannot certify), not verify and not mismatch.
     glyph_ambiguous_id_chars = glyph_id_chars
     evidence_short = (
-        identity_evidence_shortfall(
+        (punctuation_witness and not _punctuation_tokens_agree(exp, obs))
+        or identity_evidence_shortfall(
             [identity_kind(t) for t in exp],
             matched,
             raw_matched,
@@ -1569,6 +1711,66 @@ def band_match(
         glyph_ambiguous_id_chars,
         evidence_short,
     )
+
+
+def band_match(
+    expected_text: str,
+    observed_text: str,
+    *,
+    contradiction_sim: float = CONTRADICTION_SIM,
+) -> BandMatch:
+    """Legacy diagnostic scores with independently strict verdict evidence.
+
+    Noise scores describe OCR similarity; they never authorize verification.
+    ``band_verdict`` and every budget helper select the strict comparison.
+    """
+    strict = _band_match_normalized(
+        expected_text,
+        observed_text,
+        contradiction_sim=contradiction_sim,
+        normalizer=comparison_squash,
+        punctuation_witness=True,
+    )
+    diagnostics = _band_match_normalized(
+        expected_text,
+        observed_text,
+        contradiction_sim=contradiction_sim,
+        normalizer=squash,
+        punctuation_witness=False,
+    )
+    if diagnostics == strict:
+        return strict
+    result = _DiagnosticBandMatch(*strict)
+    result.diagnostic_match = diagnostics
+    return result
+
+
+def _punctuation_noise_match(expected_text: str, observed_text: str) -> BandMatch:
+    return _band_match_normalized(
+        expected_text,
+        observed_text,
+        normalizer=squash,
+        punctuation_witness=False,
+    )
+
+
+def _status_with_punctuation_noise(
+    strict: BandMatch,
+    noise: Optional[BandMatch],
+) -> tuple[
+    Literal["verified", "mismatch", "abstain"],
+    Optional[Literal["glyph_confusable_identifier", "identity_evidence_short"]],
+]:
+    """A noise comparison can supply uncertainty, never positive evidence."""
+    status = band_verdict(strict)
+    if (
+        status == "mismatch"
+        and noise is not None
+        and band_verdict(noise) == "abstain"
+        and band_abstain_reason(noise) == "glyph_confusable_identifier"
+    ):
+        return "abstain", "glyph_confusable_identifier"
+    return status, band_abstain_reason(strict)
 
 
 def _token_belongs_to(token: str, value_squashed: str) -> bool:
@@ -1606,7 +1808,7 @@ def strip_param_caret(band_text: str, param_examples: dict[str, str]) -> str:
     ONE caret glyph is rewritten; anything else is left for the matcher.
     """
     for example in param_examples.values():
-        if len(squash(example or "")) < MIN_PARAM_CHARS:
+        if len(comparison_squash(example or "")) < MIN_PARAM_CHARS:
             continue
         band_text = re.sub(
             r"(?i)(?<!\S)("
@@ -1634,11 +1836,11 @@ def substitute_param(band_text: str, example: str, value: str) -> str:
     pattern = re.compile(re.escape(example), re.IGNORECASE)
     if pattern.search(band_text):
         return pattern.sub(value, band_text)
-    example_squashed = squash(example)
+    example_squashed = comparison_squash(example)
     kept = [
         tok
         for tok in band_text.split()
-        if not _token_belongs_to(squash(tok), example_squashed)
+        if not _token_belongs_to(comparison_squash(tok), example_squashed)
     ]
     return " ".join(kept + [value])
 
@@ -1650,10 +1852,10 @@ def embedded_params(context_text: str, param_examples: dict[str, str]) -> list[s
     covered >= ``COVERAGE_THRESHOLD`` inside the squashed context (OCR may
     mangle the odd character of the recorded band).
     """
-    ctx = squash(context_text)
+    ctx = comparison_squash(context_text)
     names = []
     for name, example in param_examples.items():
-        ex = squash(example or "")
+        ex = comparison_squash(example or "")
         if len(ex) < MIN_PARAM_CHARS:
             continue
         if coverage(ex, ctx) >= COVERAGE_THRESHOLD:
@@ -1669,6 +1871,7 @@ def _band_ok_sans_glyph(match: BandMatch) -> bool:
     that fails any of them is a real ``mismatch``. The glyph budget is
     handled separately (see :func:`band_verdict`) because a collapsible
     identifier is an ABSTAIN (OCR cannot tell), not affirmative evidence."""
+    match = _authoritative_band_match(match)
     return (
         match.coverage >= COVERAGE_THRESHOLD
         and match.max_uncovered_run <= UNCOVERED_RUN_CAP
@@ -1682,6 +1885,7 @@ def _band_ok_sans_glyph(match: BandMatch) -> bool:
 def _band_ok(match: BandMatch) -> bool:
     """The pinned operating point: all of :func:`_band_ok_sans_glyph` AND the
     glyph-ambiguous-identifier budget. A fully-clean band (verifies)."""
+    match = _authoritative_band_match(match)
     return (
         _band_ok_sans_glyph(match)
         and match.glyph_ambiguous_id_chars <= GLYPH_AMBIGUOUS_ID_CHARS_CAP
@@ -1707,6 +1911,7 @@ def band_verdict(match: BandMatch) -> Literal["verified", "mismatch", "abstain"]
       clean name+DOB (optionally corroborated by a non-confusable identifier)
       genuinely discriminates.
     """
+    match = _authoritative_band_match(match)
     if not _band_ok_sans_glyph(match):
         return "mismatch"
     if match.glyph_ambiguous_id_chars > GLYPH_AMBIGUOUS_ID_CHARS_CAP:
@@ -1722,6 +1927,7 @@ def band_abstain_reason(
     match: BandMatch,
 ) -> Optional[Literal["glyph_confusable_identifier", "identity_evidence_short"]]:
     """Why :func:`band_verdict` abstains on ``match``, or None if it does not."""
+    match = _authoritative_band_match(match)
     if band_verdict(match) != "abstain":
         return None
     if match.glyph_ambiguous_id_chars > GLYPH_AMBIGUOUS_ID_CHARS_CAP:
@@ -1770,10 +1976,10 @@ def verify_target_identity(
     run_values = {k: str(v) for k, v in (params or {}).items() if isinstance(v, str)}
     if run_values:
         observed_text = strip_param_caret(observed_text, run_values)
-    hay = squash(observed_text)
+    hay = comparison_squash(observed_text)
     expected = context_text
 
-    if len(squash(context_text)) < MIN_CONTEXT_CHARS:
+    if len(comparison_squash(context_text)) < MIN_CONTEXT_CHARS:
         # A band this short ("Active High 3") is generic: any sibling row
         # sharing the generic columns would verify. The compiler no longer
         # stores such bands; when one arrives via an older bundle, identity
@@ -1801,7 +2007,7 @@ def verify_target_identity(
                 params.get(name, param_examples[name]),
             )
         for name in in_band:
-            value = squash(params.get(name, param_examples[name]))
+            value = comparison_squash(params.get(name, param_examples[name]))
             run = longest_run(value, hay)
             need = required_run(len(value))
             if run < need:
@@ -1827,9 +2033,17 @@ def verify_target_identity(
     if not hay:
         return IdentityCheck(status="unreadable", expected=expected)
     match = band_match(context_text, observed_text)
+    # Minimal scope: no lossy fallback for parameterized calls. Their strict
+    # ownership/substitution path remains authoritative and may over-halt.
+    noise = (
+        _punctuation_noise_match(context_text, observed_text)
+        if not params and not param_examples
+        else None
+    )
+    status, reason = _status_with_punctuation_noise(match, noise)
     return IdentityCheck(
-        status=band_verdict(match),
-        abstain_reason=band_abstain_reason(match),
+        status=status,
+        abstain_reason=reason,
         coverage=round(match.coverage, 4),
         expected=expected,
         observed=observed_text,
@@ -2500,7 +2714,10 @@ def identity_rests_on_confusable_identifier(text: Optional[str]) -> bool:
     """
     if not text:
         return False
-    return any(_is_glyph_vulnerable_identifier(squash(tok)) for tok in tokenize(text))
+    return any(
+        _is_glyph_vulnerable_identifier(comparison_squash(tok))
+        for tok in tokenize(text)
+    )
 
 
 def verify_vlm_identity(
