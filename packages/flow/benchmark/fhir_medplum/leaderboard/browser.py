@@ -9,6 +9,12 @@ server.
 The harness signs the agent's user in once, by the app's own sign-in page,
 and starts every run from a fresh browser context holding that session, on
 the app's home page. No agent ever sees or types a password.
+
+The browser stays inside the app. Any navigation to another origin, from a
+click, a key, a script, a pop-up or a direct ``goto``, is aborted in the
+browser before a request leaves it, and logged in the run's actions as
+``blocked_navigation``. Only the app's own origin and the Medplum server's
+origin can be navigated to.
 """
 
 from __future__ import annotations
@@ -17,7 +23,8 @@ import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Iterable, Optional
+from urllib.parse import urlsplit
 
 VIEWPORT = {"width": 1280, "height": 800}
 
@@ -75,6 +82,32 @@ def chord(keys: list[str]) -> str:
     return "+".join(key_name(k) for k in keys if k)
 
 
+def origin(url: str) -> str:
+    """``scheme://host[:port]``, lower-cased; ``""`` for a URL with no host."""
+
+    try:
+        u = urlsplit(url.strip())
+    except ValueError:
+        return ""
+    if not u.scheme or not u.netloc:
+        return ""
+    return f"{u.scheme.lower()}://{u.netloc.lower()}"
+
+
+def off_app(allowed: Iterable[str]) -> Callable[[str], bool]:
+    """A URL matcher for every http(s) URL outside the ``allowed`` origins."""
+
+    keep = frozenset(origin(a) for a in allowed) - {""}
+
+    def match(url: str) -> bool:
+        if not url.lower().startswith(("http://", "https://", "ws://", "wss://")):
+            return False
+        o = origin(url)
+        return o == "" or o not in keep
+
+    return match
+
+
 @dataclass
 class Screen:
     """One run's browser page, with the actions every adapter maps onto."""
@@ -82,6 +115,9 @@ class Screen:
     page: Any
     actions: int = 0
     log: list[dict[str, Any]] = field(default_factory=list)
+    #: Origins the browser may navigate to; empty means no check here (the
+    #: browser context's route still applies).
+    allowed: tuple[str, ...] = ()
 
     def screenshot(self) -> bytes:
         return self.page.screenshot(type="png")
@@ -161,6 +197,9 @@ class Screen:
     def goto(self, url: str) -> None:
         """Open a page of the app; other origins are refused."""
 
+        if self.allowed and off_app(self.allowed)(url):
+            self._do("goto_refused", url=url)
+            raise ValueError("only the clinic's app can be opened in this browser")
         self._do("goto", url=url)
         self.page.goto(url)
         self._settle()
@@ -262,6 +301,21 @@ class MedplumBrowser:
             out["access-control-expose-headers"] = "Location, ETag, Last-Modified"
             route.fulfill(status=resp.status, headers=out, body=body)
 
+        allowed = (self.ui_url, self.server_url)
+        blocked: list[dict[str, Any]] = []
+
+        def stay_in_app(route: Any, request: Any) -> None:
+            # Off-app subresources the app itself loads pass as before; a
+            # navigation (any frame, any pop-up) to another origin never
+            # leaves the browser.
+            if request.is_navigation_request():
+                blocked.append({"a": "blocked_navigation", "url": request.url})
+                route.abort("blockedbyclient")
+                return
+            route.fallback()
+
+        # Registered first, so the FHIR route below is tried before it.
+        ctx.route(off_app(allowed), stay_in_app)
         ctx.route(re.compile("^" + re.escape(server_fhir) + r"(/|\?|$)"), via_proxy)
         page = ctx.new_page()
         page.goto(self.ui_url)
@@ -269,4 +323,5 @@ class MedplumBrowser:
             page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:  # noqa: BLE001
             pass
-        return ctx, Screen(page)
+        screen = Screen(page, log=blocked, allowed=allowed)
+        return ctx, screen

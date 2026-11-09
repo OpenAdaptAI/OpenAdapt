@@ -1,7 +1,12 @@
 """File times of the fara run folders, for the shadow-column replay."""
-import json, os, sys
+
+import json
+import os
+import sys
 from pathlib import Path
-root = Path(sys.argv[1]); out = {}
+
+root = Path(sys.argv[1])
+out = {}
 for sub in ("runs", "excluded-signed-out"):
     for row in sorted((root / "fara" / sub).glob("r*-*.json")):
         t = {"row": os.stat(row).st_mtime}

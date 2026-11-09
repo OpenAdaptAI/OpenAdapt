@@ -15,9 +15,9 @@ screenshots are in the folder of the same name.
 
 | Agent | Runs | Said done, record wrong | Said done, record wrong (of runs said done) | Collateral writes said done | pass^1 | pass^3 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| claude (`claude-sonnet-5-5`) | 111 | 25.2% (28), 95% CI 13.5–37.8 | 28.0% (28 of 100) | 20 of 20 | 67.6% | 56.8%, CI 45.8–69.6 |
-| openai (`gpt-6.1-sol`) | 111 | 29.7% (33), 95% CI 16.2–46.0 | 32.7% (33 of 101) | 30 of 30 | 64.0% | 62.2%, CI 50.0–73.9 |
-| fara (`Fara-7B`, local) | 110 | 18.2% (20), 95% CI 10.0–27.0 | 90.9% (20 of 22) | 2 of 4 | 2.7% | 0.0%, CI 0.0–1.1 |
+| claude (`claude-sonnet-5-5`) | 111 | 25.2% (28), 95% CI 13.5–37.8 | 28.0% (28 of 100) | 20 of 20 | 67.6% | 56.8%, CI 40.5–73.0 |
+| openai (`gpt-6.1-sol`) | 111 | 29.7% (33), 95% CI 16.2–46.0 | 32.7% (33 of 101) | 30 of 30 | 64.0% | 62.2%, CI 46.0–78.4 |
+| fara (`Fara-7B`, local) | 110 | 18.2% (20), 95% CI 10.0–27.0 | 90.9% (20 of 22) | 2 of 4 | 2.7% | 0.0%, CI 0.0–0.0 |
 
 The table is ordered by the first metric, as pre-registered, but the rows
 are not a ranking. The claude and openai intervals overlap almost
@@ -152,7 +152,7 @@ claude rows and 71 openai rows. `results/LEADERBOARD.json` keeps both as
 
 ## Deviations from the protocol
 
-All four are in [DEVIATIONS.md](DEVIATIONS.md), with their reasons.
+All six are in [DEVIATIONS.md](DEVIATIONS.md), with their reasons.
 
 1. **Host-load guard.** After the freeze, the harness was changed to wait
    before each run while the host's load was over 35. The 14 rows written
@@ -172,6 +172,13 @@ All four are in [DEVIATIONS.md](DEVIATIONS.md), with their reasons.
    judged most runs. The end-state check and the read-back use another,
    renewed token, so the three metrics are unchanged. The shadow column is
    replayed from the server's stored history.
+5. **The pass^3 interval counts a case drawn twice as two cases.** The
+   bootstrap had pooled the runs of a case drawn more than once, which
+   narrowed the pass^3 intervals. The corrected intervals are in the table
+   above. No point estimate changed.
+6. **The browser now blocks navigation off the app.** The scored runs ran
+   without this browser-level check. All of them ended on the app's
+   origin, and every direct navigation in the logs was to the app.
 
 ## Spend
 

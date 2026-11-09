@@ -95,3 +95,39 @@ one exists and keeps the live column (`shadow_live`) beside it.
 **Fara:** its first process (P01-A06) ran before the fix, and its shadow
 column is replayed the same way. Its second process (A07-AP12) runs with
 the fix.
+
+## 5. The pass^3 interval counts a case drawn twice as two cases (2026-11-09)
+
+**What happened:** the protocol's intervals resample cases. `score.py`
+resampled them, but then grouped the drawn runs by case id, so a case drawn
+twice became one case with six runs. pass^3 for such a case is computed
+over six runs instead of being the case's own value counted twice: a case
+with two passes in three runs contributes 0 to pass^3, but drawn twice it
+counted as 4 of 6 and contributed 0.2. An independent review found it.
+
+**What changed:** each draw now gets its own id, so every drawn case is its
+own unit, as the protocol says. The two run-level metrics do not group by
+case, and their intervals are unchanged. No point estimate changes.
+
+**Effect on the intervals (pass^3, 95%):** claude 45.8–69.6 to 40.5–73.0;
+openai 50.0–73.9 to 46.0–78.4; fara 0.0–1.1 to 0.0–0.0. The claude and
+openai intervals still overlap.
+
+## 6. The browser now blocks navigation off the app (2026-11-09)
+
+**What happened:** the protocol says actions that leave the app are
+refused. The Gemini and Fara adapters refused a URL tool call to another
+origin, but the browser itself did not: a click or key on a link to
+another origin would have loaded it. An independent review showed this
+with the Claude and OpenAI adapters on a loopback test page.
+
+**What changed:** `browser.py` aborts, inside the browser, any navigation
+to an origin other than the app's and the server's, from a click, a key, a
+script, a pop-up or a direct `goto`, and logs it as `blocked_navigation`.
+`Screen.goto` also refuses another origin.
+
+**Runs affected:** the scored runs ran without this check. In the retained
+evidence, all 332 scored runs ended on the app's origin, and every direct
+navigation in the action logs (fara's `goto`) was to the app. The logs record clicks and keys, not
+the pages they opened, so a navigation off the app that came back before
+the run ended can't be ruled out from them. No score is changed.

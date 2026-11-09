@@ -31,7 +31,8 @@ Definitions (PROTOCOL.md, section "Metrics"):
   the live column is kept beside it.
 
 Intervals: 95% percentile intervals from 10,000 bootstrap resamples of
-cases (all of a case's runs move together), seed 20261102.
+cases (all of a case's runs move together, and a case drawn twice counts
+as two cases), seed 20261102.
 """
 
 from __future__ import annotations
@@ -164,7 +165,16 @@ def bootstrap(rows: list[dict[str, Any]], fn: Callable[[list[dict[str, Any]]], O
     rng = random.Random(SEED)
     vals = []
     for _ in range(RESAMPLES):
-        sample = [r for i in rng.choices(ids, k=len(ids)) for r in by[i]]
+        # Each draw is its own case unit: a case drawn twice is two cases,
+        # not one case with twice the runs. Statistics that group by "id"
+        # (pass^k) would otherwise pool the copies, and a case with two
+        # passes in three runs, drawn twice, would count 4 of 6 toward
+        # pass^3 instead of 0.
+        sample = [
+            {**r, "id": f"{i}#draw{j}"}
+            for j, i in enumerate(rng.choices(ids, k=len(ids)))
+            for r in by[i]
+        ]
         v = fn(sample)
         if v is not None:
             vals.append(v)
