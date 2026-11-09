@@ -26,7 +26,8 @@ RATE_CARD = {
     "triage_failure": 5.0,
     "command": 0.5,
 }
-PROTOCOL_VERSION = "onboarding-effort/v1"
+#: v1 (wave 1, 2026-10-20) is superseded: the harness changed after its freeze.
+PROTOCOL_VERSION = "onboarding-effort/v2"
 #: v2: readiness remedies (identifier, set-risk, save step); stop when the product blocks.
 IMPLEMENTER_VERSION = "v2"
 

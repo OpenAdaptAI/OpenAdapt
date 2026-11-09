@@ -77,10 +77,29 @@ def exists() -> bool:
     return subprocess.run(["podman", "container", "exists", C]).returncode == 0
 
 
+#: Where the engineer's verify.yaml reads Trac's SQLite file, relative to
+#: ``packages/flow``. Set ``OE_TRAC_DB_DIR`` to put it elsewhere. Frozen specs
+#: always carry this default, never a machine path.
+DEFAULT_DB_DIR = "benchmark/onboarding_effort/.state/trac-db"
+DB_DIR_ENV = "OE_TRAC_DB_DIR"
+
+
 def host_db_dir() -> str:
+    """The database directory as configured (may be the relative default)."""
     import os
 
-    return os.path.join(os.environ.get("OE_SCRATCH", ""), "trac-db")
+    return os.environ.get(DB_DIR_ENV) or DEFAULT_DB_DIR
+
+
+def host_db_dir_abs() -> str:
+    """The same directory as an absolute path (relative to ``packages/flow``)."""
+    import os
+    from pathlib import Path
+
+    path = Path(host_db_dir())
+    if not path.is_absolute():
+        path = Path(__file__).resolve().parents[3] / path
+    return os.fspath(path)
 
 
 def up() -> None:
@@ -94,7 +113,7 @@ def up() -> None:
     if exists():
         podman("start", C)
     else:
-        host = host_db_dir()
+        host = host_db_dir_abs()
         if not os.path.exists(os.path.join(host, "trac.db")):
             podman("create", "--name", C + "-seed", IMAGE)
             os.makedirs(host, exist_ok=True)

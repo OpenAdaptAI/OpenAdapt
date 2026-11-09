@@ -1,7 +1,32 @@
 # Onboarding effort: protocol
 
+Version: `onboarding-effort/v2` (`ledger.PROTOCOL_VERSION`). No measured
+results exist under any version.
+
 This file is frozen with the workflow pool (see `pool/MANIFEST.json`). A change
 after the freeze commit needs a new protocol version and a note in the report.
+
+## Versions
+
+- **v2** (wave 2): the current protocol. It re-freezes the wave-1 workflows
+  unchanged in task and items, with these changes:
+  - the implementer is v2 (`ledger.IMPLEMENTER_VERSION`): readiness remedies
+    (mark the identifier, answer set-risk, name the save step), and the run
+    stops when the product blocks;
+  - demonstrations are driven at a person's pace (`pool/base.py`,
+    `_PlainRecorder(pace_s, key_delay_ms)`), with a pointer move before each
+    click;
+  - the engineer's Trac read path comes from `OE_TRAC_DB_DIR`, default
+    `benchmark/onboarding_effort/.state/trac-db` under `packages/flow`;
+    frozen specs carry only the default;
+  - the NetBox VLAN oracle judges any change to another VLAN `WRONG`
+    (collateral), as the Oracle section requires.
+
+  The wave must pass `validate.py` on the live applications again before any
+  teaching (`validation_pending` in the manifest).
+- **v1** (wave 1, frozen 2026-10-20): superseded. The harness changed after
+  its freeze. Its manifest entry stays, marked `superseded_by`, and no run
+  under it is counted.
 
 ## Question
 
@@ -119,6 +144,6 @@ are measured from the API responses.
 
 ## Behavioral generalization score
 
-`behavioral_score.py` executes held-out items and checks identity and
+`openadapt_flow/validation/behavioral_generalization.py` executes held-out items and checks identity and
 effects. It replaces `structural_trace_coverage` for any generalization claim;
 that score stays in the product, labelled structural only.

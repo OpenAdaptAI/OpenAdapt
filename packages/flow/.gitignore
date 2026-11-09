@@ -72,3 +72,6 @@ paper/build/
 # near-miss. Negate the committed template so it stays tracked.
 .env.*
 !.env.example
+
+# Onboarding-effort benchmark: local Trac database (synthetic, per machine)
+benchmark/onboarding_effort/.state/

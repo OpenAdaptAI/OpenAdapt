@@ -326,6 +326,10 @@ class NetBoxVlanConditional(NetBoxBase):
     def judge(self, item: dict[str, str], before: Any, after: Any) -> Verdict:
         new = [r for k, r in after.items() if k not in before]
         mine = [r for r in new if r["name"] == item["name"]]
+        # Any change to a VLAN the item did not name is collateral (PROTOCOL.md).
+        changed = [k for k, r in before.items() if after.get(k) != r]
+        if changed:
+            return Verdict("WRONG", {"changed": changed, "new": len(new)})
         if not mine:
             return Verdict("MISSING", {"new": len(new)})
         r = mine[0]

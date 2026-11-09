@@ -3,7 +3,8 @@
 These run without any live application: no container, no browser, no
 network. ``subprocess.run`` and ``urlopen`` are replaced with functions that
 fail the test, so a workflow that reaches for Trac or NetBox here is a bug.
-They check that the frozen wave still matches its manifest, that the frozen
+They check that the live (protocol v2) wave still matches its manifest and
+that the superseded v1 wave stays recorded, that the frozen
 specs are what the code produces, that item generation is deterministic, the
 oracles' verdicts on hand-built database snapshots, and the effort ledger.
 """
@@ -23,7 +24,10 @@ import pytest
 
 HERE = Path(__file__).resolve().parents[1] / "benchmark" / "onboarding_effort"
 MANIFEST = json.loads((HERE / "pool" / "MANIFEST.json").read_text())
-FROZEN = [w for wave in MANIFEST["waves"] for w in wave["workflows"]]
+#: Waves not superseded by a later freeze; only these are pinned to the tree.
+LIVE = [w for w in MANIFEST["waves"] if not w.get("superseded_by")]
+FROZEN = [w for wave in LIVE for w in wave["workflows"]]
+PROTOCOL_VERSION = "onboarding-effort/v2"
 
 
 def _no_live_app(*args: Any, **kwargs: Any) -> Any:
@@ -57,34 +61,39 @@ def _registry() -> Any:
 # -- the frozen wave ------------------------------------------------------------
 
 
-#: Harness files changed after the wave-1 freeze, before any counted run:
-#: implementer v2 (``ledger.IMPLEMENTER_VERSION``) and a paced demonstration
-#: recorder. The task, item and oracle files are untouched. PROTOCOL.md asks
-#: for a new protocol version before a measured run uses them; until then any
-#: further change to these files fails here too.
-POST_FREEZE_HARNESS = {
-    "implementer.py": "85aa1a8baf1bb4616d37bb6669a43027cf2b9f3c0af0aa4f2706fd65c2b6141c",
-    "ledger.py": "661bb1423a7922d8d66ec8235d691572ece7bb4393cec649d239548246a0ca20",
-    "pool/base.py": "01afdc92122008695a1fb152c98f2710495c1cb6a384dd21db624ac99cf3f7d5",
-}
-
-
-def test_every_frozen_file_still_matches_the_manifest() -> None:
-    for wave in MANIFEST["waves"]:
+def test_live_wave_files_match_the_manifest() -> None:
+    assert LIVE, "no live wave in the manifest"
+    for wave in LIVE:
+        assert wave.get("protocol") == PROTOCOL_VERSION
         for rel, digest in wave["files"].items():
             path = HERE / rel
             assert path.is_file(), f"wave {wave['wave']}: {rel} is gone"
             got = hashlib.sha256(path.read_bytes()).hexdigest()
-            digest = POST_FREEZE_HARNESS.get(rel, digest)
             assert got == digest, (
                 f"wave {wave['wave']}: {rel} changed after the freeze; a change "
                 "needs a new protocol version (PROTOCOL.md)"
             )
 
 
-def test_wave_validation_is_all_ok() -> None:
+def test_superseded_waves_stay_in_the_manifest() -> None:
+    numbers = {w["wave"] for w in MANIFEST["waves"]}
+    superseded = [w for w in MANIFEST["waves"] if w.get("superseded_by")]
+    assert [w["wave"] for w in superseded] == [1]
+    for wave in superseded:
+        assert wave["superseded_by"] in numbers
+        assert wave["superseded_by"] > wave["wave"]
+        assert wave["protocol"] == "onboarding-effort/v1"
+        assert wave["files"] and wave["workflows"]
+    live = [w for wave in LIVE for w in wave["workflows"]]
+    assert len(live) == len(set(live)), "a workflow is frozen in two live waves"
+
+
+def test_wave_validation_is_ok_or_pending() -> None:
     for wave in MANIFEST["waves"]:
         rows = wave["validation"]
+        if wave.get("validation_pending"):
+            assert rows == []
+            continue
         assert {(r["workflow"], r["installation"]) for r in rows} >= {
             (w, "first") for w in wave["workflows"]
         }
@@ -101,14 +110,35 @@ def test_frozen_spec_is_what_the_code_produces(
     from benchmark.onboarding_effort import freeze
 
     frozen = json.loads((HERE / "pool" / "specs" / f"{wid}.json").read_text())
-    # The engineer's SQLite read path is the only machine-specific value; take
-    # its directory from the frozen spec rather than from this machine.
-    match = re.search(
-        r"sqlite_database: (\S+)/trac-db/trac\.db", frozen["verify_yaml"]["first"]
-    )
-    if match:
-        monkeypatch.setenv("OE_SCRATCH", match.group(1))
+    # A local override of the read path never reaches a frozen spec.
+    monkeypatch.setenv("OE_TRAC_DB_DIR", "/somewhere/else")
     assert freeze.spec(wid) == frozen
+    assert os.environ["OE_TRAC_DB_DIR"] == "/somewhere/else"
+
+
+@pytest.mark.parametrize("wid", FROZEN)
+def test_frozen_spec_carries_no_machine_path(wid: str) -> None:
+    text = (HERE / "pool" / "specs" / f"{wid}.json").read_text()
+    for path in re.findall(r"sqlite_database: (\S+)", text):
+        assert not Path(path).is_absolute(), path
+        assert not path.startswith("~"), path
+    assert str(Path.home()) not in text
+    assert "/Users/" not in text and "/home/" not in text
+
+
+def test_trac_read_path_default_and_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    from benchmark.onboarding_effort.apps import trac_app
+    from benchmark.onboarding_effort.pool import trac
+
+    monkeypatch.delenv("OE_TRAC_DB_DIR", raising=False)
+    assert trac.host_db() == "benchmark/onboarding_effort/.state/trac-db/trac.db"
+    flow = Path(__file__).resolve().parents[1]
+    assert Path(trac_app.host_db_dir_abs()) == flow / trac_app.DEFAULT_DB_DIR
+    monkeypatch.setenv("OE_TRAC_DB_DIR", "/srv/trac-db")
+    assert trac.host_db() == "/srv/trac-db/trac.db"
+    assert "sqlite_database: /srv/trac-db/trac.db" in _registry().get(
+        "tr-ticket-new"
+    ).verify_yaml("first")
 
 
 def test_registry_lists_the_frozen_pool() -> None:
@@ -315,6 +345,28 @@ def test_netbox_vlan_conditional_verdicts() -> None:
         wf.judge(second, before, {1: {**row, "cost_center": "CC-123"}}).verdict
         == "VERIFIED"
     )
+
+
+def test_netbox_vlan_conditional_collateral_is_wrong() -> None:
+    wf = _registry().get("nb-vlan-conditional")
+    item = {"vid": "301", "name": "onb-heldout-first-01", "group": "Campus"}
+    other = {"id": 7, "vid": "20", "name": "voice", "grp": "", "cost_center": ""}
+    row = {
+        "id": 8,
+        "vid": "301",
+        "name": item["name"],
+        "grp": "Campus",
+        "cost_center": "",
+    }
+    before = {7: other}
+    assert wf.judge(item, before, {7: other, 8: row}).verdict == "VERIFIED"
+    renamed = {**other, "name": "voice-2"}
+    verdict = wf.judge(item, before, {7: renamed, 8: row})
+    assert verdict.verdict == "WRONG"
+    assert verdict.detail["changed"] == [7]
+    # A deleted VLAN is collateral too, and so is damage with nothing created.
+    assert wf.judge(item, before, {8: row}).verdict == "WRONG"
+    assert wf.judge(item, before, {7: renamed}).verdict == "WRONG"
 
 
 # -- ledger -----------------------------------------------------------------------

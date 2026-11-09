@@ -94,6 +94,11 @@ class Implementer:
         self.last_lint = ""
         os.environ["OE_WORKFLOW"] = wf.id
         os.environ["OE_INSTALLATION"] = installation
+        # The verify.yaml written for a run needs an absolute read path; the
+        # frozen spec keeps the repo-relative default (apps/trac_app.py).
+        from benchmark.onboarding_effort.apps import trac_app
+
+        os.environ[trac_app.DB_DIR_ENV] = trac_app.host_db_dir_abs()
 
     # -- ledger helpers ------------------------------------------------------
     def log(self, phase: str, action: str, **kw: Any) -> Row:
