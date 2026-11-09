@@ -260,6 +260,11 @@ class TokenTemplate(BaseModel):
     idsh: bool = False
     glyph: bool = False
     gen: bool = False
+    bearing: Optional[bool] = Field(
+        default=None,
+        description="identity-bearing (identity.identity_bearing); None in "
+        "bundles compiled before the flag, which count every token",
+    )
 
 
 class ConcatTemplate(BaseModel):
@@ -4860,13 +4865,17 @@ class CheckToClickRecheck(BaseModel):
 
     Records which checked regions changed on the fresh frame taken just
     before the click, and what the runtime did: re-observed the target and
-    its identity on that frame, or refused the click. No pixels.
+    its identity on that frame, refused the click, or (``settled``) clicked
+    because the fresh frame matched an earlier confirmed one, as a blinking
+    caret does. ``settled_on`` then counts how many confirmations back that
+    frame was (1 = the one before the latest). No pixels.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     changed: list[Literal["target", "identity", "hover", "frame_size"]]
-    outcome: Literal["reobserved", "aborted"]
+    outcome: Literal["reobserved", "aborted", "settled"]
+    settled_on: Optional[int] = Field(default=None, ge=1)
 
 
 class StepResult(BaseModel):
