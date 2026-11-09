@@ -38,9 +38,10 @@ order the browser finished them:
 | `status` | yes | HTTP status, or `null` when the request failed |
 | `failed` | no | `true` when the request failed (no response) |
 | `request_type` | no | Request content type, without parameters |
-| `form` | no | For `application/x-www-form-urlencoded` bodies: `[[name, value], ...]` in the order sent, duplicates kept |
+| `form` | no | For `application/x-www-form-urlencoded` bodies, and `multipart/form-data` bodies with no file attached: `[[name, value], ...]` in the order sent, duplicates kept |
+| `multipart_files` | no | For a kept multipart body: the names of its file inputs that were sent empty (`[name, ""]` in `form`) |
 | `body` | no | Any other text body, as text |
-| `body_omitted` | no | `"multipart"` when a multipart body was not kept |
+| `body_omitted` | no | `"multipart"` when a multipart body was not kept: a file was attached, or the body isn't plain form data |
 | `request_truncated` | no | `true` when the body was cut at 256 KiB |
 | `response_type` | no | Response content type, without parameters |
 | `location` | no | The redirect target, when the response has one |

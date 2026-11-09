@@ -85,7 +85,9 @@ def make_handler(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("env_dir", type=Path)
     parser.add_argument("--port", type=int, default=8780)
     parser.add_argument("--claim", choices=["success", "failure"])

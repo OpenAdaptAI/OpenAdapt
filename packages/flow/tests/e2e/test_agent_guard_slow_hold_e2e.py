@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -33,8 +35,11 @@ pytest.importorskip("mcp")
 
 from benchmark.agent_guard import run as bench  # noqa: E402
 from benchmark.agent_guard.app import serve  # noqa: E402
-
-from .test_agent_guard_e2e import _chromium_or_skip, _port, _scenario  # noqa: E402
+from benchmark.effect_e2e import ground_truth  # noqa: E402
+from openadapt_flow.agent_guard import load_config  # noqa: E402
+from openadapt_flow.guard import load_task  # noqa: E402
+from openadapt_flow.jit import lifecycle  # noqa: E402
+from tests import _teach_authorization_support as support  # noqa: E402
 
 pytestmark = pytest.mark.timeout(900)
 
@@ -53,32 +58,92 @@ _cg.CommitGuard._send = _held
 def test_a_slowly_held_save_is_recorded_with_its_write(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _chromium_or_skip()
-    # The guard runs as a subprocess with this environment, so only its
-    # process loads the slow hold; the canary below runs in this one.
+    # The authorized compiler and capture run in a child process. The test
+    # process signs before it launches that child and retains the full run-2
+    # path here.
     patch = tmp_path / "slow_hold"
     patch.mkdir()
     (patch / "sitecustomize.py").write_text(_SLOW_HOLD, encoding="utf-8")
-    existing = os.environ.get("PYTHONPATH")
-    monkeypatch.setenv(
-        "PYTHONPATH", os.pathsep.join(filter(None, [str(patch), existing]))
-    )
     app = serve(tmp_path / "app.sqlite")
     try:
         teach_dir = tmp_path / "teach"
         files = bench.write_setup(
             tmp_path / "setup", app.base_url, teach_dir=teach_dir, db_path=app.db_path
         )
-        ok = bench.run_one(
-            app,
-            _scenario("ok"),
-            "guard",
-            tmp_path / "run-ok",
-            _port(),
-            think_s=1.0,
-            files=files,
-            teach=True,
+        cfg = load_config(files["guard"])
+        task = load_task(files["task"])
+        assert cfg.teach is not None and cfg.teach.key_dir is not None
+        key_dir = cfg.teach.key_dir
+        person = support.authorizer(key_dir, monkeypatch)
+        spec = support.spec(
+            task.task_id,
+            origins=[cfg.app_origin],
+            record={"patient_id": "p1"},
+            fields={"type": "Triage", "note": bench.NOTE},
+            inputs={"note": bench.NOTE},
+            record_kind="encounter",
         )
+        spec["writes"]["write_adapter"] = "tests._teach_scope:EncounterWrites"
+        statement = person.issue(tmp_path / "authorization", spec)
+        assert statement.is_file()
+
+        child_config = tmp_path / "child-config.json"
+        child_config.write_text(
+            json.dumps(
+                {
+                    "guard": str(files["guard"]),
+                    "task": str(files["task"]),
+                    "statement": str(statement),
+                    "approver_root": person.root,
+                    "capture_out": str(tmp_path / "guarded-capture"),
+                }
+            ),
+            encoding="utf-8",
+        )
+        child_env = os.environ.copy()
+        child_env["PYTHONPATH"] = os.pathsep.join(
+            filter(None, [str(patch), child_env.get("PYTHONPATH")])
+        )
+        result_path = tmp_path / "child-result.json"
+        stdout_path = tmp_path / "child-stdout.log"
+        stderr_path = tmp_path / "child-stderr.log"
+        before = ground_truth.capture(app.db_path)
+        with stdout_path.open("w") as stdout, stderr_path.open("w") as stderr:
+            process = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "tests.e2e.test_agent_guard_authorized_subprocess_e2e",
+                    str(child_config),
+                    str(result_path),
+                ],
+                env=child_env,
+                cwd=Path(__file__).resolve().parents[2],
+                stdout=stdout,
+                stderr=stderr,
+                timeout=300,
+                check=False,
+            )
+        assert process.returncode == 0, (
+            stdout_path.read_text()[-6000:],
+            stderr_path.read_text()[-6000:],
+        )
+        captured = json.loads(result_path.read_text())
+        assert captured["pid"] != os.getpid()
+        summary = captured["summary"]
+        truth = ground_truth.judge(
+            before, ground_truth.capture(app.db_path), intended_note=bench.NOTE
+        )
+        ok = {
+            "arm": "guard",
+            "truth": {"correct": truth.correct, "fault_class": truth.fault_class},
+            "blocked": summary.get("blocked") or [],
+            "writes": app.writes,
+            "verdict": summary.get("verdict"),
+            "hold_ms": summary.get("hold_ms"),
+            "handoff": captured["handoff"],
+        }
+        ok["outcome"] = bench.outcome(ok)
         assert ok["outcome"] == "clean", ok
         assert ok["hold_ms"] and ok["hold_ms"][0] >= HOLD_S * 1000 * 0.9, ok["hold_ms"]
         handoff = ok["handoff"]
@@ -99,7 +164,13 @@ def test_a_slowly_held_save_is_recorded_with_its_write(
         # recorder waited for the held save to go through.
         records = save.get("sor_after")
         assert records and records[0]["patient_id"] == "p1", records
-        monkeypatch.undo()
+        program = Path(handoff["task_dir"]) / "program"
+        candidate = json.loads((program / lifecycle.CANDIDATE_FILE).read_text())
+        assert candidate["teach_authorization"]["authorizer"] == support.AUTHORIZER
+        assert candidate["recorder"]["agent_principal_id"] == "subprocess-agent"
+        assert candidate["recorder"]["teach_scope"]["readback"]["status"] == "verified"
+        status = lifecycle.admission_status(program, key_dir=key_dir)
+        assert status["requirements"]["teach_authorization"]["met"] is True
         second = bench.run2(
             app,
             Path(handoff["task_dir"]),

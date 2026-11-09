@@ -38,6 +38,7 @@ from benchmark.harness.effectbench.runner.compound import (
     CompoundEffectVerifier,
 )
 from benchmark.harness.effectbench.schema import Substrate
+from openadapt_flow.mockmed.fault_server import mockmed_rest_read_kwargs
 from openadapt_flow.runtime.effects.effect import Effect, EffectVerifier
 
 
@@ -237,8 +238,7 @@ class MockMedSession:
 
         base = RestRecordVerifier(
             self._base,
-            records_path="/api/db",
-            records_key="records",
+            **mockmed_rest_read_kwargs(),
             poll_interval_s=0.02,
         )
         return CompoundEffectVerifier(base, extra_effects=self._extra)

@@ -250,6 +250,16 @@ def _new_order(orders: list[dict[str, str]], error: str = "") -> bytes:
     )
 
 
+# GET /api/orders serializes every row of the locked, in-memory order store.
+# It has no filter, page size, cursor, or response cap.
+ORDERS_READ_CONTRACT = {
+    "kind": "rest",
+    "records_path": "/api/orders",
+    "records_key": "records",
+    "records_complete": True,
+}
+
+
 ORDER_FIELDS = ("order_id", "customer", "product", "units")
 
 

@@ -55,6 +55,26 @@ def _teach_authorization_env(monkeypatch: pytest.MonkeyPatch):
     support._AUTHORIZERS.clear()
 
 
+@pytest.fixture(scope="module")
+def module_durable_authority(tmp_path_factory: pytest.TempPathFactory):
+    """Isolate opted-in module setup before function-scoped fixtures run."""
+
+    root = tmp_path_factory.mktemp("module-authority")
+    database = root / "authority.sqlite3"
+    # A dependency's teardown also runs when the consuming fixture fails
+    # before yield. Function-scoped authority isolation remains independent.
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("OPENADAPT_DURABLE_AUTHORITY_DB", str(database))
+        patch.setenv("OPENADAPT_SEAL_HOME", str(root / ".seal-home"))
+        patch.setenv("OPENADAPT_FRAME_SECRET", "11" * 32)
+        patch.delenv("OPENADAPT_FRAME_SECRET_FILE", raising=False)
+        patch.setenv("OPENADAPT_LEDGER_DIR", str(root / ".write-ledger"))
+        patch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "test suite: synthetic data")
+        patch.setenv("OPENADAPT_FLOW_AT_REST_HOME", str(root / ".at-rest-home"))
+        patch.delenv("OPENADAPT_FLOW_AT_REST", raising=False)
+        yield database
+
+
 @pytest.fixture(autouse=True)
 def _isolate_durable_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep each test's monotonic run authority independent and disposable."""
@@ -63,6 +83,9 @@ def _isolate_durable_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
         "OPENADAPT_DURABLE_AUTHORITY_DB",
         str(tmp_path / ".durable-authority.sqlite3"),
     )
+    # Sealed-set cooperative locks stay outside authenticated inventories and
+    # outside the real per-user lock directory, including in subprocesses.
+    monkeypatch.setenv("OPENADAPT_SEALED_LOCK_DIR", str(tmp_path / ".sealed-locks"))
     # Offline Seals are on by default; keep each test's Seal key and batch
     # queue out of the real home directory.
     monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / ".seal-home"))
@@ -100,3 +123,11 @@ def pytest_runtest_makereport(item, call):
 
     if is_pytest_timeout(call.excinfo.value):
         clear_leaked_running_loop()
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    # A package-local pyproject.toml cuts off ancestor conftest discovery.
+    if not config.pluginmanager.hasplugin("openadapt-headless"):
+        from tests import headless_guard
+
+        config.pluginmanager.register(headless_guard, "openadapt-headless")
