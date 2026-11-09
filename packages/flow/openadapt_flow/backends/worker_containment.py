@@ -40,6 +40,12 @@ from typing import Any, Callable, Optional
 WORKER_TARGET_TYPES = frozenset({"worker", "shared_worker", "service_worker"})
 
 _INIT_JS = """(() => {
+  const report = globalThis.__openadaptWorkerViolation;
+  addEventListener('securitypolicyviolation', (event) => {
+    if (event.isTrusted && event.effectiveDirective === 'worker-src') {
+      report().catch(() => {});
+    }
+  });
   const before = document.documentElement;
   const make = (n) => document.createElementNS('http://www.w3.org/1999/xhtml', n);
   try {
@@ -63,6 +69,7 @@ _INIT_JS = """(() => {
 
 NEW_WINDOW = "the page opened a new window or tab, and it was stopped"
 WORKER_STARTED = "a worker started on the page, and its requests can't be checked"
+WORKER_REFUSED = "the page tried to start a worker, and the browser refused it"
 
 
 @dataclass
@@ -151,6 +158,14 @@ def contain_workers(
     try:
         session.on("Target.targetCreated", on_target)
         session.send("Target.setDiscoverTargets", {"discover": True})
+        # A worker refused by CSP never becomes a target. Report the browser's
+        # policy violation too, so callers halt on the attempt, not only on a
+        # worker that escaped the policy. The init script captures the binding
+        # before page script can replace it.
+        context.expose_binding(
+            "__openadaptWorkerViolation",
+            lambda _source: state.violate(WORKER_REFUSED),
+        )
         context.add_init_script(_INIT_JS)
         context.route("**/*", route)
         context.on("page", on_page)

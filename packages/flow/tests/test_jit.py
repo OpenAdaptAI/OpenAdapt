@@ -659,6 +659,9 @@ def test_a_node_click_binds_scope_checks_and_pointer_to_its_center(center: Any) 
         def check_ops(self, ops: list[Op], **kwargs: Any) -> None:
             checked.extend((op.x, op.y) for op in ops)
 
+        def check_key(self, op: Op, page: Any) -> None:
+            pass
+
         def after_action(self, page: Any) -> None:
             pass
 
