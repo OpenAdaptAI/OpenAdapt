@@ -347,9 +347,11 @@ A test fails when a command has no file or this list is out of date.
 
 **Record and build a program:**
 
+- `browser-accessibility`: On Linux, make Chrome, Chromium, Edge and Brave start with their page readable to accessibility tools, so `record` can read what you click in your everyday browser. It writes launcher entries in your own `~/.local/share/applications` only; `--disable` removes them. On Windows and macOS, `record` does this by itself.
 - `compile-agent`: With `--config DEPLOY_YAML`, the agent drives a desktop, RDP or Citrix app built by `build_backend`. With `admit TASK_DIR`, a person confirms and admits a waiting draft, such as one an agent taught over MCP (`openadapt-agent serve --teach`).
 - `compile`
 - `compose`
+- `confirm-surfaces`: Show the windows and apps a cross-window recording used, with the steps on each, and confirm them. `compile` refuses a cross-window recording until a person has confirmed its surfaces, either at the end of `record` or with this command. `--yes` confirms without asking.
 - `demo-record`
 - `disambiguate`
 - `for-each`

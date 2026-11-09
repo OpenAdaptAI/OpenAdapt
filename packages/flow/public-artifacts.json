@@ -410,6 +410,7 @@
     "benchmark/macos_native/results/calibre-20261103-steady-caret-run2.json",
     "benchmark/macos_native/textedit_counted_3plus1_b1b61a5_20260717.adjudication.json",
     "benchmark/macos_native/textedit_counted_3plus1_b1b61a5_20260717.json",
+    "benchmark/multi_surface_record/results/linux-cross-window-20261104-200106.json",
     "benchmark/multiapp-standard.yaml",
     "benchmark/native_authoring/results/linux-atspi-20261103.json",
     "benchmark/native_authoring/results/macos-calculator-20261103.json",
