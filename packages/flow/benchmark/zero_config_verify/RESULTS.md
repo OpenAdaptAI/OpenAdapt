@@ -1,18 +1,25 @@
 # Results: generated verifiers vs hand-written verifiers under planted faults
 
 Protocol: [PROTOCOL.md](PROTOCOL.md). It was committed before any trial
-(42415a612). Two deviations, each committed before the run it affects:
-c4a3be060 (the `hand-written+complete` baseline) and 79df8b96c (the second
-run: the fixed generator and a new `Z-net-probed` arm).
+(42415a612). Three deviations, each committed before the run it affects:
 
-This file reports the **second run**, made on 2026-11-09 at commit 0fa5f2b35.
-That commit is this branch with the engine change from #2129
-(`feat/zero-config-read-discovery`) merged in. The run had 69 trials (36
-MockMed, 33 MockLoan), used headless Chromium on localhost only, made no model
-calls and used synthetic data only. Raw data is in
-[results.json](results.json), and the generated files are in
-[generated/](generated/). The first run, made before the fixes, is kept in
-[results-run1.json](results-run1.json) and summarized at the end.
+- c4a3be060: the `hand-written+complete` baseline;
+- 79df8b96c: the second run, with the fixed generator and the new
+  `Z-net-probed` arm;
+- bedb622b9: the third run, which refuses a probed read that can't see the
+  whole save.
+
+This file reports the **third run**, made on 2026-11-09 at commit cfa11472b.
+That commit is this branch with #2129 (`feat/zero-config-read-discovery`,
+32997eeac) merged in. The run had 69 trials (36 MockMed, 33 MockLoan), used
+headless Chromium on localhost only, made no model calls and used synthetic
+data only. Raw data is in [results.json](results.json), and the generated
+files are in [generated/](generated/). Earlier runs are kept and summarized
+at the end:
+
+- [results-run1.json](results-run1.json): the generator as it was on `main`;
+- [results-run2.json](results-run2.json): the fixed generator, before the
+  refusal.
 
 ## Verdict
 
@@ -25,25 +32,25 @@ loads the store's record list (`GET /api/db`) before and after the save. No
 person writes any verifier text for it. However, neither app makes that read
 by itself, so it is an assisted demonstration.
 
-The new arm, `Z-net-probed`, uses only the app's own traffic. It is **not
-ready on either app**:
+The new arm, `Z-net-probed`, uses only the app's own traffic. It has **no
+runnable verifier on either app, and so no false accepts**:
 
-- **MockMed: no runnable verifier.** The app has no JSON read route for the
+- **MockMed: read unavailable.** The app has no JSON read route for the
   collection it writes, so all 4 probes returned 404:
   - `GET /api/encounter` and `GET /api/encounters`;
   - `GET /api/encounter/1` and `GET /api/encounters/1`.
 
-  The generator left the read UNAVAILABLE and marked it as needing a person,
-  as designed. It wrote the TODO draft and no check.
-- **MockLoan (held out): 3 false accepts in 21 wrong runs (all 3 are
-  `collateral`), 0 false rejects in 12 correct runs.** The probe found and
-  confirmed `GET /api/disbursements`, which returns the record with all four
-  written fields. That read covers the disbursements surface only. The
-  `collateral` fault writes a stray fee row on another surface, which this
-  read cannot see. The generator said so itself: it labelled the file a
-  draft, with the miss "collateral_unaudited: a stray row written to a table
-  this check does not read". The protocol uses the file with the
-  confirmation flags deleted, which is how those runs were accepted.
+  The generator wrote the TODO draft and no check.
+- **MockLoan (held out): refused.** The probe found and confirmed
+  `GET /api/disbursements`, which returns the record with all four written
+  fields. The fault test then showed that a write outside that collection
+  would pass (`collateral_unaudited`). So the generator wrote no runnable
+  check, only the TODO draft. `read_discovery.json` and the proof record the
+  status as `refused`, with `needs_operator_confirmation: true` and the
+  reason.
+
+  In the second run, before the refusal, this arm accepted all 3
+  `collateral` runs.
 
 On MockLoan, the database arms (`Z-db`, `Z-db-gate`) also pass. They were
 blocked before generation in the first run.
@@ -74,7 +81,7 @@ label on all 69 trials, and no verdict carried an error.
 | MockLoan | `hand-written` (as committed) | baseline | 0 / 21 | 12 / 12 | (not used) |
 | MockLoan | `hand-written+complete` | baseline | 0 / 21 | 0 / 12 | (threshold baseline) |
 | MockLoan | `Z-net` | zero-config | no runnable verifier (TODO draft) | | not ready |
-| MockLoan | `Z-net-probed` | zero-config | **3 / 21** | 0 / 12 | not ready (FA 3 > 0) |
+| MockLoan | `Z-net-probed` | zero-config | no runnable verifier (refused: the probed read can't see the whole save) | | not ready |
 | MockLoan | `Z-net-read` | zero-config (assisted read) | 0 / 21 | 0 / 12 | **ready** |
 | MockLoan | `Z-db` | zero-config | 0 / 21 | 0 / 12 | **ready** |
 | MockLoan | `Z-db-gate` | zero-config | 0 / 21 | 0 / 12 | **ready** |
@@ -88,9 +95,10 @@ What the generator said about each file it wrote (recorded in
 - **Labelled working:** `D-net-read-complete` on both apps, and `Z-db` on
   MockLoan.
 - **Labelled draft:**
-  - `Z-net-read`, `Z-net-probed` and `P-scaffold-verifier`. Each missed the
-    write-outside-the-read fault, because none of them reads the whole store
-    by itself.
+  - `Z-net-read` and `P-scaffold-verifier`. Each missed the
+    write-outside-the-read fault, because neither reads the whole store by
+    itself. `Z-net-probed` now refuses in that case instead of writing a
+    draft check.
   - `Z-db-gate`. Two of its fault-gate classes could not be tested on the
     copy.
 
@@ -119,19 +127,19 @@ What the generator said about each file it wrote (recorded in
 
 ### MockLoan (held out)
 
-| fault | truth | `hand-written` | `hand-written+complete` | `Z-net-probed` | `Z-net-read` | `Z-db` | `Z-db-gate` | `D-net-read-complete` | `P-record-verify` | `P-scaffold-verifier` |
-|---|---|---|---|---|---|---|---|---|---|---|
-| ok | correct | 6 FR / 6 | 0 FR / 6 | 0 FR / 6 | 0 FR / 6 | 0 FR / 6 | 0 FR / 6 | 0 FR / 6 | 0 FR / 6 | 0 FR / 6 |
-| idempotent | correct | 3 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 |
-| timeout | correct | 3 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 |
-| partial | wrong | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 |
-| optimistic | wrong | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 |
-| session | wrong | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 |
-| duplicate | wrong | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 |
-| double | wrong | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 |
-| stale | wrong | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 |
-| collateral | wrong | 0 FA / 3 | 0 FA / 3 | **3 FA / 3** | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 |
-| indeterminate | | 33 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| fault | truth | `hand-written` | `hand-written+complete` | `Z-net-read` | `Z-db` | `Z-db-gate` | `D-net-read-complete` | `P-record-verify` | `P-scaffold-verifier` |
+|---|---|---|---|---|---|---|---|---|---|
+| ok | correct | 6 FR / 6 | 0 FR / 6 | 0 FR / 6 | 0 FR / 6 | 0 FR / 6 | 0 FR / 6 | 0 FR / 6 | 0 FR / 6 |
+| idempotent | correct | 3 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 |
+| timeout | correct | 3 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 | 0 FR / 3 |
+| partial | wrong | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 |
+| optimistic | wrong | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 |
+| session | wrong | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 |
+| duplicate | wrong | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 |
+| double | wrong | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 |
+| stale | wrong | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 |
+| collateral | wrong | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 | 0 FA / 3 |
+| indeterminate | | 33 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 
 ## What the fixes did, gap by gap
 
@@ -145,9 +153,11 @@ What the generator said about each file it wrote (recorded in
 2. **Write detection (fixed).** On MockLoan, "Authorize Disbursement" is now
    detected as a write from its `POST /api/disbursement`. Every MockLoan arm
    now generates; in the first run, all were refused.
-3. **Read-path discovery (works as specified, and not enough on its own):**
+3. **Read-path discovery (works as specified; fails closed where it can't
+   see everything):**
    - **MockLoan:** the probe confirmed the disbursements list. It is the right
-     record read, but not the whole store.
+     record read, but not the whole store, so the generator refused to make
+     it runnable.
    - **MockMed:** no read route exists, so the read stays unavailable, and
      nothing was made up.
 
@@ -157,15 +167,16 @@ What the generator said about each file it wrote (recorded in
 
 ## Gaps that remain
 
-- **A probed read sees one collection, not the store.** On MockLoan it
-  misses a write to a second surface. The generator already labels this
-  case a draft. An operator who accepts the file unread still gets a check
-  that passes a stray write elsewhere. Possible fixes:
-  - refuse to emit a runnable check while `collateral_unaudited` is
-    unresolved;
-  - have the probe look for a sibling read that covers more surfaces.
+- **A probed read sees one collection, not the store.** On a multi-surface
+  store, the generator now refuses instead of emitting a check that could
+  hide a write elsewhere. That is safe, but it means `Z-net-probed` produces
+  nothing runnable there unless one of these is given:
+  - `--complete-read`;
+  - `--db`;
+  - a fuller read.
 
-  This run tested neither.
+  Probing for a sibling read that covers more of the store is not
+  implemented (follow-up).
 - **Apps with no JSON read route.** MockMed shows the saved record only as
   server-rendered HTML (`/chart/<patient>`). Discovery reads JSON only, so
   the read stays unavailable there. Reading an HTML record page is not
@@ -190,6 +201,14 @@ What the generator said about each file it wrote (recorded in
     write, and no second store;
   - the Chrome extension's capture and `benchmark/contract_autogen` were not
     measured.
+
+## Second run (fixed generator, before the refusal)
+
+That run is in [results-run2.json](results-run2.json), made at 0fa5f2b35.
+Every arm matched this run except `Z-net-probed` on MockLoan. There, the
+generator emitted a draft check on the probed `/api/disbursements` read. With
+the confirmation flags deleted, it gave 3 false accepts in 21 wrong runs (all
+`collateral`) and 0 false rejects in 12 correct runs, which is not ready.
 
 ## First run (before the fixes)
 
@@ -221,5 +240,5 @@ uv run --frozen --extra dev --extra browser python -m benchmark.zero_config_veri
 uv run --frozen python -m benchmark.zero_config_verify.report
 ```
 
-The second run took about 40 minutes: 16 minutes of MockMed trials, 23
-minutes of MockLoan trials, plus generation.
+Each run takes about 40 minutes: about 16 minutes of MockMed trials,
+23 minutes of MockLoan trials, plus generation.
