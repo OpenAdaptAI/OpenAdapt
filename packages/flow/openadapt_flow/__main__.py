@@ -6089,7 +6089,9 @@ def _cmd_silent_saves(args: argparse.Namespace) -> int:
         module = importlib.util.module_from_spec(spec)
         sys.modules["silent_saves"] = module
         spec.loader.exec_module(module)
-    from silent_saves.cli import main as silent_saves_main  # type: ignore[import-not-found]
+    from silent_saves.cli import (  # type: ignore[import-not-found]
+        main as silent_saves_main,
+    )
 
     return int(silent_saves_main(list(args.silent_saves_argv)))
 
@@ -9452,6 +9454,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Review the windows a cross-window recording used, and confirm "
             "them so the recording can be compiled"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("recording", help="Recording directory")
     p.add_argument("--yes", action="store_true", help="Confirm without asking")
@@ -9464,6 +9467,7 @@ def build_parser() -> argparse.ArgumentParser:
             "readable to accessibility tools, so record can read clicks in "
             "your everyday browser. Writes your own launcher entries only"
         ),
+        allow_abbrev=False,
     )
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--enable", action="store_true", help="Add the setting")

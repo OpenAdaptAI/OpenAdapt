@@ -149,7 +149,7 @@ class Chart:
 
     def place(self, x: int, y: int, timeout: float = 20.0) -> None:
         """Put the chart window beside the browser, as a person arranges it."""
-        from Xlib import X, display
+        from Xlib import display
 
         d = display.Display()
         deadline = time.monotonic() + timeout
@@ -429,7 +429,7 @@ def qualify(root: Path) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--keep", action="store_true")
     args = parser.parse_args()
