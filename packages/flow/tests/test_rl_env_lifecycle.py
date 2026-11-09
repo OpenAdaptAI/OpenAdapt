@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -189,3 +190,119 @@ def test_an_abandoned_browser_reports_how_its_driver_was_stopped(monkeypatch) ->
     with pytest.raises(ChildProcessError):
         os.waitpid(child.pid, os.WNOHANG)
     child.returncode = -signal.SIGKILL
+
+
+# -- an unreadable process table is unknown, never an empty tree -------------
+
+
+def _failing_census(monkeypatch, fail: "set[int]") -> list[int]:
+    """Make the listed (1-based) ``ps`` census calls fail; count them all."""
+    calls: list[int] = []
+    real_run = lifecycle.subprocess.run
+
+    def run(args, *a, **k):
+        if list(args[:1]) == ["ps"]:
+            calls.append(len(calls) + 1)
+            if calls[-1] in fail:
+                raise subprocess.CalledProcessError(1, args)
+        return real_run(args, *a, **k)
+
+    monkeypatch.setattr(lifecycle.subprocess, "run", run)
+    return calls
+
+
+def _live_child() -> subprocess.Popen[bytes]:
+    proc = subprocess.Popen(
+        [sys.executable, "-c", "import time; print(flush=True); time.sleep(600)"],
+        stdout=subprocess.PIPE,
+    )
+    assert proc.stdout is not None
+    proc.stdout.readline()
+    assert proc.poll() is None
+    return proc
+
+
+def _cleanup(proc: subprocess.Popen[bytes]) -> None:
+    try:
+        os.kill(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
+        proc.wait(timeout=30)
+    except ChildProcessError:
+        pass
+    proc.returncode = proc.returncode or -signal.SIGKILL
+
+
+def test_a_census_that_fails_twice_refuses_to_report_killed(monkeypatch) -> None:
+    proc = _live_child()
+    calls = _failing_census(monkeypatch, fail={1, 2})
+    try:
+        with pytest.raises(lifecycle.DescendantsUnknown, match="descendants"):
+            lifecycle.kill_child_tree(proc.pid, timeout=5)
+        assert calls[:2] == [1, 2]
+        # The child itself was still killed and reaped; only the verdict is
+        # withheld.
+        with pytest.raises(ChildProcessError):
+            os.waitpid(proc.pid, os.WNOHANG)
+    finally:
+        monkeypatch.undo()
+        _cleanup(proc)
+
+
+def test_a_census_that_fails_once_then_confirms_empty_reports_killed(
+    monkeypatch,
+) -> None:
+    proc = _live_child()
+    calls = _failing_census(monkeypatch, fail={1})
+    try:
+        assert lifecycle.kill_child_tree(proc.pid, timeout=10) == "killed"
+        assert len(calls) >= 3  # the failure, its retry and the confirmation
+    finally:
+        monkeypatch.undo()
+        _cleanup(proc)
+
+
+def test_a_census_that_fails_after_the_kill_refuses_to_report_killed(
+    monkeypatch,
+) -> None:
+    proc = _live_child()
+    # Call 1 lists the frozen (childless) tree; every later one fails.
+    calls = _failing_census(monkeypatch, fail=set(range(2, 10_000)))
+    try:
+        with pytest.raises(lifecycle.DescendantsUnknown, match="after the kill"):
+            lifecycle.kill_child_tree(proc.pid, timeout=0.5)
+        assert len(calls) > 1
+    finally:
+        monkeypatch.undo()
+        _cleanup(proc)
+
+
+def test_unparseable_or_empty_census_output_is_unknown(monkeypatch) -> None:
+    for out in ("", "garbage\n", "12 x R\n", "1 0 S\n"):
+        monkeypatch.setattr(
+            lifecycle.subprocess,
+            "run",
+            lambda *a, _o=out, **k: SimpleNamespace(stdout=_o),
+        )
+        assert lifecycle._ps_rows() is None, out
+
+
+def test_a_stopped_group_that_cannot_be_inspected_is_not_reported_stopped(
+    monkeypatch,
+) -> None:
+    proc, _ = _start(COOPERATIVE)
+    real_killpg = os.killpg
+
+    def killpg(pgid: int, sig: int) -> None:
+        if sig == 0:
+            raise OSError(5, "I/O error")
+        real_killpg(pgid, sig)
+
+    monkeypatch.setattr(lifecycle.os, "killpg", killpg)
+    try:
+        with pytest.raises(lifecycle.DescendantsUnknown, match="inspected"):
+            lifecycle.stop(proc, term_timeout=10)
+        assert proc.poll() is not None  # the leader itself was reaped
+    finally:
+        monkeypatch.undo()
