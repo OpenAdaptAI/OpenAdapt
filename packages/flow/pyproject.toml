@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-flow"
-version = "2.6.0"
+version = "2.7.0"
 description = "Compile demonstrated GUI workflows into deterministic local replay with governed repair and refusal"
 readme = "README.md"
 license = { text = "MIT" }
@@ -524,7 +524,7 @@ line-length = 88
 # Generated / non-package trees at the repo root are not part of the lint
 # surface. The benchmark harness (benchmark/harness/) is linted by naming it
 # explicitly in CI (`ruff check openadapt_flow benchmark/harness`).
-extend-exclude = ["/benchmark", "/docs", "/runs", "/dist"]
+extend-exclude = ["/benchmark", "/docs", "/runs", "/dist", "tests/golden_runs/baselines"]
 
 [tool.ruff.lint]
 # Start pragmatic: pyflakes (real bugs), the safe pycodestyle subset, warnings,

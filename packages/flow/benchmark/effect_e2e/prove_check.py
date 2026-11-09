@@ -1,6 +1,6 @@
 """The effect_e2e record service as a fixture for proving a proposed check.
 
-``openadapt-flow scaffold-verifier --prove effect-e2e`` runs a proposed record
+``python -m benchmark.record_check_proof scaffold-verifier --prove effect-e2e`` runs a proposed record
 check through the real replayer against this service, one run per fault in
 :data:`benchmark.effect_e2e.run.SCENARIOS`, judged by this harness's
 independent ground truth (a read-only connection to the SQLite file that never

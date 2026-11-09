@@ -388,7 +388,8 @@ def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyCo
     if isinstance(key, list):
         from openadapt_flow.qualify.config import composite_key_read_problems
 
-        problems = composite_key_read_problems(key, cfg.verifier)
+        surface = record.get("surface") if isinstance(record, dict) else None
+        problems = composite_key_read_problems(key, cfg.verifier, surface)
         if problems:
             raise VerifyRunError(f"invalid {source}: " + "; ".join(problems))
     kinds = [cfg.verifier.kind] + [s.kind for s in cfg.verifier.surfaces.values()]

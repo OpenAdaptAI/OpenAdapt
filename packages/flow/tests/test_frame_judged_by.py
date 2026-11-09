@@ -122,7 +122,8 @@ def test_a_correct_checkout_holds_and_its_recheck_confirms(tmp_path: Path) -> No
     contract = _contract(db)
     result = _write(contract, db, CHECKOUT.format("LT-1"))
     assert result.verified, result.reasons
-    late = recheck(contract, result, params=PARAMS, actor=BOT)
+    # The write used no ledger, so neither does its recheck.
+    late = recheck(contract, result, params=PARAMS, actor=BOT, ledger=None)
     assert late.outcome == "CONFIRMED", late.reasons
 
 
