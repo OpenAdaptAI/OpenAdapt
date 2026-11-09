@@ -9170,8 +9170,9 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     """Build the top-level argument parser."""
     from openadapt_flow.cli_hints import command
+    from openadapt_flow.cli_tasks import TaskParser
 
-    parser = argparse.ArgumentParser(
+    parser = TaskParser(
         prog="openadapt-flow",
         description=(
             "Record a task and compile it into a program that runs on "
@@ -9192,7 +9193,9 @@ def build_parser() -> argparse.ArgumentParser:
         action="version",
         version=f"%(prog)s {_package_version()}",
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(
+        dest="command", required=True, parser_class=argparse.ArgumentParser
+    )
 
     p = sub.add_parser(
         "demo",
@@ -13024,6 +13027,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     register_fleet_parser(sub)
 
+    parser.add_task_help()
     return parser
 
 
@@ -14017,8 +14021,11 @@ def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point. Returns a process exit code."""
+    from openadapt_flow.cli_tasks import alias_notice, translate
+
     raw = list(sys.argv[1:] if argv is None else argv)
-    if raw[:1] in (["demo"], ["tutorial"]) and not _PREWARM_SKIP_FLAGS & set(raw):
+    routed = translate(raw)
+    if routed[:1] in (["demo"], ["tutorial"]) and not _PREWARM_SKIP_FLAGS & set(routed):
         # Building the parser imports for a second or two on a new install;
         # start loading OCR and checking the browser driver meanwhile.
         from openadapt_flow import _prewarm
@@ -14027,8 +14034,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     from openadapt_flow._browser_setup import BrowserSupportMissing
 
-    argv = list(sys.argv[1:] if argv is None else argv)
-    argv = _qualify_default_form(argv)
+    argv = _qualify_default_form(routed)
     from openadapt_flow.cli_admit import admit_default_form
 
     argv = admit_default_form(argv)
@@ -14039,7 +14045,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     from openadapt_flow import no_outbound
 
     no_outbound.enforce_from_env()
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    alias_notice(raw, getattr(parser, "task_names", {}), "openadapt-flow")
     if getattr(args, "config_sha256", None):
         if not getattr(args, "config", None):
             print("REFUSED: --config-sha256 needs --config", file=sys.stderr)
