@@ -1758,6 +1758,25 @@ def _version_meta(version: Mapping[str, Any]) -> tuple[Optional[datetime], str]:
     return _when(meta.get("lastUpdated")), str(vid) if vid not in (None, "") else ""
 
 
+def window_versions_unbound(change: Change) -> Optional[str]:
+    """Why the observed window cannot identify its last version, or None.
+
+    This checks version metadata only. Readers must separately establish
+    complete history and exact version counts before treating it as proof.
+    """
+
+    if not change.bodies:
+        return "the created record's _history shows no version in the window"
+    timed = [_version_meta(body) for body in change.bodies]
+    if any(when is None or not vid for when, vid in timed):
+        return "a version in the window has no versionId or time to bind to"
+    newest = max(when for when, _ in timed if when is not None)
+    last = {vid for when, vid in timed if when == newest}
+    if len(last) != 1:
+        return "two versions share the newest time, so the last write can't be told"
+    return None
+
+
 def read_back_unbound(change: Change, created: Mapping[str, Any]) -> Optional[str]:
     """Why the read-back can't be shown to be the last version written, or None.
 
@@ -1770,15 +1789,12 @@ def read_back_unbound(change: Change, created: Mapping[str, Any]) -> Optional[st
 
     if change.versions is None:
         return None
-    if not change.bodies:
-        return "the created record's _history shows no version in the window"
+    unbound = window_versions_unbound(change)
+    if unbound is not None:
+        return unbound
     timed = [_version_meta(body) for body in change.bodies]
-    if any(when is None or not vid for when, vid in timed):
-        return "a version in the window has no versionId or time to bind to"
     newest = max(when for when, _ in timed if when is not None)
     last = {vid for when, vid in timed if when == newest}
-    if len(last) != 1:
-        return "two versions share the newest time, so the last write can't be told"
     _, got = _version_meta(created)
     if not got:
         return "the read-back carries no versionId to bind to"

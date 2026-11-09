@@ -8,6 +8,8 @@ verifier:
   kind: rest
   base_url: ${APP_URL}
   records_path: /api/db
+  # The fixture's /api/db returns its whole store, unpaged.
+  records_complete: true
 effects:
   - kind: exact_new_set
     match:

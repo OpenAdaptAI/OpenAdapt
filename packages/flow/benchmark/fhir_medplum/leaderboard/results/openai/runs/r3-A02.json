@@ -1,0 +1,110 @@
+{
+ "id": "A02",
+ "class": "clean",
+ "type": "allergy",
+ "expect": "found",
+ "note": "The allergy is already recorded; nothing should be written.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 69.6,
+ "cost_usd": 0.110735,
+ "claim": {
+  "status": "done",
+  "id": "AllergyIntolerance/96ca40e4-5e02-4ad2-ba6c-759ff89fff0a",
+  "note": "RESULT: DONE AllergyIntolerance/96ca40e4-5e02-4ad2-ba6c-759ff89fff0a",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/AllergyIntolerance/96ca40e4-5e02-4ad2-ba6c-759ff89fff0a/json",
+  "final_text": "RESULT: DONE AllergyIntolerance/96ca40e4-5e02-4ad2-ba6c-759ff89fff0a",
+  "model_calls": 20,
+  "actions": 20,
+  "tokens_in": 284479,
+  "tokens_out": 665
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "AllergyIntolerance/96ca40e4-5e02-4ad2-ba6c-759ff89fff0a"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 33.5,
+  "end": 33.7,
+  "waited_s": 0
+ }
+}

@@ -202,6 +202,17 @@ class Surface:
     #: Parameters the read itself is scoped by (a URL path or query value, a
     #: SQL ``WHERE``): a record saved under another value is not returned.
     scope: list[str] = field(default_factory=list)
+    #: For a REST read: why one response was observed to hold the whole
+    #: collection (:func:`observed_completeness`), or ``None``.
+    observed_complete: Optional[str] = None
+    #: For a REST read: why completeness was NOT observed (paging fields, a
+    #: truncated body, a record the read lost). Empty when it was observed.
+    incomplete: list[str] = field(default_factory=list)
+    #: ``"declared"`` (a person said so), ``"observed"`` or ``None``: the
+    #: basis on which the generated read carries ``records_complete: true``.
+    complete_basis: Optional[str] = None
+    #: The request or response says it is one page (see :func:`_paging_signs`).
+    paged: bool = False
 
     @property
     def is_target(self) -> bool:
@@ -238,6 +249,9 @@ class ReadSearch:
     taken: set[str] = field(default_factory=set)
     #: Detached learning observations; never a reader authorization or admission.
     rest_setup_observations: list[dict[str, Any]] = field(default_factory=list)
+    #: What read-path discovery (:mod:`openadapt_flow.read_discovery`) probed
+    #: and concluded, when it ran; recorded in the proof.
+    read_discovery: Optional[dict[str, Any]] = None
     rest_read_contexts: dict[str, RestReadContext] = field(
         default_factory=dict, repr=False
     )
@@ -612,6 +626,164 @@ def save_window(
     return _t(chosen[0]), _t(chosen[-1]), chosen
 
 
+#: Query parameters that select one page of a collection.
+_PAGING_QUERY = frozenset(
+    {
+        "page",
+        "pagenumber",
+        "page_number",
+        "per_page",
+        "perpage",
+        "page_size",
+        "pagesize",
+        "limit",
+        "offset",
+        "cursor",
+        "after",
+        "before",
+        "start",
+        "skip",
+        "top",
+        "$top",
+        "$skip",
+        "_count",
+        "_offset",
+        "page_token",
+        "pagetoken",
+        "max_results",
+        "maxresults",
+    }
+)
+#: Body fields that say there is more than this response holds.
+_PAGING_BODY = frozenset(
+    {
+        "next",
+        "next_page",
+        "nextpage",
+        "next_url",
+        "nexturl",
+        "next_link",
+        "nextlink",
+        "@odata.nextlink",
+        "next_page_token",
+        "nextpagetoken",
+        "next_cursor",
+        "nextcursor",
+        "cursor",
+        "has_more",
+        "hasmore",
+        "more",
+        "page",
+        "pages",
+        "page_count",
+        "pagecount",
+        "page_size",
+        "pagesize",
+        "per_page",
+        "perpage",
+        "limit",
+        "offset",
+        "truncated",
+    }
+)
+#: Body fields that state how many records the server holds.
+_TOTAL_BODY = frozenset({"total", "total_count", "totalcount", "count", "totalsize"})
+#: A response holding exactly this many records may be a server's default page.
+#: Completeness is never inferred from length; this only refuses it.
+_PAGE_SIZES = frozenset({10, 12, 15, 20, 24, 25, 30, 40, 50, 100, 200, 250, 500, 1000})
+
+
+def _paging_signs(
+    url: str, body: Any, records_key: Optional[str]
+) -> tuple[list[str], list[str]]:
+    """``(paged, doubts)``: why one REST response is, or may be, one page.
+
+    ``paged`` are statements the request or response makes (a paging
+    parameter or field, a stated total that differs); a person's declaration
+    does not override them. ``doubts`` are guesses (a common page size).
+    """
+
+    signs: list[str] = []
+    doubts: list[str] = []
+    for key, _value in parse_qsl(urlsplit(url).query, keep_blank_values=True):
+        if key.lower() in _PAGING_QUERY:
+            signs.append(f"the URL selects a page ({key})")
+    records: Any = body
+    if isinstance(body, dict):
+        records = body.get(records_key) if records_key else None
+        for key, value in body.items():
+            low = str(key).lower()
+            if key == records_key:
+                continue
+            if low in _PAGING_BODY and value not in (None, False, "", [], {}):
+                signs.append(f"the response has a paging field ({key})")
+            elif low == "links" and "next" in json.dumps(value, default=str).lower():
+                signs.append("the response links to a next page")
+            elif low in _TOTAL_BODY and isinstance(records, list):
+                if isinstance(value, bool) or not isinstance(value, int):
+                    continue
+                if value != len(records):
+                    signs.append(
+                        f"the response says {key}={value} but holds {len(records)}"
+                    )
+    if isinstance(records, list) and len(records) in _PAGE_SIZES:
+        doubts.append(
+            f"the response holds {len(records)} records, a common page size, so "
+            "it may be one page"
+        )
+    return signs, doubts
+
+
+def observed_completeness(
+    url: str,
+    body: Any,
+    records_key: Optional[str],
+    records: list[dict[str, Any]],
+    *,
+    target: Mapping[str, Any],
+    seen_before: Optional[list[dict[str, Any]]],
+    truncated: bool = False,
+) -> tuple[Optional[str], list[str], bool]:
+    """``(basis, problems, paged)``: whether one REST response held the whole
+    collection, as far as the recording observed it.
+
+    It did when the response is not paged (no paging parameter in the URL, no
+    paging field, no stated total that differs from what it holds, not a
+    common page size), its body was not cut, it holds the saved record, and it
+    still holds every record the read returned before the save. Any doubt is a
+    problem and the read stays incomplete (fail closed): a person declares it
+    with ``--complete-read`` or configures paging.
+    """
+
+    problems: list[str] = []
+    if truncated:
+        problems.append("the response body was cut, so it may not hold every record")
+    paged, doubts = _paging_signs(url, body, records_key)
+    problems.extend(paged + doubts)
+    keys = {stable_id(dict(r)) for r in records}
+    if stable_id(dict(target)) not in keys:
+        problems.append("the response does not hold the saved record")
+    if seen_before is not None:
+        lost = [r for r in seen_before if stable_id(dict(r)) not in keys]
+        if lost:
+            problems.append(
+                f"{len(lost)} record(s) the read returned before the save are "
+                "missing after it"
+            )
+    if problems:
+        return None, problems, bool(paged)
+    basis = (
+        f"one unpaged response held all {len(records)} record(s)"
+        + (
+            ", including every record read before the save"
+            if seen_before is not None
+            else " (no read before the save was recorded)"
+        )
+        + " and the saved record"
+    )
+    return basis, [], False
+
+
 def _surface_from_listing(
     line: Mapping[str, Any],
     listing: _Listing,
@@ -743,6 +915,15 @@ def _surface_from_listing(
     before_records, recorded = _before_records(
         before_line, listing_kind="rest", records_key=listing.records_key, shape=dict
     )
+    observed, incomplete, paged = observed_completeness(
+        url,
+        _json_body(line),
+        listing.records_key,
+        after,
+        target=target,
+        seen_before=before_records if recorded else None,
+        truncated=bool(line.get("response_truncated")),
+    )
     surface = Surface(
         name=_unique_name(tpl.safe.replace("*", "x").strip("/") or "records", taken),
         config=config,
@@ -753,6 +934,9 @@ def _surface_from_listing(
         target=target,
         bound=bound,
         scope=sorted(placeholders),
+        observed_complete=observed,
+        incomplete=incomplete,
+        paged=paged,
     )
     return surface, None
 
@@ -1119,6 +1303,46 @@ def _apply_sent_constants(search: ReadSearch, params: Mapping[str, str]) -> None
                 continue
             if any(str(values.get(fld)) == str(value) for values in sent):
                 surface.constants[fld] = str(value)
+
+
+def _apply_completeness(search: ReadSearch, *, complete_read: bool) -> None:
+    """Set ``records_complete: true`` on each REST read whose completeness is
+    established, and say why on the others.
+
+    Established means a person declared it (``--complete-read``) and nothing
+    the request or response said contradicts it, or one response was observed
+    to hold the whole collection (:func:`observed_completeness`). Otherwise the
+    read is left without it, so ``verify-run`` returns INDETERMINATE (fail
+    closed) and the check stays a draft.
+    """
+
+    for surface in search.surfaces:
+        cfg = surface.config
+        if str(cfg.get("kind") or "").strip().lower() != "rest":
+            continue
+        if cfg.get("records_complete") is True:
+            surface.complete_basis = surface.complete_basis or "configured"
+            continue
+        if cfg.get("records_next_path") or cfg.get("records_total_path"):
+            continue
+        if complete_read and not surface.paged:
+            surface.complete_basis = "declared"
+        elif surface.observed_complete:
+            surface.complete_basis = "observed"
+        if surface.complete_basis is not None:
+            cfg["records_complete"] = True
+            continue
+        why = "; ".join(surface.incomplete) or "no response of this read was checked"
+        if complete_read:
+            search.notes.append(
+                f"{surface.name}: declared complete, but the read says it is paged "
+                f"({why}); records_complete is not set"
+            )
+        else:
+            search.notes.append(
+                f"{surface.name}: completeness not observed ({why}); declare it "
+                "with --complete-read or configure the read's paging"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -1625,7 +1849,15 @@ class Proposal:
         return out
 
     @property
+    def refused(self) -> bool:
+        """A probed read was found but can't see the whole save: no check."""
+        found = self.search.read_discovery or {}
+        return found.get("status") == "refused"
+
+    @property
     def working(self) -> bool:
+        if self.refused:
+            return False
         if not self.effects or not any(s.is_target for s in self.search.surfaces):
             return False
         if self.live is not None and not self.live.get("passed"):
@@ -1636,6 +1868,18 @@ class Proposal:
         targets = [s for s in self.search.surfaces if s.is_target]
         reads = []
         for s in self.search.surfaces:
+            completeness = (
+                {
+                    "records_complete": s.complete_basis,
+                    "completeness": (
+                        s.observed_complete
+                        if s.observed_complete
+                        else "; ".join(s.incomplete) or None
+                    ),
+                }
+                if str(s.config.get("kind") or "").lower() == "rest"
+                else {}
+            )
             reads.append(
                 {
                     "surface": s.name,
@@ -1643,6 +1887,7 @@ class Proposal:
                     "role": "saved record" if s.is_target else "no row added",
                     "checked_fields": sorted(s.bound) + sorted(s.constants),
                     "baseline": "recorded" if s.before_recorded else "derived",
+                    **completeness,
                 }
             )
             if s.has_ids:
@@ -1653,11 +1898,14 @@ class Proposal:
                         "role": "no record changed or removed",
                         "checked_fields": [],
                         "baseline": "recorded" if s.before_recorded else "derived",
+                        **completeness,
                     }
                 )
         return {
             "schema": PROOF_SCHEMA,
-            "status": "working" if self.working else "draft",
+            "status": (
+                "refused" if self.refused else "working" if self.working else "draft"
+            ),
             "approved": False,
             "reads": reads,
             **(
@@ -1675,6 +1923,7 @@ class Proposal:
             "live": self.live,
             "misses": self.misses,
             "notes": list(self.search.notes),
+            "read_discovery": self.search.read_discovery,
             "identity": self.identity,
             "coverage": (
                 None
@@ -1699,12 +1948,22 @@ def synthesize(
     fault_gate: bool = False,
     rest_setups: Optional[list[RestReadSetup]] = None,
     rest_read_contexts: Optional[Mapping[str, RestReadContext]] = None,
+    probe_reads: bool = False,
+    probe_base: Optional[str] = None,
 ) -> Proposal:
     """Find the read, build the check, and run the recorded-state fault test.
 
     ``complete_read`` records a person's statement that the reads return
     everything the save can change (one store, no other tables). It is not
-    proven: the proof says it was declared.
+    proven: the proof says it was declared. It also sets
+    ``records_complete: true`` on each REST read that does not say it is
+    paged; a REST read observed to return its whole collection in one
+    response gets it without the statement (:func:`_apply_completeness`).
+
+    ``probe_reads``: when no recorded read returns the saved record, derive
+    candidate reads from the captured write and probe them with ``GET`` on
+    the local machine (``probe_base``, or the recorded origin when it is
+    local); see :mod:`openadapt_flow.read_discovery`.
     """
 
     if params is None:
@@ -1732,6 +1991,10 @@ def synthesize(
         reads_from_verifier(verifier, params, search, snapshots=snapshots)
     if db_path is not None:
         reads_from_sqlite(Path(db_path), params, search)
+    if probe_reads and not any(s.is_target for s in search.surfaces):
+        from openadapt_flow.read_discovery import discover
+
+        discover(params, search, probe_base=probe_base)
     if not any(s.is_target for s in search.surfaces):
         return Proposal(params, search, [], {}, [])
     if rest_setups is not None:
@@ -1754,6 +2017,7 @@ def synthesize(
                 f"{surface.name}: the record names parameter {name!r} only as a "
                 "reference the read is not scoped by; that link is not checked"
             )
+    _apply_completeness(search, complete_read=complete_read)
     effects = effects_for(search.surfaces)
     section = verifier_section(search.surfaces)
     search.problems.extend(
@@ -1768,12 +2032,49 @@ def synthesize(
         closed_world=search.closed_world,
     )
     proposal = Proposal(params, search, effects, section, faults)
+    _refuse_partial_probed_read(proposal)
     cfg = gate_config(proposal)
     if fault_gate and db_path is not None:
         proposal.coverage = gate_on_database(proposal, Path(db_path), cfg)
     if proposal.coverage is None and cfg is not None:
         proposal.coverage = coverage_from_recorded(proposal.faults, cfg)
     return proposal
+
+
+def _refuse_partial_probed_read(proposal: Proposal) -> None:
+    """Refuse a check built on a probed read that can't see the whole save.
+
+    A probe finds the collection the save wrote, not the store. When the
+    fault test shows a write outside the reads would pass
+    (``collateral_unaudited``), or the capture holds a write no read covers,
+    a CONFIRMED from that check could hide a wrong write elsewhere. So no
+    runnable check is emitted: the read stays proposed only, with the reason,
+    and a person decides (``--complete-read``, ``--db`` or a fuller read).
+    """
+
+    found = proposal.search.read_discovery
+    if not found or found.get("status") != "promoted":
+        return
+    unaudited = [
+        f"{r.fault}: {r.detail}"
+        for r in proposal.faults
+        if r.fault == "collateral_unaudited" and not r.ok
+    ] + [f"not covered: {item}" for item in proposal.search.uncovered]
+    if not unaudited:
+        return
+    found.update(
+        status="refused",
+        needs_operator_confirmation=True,
+        reason=(
+            f"the probed read {found.get('read')} covers only the written "
+            "collection, and a write outside it would pass the check ("
+            + "; ".join(unaudited)
+            + "). No runnable check was written; confirm the read covers "
+            "everything the save can change (--complete-read), give --db, or "
+            "name a fuller read"
+        ),
+    )
+    proposal.search.notes.append(f"read discovery: {found['reason']}")
 
 
 # ---------------------------------------------------------------------------

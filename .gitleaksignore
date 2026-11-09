@@ -6,6 +6,8 @@
 # a benchmark idempotency key from the openadapt-flow and openadapt-agent histories.
 # None is a credential. Each fingerprint pins commit:file:rule:line, so a new finding,
 # or the same text in any other commit, file or line, still fails. No rule is relaxed.
+# PR #1951: a synthetic record parameter in a test, not a key.
+9f7b67e652a1906366fec4cd1966ec0865bc675f:packages/flow/tests/test_ensure_invariants.py:generic-api-key:15
 01d9ead6895964e8236272296fad0d424dffd98f:packages/flow/tests/fixtures/terminal_verification_v2_terminal_vectors.json:generic-api-key:33
 0f5f39557513cd71d9e84996f5773eeca26b1005:packages/flow/tests/test_attended_actions.py:generic-api-key:122
 0f5f39557513cd71d9e84996f5773eeca26b1005:packages/flow/tests/test_attended_actions.py:generic-api-key:174
@@ -108,3 +110,5 @@ ccc7c617e5cd8082909b455ec6176a5e4c0dd4f0:packages/flow/tests/test_extension_netw
 ccc7c617e5cd8082909b455ec6176a5e4c0dd4f0:packages/flow/tests/test_extension_network_browser.py:generic-api-key:24
 # PR #1862: a test key file path (files / "agent.pem") passed to principal_from_key, not a key.
 b712804d6a80dde61588980f11e9b4d5a478f39e:packages/flow/tests/e2e/test_mcp_teach_desktop_e2e.py:generic-api-key:144
+# The same line after #1862 was squash-merged into main.
+be3584b446cc4c2b576d69ffc9d7a6d60f6fcb92:packages/flow/tests/e2e/test_mcp_teach_desktop_e2e.py:generic-api-key:144

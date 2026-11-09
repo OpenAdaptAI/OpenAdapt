@@ -1,0 +1,56 @@
+{
+ "id": "P10",
+ "class": "ambiguous",
+ "type": "patient",
+ "expect": "ambiguous",
+ "note": "Two records already match the person; a person has to merge them.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 11.6,
+ "cost_usd": 0.016064,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is on the sign-in page and I have no login credentials, so I couldn't search for or create the Patient record.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't check for or create a Patient record for Lena Okafor because Medplum is showing its sign-in page, not a signed-in session. The task said I'd already be signed in, but the page asks for an email and I have no credentials. I reloaded the page once and it still showed the sign-in form. I didn't try the Register link, since that would create an account and isn't part of this task. I haven't searched for or changed any records.\n\nRESULT: NOT DONE Medplum is on the sign-in page and I have no login credentials, so I couldn't search for or create the Patient record.",
+  "model_calls": 3,
+  "actions": 2,
+  "tokens_in": 23351,
+  "tokens_out": 441
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "needs_person",
+  "reasons": [
+   "2 records already match; a person must merge them"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 2,
+ "host_load": {
+  "start": 24.2,
+  "end": 26.5,
+  "waited_s": 0
+ }
+}

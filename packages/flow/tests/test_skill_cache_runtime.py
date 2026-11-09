@@ -133,6 +133,8 @@ def test_failed_hit_keeps_evidence_and_never_falls_back(model, monkeypatch) -> N
     assert second.status == "CACHE_HALTED" and not second.verified
     assert second.replay == first.replay and second.model_calls == 0
     assert model.sent == [{"value": "one"}]
+    # A caller can tell the hold apart from a cache miss without a model.
+    assert model.cache.held(PROMPT, {"value": ""})
     assert (
         model.jit.bundle_dir.is_dir()
         and model.cache.server(PROMPT, {"value": "two"}) is None

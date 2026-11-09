@@ -1,0 +1,61 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't check whether this appointment is already booked, and I didn't book it. Medplum is showing its sign-in page, not a signed-in session, even though you said I'd already be signed in. I reloaded the page and got the same sign-in screen. You haven't given me any credentials, and I shouldn't register a new account, so I couldn't search for Tomasz Wren or for Dr Ama Osei's existing appointments. I haven't changed anything in the record.\n\nIf you sign in or give me login details, I can start with the existing-appointment check.\n\nRESULT: NOT DONE Medplum is showing the sign-in page, not a signed-in session, and no credentials were provided.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6283,
+   "out": 93,
+   "usd": 0.002194,
+   "cached": 6279
+  },
+  {
+   "in": 7749,
+   "out": 148,
+   "usd": 0.003033,
+   "cached": 7747
+  },
+  {
+   "in": 9293,
+   "out": 217,
+   "usd": 0.007583,
+   "cached": 7747
+  }
+ ]
+}
