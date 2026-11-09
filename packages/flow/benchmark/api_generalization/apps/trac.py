@@ -14,6 +14,7 @@ from typing import Any
 from benchmark.api_generalization.common import (
     AppBase,
     ExecSqlVerifier,
+    dump_database,
     podman,
     rec_click,
     rec_select,
@@ -39,10 +40,13 @@ def tsql(query: str, *, write: bool = False) -> list[dict[str, Any]]:
 
 
 class App(AppBase):
+    def dump(self) -> dict[str, list[dict[str, Any]]]:
+        return dump_database('sqlite', tsql)
+
     name = "trac"
     workflow = "new-ticket"
-    upstream_port = 9871
-    proxy_port = 9872
+    upstream_port = 9669
+    proxy_port = 9670
     form_path = "/newticket"
     save_path_regex = r"^/newticket$"
     unique_param = "summary"

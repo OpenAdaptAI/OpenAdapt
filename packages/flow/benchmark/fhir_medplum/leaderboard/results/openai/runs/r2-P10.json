@@ -1,0 +1,87 @@
+{
+ "id": "P10",
+ "class": "ambiguous",
+ "type": "patient",
+ "expect": "ambiguous",
+ "note": "Two records already match the person; a person has to merge them.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 32.8,
+ "cost_usd": 0.049576,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Two existing Patient records match Lena Okafor\u2019s name, birth date, and sex; I cannot safely resolve the duplicate records. No changes made.",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/Patient/ad6296b3-b6e6-47c0-a048-c89fad6afa91/json",
+  "final_text": "RESULT: NOT DONE Two existing Patient records match Lena Okafor\u2019s name, birth date, and sex; I cannot safely resolve the duplicate records. No changes made.",
+  "model_calls": 11,
+  "actions": 9,
+  "tokens_in": 94281,
+  "tokens_out": 390
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "needs_person",
+  "reasons": [
+   "2 records already match; a person must merge them"
+  ],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 2,
+ "host_load": {
+  "start": 28.3,
+  "end": 20.6,
+  "waited_s": 150
+ }
+}

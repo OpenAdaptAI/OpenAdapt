@@ -1,0 +1,459 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost:3000/AllergyIntolerance?_count=50\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      220,
+      297
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      32,
+      31
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      0,
+      0
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      124,
+      90
+     ]
+    },
+    {
+     "text": "AllergyIntolerance"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      0,
+      0
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      0,
+      0
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      84,
+      138
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      0,
+      0
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      0,
+      0
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      0,
+      0
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "coordinate": [
+      0,
+      0
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 5
+    },
+    {
+     "coordinate": [
+      0,
+      0
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "One existing record. Let me inspect it.",
+   "actions": [
+    {
+     "coordinate": [
+      470,
+      297
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      0,
+      0
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      722,
+      142
+     ]
+    },
+    {
+     "duration": 4
+    },
+    {
+     "coordinate": [
+      0,
+      0
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The penicillin allergy is already recorded for Rosa Delgado (born 1979-06-14, Patient/550b2732-4bbd-417d-8dd5-c0c4854ff4e3), so I didn't add a second one. The only AllergyIntolerance in the system points to that patient and matches every field you listed:\n- **Code:** Allergy to penicillin, SNOMED CT 91936005\n- **Criticality:** high\n- **Clinical status:** active\n- **Verification status:** confirmed\n\nThe Patient list showed only this one Rosa Delgado, so there was no similar-named patient to confuse her with.\n\nRESULT: DONE AllergyIntolerance/6dc4a9af-806b-4c03-a219-a70c8d961443",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost:3000/AllergyIntolerance?_count=50\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 220,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 32,
+   "y": 31,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 84,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 470,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 722,
+   "y": 142,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 4.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6357,
+   "out": 59,
+   "usd": 0.016481,
+   "cached": 0
+  },
+  {
+   "in": 7789,
+   "out": 221,
+   "usd": 0.00707,
+   "cached": 6353
+  },
+  {
+   "in": 9418,
+   "out": 172,
+   "usd": 0.007354,
+   "cached": 7787
+  },
+  {
+   "in": 10980,
+   "out": 129,
+   "usd": 0.007082,
+   "cached": 9416
+  },
+  {
+   "in": 12486,
+   "out": 266,
+   "usd": 0.008625,
+   "cached": 10978
+  },
+  {
+   "in": 14151,
+   "out": 133,
+   "usd": 0.007993,
+   "cached": 12484
+  },
+  {
+   "in": 15693,
+   "out": 87,
+   "usd": 0.007559,
+   "cached": 14149
+  },
+  {
+   "in": 17165,
+   "out": 110,
+   "usd": 0.007922,
+   "cached": 15691
+  },
+  {
+   "in": 18673,
+   "out": 87,
+   "usd": 0.008077,
+   "cached": 17163
+  },
+  {
+   "in": 20145,
+   "out": 87,
+   "usd": 0.008288,
+   "cached": 18671
+  },
+  {
+   "in": 21617,
+   "out": 87,
+   "usd": 0.008583,
+   "cached": 20143
+  },
+  {
+   "in": 23089,
+   "out": 144,
+   "usd": 0.009447,
+   "cached": 21615
+  },
+  {
+   "in": 24629,
+   "out": 124,
+   "usd": 0.009711,
+   "cached": 23087
+  },
+  {
+   "in": 26151,
+   "out": 110,
+   "usd": 0.009834,
+   "cached": 24627
+  },
+  {
+   "in": 27659,
+   "out": 310,
+   "usd": 0.012104,
+   "cached": 26149
+  }
+ ]
+}

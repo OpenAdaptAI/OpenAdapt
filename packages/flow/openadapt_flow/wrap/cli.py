@@ -38,6 +38,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-turns", type=int, default=40)
     parser.add_argument("--max-run-seconds", type=float, default=110)
     parser.add_argument("--request-timeout-seconds", type=float, default=25)
+    parser.add_argument(
+        "--max-input-bytes",
+        type=int,
+        help="Largest rendered model request, in bytes, on a cache miss "
+        "(default: 4 MiB for Claude, 64 KiB for OpenAI; at most 32 MiB). "
+        "A larger request is not sent and the run stops",
+    )
     parser.add_argument("--price-model", help="Exact model covered by supplied prices")
     parser.add_argument("--pricing-source-url", help="Primary source for model prices")
     parser.add_argument("--pricing-verified-at", help="Date prices were verified")
@@ -123,14 +130,33 @@ def _task(args: argparse.Namespace, parser: argparse.ArgumentParser) -> WrappedT
     setup = load_task(args.task, **options)
     # The cache key depends on parameter names, not their current values.
     # A healthy hit needs neither a provider SDK nor a model credential.
-    cached = setup.cache.server(setup.instruction, dict.fromkeys(setup.parameters, ""))
+    names = dict.fromkeys(setup.parameters, "")
+    held = getattr(setup.cache, "held", None)
+    if callable(held) and held(setup.instruction, names):
+        # A held task returns CACHE_HALTED with its reason and never reruns
+        # the agent, so it needs no model, key or budget.
+        cached = None
+        halted = True
+    else:
+        cached = setup.cache.server(setup.instruction, names)
+        halted = False
     agent = None
-    if cached is None:
+    if cached is None and not halted:
         cap = args.max_cost_usd
         if cap is None or not math.isfinite(cap) or cap <= 0:
             parser.error("a cache miss requires a positive --max-cost-usd")
         if args.max_turns <= 0:
             parser.error("--max-turns must be positive")
+        from openadapt_flow.integrations.agents.providers import (
+            MAX_INPUT_BYTES_CEILING,
+        )
+
+        if args.max_input_bytes is not None and not (
+            0 < args.max_input_bytes <= MAX_INPUT_BYTES_CEILING
+        ):
+            parser.error(
+                f"--max-input-bytes must be between 1 and {MAX_INPUT_BYTES_CEILING}"
+            )
         from openadapt_flow.integrations.agents.providers import build_agent
         from openadapt_flow.jit.keys import load_customer_model_key
 
@@ -142,6 +168,7 @@ def _task(args: argparse.Namespace, parser: argparse.ArgumentParser) -> WrappedT
             prices=_prices(args.price),
             max_run_seconds=args.max_run_seconds,
             request_timeout_seconds=args.request_timeout_seconds,
+            max_input_bytes=args.max_input_bytes,
             price_model=args.price_model,
             pricing_source_url=args.pricing_source_url,
             pricing_verified_at=args.pricing_verified_at,

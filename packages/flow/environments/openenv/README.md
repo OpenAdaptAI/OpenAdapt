@@ -130,6 +130,22 @@ not to. `run_eval` always passes `--no-push` and runs locally; uploading needs
 OpenAI-compatible stub that answers with the reference actions, so the whole
 path runs with no model.
 
+### Trainers
+
+`openadapt_flow.rl_env.trainers` connects a running server to three trainers,
+one OpenEnv session per rollout, with the server's record-checked reward
+passed through unchanged:
+
+| Trainer | Entry point | How it plugs in |
+|---|---|---|
+| TRL | `trl_environment(base_url)`, `trl_reward`, `trl_harm` | `GRPOTrainer(environment_factory=trl_environment(url), reward_funcs=[trl_reward])`; the dataset's `task_id` column picks the task |
+| SkyRL | `skyrl_env_class()` | a `skyrl_gym` `BaseTextEnv`; register it with `skyrl_gym.envs.registration.register`, `env_config.base_url`, `extras.task_id` |
+| verl | `verl_tool_class()` | a `verl.tools.base_tool.BaseTool`: one browser session per trajectory, `create(task_id=...)`, reward from `calc_reward` |
+
+Tested against skyrl-gym 0.4.0 and verl 0.9.1 base classes and TRL's
+`environment_factory` contract; no GPU training run has used them yet. Size
+the server's `--max-concurrent-envs` to the trainer's generation batch.
+
 ## What stays private
 
 Only the `public` split ships. A task pack holding any other split is refused
