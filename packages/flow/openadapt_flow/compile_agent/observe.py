@@ -3,9 +3,9 @@
 :func:`observe` lists what is on the page as short lines of text: headings,
 text, table rows, and every visible control with a ref (``e1``, ``e2``...) the
 agent acts on. Text is scrubbed with :func:`openadapt_flow.privacy.scrub_text`
-before it leaves the harness, except for the values the operator put in the
-task (its inputs and the record identity it names), which the agent needs to
-find the right row.
+before it leaves the harness. The values the task names (its inputs and the
+record identity) are sent as typed placeholders such as ``⟦task.identity_1⟧``,
+never as values, so the agent can find the right row without seeing it.
 
 Refs are valid for one observation. Each control keeps the center of its box,
 so an action on a ref becomes an ordinary click at a point and is recorded the
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Optional, Sequence
+from typing import Any, Iterable, Mapping, Optional, Sequence
 
 __all__ = [
     "Control",
@@ -24,6 +24,7 @@ __all__ = [
     "commit_label",
     "element_at",
     "observe",
+    "placeholder_regions",
     "scrub_lines",
     "shows",
 ]
@@ -254,32 +255,180 @@ def shows(text: str, identity: str) -> bool:
     return re.search(pattern, " ".join(text.split())) is not None
 
 
-def scrub_lines(text: str, keep: Iterable[str] = ()) -> str:
-    """Scrub ``text`` line by line, leaving every ``keep`` value as it is.
+#: The ref tokens the listing generators emit: ``[e3]`` (:func:`observe`) and
+#: ``@3`` (the code-action tool). They are structure, not page text, so they
+#: never reach the scrubber.
+REF_TOKEN = re.compile(r"\[e\d+\]|(?<![\w@])@\d+(?!\w)")
+#: The separator between a table row's cells in a listing.
+_CELL = " | "
 
-    Each kept value is swapped for a placeholder the scrubber leaves alone,
-    and swapped back afterwards. When no scrubber is installed, or scrubbing
-    is off (``OPENADAPT_FLOW_SCRUB``), the text is returned unchanged.
+
+def scrub_lines(
+    text: str,
+    keep: Iterable[str] = (),
+    bindings: Optional[Mapping[str, str]] = None,
+) -> str:
+    """Scrub ``text`` line by line, for a listing that goes to the model.
+
+    Only page text is scrubbed: each line is cut at its ref tokens
+    (:data:`REF_TOKEN`) and its row-cell separators, and each piece is scrubbed
+    on its own, so ``[e3]`` and the listing's syntax come back as they went in.
+    A value in ``bindings`` (placeholder to value, see
+    :func:`openadapt_flow.privacy.task_bindings`) is replaced by its
+    placeholder and never sent. A ``keep`` value is left as it is. When no
+    scrubber is installed, or scrubbing is off (``OPENADAPT_FLOW_SCRUB``), the
+    text is returned unchanged.
     """
 
-    from openadapt_flow.privacy import scrub_text, text_scrubbing_enabled
+    from openadapt_flow.privacy import text_scrubbing_works
 
-    if not text or not text_scrubbing_enabled():
+    if not text or not text_scrubbing_works():
         return text
     kept = sorted({str(k) for k in keep if k and str(k).strip()}, key=len, reverse=True)
+    bound = sorted((bindings or {}).items(), key=lambda kv: -len(kv[1]))
+    memo: dict[str, str] = {}
+
+    def piece(segment: str) -> str:
+        if not segment.strip():
+            return segment
+        if segment not in memo:
+            memo[segment] = _scrub_piece(segment, kept, bound)
+        return memo[segment]
+
     out: list[str] = []
     for line in text.splitlines():
-        held: dict[str, str] = {}
-        for i, value in enumerate(kept):
-            if value in line:
-                token = f"KEEPTOKEN{i}X"
-                held[token] = value
-                line = line.replace(value, token)
-        line = scrub_text(line) or ""
-        for token, value in held.items():
-            line = line.replace(token, value)
-        out.append(line)
+        parts: list[str] = []
+        pos = 0
+        for match in REF_TOKEN.finditer(line):
+            parts.append(_CELL.join(map(piece, line[pos : match.start()].split(_CELL))))
+            parts.append(match.group(0))
+            pos = match.end()
+        parts.append(_CELL.join(map(piece, line[pos:].split(_CELL))))
+        out.append("".join(parts))
     return "\n".join(out)
+
+
+def _scrub_piece(
+    segment: str, kept: Sequence[str], bound: Sequence[tuple[str, str]]
+) -> str:
+    from openadapt_flow.privacy import bound_pattern, scrub_text
+
+    held: dict[str, str] = {}
+    for i, (name, value) in enumerate(bound):
+        token = f"BOUNDTOKEN{i}X"
+        replaced = bound_pattern(value).sub(token, segment)
+        if replaced != segment:
+            held[token] = name
+            segment = replaced
+    for i, value in enumerate(kept):
+        if value in segment:
+            token = f"KEEPTOKEN{i}X"
+            held[token] = value
+            segment = segment.replace(value, token)
+    segment = scrub_text(segment) or ""
+    for token, value in held.items():
+        segment = segment.replace(token, value)
+    return segment
+
+
+def placeholder_regions(
+    page: Any, bindings: Mapping[str, str], width: int, height: int
+) -> list[tuple[tuple[int, int, int, int], str]]:
+    """Where the page shows a bound value, in screenshot pixels.
+
+    ``width`` and ``height`` are the screenshot's size; the page's viewport is
+    scaled to it. Each region is a text range that matches a bound value as
+    whole words, or the smallest element whose text or field value does (a
+    value split across elements). An unreadable page has no regions.
+    """
+
+    if not bindings:
+        return []
+    names = list(bindings)
+    try:
+        raw = page.evaluate(_REGIONS_JS, [bindings[n] for n in names])
+    except Exception:  # noqa: BLE001 - an unreadable page shows nothing to label
+        return []
+    if not raw or not raw.get("w") or not raw.get("h"):
+        return []
+    sx = width / float(raw["w"])
+    sy = height / float(raw["h"])
+    out: list[tuple[tuple[int, int, int, int], str]] = []
+    for index, x, y, w, h in raw.get("rects") or []:
+        box = (
+            int(x * sx) - 1,
+            int(y * sy) - 1,
+            int(w * sx + 0.999) + 2,
+            int(h * sy + 0.999) + 2,
+        )
+        out.append((box, names[int(index)]))
+    return out
+
+
+_REGIONS_JS = r"""
+(values) => {
+  function esc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  var res = values.map(function (v) {
+    return new RegExp('(?<![\\p{L}\\p{N}_])' +
+      v.split(/\s+/).map(esc).join('\\s+') + '(?![\\p{L}\\p{N}_])', 'gu');
+  });
+  function shown(el) {
+    if (!el) return false;
+    var s = getComputedStyle(el);
+    return s.visibility !== 'hidden' && s.display !== 'none';
+  }
+  var rects = [];
+  function add(i, r) {
+    if (r.width <= 0 || r.height <= 0) return;
+    if (r.bottom < 0 || r.right < 0 || r.top > innerHeight || r.left > innerWidth) return;
+    rects.push([i, r.left, r.top, r.width, r.height]);
+  }
+  var covered = values.map(function () { return []; });
+  var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  var node;
+  while ((node = walker.nextNode())) {
+    if (!shown(node.parentElement)) continue;
+    var t = node.textContent;
+    for (var i = 0; i < res.length; i++) {
+      res[i].lastIndex = 0;
+      var m;
+      while ((m = res[i].exec(t))) {
+        var range = document.createRange();
+        range.setStart(node, m.index);
+        range.setEnd(node, m.index + m[0].length);
+        var list = range.getClientRects();
+        for (var k = 0; k < list.length; k++) add(i, list[k]);
+        covered[i].push(node.parentElement);
+        if (!m[0].length) res[i].lastIndex++;
+      }
+    }
+  }
+  var all = document.body.querySelectorAll('*');
+  for (var j = 0; j < all.length; j++) {
+    var el = all[j];
+    if (!shown(el)) continue;
+    var tag = el.tagName;
+    var field = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+    var text = field ? String(el.value || '') : String(el.innerText || '');
+    for (var i = 0; i < res.length; i++) {
+      res[i].lastIndex = 0;
+      if (!res[i].test(text)) continue;
+      if (!field) {
+        var inner = false;
+        for (var c = 0; c < el.children.length && !inner; c++) {
+          res[i].lastIndex = 0;
+          inner = res[i].test(String(el.children[c].innerText || ''));
+        }
+        if (inner) continue;
+        var done = covered[i].some(function (p) { return el.contains(p); });
+        if (done) continue;
+      }
+      add(i, el.getBoundingClientRect());
+    }
+  }
+  return {w: innerWidth, h: innerHeight, rects: rects};
+}
+"""
 
 
 def _render(raw: dict[str, Any]) -> tuple[str, dict[str, Control]]:
@@ -332,13 +481,18 @@ def _render(raw: dict[str, Any]) -> tuple[str, dict[str, Control]]:
     return "\n".join(lines), controls
 
 
-def observe(page: Any, *, keep: Sequence[str] = ()) -> StructuralObservation:
+def observe(
+    page: Any,
+    *,
+    keep: Sequence[str] = (),
+    bindings: Optional[Mapping[str, str]] = None,
+) -> StructuralObservation:
     """Read ``page``'s structure: one line per text, heading, row or control."""
 
     raw = page.evaluate(_OBSERVE_JS, INTERACTIVE)
     body, controls = _render(raw)
     header = f"page: {raw.get('title') or ''} ({raw.get('url') or ''})"
-    text = scrub_lines(header + "\n" + body, keep)
+    text = scrub_lines(header + "\n" + body, keep, bindings)
     return StructuralObservation(
         url=str(raw.get("url") or ""),
         title=str(raw.get("title") or ""),
