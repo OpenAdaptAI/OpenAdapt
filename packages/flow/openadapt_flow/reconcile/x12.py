@@ -170,7 +170,7 @@ def _records(body: list[list[str]], component: str, ref: str) -> list[dict[str, 
     purpose = bht[2] if bht is not None and len(bht) > 2 else None
     #: HL id -> (parent id, level code), and what each level named.
     tree: dict[str, tuple[str, str]] = {}
-    names: dict[str, dict[str, str]] = {}
+    names: dict[str, dict[str, Optional[str]]] = {}
     records: list[dict[str, Any]] = []
     current: Optional[dict[str, Any]] = None
     hl = ""

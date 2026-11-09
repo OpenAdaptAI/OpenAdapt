@@ -33,7 +33,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Literal, Optional, Union
+from typing import Any, Final, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -64,7 +64,7 @@ __all__ = [
     "reconcile",
 ]
 
-SCHEMA = "openadapt.reconcile/v1"
+SCHEMA: Final = "openadapt.reconcile/v1"
 Role = Literal["ehr", "clearinghouse", "payer", "writeback"]
 BreakKind = Literal["not_received", "mismatch", "not_written_back", "duplicate"]
 
@@ -439,10 +439,16 @@ def _joined(
     if not join:
         return records
     by_ref: dict[str, dict[str, Any]] = {}
+    conflicting: set[str] = set()
     for r in records:
         kind, rid = r.get("resourceType"), r.get("id")
         if kind and rid is not None:
-            by_ref[f"{kind}/{rid}"] = r
+            key = f"{kind}/{rid}"
+            # Two different records under one reference: the read can't say
+            # which one the reference names, and record order is no answer.
+            if key in by_ref and by_ref[key] != r:
+                conflicting.add(key)
+            by_ref.setdefault(key, r)
     out = []
     for r in records:
         r = dict(r)
@@ -451,7 +457,7 @@ def _joined(
             if ref is None:
                 continue  # a record that references nothing (the joined one)
             target = by_ref.get(str(ref))
-            if target is None:
+            if target is None or str(ref) in conflicting:
                 return None
             r[name] = target.get(rule.field)
         out.append(r)
@@ -546,10 +552,24 @@ def _order(marks: list[Any]) -> Optional[list[Any]]:
     length). A missing mark, a time without a zone, or a mix is no order."""
 
     if all(isinstance(m, str) and m.isdigit() and len(m) >= 12 for m in marks):
+        if not all(_x12_clock(m) for m in marks):
+            return None  # an impossible clock orders nothing
         width = max(len(m) for m in marks)
         return [m.ljust(width, "0") for m in marks]
     times = [_when(m) for m in marks]
     return None if any(t is None for t in times) else times
+
+
+def _x12_clock(mark: str) -> bool:
+    """Whether ``mark`` is a real X12 ``CCYYMMDDHHMM[SS[d[d]]]`` time."""
+
+    if len(mark) not in (12, 14, 15, 16):
+        return False
+    try:
+        datetime.strptime(mark[:12], "%Y%m%d%H%M")
+    except ValueError:
+        return False
+    return len(mark) == 12 or int(mark[12:14]) <= 59
 
 
 def _check_leg(
@@ -607,6 +627,8 @@ def _check_leg(
     substrate = contract.config.verifier.kind
     try:
         verifier = build_effect_verifier(contract.config.verifier, params)
+        if verifier is None:
+            raise VerifierError("the leg has no reader")
         state = verifier.capture_pre_state()
     except Exception as exc:  # noqa: BLE001 - a leg that can't be read is UNCERTAIN
         result.reasons.append(f"the store could not be read: {type(exc).__name__}")
@@ -836,21 +858,21 @@ def reconcile(
         )
 
     # Every leg counts: CONFIRMED only when every check on every leg held.
-    outcome = max((leg.outcome for leg in legs), key=_RANK.__getitem__)
-    reasons = [f"{leg.name}: {r}" for leg in legs for r in leg.reasons]
+    outcome = max((lr.outcome for lr in legs), key=_RANK.__getitem__)
+    reasons = [f"{lr.name}: {r}" for lr in legs for r in lr.reasons]
 
-    scopes = [leg.scope for leg in legs if leg.scope is not None]
+    scopes = [lr.scope for lr in legs if lr.scope is not None]
     paths: list[str] = []
     stores: list[str] = []
     unread: list[str] = []
-    for leg in legs:
-        if leg.scope is None:
-            unread.append(leg.name)
+    for lr in legs:
+        if lr.scope is None:
+            unread.append(lr.name)
             continue
-        for p in leg.scope.read_paths:
+        for p in lr.scope.read_paths:
             if p not in paths:
                 paths.append(p)
-        (unread if leg.scope.unread else stores).append(leg.name)
+        (unread if lr.scope.unread else stores).append(lr.name)
     strengths = [s.strength for s in scopes if s.strength != "unchecked"]
     strength = (
         min(strengths, key=lambda s: _STRENGTH_RANK.get(s, 0))

@@ -693,3 +693,90 @@ def test_an_id_that_repeats_a_value_is_not_in_the_reference() -> None:
     v = SimpleNamespace(resource_type="ClaimResponse", substrate="fhir")
     refs = _refs(v, [{"id": "abc-1", "auth_number": "abc-1"}, {"id": "r2", "x": "y"}])
     assert refs == ("ClaimResponse/…", "ClaimResponse/r2")
+
+
+def test_conflicting_join_targets_are_unreadable_in_any_order() -> None:
+    # Round 4, finding 1: two different records under one reference.
+    from openadapt_flow.reconcile import Join, _joined
+
+    claim = {"resourceType": "Claim", "id": "c1", "patient": "Patient/p"}
+    good = {"resourceType": "Patient", "id": "p", "member_id": "M-1"}
+    other = {"resourceType": "Patient", "id": "p", "member_id": "M-2"}
+    join = {"member_id": Join(via="patient", field="member_id")}
+    assert _joined([claim, other, good], join) is None
+    assert _joined([claim, good, other], join) is None
+    # The same record read twice is one target.
+    joined = _joined([claim, good, dict(good)], join)
+    assert joined is not None and joined[0]["member_id"] == "M-1"
+
+
+def test_impossible_x12_clocks_order_nothing() -> None:
+    # Round 4, finding 3: month 13 is no time to drop a record by.
+    from openadapt_flow.reconcile import _order
+
+    assert _order(["999913992359", "202611011000"]) is None
+    assert _order(["202611011000", "2026110110000"]) is None  # 13 digits
+    assert _order(["20261101106000", "202611011000"]) is None  # second 60
+    assert _order(["202611011000", "20261101100001"]) == [
+        "20261101100000",
+        "20261101100001",
+    ]
+
+
+def _fhir_read(resource_type, field_paths, resources):
+    from types import SimpleNamespace
+
+    from openadapt_flow.runtime.effects.fhir import FhirEffectVerifier
+
+    body = {
+        "resourceType": "Bundle",
+        "type": "searchset",
+        "total": len([r for r in resources if r[1] != "include"]),
+        "entry": [
+            {"resource": r, **({"search": {"mode": m}} if m else {})}
+            for r, m in resources
+        ],
+    }
+
+    class Session:
+        def get(self, url, **kwargs):
+            return SimpleNamespace(
+                status_code=200, headers={}, url=url, json=lambda: body
+            )
+
+    reader = FhirEffectVerifier(
+        "http://fhir.test/fhir/R4",
+        resource_type=resource_type,
+        field_paths=field_paths,
+        session=Session(),
+        access_token="synthetic-test-token",
+    )
+    return reader._search(), reader.read_problem
+
+
+def test_a_search_match_must_be_the_requested_type() -> None:
+    # Round 4, finding 2: an Observation can't stand in for a Claim.
+    paths = {"id": "id", "status": "status"}
+    obs = {"resourceType": "Observation", "id": "c1", "status": "active"}
+    records, problem = _fhir_read("Claim", paths, [(obs, "match")])
+    assert records is None and "requested resource type" in problem
+    records, problem = _fhir_read("Claim", paths, [(obs, None)])
+    assert records is None
+    # A Bundle is no Claim unless every field is read out of a Claim in it.
+    wrapped = {"resourceType": "Bundle", "id": "b1", "entry": []}
+    records, _ = _fhir_read("Claim", paths, [(wrapped, "match")])
+    assert records is None
+    # The requested type, an included resource, and a declared nested
+    # projection still read.
+    claim = {"resourceType": "Claim", "id": "c1", "status": "active"}
+    patient = {"resourceType": "Patient", "id": "p"}
+    records, _ = _fhir_read("Claim", paths, [(claim, "match"), (patient, "include")])
+    assert records is not None and len(records) == 2
+    nested = "entry[resource.resourceType=ClaimResponse].resource."
+    response = {
+        "resourceType": "Bundle",
+        "id": "b1",
+        "entry": [{"resource": {"resourceType": "ClaimResponse", "id": "r1"}}],
+    }
+    records, _ = _fhir_read("ClaimResponse", {"id": nested + "id"}, [(response, None)])
+    assert records == [{"id": "r1"}]

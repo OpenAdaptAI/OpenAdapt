@@ -253,6 +253,14 @@ class FhirEffectVerifier(VerifierAdapterBase):
         if not resource_type or not field_paths:
             raise ValueError("a FHIR read needs its resource_type and field_paths")
         self.field_paths = dict(field_paths)
+        # A search answered with Bundles that wrap the requested resource
+        # (one Bundle per match) is read only when every field is projected
+        # out of an entry of the requested type; any other match must itself
+        # be the requested type.
+        nested = f"entry[resource.resourceType={resource_type}]."
+        self._match_types = {resource_type}
+        if all(path.startswith(nested) for path in self.field_paths.values()):
+            self._match_types.add("Bundle")
         if access_token and token_source is not None:
             raise ValueError("give access_token or token_source, not both")
         self.access_token = access_token
@@ -504,6 +512,12 @@ class FhirEffectVerifier(VerifierAdapterBase):
                     ):
                         self.read_problem = (
                             "a matching search resource has no stable identity"
+                        )
+                        return None
+                    if resource_type not in self._match_types:
+                        self.read_problem = (
+                            "a matching search resource is not the requested "
+                            "resource type"
                         )
                         return None
                     identity = (resource_type, resource_id)
