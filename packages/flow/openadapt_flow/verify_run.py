@@ -736,6 +736,22 @@ def _same_connection(
     return all(audit.get(k) == read.get(k) for k in keys)
 
 
+def _same_sql_source(source: Mapping[str, Any], read: Mapping[str, Any]) -> bool:
+    """Positive source binding for an attributed physical-row witness."""
+
+    if source.get("kind") != "sql":
+        return False
+    if source.get("sqlite_database") or read.get("sqlite_database"):
+        a, b = source.get("sqlite_database"), read.get("sqlite_database")
+        return bool(a and b and Path(str(a)).resolve() == Path(str(b)).resolve())
+    return bool(source.get("sql_driver")) and (
+        source.get("sql_driver") == read.get("sql_driver")
+        and (source.get("sql_connect_args") or {})
+        == (read.get("sql_connect_args") or {})
+        and source.get("sql_password_env") == read.get("sql_password_env")
+    )
+
+
 def _audit_sql(cfg: VerifyConfig) -> dict[str, str]:
     """Reads that run inside the database snapshot: the audit query (when it
     shares the connection), and the acting user's ids (for a profile's
@@ -1705,6 +1721,7 @@ def judge_run_frame(
         )
     if disputed:
         verdict.excused_by.add(late_write.LATER_WRITE_DISPUTED)
+    _witness_attributed_additions(cfg, verifier, verdict, db)
     database = spec.database
     if (
         db is not None
@@ -1729,6 +1746,204 @@ def judge_run_frame(
             },
         }
     return verdict
+
+
+def _sql_reader(verifier: Any, surface: str) -> Any:
+    from openadapt_flow.runtime.effects.sql import SqlRecordVerifier
+
+    routed = getattr(verifier, "verifiers", None)
+    reader = (
+        routed.get(surface)
+        if isinstance(routed, dict)
+        else (verifier if not surface else None)
+    )
+    return reader if isinstance(reader, SqlRecordVerifier) else None
+
+
+def _witness_attributed_additions(
+    cfg: VerifyConfig, verifier: Any, frame: FrameVerdict, db: Optional[_DatabaseFrame]
+) -> None:
+    """Bind another actor's addition to one physical row in this read source.
+
+    Audit identities need to be unique in the entire settled table, including
+    unchanged rows and rows a surface query hides. Counts of visible records
+    or audit entries cannot establish which physical row an actor inserted.
+    """
+
+    from openadapt_flow.runtime.effects.db_snapshot import unpack
+    from openadapt_flow.runtime.effects.frame import AddedRowWitness
+
+    spec = cfg.frame
+    database = spec.database if spec is not None else None
+    attribution = spec.attribution if spec is not None else None
+    if (
+        not frame.held
+        or not any(effect.kind is EffectKind.EXACT_NEW_SET for effect in cfg.effects)
+        or spec is None
+        or database is None
+        or attribution is None
+        or attribution.kind != "audit_read"
+        or not attribution.insert_events
+        or not attribution.table_field
+        or not _same_sql_source(attribution.read or {}, database.read)
+        or db is None
+        or db.post is None
+        or db.old is None
+    ):
+        return
+    counts: dict[str, dict[str, int]] = {}
+    for change in frame.concurrent:
+        name = change.surface
+        surface = database.views.get(name)
+        record_key = attribution.record_keys.get(name, attribution.record_key)
+        if (
+            change.change != "added"
+            or change.attribution != "other"
+            or surface is None
+            or not record_key
+            or any(side.surface == name for side in spec.side_records)
+            or [t for t, v in database.views.items() if v == surface] != [name]
+        ):
+            continue
+        source = (
+            cfg.verifier.surfaces.get(surface)
+            if cfg.verifier.surfaces
+            else cfg.verifier
+            if surface == ""
+            else None
+        )
+        if source is None or not _same_sql_source(source.model_dump(), database.read):
+            continue
+        table = db.post.tables.get(name)
+        old = db.old.tables.get(name)
+        reader = _sql_reader(verifier, surface)
+        if (
+            table is None
+            or old is None
+            or not table.primary_key
+            or table.non_transactional
+            or record_key not in table.cell_columns
+            or change.key in old.rows
+            or reader is None
+            or reader.source_relation is None
+        ):
+            continue
+        relation = (
+            ("main", name, 0)
+            if database.dialect == "sqlite"
+            else table.source_relation
+            if database.dialect == "postgresql"
+            else None
+        )
+        if relation is None or reader.source_relation != relation:
+            continue
+        record = table.values.get(change.key)
+        if record is None or record.get(record_key) is None:
+            continue
+        if name not in counts:
+            counts[name] = {}
+            for _, cells in table.rows.values():
+                identity = unpack(table.cell_columns, cells)[record_key]
+                counts[name][identity] = counts[name].get(identity, 0) + 1
+        identity = db.hashers[name](record_key, record[record_key])
+        if counts[name].get(identity) != 1:
+            continue
+        frame.added_row_witnesses.setdefault(surface, []).append(
+            AddedRowWitness(tuple(table.primary_key), dict(record), relation)
+        )
+
+
+def _excuse_attributed_additions(
+    cfg: VerifyConfig,
+    verifier: Any,
+    before: EffectState,
+    effects: Sequence[Effect],
+    verdicts: list[EffectVerdict],
+    rows: list[dict[str, Any]],
+    frame: FrameVerdict,
+) -> None:
+    """Re-judge a refuted ``exact_new_set`` without records another user added.
+
+    ``exact_new_set`` says the save added these records and nothing else. A
+    record the frame's attribution names another actor for (a colleague's
+    new patient in the same window) is not this save's addition. Only such
+    attributed additions are set aside; an unattributed one still refutes.
+
+    Only an insert event into the record's own table proves who created it:
+    the frame must diff the database (``frame.database``) and read the log
+    with ``insert_events`` and a ``table_field``. A colleague's later entry or last-modifier
+    stamp on a record says who touched it, not who added it, so under any
+    other attribution nothing is set aside.
+
+    The settled snapshot must also witness the surface's physical row in
+    the same SQL source, with an audit identity unique in the full table.
+    """
+
+    from openadapt_flow.runtime.effects._common import judge_records
+    from openadapt_flow.runtime.effects.db_snapshot import canonical
+    from openadapt_flow.runtime.effects.surfaces import surface_of
+
+    if not frame.added_row_witnesses:
+        return
+
+    for i, (effect, verdict) in enumerate(zip(effects, verdicts)):
+        if (
+            effect.kind is not EffectKind.EXACT_NEW_SET
+            or verdict.verdict is not Verdict.REFUTED
+        ):
+            continue
+        try:
+            state = verifier.capture_pre_state()
+        except Exception:  # noqa: BLE001 - unreadable: the refutation stands
+            continue
+        surface = surface_of(effect) or ""
+        routed = isinstance(getattr(verifier, "verifiers", None), dict)
+        if routed and surface:
+            post = (state.detail or {}).get(surface, {})
+            pre = (before.detail or {}).get(surface, {})
+            records = list(post.get("records", [])) if post.get("reachable") else None
+            base = EffectState(
+                substrate=str(pre.get("substrate", "")),
+                reachable=bool(pre.get("reachable", False)),
+                records=list(pre.get("records", [])),
+            )
+            name = surface
+        else:
+            records = list(state.records) if state.reachable else None
+            base, name = before, ""
+        if records is None:
+            continue
+        kept = list(records)
+        for witness in frame.added_row_witnesses.get(name, ()):
+            reader = _sql_reader(verifier, name)
+            if reader is None or reader.source_relation != witness.source_relation:
+                continue
+            # The fresh surface read must still name this physical key and
+            # match every returned column. Missing keys or changed
+            # contents cannot borrow an earlier row's attribution.
+            matches = []
+            for j, record in enumerate(kept):
+                if any(record.get(k) is None for k in witness.primary_key):
+                    continue
+                try:
+                    if all(
+                        k in witness.record
+                        and canonical(value) == canonical(witness.record[k])
+                        for k, value in record.items()
+                    ):
+                        matches.append(j)
+                except (TypeError, ValueError):
+                    continue
+            if len(matches) == 1:
+                kept.pop(matches[0])
+        if len(kept) == len(records):
+            continue
+        again = judge_records(effect, base, kept, substrate=verdict.substrate)
+        if again.verdict is Verdict.CONFIRMED:
+            verdicts[i] = again
+            rows[i]["verdict"] = _label(again.verdict)
+            rows[i]["observed_effect"] = again.observed_effect
+            rows[i]["observed_count"] = again.observed_count
 
 
 def _target_record(
@@ -2620,6 +2835,7 @@ def verify_run(
     verdicts: list[EffectVerdict] = []
     rows: list[dict[str, Any]] = []
     bound_effects: list[Effect] = []
+    judged_effects: list[Effect] = []
     weakest: Optional[VerificationTier] = None
     tiers: list[Optional[VerificationTier]] = []
     for effect in cfg.effects:
@@ -2642,6 +2858,7 @@ def verify_run(
             else _audit_effect(effect, bound)
         )
         bound_effects.append(bound)
+        judged_effects.append(judged)
         tier = verifier_effect_tier(verifier, judged)
         try:
             verdict = verify_effect_without_mutation(verifier, judged, before)
@@ -2704,6 +2921,12 @@ def verify_run(
             status="not_checked",
             reason="no baseline, so what else changed can't be known",
         )
+    if frame.concurrent and any(c.change == "added" for c in frame.concurrent):
+        _excuse_attributed_additions(
+            cfg, verifier, before, judged_effects, verdicts, rows, frame
+        )
+        delta_verdict = _aggregate(verdicts)
+        observed_effect = _observed(verdicts)
     if history_spec is not None:
         if history_problem is not None and frame.status != "refuted":
             frame.status = "not_checked"

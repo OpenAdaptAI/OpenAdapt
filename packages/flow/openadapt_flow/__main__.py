@@ -1588,6 +1588,8 @@ def _propose_lookup_check(args: argparse.Namespace, *, from_lookup: bool) -> Non
 
 
 def _cmd_record_capture(args: argparse.Namespace) -> int:
+    if getattr(args, "surface", None) or _records_automatically(args):
+        return _cmd_record_surfaces(args)
     # The interactive (web) recorder installs in-page DOM listeners against a
     # headed Playwright page. The DESKTOP recorder (--backend windows) captures
     # the operator's native OS input over the win_agent contract; both emit the
@@ -1810,6 +1812,212 @@ def _recording_privacy_notices(recording_dir: Path) -> list[str]:
             "actions."
         )
     return notices
+
+
+def _cmd_confirm_surfaces(args: argparse.Namespace) -> int:
+    from openadapt_flow.multi_surface_record import (
+        MultiSurfaceRecordError,
+        confirm_review,
+        review_lines,
+    )
+
+    recording = Path(args.recording)
+    try:
+        lines = review_lines(recording)
+    except (OSError, ValueError, KeyError) as exc:
+        raise SystemExit(f"confirm-surfaces: cannot read {recording}: {exc}") from exc
+    print("This recording used:")
+    for line in lines:
+        print(line)
+    if not args.yes:
+        if not sys.stdin.isatty():
+            print("Not confirmed: run it in a terminal, or pass --yes.")
+            return 2
+        if input("Confirm these surfaces? [y/N] ").strip().lower() not in ("y", "yes"):
+            print("Not confirmed.")
+            return 1
+    try:
+        confirm_review(recording)
+    except MultiSurfaceRecordError as exc:
+        raise SystemExit(f"confirm-surfaces: {exc}") from exc
+    print("Confirmed. The recording can be compiled.")
+    return 0
+
+
+def _cmd_browser_accessibility(args: argparse.Namespace) -> int:
+    from openadapt_flow import browser_accessibility as ba
+
+    if not sys.platform.startswith("linux"):
+        print(
+            "Nothing to do here: on Windows and macOS, record makes the "
+            "browser's page readable by itself while it records."
+        )
+        return 0
+    if args.enable:
+        lines = ba.enable_linux()
+        for line in lines or ["no Chromium-family browser launcher found"]:
+            print(line)
+        from openadapt_flow.cli_hints import command
+
+        print(
+            "Restart the browser for this to take effect. Undo with "
+            f"'{command('browser-accessibility')} --disable'."
+        )
+    elif args.disable:
+        for line in ba.disable_linux() or ["nothing to remove"]:
+            print(line)
+    else:
+        for line in ba.linux_status():
+            print(line)
+    return 0
+
+
+def _records_automatically(args: argparse.Namespace) -> bool:
+    """``record`` with no target: follow the person across windows."""
+
+    if getattr(args, "backend", None) or getattr(args, "url", None):
+        return False
+    if getattr(args, "profile", None) in ("standard", "regulated"):
+        return False  # a production posture names its surface
+    target_flags = (
+        "window",
+        "window_title",
+        "rdp_window",
+        "rdp_window_title",
+        "rdp_readiness_text",
+        "browser_cdp_endpoint",
+        "browser_page_url",
+        "capture_network",
+    ) + tuple(attr for attr, _ in _RECORD_TARGET_FLAGS)
+    return not any(getattr(args, attr, None) for attr in target_flags)
+
+
+def _cmd_record_surfaces(args: argparse.Namespace) -> int:
+    """``record`` across windows: found automatically, or ``--surface``."""
+
+    from openadapt_flow.multi_surface_record import (
+        MultiSurfaceRecordError,
+        host_surface_kind,
+        parse_record_surfaces,
+        record_multi_surface,
+        review_lines,
+    )
+
+    url = getattr(args, "url", None)
+    declared = [f for f in (getattr(args, "surface", None) or []) if f != "auto"]
+    try:
+        surfaces = (
+            parse_record_surfaces(declared, web_primary=bool(url)) if declared else []
+        )
+    except MultiSurfaceRecordError as exc:
+        raise SystemExit(f"record: {exc}. Nothing was recorded.") from exc
+    backend = getattr(args, "backend", None)
+    lead = "web" if url else (surfaces[0].kind if surfaces else host_surface_kind())
+    if backend is not None and backend != lead:
+        raise SystemExit(
+            f"record --surface: the recording starts on {lead} "
+            f"({'--url' if url else 'the first --surface'}), not --backend "
+            f"{backend}. Drop --backend. Nothing was recorded."
+        )
+    unsupported = [
+        flag
+        for attr, flag in (
+            ("window", "--window"),
+            ("window_title", "--window-title"),
+            ("rdp_window", "--rdp-window"),
+            ("rdp_window_title", "--rdp-window-title"),
+            ("rdp_readiness_text", "--rdp-readiness-text"),
+            ("browser_cdp_endpoint", "--browser-cdp-endpoint"),
+            ("browser_page_url", "--browser-page-url"),
+            ("capture_network", "--capture-network"),
+            ("identifier", "--identifier"),
+        )
+        if getattr(args, attr, None)
+    ]
+    if unsupported:
+        raise SystemExit(
+            f"record --surface: {', '.join(unsupported)} cannot be combined "
+            "with --surface (each declared window is found by its "
+            "--surface WINDOW). Nothing was recorded."
+        )
+    # A capture session runs for every cross-window recording, and Flow
+    # cannot encrypt it yet: the desktop recording policy applies.
+    _recording_encryption_key(
+        args, surfaces[0].kind if surfaces else host_surface_kind()
+    )
+    desktop_params: dict[str, str] = {}
+    web_params: list[str] = []
+    for entry in args.param or ():
+        if "=" in entry:
+            desktop_params.update(_parse_params([entry]))
+        elif url:
+            web_params.append(entry)
+        else:
+            raise SystemExit(
+                f"record --surface: --param {entry!r}: a desktop window has "
+                "no field names; use NAME=VALUE. Nothing was recorded."
+            )
+    if args.secret and not url:
+        raise SystemExit(
+            "record --surface: --secret names browser fields and needs --url. "
+            "Nothing was recorded."
+        )
+    try:
+        out = record_multi_surface(
+            Path(args.out),
+            surfaces=surfaces,
+            url=url,
+            params=desktop_params,
+            web_params=web_params,
+            web_secrets=tuple(args.secret or ()),
+            headless=bool(getattr(args, "headless", False)),
+            task_description=args.task or "openadapt-flow recording",
+            stop=_record_until_stop(args),
+        )
+    except MultiSurfaceRecordError as exc:
+        raise SystemExit(f"record: {exc}. Nothing was kept.") from exc
+    from openadapt_flow.cli_hints import command
+    from openadapt_flow.multi_surface_record import (
+        confirm_review,
+        write_unconfirmed_review,
+    )
+
+    print("This recording used:")
+    for line in review_lines(out):
+        print(line)
+    if getattr(args, "yes", False):
+        confirm_review(out)
+    elif sys.stdin.isatty():
+        answer = input("Keep it? [Y/n] ").strip().lower()
+        if answer in ("n", "no"):
+            import shutil
+
+            shutil.rmtree(out, ignore_errors=True)
+            print("Deleted. Nothing was kept.")
+            return 1
+        confirm_review(out)
+    else:
+        review = write_unconfirmed_review(out)
+        print(
+            f"No one confirmed these surfaces, so compile refuses the recording "
+            f"until a person runs '{command('confirm-surfaces')} {out}' "
+            f"(the list is in {review.name})."
+        )
+    print(f"Recording written to {out}")
+    import json as _json
+
+    listed = _json.loads((Path(out) / "meta.json").read_text())["surfaces"]
+    lead_flag = "--url <app>" if url else f"--backend {listed[0]['kind']} <target>"
+    binds = " ".join(
+        f"--surface {s['id']}={s['kind']}:<target>"
+        for s in listed[1:]
+        if s["kind"] != "web"
+    )
+    print(
+        f"Compile it:  {command('compile')} {out} --out <bundle> --name <workflow>\n"
+        f"Then replay: {command('replay')} <bundle> {lead_flag} {binds}"
+    )
+    return 0
 
 
 def _cmd_record_desktop(args: argparse.Namespace, backend: str) -> int:
@@ -5904,7 +6112,9 @@ def _cmd_silent_saves(args: argparse.Namespace) -> int:
         module = importlib.util.module_from_spec(spec)
         sys.modules["silent_saves"] = module
         spec.loader.exec_module(module)
-    from silent_saves.cli import main as silent_saves_main  # type: ignore[import-not-found]
+    from silent_saves.cli import (  # type: ignore[import-not-found]
+        main as silent_saves_main,
+    )
 
     return int(silent_saves_main(list(args.silent_saves_argv)))
 
@@ -9283,6 +9493,34 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_demo)
 
     p = sub.add_parser(
+        "confirm-surfaces",
+        help=(
+            "Review the windows a cross-window recording used, and confirm "
+            "them so the recording can be compiled"
+        ),
+        allow_abbrev=False,
+    )
+    p.add_argument("recording", help="Recording directory")
+    p.add_argument("--yes", action="store_true", help="Confirm without asking")
+    p.set_defaults(func=_cmd_confirm_surfaces)
+
+    p = sub.add_parser(
+        "browser-accessibility",
+        help=(
+            "Linux: start Chrome, Chromium, Edge and Brave with their page "
+            "readable to accessibility tools, so record can read clicks in "
+            "your everyday browser. Writes your own launcher entries only"
+        ),
+        allow_abbrev=False,
+    )
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument("--enable", action="store_true", help="Add the setting")
+    mode.add_argument(
+        "--disable", action="store_true", help="Remove what --enable added"
+    )
+    p.set_defaults(func=_cmd_browser_accessibility)
+
+    p = sub.add_parser(
         "record",
         help=(
             "Record YOUR workflow interactively: a headed browser "
@@ -9467,6 +9705,35 @@ def build_parser() -> argparse.ArgumentParser:
             "verify.proposed.yaml. Both reads go to sor_snapshots.json "
             "(mode 0600). With no file, look the record up after you save: "
             "that look-up becomes the proposed check"
+        ),
+    )
+    p.add_argument(
+        "--surface",
+        action="append",
+        default=None,
+        metavar="NAME=KIND:WINDOW",
+        help=(
+            "With no --backend or --url, record follows you across windows "
+            "on its own. Use --surface to name the windows yourself instead, "
+            "or --surface auto with --url to add automatic windows to a "
+            "browser recording. Declare each desktop or remote window the "
+            "person works in (repeatable). "
+            "KIND is windows, macos, linux, rdp or citrix; WINDOW is part of "
+            "that window's title (on macOS, the app name). Repeat a NAME to "
+            "add another window to it, such as its dialog. With --url the "
+            "browser leads; otherwise the first --surface does. Each change "
+            "of window becomes a checked switch step. An action in a window "
+            "you did not declare stops the recording. See "
+            "docs/MULTI_SURFACE.md."
+        ),
+    )
+    p.add_argument(
+        "--yes",
+        action="store_true",
+        help=(
+            "Keep a cross-window recording's surfaces without asking. Without "
+            "a terminal and without --yes, the recording is kept unconfirmed "
+            "and compile refuses it until confirm-surfaces is run."
         ),
     )
     _add_backend_flags(p)
@@ -13049,6 +13316,10 @@ def build_parser() -> argparse.ArgumentParser:
     from openadapt_flow.learn import register as _register_learn
 
     _register_learn(sub)
+
+    from openadapt_flow.cli_reconcile import register as _register_reconcile
+
+    _register_reconcile(sub)
 
     from openadapt_flow.cli_cleanup import register as _register_cleanup
 

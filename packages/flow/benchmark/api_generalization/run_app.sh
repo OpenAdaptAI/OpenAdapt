@@ -1,0 +1,45 @@
+#!/bin/sh
+# One app end to end on the frozen engine: up, record, compile, the case
+# matrix in both arms, timing where the API step ran, down.
+#   APIGEN_FROZEN=<sha> APIGEN_PY=<python> ./run_app.sh <app> [reps]
+# Results: results/frozen-<sha8>/<app>/. Timing waits for load under 35.
+set -eu
+HERE=$(cd "$(dirname "$0")" && pwd)
+APP=$1
+REPS=${2:-10}
+: "${APIGEN_FROZEN:?set APIGEN_FROZEN to the frozen engine commit}"
+OUT="$HERE/results/frozen-$(echo "$APIGEN_FROZEN" | cut -c1-8)/$APP"
+STATE=${APIGEN_STATE:-$HOME/oa/scratch/api-generalization}
+REC="$STATE/$APP/rec-$(echo "$APIGEN_FROZEN" | cut -c1-8)"
+mkdir -p "$OUT"
+H="$HERE/run.sh"
+load1() { sysctl -n vm.loadavg | awk '{print $2}'; }
+
+"$H" up --app "$APP"
+if [ ! -d "$REC" ]; then
+  # A demonstration the judge rejects stops this app (the recording is redone).
+  "$H" record --app "$APP" --out "$REC" --tag "rec$(date +%H%M)" > "$OUT/record.json" 2>&1 || {
+    rm -rf "${REC:?}"; echo "recording failed for $APP"; "$H" down --app "$APP"; exit 1; }
+fi
+rm -rf "${STATE:?}/${APP:?}/bundle" "${STATE:?}/${APP:?}/matrix" "${STATE:?}/${APP:?}/timing"
+"$H" compile --app "$APP" --recording "$REC" --out "$STATE/$APP/bundle" > "$OUT/compile.log" 2>&1
+cp "$STATE/$APP/bundle/apigen-compile.json" "$OUT/compile.json"
+if grep -q '"proposed": true' "$OUT/compile.json"; then
+  # Side effects first: the API step keeps its admission only when the whole
+  # database changes the same way through it as through the GUI.
+  rm -rf "${STATE:?}/${APP:?}/footprint"
+  "$H" footprint --app "$APP" --bundle "$STATE/$APP/bundle" --out "$STATE/$APP/footprint" --reps 3 \
+    --tag "$(date +%H%M)" > "$OUT/footprint.log" 2>&1 || true
+  cp "$STATE/$APP/footprint/footprint.json" "$OUT/footprint.json" 2>/dev/null || true
+fi
+"$H" matrix --app "$APP" --bundle "$STATE/$APP/bundle" --out "$STATE/$APP/matrix" --tag "$(date +%H%M)" \
+  > "$OUT/matrix.log" 2>&1 || true
+cp "$STATE/$APP/matrix/runs.csv" "$OUT/matrix.csv" 2>/dev/null || true
+if grep -q '"proposed": true' "$OUT/compile.json"; then
+  until [ "$(load1 | cut -d. -f1)" -lt 35 ]; do sleep 30; done
+  "$H" timing --app "$APP" --bundle "$STATE/$APP/bundle" --out "$STATE/$APP/timing" --reps "$REPS" --tag "$(date +%H%M)" \
+    > "$OUT/timing.log" 2>&1 || true
+  cp "$STATE/$APP/timing/runs.csv" "$OUT/timing.csv" 2>/dev/null || true
+fi
+"$H" down --app "$APP"
+echo "done $APP"

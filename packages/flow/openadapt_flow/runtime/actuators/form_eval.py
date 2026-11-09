@@ -98,13 +98,16 @@ _INSTRUMENT_JS = """
 #: Finds the form, marks it for the locators, and adds the last submit
 #: listener (it records each submit that gets through, then stops it).
 _SETUP_JS = """
-({ actionPath, formAction }) => {
+({ actionPath, formAction, names }) => {
   const state = window.__openadaptFormEval;
   if (!state) return { unevaluable: 'the scratch page could not be instrumented' };
-  const forms = Array.from(document.forms).filter((f) => {
+  let forms = Array.from(document.forms).filter((f) => {
     const p = new URL(f.getAttribute('action') || location.href, document.baseURI).pathname;
     return p === (formAction || actionPath);
   });
+  // Several forms may post there (a settings form with no action posts to
+  // its own page): only the one holding every field typed can be the save.
+  if (forms.length > 1) forms = forms.filter((f) => names.every((n) => f.elements.namedItem(n)));
   if (forms.length !== 1) return { unevaluable: 'the scratch page has no unique form that posts to the save' };
   const form = forms[0];
   form.setAttribute('data-openadapt-eval', '1');
@@ -437,6 +440,7 @@ def evaluate_form(
             {
                 "actionPath": expected[3],
                 "formAction": form_action,
+                "names": [name for name, _ in fields],
             },
         )
         if setup.get("unevaluable"):

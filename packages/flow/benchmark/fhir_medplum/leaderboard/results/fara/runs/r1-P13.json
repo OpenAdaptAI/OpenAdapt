@@ -1,0 +1,162 @@
+{
+ "id": "P13",
+ "class": "fake_success",
+ "type": "patient",
+ "expect": "create",
+ "note": "The write path answers 201 with a record, but nothing reaches the server.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9820/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9820/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 915.7,
+ "cost_usd": 0.0,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE \u2014 no existing Patient record found for Lena Okafor with birth date 1988-04-22",
+  "claim_line": true,
+  "end_url": "http://localhost:9821/Patient?_count=20&_fields=id,_lastUpdated,name,birthDate,gender&_sort=-_lastUpdated",
+  "final_text": "RESULT: NOT DONE \u2014 no existing Patient record found for Lena Okafor with birth date 1988-04-22",
+  "model_calls": 31,
+  "actions": 77,
+  "tokens_in": 224397,
+  "tokens_out": 2236
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Patient was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "fake_success"
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 3,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 4,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 5,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1,
+ "host_load": {
+  "start": 9.2,
+  "end": 8.1,
+  "waited_s": 0
+ }
+}

@@ -71,6 +71,19 @@ outcome cannot be established.
   repair through the normal signed admission and canaries. Model spend and run
   time are capped before each model call (`--max-cost-usd`,
   `--max-run-seconds`), and the run reports its usage.
+- The model never sees the task's own identity or inputs. Where a listing or
+  screenshot shows a value bound to the task (a declared `on_screen` identity
+  string or a task input), it is sent as a typed placeholder such as
+  `⟦task.identity_1⟧` or `⟦task.note⟧`: in text, and as a labelled box in the
+  redacted screenshot. Before, the scrubber redacted the task's own patient name
+  and MRN, and Claude stopped at read-back because it could not tell the task's
+  row from any other. Unbound personal data is still redacted generically. The
+  agent may type a placeholder; the harness types the value. The save gate and
+  the read-back still check the real values locally.
+- `openadapt wrap` takes `--max-input-bytes`. Claude's default ceiling on one
+  rendered request is now 4 MiB (was 64 KiB, which ended every
+  screenshot-per-turn run on turn 2); OpenAI keeps 64 KiB. No setting may exceed
+  32 MiB, and a request above the setting is still never sent.
 - Commands are grouped into 15 tasks in `openadapt-flow --help` (for example
   `setup teach-authorization`, `verify shadow`). Every earlier command name
   still works as an alias.
@@ -150,6 +163,12 @@ outcome cannot be established.
 
 ### Fixes
 
+- The scrubber no longer rewrites a listing's element refs: `[e3] button "Open"`
+  came back as `[<US_DRIVER_LICENSE>] button "Open"`. Only page text is
+  scrubbed, cell by cell; ref tokens never reach the scrubber.
+- `openadapt wrap` on a held task reports `CACHE_HALTED` with the halt reason
+  and exits 1. It used to treat the hold as a cache miss and exit 2 asking for
+  `--max-cost-usd`. A held task never runs the agent.
 - A headed browser launch no longer hangs before the browser opens. Flow's
   first-launch check held its guard while calling a function that takes the
   same guard, so every first headed launch with auto-install on (including

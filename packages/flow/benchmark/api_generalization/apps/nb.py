@@ -13,16 +13,16 @@ import secrets
 import subprocess
 from typing import Any
 
-from benchmark.api_generalization.common import AppBase, podman
+from benchmark.api_generalization.common import AppBase, dump_database, podman
 
 POD = "apigen-nb"
 PG_C, REDIS_C, NB_C = "apigen-nb-pg", "apigen-nb-redis", "apigen-nb-app"
 NB_IMAGE = "docker.io/netboxcommunity/netbox:v4.1.11"
 PG_IMAGE = "docker.io/library/postgres:16-alpine"
-REDIS_IMAGE = "ffb4a863fae9"  # docker.io/library/redis (alpine), already on this machine
+REDIS_IMAGE = "docker.io/library/redis:7.2"  # BSD-3-Clause; a fixture only
 DB_PASS = "synthetic-db-pass"  # throwaway local container
 ADMIN_PASS = "synthetic-admin-pass"  # throwaway local container
-UPSTREAM, PROXY = 9841, 9842
+UPSTREAM, PROXY = 9665, 9666
 SEED = """
 from extras.models import CustomField
 from core.models import ObjectType
@@ -41,6 +41,9 @@ def nbsql(query: str) -> list[dict[str, Any]]:
 
 
 class NetBoxBase(AppBase):
+    def dump(self) -> dict[str, list[dict[str, Any]]]:
+        return dump_database('postgresql', nbsql)
+
     upstream_port = UPSTREAM
     proxy_port = PROXY
 

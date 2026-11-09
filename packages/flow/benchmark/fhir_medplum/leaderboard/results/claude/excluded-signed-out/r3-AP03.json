@@ -1,0 +1,56 @@
+{
+ "id": "AP03",
+ "class": "wrong_value",
+ "type": "appointment",
+ "expect": "create",
+ "note": "The write path shifts the slot an hour later (a time-zone slip).",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 10.2,
+ "cost_usd": 0.016057,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is on the sign-in page, not signed in as the task said, and I have no credentials.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't book or check the appointment, because Medplum is showing its sign-in page and not a signed-in session. I reloaded the page and it still asks for an email. You said I'd already be signed in, but I have no login details, and I won't try to register a new account. No records were searched, created or changed.\n\nI haven't found Tomasz Wren's Patient record or checked whether the appointment with Dr Ama Osei on 2026-11-17 at 14:00\u201314:30Z already exists. If you sign in or give me credentials I can continue.\n\nRESULT: NOT DONE Medplum is on the sign-in page, not signed in as the task said, and I have no credentials.",
+  "model_calls": 3,
+  "actions": 2,
+  "tokens_in": 23321,
+  "tokens_out": 446
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Appointment was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 30.9,
+  "end": 27.4,
+  "waited_s": 0
+ }
+}
