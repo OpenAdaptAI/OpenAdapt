@@ -213,6 +213,10 @@ class Surface:
     complete_basis: Optional[str] = None
     #: The request or response says it is one page (see :func:`_paging_signs`).
     paged: bool = False
+    #: The read returns the whole store, not one collection (a covering read
+    #: found by :func:`openadapt_flow.read_discovery.cover`): a row written
+    #: anywhere in the store shows up here, so the save may add exactly one.
+    store_wide: bool = False
 
     @property
     def is_target(self) -> bool:
@@ -1399,6 +1403,17 @@ def effects_for(
                     confirmed=confirmed,
                 )
             )
+            if surface.store_wide:
+                effects.append(
+                    _effect(
+                        surface.name,
+                        "the save adds exactly one row to the whole store read",
+                        match={},
+                        expected_count=1,
+                        forbid_collateral_loss=False,
+                        confirmed=confirmed,
+                    )
+                )
         else:
             effects.append(
                 _effect(
@@ -1716,6 +1731,20 @@ def prove_against_faults(
                 f"saved twice in {surface.name}",
                 {**base, surface.name: (before, after + [copy])},
             )
+            if surface.store_wide:
+                # The read is the whole store: a stray row written to another
+                # collection lands here, with values unlike the saved record's.
+                elsewhere = dict(target)
+                for fld in list(surface.bound) + list(surface.constants):
+                    elsewhere[fld] = f"stray {elsewhere.get(fld)}"
+                if "id" in elsewhere or surface.has_ids:
+                    elsewhere["id"] = _fresh_id(after + before)
+                run(
+                    "collateral_unaudited",
+                    f"a stray row written elsewhere in the store (it shows in "
+                    f"{surface.name})",
+                    {**base, surface.name: (before, after + [elsewhere])},
+                )
 
             identity = [
                 f for f, p in surface.bound.items() if _identity_like(params.get(p, ""))
@@ -1992,9 +2021,14 @@ def synthesize(
     if db_path is not None:
         reads_from_sqlite(Path(db_path), params, search)
     if probe_reads and not any(s.is_target for s in search.surfaces):
-        from openadapt_flow.read_discovery import discover
+        from openadapt_flow.read_discovery import cover, discover
 
-        discover(params, search, probe_base=probe_base)
+        promoted = discover(params, search, probe_base=probe_base)
+        if promoted is not None and not complete_read and not search.closed_world:
+            # The probed read is the written collection only. Before the
+            # refusal below, look for a read that covers the whole save.
+            captured = load_network(Path(recording_dir)) if recording_dir else []
+            cover(params, search, promoted, captured=captured, probe_base=probe_base)
     if not any(s.is_target for s in search.surfaces):
         return Proposal(params, search, [], {}, [])
     if rest_setups is not None:
@@ -2062,14 +2096,27 @@ def _refuse_partial_probed_read(proposal: Proposal) -> None:
     ] + [f"not covered: {item}" for item in proposal.search.uncovered]
     if not unaudited:
         return
+    covering = found.get("covering_read") or {}
+    searched = (
+        f" No read covering the whole save was found: {covering['reason']}."
+        if covering.get("status") == "not found" and covering.get("reason")
+        else ""
+    )
+    scope = (
+        "covers only the written collection"
+        if not covering.get("status") == "promoted"
+        else "does not cover the whole save"
+    )
     found.update(
         status="refused",
         needs_operator_confirmation=True,
         reason=(
-            f"the probed read {found.get('read')} covers only the written "
-            "collection, and a write outside it would pass the check ("
+            f"the probed read {found.get('read')} {scope}, and a write outside "
+            "it would pass the check ("
             + "; ".join(unaudited)
-            + "). No runnable check was written; confirm the read covers "
+            + ")."
+            + searched
+            + " No runnable check was written; confirm the read covers "
             "everything the save can change (--complete-read), give --db, or "
             "name a fuller read"
         ),
