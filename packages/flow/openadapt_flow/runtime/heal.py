@@ -216,6 +216,7 @@ def build_heal_event(
             dw,
             dh,
         )
+    new_context: str | None
     if (
         old_anchor.context_text is None
         and old_anchor.identity_template is not None
