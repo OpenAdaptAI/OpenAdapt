@@ -467,7 +467,14 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
 
         self._pw = sync_playwright().start()
         self._driver_pid = _driver_pid(self._pw)
-        self._browser = self._pw.chromium.launch(headless=True)
+        from openadapt_flow._browser_readiness import launch_rendering_ready
+
+        try:
+            self._browser = launch_rendering_ready(self._pw.chromium, headless=True)
+        except BaseException:
+            self._pw.stop()
+            self._pw = None
+            raise
         return self._new_context()
 
     def _new_context(self) -> Any:

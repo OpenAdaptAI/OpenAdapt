@@ -218,7 +218,7 @@ def _text(png: bytes, ocr: Callable[..., Any]) -> str:
     except Exception:  # noqa: BLE001 - unreadable is no text
         return ""
     words = " ".join(str(getattr(line, "text", "")) for line in lines)
-    return identity_mod.ocr_canonical(identity_mod.squash(words))
+    return identity_mod.ocr_canonical(identity_mod.comparison_squash(words))
 
 
 def compare(

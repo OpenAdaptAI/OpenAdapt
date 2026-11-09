@@ -320,9 +320,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="STATEMENT",
         help=(
-            "With --teach: a person's signed teach authorization (openadapt-flow "
-            "teach-authorization). Run 1 is scoped by it; without one, drafts "
-            "are refused at admission. With --repair-access: it lets a calling "
+            "With --teach or --teach-browser: a person's signed teach "
+            "authorization (openadapt-flow teach-authorization). Run 1 is scoped "
+            "by it; without one, --teach drafts are refused at admission and "
+            "--teach-browser teaches and runs no write. With --repair-access: it lets a calling "
             "agent's fix be approved (it must cover repair). Its signer is checked under the deployment config's approvers section (--config) only."
         ),
     )
@@ -1194,6 +1195,23 @@ def _served_authority(args: argparse.Namespace) -> Any:
     )
 
 
+def _config_trust(args: argparse.Namespace) -> Any:
+    """The deployment config's roster pin, for checking kept statements, or ``None``."""
+
+    approvers = _config_approvers(args)
+    if approvers is None or not approvers.key_dir:
+        return None
+    from openadapt_flow.teach_authorization import TeachAuthority
+
+    return TeachAuthority(
+        Path("."),  # no statement: only the pin is used
+        key_dir=Path(approvers.key_dir),
+        approver_root=approvers.root_public_key,
+        config_only=True,
+        at_least=tuple(approvers.head) if approvers.head else None,
+    )
+
+
 def _teach_authority(args: argparse.Namespace, key_dir: Optional[Path]) -> Any:
     """``--teach-authorization``, checked now so a bad one stops the server."""
 
@@ -1288,6 +1306,12 @@ def _serve_teach_browser(args: argparse.Namespace, serve) -> int:
             headless=not args.headed,
             contracts=contracts,
             secrets=sign_in,
+            # What lets a write be taught: a person's signed statement,
+            # checked under the deployment config's approvers only. A bad or
+            # expired one refuses teach_start, not the server.
+            teach_authorization=_served_authority(args),
+            # What lets taught write tools run: the config's roster pin.
+            approvers=_config_trust(args),
         )
     except ValueError as exc:
         print(f"serve: {exc}", file=sys.stderr)

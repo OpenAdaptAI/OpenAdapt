@@ -133,7 +133,10 @@ def test_punctuation_run_between_id_fragments_is_kept(mark: str) -> None:
     plain, hashed = _both(recorded, changed)
     assert plain != "verified"
     assert hashed != "verified"
-    assert _both(recorded, unchanged) == ("verified", "verified")
+    # Strict punctuation (PR 1961): a standalone mark between two numeric
+    # fragments has no known field owner, so even the unchanged id refuses.
+    assert "verified" not in _both(recorded, unchanged)
+    assert "verified" not in _both(recorded, recorded)
 
 
 @pytest.mark.parametrize("mark", [".", ",", ":", ";"])
@@ -166,12 +169,20 @@ def test_mixed_punctuation_run_between_id_fragments_is_kept(
     assert I.glued_forms(["RC79", *run, "284"]) == ["RC79" + "".join(run) + "284"]
 
 
+# PR 1742 let the unchanged glued id verify. Strict punctuation (PR 1961)
+# refuses any band with a standalone mark between numeric fragments, because
+# the mark's field owner is unknown. The two rules conflict here and the
+# stricter one holds: the unchanged id refuses too, on both APIs, while the
+# glued form still keeps every mark (so it never matches a changed id).
 @pytest.mark.parametrize("mark,bridge", _MIXED)
-def test_mixed_punctuation_run_unchanged_still_verifies(mark: str, bridge: str) -> None:
+def test_mixed_punctuation_run_unchanged_refuses_under_strict_punctuation(
+    mark: str, bridge: str
+) -> None:
     run = mark + bridge + mark + bridge + mark
     recorded = f"Ashford Jane 02/23/1975 RC79 {' '.join(run)} 284 Active"
     unchanged = f"Ashford Jane 02/23/1975 RC79{run}284 Active"
-    assert _both(recorded, unchanged) == ("verified", "verified")
+    assert "verified" not in _both(recorded, unchanged)
+    assert I.glued_forms(["RC79", *run, "284"]) == ["RC79" + run + "284"]
 
 
 def test_mixed_punctuation_between_words_still_glues() -> None:
