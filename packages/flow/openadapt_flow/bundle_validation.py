@@ -385,6 +385,60 @@ def _apply_sealed_canonical_omissions(
             )
 
 
+def omit_unset_sealed_defaults(
+    model: object,
+    rendered: object,
+    *,
+    schema_version: int,
+) -> None:
+    """Drop listed fields that the sealed file never held, for older contracts.
+
+    This reuses the reviewed registry above, more narrowly than the content
+    digest does. A field is dropped only when all of these hold: its exact
+    owner and name are on the list for ``schema_version``, the list accepts
+    ``None`` for it, its value is ``None``, and the loaded file did not set it
+    (it is not in the model's ``model_fields_set``). A field the file wrote,
+    even as ``null``, stays, and so does any non-``None`` value.
+    """
+
+    rules = tuple(
+        rule
+        for rule in _SEALED_CANONICAL_OMISSIONS_BY_VERSION.get(schema_version, ())
+        if any(value is None for value in rule.omitted_values)
+    )
+    if not rules:
+        return
+    _omit_unset_sealed_defaults(model, rendered, rules)
+
+
+def _omit_unset_sealed_defaults(
+    model: object,
+    rendered: object,
+    rules: tuple[_SealedCanonicalOmission, ...],
+) -> None:
+    if isinstance(model, BaseModel) and isinstance(rendered, dict):
+        for rule in rules:
+            if (
+                type(model) is rule.owner
+                and rule.field_name in rendered
+                and rule.field_name not in model.model_fields_set
+                and getattr(model, rule.field_name) is None
+            ):
+                rendered.pop(rule.field_name)
+        for field_name in type(model).model_fields:
+            if field_name in rendered:
+                _omit_unset_sealed_defaults(
+                    getattr(model, field_name), rendered[field_name], rules
+                )
+    elif isinstance(model, dict) and isinstance(rendered, dict):
+        for key, value in model.items():
+            if key in rendered:
+                _omit_unset_sealed_defaults(value, rendered[key], rules)
+    elif isinstance(model, (list, tuple)) and isinstance(rendered, list):
+        for value, rendered_value in zip(model, rendered, strict=True):
+            _omit_unset_sealed_defaults(value, rendered_value, rules)
+
+
 def _referenced_asset_paths(workflow: "Workflow") -> set[str]:
     """Every bundle-relative image path the IR references (templates, identifier
     crops, postcondition template crops), across the linear steps AND every
