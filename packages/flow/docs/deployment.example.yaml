@@ -118,6 +118,8 @@ effects:
   #     password_env: APP_READER_PASSWORD
   #   ready_selector: "#encounters"        # present once the page loaded
   #   empty_selector: "#no-encounters"     # "no rows" marker (recommended)
+  #   index_lag_s: 0                       # 0 for a primary view, or the
+  #                                        #   measured replica/index lag
   #   row_selector: "tr.encounter"
   #   fields:                              # record field -> how to read it
   #     id: { attribute: data-id }

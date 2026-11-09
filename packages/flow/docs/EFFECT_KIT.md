@@ -690,9 +690,11 @@ acting session with no URL (desktop, RDP, Citrix) is a different view by
 construction.
 
 Search and list views often read a replica or an index that lags the save.
-Set `index_lag_s` to the lag measured in the application's sandbox (never
-from evaluation data): the read polls with backoff for at least that long
-before a missing record counts. Once a read has shown the record, a later
+Every UI read-back needs `index_lag_s`: the lag measured in the application's
+sandbox (never from evaluation data), or `0` for a primary view that never
+lags. The read polls with backoff for at least that long before a missing
+record counts. Left unset, the view's freshness is unknown, and a `final`
+read never settles a record `VERIFIED` (see below). Once a read has shown the record, a later
 read that doesn't show it is INDETERMINATE, never "not saved".
 
 Cardinality comes from the view, not a separate rule: point `record_url` at
@@ -748,8 +750,13 @@ lags the record (a replica or an index) can serve a copy older than a late
 change, with an ordinary HTTP 200, that still matches the provisional read.
 With `index_lag_s` set, a record settles `VERIFIED` only from a second read
 that starts at least that long after the settle session opened; a change seen
-on either read reconciles. Without it, a stale copy can't be told from a
-fresh one, so declare the lag for any view that has one. Set it from the
+on either read reconciles. With `index_lag_s: 0` (a primary view) one read
+settles. With `index_lag_s` unset, a stale copy can't be told from a fresh
+one, so the final read never settles `VERIFIED`: the entry stays waiting
+(`freshness_undeclared` in the provisional read's reason) until its deadline
+reconciles it, and the run counts only its other record checks. A changed
+value, a rejected status or a missing record still reconciles, because a UI
+read may add evidence against a save but never for one it can't date. Set it from the
 application's observed behavior. A rejected status at the provisional read is
 REFUTED at once. `openadapt-flow deferred status RUN` gives the run's settled
 outcome.
@@ -797,6 +804,7 @@ effects:
       password_env: APP_READER_PASSWORD
     ready_selector: "#encounters"
     empty_selector: "#no-encounters"
+    index_lag_s: 0          # a primary view; a replica or index: its measured lag
     row_selector: "tr.encounter"
     fields:
       id: { attribute: data-id }

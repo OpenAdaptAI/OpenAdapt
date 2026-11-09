@@ -2263,7 +2263,9 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
             for added in ("reference", "history", "final"):
                 if section.get(added) is None:
                     section.pop(added, None)
-            if not section.get("index_lag_s"):
+            # Unset keeps the earlier identity; an explicit 0 (a primary
+            # view) is a declaration that changes how a final read settles.
+            if section.get("index_lag_s") is None:
                 section.pop("index_lag_s", None)
             sign_in = section.get("sign_in")
             if isinstance(sign_in, dict) and sign_in.get("post_url") is None:

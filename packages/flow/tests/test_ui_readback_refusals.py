@@ -161,7 +161,7 @@ def test_final_settle_retains_session_fact_refusals(
 def test_fixed_target_pending_guard_covers_empty_parameters(
     tmp_path, params: dict
 ) -> None:
-    data = _spec(final=_final(tmp_path)).model_dump(mode="json")
+    data = _spec(final=_final(tmp_path), index_lag_s=0).model_dump(mode="json")
     data.update(record_url=RECORD_URL, url_params={})
     data["identity"]["value"] = {"literal": "p1"}
     spec = UiReadbackSpec.model_validate(data)
@@ -211,7 +211,7 @@ def test_legacy_null_digest_waiting_entry_needs_positive_other_target(
     import json
     from pathlib import Path
 
-    data = _spec(final=_final(tmp_path)).model_dump(mode="json")
+    data = _spec(final=_final(tmp_path), index_lag_s=0).model_dump(mode="json")
     data.update(record_url=RECORD_URL, url_params={})
     data["identity"]["value"] = {"literal": "p1"}
     spec = UiReadbackSpec.model_validate(data)
@@ -316,3 +316,50 @@ def test_lagging_view_unreadable_reread_keeps_waiting(tmp_path) -> None:
     driver = Driver([ok, replace(ok, ok=False)])
     assert settle_ui_readback(spec, driver=driver, environ=ENV) == []
     assert PendingLedger(spec.final.ledger).get(first.deferred_check).state == "waiting"
+
+
+def test_undeclared_lag_never_settles_verified(tmp_path) -> None:
+    """Without ``index_lag_s`` the view's freshness is unknown: a matching
+    final read keeps the entry waiting, and only a deadline or another
+    check settles it."""
+
+    spec = _spec(final=_final(tmp_path))
+    assert spec.index_lag_s is None
+    first = _verifier(
+        Driver([_page(_row(status="Pending review"))]), spec, backend=DesktopBackend()
+    ).verify(_note(), EMPTY_BEFORE)
+    assert first.deferred_check
+    assert "freshness_undeclared" in first.reason
+    assert first.read_evidence["final"]["freshness"] == "freshness_undeclared"
+    assert (
+        settle_ui_readback(
+            spec, driver=Driver([_page(_row(status="Approved"))]), environ=ENV
+        )
+        == []
+    )
+    entry = PendingLedger(spec.final.ledger).get(first.deferred_check)
+    assert entry.state == "waiting"
+
+
+def test_undeclared_lag_still_reconciles_a_change(tmp_path) -> None:
+    """A UI read may still add evidence against a save."""
+
+    spec = _spec(final=_final(tmp_path))
+    first = _verifier(
+        Driver([_page(_row(status="Pending review"))]), spec, backend=DesktopBackend()
+    ).verify(_note(), EMPTY_BEFORE)
+    settled = settle_ui_readback(
+        spec,
+        driver=Driver([_page(_row(note="edited later", status="Approved"))]),
+        environ=ENV,
+    )
+    assert [(s.id, s.code) for s in settled] == [(first.deferred_check, "changed")]
+
+
+def test_explicit_zero_lag_is_a_primary_view_single_read(tmp_path) -> None:
+    spec, first = _provisional(tmp_path)
+    assert spec.index_lag_s == 0
+    driver = Driver([_page(_row(status="Approved"))])
+    settled = settle_ui_readback(spec, driver=driver, environ=ENV)
+    assert [(s.id, s.state) for s in settled] == [(first.deferred_check, "verified")]
+    assert len(driver.sessions[0].reads) == 1

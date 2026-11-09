@@ -304,7 +304,8 @@ def _final(tmp_path, **extra: Any) -> dict:
 
 
 def _provisional(tmp_path, status: str = "Pending review", **extra: Any):
-    spec = _spec(final=_final(tmp_path, **extra))
+    # The fixture's record page is the primary view: it declares no lag.
+    spec = _spec(final=_final(tmp_path, **extra), index_lag_s=0)
     verdict = _verifier(
         Driver([_page(_row(status=status))]), spec, backend=DesktopBackend()
     ).verify(_note(), EMPTY_BEFORE)
@@ -360,7 +361,7 @@ def test_final_read_waits_for_the_quiet_window(tmp_path) -> None:
 
 
 def test_one_session_settles_a_whole_batch(tmp_path) -> None:
-    spec = _spec(final=_final(tmp_path))
+    spec = _spec(final=_final(tmp_path), index_lag_s=0)
     ids = []
     for _ in range(5):
         ids.append(

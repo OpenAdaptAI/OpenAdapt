@@ -306,8 +306,10 @@ class UiReadbackSpec(BaseModel):
     #: Seconds a search or list view may lag the save (a replica or a
     #: full-text index), measured per application in its sandbox, never
     #: from evaluation data. The read polls with backoff for at least this
-    #: long before a missing record counts.
-    index_lag_s: float = Field(default=0.0, ge=0.0, le=300.0)
+    #: long before a missing record counts. ``0`` declares a primary view
+    #: that never lags. Left unset, the view's freshness is unknown, so a
+    #: ``final`` read never settles a record VERIFIED (it stays waiting).
+    index_lag_s: Optional[float] = Field(default=None, ge=0.0, le=300.0)
     browser: Literal["chromium", "firefox", "webkit"] = "chromium"
     headless: bool = True
     #: Optional: the application's history, audit or activity view, read
@@ -1704,11 +1706,26 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
                     + (f" (status {status})" if status else "")
                     + f"; the final read is due after {entry.due_at} and by "
                     f"{entry.deadline}; not counted until it settles"
+                    + (
+                        "; index_lag_s is not declared, so the final read can't "
+                        "settle it VERIFIED (freshness_undeclared)"
+                        if self._target.spec.index_lag_s is None
+                        else ""
+                    )
                 ),
                 deferred_check=entry.id,
                 assurance=UNCHECKED,
             ),
-            {"provisional": True, "status": status, "due_at": entry.due_at},
+            {
+                "provisional": True,
+                "status": status,
+                "due_at": entry.due_at,
+                **(
+                    {"freshness": "freshness_undeclared"}
+                    if self._target.spec.index_lag_s is None
+                    else {}
+                ),
+            },
         )
 
     # -- session plumbing ----------------------------------------------------------
@@ -2055,7 +2072,7 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
             # Search and list views often read a replica or an index that
             # lags the save. Poll with backoff for the lag the deployment
             # measured in its sandbox before taking "not there" as the read.
-            deadline = time.monotonic() + max(timeout_s, spec.index_lag_s)
+            deadline = time.monotonic() + max(timeout_s, spec.index_lag_s or 0.0)
             wait = self.poll_interval_s
             found = False
             while True:
@@ -2089,7 +2106,7 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         started = time.monotonic()
         result, failure, facts = self._in_session(
             work,
-            budget_s=self._session_budget(max(timeout_s, spec.index_lag_s)),
+            budget_s=self._session_budget(max(timeout_s, spec.index_lag_s or 0.0)),
             target=target,
         )
         if result is None:
@@ -2255,10 +2272,14 @@ def settle_ui_readback(
       or (first, before any read) a deadline that passed;
     - still waiting: a status still pending, or a page that couldn't be read.
 
-    With ``index_lag_s`` set, an entry verifies only from a second read that
-    starts at least that long after the session opened, so a lagging view
-    can't certify an old copy of a record changed before the settle. A lag
-    the deployment doesn't declare can't be seen past.
+    With ``index_lag_s`` above 0, an entry verifies only from a second read
+    that starts at least that long after the session opened, so a lagging
+    view can't certify an old copy of a record changed before the settle.
+    ``index_lag_s: 0`` declares a primary view: one read. Left unset, the
+    view's freshness is unknown and no entry settles VERIFIED: it stays
+    waiting (``freshness_undeclared``) until another check or its deadline
+    settles it. A change, a rejected status or a missing record still
+    reconciles, because a UI read may add evidence against a save.
 
     Returns the :class:`~.deferred_report.Settlement` list.
     """
@@ -2361,6 +2382,7 @@ def settle_ui_readback(
         )
 
     lag_s = spec.index_lag_s
+    reread_after_s: float = lag_s or 0.0
 
     def work(session: ReadbackSession) -> list[tuple[Any, Any, str, str]]:
         # A view that lags the record (a replica or an index) can serve a
@@ -2370,6 +2392,8 @@ def settle_ui_readback(
         # starts at least that long after this session opened: every change
         # made before the settle began is then in what the read shows. A
         # change seen on any read reconciles; a later read never undoes it.
+        # With no lag declared the view's freshness is unknown: nothing
+        # verifies, and the entry waits for another check or its deadline.
         opened = time.monotonic()
         decisions = []
         unchanged = []
@@ -2377,12 +2401,14 @@ def settle_ui_readback(
             decision = judge(session, entry, target)
             if decision is None:
                 continue
-            if decision[1] == "verified" and lag_s > 0:
+            if decision[1] == "verified" and lag_s is None:
+                continue  # freshness_undeclared: a UI read can't verify
+            if decision[1] == "verified" and reread_after_s > 0:
                 unchanged.append((entry, target))
                 continue
             decisions.append(decision)
         if unchanged:
-            wait = opened + lag_s - time.monotonic()
+            wait = opened + reread_after_s - time.monotonic()
             if wait > 0:
                 time.sleep(wait)
             for entry, target in unchanged:
@@ -2393,7 +2419,7 @@ def settle_ui_readback(
 
     decisions, failure, facts = verifier._in_session(
         work,
-        budget_s=verifier._session_budget(lag_s)
+        budget_s=verifier._session_budget(reread_after_s)
         + 2 * len(due) * spec.navigation_timeout_s,
         target=due[0][1],
     )
