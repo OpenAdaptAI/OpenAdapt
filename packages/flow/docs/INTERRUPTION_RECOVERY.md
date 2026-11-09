@@ -61,8 +61,12 @@ A run clears an interruption only when all four of these hold:
    any node that labels it has more than 64 nodes in its subtree (itself
    included, `LABEL_GUARD_MAX_NODES`), or the walk can't finish, the guard
    refuses to arm and nothing is clicked. A label that grows past that
-   limit during the click is a change. If any of them changed before a
-   press or click arrives, or the input is not on
+   limit during the click is a change. The guard reads all of this only
+   through the browser's own getters and methods, captured before any page
+   script runs, so a getter or method the page defines later never runs.
+   An input is let through only when the whole check finishes and passes:
+   an error anywhere in it blocks the input and counts as a change. If any
+   of them changed before a press or click arrives, or the input is not on
    the control, the guard cancels that input before the page sees it. The
    run then halts with the dismissal reported as delivered and its outcome
    uncertain (`LabelChangedDuringClick`), so it is reconciled, never

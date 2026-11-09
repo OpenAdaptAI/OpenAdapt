@@ -2187,14 +2187,36 @@ LABEL_GUARD_MAX_NODES = 64
 _CLICK_GUARD_JS = r"""
 ((key) => {
   if (Object.prototype.hasOwnProperty.call(window, key)) return;
+  // Every read goes through a built-in captured here, before any page
+  // script, and called with Reflect.apply: a getter or method the page
+  // defines later (on a node, a prototype, Array or Object) never runs.
+  // Lists are walked by index and results are built as strings, so a
+  // patched iterator, push or toJSON can't change them either.
   const R = Reflect.apply;
+  const defProp = Reflect.defineProperty;
+  const getOwn = Object.getOwnPropertyDescriptor;
+  const getter = (proto, name) => {
+    const d = proto ? getOwn(proto, name) : undefined;
+    return d && d.get ? d.get : null;
+  };
   const getAttr = Element.prototype.getAttribute;
-  const textOf = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent').get;
-  const connected = Object.getOwnPropertyDescriptor(Node.prototype, 'isConnected').get;
+  const tagOf = getter(Element.prototype, 'tagName');
+  const textOf = getter(Node.prototype, 'textContent');
+  const connected = getter(Node.prototype, 'isConnected');
+  const nameOf = getter(Node.prototype, 'nodeName');
+  const parentOf = getter(Node.prototype, 'parentNode');
   const rootOf = Node.prototype.getRootNode;
   const qsa = Document.prototype.querySelectorAll;
+  const elQsa = Element.prototype.querySelectorAll;
   const docById = Document.prototype.getElementById;
   const fragById = DocumentFragment.prototype.getElementById;
+  const listLen = getter(NodeList.prototype, 'length');
+  const listItem = NodeList.prototype.item;
+  const recType = getter(MutationRecord.prototype, 'type');
+  const recTarget = getter(MutationRecord.prototype, 'target');
+  const recAdded = getter(MutationRecord.prototype, 'addedNodes');
+  const recRemoved = getter(MutationRecord.prototype, 'removedNodes');
+  const evType = getter(Event.prototype, 'type');
   const path = Event.prototype.composedPath;
   const prevent = Event.prototype.preventDefault;
   const stopNow = Event.prototype.stopImmediatePropagation;
@@ -2208,40 +2230,93 @@ _CLICK_GUARD_JS = r"""
   const stringify = JSON.stringify;
   const computed = window.getComputedStyle;
   const propOf = CSSStyleDeclaration.prototype.getPropertyValue;
-  const elQsa = Element.prototype.querySelectorAll;
-  const isEl = n => n instanceof Element;
-  // How a node renders its label: generated ::before/::after text, its own
-  // computed content, and whether it is shown at all, for the node and every
-  // node under it, so a CSSOM rule (insertRule, adoptedStyleSheets) that
-  // relabels or hides the text is a change too. The evidence must be whole:
-  // a subtree of more than MAX_LOOK nodes (the node included), or one whose
-  // walk fails, can't be observed, and the snapshot is null. Arming then
-  // refuses; at an input, a null snapshot differs from the armed one.
-  const LOOK = ['content', 'display', 'visibility', 'content-visibility'];
-  const MAX_LOOK = %(max_look)d;
-  const look = (node, parts) => {
-    if (!isEl(node)) return true;
-    let all;
-    try {
-      all = [node, ...R(elQsa, node, ['*'])];
-    } catch (err) {
-      return false;
+  const freeze = Object.freeze;
+  // Brand-checked getters: a built-in getter throws on the wrong kind of
+  // object, so trying each one reads the element's own built-in value.
+  const VALUE_TYPES = ['HTMLInputElement', 'HTMLTextAreaElement',
+    'HTMLSelectElement', 'HTMLButtonElement', 'HTMLOptionElement',
+    'HTMLOutputElement', 'HTMLDataElement', 'HTMLMeterElement',
+    'HTMLProgressElement', 'HTMLLIElement'];
+  const LABEL_TYPES = ['HTMLInputElement', 'HTMLTextAreaElement',
+    'HTMLSelectElement', 'HTMLButtonElement', 'HTMLOutputElement',
+    'HTMLMeterElement', 'HTMLProgressElement'];
+  const collect = (types, name) => {
+    const out = [];
+    for (let i = 0; i < types.length; i += 1) {
+      const ctor = window[types[i]];
+      const g = ctor ? getter(ctor.prototype, name) : null;
+      if (g) defProp(out, out.length, {value: g, enumerable: true});
     }
-    if (all.length > MAX_LOOK) return false;
-    parts.push(all.length);
-    for (const n of all) {
-      try {
-        const own = R(computed, window, [n]);
-        for (const p of LOOK) parts.push(R(propOf, own, [p]));
-        for (const pseudo of ['::before', '::after']) {
-          const ps = R(computed, window, [n, pseudo]);
-          for (const p of LOOK) parts.push(R(propOf, ps, [p]));
-        }
-      } catch (err) {
-        return false;
+    return out;
+  };
+  const valueGetters = collect(VALUE_TYPES, 'value');
+  const labelGetters = collect(LABEL_TYPES, 'labels');
+  const branded = (getters, node) => {
+    for (let i = 0; i < getters.length; i += 1) {
+      let v;
+      let ok = true;
+      try { v = R(getters[i], node, []); } catch (err) { ok = false; }
+      if (ok) return {found: true, v};
+    }
+    return {found: false, v: null};
+  };
+  const put = (list, v) => { defProp(list, list.length, {value: v, enumerable: true}); };
+  const nodes = list => {
+    const out = [];
+    if (!list) return out;
+    const n = R(listLen, list, []);
+    for (let i = 0; i < n; i += 1) put(out, R(listItem, list, [i]));
+    return out;
+  };
+  const isEl = n => {
+    if (!n) return false;
+    try { R(tagOf, n, []); return true; } catch (err) { return false; }
+  };
+  const enc = v => stringify(v === undefined ? null : v) + '\u0001';
+  const attr = (el, a) => R(getAttr, el, [a]);
+  const text = n => R(textOf, n, []);
+  const words = s => {
+    const out = [];
+    let cur = '';
+    const str = s === null ? '' : '' + s;
+    for (let i = 0; i < str.length; i += 1) {
+      const c = str[i];
+      if (c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f') {
+        if (cur) put(out, cur);
+        cur = '';
+      } else {
+        cur += c;
       }
     }
-    return true;
+    if (cur) put(out, cur);
+    return out;
+  };
+  const byId = (root, id) => {
+    try { return R(docById, root, [id]); } catch (err) { /* not a document */ }
+    try { return R(fragById, root, [id]); } catch (err) { return null; }
+  };
+  const LOOK = ['content', 'display', 'visibility', 'content-visibility'];
+  const PSEUDO = ['::before', '::after'];
+  const MAX_LOOK = %(max_look)d;
+  // How a node renders its label, for the node and every node under it:
+  // generated ::before/::after text, its own computed content, and whether
+  // it is shown. More than MAX_LOOK nodes (the node included) can't be
+  // observed whole: the snapshot is then null.
+  const look = node => {
+    if (!isEl(node)) return '';
+    const all = nodes(R(elQsa, node, ['*']));
+    if (all.length + 1 > MAX_LOOK) return null;
+    let out = enc(all.length + 1);
+    for (let i = -1; i < all.length; i += 1) {
+      const n = i < 0 ? node : all[i];
+      const own = R(computed, window, [n]);
+      for (let j = 0; j < LOOK.length; j += 1) out += enc(R(propOf, own, [LOOK[j]]));
+      for (let k = 0; k < PSEUDO.length; k += 1) {
+        const ps = R(computed, window, [n, PSEUDO[k]]);
+        for (let j = 0; j < LOOK.length; j += 1) out += enc(R(propOf, ps, [LOOK[j]]));
+      }
+    }
+    return out;
   };
   const ATTRS = ['role', 'aria-label', 'aria-labelledby', 'aria-describedby',
     'title', 'alt', 'value', 'hidden', 'aria-hidden', 'class', 'style', 'id',
@@ -2249,60 +2324,97 @@ _CLICK_GUARD_JS = r"""
   const EVENTS = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click',
     'auxclick', 'dblclick', 'contextmenu', 'keydown', 'keypress', 'keyup',
     'touchstart', 'touchend'];
-  const probe = key + '_probe';
-  let beat = 0;
-  let st = null;
-  const attr = (el, a) => R(getAttr, el, [a]);
-  const text = n => R(textOf, n, []);
+  const attrs = n => {
+    let out = '';
+    for (let i = 0; i < ATTRS.length; i += 1) out += enc(attr(n, ATTRS[i]));
+    return out;
+  };
+  // The nodes that label the control: [id, node] pairs, then its labels.
   const refs = el => {
     const out = [];
     const root = R(rootOf, el, []);
-    for (const a of ['aria-labelledby', 'aria-describedby']) {
-      for (const id of (attr(el, a) || '').split(/\s+/).filter(Boolean)) {
-        const n = root instanceof Document ? R(docById, root, [id])
-          : (root instanceof DocumentFragment ? R(fragById, root, [id]) : null);
-        out.push([id, n]);
-      }
+    const kinds = ['aria-labelledby', 'aria-describedby'];
+    for (let k = 0; k < kinds.length; k += 1) {
+      const ids = words(attr(el, kinds[k]));
+      for (let i = 0; i < ids.length; i += 1) put(out, [ids[i], byId(root, ids[i])]);
     }
     return out;
   };
+  const labels = el => {
+    const b = branded(labelGetters, el);
+    return b.found ? nodes(b.v) : [];
+  };
+  // The whole evidence as one string, or null when it can't be read whole.
+  // Throws on anything unreadable; callers treat a throw as null.
   const snapshot = el => {
-    const parts = [R(connected, el, []), el.tagName];
-    for (const a of ATTRS) parts.push(attr(el, a));
-    parts.push(text(el));
-    if ('value' in el) parts.push(String(el.value));
-    if (!look(el, parts)) return null;
-    for (const [id, n] of refs(el)) {
-      parts.push(id, n ? text(n) : null);
-      if (n) for (const a of ATTRS) parts.push(attr(n, a));
-      if (n && !look(n, parts)) return null;
-    }
-    if (el.labels) {
-      for (const l of el.labels) {
-        parts.push(text(l), attr(l, 'class'), attr(l, 'style'));
-        if (!look(l, parts)) return null;
+    let out = enc(R(connected, el, [])) + enc(R(tagOf, el, [])) + attrs(el)
+      + enc(text(el));
+    const value = branded(valueGetters, el);
+    out += enc(value.found) + enc(value.found ? '' + value.v : null);
+    const own = look(el);
+    if (own === null) return null;
+    out += own;
+    const rs = refs(el);
+    for (let i = 0; i < rs.length; i += 1) {
+      const n = rs[i][1];
+      out += enc(rs[i][0]) + enc(n ? text(n) : null);
+      if (n) {
+        out += attrs(n);
+        const seen = look(n);
+        if (seen === null) return null;
+        out += seen;
       }
     }
-    return stringify(parts);
+    const ls = labels(el);
+    for (let i = 0; i < ls.length; i += 1) {
+      out += enc(text(ls[i])) + enc(attr(ls[i], 'class')) + enc(attr(ls[i], 'style'));
+      const seen = look(ls[i]);
+      if (seen === null) return null;
+      out += seen;
+    }
+    return out;
   };
-  const styled = records => records.some(r => {
-    const t = r.target;
-    if (r.type === 'characterData') return !!(t.parentNode && t.parentNode.nodeName === 'STYLE');
-    if (t && (t.nodeName === 'STYLE' || t.nodeName === 'LINK')) return true;
-    for (const n of [...r.addedNodes, ...r.removedNodes]) {
-      if (n.nodeName === 'STYLE' || n.nodeName === 'LINK') return true;
+  const styledNode = n => {
+    const name = R(nameOf, n, []);
+    return name === 'STYLE' || name === 'LINK';
+  };
+  const styled = records => {
+    for (let i = 0; i < records.length; i += 1) {
+      const r = records[i];
+      const t = R(recTarget, r, []);
+      if (R(recType, r, []) === 'characterData') {
+        const p = R(parentOf, t, []);
+        if (p && styledNode(p)) return true;
+        continue;
+      }
+      if (t && styledNode(t)) return true;
+      const moved = [R(recAdded, r, []), R(recRemoved, r, [])];
+      for (let j = 0; j < 2; j += 1) {
+        const ns = nodes(moved[j]);
+        for (let k = 0; k < ns.length; k += 1) if (styledNode(ns[k])) return true;
+      }
     }
     return false;
-  });
-  const flush = () => {
-    if (!st) return;
+  };
+  const probe = key + '_probe';
+  let beat = 0;
+  let st = null;
+  // Why the evidence no longer holds, or null. Throws when it can't tell.
+  const changed = () => {
+    if (st.tainted) return st.tainted;
     if (R(take, st.mo, []).length) st.tainted = 'the control or its label changed';
-    if (styled(R(take, st.docMo, []))) st.tainted = 'a stylesheet changed';
-    if (!st.tainted) {
+    else if (styled(R(take, st.docMo, []))) st.tainted = 'a stylesheet changed';
+    else {
       const now = snapshot(st.el);
       if (now === null) st.tainted = 'the label grew too large to observe whole';
       else if (now !== st.snap) st.tainted = 'the control or its label changed';
     }
+    return st.tainted;
+  };
+  const onControl = e => {
+    const p = R(path, e, []);
+    for (let i = 0; i < p.length; i += 1) if (p[i] === st.el) return true;
+    return false;
   };
   const alive = () => {
     const before = beat;
@@ -2312,62 +2424,87 @@ _CLICK_GUARD_JS = r"""
   R(add, window, [probe, () => { beat += 1; }, true]);
   const guard = e => {
     if (!st) return;
-    flush();
-    let why = st.tainted;
-    if (!why) {
-      let inside = false;
-      try { inside = R(path, e, []).includes(st.el); } catch (err) { inside = false; }
-      if (!inside) why = 'the input is not on the control';
-    }
-    st.events.push(e.type + (e.isTrusted ? '' : ' (synthetic)'));
-    if (why) {
-      R(prevent, e, []);
-      R(stopNow, e, []);
-      st.violations.push(e.type + ': ' + why);
+    // Blocked unless the whole check finishes and passes: an exception
+    // anywhere in it (a page getter, an unreadable node) blocks the input.
+    let why = 'the label evidence could not be read';
+    let type = '?';
+    try {
+      type = '' + R(evType, e, []);
+      const c = changed();
+      why = c ? c : (onControl(e) ? null : 'the input is not on the control');
+    } catch (err) {
+      why = 'the label evidence could not be read';
+      st.tainted = st.tainted || why;
+    } finally {
+      try { put(st.events, type); } catch (err) { /* recorded below */ }
+      if (why !== null) {
+        R(prevent, e, []);
+        R(stopNow, e, []);
+        put(st.violations, type + ': ' + why);
+      }
     }
   };
-  for (const t of EVENTS) R(add, window, [t, guard, true]);
+  for (let i = 0; i < EVENTS.length; i += 1) R(add, window, [EVENTS[i], guard, true]);
+  const answer = (ok, reason) => (ok ? 'ok' : 'refused: ' + reason);
   const arm = (tokenAttr, secret) => {
-    if (st) { st.violations.push('armed twice'); return {ok: false, reason: 'the guard is already armed'}; }
-    if (!alive()) return {ok: false, reason: "the guard's listeners are not in this document"};
-    const found = R(qsa, document, ['[' + tokenAttr + ']']);
-    if (found.length !== 1) return {ok: false, reason: 'the control is not in this document'};
-    const el = found[0];
-    const opts = {attributes: true, characterData: true, childList: true, subtree: true};
-    const mo = new MO(() => { if (st) st.tainted = 'the control or its label changed'; });
-    const docMo = new MO(rs => { if (st && styled(rs)) st.tainted = 'a stylesheet changed'; });
+    if (st) {
+      put(st.violations, 'armed twice');
+      return answer(false, 'the guard is already armed');
+    }
+    if (!alive()) return answer(false, "the guard's listeners are not in this document");
+    let mo = null;
+    let docMo = null;
     try {
+      const found = nodes(R(qsa, document, ['[' + tokenAttr + ']']));
+      if (found.length !== 1) return answer(false, 'the control is not in this document');
+      const el = found[0];
+      const opts = {attributes: true, characterData: true, childList: true, subtree: true};
+      mo = new MO(() => { if (st) st.tainted = 'the control or its label changed'; });
+      docMo = new MO(rs => {
+        if (!st) return;
+        try {
+          if (styled(rs)) st.tainted = 'a stylesheet changed';
+        } catch (err) {
+          st.tainted = 'the label evidence could not be read';
+        }
+      });
       R(observe, mo, [el, opts]);
-      for (const [, n] of refs(el)) if (n) R(observe, mo, [n, opts]);
-      if (el.labels) for (const l of el.labels) R(observe, mo, [l, opts]);
-      R(observe, docMo, [document, {characterData: true, childList: true, subtree: true, attributes: true, attributeFilter: ['href', 'media', 'disabled']}]);
+      const rs = refs(el);
+      for (let i = 0; i < rs.length; i += 1) if (rs[i][1]) R(observe, mo, [rs[i][1], opts]);
+      const ls = labels(el);
+      for (let i = 0; i < ls.length; i += 1) R(observe, mo, [ls[i], opts]);
+      R(observe, docMo, [document, {characterData: true, childList: true,
+        subtree: true, attributes: true, attributeFilter: ['href', 'media', 'disabled']}]);
+      const snap = snapshot(el);
+      if (snap === null) throw new Error('too large');
+      st = {el, secret, snap, tainted: null, violations: [], events: [], mo, docMo};
+      return answer(true);
     } catch (err) {
-      R(disconnect, mo, []); R(disconnect, docMo, []);
-      return {ok: false, reason: 'the label could not be watched'};
+      try { if (mo) R(disconnect, mo, []); if (docMo) R(disconnect, docMo, []); } catch (e2) { /* gone */ }
+      return answer(false, 'the control or its label has more than ' + MAX_LOOK
+        + " nodes in one part, or could not be read, so the whole label can't be observed");
     }
-    let snap = null;
-    try { snap = snapshot(el); } catch (err) { snap = null; }
-    if (snap === null) {
-      R(disconnect, mo, []); R(disconnect, docMo, []);
-      return {ok: false, reason: 'the control or its label has more than '
-        + MAX_LOOK + ' nodes in one part, or could not be read, so the whole '
-        + 'label can\'t be observed'};
-    }
-    st = {el, secret, snap, tainted: null, violations: [], events: [], mo, docMo};
-    return {ok: true};
+  };
+  const list = xs => {
+    let out = '[';
+    for (let i = 0; i < xs.length; i += 1) out += (i ? ',' : '') + stringify('' + xs[i]);
+    return out + ']';
   };
   const finish = secret => {
-    if (!st || st.secret !== secret) return {ok: false, violations: ['the guard was not armed by this click'], events: []};
+    if (!st || st.secret !== secret) {
+      return '{"ok":false,"violations":["the guard was not armed by this click"],"events":[]}';
+    }
     // A change after the last input is the click's own effect (the dialog
     // closing); only an input judged after a change is a violation.
-    const out = {ok: true, violations: st.violations.slice(), events: st.events.slice()};
-    if (!alive()) out.violations.push("the guard's listeners were removed during the click");
-    R(disconnect, st.mo, []); R(disconnect, st.docMo, []);
+    const violations = st.violations;
+    if (!alive()) put(violations, "the guard's listeners were removed during the click");
+    const out = '{"ok":true,"violations":' + list(violations) + ',"events":' + list(st.events) + '}';
+    try { R(disconnect, st.mo, []); R(disconnect, st.docMo, []); } catch (err) { /* gone */ }
     st = null;
     return out;
   };
-  Object.defineProperty(window, key, {
-    value: Object.freeze({arm, finish}), enumerable: false,
+  defProp(window, key, {
+    value: freeze({arm, finish}), enumerable: false,
     configurable: false, writable: false,
   });
 })(%(key)s);
@@ -3761,15 +3898,18 @@ class PlaywrightBackend:
         try:
             armed = guard.scope.evaluate(
                 "([k, a, s]) => { const g = window[k];"
-                " return g ? g.arm(a, s) : {ok: false,"
-                " reason: 'this document has no click guard (it loaded before"
-                " the guard was installed)'}; }",
+                " return g ? g.arm(a, s) : 'refused: this document has no click"
+                " guard (it loaded before the guard was installed)'; }",
                 [key, self._token_attribute(guard.token), secret],
             )
         except Exception as exc:  # noqa: BLE001 - no guard, no click
-            armed = {"ok": False, "reason": f"arming failed ({type(exc).__name__})"}
-        if not isinstance(armed, dict) or armed.get("ok") is not True:
-            reason = armed.get("reason") if isinstance(armed, dict) else None
+            armed = f"refused: arming failed ({type(exc).__name__})"
+        if armed != "ok":
+            reason = (
+                armed[len("refused: ") :]
+                if isinstance(armed, str) and armed.startswith("refused: ")
+                else None
+            )
             report.refusal = f"the click guard did not arm: {reason or 'unknown'}"
             yield report
             return
@@ -3784,7 +3924,17 @@ class PlaywrightBackend:
                 )
             except Exception:  # noqa: BLE001 - the document went away
                 seen = None
-            if not isinstance(seen, dict) or seen.get("ok") is not True:
+            # The guard answers with a string it built itself, so nothing the
+            # page patched (toJSON, Array methods) can shape the answer.
+            try:
+                seen = json.loads(seen) if isinstance(seen, str) else None
+            except ValueError:
+                seen = None
+            if (
+                not isinstance(seen, dict)
+                or seen.get("ok") is not True
+                or not isinstance(seen.get("violations"), list)
+            ):
                 report.violations.append(
                     "the click guard could not be read after the click"
                 )

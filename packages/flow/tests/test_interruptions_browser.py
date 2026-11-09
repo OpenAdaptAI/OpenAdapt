@@ -29,6 +29,9 @@ nodes-65       a 65-node label, relabeled by CSSOM on its last  halt, no click
 nodes-64       a stable 64-node label                           saved
 grow           a 64-node label grows past the cap on            halt, no GET
                pointerover
+getter-*       on pointerover a page getter that throws, plus   halt, no GET
+               a CSSOM relabel to "Sign out"
+getter-stable  the same throwing getter, no relabel             saved
 =============  ===============================================  ============
 """
 
@@ -163,6 +166,37 @@ if (kind === 'session') {
   });
   b.onclick = () => {
     if (kind !== 'nodes-64') fetch('/logout-everywhere');
+    d.remove();
+  };
+} else if (kind.startsWith('getter-')) {
+  // A page getter that throws when read, installed as the pointer arrives,
+  // together with a CSSOM relabel; the stable variant only installs it.
+  const st = document.createElement('style');
+  st.textContent = '.l::before { content: "Close"; }';
+  document.head.appendChild(st);
+  const d = document.createElement('div');
+  d.setAttribute('role', 'dialog');
+  d.style = 'position:fixed;inset:0;background:#fff;padding:40px;font-size:28px';
+  d.innerHTML = '<p>Update available now</p><span id="lbl" class="l"></span> '
+    + '<button id="x" aria-labelledby="lbl" style="font-size:22px">x</button>';
+  document.body.appendChild(d);
+  const b = d.querySelector('#x');
+  const boom = { get() { throw new Error('boom'); }, configurable: true };
+  b.addEventListener('pointerover', () => {
+    const what = kind.slice('getter-'.length);
+    if (what === 'proto') {
+      Object.defineProperty(HTMLButtonElement.prototype, 'value', boom);
+    } else if (what === 'stable') {
+      Object.defineProperty(b, 'value', boom);
+    } else {
+      Object.defineProperty(b, what, boom);
+    }
+    if (what !== 'stable') {
+      st.sheet.insertRule('.l::before { content: "Sign out" !important; }', 1);
+    }
+  });
+  b.onclick = () => {
+    if (kind !== 'getter-stable') fetch('/logout-everywhere');
     d.remove();
   };
 } else if (kind === 'banner') {
@@ -502,3 +536,47 @@ def test_a_label_that_grows_past_the_cap_during_the_click_is_blocked(
     assert result.delivery_uncertainty.cause_type == "LabelChangedDuringClick"
     assert not any("/logout-everywhere" in seen for seen in _Server.seen)
     assert not any(seen.startswith("POST") for seen in _Server.seen)
+
+
+GETTERS = [
+    "getter-value",
+    "getter-labels",
+    "getter-textContent",
+    "getter-tagName",
+    "getter-proto",
+]
+
+
+@pytest.mark.parametrize("kind", GETTERS)
+def test_a_throwing_page_getter_cannot_let_a_relabeled_click_through(
+    server: str, kind: str, tmp_path: Any
+) -> None:
+    report = _run(server, kind, tmp_path, classes=[LABELLED])
+    assert report.success is False
+    result = report.results[0]
+    assert result.safety_halt is True, result.error
+    assert result.delivery_uncertainty is not None
+    assert result.delivery_uncertainty.cause_type == "LabelChangedDuringClick"
+    assert result.interstitial_actions[0].label_violations
+    assert not any("/logout-everywhere" in seen for seen in _Server.seen)
+    assert not any(seen.startswith("POST") for seen in _Server.seen)
+
+
+@pytest.mark.parametrize("kind", GETTERS)
+def test_learning_refuses_a_relabeled_click_behind_a_throwing_getter(
+    server: str, kind: str
+) -> None:
+    from openadapt_flow.interruptions import LearnRefused
+
+    with pytest.raises(LearnRefused, match="label changed during the click"):
+        _learn(server, kind)
+    assert not any("/logout-everywhere" in seen for seen in _Server.seen)
+    assert not any(seen.startswith("POST") for seen in _Server.seen)
+
+
+def test_a_throwing_page_getter_alone_does_not_block_a_stable_label(
+    server: str, tmp_path: Any
+) -> None:
+    report = _run(server, "getter-stable", tmp_path, classes=[LABELLED])
+    assert report.success is True, report.results[0].error
+    assert "POST /save" in _Server.seen
