@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,7 @@ from openadapt_flow.agent.cli import main as agent_main  # noqa: E402
 from openadapt_flow.agent.mcp import build_server  # noqa: E402
 from openadapt_flow.agent.verify_tools import VerifyBridge  # noqa: E402
 from openadapt_flow.mockmed.fault_server import serve as fault_serve  # noqa: E402
+from tests.test_verifier_recheck import due_now as due_now  # noqa: E402
 
 NOTE = "Follow-up in two weeks"
 
@@ -233,10 +235,11 @@ def test_verify_recheck_is_listed_and_waits_for_its_due_time(sqlite_bridge) -> N
     assert early["wait_s"] > 30
 
 
-def test_verify_recheck_confirms_then_is_spent(sqlite_bridge, monkeypatch) -> None:
+def test_verify_recheck_confirms_then_is_spent(
+    sqlite_bridge, monkeypatch, due_now
+) -> None:
     bridge, db = sqlite_bridge
     checked = _provisional(bridge, db)
-    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
     late = bridge.dispatch("verify_recheck", {"write_id": checked["write_id"]})
     assert late["due"] is True and late["outcome"] == "CONFIRMED"
     assert late["verified"] is True and late["late"] is False
@@ -246,13 +249,12 @@ def test_verify_recheck_confirms_then_is_spent(sqlite_bridge, monkeypatch) -> No
 
 
 def test_verify_recheck_refutes_a_write_that_landed_late(
-    sqlite_bridge, monkeypatch
+    sqlite_bridge, monkeypatch, due_now
 ) -> None:
     bridge, db = sqlite_bridge
     checked = _provisional(bridge, db)
     # After the verdict, before the recheck: a background job adds a row.
     _sql(db, "INSERT INTO calendar (pid, title) VALUES (2, 'New Patient')")
-    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
     late = bridge.dispatch("verify_recheck", {"write_id": checked["write_id"]})
     assert late["outcome"] == "REFUTED" and late["late"] is True
     assert late["verified"] is False and "no longer stands" in late["next"]
@@ -275,7 +277,7 @@ def _second(bridge: VerifyBridge, db: Path, contract: str = "patient") -> dict:
 
 
 def test_the_agents_next_write_in_the_window_does_not_refute_the_first(
-    sqlite_bridge, monkeypatch
+    sqlite_bridge, monkeypatch, due_now
 ) -> None:
     # The reviewer's probe: two correct writes by one agent under one
     # contract inside the window. Each recheck excuses the other's rows.
@@ -283,7 +285,6 @@ def test_the_agents_next_write_in_the_window_does_not_refute_the_first(
     first = _provisional(bridge, db)
     second = _second(bridge, db)
     assert second["provisional"] is True
-    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
     one = bridge.dispatch("verify_recheck", {"write_id": first["write_id"]})
     two = bridge.dispatch("verify_recheck", {"write_id": second["write_id"]})
     assert one["outcome"] == "CONFIRMED", one["reasons"]
@@ -294,19 +295,18 @@ def test_the_agents_next_write_in_the_window_does_not_refute_the_first(
 
 
 def test_a_late_row_after_the_next_write_still_refutes_the_first(
-    sqlite_bridge, monkeypatch
+    sqlite_bridge, monkeypatch, due_now
 ) -> None:
     bridge, db = sqlite_bridge
     first = _provisional(bridge, db)
     _second(bridge, db)
     _sql(db, "INSERT INTO calendar (pid, title) VALUES (2, 'New Patient')")
-    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
     one = bridge.dispatch("verify_recheck", {"write_id": first["write_id"]})
     assert one["outcome"] == "REFUTED"
 
 
 def test_a_write_under_another_contract_is_not_excused(
-    sqlite_bridge, monkeypatch, tmp_path
+    sqlite_bridge, monkeypatch, due_now, tmp_path
 ) -> None:
     bridge, db = sqlite_bridge
     # The same read under another name: another contract excuses nothing.
@@ -314,19 +314,17 @@ def test_a_write_under_another_contract_is_not_excused(
     bridge.contracts["intake"] = verifier.Contract.from_dict(doc, name="intake")
     first = _provisional(bridge, db)
     _second(bridge, db, contract="intake")
-    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
     one = bridge.dispatch("verify_recheck", {"write_id": first["write_id"]})
     assert one["outcome"] == "REFUTED"
 
 
 def test_a_recheck_waits_for_a_later_write_still_unchecked(
-    sqlite_bridge, monkeypatch
+    sqlite_bridge, monkeypatch, due_now
 ) -> None:
     bridge, db = sqlite_bridge
     first = _provisional(bridge, db)
     begun = bridge.dispatch("verify_begin", {"contract": "patient", "values": VALUES_3})
     _sql(db, SAVE_3)
-    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
     with pytest.raises(BridgeError, match="not checked yet"):
         bridge.dispatch("verify_recheck", {"write_id": first["write_id"]})
     bridge.dispatch("verify_check", {"write_id": begun["write_id"]})
@@ -359,6 +357,7 @@ def test_an_owed_recheck_is_named_after_a_restart(sqlite_bridge, tmp_path) -> No
     )
     assert retry["ok_to_write"] is False
     assert retry["earlier_result"]["provisional"] is True
+    assert retry["earlier_result"]["final"] is False
     assert "doesn't hold it" in retry["next"] and "ledger list" in retry["next"]
 
 
@@ -372,13 +371,12 @@ def test_a_retry_before_the_recheck_is_told_to_recheck(sqlite_bridge) -> None:
 
 
 def test_a_retry_after_a_confirming_recheck_is_not_provisional(
-    sqlite_bridge, monkeypatch
+    sqlite_bridge, monkeypatch, due_now
 ) -> None:
     from openadapt_flow.write_ledger import default_ledger
 
     bridge, db = sqlite_bridge
     checked = _provisional(bridge, db)
-    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
     late = bridge.dispatch("verify_recheck", {"write_id": checked["write_id"]})
     assert late["outcome"] == "CONFIRMED"
     assert default_ledger().rechecks_owed() == []
@@ -388,12 +386,13 @@ def test_a_retry_after_a_confirming_recheck_is_not_provisional(
     assert "next" not in retry
 
 
-def test_a_recheck_that_could_not_run_is_still_owed(sqlite_bridge, monkeypatch) -> None:
+def test_a_recheck_that_could_not_run_is_still_owed(
+    sqlite_bridge, monkeypatch, due_now
+) -> None:
     from openadapt_flow.agent import verify_tools
 
     bridge, db = sqlite_bridge
     checked = _provisional(bridge, db)
-    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
 
     def broken(*args, **kwargs):
         raise verifier.VerifierError("excused_by[0] has no params")
@@ -411,3 +410,104 @@ def test_the_recheck_tool_says_another_agent_id_is_not_excused(sqlite_bridge) ->
     bridge, _ = sqlite_bridge
     spec = {t.name: t for t in bridge.list_tool_specs()}["verify_recheck"]
     assert "another agent_id" in spec.description
+
+
+def test_verify_check_uncertain_is_not_final(sqlite_bridge) -> None:
+    bridge, _db = sqlite_bridge
+    begun = bridge.dispatch("verify_begin", {"contract": "patient", "values": VALUES})
+    checked = bridge.dispatch("verify_check", {"write_id": begun["write_id"]})
+    assert checked["outcome"] == "UNCERTAIN"
+    assert checked["verified"] is False
+    assert checked["provisional"] is False
+    assert checked["final"] is False
+
+
+def test_verify_recheck_disputed_later_write_is_not_final(
+    sqlite_bridge, monkeypatch
+) -> None:
+    bridge, db = sqlite_bridge
+    first = _provisional(bridge, db)
+    begun = bridge.dispatch("verify_begin", {"contract": "patient", "values": VALUES_3})
+    _sql(db, SAVE_3, "INSERT INTO calendar (pid, title) VALUES (2, 'Unexplained')")
+    second = bridge.dispatch("verify_check", {"write_id": begun["write_id"]})
+    assert second["outcome"] == "REFUTED"
+    assert second["verified"] is False
+    assert second["final"] is True
+    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+    late = bridge.dispatch("verify_recheck", {"write_id": first["write_id"]})
+    assert late["outcome"] == "UNCERTAIN", late["reasons"]
+    assert late["verified"] is False
+    assert late["final"] is False
+    assert "Not a pass" in late["next"]
+
+
+# -- a native read before the bound deadline has not completed the recheck ----
+
+
+def test_an_actual_early_read_stays_pending_until_a_genuinely_due_recheck(
+    sqlite_bridge, monkeypatch, tmp_path
+) -> None:
+    from openadapt_flow.runtime.effects.late_write import parse_time
+    from openadapt_flow.write_ledger import default_ledger
+
+    bridge, db = sqlite_bridge
+    # Declare a short real schedule before any write or issuance; do not edit
+    # a saved payload, digest, returned timestamp or production clock.
+    doc = yaml.safe_load((tmp_path / "contracts" / "patient.yaml").read_text())
+    doc["frame"]["database"]["recheck_after_s"] = 0.01
+    bridge.contracts["patient"] = verifier.Contract.from_dict(doc, name="patient")
+    checked = _provisional(bridge, db)
+    write_id = checked["write_id"]
+    held = bridge._rechecks[write_id]
+    before = default_ledger().find_attempt(write_id)
+    assert before is not None and before[1].recheck_owed == checked["recheck_due_at"]
+    with monkeypatch.context() as scheduler:
+        scheduler.setattr(verifier, "seconds_until", lambda due: 0.0)
+        early = bridge.dispatch("verify_recheck", {"write_id": write_id})
+
+    assert parse_time(early["read_at"]) < parse_time(early["recheck_due_at"])
+    assert early["outcome"] == "UNCERTAIN" and early["verified"] is False
+    assert early["recheck_owed"] is True and "verify_recheck" in early["next"]
+    assert bridge._rechecks[write_id] is held and write_id not in bridge._spent
+    after = default_ledger().find_attempt(write_id)
+    assert after is not None and after[1].events == before[1].events
+    assert after[1].recheck_owed == checked["recheck_due_at"]
+    retry = bridge.dispatch("verify_begin", {"contract": "patient", "values": VALUES})
+    assert (
+        retry["ok_to_write"] is False and retry["earlier_result"]["provisional"] is True
+    )
+
+    # A second call is intentional lifecycle coverage after actual UTC reaches
+    # this newly declared short schedule, not a retry of a failed timing test.
+    budget = time.monotonic() + 10
+    while verifier.seconds_until(checked["recheck_due_at"]) > 0:
+        assert time.monotonic() < budget, "actual UTC did not reach the issued deadline"
+        time.sleep(0.01)
+    late = bridge.dispatch("verify_recheck", {"write_id": write_id})
+    assert parse_time(late["read_at"]) >= parse_time(late["recheck_due_at"])
+    assert late["outcome"] == "CONFIRMED" and late["verified"] is True
+    assert late.get("recheck_owed", False) is False
+    assert write_id not in bridge._rechecks and bridge._spent[write_id] == "CONFIRMED"
+    assert default_ledger().rechecks_owed() == []
+
+
+def test_a_genuine_early_native_refutation_is_spent_and_held(
+    sqlite_bridge, monkeypatch
+) -> None:
+    from openadapt_flow.runtime.effects.late_write import parse_time
+    from openadapt_flow.write_ledger import default_ledger
+
+    bridge, db = sqlite_bridge
+    checked = _provisional(bridge, db)
+    write_id = checked["write_id"]
+    _sql(db, "INSERT INTO calendar (pid, title) VALUES (2, 'Delayed side record')")
+    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+    late = bridge.dispatch("verify_recheck", {"write_id": write_id})
+    assert parse_time(late["read_at"]) < parse_time(late["recheck_due_at"])
+    assert late["outcome"] == "REFUTED" and late["verified"] is False
+    assert late.get("recheck_owed", False) is False
+    assert write_id not in bridge._rechecks and bridge._spent[write_id] == "REFUTED"
+    attempt = default_ledger().find_attempt(write_id)
+    assert attempt is not None and attempt[1].state == "held"
+    again = bridge.dispatch("verify_begin", {"contract": "patient", "values": VALUES})
+    assert again["ok_to_write"] is False and "earlier_result" not in again

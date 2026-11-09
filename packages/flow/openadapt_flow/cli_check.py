@@ -57,11 +57,14 @@ def register_check_parser(sub: argparse._SubParsersAction) -> None:
             "Teach a save's read-back by demonstration, and admit it. Nothing "
             "confirms a save until a person admits the check."
         ),
+        allow_abbrev=False,
     )
     verbs = parser.add_subparsers(dest="check_cmd", required=True)
 
     mark = verbs.add_parser(
-        "mark", help="Write check.json: where the check starts and what it reads"
+        "mark",
+        help="Write check.json: where the check starts and what it reads",
+        allow_abbrev=False,
     )
     mark.add_argument("recording", help="Recording directory")
     mark.add_argument(
@@ -102,7 +105,9 @@ def register_check_parser(sub: argparse._SubParsersAction) -> None:
     )
     mark.set_defaults(func=cmd_check_mark)
 
-    show = verbs.add_parser("show", help="List a bundle's demonstrated checks")
+    show = verbs.add_parser(
+        "show", help="List a bundle's demonstrated checks", allow_abbrev=False
+    )
     show.add_argument("bundle", help="Bundle directory")
     show.add_argument("--json", action="store_true", dest="as_json")
     show.set_defaults(func=cmd_check_show)
@@ -110,6 +115,7 @@ def register_check_parser(sub: argparse._SubParsersAction) -> None:
     admit = verbs.add_parser(
         "admit",
         help="Admit a bundle's demonstrated checks (a person, at a terminal)",
+        allow_abbrev=False,
     )
     admit.add_argument("bundle", help="Bundle directory")
     admit.add_argument("--step", default=None, help="Admit only this save step")
@@ -122,6 +128,7 @@ def register_check_parser(sub: argparse._SubParsersAction) -> None:
             "Use the look-up found after the save (check.proposed.json) as the "
             "recording's check.json"
         ),
+        allow_abbrev=False,
     )
     accept.add_argument("recording", help="Recording directory")
     accept.set_defaults(func=cmd_check_accept)

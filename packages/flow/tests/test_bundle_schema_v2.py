@@ -19,6 +19,7 @@ from openadapt_flow.ir import (
     TEMPLATE_AAD,
     ActionKind,
     Anchor,
+    IdentityTemplate,
     Landmark,
     LoopSpec,
     Predicate,
@@ -28,6 +29,7 @@ from openadapt_flow.ir import (
     StateKind,
     Step,
     StructuralLocator,
+    TokenTemplate,
     Transition,
     Workflow,
 )
@@ -305,6 +307,136 @@ def _write_synthetic_pre_field_bundle(
         (bundle / "workflow.json").write_bytes(serialized)
     (bundle / "manifest.json").write_text(manifest.model_dump_json(indent=2))
     return legacy_digest
+
+
+# Identity templates sealed before the optional bearing flag existed.
+# These vectors were produced by the pre-field engine at 43ff31046, using
+# synthetic hashes and the same fixed workflow/date/template builders above.
+_PRE_BEARING_DIGESTS = {
+    "linear": "281bd68eac6edf0f53a8acb3cef7a71a8df69ab5c6f21b4748deb38f22190d6f",
+    "linear-encrypted": "f75414e64f69e761a57492b923acf47207d288c6ae78e3706b9c2fe77d96703f",
+    "program": "5e56f5b56f9ef52e80c63d1c445a4cf19396001daa3b389fd8d8743941ac247e",
+    "program-encrypted": "6d9cdfd06b7e415d9b6312e169fda3f4ffbb4e3405b6ac7b0df9ad3e7618fcf7",
+}
+
+
+def _pre_bearing_workflow(shape: str, *, encrypted: bool) -> Workflow:
+    wf = _structural_workflow(shape, encrypted=encrypted)
+    step = wf.steps[0] if shape == "linear" else wf.program.states["s1"].step
+    assert step is not None and step.anchor is not None
+    step.anchor.identity_template = IdentityTemplate(
+        salt="ab" * 16,
+        band_len=6,
+        tokens=[TokenTemplate(c="c" * 64, r="d" * 64, n=6, alpha=True, name=True)],
+    )
+    return wf
+
+
+def _write_pre_bearing_bundle(tmp_path, shape: str, *, encrypted: bool):
+    bundle = _write_bundle_dir(tmp_path)
+    wf = _pre_bearing_workflow(shape, encrypted=encrypted)
+    files = bv.compute_file_hashes(wf, bundle)
+    historical = _pre_frame_path_content(wf, shape)
+    tokens = _anchor_payload(historical, shape)["identity_template"]["tokens"]
+    assert tokens[0].pop("bearing") is None
+    payload = {"workflow": historical, "files": dict(sorted(files.items()))}
+    legacy_digest = hashlib.sha256(
+        json.dumps(
+            payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
+    ).hexdigest()
+    fixture = shape + ("-encrypted" if encrypted else "")
+    assert legacy_digest == _PRE_BEARING_DIGESTS[fixture]
+    manifest = bv.build_manifest(wf, bundle)
+    manifest.content_digest = legacy_digest
+    manifest.encrypted = encrypted
+    wf.manifest = manifest
+    raw = wf.model_dump(mode="json")
+    assert (
+        _anchor_payload(raw, shape)["identity_template"]["tokens"][0].pop("bearing")
+        is None
+    )
+    serialized = json.dumps(raw, sort_keys=True).encode("utf-8")
+    if encrypted:
+        (bundle / "workflow.json.enc").write_bytes(
+            crypto.encrypt_bytes(
+                serialized, _SYNTHETIC_BUNDLE_KEY, aad=crypto.BUNDLE_AAD
+            )
+        )
+        for rel in files:
+            source = bundle / rel
+            (bundle / f"{rel}.enc").write_bytes(
+                crypto.encrypt_bytes(
+                    source.read_bytes(), _SYNTHETIC_BUNDLE_KEY, aad=TEMPLATE_AAD
+                )
+            )
+            source.unlink()
+    else:
+        (bundle / "workflow.json").write_bytes(serialized)
+    (bundle / "manifest.json").write_text(manifest.model_dump_json(indent=2))
+    return bundle, legacy_digest
+
+
+@pytest.mark.parametrize("shape", ["linear", "program"])
+@pytest.mark.parametrize("encrypted", [False, True])
+def test_pre_bearing_template_keeps_its_historical_seal(tmp_path, shape, encrypted):
+    bundle, digest = _write_pre_bearing_bundle(tmp_path, shape, encrypted=encrypted)
+    loaded = Workflow.load(
+        bundle, key=_SYNTHETIC_BUNDLE_KEY if encrypted else None, verify_integrity=True
+    )
+    assert loaded.manifest.content_digest == digest
+    assert bv.compute_content_digest(loaded, loaded.manifest.file_hashes) == digest
+    anchor = _anchor_payload(loaded.model_dump(mode="json"), shape)
+    assert anchor["identity_template"]["tokens"][0]["bearing"] is None
+
+
+@pytest.mark.parametrize("shape", ["linear", "program"])
+@pytest.mark.parametrize("encrypted", [False, True])
+@pytest.mark.parametrize("bearing", [False, True])
+def test_identity_bearing_decisions_remain_sealed(tmp_path, shape, encrypted, bearing):
+    bundle, _ = _write_pre_bearing_bundle(tmp_path, shape, encrypted=encrypted)
+    path = bundle / ("workflow.json.enc" if encrypted else "workflow.json")
+    content = path.read_bytes()
+    if encrypted:
+        content = crypto.decrypt_bytes(
+            content, _SYNTHETIC_BUNDLE_KEY, aad=crypto.BUNDLE_AAD
+        )
+    raw = json.loads(content)
+    _anchor_payload(raw, shape)["identity_template"]["tokens"][0]["bearing"] = bearing
+    content = json.dumps(raw, sort_keys=True).encode("utf-8")
+    if encrypted:
+        content = crypto.encrypt_bytes(
+            content, _SYNTHETIC_BUNDLE_KEY, aad=crypto.BUNDLE_AAD
+        )
+    path.write_bytes(content)
+    with pytest.raises(bv.BundleIntegrityError):
+        Workflow.load(
+            bundle,
+            key=_SYNTHETIC_BUNDLE_KEY if encrypted else None,
+            verify_integrity=True,
+        )
+
+
+def test_bearing_named_parameter_is_still_sealed_content(tmp_path):
+    bundle, legacy_digest = _write_pre_bearing_bundle(
+        tmp_path, "linear", encrypted=False
+    )
+    wf = _pre_bearing_workflow("linear", encrypted=False)
+    wf.params["bearing"] = "task input"
+    assert (
+        bv.compute_content_digest(wf, bv.compute_file_hashes(wf, bundle))
+        != legacy_digest
+    )
+
+
+def test_bearing_default_omission_does_not_cross_schema_versions():
+    wf = _pre_bearing_workflow("linear", encrypted=False)
+    rendered = wf.model_dump(mode="json", exclude={"manifest"})
+    bv._apply_sealed_canonical_omissions(wf, rendered, schema_version=3)
+    assert (
+        _anchor_payload(rendered, "linear")["identity_template"]["tokens"][0]["bearing"]
+        is None
+    )
 
 
 # --------------------------------------------------------------------------
@@ -1092,3 +1224,93 @@ def test_a_read_spec_and_grade_floor_are_sealed_content(tmp_path):
     )
     content = bv._workflow_content(read)
     assert content["steps"][0]["read"]["field"]["name"] == "amount"
+
+
+@pytest.mark.parametrize("shape", ["linear", "program"])
+def test_dialog_row_evidence_preserves_frozen_legacy_seal_and_is_tamper_evident(
+    tmp_path, shape
+):
+    b = _write_bundle_dir(tmp_path)
+    wf = _structural_workflow(shape)
+    old_digest = _write_synthetic_pre_field_bundle(b, wf, shape, encrypted=False)
+    assert old_digest == _SYNTHETIC_LEGACY_DIGESTS[shape]
+    raw = json.loads((b / "workflow.json").read_text())
+    assert "dialog_row" not in _anchor_payload(raw, shape)
+    loaded = Workflow.load(b, verify_integrity=True)
+    anchor = (
+        loaded.steps[0].anchor
+        if shape == "linear"
+        else loaded.program.states["s1"].step.anchor
+    )
+    assert anchor.dialog_row is None
+    for evidence in (True, False):
+        anchor.dialog_row = evidence
+        assert (
+            bv.compute_content_digest(loaded, loaded.manifest.file_hashes) != old_digest
+        )
+        _anchor_payload(raw, shape)["dialog_row"] = evidence
+        (b / "workflow.json").write_text(json.dumps(raw))
+        with pytest.raises(bv.BundleIntegrityError):
+            Workflow.load(b, verify_integrity=True)
+
+
+def test_native_select_contract_preserves_value_and_legacy_serialization():
+    from openadapt_flow.ir import NativeSelectContract
+
+    contract = NativeSelectContract(
+        value="species-17",
+        label="Dog",
+        options=[
+            {"value": "", "label": "Choose", "disabled": False},
+            {"value": "species-17", "label": "Dog", "disabled": False},
+        ],
+    )
+    anchor = click_step().anchor.model_copy(deep=True)
+    anchor.structural = StructuralLocator(selector="#species")
+    step = Step(
+        id="select",
+        intent="select Dog",
+        action=ActionKind.SELECT_OPTION,
+        text="Dog",
+        native_selection=contract,
+        anchor=anchor,
+    )
+    assert Step.model_validate_json(step.model_dump_json()) == step
+    assert step.native_selection.value != step.text
+    assert "native_selection" not in key_step().model_dump(mode="json")
+    old = step.model_dump(mode="json")
+    old.pop("native_selection")
+    with pytest.raises(ValueError, match="SELECT_OPTION requires"):
+        Step.model_validate(old)
+    for patch in (
+        {"action": "type"},
+        {"param": "species"},
+        {"secret": True},
+        {"selection_commit_key": "Enter", "selection_region": [1, 2, 3, 4]},
+        {"text": "d"},
+        {"anchor": None},
+    ):
+        with pytest.raises(ValueError):
+            Step.model_validate({**step.model_dump(mode="json"), **patch})
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"value": "other", "label": " DOG ", "disabled": False},
+        {"value": "species-17", "label": "Another", "disabled": False},
+        {"value": "species-17", "label": "Dog", "disabled": True},
+    ],
+)
+def test_native_select_contract_rejects_ambiguous_or_disabled_options(extra):
+    from openadapt_flow.ir import NativeSelectContract
+
+    with pytest.raises(ValueError, match="unambiguous"):
+        NativeSelectContract(
+            value="species-17",
+            label="Dog",
+            options=[
+                {"value": "species-17", "label": "Dog", "disabled": False},
+                extra,
+            ],
+        )

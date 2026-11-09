@@ -88,6 +88,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         ),
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
     )
     p.add_argument(
         "prompt",
@@ -109,13 +110,16 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         choices=["web", "windows", "macos", "linux", "rdp", "citrix"],
         default="web",
         help=(
-            "the surface the app runs on, as for record --backend. Only web is "
-            "supported so far; any other is refused before anything runs"
+            "the surface the app runs on, as for record --backend. A desktop, "
+            "RDP or Citrix app is named by --config instead"
         ),
     )
     p.add_argument(
         "--config",
-        help="deployment.yaml; its backend.kind must be web (others are refused)",
+        help=(
+            "deployment.yaml; a non-web backend section (windows, macos, linux, "
+            "rdp, citrix) is the app the agent drives, built by build_backend"
+        ),
     )
     p.add_argument(
         "--verify",
@@ -377,20 +381,44 @@ def cmd_compile_agent(
     from openadapt_flow.compile_agent.pipeline import UnsupportedTarget, check_target
 
     backend = args.backend
+    surface_config = None
     if args.config:
+        from openadapt_flow.backends.factory import _normalize_kind
+        from openadapt_flow.compile_agent.pipeline import BACKENDS
         from openadapt_flow.deployment import load_deployment
 
-        backend = load_deployment(args.config, allow_unresolved=True).backend.kind
+        section = load_deployment(args.config, allow_unresolved=True).backend
+        backend = (section.kind or "web").strip().lower()
+        if backend not in BACKENDS:
+            print(
+                f"compile-agent: --config names backend {backend!r}; use one of "
+                f"{', '.join(BACKENDS)}. Nothing ran.",
+                file=sys.stderr,
+            )
+            return 2
+        if _normalize_kind(backend) != "web":
+            # A native or remote app: the deployment's backend section names
+            # it, and build_backend opens it for run 1, the canaries and runs.
+            surface_config = args.config
     try:
-        check_target(args.url or "http://unset", backend)
+        if surface_config is None:
+            check_target(args.url or "http://unset", backend)
+        elif args.url:
+            raise UnsupportedTarget(
+                f"--url names a web app; the {backend!r} app comes from --config. "
+                "Nothing ran."
+            )
     except UnsupportedTarget as exc:
         print(f"compile-agent: {exc}", file=sys.stderr)
         return 2
-    missing = [f for f in ("url", "verify") if not getattr(args, f)]
+    missing = [f for f in ("verify",) if not getattr(args, f)]
+    if surface_config is None and not args.url:
+        missing.append("url")
     if missing or not args.expect or not args.on_screen:
         raise SystemExit(
-            "compile-agent needs --url, --verify, at least one --expect FIELD=VALUE "
-            "and at least one --on-screen TEXT"
+            "compile-agent needs --url (or --config for a desktop, RDP or Citrix "
+            "app), --verify, at least one --expect FIELD=VALUE and at least one "
+            "--on-screen TEXT"
         )
     tty = interactive()
     hold = (
@@ -412,6 +440,7 @@ def cmd_compile_agent(
         expect=_pairs(args.expect, "--expect"),
         on_screen=args.on_screen,
         agent=agent,
+        surface_config=surface_config,
         confirm_checks=_terminal_confirm(ask) if tty else None,
         drop_fields=args.drop_field,
         admitter=_admitter(args),

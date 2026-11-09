@@ -147,6 +147,37 @@ side rows. A plain number whose exponent is beyond ±999999 can't be
 compared exactly: `begin_write` refuses it and names the parameter. A
 literal marked `number: true` is part of the contract hash.
 
+## Values the app transforms on save
+
+Some forms change what was typed before they save it. Declare that per
+field with `stored`, from a closed set:
+
+- `upper` or `lower`: full Unicode case mapping (`Straße` is stored
+  `STRASSE`).
+- `capitalize_words`: each space-separated word gets a capital first
+  letter, the rest of the word keeps its case, and extra spaces are dropped
+  (`ada  mcQuill` is stored `Ada McQuill`).
+
+OpenEMR's New Patient form saves street and city in capitals (the "U" edit
+option) and capitalizes the names ("C"):
+
+```yaml
+fields:
+  fname: {param: fname, stored: capitalize_words}
+  street: {param: street, stored: upper}
+```
+
+The transform is applied to the parameter, after any `map`, and the check
+stays exact: it expects that stored form and no other casing, and a
+different value is still refuted. Declare only a transform the app
+applies on every save path: a wrong declaration refutes correct saves, and
+lets a value that differs only in that transform (case or spacing) confirm.
+OpenEMR applies its transforms when a field changes in the form, so a value
+set by a script or a replayed form post is stored as sent.
+`tests/test_stored_form_live_openemr.py` checks the declarations against
+the app's own layout. A field without `stored` compares what was typed.
+`stored` is part of the contract hash.
+
 ## Writes that land after the result
 
 With `frame.database.recheck_after_s`, a `CONFIRMED` result has
@@ -443,3 +474,64 @@ A snapshot doesn't go through the ledger, so move to
   call without a `write_key` counts as a new write. A cancellation the
   caller sees isn't affected (`delivered=False`). `write_key` closes the
   remaining gap for callers that have a stable task id.
+
+### Final verdicts from history
+
+A contract can set `frame.history` to read complete change feeds across its
+record surfaces and declared collateral scope. Each surface maps to a feed;
+additional feeds extend the collateral scope. The quiet window `quiet_s` is
+chosen from server behavior observed during sandbox setup, and
+`setup_evidence_sha256` pins that observation.
+
+FHIR feeds read every page of the type-level `_history?_since=t0`, including
+deletions and earlier versions. SQL feeds read CDC or audit events and an
+independent coverage query in one read-only transaction. The coverage query
+returns `retained_since`, `through`, and `event_count`; it must describe the
+source's complete retained history, independently of the event query. The
+SQL event query returns `event_id`, `record_id`, `operation`, `author`, and
+`occurred_at`. Both time columns and event times are timezone-bearing ISO
+strings. SQL checkpoints retain every returned event identity, including
+events dated before the attempt; the independent count and existing budget
+bound that inventory. A new identity is judged even when its timestamp is
+old. Earlier SQL checkpoints lack the per-feed retained-inventory marker and
+cannot authorize an initial or final verdict under this model; they remain
+unresolved rather than being upgraded or rebaselined.
+
+A SQL-history confirmation recorded by an older ledger cannot be promoted
+to a final result during a retry handoff unless the recheck recorded the
+current inventory model and the same frame contract. The current recheck
+writer records that tag only after validating and confirming the issued
+checkpoint. Missing or different tags hold the cached result for review;
+old entries are never retagged. This cannot revoke a result already delivered
+by an older runtime, and it does not reconstruct a missing old inventory.
+
+Event visibility and event attribution are separate. A newly discovered event
+dated before the attempt cannot count as its intended target write. A known
+historical event stays in the baseline, and a changed or missing historical
+event prevents confirmation. The same checks apply before provisional
+success and during recheck.
+
+FHIR `_since` selects resource-version creation time. The reader uses the
+history entry's server `response.lastModified`, falling back to the resource's
+server-managed `meta.lastUpdated`; a domain timestamp such as
+`Provenance.recorded` does not set this boundary. Every returned history row
+is retained. Setup must qualify version visibility, retention and the coverage
+frontier for the actual endpoint. A source that omits versions that become
+visible later with older version timestamps cannot establish complete
+coverage from a timestamp-filtered history response alone. No client-side
+quiet window proves that source property, and unsupported coverage must not
+be presented as a complete finality proof.
+
+A confirmed initial check has `provisional: true` and `final: false` while its
+recheck is owed. A consumer that requires a final verdict calls
+`recheck(contract, result, params=params, actor=actor, wait=True)`. The ledger
+keeps the recheck owed across restarts. The final verdict covers the earliest
+coverage frontier returned by all feeds. A write after that frontier remains
+outside the receipt's time window.
+
+Every version and tombstone is checked, so reverting a late edit does not
+remove its history. Only server-controlled provenance can attribute a late
+edit to another user. Missing coverage, a vanished or changed history entry,
+an unreadable page, or an unresolved actor prevents confirmation. The history
+checkpoint stores keyed event digests; record values and actor identities do
+not enter the receipt.

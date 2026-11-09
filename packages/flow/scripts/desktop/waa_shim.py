@@ -259,7 +259,9 @@ def uia() -> object:
 
 def main() -> None:
     """Run the shim server."""
-    parser = argparse.ArgumentParser(description="In-guest WAA HTTP shim")
+    parser = argparse.ArgumentParser(
+        description="In-guest WAA HTTP shim", allow_abbrev=False
+    )
     parser.add_argument(
         "--host",
         default="127.0.0.1",

@@ -67,13 +67,20 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator, Optional, Union
 
+from openadapt_flow.complete_read import CompleteReadProvider
+from openadapt_flow.runtime.effects.db_snapshot import (
+    DEFAULT_READ_ROW_BUDGET,
+    TableDiff,
+    diff,
+    take_snapshot,
+)
 from openadapt_flow.runtime.effects.db_snapshot import Snapshot as DatabaseSnapshot
-from openadapt_flow.runtime.effects.db_snapshot import TableDiff, diff, take_snapshot
 from openadapt_flow.runtime.effects.late_write import (
     EVIDENCE_KEY,
     LATER_WRITE_DISPUTED,
     LATER_WRITE_UNJUDGED,
     LateOutcome,
+    parse_time,
     seconds_until,
     state_problem,
 )
@@ -637,6 +644,19 @@ class WriteResult:
         return self.verified and bool(self.recheck_due_at)
 
     @property
+    def final(self) -> bool:
+        """Whether this verdict is resolved, with no owed final recheck.
+
+        An uncertain read does not settle the verdict. A final refutation
+        remains a negative verdict, not verification or permission to retry.
+        """
+
+        return (
+            self.outcome in (Outcome.CONFIRMED, Outcome.REFUTED)
+            and not self.provisional
+        )
+
+    @property
     def verdict(self) -> str:
         """The outcome under its old name (``VERIFIED``, ``REFUTED``,
         ``RECONCILIATION_REQUIRED``)."""
@@ -681,6 +701,7 @@ class WriteResult:
             "review": self.review,
             "recheck_due_at": self.recheck_due_at,
             "provisional": self.provisional,
+            "final": self.final,
             "write_receipt": self.write_receipt,
             "write_receipt_path": self.write_receipt_path,
         }
@@ -768,12 +789,25 @@ class RecheckResult:
     #: The frame's closed evidence since the post-save read (counts and
     #: names, no values).
     evidence: dict[str, Any] = field(default_factory=dict)
+    #: A held native read did not establish the due time, so this recheck
+    #: remains pending. No completed judgment may be recorded for it.
+    recheck_owed: bool = False
 
     @property
     def verified(self) -> bool:
         """True only when the earlier verdict still stands."""
 
         return self.outcome == "CONFIRMED"
+
+    @property
+    def final(self) -> bool:
+        """A completed proof through read_at, with no unread history gap."""
+
+        return (
+            self.outcome in ("CONFIRMED", "REFUTED")
+            and bool(self.read_at)
+            and self.frame in ("held", "refuted")
+        )
 
     @property
     def late(self) -> bool:
@@ -815,6 +849,7 @@ class PendingWrite:
     write_key_bound: bool = False
     used: bool = False
     _lease: Any = field(default=None, repr=False)
+    _read_provider: Optional[CompleteReadProvider] = field(default=None, repr=False)
 
     @property
     def baseline_path(self) -> Path:
@@ -848,6 +883,7 @@ def begin_write(
     authorization_ref: str = "",
     workdir: Union[str, Path, None] = None,
     declared_by: DeclaredBy = "agent",
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> PendingWrite:
     """Consult the ledger, then read the system of record before the write.
 
@@ -856,6 +892,10 @@ def begin_write(
         params: The values the write will save, and any that name the record.
         actor: Who writes. Its own changes are never excused as another
             user's.
+        read_provider: An in-process reader bound to this config and params.
+            Baseline and post-write checks use the same reader. Its ordinary
+            completeness checks still apply; pending audit completion cannot
+            authorize the baseline. Keep its session open through verification.
         ledger: The uncertain-write ledger: a :class:`Ledger`, a
             :class:`LedgerBackend`, or None to turn it off (only for a
             sandbox that resets between runs). Default: :class:`FileLedger`
@@ -920,7 +960,14 @@ def begin_write(
     if led is None:
         folder = _new_folder(Path(workdir or DEFAULT_WORKDIR), write_id)
         return _capture(
-            contract, params, actor, write_id, folder, authorization_ref, declared_by
+            contract,
+            params,
+            actor,
+            write_id,
+            folder,
+            authorization_ref,
+            declared_by,
+            read_provider=read_provider,
         )
     try:
         key = led.key_for(contract.identity, values, write_key)
@@ -935,7 +982,7 @@ def begin_write(
             key=key,
         )
     try:
-        _settle(led, key, contract, params, actor)
+        _settle(led, key, contract, params, actor, read_provider=read_provider)
         _hold_elsewhere(led, key, shape_key)
         if any(v is None for v in values.values()):
             _hold_legacy_null(led, contract, values, write_key)
@@ -946,7 +993,14 @@ def begin_write(
         )
         started = time.time()  # before the baseline: this attempt's window opens
         pending = _capture(
-            contract, params, actor, write_id, folder, authorization_ref, declared_by
+            contract,
+            params,
+            actor,
+            write_id,
+            folder,
+            authorization_ref,
+            declared_by,
+            read_provider=read_provider,
         )
         pending.started = started
         _write_private(
@@ -1000,6 +1054,8 @@ def _capture(
     folder: Path,
     authorization_ref: str,
     declared_by: DeclaredBy,
+    *,
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> PendingWrite:
     pending = PendingWrite(
         contract=contract,
@@ -1010,10 +1066,14 @@ def _capture(
         authorization_ref=authorization_ref or write_id,
         authorized=bool(authorization_ref),
         declared_by=declared_by,
+        _read_provider=read_provider,
     )
     try:
         payload = capture_baseline(
-            contract.config, pending.params, pending.baseline_path
+            contract.config,
+            pending.params,
+            pending.baseline_path,
+            read_provider=read_provider,
         )
     except Exception as exc:  # a store that can't be reached, a bad binding
         raise BaselineUnreadable(
@@ -1028,7 +1088,37 @@ def _capture(
     database = contract.config.frame.database if contract.config.frame else None
     if database is not None and FRAME_DB_DETAIL not in (state.get("detail") or {}):
         raise BaselineUnreadable(_frame_db_unread(state))
+    if contract.config.frame is not None and contract.config.frame.history is not None:
+        from openadapt_flow.runtime.effects.history import DETAIL, checkpoint_problem
+
+        if (
+            checkpoint_problem(
+                (state.get("detail") or {}).get(DETAIL), contract.config.frame.history
+            )
+            is not None
+        ):
+            raise BaselineUnreadable(
+                "complete change history could not be read before the write"
+            )
     return pending
+
+
+def _sql_history_coverage(contract: Contract) -> Optional[dict[str, str]]:
+    """The model and actual frame bound by a current SQL-history proof."""
+    spec = contract.config.frame
+    if spec is None:
+        return None
+    history = spec.history
+    if history is None:
+        return None
+    kinds = {feed.read.get("kind") for feed in history.feeds.values()}
+    if not kinds <= {"sql", "fhir"}:
+        raise ValueError("history feed kind is unresolved")
+    if "sql" not in kinds:
+        return None
+    from openadapt_flow.runtime.effects.history import SQL_INVENTORY
+
+    return {"model": SQL_INVENTORY, "frame_sha256": spec.digest()}
 
 
 def _settle(
@@ -1037,6 +1127,8 @@ def _settle(
     contract: Contract,
     params: Mapping[str, Any],
     actor: Actor,
+    *,
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> None:
     """With the lease held: resolve the key's earlier attempt, or raise."""
 
@@ -1044,7 +1136,7 @@ def _settle(
     if attempt is not None and attempt.state in ("open", "uncertain"):
         # Open with a free lease: its owner died between the send and the
         # read-back. Read back before anything is sent.
-        _reconcile(led, key, attempt, contract, params)
+        _reconcile(led, key, attempt, contract, params, read_provider=read_provider)
         attempt = led.latest(key)
     state = led.state(attempt)
     if state == "free":
@@ -1054,9 +1146,19 @@ def _settle(
         result = dict(attempt.resolved.get("result") or {})
         result["not_sent_again"] = True
         if attempt.rechecked is not None:
+            coverage = _sql_history_coverage(contract)
+            if (
+                coverage is not None
+                and attempt.rechecked.get("history_coverage") != coverage
+            ):
+                raise WriteHeld(
+                    "the earlier SQL history proof lacks the current retained-event inventory; a person must reconcile it",
+                    key=key,
+                )
             # A recheck confirmed it since: no longer provisional, and no
             # recheck is due.
             result["provisional"] = False
+            result["final"] = True
             result["recheck_due_at"] = None
             result["rechecked_at"] = attempt.rechecked.get("at")
         if not attempt.delivered:
@@ -1156,6 +1258,8 @@ def _reconcile(
     attempt: Attempt,
     contract: Contract,
     params: Optional[Mapping[str, Any]] = None,
+    *,
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> None:
     """Resolve ``attempt`` by reading back. The caller holds the lease.
 
@@ -1192,6 +1296,7 @@ def _reconcile(
         authorized=bool(attempt.begun.get("authorized")),
         declared_by=attempt.begun.get("declared_by") or "agent",
         write_key=key,
+        _read_provider=read_provider,
     )
     result = _judge(
         pending,
@@ -1608,16 +1713,28 @@ def _judge(
             provenance=None if source is None else source.provenance,
             documents=None if source is None else source.documents,
             post_state_out=post_state,
+            read_provider=pending._read_provider,
         )
         path: Optional[str] = str(write_result(doc, pending.workdir))
     except Exception as exc:  # noqa: BLE001 - unreadable store, timeout, used baseline
+        reasons = [
+            "the system of record could not be read back "
+            f"({type(exc).__name__}); the write may still land"
+        ]
+        if isinstance(exc, VerifyRunError):
+            code = (
+                exc.validation_reason if type(exc) is VerifyRunError else "unclassified"
+            )
+            label = (
+                "unclassified"
+                if code == "unclassified"
+                else f"receipt_validation.{code}"
+            )
+            reasons.append(f"verification diagnostic: {label}")
         return WriteResult(
             outcome=Outcome.UNCERTAIN,
             scope=_scope(pending.contract, {}),
-            reasons=[
-                "the system of record could not be read back "
-                f"({type(exc).__name__}); the write may still land"
-            ],
+            reasons=reasons,
             **base,
         )
     receipt = dict(doc["receipt"])
@@ -1821,7 +1938,16 @@ def _reasons(evidence: Mapping[str, Any], receipt_outcome: str) -> list[str]:
             f"{frame.get('unattributed_count', 0)} of them no actor explains"
         )
     elif frame.get("status") == "not_checked" and not problem:
-        out.append("what else changed could not be read, so the frame is not checked")
+        database = frame.get("database") or {}
+        if database.get("read_status") == "too_large":
+            out.append(
+                "frame too large: row read budget of "
+                f"{database.get('read_row_budget')} exceeded; the frame is not checked"
+            )
+        else:
+            out.append(
+                "what else changed could not be read, so the frame is not checked"
+            )
     source = evidence.get("source") or {}
     if isinstance(source, Mapping) and source.get("status") == "refuted":
         fields = ", ".join(source.get("mismatched_fields") or [])
@@ -2152,6 +2278,7 @@ def reconcile(
     key: str,
     *,
     ledger: Any = _NO_LEDGER,
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> Optional[str]:
     """Resolve the key's open or uncertain attempt by reading back.
 
@@ -2171,7 +2298,7 @@ def reconcile(
         if attempt is None:
             return None
         if attempt.state in ("open", "uncertain"):
-            _reconcile(led, key, attempt, contract)
+            _reconcile(led, key, attempt, contract, read_provider=read_provider)
             attempt = led.latest(key)
         return attempt.state if attempt is not None else None
     finally:
@@ -2190,6 +2317,7 @@ def recheck(
     excused_by: Sequence[WriteResult | RecheckState] = (),
     wait: bool = False,
     ledger: Any = _NO_LEDGER,
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> RecheckResult:
     """Read the whole database again and judge every change since a verified
     write's post-save read.
@@ -2236,17 +2364,28 @@ def recheck(
     """
 
     late, trusted = _judge_recheck(
-        contract, write, params=params, actor=actor, excused_by=excused_by, wait=wait
+        contract,
+        write,
+        params=params,
+        actor=actor,
+        excused_by=excused_by,
+        wait=wait,
+        read_provider=read_provider,
     )
+    if late.recheck_owed:
+        return late
     if late.outcome != "CONFIRMED":
         late = _hold_after_recheck(ledger, write, late, trusted=trusted)
     else:
-        _mark_rechecked(ledger, write, late)
+        _mark_rechecked(ledger, write, late, contract)
     return late
 
 
 def _mark_rechecked(
-    ledger: Any, write: WriteResult | RecheckState, late: RecheckResult
+    ledger: Any,
+    write: WriteResult | RecheckState,
+    late: RecheckResult,
+    contract: Contract,
 ) -> None:
     """Record on the write's ledger attempt that a recheck confirmed it, so
     ``openadapt verify ledger list`` no longer shows a recheck owed and a
@@ -2276,12 +2415,16 @@ def _mark_rechecked(
             return
         if (attempt.resolved or {}).get("outcome") != "CONFIRMED":
             return
+        # Only reached after this contract's authenticated checkpoint and
+        # actual recheck confirmed. Never upgrade an old ledger entry in place.
+        coverage = _sql_history_coverage(contract)
         led.rechecked(
             key,
             write_id,
             outcome=late.outcome,
             read_at=late.read_at,
             receipt_sha256=late.receipt_sha256 or None,
+            **({"history_coverage": coverage} if coverage is not None else {}),
         )
     except Exception:  # noqa: BLE001 - the list keeps showing it owed
         return
@@ -2431,6 +2574,7 @@ def _judge_recheck(
     actor: Actor,
     excused_by: Sequence[WriteResult | RecheckState],
     wait: bool,
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> tuple[RecheckResult, bool]:
     """The recheck's result, and whether the state passed validation."""
 
@@ -2443,7 +2587,7 @@ def _judge_recheck(
     ):
         raise VerifierError(
             "this write scheduled no recheck: it was not verified, or the "
-            "contract doesn't set frame.database.recheck_after_s"
+            "contract schedules no history or database recheck"
         )
     run_record = actor.run_record()
     cfg = contract.config
@@ -2464,7 +2608,13 @@ def _judge_recheck(
         else "the write's result was downgraded from CONFIRMED to UNCERTAIN"
         if _recheck_withdrawn(state.payload)
         else None
-    ) or recheck_problem(cfg, state.payload, params=params, run_record=run_record)
+    ) or recheck_problem(
+        cfg,
+        state.payload,
+        params=params,
+        run_record=run_record,
+        read_provider=read_provider,
+    )
     if problem is not None:
         return (
             _replace(base, reasons=[_recheck_refusal(problem)]),
@@ -2496,7 +2646,12 @@ def _judge_recheck(
         excused.append((later.payload, later.params))
     try:
         verdict, read_at = recheck_run(
-            cfg, state.payload, params=params, run_record=run_record, excused=excused
+            cfg,
+            state.payload,
+            params=params,
+            run_record=run_record,
+            excused=excused,
+            read_provider=read_provider,
         )
     except VerifyRunError as exc:
         raise VerifierError(str(exc)) from exc
@@ -2529,6 +2684,19 @@ def _judge_recheck(
             "a change since the verdict may be a later write's whose own "
             "frame was not judged; reconcile both"
         )
+    keep_owed = False
+    if status == "held":
+        try:
+            read_was_due = parse_time(read_at) >= parse_time(state.due_at)
+        except ValueError:
+            read_was_due = False
+        if not read_was_due:
+            status = "not_checked"
+            keep_owed = True
+            reasons.append(
+                "the recheck's read time does not establish that it was due; "
+                "the write remains unrechecked"
+            )
     if status == "refuted":
         kinds = ", ".join(sorted({c.change for c in verdict.collateral}))
         reasons.append(
@@ -2546,6 +2714,7 @@ def _judge_recheck(
             read_at=read_at,
             excused=len(excused),
             evidence=evidence,
+            recheck_owed=keep_owed,
         ),
         True,
     )
@@ -2577,6 +2746,7 @@ def capture_database(
     *,
     allow_tables: Sequence[str] = (),
     max_rows: int = 2000,
+    read_row_budget: int = DEFAULT_READ_ROW_BUDGET,
     key: Optional[bytes] = None,
     profile: Optional[str] = None,
     before: Optional[DatabaseSnapshot] = None,
@@ -2590,7 +2760,9 @@ def capture_database(
     (to read through ``podman exec``, say). It talks to the database over
     that connection only; no application code is imported. The snapshot
     holds keyed MACs, never values: ``key`` keys them (default: one key per
-    process). ``allow_tables`` are kept append-only.
+    process). ``allow_tables`` are kept append-only. ``read_row_budget``
+    caps data rows across tables and auxiliary queries; exceeding it refuses
+    the read without returning a partial snapshot.
 
     ``profile`` (``openemr``) applies an app profile's bookkeeping rules, the
     same ones the frame uses (``openadapt_flow.app_profiles``); its own-row
@@ -2619,6 +2791,7 @@ def capture_database(
             key=key or _PROCESS_KEY,
             modes=dict.fromkeys(allow_tables, "append_only"),
             max_rows=max_rows,
+            read_row_budget=read_row_budget,
             before=before,
             extra_queries=extra,
             **_profile_args(profile),

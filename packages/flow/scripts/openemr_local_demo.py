@@ -31,15 +31,6 @@ from typing import Any, TypedDict
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-from benchmark.openemr_local.fixture import (  # noqa: E402
-    FixtureError,
-    OpenEMRFixture,
-    audit_table_deltas,
-)
-from openadapt_flow.backend import StructuralResolutionRefused  # noqa: E402
-from openadapt_flow.backends.playwright_backend import (  # noqa: E402
-    PlaywrightBackend as _BasePlaywrightBackend,
-)
 from benchmark.harness import agent_baseline  # noqa: E402
 from benchmark.harness.openemr_local import (  # noqa: E402
     CONDITIONS,
@@ -54,6 +45,15 @@ from benchmark.harness.openemr_local import (  # noqa: E402
     patient_effects,
     patient_records_sha256,
     publication_gate,
+)
+from benchmark.openemr_local.fixture import (  # noqa: E402
+    FixtureError,
+    OpenEMRFixture,
+    audit_table_deltas,
+)
+from openadapt_flow.backend import StructuralResolutionRefused  # noqa: E402
+from openadapt_flow.backends.playwright_backend import (  # noqa: E402
+    PlaywrightBackend as _BasePlaywrightBackend,
 )
 from openadapt_flow.ir import (  # noqa: E402
     Postcondition,
@@ -325,8 +325,8 @@ class OpenEMRPlaywrightBackend(_BasePlaywrightBackend):
         return StructuralLocator(
             selector=target.get("selector"),
             frame_path=located.frame_path,
-            role=target.get("role"),
-            name=target.get("name"),
+            role=target.get("role") or located.role,
+            name=target.get("name") or located.name,
         )
 
     def _confirm_point(self) -> tuple[int, int] | None:
@@ -1943,29 +1943,29 @@ def _plan(n: int, *, model_free: bool = False) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument(
         "--state", type=Path, default=REPO / "benchmark/openemr_local/state"
     )
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("preflight")
-    sub.add_parser("prepare")
-    sub.add_parser("up")
-    sub.add_parser("bootstrap")
-    sub.add_parser("snapshot")
-    sub.add_parser("reset")
-    plan_parser = sub.add_parser("plan")
+    sub.add_parser("preflight", allow_abbrev=False)
+    sub.add_parser("prepare", allow_abbrev=False)
+    sub.add_parser("up", allow_abbrev=False)
+    sub.add_parser("bootstrap", allow_abbrev=False)
+    sub.add_parser("snapshot", allow_abbrev=False)
+    sub.add_parser("reset", allow_abbrev=False)
+    plan_parser = sub.add_parser("plan", allow_abbrev=False)
     plan_parser.add_argument(
         "--profile", choices=("initial", "publication"), default="initial"
     )
     plan_parser.add_argument("--model-free", action="store_true")
-    record_parser = sub.add_parser("record")
+    record_parser = sub.add_parser("record", allow_abbrev=False)
     record_parser.add_argument("--out", type=Path, required=True)
     record_parser.add_argument("--headed", action="store_true")
-    compile_parser = sub.add_parser("compile")
+    compile_parser = sub.add_parser("compile", allow_abbrev=False)
     compile_parser.add_argument("--recording", type=Path, required=True)
     compile_parser.add_argument("--bundle", type=Path, required=True)
-    run_parser = sub.add_parser("run")
+    run_parser = sub.add_parser("run", allow_abbrev=False)
     run_parser.add_argument("--bundle", type=Path, required=True)
     run_parser.add_argument("--out", type=Path, required=True)
     run_parser.add_argument(

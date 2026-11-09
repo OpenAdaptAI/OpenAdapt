@@ -1,5 +1,8 @@
 # Write receipts
 
+See [Receipt formats (draft)](RECEIPT_FORMATS.md) for the wire fields,
+verification steps and distinction from Execute issuer Seals.
+
 A write receipt is a signed, portable statement of one verifier verdict:
 what OpenAdapt read, when, how strongly, what it concluded, and what it did
 **not** check. A vendor can hand a receipt to a customer's compliance team or

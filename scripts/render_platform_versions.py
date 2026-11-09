@@ -200,7 +200,7 @@ def render_markdown(manifest: dict) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument(
         "--manifest", type=Path, default=ROOT / "platform-manifest.json"
     )

@@ -13,6 +13,7 @@ from PIL import Image
 
 from openadapt_flow.emit import emit_mcp_server, emit_skill
 from openadapt_flow.ir import Anchor, Step, Workflow
+from tests.browser_readiness import ReadyBrowserMixin
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -421,7 +422,7 @@ def _load_emitted_tool(
         def goto(self, url: str) -> None:
             pass
 
-    class _Browser:
+    class _Browser(ReadyBrowserMixin):
         def new_page(self, **kwargs: object) -> _Page:
             return _Page()
 

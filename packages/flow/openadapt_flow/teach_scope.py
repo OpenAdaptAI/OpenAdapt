@@ -344,7 +344,7 @@ class TeachScope:
         )
 
     def request_refusal(
-        self, method: str, url: str, body: Optional[bytes]
+        self, method: str, url: str, body: Optional[bytes], *, write: bool = False
     ) -> Optional[str]:
         """Why a browser request is outside the scope, or ``None`` if it may go.
 
@@ -360,7 +360,7 @@ class TeachScope:
             return "egress_origin_not_declared"
         if method == "DELETE" and "delete_request" in self.forbidden_actions:
             return "forbidden_action"
-        if method not in WRITE_METHODS or self.write_adapter is None:
+        if (method not in WRITE_METHODS and not write) or self.write_adapter is None:
             return None
         try:
             claim = self.write_adapter.claim(method, url, body)
@@ -379,6 +379,14 @@ class TeachScope:
         named = {**dict(claim.fields), **dict(claim.record)}
         for name, value in self.record.items():
             if name not in named or not _same(named[name], value):
+                return f"{prefix}_wrong_record"
+        for name, value in claim.record.items():
+            # The adapter's record key must be one the declaration names, as
+            # identity or as a field, with that value: a declaration that put
+            # it under fields still pins it.
+            if name in self.record:
+                continue
+            if name not in self.fields or not _same(value, self.fields[name]):
                 return f"{prefix}_wrong_record"
         for name, value in claim.fields.items():
             if name in self.record:
@@ -509,29 +517,277 @@ _LINK_PROBE = """([x, y]) => {
 }"""
 
 
-_CONTROL_LABEL = """([x, y]) => {
-  const el = document.elementFromPoint(x, y);
-  if (!el) return null;
-  const c = el.closest('button, a, input, select, [role], label, summary') || el;
-  const text = c.getAttribute('aria-label') || c.getAttribute('title') ||
-    (c.tagName === 'INPUT' ? (c.value || c.getAttribute('placeholder') || '') : '') ||
-    c.innerText || c.textContent || '';
-  return text.trim().slice(0, 300);
+#: Accessibility roles that are a control a person activates.
+_CONTROL_ROLES = frozenset(
+    {
+        "button",
+        "link",
+        "menuitem",
+        "menuitemcheckbox",
+        "menuitemradio",
+        "checkbox",
+        "radio",
+        "switch",
+        "tab",
+        "option",
+        "combobox",
+        "listbox",
+        "textbox",
+        "searchbox",
+        "spinbutton",
+        "slider",
+        "treeitem",
+        "PopUpButton",
+        "ToggleButton",
+    }
+)
+#: Roles whose focus hides what is focused inside them.
+_OPAQUE_ROLES = frozenset({"Iframe", "IframePresentational", "PluginObject"})
+
+
+def _ax_value(node: Mapping[str, Any], key: str) -> str:
+    return str(((node.get(key) or {}).get("value")) or "")
+
+
+def _control_name(nodes: Sequence[Mapping[str, Any]], start: Mapping[str, Any]) -> str:
+    """The name of ``start`` or the nearest control above it, from an AX tree."""
+
+    by_id = {str(n.get("nodeId")): n for n in nodes}
+    node: Optional[Mapping[str, Any]] = start
+    seen = 0
+    while node is not None and seen < 64:
+        if _ax_value(node, "role") in _CONTROL_ROLES:
+            return _ax_value(node, "name").strip()[:300]
+        node = by_id.get(str(node.get("parentId")))
+        seen += 1
+    return _ax_value(start, "name").strip()[:300]
+
+
+def _cdp(page: Any) -> Any:
+    """A Chrome DevTools session on ``page``, or ``None`` (not Chromium)."""
+
+    try:
+        return page.context.new_cdp_session(page)
+    except Exception:  # noqa: BLE001 - no CDP: the label is unknown
+        return None
+
+
+#: Text a click at a point could be said to hit: the element and three
+#: ancestors (a ``<div onclick>`` has no accessible role). Run in an
+#: isolated world, so the page's own prototypes don't apply.
+_TEXTS_JS = """function () {
+  const out = [];
+  let e = this.nodeType === 1 ? this : this.parentElement;
+  for (let i = 0; i < 4 && e; i++, e = e.parentElement) {
+    out.push(String(e.innerText || e.textContent || '').trim().slice(0, 300));
+  }
+  return out;
+}"""
+#: The control a ``<label>`` (the element or an ancestor) is for.
+_LABEL_CONTROL_JS = """function () {
+  let e = this.nodeType === 1 ? this : this.parentElement;
+  for (let i = 0; i < 4 && e; i++, e = e.parentElement) {
+    if (e.tagName === 'LABEL' && e.control) return e.control;
+  }
+  return null;
+}"""
+#: The button Enter in this field submits the form with (HTML implicit
+#: submission), by the browser's own rule (``:default``).
+_DEFAULT_BUTTON_JS = """function () {
+  if (this.tagName !== 'INPUT') return null;
+  if (['button', 'submit', 'reset', 'image'].includes(this.type)) return null;
+  const f = this.form;
+  if (!f) return null;
+  return Array.from(f.elements).find((e) => e.matches(':default')) || null;
 }"""
 
 
-def control_label_at(page: Any, x: int, y: int) -> Optional[str]:
-    """The accessible label of the control under ``(x, y)``.
+def _isolated(
+    session: Any, frame_id: Any, backend: Any, js: str, *, by_value: bool
+) -> Any:
+    """Call ``js`` on a node in an isolated world of its frame."""
 
-    ``""`` when there is no control or it has no label; ``None`` when the
-    probe failed (the page broke or overrode it), which the guard refuses.
+    params: dict[str, Any] = {"worldName": "openadapt-teach-guard"}
+    if frame_id:
+        params["frameId"] = frame_id
+    else:
+        params["frameId"] = session.send("Page.getFrameTree", {})["frameTree"]["frame"][
+            "id"
+        ]
+    context = session.send("Page.createIsolatedWorld", params)["executionContextId"]
+    obj = session.send(
+        "DOM.resolveNode", {"backendNodeId": backend, "executionContextId": context}
+    )["object"]["objectId"]
+    result = session.send(
+        "Runtime.callFunctionOn",
+        {"functionDeclaration": js, "objectId": obj, "returnByValue": by_value},
+    )
+    if result.get("exceptionDetails"):
+        raise RuntimeError("the isolated probe failed")
+    return result["result"]
+
+
+def _ax_name_of(session: Any, backend: Any) -> Optional[str]:
+    tree = session.send(
+        "Accessibility.getPartialAXTree",
+        {"backendNodeId": backend, "fetchRelatives": True},
+    )
+    nodes = tree.get("nodes") or []
+    node = next((n for n in nodes if n.get("backendDOMNodeId") == backend), None)
+    if node is None or _ax_value(node, "role") in _OPAQUE_ROLES:
+        return None
+    return _control_name(nodes, node)
+
+
+def _object_name(session: Any, result: Mapping[str, Any]) -> Optional[str]:
+    """The accessible name of the element a probe returned, ``""`` for none."""
+
+    if result.get("subtype") == "null" or not result.get("objectId"):
+        return ""
+    node = session.send("DOM.describeNode", {"objectId": result["objectId"]})["node"]
+    return _ax_name_of(session, node["backendNodeId"])
+
+
+def _node_labels(session: Any, backend: Any, frame_id: Any) -> Optional[list[str]]:
+    """The same isolated names for a pointer target or a focused element."""
+
+    name = _ax_name_of(session, backend)
+    if name is None:
+        return None
+    texts = _isolated(session, frame_id, backend, _TEXTS_JS, by_value=True)
+    control = _isolated(session, frame_id, backend, _LABEL_CONTROL_JS, by_value=False)
+    labelled = _object_name(session, control)
+    if labelled is None:
+        return None
+    return [name, labelled, *[str(t) for t in texts.get("value") or []]]
+
+
+def control_labels_at(page: Any, x: int, y: int) -> Optional[list[str]]:
+    """Every name the control under ``(x, y)`` goes by, or ``None``.
+
+    Read over DevTools, not by a script in the page: the accessible name of
+    the control (from Chromium's accessibility tree); the text of the hit
+    element and three ancestors (a control with no role, such as a
+    ``<div onclick>``), and, for a ``<label>``, the name of the control it
+    is for, both from an isolated world the page's scripts can't reach.
+    ``None`` when any of it can't be read, which the guard refuses.
     """
 
+    session = _cdp(page)
+    if session is None:
+        return None
     try:
-        label = page.evaluate(_CONTROL_LABEL, [int(x), int(y)])
+        session.send("DOM.getDocument", {"depth": 0})
+        # The point is in the viewport; DevTools locates in the document.
+        view = session.send("Page.getLayoutMetrics", {})["cssVisualViewport"]
+        found = session.send(
+            "DOM.getNodeForLocation",
+            {
+                "x": int(x + view.get("pageX", 0)),
+                "y": int(y + view.get("pageY", 0)),
+                "ignorePointerEventsNone": True,
+            },
+        )
+        return _node_labels(session, found["backendNodeId"], found.get("frameId"))
     except Exception:  # noqa: BLE001 - the probe failed: the label is unknown
         return None
-    return str(label) if label is not None else ""
+    finally:
+        try:
+            session.detach()
+        except Exception:  # noqa: BLE001 - already gone
+            pass
+
+
+def control_label_at(page: Any, x: int, y: int) -> Optional[str]:
+    """The accessible name of the control under ``(x, y)``, or ``None``."""
+
+    labels = control_labels_at(page, x, y)
+    return None if labels is None else labels[0]
+
+
+def focused_control_label(page: Any) -> Optional[str]:
+    """The accessible name of the control that has focus now.
+
+    From Chromium's accessibility tree over DevTools, like
+    :func:`control_label_at`, in every frame of the page. ``""`` when
+    nothing but a document has focus; ``None`` when it can't be read, or
+    focus is in a frame the tree can't see into.
+    """
+
+    labels = key_target_labels(page, enter=False)
+    return None if labels is None else labels[0]
+
+
+_ENTER_KEYS = frozenset({"enter", "return", "numpadenter", "kp_enter"})
+
+
+def key_target_labels(page: Any, *, enter: bool) -> Optional[list[str]]:
+    """The names of every control a key could activate now, or ``None``.
+
+    The control with focus, found across the page's frames in Chromium's
+    accessibility tree; and, for ``enter``, the default button of the form
+    the focused field is in (HTML implicit submission sends the form with
+    it). ``None`` when any of it can't be read, so the guard refuses.
+    """
+
+    session = _cdp(page)
+    if session is None:
+        return None
+    try:
+        tree = session.send("Page.getFrameTree", {})["frameTree"]
+        frames: list[str] = []
+        queue = [tree]
+        while queue:
+            item = queue.pop(0)
+            frames.append(str(item["frame"]["id"]))
+            queue.extend(item.get("childFrames") or [])
+        found: Optional[tuple[list[Any], Mapping[str, Any], str]] = None
+        for frame_id in frames:
+            nodes = session.send("Accessibility.getFullAXTree", {"frameId": frame_id})[
+                "nodes"
+            ]
+            for node in nodes:
+                focused = any(
+                    prop.get("name") == "focused"
+                    and (prop.get("value") or {}).get("value") is True
+                    for prop in node.get("properties") or []
+                )
+                if focused and _ax_value(node, "role") != "RootWebArea":
+                    # The last frame's wins: the deepest.
+                    found = (nodes, node, frame_id)
+        if found is None:
+            return [""]
+        nodes, node, frame_id = found
+        if _ax_value(node, "role") in _OPAQUE_ROLES:
+            return None  # focus is in a frame this session can't read
+        backend = node.get("backendDOMNodeId")
+        if backend is None:
+            return None
+        labels = _node_labels(session, backend, frame_id)
+        if labels is None:
+            return None
+        if enter:
+            default = _isolated(
+                session, frame_id, backend, _DEFAULT_BUTTON_JS, by_value=False
+            )
+            if default.get("subtype") != "null" and default.get("objectId"):
+                default_node = session.send(
+                    "DOM.describeNode", {"objectId": default["objectId"]}
+                )["node"]
+                default_labels = _node_labels(
+                    session, default_node["backendNodeId"], frame_id
+                )
+                if default_labels is None:
+                    return None
+                labels.extend(default_labels)
+        return labels
+    except Exception:  # noqa: BLE001 - the probe failed: unknown, refused
+        return None
+    finally:
+        try:
+            session.detach()
+        except Exception:  # noqa: BLE001 - already gone
+            pass
 
 
 def link_target_at(page: Any, x: int, y: int) -> Optional[dict[str, str]]:
@@ -635,6 +891,50 @@ class TeachGuard:
 
     # -- actions ------------------------------------------------------------------
 
+    def check_key(self, op: Any, page: Any = None) -> None:
+        """Refuse a key (or typing) that arrives at a forbidden control.
+
+        Called just before each key op is performed, so it reads the control
+        that has focus when the key arrives (reached by Tab, a click, or the
+        page itself), from the browser's accessibility tree. Any key counts:
+        Enter, Space and others can activate a control. Raises
+        :class:`ScopeViolation`.
+        """
+
+        if not self.scope.forbidden_controls or op.kind not in (
+            "press",
+            "hotkey",
+            "type",
+        ):
+            return
+        if op.kind == "hotkey" and op.modifiers:
+            # A modifier chord can activate a control by its access key,
+            # wherever focus is.
+            self._raise(
+                "control_forbidden",
+                "key combinations are refused while the authorization forbids "
+                "some controls",
+            )
+        key = (op.key or "").lower()
+        enter = key in _ENTER_KEYS or (
+            op.kind == "type" and ("\n" in (op.text or "") or "\r" in (op.text or ""))
+        )
+        labels = key_target_labels(page, enter=enter) if page is not None else None
+        if labels is None:
+            self._raise(
+                "control_forbidden",
+                "the control the key would reach could not be read, and the "
+                "authorization forbids some controls",
+            )
+        if any(
+            label and normalize_structured(label) in self.scope.forbidden_controls
+            for label in labels or []
+        ):
+            self._raise(
+                "control_forbidden",
+                "the key would reach a control the authorization forbids",
+            )
+
     def check_ops(
         self,
         ops: Sequence[Op],
@@ -654,12 +954,22 @@ class TeachGuard:
                 )
             if (
                 op.kind in ("click", "double_click", "right_click")
+                and page is None
+                and self.scope.forbidden_controls
+            ):
+                self._raise(
+                    "control_forbidden",
+                    "there is no page to read the clicked control from, and the "
+                    "authorization forbids some controls",
+                )
+            if (
+                op.kind in ("click", "double_click", "right_click")
                 and page is not None
                 and self.scope.forbidden_controls
             ):
                 at = (op.x, op.y) if op.x is not None and op.y is not None else pointer
-                label = control_label_at(page, at[0], at[1]) if at else ""
-                if label is None:
+                names = control_labels_at(page, at[0], at[1]) if at else None
+                if names is None:
                     # Fail closed: a page that breaks the probe could hide a
                     # forbidden control behind it.
                     self._raise(
@@ -667,8 +977,9 @@ class TeachGuard:
                         "the clicked control's label could not be read, and the "
                         "authorization forbids some controls",
                     )
-                if label and (
-                    normalize_structured(label) in self.scope.forbidden_controls
+                if any(
+                    n and normalize_structured(n) in self.scope.forbidden_controls
+                    for n in names or []
                 ):
                     self._raise(
                         "control_forbidden",

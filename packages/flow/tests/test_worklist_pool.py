@@ -107,10 +107,15 @@ def test_forced_halt_on_one_worker_stops_the_others(tmp_path: Path) -> None:
 
     halted_idx: list[int] = []
     w1_items: list[int] = []
+    stopped = threading.Event()
+    peers_ready = threading.Event()
+    peer_claims: dict[str, int] = {}
+    peer_lock = threading.Lock()
 
     def halting(idx: int) -> ItemRun:
         w1_items.append(idx)
         if len(w1_items) == 2:  # w1's second item halts, whatever its index
+            assert peers_ready.wait(10), "peers never obtained their in-flight claims"
             halted_idx.append(idx)
             return ItemRun(
                 state=HALTED,
@@ -122,9 +127,31 @@ def test_forced_halt_on_one_worker_stops_the_others(tmp_path: Path) -> None:
         return ItemRun(state=VERIFIED)
 
     w1 = FakeWorker("w1", halting, delay_s=0.01)
-    peers = [FakeWorker(f"w{i}", delay_s=0.03) for i in (2, 3, 4)]
+
+    def finish_after_stop(idx: int, peer: str) -> ItemRun:
+        # A delay cannot guarantee which worker obtains the next SQLite
+        # claim. Establish real in-flight peers, then let STOP release them.
+        with peer_lock:
+            assert peer not in peer_claims
+            assert not stopped.is_set()
+            peer_claims[peer] = idx
+            if len(peer_claims) == 3:
+                peers_ready.set()
+        assert stopped.wait(10), "the halting worker never committed STOP"
+        return ItemRun(VERIFIED)
+
+    peers = [
+        FakeWorker(
+            f"w{i}", lambda idx, i=i: finish_after_stop(idx, f"w{i}"), delay_s=0.03
+        )
+        for i in (2, 3, 4)
+    ]
     report = run_worklist_pool(
-        _rows(100), [w1, *peers], run_dir=tmp_path, policy=_policy(4)
+        _rows(100),
+        [w1, *peers],
+        run_dir=tmp_path,
+        policy=_policy(4),
+        on_event=lambda msg: stopped.set() if msg.startswith("STOP (") else None,
     )
 
     assert not report.success
@@ -133,6 +160,11 @@ def test_forced_halt_on_one_worker_stops_the_others(tmp_path: Path) -> None:
     assert "identity check failed" in report.stop["reason"]
     states = {item["idx"]: item["state"] for item in report.items}
     assert states[halted_idx[0]] == HALTED
+    assert set(peer_claims) == {"w2", "w3", "w4"}
+    for item in report.items:
+        if item["idx"] in peer_claims.values():
+            assert item["state"] == VERIFIED
+            assert item["claimed_at"] < report.stop["at"] <= item["finished_at"]
     # Far fewer than 100 items ran: claims stopped everywhere.
     ran = [idx for w in (w1, *peers) for idx in w.ran]
     assert len(ran) < 40
@@ -257,20 +289,34 @@ def test_only_the_claiming_worker_records_a_result(tmp_path: Path) -> None:
 
 
 class PipelinedWorker(FakeWorker):
-    """Read-back runs on a side thread and resolves after ``readback_s``."""
+    """Read-back runs on a side thread, optionally held until a later write."""
 
     def __init__(
-        self, name: str, fail_idx: Optional[int], readback_s: float, **kw: Any
+        self,
+        name: str,
+        fail_idx: Optional[int],
+        readback_s: float,
+        *,
+        hold_failure_until_next_write: bool = False,
+        **kw: Any,
     ) -> None:
         super().__init__(name, **kw)
         self.fail_idx = fail_idx
         self.readback_s = readback_s
+        self.hold_failure_until_next_write = hold_failure_until_next_write
+        self._next_write = threading.Event()
         self.max_outstanding = 0
         self._outstanding = 0
         self._lock = threading.Lock()
 
     def run_item(self, idx: int, row: dict[str, Any], item_dir: Path) -> ItemRun:
         self.ran.append(idx)
+        if (
+            self.hold_failure_until_next_write
+            and self.fail_idx is not None
+            and idx == self.fail_idx + 1
+        ):
+            self._next_write.set()
         time.sleep(self.delay_s)
         fut: Future = Future()
         with self._lock:
@@ -278,9 +324,16 @@ class PipelinedWorker(FakeWorker):
             self.max_outstanding = max(self.max_outstanding, self._outstanding)
 
         def readback() -> None:
-            time.sleep(self.readback_s)
+            ready = True
+            if idx == self.fail_idx and self.hold_failure_until_next_write:
+                ready = self._next_write.wait(10)
+            else:
+                time.sleep(self.readback_s)
             with self._lock:
                 self._outstanding -= 1
+            if not ready:
+                fut.set_exception(RuntimeError("the later write never started"))
+                return
             if idx == self.fail_idx:
                 fut.set_result(
                     (RECONCILIATION_REQUIRED, {"halt_reason": "saved record differs"})
@@ -296,7 +349,13 @@ class PipelinedWorker(FakeWorker):
 def test_pipelined_readback_failure_names_items_written_after(
     tmp_path: Path, window: int
 ) -> None:
-    w = PipelinedWorker("w1", fail_idx=3, readback_s=0.05, delay_s=0.01)
+    w = PipelinedWorker(
+        "w1",
+        fail_idx=3,
+        readback_s=0.05,
+        delay_s=0.01,
+        hold_failure_until_next_write=True,
+    )
     report = run_worklist_pool(
         _rows(20), [w], run_dir=tmp_path, policy=_policy(1, readback_window=window)
     )
@@ -311,6 +370,8 @@ def test_pipelined_readback_failure_names_items_written_after(
     # The items written after it still got their own read-back.
     for idx in after:
         assert states[idx] == VERIFIED
+    later = next(item for item in report.items if item["idx"] == 4)
+    assert later["claimed_at"] < report.stop["at"]
     assert max(w.ran) <= 3 + window
     md = (tmp_path / POOL_REPORT_MD).read_text()
     assert "Read-back of item 3 failed" in md
@@ -358,15 +419,22 @@ def test_cookie_fingerprint_tells_sessions_apart() -> None:
 
 
 def make_process_fake(
-    name: str, fail_idx: int = -1, pipelined: bool = False, instant: bool = False
+    name: str,
+    fail_idx: int = -1,
+    pipelined: bool = False,
+    instant: bool = False,
+    hold_failure_until_next_write: bool = False,
 ) -> Any:
     """Factory the child process imports (see ProcessWorker)."""
+    next_write = threading.Event()
 
     class _W(FakeWorker):
         def open(self) -> None:
             self.thread = threading.get_ident()
 
         def run_item(self, idx: int, row: dict[str, Any], item_dir: Path) -> ItemRun:
+            if hold_failure_until_next_write and idx == fail_idx + 1:
+                next_write.set()
             item_dir.mkdir(parents=True, exist_ok=True)
             (item_dir / "ran_in_pid").write_text(str(__import__("os").getpid()))
             time.sleep(0.02)
@@ -386,7 +454,12 @@ def make_process_fake(
             fut: Future = Future()
 
             def later() -> None:
-                time.sleep(0.05)
+                if idx == fail_idx and hold_failure_until_next_write:
+                    if not next_write.wait(10):
+                        fut.set_exception(RuntimeError("the later write never started"))
+                        return
+                else:
+                    time.sleep(0.05)
                 fut.set_result(
                     (RECONCILIATION_REQUIRED, {"halt_reason": "differs"})
                     if idx == fail_idx
@@ -542,7 +615,12 @@ def test_process_worker_halt_and_pipelined_failure(tmp_path: Path) -> None:
         ProcessWorker(
             "q",
             "tests.test_worklist_pool:make_process_fake",
-            {"name": "q", "fail_idx": 3, "pipelined": True},
+            {
+                "name": "q",
+                "fail_idx": 3,
+                "pipelined": True,
+                "hold_failure_until_next_write": True,
+            },
         )
     ]
     report = run_worklist_pool(
@@ -550,6 +628,10 @@ def test_process_worker_halt_and_pipelined_failure(tmp_path: Path) -> None:
     )
     assert report.stop is not None and report.stop["idx"] == 3
     assert report.written_after_failed_readback["3"] == [4]
+    later = next(item for item in report.items if item["idx"] == 4)
+    assert later["state"] == VERIFIED
+    assert later["claimed_at"] < report.stop["at"]
+    assert (tmp_path / "b" / "items" / "00004" / "ran_in_pid").is_file()
 
 
 def test_function_worker_reads_reports(tmp_path: Path) -> None:

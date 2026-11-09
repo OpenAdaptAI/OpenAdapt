@@ -610,7 +610,12 @@ class Harness:
             self._check_gate(*commit)
             _before_write(self, commit[0])
         try:
-            obs = self.computer.execute(native)
+            dispatcher = getattr(self.computer, "dispatcher", None)
+            obs = (
+                dispatcher.execute(native)
+                if dispatcher is not None
+                else self.computer.execute(native)
+            )
         except BaseException as exc:
             if commit is not None:
                 _expect_write(self, 0.0)
@@ -1034,7 +1039,9 @@ class SurfaceHarness:
             self._check_gate(commit)
             _before_write(self, commit)
         try:
-            obs = self.computer.execute(native)
+            obs = self.computer.execute(
+                native, node_id=ref if native.get("kind") == "click" else None
+            )
         except BaseException as exc:
             if commit is not None:
                 _expect_write(self, 0.0)

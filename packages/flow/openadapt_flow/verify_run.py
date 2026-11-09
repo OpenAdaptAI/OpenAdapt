@@ -65,6 +65,7 @@ from openadapt_types.approval import (
 )
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
+from openadapt_flow.complete_read import CompleteReadProvider
 from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
 from openadapt_flow.fault_gate import (
     AdmissionPolicy,
@@ -150,6 +151,7 @@ _STRENGTH_RANK = {
 FRAME_AUDIT_DETAIL = "openadapt:frame_audit"
 #: Where the baseline keeps the whole-database snapshot (``frame.database``).
 FRAME_DB_DETAIL = "openadapt:frame_database"
+FRAME_IDENTITY_DETAIL = "openadapt:frame_identity_indexes"
 #: Why the whole-database snapshot couldn't be read, when it couldn't.
 FRAME_DB_ERROR = "openadapt:frame_database_error"
 #: Where the baseline keeps the target versions read (``frame.versions``), as
@@ -197,8 +199,57 @@ _SIGNATURE_FIELDS = frozenset(
 )
 
 
+_RECEIPT_VALIDATION_REASONS = frozenset(
+    {
+        "schema_version",
+        "unknown_field",
+        "missing_field",
+        "execute_v1_rules",
+        "issued_at",
+        "executor_kind",
+        "executor_ref_sha256",
+        "effect_verdict",
+        "verification_tier",
+        "remediates",
+        "correlation_id",
+        "recheck_due_at",
+        "checked_how",
+        "checked",
+        "verified_without_every_part",
+        "verified_without_independent_readback",
+        "delivery_uncertain",
+        "evidence_mismatch",
+        "unsalted",
+        "baseline_window",
+        "self_approved",
+        "issued_before_read",
+    }
+)
+
+
 class VerifyRunError(ValueError):
-    """verify-run refused its inputs. Nothing was read or written."""
+    """A refusal with an optional closed receipt-validation diagnostic.
+
+    All existing validator codes are listed above. Other refusals and unknown
+    future codes stay unclassified. This diagnostic grants no authority and
+    does not change the exception's existing arguments or message.
+    """
+
+    def __init__(self, *args: object, validation_reason: object = None) -> None:
+        super().__init__(*args)
+        self._validation_reason = VerifyRunError._closed_reason(validation_reason)
+
+    @staticmethod
+    def _closed_reason(value: object) -> str:
+        return (
+            value
+            if type(value) is str and value in _RECEIPT_VALIDATION_REASONS
+            else "unclassified"
+        )
+
+    @property
+    def validation_reason(self) -> str:
+        return VerifyRunError._closed_reason(self.__dict__.get("_validation_reason"))
 
 
 class VerifyConfig(BaseModel):
@@ -369,6 +420,32 @@ def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyCo
                 "frame.attribution.read must be one read-only system-of-record "
                 "read (rest, sql, fhir, graphql, ...)"
             )
+    history = cfg.frame.history if cfg.frame is not None else None
+    if history is not None:
+        sources = cfg.verifier.surfaces or {"": cfg.verifier}
+        if set(history.surfaces) != set(sources):
+            raise VerifyRunError("frame.history must cover every verifier surface")
+        for name, history_source in sources.items():
+            feed = history.feeds[history.surfaces[name]]
+            read = EffectsConfig.model_validate(feed.read)
+            if read.candidates or read.surfaces or read.records_drop_fields:
+                raise VerifyRunError(
+                    "history feeds cannot omit fields or route candidates"
+                )
+            if history_source.kind == "fhir" and (
+                read.kind != "fhir"
+                or read.resource_type != history_source.resource_type
+                or read.base_url != history_source.base_url
+            ):
+                raise VerifyRunError(
+                    "history must cover the same FHIR origin and type as the record read"
+                )
+        for feed in history.feeds.values():
+            read = EffectsConfig.model_validate(feed.read)
+            if read.candidates or read.surfaces or read.records_drop_fields:
+                raise VerifyRunError(
+                    "history feeds cannot omit fields or route candidates"
+                )
     database = cfg.frame.database if cfg.frame is not None else None
     if database is not None:
         surfaces = set(cfg.verifier.surfaces) or {""}
@@ -705,6 +782,12 @@ def _ref_columns(cfg: VerifyConfig) -> list[str]:
     if frame is None:
         return []
     cols = {frame.identity_field} if frame.identity_field else set()
+    cols.update(binding.column for binding in frame.identities.values())
+    cols.update(
+        cell.column
+        for binding in frame.identities.values()
+        for cell in (binding.field_bindings or {}).values()
+    )
     a = frame.attribution
     if a is not None:
         cols |= {a.record_key} if a.record_key else set()
@@ -726,6 +809,7 @@ def _read_database(
     salt: bytes,
     before: Optional[Any] = None,
     errors: Optional[list[str]] = None,
+    retain_values: Sequence[str] = (),
 ) -> Optional[Any]:
     """The whole-database snapshot, or None when it can't be read (and then
     why, appended to ``errors``)."""
@@ -733,7 +817,7 @@ def _read_database(
     from openadapt_flow.runtime.effects.db_snapshot import mac_key, take_snapshot
 
     database = cfg.frame.database if cfg.frame is not None else None
-    if database is None:
+    if database is None or cfg.frame is None:
         return None
     try:
         return take_snapshot(
@@ -742,6 +826,7 @@ def _read_database(
             key=mac_key(salt),
             modes=database.modes(),  # type: ignore[arg-type]
             max_rows=database.max_rows,
+            read_row_budget=database.read_row_budget,
             before=before,
             extra_queries=_audit_sql(cfg),
             ignore=database.all_ignore_columns(),
@@ -749,6 +834,9 @@ def _read_database(
             schemas=database.schemas,
             optional_modes=database.profile_modes(),  # type: ignore[arg-type]
             links=database.recheck_after_s is not None,
+            retain_values=tuple(
+                set(retain_values) | {b.table for b in cfg.frame.identities.values()}
+            ),
         )
     except Exception as exc:  # noqa: BLE001 - unreadable -> the frame is not checked
         if errors is not None:
@@ -801,6 +889,8 @@ class _DatabaseFrame:
     blind: bool = False
     #: The two reads after the save differed: the database was still moving.
     still_moving: bool = False
+    #: A baseline or post-save read exceeded the row budget.
+    too_large: bool = False
     #: The app profile's judgment of one row change (``AppProfile.excuse``).
     excuse: Any = None
     #: Every user's id by sign-in name (in memory only), to resolve an
@@ -876,6 +966,7 @@ def _database_frame(
         ROW,
         Snapshot,
         SnapshotError,
+        SnapshotTooLarge,
         cell_hash,
         key_text,
         mac_key,
@@ -900,11 +991,20 @@ def _database_frame(
     stored = (
         before.detail.get(FRAME_DB_DETAIL) if isinstance(before.detail, dict) else None
     )
+    limit_error = SnapshotTooLarge.__name__ + ":"
     if not isinstance(stored, dict):
+        error = (
+            before.detail.get(FRAME_DB_ERROR, "")
+            if isinstance(before.detail, dict)
+            else ""
+        )
+        unreachable.too_large = str(error).startswith(limit_error)
         return unreachable
     old = Snapshot.from_json(stored)
-    new = _read_database(cfg, salt, before=old)
+    errors: list[str] = []
+    new = _read_database(cfg, salt, before=old, errors=errors)
     if new is None:
+        unreachable.too_large = any(e.startswith(limit_error) for e in errors)
         return unreachable
     new_at = _now()
     # Read again a moment later: two reads in a row must match, or the app
@@ -918,8 +1018,9 @@ def _database_frame(
     used = 0
     for used in range(1, attempts + 1):
         time.sleep(database.settle_s)
-        again = _read_database(cfg, salt, before=old)
+        again = _read_database(cfg, salt, before=old, errors=errors)
         if again is None:
+            unreachable.too_large = any(e.startswith(limit_error) for e in errors)
             return unreachable
         if settled_state(new, again):
             settled = True
@@ -1128,6 +1229,242 @@ def _declared_by_surface(
     return keys
 
 
+def _frame_surface_routes(
+    cfg: VerifyConfig, effects: Sequence[Effect]
+) -> dict[str, list[str]]:
+    """Use the same content-twin routes before and after a write."""
+    from openadapt_flow.runtime.effects.surfaces import surface_of
+
+    if not cfg.verifier.surfaces:
+        return {str(i): [""] for i in range(len(effects))}
+
+    def read_of(name: str) -> str:
+        sub = cfg.verifier.surfaces.get(name)
+        if sub is None:
+            return name
+        shape = sub.model_dump(mode="json", exclude={"records_drop_fields"})
+        return json.dumps(shape, sort_keys=True, default=str)
+
+    views: dict[str, list[str]] = {}
+    for name in cfg.verifier.surfaces:
+        views.setdefault(read_of(name), []).append(name)
+    routes = {}
+    for i, effect in enumerate(effects):
+        own = surface_of(effect) or ""
+        routes[str(i)] = (
+            views.get(read_of(own), [own]) if own in cfg.verifier.surfaces else [own]
+        )
+    return routes
+
+
+def _identity_evidence_mac(data: Any, key: bytes) -> str:
+    raw = json.dumps(
+        data, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode()
+    return hmac.new(
+        key, b"openadapt.frame-identity-evidence/v1\0" + raw, hashlib.sha256
+    ).hexdigest()
+
+
+def _identity_effect_binding(
+    effects: Sequence[Effect], params: Mapping[str, object], key: bytes
+) -> str:
+    return _identity_evidence_mac(
+        {
+            "effects": [e.model_dump(mode="json") for e in effects],
+            "params": dict(params),
+        },
+        key,
+    )
+
+
+def _mapped_baseline_evidence(
+    cfg: VerifyConfig,
+    state: EffectState,
+    indexes: Mapping[str, dict[str, str]],
+    params: Mapping[str, object],
+    salt: bytes,
+) -> dict[str, Any]:
+    """Authenticate old selectors before sealing removes the original values."""
+    from openadapt_flow.runtime.effects.effect import record_matches
+    from openadapt_flow.runtime.effects.frame import declared_selectors
+    from openadapt_flow.runtime.effects.frame_identity import match_records
+
+    if cfg.frame is None:
+        return {}
+    effects = [e.resolve(params) for e in cfg.effects]
+    routes = _frame_surface_routes(cfg, effects)
+    key = _mac_key(salt)
+    bound = _identity_effect_binding(effects, params, key)
+    result = {}
+    for surface, binding in cfg.frame.identities.items():
+        records = _surface_records(state, surface)
+        row_keys = match_records(binding, records, indexes[surface], key)
+        selectors = [
+            s
+            for i, e in enumerate(effects)
+            if surface in routes.get(str(i), ())
+            for s in declared_selectors(e)
+        ]
+        typed = _surface_config(cfg, surface).kind == "sql"
+        selected = [
+            row_key
+            for record, row_key in zip(records, row_keys)
+            if any(
+                record_matches(dict(record), sel, text_numbers=typed)
+                for sel in selectors
+            )
+        ]
+        data = {
+            "index": indexes[surface],
+            "declared": sorted(selected),
+            "effects": bound,
+            "read_config": binding.read_config_sha256,
+            "binding": binding.model_dump(mode="json"),
+        }
+        result[surface] = {"data": data, "mac": _identity_evidence_mac(data, key)}
+    return result
+
+
+def _map_frame_rows(
+    cfg: VerifyConfig,
+    before: EffectState,
+    after: Any,
+    db: _DatabaseFrame,
+    slices: dict[str, tuple[EffectState, Optional[list[dict[str, Any]]]]],
+    effects: Sequence[Effect],
+    routes: Mapping[str, Sequence[str]],
+    salt: bytes,
+    declared: dict[str, set[str]],
+    params: Mapping[str, object],
+    column_values: dict[str, dict[str, dict[str, Any]]],
+) -> None:
+    from openadapt_flow.runtime.effects.effect import record_matches
+    from openadapt_flow.runtime.effects.frame import declared_selectors
+    from openadapt_flow.runtime.effects.frame_identity import match_records
+
+    if cfg.frame is None or not isinstance(after, EffectState):
+        raise VerifyRunError("no current mapped surface read")
+    previous = before.detail.get(FRAME_IDENTITY_DETAIL)
+    if not isinstance(previous, dict):
+        raise VerifyRunError("baseline has no bound identity index")
+    if set(previous) != set(cfg.frame.identities):
+        raise VerifyRunError(
+            "baseline identity evidence belongs to another surface mapping"
+        )
+    key = _mac_key(salt)
+    bound = _identity_effect_binding(effects, params, key)
+    authenticated = {}
+    for surface, binding in cfg.frame.identities.items():
+        envelope = previous.get(surface)
+        if (
+            not isinstance(envelope, dict)
+            or set(envelope) != {"data", "mac"}
+            or type(envelope["mac"]) is not str
+        ):
+            raise VerifyRunError("baseline identity evidence is malformed")
+        data = envelope["data"]
+        if not isinstance(data, dict) or not hmac.compare_digest(
+            envelope["mac"], _identity_evidence_mac(data, key)
+        ):
+            raise VerifyRunError("baseline identity evidence authentication failed")
+        if (
+            set(data) != {"index", "declared", "effects", "read_config", "binding"}
+            or data["effects"] != bound
+            or data["read_config"] != binding.read_config_sha256
+            or data["binding"] != binding.model_dump(mode="json")
+        ):
+            raise VerifyRunError(
+                "baseline identity evidence belongs to another read or effect contract"
+            )
+        authenticated[surface] = data
+    current = _frame_identity_indexes(cfg, after, db.post, salt)
+    for surface, binding in cfg.frame.identities.items():
+        data = authenticated[surface]
+        prior, selected = data["index"], data["declared"]
+        if not isinstance(prior, dict) or any(
+            type(k) is not str or type(v) is not str for k, v in prior.items()
+        ):
+            raise VerifyRunError("baseline identity index is malformed")
+        old_table = db.old.tables.get(binding.table) if db.old is not None else None
+        if (
+            old_table is None
+            or set(prior.values()) != set(old_table.rows)
+            or len(prior) != len(old_table.rows)
+        ):
+            raise VerifyRunError("baseline identity index does not cover its table")
+        if (
+            not isinstance(selected, list)
+            or any(type(k) is not str or k not in prior.values() for k in selected)
+            or len(selected) != len(set(selected))
+        ):
+            raise VerifyRunError("baseline selected row keys are malformed")
+        old_state, post_records = slices[surface]
+        if post_records is None or not old_state.reachable:
+            raise VerifyRunError("mapped surface is unreadable")
+        # The old selection came from actual pre-write records and is bound
+        # to these exact effects/parameters. Sealed REMOVED/CHANGED markers
+        # are never interpreted as actual application identities or values.
+        keys = set(selected)
+        selectors = [
+            s
+            for i, e in enumerate(effects)
+            if surface in routes.get(str(i), ())
+            for s in declared_selectors(e)
+        ]
+        row_keys = match_records(binding, post_records, current[surface], key)
+        for record, row_key in zip(post_records, row_keys):
+            if any(
+                record_matches(
+                    dict(record), sel, text_numbers=old_state.substrate == "sql"
+                )
+                for sel in selectors
+            ):
+                keys.add(row_key)
+        declared[binding.table] = keys
+        if binding.field_bindings is not None:
+            # Pair actual current reader values to the frame's own row keys.
+            # Intent is checked by the ordinary effect verdict; the frame
+            # independently checks the bound stored cells against this read.
+            column_values[binding.table] = {
+                row_key: dict(record)
+                for record, row_key in zip(post_records, row_keys)
+                if row_key in keys
+            }
+            # The database diff ordinarily carries changed rows only. Cell
+            # verification also needs an unchanged target: a misleading read
+            # must not certify a requested update that never reached storage.
+            from openadapt_flow.runtime.effects.db_snapshot import KEY, ROW, unpack
+
+            table = db.post.tables[binding.table]
+            baseline, now = slices[binding.table]
+            if now is None:
+                raise VerifyRunError("mapped table has no current row slice")
+            present = {record[KEY] for record in now}
+            previous_rows = list(baseline.records)
+            current_rows = list(now)
+            for row_key in column_values[binding.table]:
+                if row_key in present:
+                    continue
+                current_rows.append(
+                    {KEY: row_key, ROW: table.rows[row_key][0], **table.values[row_key]}
+                )
+                if row_key in old_table.rows:
+                    previous_rows.append(
+                        {
+                            KEY: row_key,
+                            ROW: old_table.rows[row_key][0],
+                            **unpack(
+                                old_table.cell_columns, old_table.rows[row_key][1]
+                            ),
+                        }
+                    )
+            slices[binding.table] = (
+                baseline.model_copy(update={"records": previous_rows}),
+                current_rows,
+            )
+
+
 def judge_run_frame(
     cfg: VerifyConfig,
     verifier: Any,
@@ -1150,13 +1487,31 @@ def judge_run_frame(
     and audit entries in them.
     """
 
-    from openadapt_flow.runtime.effects.surfaces import surface_of
-
     spec = cfg.frame or FrameSpec()
+    if FRAME_IDENTITY_DETAIL in before.detail and (
+        cfg.frame is None or cfg.frame.database is None or not cfg.frame.identities
+    ):
+        return FrameVerdict(
+            status="not_checked",
+            reason="baseline identity evidence belongs to another surface mapping",
+        )
     # The database first, then the surfaces: a row a surface judges
     # (``database.judged_by``) is read by it no earlier than the settled
     # read a recheck compares with, so no change falls between the two.
     db = _database_frame(cfg, before, salt)
+    if db is not None and db.too_large:
+        from openadapt_flow.runtime.effects.db_snapshot import SnapshotTooLarge
+
+        assert spec.database is not None
+        return FrameVerdict(
+            status="not_checked",
+            reason=str(SnapshotTooLarge(spec.database.read_row_budget)),
+            database={
+                "read_status": "too_large",
+                "read_row_budget": spec.database.read_row_budget,
+            },
+            attribution=spec.attribution.kind if spec.attribution else "none",
+        )
     after: Any = None
     if not database_only:
         try:
@@ -1170,23 +1525,7 @@ def judge_run_frame(
     slices: dict[str, tuple[EffectState, Optional[list[dict[str, Any]]]]] = {}
     routes: Optional[dict[str, list[str]]] = None
     if isinstance(routed, dict) and routed:
-        # Surfaces that differ only in dropped fields (a content twin) are
-        # views of one read: a record an effect declares in one is declared
-        # in each.
-        def read_of(name: str) -> str:
-            sub = cfg.verifier.surfaces.get(name)
-            if sub is None:
-                return name
-            shape = sub.model_dump(mode="json", exclude={"records_drop_fields"})
-            return json.dumps(shape, sort_keys=True, default=str)
-
-        views: dict[str, list[str]] = {}
-        for name in routed:
-            views.setdefault(read_of(name), []).append(name)
-        routes = {}
-        for i, effect in enumerate(bound_effects):
-            own = surface_of(effect) or ""
-            routes[str(i)] = views.get(read_of(own), [own]) if own in routed else [own]
+        routes = _frame_surface_routes(cfg, bound_effects)
         for name in [] if database_only else routed:
             sub = before.detail.get(name, {}) if isinstance(before.detail, dict) else {}
             post = (
@@ -1204,9 +1543,12 @@ def judge_run_frame(
             )
     elif not database_only:
         slices[""] = (before, _post_records(after))
-    identities: Optional[dict[str, str]] = None
+    identities: dict[str, str] = {
+        name: b.surface_field for name, b in spec.identities.items()
+    }
     #: Table -> row key MACs its ``judged_by`` surface declares.
     declared_rows: dict[str, set[str]] = {}
+    column_values: dict[str, dict[str, dict[str, Any]]] = {}
     if db is not None and db.still_moving:
         tries = db.evidence.get("settle_attempts", 1)
         return FrameVerdict(
@@ -1250,7 +1592,29 @@ def judge_run_frame(
                     declared_rows[table] = _declared_by_surface(
                         table, surface, slices[surface], bound_effects, routes, db
                     )
-        identities = {name: KEY for name in db.slices}
+        identities.update({name: KEY for name in db.slices})
+        if (
+            spec.identities or FRAME_IDENTITY_DETAIL in before.detail
+        ) and not database_only:
+            try:
+                _map_frame_rows(
+                    cfg,
+                    before,
+                    after,
+                    db,
+                    slices,
+                    bound_effects,
+                    routes,
+                    salt,
+                    declared_rows,
+                    params,
+                    column_values,
+                )
+            except (ValueError, TypeError) as exc:
+                return FrameVerdict(
+                    status="not_checked",
+                    reason=f"frame identity mapping refused: {exc}",
+                )
     audit_before: Optional[list[dict[str, Any]]] = None
     audit_after: Optional[list[dict[str, Any]]] = None
     stored = (
@@ -1329,6 +1693,7 @@ def judge_run_frame(
         excuse=excuse,
         user_ids=None if db is None else db.users_map,
         declared_rows=declared_rows,
+        column_values=column_values,
     )
     profile = db.evidence.get("profile") if db is not None else None
     if profile is not None:
@@ -1513,9 +1878,17 @@ def _new_execution_id() -> str:
 # -- verifier -----------------------------------------------------------------
 
 
-def _build_verifier(cfg: VerifyConfig, params: Mapping[str, object]) -> Any:
+def _build_verifier(
+    cfg: VerifyConfig,
+    params: Mapping[str, object],
+    read_provider: Optional[CompleteReadProvider] = None,
+) -> Any:
     try:
-        verifier = build_effect_verifier(cfg.verifier, params)
+        verifier = (
+            build_effect_verifier(cfg.verifier, params)
+            if read_provider is None
+            else read_provider.resolve(cfg.verifier, params)
+        )
     except ValueError as exc:
         raise VerifyRunError(f"cannot build the verifier: {exc}") from exc
     if verifier is None:
@@ -1550,8 +1923,232 @@ def _tag_reads(verifier: Any, execution_id: str) -> None:
 # -- baseline -----------------------------------------------------------------
 
 
+def _surface_config(cfg: VerifyConfig, surface: str) -> EffectsConfig:
+    if not surface and not cfg.verifier.surfaces:
+        return cfg.verifier
+    if surface not in cfg.verifier.surfaces:
+        raise VerifyRunError("frame identity names an unavailable surface")
+    return cfg.verifier.surfaces[surface]
+
+
+def _available_surface_records(
+    state: EffectState, surface: str
+) -> Optional[list[dict[str, Any]]]:
+    """Actual readable records, without asserting their scope is complete."""
+    if not state.reachable:
+        return None
+    if not surface:
+        return list(state.records)
+    sub = state.detail.get(surface)
+    if not isinstance(sub, dict) or sub.get("reachable") is not True:
+        return None
+    records = sub.get("records")
+    if not isinstance(records, list) or any(not isinstance(r, dict) for r in records):
+        return None
+    return records
+
+
+def _surface_records(state: EffectState, surface: str) -> list[dict[str, Any]]:
+    if not surface:
+        if not state.reachable or state.readback_complete is not True:
+            raise VerifyRunError("frame identity needs a complete reachable read")
+        return list(state.records)
+    sub = state.detail.get(surface)
+    if (
+        not state.reachable
+        or not isinstance(sub, dict)
+        or sub.get("reachable") is not True
+        or sub.get("readback_complete") is not True
+    ):
+        raise VerifyRunError("frame identity needs a complete reachable surface")
+    records = sub.get("records")
+    if not isinstance(records, list) or any(not isinstance(r, dict) for r in records):
+        raise VerifyRunError("frame identity surface has no record list")
+    return records
+
+
+def learn_frame_identities(
+    cfg: VerifyConfig,
+    params: Mapping[str, object],
+    *,
+    read_provider: Optional[CompleteReadProvider] = None,
+) -> VerifyConfig:
+    """Compatibility API: learn row identity, retaining strict legacy columns."""
+    return _learn_frame_correspondence(cfg, params, read_provider, fields=False)
+
+
+def learn_frame_correspondence(
+    cfg: VerifyConfig,
+    params: Mapping[str, object],
+    *,
+    read_provider: Optional[CompleteReadProvider] = None,
+) -> VerifyConfig:
+    """Setup: learn row and field/column correspondence from the same reads."""
+    return _learn_frame_correspondence(cfg, params, read_provider, fields=True)
+
+
+def _learn_frame_correspondence(
+    cfg: VerifyConfig,
+    params: Mapping[str, object],
+    read_provider: Optional[CompleteReadProvider],
+    *,
+    fields: bool,
+) -> VerifyConfig:
+    """Learn row correspondence during setup, before the contract is frozen.
+
+    Uses the frame's own complete snapshot, not a supplied column descriptor.
+    The same read-only client/provider used for selection can be retained.
+    Returned data contains column names and witness counts, never raw rows.
+    """
+    from openadapt_flow.runtime.effects.db_snapshot import settled_state
+    from openadapt_flow.runtime.effects.frame_identity import (
+        FrameIdentityError,
+        learn_field_bindings,
+        learn_identity,
+    )
+
+    if cfg.frame is None or cfg.frame.database is None:
+        raise VerifyRunError("identity learning needs a database frame")
+    database = cfg.frame.database
+    targets = {**database.views, **database.judged_by}
+    if not targets or len(set(targets.values())) != len(targets):
+        raise VerifyRunError("identity learning needs one target table per surface")
+    salt = secrets.token_bytes(32)
+    old = _read_database(cfg, salt, retain_values=tuple(targets))
+    verifier = _build_verifier(cfg, params, read_provider)
+    state = verifier.capture_pre_state()
+    current = _read_database(cfg, salt, retain_values=tuple(targets))
+    if old is None or current is None or not settled_state(old, current):
+        raise VerifyRunError(
+            "frame snapshot changed or was unavailable during identity setup"
+        )
+    if not isinstance(state, EffectState):
+        raise VerifyRunError("identity setup returned no readable state")
+    bindings = {}
+    try:
+        for table_name, surface in targets.items():
+            table = current.tables.get(table_name)
+            if (
+                table is None
+                or table.mode != "compare"
+                or set(table.values) != set(table.rows)
+            ):
+                raise FrameIdentityError(
+                    "identity learning needs every target-table row"
+                )
+            read = _surface_config(cfg, surface)
+            # FHIR has a resource identity; other readers keep their declared
+            # shared identity (or the ordinary default id).
+            records = _surface_records(state, surface)
+            identity = cfg.frame.identity_field or "id"
+            if read.kind == "fhir" or any(identity not in record for record in records):
+                identity = "id"  # The ordinary record reader's stable-id field.
+            bindings[surface] = learn_identity(
+                records,
+                list(table.values.values()),
+                surface_field=identity,
+                table=table_name,
+                read_config=read.model_dump(mode="json"),
+            )
+            if fields:
+                binding = bindings[surface]
+                bindings[surface] = binding.model_copy(
+                    update={
+                        "field_bindings": learn_field_bindings(
+                            binding, records, list(table.values.values())
+                        ),
+                        "field_columns": sorted(table.columns),
+                    }
+                )
+    except FrameIdentityError as exc:
+        raise VerifyRunError(f"frame identity setup refused: {exc}") from exc
+    frame = cfg.frame.model_copy(update={"identities": bindings})
+    return cfg.model_copy(update={"frame": frame})
+
+
+def _frame_identity_indexes(
+    cfg: VerifyConfig, state: EffectState, snapshot: Any, salt: bytes
+) -> dict[str, dict[str, str]]:
+    from openadapt_flow.runtime.effects.frame_identity import (
+        FrameIdentityError,
+        match_records,
+        read_config_digest,
+        snapshot_index,
+    )
+
+    if cfg.frame is None:
+        return {}
+    indexes = {}
+    try:
+        for surface, binding in cfg.frame.identities.items():
+            read = _surface_config(cfg, surface)
+            database = cfg.frame.database
+            if (
+                database is None
+                or {**database.views, **database.judged_by}.get(binding.table)
+                != surface
+            ):
+                raise FrameIdentityError(
+                    "identity binding does not match its frame route"
+                )
+            if binding.read_config_sha256 != read_config_digest(
+                read.model_dump(mode="json")
+            ):
+                raise FrameIdentityError(
+                    "identity binding belongs to another read configuration"
+                )
+            table = snapshot.tables.get(binding.table) if snapshot is not None else None
+            if binding.field_bindings is not None and (
+                table is None or sorted(table.columns) != binding.field_columns
+            ):
+                raise FrameIdentityError("stored-column inventory no longer matches")
+            index = snapshot_index(binding, table, _mac_key(salt))
+            match_records(
+                binding, _surface_records(state, surface), index, _mac_key(salt)
+            )
+            indexes[surface] = index
+        # A nonempty selected read must expose its declared legacy identity.
+        # Empty create baselines do not invent correspondence evidence.
+        reads = cfg.verifier.surfaces or {"": cfg.verifier}
+        for surface, read in reads.items():
+            identity = cfg.frame.identity_field
+            if (
+                read.kind in {"fhir", "rest", "sql"}
+                and surface not in cfg.frame.identities
+                and identity
+            ):
+                records = _available_surface_records(state, surface)
+                if records is None:
+                    # Preserve the existing unreadable-baseline/budget path.
+                    # Available identity is not a new completeness assertion.
+                    continue
+                if any(identity not in record for record in records):
+                    raise FrameIdentityError(
+                        "frame identity is unavailable on the selected read; learn its row mapping at setup"
+                    )
+                from openadapt_flow.runtime.effects.frame_identity import (
+                    canonical_identity,
+                )
+
+                values = [
+                    canonical_identity(record.get(identity), "exact")
+                    for record in records
+                ]
+                if len(set(values)) != len(values):
+                    raise FrameIdentityError(
+                        "frame identity is not unique on the selected read"
+                    )
+    except FrameIdentityError as exc:
+        raise VerifyRunError(f"frame identity setup refused: {exc}") from exc
+    return indexes
+
+
 def capture_baseline(
-    cfg: VerifyConfig, params: Mapping[str, object], out: Path
+    cfg: VerifyConfig,
+    params: Mapping[str, object],
+    out: Path,
+    *,
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> dict[str, Any]:
     """Read the system of record before the executor starts.
 
@@ -1562,11 +2159,18 @@ def capture_baseline(
     the run: ``execution_id`` is generated here and the read step reuses it.
     """
 
-    verifier = _build_verifier(cfg, params)
+    verifier = _build_verifier(cfg, params, read_provider)
     identity = verifier_identity(verifier)
     execution_id = _new_execution_id()
     _tag_reads(verifier, execution_id)
     salt = secrets.token_bytes(32)
+    history_before = None
+    history_error = None
+    if cfg.frame is not None and cfg.frame.history is not None:
+        try:
+            history_before, _history_rows = _read_history(cfg, params, _now(), salt)
+        except Exception as exc:
+            history_error = type(exc).__name__
     # The versions first: a save between this read and the record read is
     # then in the record baseline too, never hidden in the versions one.
     versions_rows = (
@@ -1578,6 +2182,12 @@ def capture_baseline(
     if not isinstance(state, EffectState):
         raise VerifyRunError("verifier returned no readable baseline")
     detail: dict[str, Any] = {}
+    if cfg.frame is not None and cfg.frame.history is not None:
+        from openadapt_flow.runtime.effects.history import DETAIL
+
+        detail[DETAIL] = (
+            history_before if history_before is not None else {"error": history_error}
+        )
     entries: Optional[list[dict[str, Any]]] = None
     snapshot = None
     if cfg.frame is not None and cfg.frame.database is not None:
@@ -1590,7 +2200,11 @@ def capture_baseline(
             detail[FRAME_DB_ERROR] = why[0] if why else "not read"
     audit_verifier = _audit_verifier(cfg, params)
     if audit_verifier is not None:
-        if entries is None:
+        if entries is None and (
+            cfg.frame is None or cfg.frame.database is None or snapshot is not None
+        ):
+            # A failed database read must not retry its audit query outside
+            # the snapshot's budget and consistent transaction.
             entries = _read_audit(audit_verifier)
         # Which entries existed, as keyed hashes: never what they say.
         detail[FRAME_AUDIT_DETAIL] = {
@@ -1605,6 +2219,18 @@ def capture_baseline(
         )
     if detail:
         state = state.model_copy(update={"detail": {**state.detail, **detail}})
+    indexes = _frame_identity_indexes(cfg, state, snapshot, salt)
+    if indexes:
+        state = state.model_copy(
+            update={
+                "detail": {
+                    **state.detail,
+                    FRAME_IDENTITY_DETAIL: _mapped_baseline_evidence(
+                        cfg, state, indexes, params, salt
+                    ),
+                }
+            }
+        )
     state = _seal_state(cfg, state, salt)
     payload = {
         "schema_version": BASELINE_SCHEMA,
@@ -1625,13 +2251,16 @@ def _seal_state(cfg: VerifyConfig, state: EffectState, salt: bytes) -> EffectSta
 
     identity = cfg.frame.identity_field if cfg.frame is not None else None
     key = _mac_key(salt)
-    sealed = {"": seal(state.records, key, identity)}
+    identities = cfg.frame.identities if cfg.frame is not None else {}
+    own_identity = identities[""].surface_field if "" in identities else identity
+    sealed = {"": seal(state.records, key, own_identity)}
     detail = dict(state.detail or {})
     for name, sub in (state.detail or {}).items():
         if name.startswith("openadapt:") or not isinstance(sub, dict):
             continue
         if isinstance(sub.get("records"), list):
-            sealed[name] = seal(sub["records"], key, identity, name)
+            field = identities[name].surface_field if name in identities else identity
+            sealed[name] = seal(sub["records"], key, field, name)
             detail[name] = {**sub, "records": []}
     detail[SEALED_DETAIL] = sealed
     return state.model_copy(update={"records": [], "detail": detail})
@@ -1656,6 +2285,7 @@ def _unseal_state(
     identity = cfg.frame.identity_field if cfg.frame is not None else None
     key = _mac_key(salt)
     detail = dict(before.detail)
+    identities = cfg.frame.identities if cfg.frame is not None else {}
     for name, entries in sealed.items():
         if not name:
             continue
@@ -1666,12 +2296,21 @@ def _unseal_state(
         detail[name] = {
             **detail.get(name, {}),
             "records": unseal(
-                entries, list(current.get("records", [])), key, identity, name
+                entries,
+                list(current.get("records", [])),
+                key,
+                identities[name].surface_field if name in identities else identity,
+                name,
             ),
         }
     return before.model_copy(
         update={
-            "records": unseal(sealed.get("", []), list(now.records), key, identity),
+            "records": unseal(
+                sealed.get("", []),
+                list(now.records),
+                key,
+                identities[""].surface_field if "" in identities else identity,
+            ),
             "detail": detail,
         }
     )
@@ -1861,6 +2500,7 @@ def verify_run(
     documents: Optional[Mapping[str, Any]] = None,
     second_extractor: Optional[Any] = None,
     post_state_out: Optional[dict[str, Any]] = None,
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> dict[str, Any]:
     """Read the system of record and return ``{"receipt", "evidence"}``.
 
@@ -1903,7 +2543,7 @@ def verify_run(
     approver_doc = _approver(approver)
     executor_kind, executor_ref, build_digest = _executor(run_record)
 
-    verifier = _build_verifier(cfg, params)
+    verifier = _build_verifier(cfg, params, read_provider)
     identity = verifier_identity(verifier)
 
     baseline: Optional[dict[str, Any]] = None
@@ -1928,6 +2568,29 @@ def verify_run(
             },
         )
     _tag_reads(verifier, execution_id)
+
+    history_checkpoint = None
+    history_problem = None
+    history_spec = cfg.frame.history if cfg.frame is not None else None
+    if history_spec is not None:
+        try:
+            if baseline is None:
+                raise ValueError("history requires a baseline")
+            from openadapt_flow.runtime.effects.history import (
+                DETAIL,
+                checkpoint_problem,
+            )
+
+            stored_history = baseline["state"]["detail"].get(DETAIL)
+            if checkpoint_problem(stored_history, history_spec) is not None:
+                raise ValueError("history baseline is unavailable")
+            history_checkpoint, _history_rows = _read_history(
+                cfg, params, stored_history["since"], salt
+            )
+        except Exception as exc:  # unreadable or incomplete history never confirms
+            history_problem = (
+                f"history checkpoint could not be read ({type(exc).__name__})"
+            )
 
     read_at = _now()
     before: EffectState
@@ -2041,6 +2704,46 @@ def verify_run(
             status="not_checked",
             reason="no baseline, so what else changed can't be known",
         )
+    if history_spec is not None:
+        if history_problem is not None and frame.status != "refuted":
+            frame.status = "not_checked"
+            frame.reason = history_problem
+        elif history_checkpoint is not None:
+            from openadapt_flow.runtime.effects.history import judge_initial_history
+            from openadapt_flow.runtime.effects.surfaces import surface_of
+
+            targets: set[tuple[str, str]] = set()
+            for effect, verdict in zip(bound_effects, verdicts):
+                if effect.kind not in (
+                    EffectKind.RECORD_WRITTEN,
+                    EffectKind.FIELD_EQUALS,
+                    EffectKind.EXACT_NEW_SET,
+                ):
+                    continue
+                scope = history_spec.surfaces[surface_of(effect) or ""]
+                for target_record in verdict.matched_records:
+                    target_identity = target_record.get(
+                        frame_spec.identity_field or "id"
+                    )
+                    if target_identity not in (None, ""):
+                        targets.add((scope, str(target_identity)))
+            history_frame = judge_initial_history(
+                history_spec,
+                stored_history,
+                history_checkpoint,
+                _history_rows,
+                params,
+                str(run_record.get("executor_id") or ""),
+                targets,
+            )
+            frame.collateral.extend(history_frame.collateral)
+            frame.concurrent.extend(history_frame.concurrent)
+            if history_frame.status == "refuted" or (
+                history_frame.status == "not_checked" and frame.status == "held"
+            ):
+                frame.status = history_frame.status
+                frame.reason = history_frame.reason
+            frame.post_state = {"read_at": _now(), "history": history_checkpoint}
     # A record outside the declared delta moved: the save's effect on the
     # store is not the declared one, whatever the per-effect reads say.
     effect_verdict: EffectVerdictLabel = (
@@ -2199,12 +2902,15 @@ def verify_run(
         "effect_verdict": effect_verdict,
     }
     database_spec = frame_spec.database
+    recheck_after_s = (
+        frame_spec.history.quiet_s
+        if frame_spec.history is not None
+        else database_spec.recheck_after_s
+        if database_spec is not None
+        else None
+    )
     recheck_due_at: Optional[str] = None
-    if (
-        frame.post_state is not None
-        and database_spec is not None
-        and database_spec.recheck_after_s is not None
-    ):
+    if frame.post_state is not None and recheck_after_s is not None:
         # A write that lands after the settled read lands after this verdict:
         # say when the database is read again (a verified write only), and
         # bind what it compares with. A write of any outcome binds its
@@ -2212,7 +2918,7 @@ def verify_run(
         # this one's own window covered.
         schedule = late_write.schedule(
             frame.post_state,
-            database_spec.recheck_after_s,
+            recheck_after_s,
             salted_digest(salt, late_write.POST_STATE_LABEL, frame.post_state),
             due=verified,
         )
@@ -2271,7 +2977,10 @@ def verify_run(
         receipt[RECHECK_RECEIPT_FIELD] = recheck_due_at
     problem = receipt_problem(receipt) or evidence_problem(evidence, receipt)
     if problem is not None:  # pragma: no cover - a producer bug, never input
-        raise VerifyRunError(f"verify-run built an invalid receipt: {problem}")
+        raise VerifyRunError(
+            f"verify-run built an invalid receipt: {problem}",
+            validation_reason=problem,
+        )
     return {
         "schema_version": EFFECT_RECEIPT_SCHEMA,
         "receipt": receipt,
@@ -2318,6 +3027,7 @@ def recheck_problem(
     params: Mapping[str, object],
     run_record: Mapping[str, Any],
     verified: bool = True,
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> Optional[str]:
     """A plain sentence when ``state`` can't be used as this contract's
     write by this executor with these params; None when it can.
@@ -2334,6 +3044,20 @@ def recheck_problem(
     problem = late_write.state_problem(state)
     if problem is not None:
         return problem
+    history_spec = cfg.frame.history if cfg.frame is not None else None
+    if history_spec is not None:
+        from openadapt_flow.runtime.effects.history import (
+            DETAIL,
+            checkpoint_pair_problem,
+        )
+
+        baseline_history = (
+            (state["baseline"].get("state") or {}).get("detail") or {}
+        ).get(DETAIL)
+        post_history = state["post_state"].get("history")
+        problem = checkpoint_pair_problem(baseline_history, post_history, history_spec)
+        if problem is not None:
+            return problem
     receipt, evidence = dict(state["receipt"]), dict(state["evidence"])
     if receipt_problem(receipt) or evidence_problem(evidence, receipt):
         return "the recheck state's receipt and evidence don't match"
@@ -2353,21 +3077,27 @@ def recheck_problem(
     frame = evidence.get("frame") or {}
     schedule = frame.get(late_write.EVIDENCE_KEY)
     database = cfg.frame.database if cfg.frame is not None else None
-    if not isinstance(schedule, Mapping) or database is None:
+    history = cfg.frame.history if cfg.frame is not None else None
+    after_s = (
+        history.quiet_s
+        if history is not None
+        else database.recheck_after_s
+        if database is not None
+        else None
+    )
+    if not isinstance(schedule, Mapping) or after_s is None:
         return "the receipt binds no post-save state"
     post = dict(state["post_state"])
     digest = salted_digest(salt, late_write.POST_STATE_LABEL, post)
     if schedule.get("post_state_sha256") != digest:
         return "the recheck state is not the post-save state its receipt names"
     is_verified = receipt.get("outcome") == "verified"
-    if database.recheck_after_s is None or dict(schedule) != late_write.schedule(
-        post, database.recheck_after_s, digest, due=is_verified
-    ):
+    if dict(schedule) != late_write.schedule(post, after_s, digest, due=is_verified):
         return (
             "the contract's recheck_after_s is not the one the receipt was issued under"
         )
     try:
-        verifier = _build_verifier(cfg, params)
+        verifier = _build_verifier(cfg, params, read_provider)
         identity = verifier_identity(verifier)
         executor_kind, executor_ref, _build = _executor(run_record)
     except (VerifyRunError, KeyError, ValueError) as exc:
@@ -2465,6 +3195,23 @@ def _later_window(state: Mapping[str, Any]) -> Optional[Any]:
         return None
 
 
+def _read_history(
+    cfg: VerifyConfig, params: Mapping[str, object], since: str, salt: bytes
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    from openadapt_flow.runtime.effects.history import read_history
+
+    if cfg.frame is None or cfg.frame.history is None:
+        raise VerifyRunError("no history feeds are configured")
+
+    def build(read: dict[str, Any]) -> Any:
+        verifier = build_effect_verifier(EffectsConfig.model_validate(read), params)
+        if verifier is None:
+            raise VerifyRunError("history built no read-only verifier")
+        return verifier
+
+    return read_history(cfg.frame.history, since, build, _mac_key(salt))
+
+
 def recheck_run(
     cfg: VerifyConfig,
     state: Mapping[str, Any],
@@ -2472,6 +3219,7 @@ def recheck_run(
     params: Mapping[str, object],
     run_record: Mapping[str, Any],
     excused: Sequence[tuple[Mapping[str, Any], Mapping[str, object]]] = (),
+    read_provider: Optional[CompleteReadProvider] = None,
 ) -> tuple[FrameVerdict, str]:
     """Judge every change since a verified write's post-save read.
 
@@ -2490,12 +3238,50 @@ def recheck_run(
     refuted with one in ``excused``, ``excused_by`` holds
     ``LATER_WRITE_UNJUDGED``, since the change may be that write's. The
     database is read twice, ``settle_s`` apart, as after the save. Returns
-    the frame verdict and when the database was read.
+    the frame verdict and a conservative lower bound on when its reads began.
 
     Raises :class:`VerifyRunError` for an excuse that doesn't qualify.
     """
 
     post = dict(state["post_state"])
+    if cfg.frame is not None and cfg.frame.history is not None:
+        from openadapt_flow.runtime.effects.history import instant, judge_history
+
+        if excused:
+            raise VerifyRunError(
+                "history rechecks require source provenance; later-write windows cannot excuse events"
+            )
+        from openadapt_flow.runtime.effects.history import (
+            DETAIL,
+            checkpoint_pair_problem,
+        )
+
+        checkpoint = post.get("history")
+        baseline_history = (
+            (state.get("baseline") or {}).get("state", {}).get("detail") or {}
+        ).get(DETAIL)
+        problem = checkpoint_pair_problem(
+            baseline_history, checkpoint, cfg.frame.history
+        )
+        if problem is not None:
+            raise VerifyRunError(problem)
+        if not isinstance(checkpoint, dict):
+            raise VerifyRunError("the history checkpoint is malformed")
+        now, rows = _read_history(
+            cfg, params, checkpoint["since"], bytes.fromhex(str(state["salt"]))
+        )
+        schedule = state["evidence"]["frame"][late_write.EVIDENCE_KEY]
+        verdict = judge_history(
+            cfg.frame.history,
+            checkpoint,
+            now,
+            rows,
+            params,
+            schedule["due_at"],
+            str(run_record.get("executor_id") or ""),
+        )
+        horizon = min(instant(feed["through"]) for feed in now["feeds"].values())
+        return verdict, late_write.format_time(horizon)
     since = late_write.parse_time(str(post["read_at"]))
     windows: list[Any] = []
     unjudged = 0
@@ -2526,7 +3312,10 @@ def recheck_run(
     if post.get("audit") is not None:
         detail[FRAME_AUDIT_DETAIL] = dict(post["audit"])
     before = EffectState(substrate="database", reachable=True, detail=detail)
-    verifier = _build_verifier(cfg, params)
+    verifier = _build_verifier(cfg, params, read_provider)
+    # A lower bound on every observation in this pass. Completion may be
+    # delayed after the database snapshots were taken, even past due_at.
+    read_started_at = _now()
     verdict = judge_run_frame(
         cfg,
         verifier,
@@ -2543,7 +3332,7 @@ def recheck_run(
         # A later write whose frame wasn't judged excuses nothing, so what
         # refuted this write may be that write's own change.
         verdict.excused_by.add(late_write.LATER_WRITE_UNJUDGED)
-    return verdict, _now()
+    return verdict, read_started_at
 
 
 def write_result(result: Mapping[str, Any], out_dir: Path) -> Path:
