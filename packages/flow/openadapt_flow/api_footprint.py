@@ -44,6 +44,25 @@ def _key_column(rows: Sequence[Row]) -> str | None:
     return None
 
 
+def _unique_key(rows: Sequence[Row], key: str) -> bool:
+    """Does ``key`` identify each row on its own: present, non-null, unique?
+
+    A column named ``id`` is not proof of a row key. It can be one part of a
+    composite key, repeat across tenants, or be null. Indexing such a table by
+    it would keep only the last row per value and hide writes to the others.
+    """
+
+    seen: set[str] = set()
+    for r in rows:
+        if key not in r or r[key] is None:
+            return False
+        k = _canon({"k": r[key]})
+        if k in seen:
+            return False
+        seen.add(k)
+    return True
+
+
 def _canon(row: Row) -> str:
     return json.dumps(
         {k: (None if v is None else str(v)) for k, v in row.items()}, sort_keys=True
@@ -53,18 +72,23 @@ def _canon(row: Row) -> str:
 def diff_dumps(before: Dump, after: Dump) -> Changes:
     """What changed between two dumps of a database, table by table.
 
-    Rows are matched by an ``id`` column when the table has one (a changed
-    row is one entry under ``changed``), else as a multiset of whole rows.
+    Rows are matched by an ``id`` column only when that column is present,
+    non-null and unique in both dumps (a changed row is then one entry under
+    ``changed``). Otherwise rows are compared as a multiset of whole rows, so
+    a changed row is one ``removed`` and one ``added`` entry and duplicate
+    rows keep their multiplicity.
     """
 
     out: Changes = {}
     for table in sorted(set(before) | set(after)):
         old, new = list(before.get(table) or []), list(after.get(table) or [])
         key = _key_column(old or new)
+        if key is not None and not (_unique_key(old, key) and _unique_key(new, key)):
+            key = None
         entry: dict[str, list[Any]] = {"added": [], "removed": [], "changed": []}
         if key is not None:
-            o = {str(r.get(key)): r for r in old}
-            n = {str(r.get(key)): r for r in new}
+            o = {_canon({"k": r[key]}): r for r in old}
+            n = {_canon({"k": r[key]}): r for r in new}
             entry["added"] = [n[k] for k in n if k not in o]
             entry["removed"] = [o[k] for k in o if k not in n]
             entry["changed"] = [
