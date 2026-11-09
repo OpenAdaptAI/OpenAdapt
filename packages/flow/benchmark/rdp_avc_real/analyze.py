@@ -108,7 +108,7 @@ def cause_of(trial: dict) -> tuple[str, dict]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("campaigns", nargs="+", type=Path)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument(

@@ -460,11 +460,10 @@ def run_qualification(
     candidate_commit: str = "",
     base_commit: str = "",
 ) -> dict:
-    from playwright.sync_api import sync_playwright
-
     from openadapt_flow.compiler import compile_recording
     from openadapt_flow.recorder import Recorder
     from openadapt_flow.runtime.replayer import Replayer
+    from playwright.sync_api import sync_playwright
 
     work = out_dir / "work"
     work.mkdir(parents=True, exist_ok=True)
@@ -714,7 +713,7 @@ def run_qualification(
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     ap.add_argument(
         "--container",
         default=os.environ.get(

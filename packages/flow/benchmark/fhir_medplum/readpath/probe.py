@@ -293,7 +293,9 @@ def probe(fx: MedplumFixture) -> dict[str, Any]:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     ap.add_argument("--out", required=True)
     args = ap.parse_args(argv)
     facts = probe(MedplumFixture())

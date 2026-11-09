@@ -132,7 +132,6 @@ class BridgeRepairAgent:
 
     def propose(self, request: Any) -> Any:
         import anthropic
-
         from openadapt_flow.repair.self_repair import RepairProposal
 
         key = request.model_key.secret() if request.model_key is not None else None
@@ -339,7 +338,9 @@ def _git_head() -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--trials", type=int, default=3)
     parser.add_argument("--modes", default=",".join(MODES))

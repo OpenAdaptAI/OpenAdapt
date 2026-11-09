@@ -22,7 +22,7 @@ body:
       placeholder: |
         1. openadapt-flow demo-record --out rec
         2. openadapt-flow compile rec --out bundle --name my-task
-        3. openadapt-flow replay bundle
+        3. openadapt-flow replay bundle --demo-app
     validations:
       required: true
   - type: textarea

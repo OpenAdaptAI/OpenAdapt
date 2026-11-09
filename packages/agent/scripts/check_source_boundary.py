@@ -221,7 +221,7 @@ def scan_archive(path: Path, policy: Policy) -> list[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--repo")
     parser.add_argument("--policy", type=Path, default=POLICY_PATH)

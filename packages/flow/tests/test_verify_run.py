@@ -51,6 +51,7 @@ from openadapt_flow.verify_run import (
     salted_digest,
     verify_run,
 )
+from tests._rest_read_contract_fixtures import mockmed_effects_config
 
 PARAMS = {"patient_id": "p1", "note": "Follow-up in two weeks"}
 AGENT_RECORD = {
@@ -68,7 +69,7 @@ TEST_SEED = bytes([7]) * 32
 def _verify_yaml(base_url: str, **extra: object) -> dict:
     doc = {
         "schema_version": "openadapt.verify/v1",
-        "verifier": {"kind": "rest", "base_url": base_url, "records_path": "/api/db"},
+        "verifier": mockmed_effects_config(base_url),
         "effects": [
             {
                 "kind": "record_written",

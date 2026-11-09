@@ -168,7 +168,7 @@ class MockLedger:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser()
+    p = argparse.ArgumentParser(allow_abbrev=False)
     p.add_argument("--db", type=Path, required=True)
     p.add_argument("--export-dir", type=Path, default=Path("exports"))
     p.add_argument("--seed", action="store_true")

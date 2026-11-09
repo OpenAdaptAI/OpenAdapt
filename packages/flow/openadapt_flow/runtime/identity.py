@@ -401,6 +401,20 @@ def regions_intersect(a: Region, b: Region) -> bool:
 _intersects = regions_intersect
 
 
+def centered_in(region: Region, scope: Region) -> bool:
+    """Whether ``region``'s center lies inside ``scope``.
+
+    Scopes the identity band to the active dialog: a line belongs to the
+    dialog when its center is inside the dialog's box, so a form label beside
+    the dialog is not identity evidence. A line the dialog's edge only clips
+    is judged by where most of it sits.
+    """
+    x, y, w, h = region
+    sx, sy, sw, sh = scope
+    cx, cy = x + w // 2, y + h // 2
+    return sx <= cx < sx + sw and sy <= cy < sy + sh
+
+
 def lines_near_point(lines: Iterable[Any], point_y: int) -> list[Any]:
     """Filter OCR lines to the single text row containing ``point_y``.
 
@@ -473,6 +487,7 @@ def context_from_lines(
     point: Optional[Point] = None,
     min_confidence: float = 0.5,
     reference_date: Optional[date] = None,
+    scope: Optional[Region] = None,
 ) -> Optional[str]:
     """Extract the context-band text from full-frame OCR lines.
 
@@ -497,6 +512,8 @@ def context_from_lines(
         reference_date: The recording date, enabling the near/far date
             split; when None every date-bearing line is dropped (heal-time
             re-extraction has no recording date).
+        scope: The active dialog's box when the target sits in one; lines
+            centered outside it (the page behind the dialog) are dropped.
 
     Returns:
         The joined band text, or None when the surviving text is too short
@@ -509,6 +526,7 @@ def context_from_lines(
         point=point,
         min_confidence=min_confidence,
         reference_date=reference_date,
+        scope=scope,
     )
     if not kept:
         return None
@@ -563,6 +581,7 @@ def _kept_context_lines(
     point: Optional[Point],
     min_confidence: float,
     reference_date: Optional[date],
+    scope: Optional[Region] = None,
 ) -> list[tuple[int, Any, str]]:
     """The confident, in-band, non-excluded, non-volatile identity lines.
 
@@ -579,6 +598,8 @@ def _kept_context_lines(
         lx, ly, lw, lh = line.region
         center_y = ly + lh // 2
         if not (band_y <= center_y < band_y + band_h):
+            continue
+        if scope is not None and not centered_in(line.region, scope):
             continue
         if _intersects(line.region, exclude_region):
             continue
@@ -599,6 +620,7 @@ def context_region_from_lines(
     point: Optional[Point] = None,
     min_confidence: float = 0.5,
     reference_date: Optional[date] = None,
+    scope: Optional[Region] = None,
 ) -> Optional[Region]:
     """Bounding box of the identity lines :func:`context_from_lines` keeps.
 
@@ -618,6 +640,7 @@ def context_region_from_lines(
         point=point,
         min_confidence=min_confidence,
         reference_date=reference_date,
+        scope=scope,
     )
     if not kept:
         return None
@@ -884,6 +907,118 @@ _GEN_SUFFIX_CANON = frozenset(ocr_canonical(s) for s in GENERATIONAL_SUFFIXES)
 # _GENERIC_IDENTITY_WORDS): compared against the canonical form of a band
 # token so 'Act1ve'/'0pen'-style OCR noise still folds to the stop word.
 _GENERIC_IDENTITY_CANON = frozenset(ocr_canonical(w) for w in _GENERIC_IDENTITY_WORDS)
+
+
+# Form labels, hints and column headings: the words a UI prints beside a
+# record, never part of it. With lowercase words and "Label:" tokens they are
+# not identity-bearing, so they never pad coverage (see identity_bearing).
+_LABEL_WORDS = frozenset(
+    (
+        "name",
+        "last",
+        "first",
+        "middle",
+        "preferred",
+        "phone",
+        "home",
+        "work",
+        "mobile",
+        "cell",
+        "fax",
+        "email",
+        "address",
+        "city",
+        "state",
+        "zip",
+        "country",
+        "dob",
+        "birth",
+        "birthdate",
+        "date",
+        "time",
+        "age",
+        "sex",
+        "gender",
+        "mrn",
+        "id",
+        "number",
+        "num",
+        "account",
+        "acct",
+        "ssn",
+        "subscriber",
+        "invoice",
+        "billing",
+        "type",
+        "mode",
+        "note",
+        "notes",
+        "user",
+        "provider",
+        "select",
+        "ok",
+        "cancel",
+        "save",
+        "clear",
+        "new",
+        "add",
+        "edit",
+        "delete",
+        "close",
+        "previous",
+        "next",
+        "show",
+        "only",
+        "all",
+        "insurance",
+        "clinic",
+        "family",
+    )
+)
+_LABEL_CANON = (
+    frozenset(ocr_canonical(w) for w in _LABEL_WORDS) | _GENERIC_IDENTITY_CANON
+)
+
+
+def identity_bearing(raw_token: str, squashed_token: str) -> bool:
+    """Whether a band token can identify a record, from its shape alone.
+
+    Digit-bearing tokens (ids, dates, ages, counts) and capitalised
+    name-shaped words count. Lowercase words, ``Label:`` tokens and UI
+    vocabulary (field labels, hints, column words) do not: they appear
+    identically beside every record, so they must never pad coverage. The
+    same rule holds in a list, a form or a dialog.
+    """
+    if _has_digit(squashed_token):
+        return True
+    if raw_token.rstrip().endswith(":"):
+        return False
+    bare = squashed_token.strip(".,;:()[]")
+    return (
+        _name_shaped(raw_token, squashed_token)
+        and ocr_canonical(bare) not in _LABEL_CANON
+    )
+
+
+def identity_coverage(
+    lengths: list[int], matched: list[bool], bearing: list[bool]
+) -> tuple[float, bool]:
+    """Coverage the band must meet, and whether identity evidence is short.
+
+    The lower of whole-band coverage and coverage over identity-bearing
+    tokens. Label text then cannot pad coverage (the bearing share must pass
+    on its own), and leaving a token out of the bearing share can never let
+    a band pass that whole-band coverage fails: a real name that reads like
+    a UI word ("Ali" / "all") or is entered lowercase still counts there.
+    Short when no recorded token is identity-bearing: nothing identifies
+    the record, so the OCR tier abstains.
+    """
+    whole = sum(n for n, m in zip(lengths, matched) if m) / max(sum(lengths), 1)
+    total = sum(n for n, b in zip(lengths, bearing) if b)
+    if not total:
+        return whole, True
+    share = sum(n for n, m, b in zip(lengths, matched, bearing) if m and b) / total
+    return min(whole, share), False
 
 
 def _is_generational_suffix(token: str) -> bool:
@@ -1321,6 +1456,12 @@ def _glues_digits(fragments: list[str]) -> bool:
     )
 
 
+def _digit_floor_met(digit: list[bool], raw_matched: list[bool]) -> bool:
+    """With an id, date or other digit token in the recorded band, at least
+    one of them must match raw: a name-only match is not enough."""
+    return not any(digit) or any(d and r for d, r in zip(digit, raw_matched))
+
+
 def _digit_token_absent(exp: list[str], matched: list[bool]) -> bool:
     """Whether a digit-bearing recorded token (id, date, age, count) is
     unmatched. Such a token is never a tolerated uncovered run: absent, the
@@ -1393,6 +1534,7 @@ def band_match(
     exp = tokenize(expected_text)
     if not exp:
         return BandMatch(0.0, 0, 0)
+    exp_raw = [tok for tok in expected_text.split() if squash(tok)]
     obs_raw = [tok for tok in observed_text.split() if squash(tok)]
     obs = [squash(tok) for tok in obs_raw]
     exp_c = [ocr_canonical(t) for t in exp]
@@ -1513,8 +1655,15 @@ def band_match(
         or _extra_digit_token(exp, obs, explained)
         or _name_token_replaced(exp, obs, matched, explained)
     )
+    coverage, no_bearing = identity_coverage(
+        [len(t) for t in exp],
+        matched,
+        [identity_bearing(r, t) for r, t in zip(exp_raw, exp)],
+    )
+    if no_bearing or not _digit_floor_met([_has_digit(t) for t in exp], raw_matched):
+        evidence_short = True
     return BandMatch(
-        matched_chars / total_chars,
+        coverage,
         max(uncovered_runs, default=0),
         contradicted_chars,
         suspect_chars,
@@ -2525,6 +2674,34 @@ def crop_region(frame_png: bytes, region: Region) -> Optional[bytes]:
     if x1 <= x0 or y1 <= y0:
         return None
     ok, buf = cv2.imencode(".png", img[y0:y1, x0:x1])
+    return buf.tobytes() if ok else None
+
+
+def mask_outside(frame_png: bytes, region: Region) -> Optional[bytes]:
+    """Blank every pixel of a PNG frame outside ``region`` (x, y, w, h).
+
+    The identity band of a target inside a dialog is read on this frame, at
+    record and at replay time, so the page behind the dialog cannot reach the
+    OCR at all: a label beside the dialog is neither read nor merged into a
+    line with the dialog's own text. The fill is flat white, which OCR reads
+    as no text. Returns None when the frame cannot be decoded or the region
+    is empty.
+    """
+    import cv2
+    import numpy as np
+
+    img = cv2.imdecode(np.frombuffer(frame_png, np.uint8), cv2.IMREAD_COLOR)
+    if img is None:
+        return None
+    h, w = img.shape[:2]
+    x0, y0 = max(0, int(region[0])), max(0, int(region[1]))
+    x1 = min(w, int(region[0]) + int(region[2]))
+    y1 = min(h, int(region[1]) + int(region[3]))
+    if x1 <= x0 or y1 <= y0:
+        return None
+    out = np.full_like(img, 255)
+    out[y0:y1, x0:x1] = img[y0:y1, x0:x1]
+    ok, buf = cv2.imencode(".png", out)
     return buf.tobytes() if ok else None
 
 
