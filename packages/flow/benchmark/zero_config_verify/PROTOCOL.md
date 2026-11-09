@@ -146,3 +146,24 @@ generated verifiers under `generated/`. Re-run with:
 cd packages/flow
 uv run --frozen --extra dev --extra browser python -m benchmark.zero_config_verify.run
 ```
+
+## Deviations
+
+### 2026-11-09, before any trial (found by the generation-only smoke run)
+
+The committed hand-written files (`environments/openenv/{mockmed,mockloan}/verify.yaml`)
+read `/api/db` without declaring the read complete. Since #2041 a REST read
+whose completeness is not established is unreachable, so on this commit both
+files return `INDETERMINATE` for a correct save (checked by hand on one MockMed
+`ok` save: `INDETERMINATE`, outcome `reconciliation_required`; with
+`records_complete: true` added: `CONFIRMED`). A baseline that rejects every
+run makes the false-reject threshold meaningless, so there are two hand-written
+baselines:
+
+- `hand-written` (as committed): reported, not used for the thresholds;
+- `hand-written+complete`: the same file with `records_complete: true` added
+  under `verifier:`, the one line #2041 made necessary. **The kill thresholds
+  compare against this one.**
+
+The `P-*` arms take their read path from `hand-written+complete` for the
+same reason. No other change.
