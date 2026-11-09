@@ -119,3 +119,27 @@ def test_glued_forms_keep_marks_beside_digits() -> None:
     assert I.glued_forms(["1.", "23456"]) == ["1.23456"]
     assert I.glued_forms(["name:", "15"]) == ["name:15"]
     assert I.glued_forms(["hint:", "enter"]) == ["hint:enter", "hintenter"]
+
+
+# Review blocker 2 (Codex, PR 1742): a fragment that is only punctuation sits
+# between two other fragments, so checking only immediate neighbours let a run
+# of marks between two id fragments lose one ("RC79..284" read as
+# "RC79.284"). Every mark, on both the plaintext and the template path.
+@pytest.mark.parametrize("mark", [".", ",", ":", ";"])
+def test_punctuation_run_between_id_fragments_is_kept(mark: str) -> None:
+    recorded = f"Ashford Jane 02/23/1975 RC79 {mark} {mark} 284 Active"
+    changed = f"Ashford Jane 02/23/1975 RC79{mark}284 Active"
+    unchanged = f"Ashford Jane 02/23/1975 RC79{mark}{mark}284 Active"
+    plain, hashed = _both(recorded, changed)
+    assert plain != "verified"
+    assert hashed != "verified"
+    assert _both(recorded, unchanged) == ("verified", "verified")
+
+
+@pytest.mark.parametrize("mark", [".", ",", ":", ";"])
+def test_glued_forms_keep_punctuation_runs_beside_digits(mark: str) -> None:
+    assert I.glued_forms(["RC79", mark, mark, "284"]) == [f"RC79{mark}{mark}284"]
+    assert I.glued_forms(["hint", mark, mark, "enter"]) == [
+        f"hint{mark}{mark}enter",
+        "hintenter",
+    ]
