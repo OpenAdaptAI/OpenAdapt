@@ -1,9 +1,0 @@
-.                                                                        [100%]
-=============================== warnings summary ===============================
-../../.venv-envs/lib/python3.12/site-packages/_pytest/config/__init__.py:1636
-  /Users/abrichr/oa/worktrees/openenv-benches/.venv-envs/lib/python3.12/site-packages/_pytest/config/__init__.py:1636: PytestConfigWarning: Unknown config option: timeout
-  
-    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-1 passed, 4 deselected, 1 warning in 25.07s

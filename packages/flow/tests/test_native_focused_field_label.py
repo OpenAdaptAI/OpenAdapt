@@ -160,15 +160,15 @@ def test_atspi_field_label_prefers_labelled_by() -> None:
 
 def test_uia_field_label_prefers_labeled_by_then_name() -> None:
     class Ctrl:
-        def __init__(self, name, labeled_by=None, prop_id=30092):
+        def __init__(self, name, labeled_by=None):
             self.Name = name
-            self._labeled_by = labeled_by
-            self._prop_id = prop_id
+            self.Element = SimpleNamespace(
+                CurrentName=name,
+                CurrentLabeledBy=labeled_by.Element if labeled_by is not None else None,
+            )
 
         def GetPropertyValue(self, prop_id):
-            if prop_id == self._prop_id:
-                return self._labeled_by
-            return None
+            raise AssertionError("typed label reads must not query legacy property IDs")
 
     label = Ctrl("Insurance No.")
     field = Ctrl("ignored", labeled_by=label)

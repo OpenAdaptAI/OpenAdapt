@@ -1,3 +1,0 @@
-# Signed files: their exact bytes are what the Seals cover.
-tests/fixtures/seal_view/** -text
-packages/seal-view/test/fixtures/** -text

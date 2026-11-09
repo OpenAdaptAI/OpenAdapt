@@ -1,1 +1,0 @@
-"""Platform structural-observer implementations."""

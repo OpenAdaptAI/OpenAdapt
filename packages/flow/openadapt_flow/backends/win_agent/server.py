@@ -757,25 +757,12 @@ def _target_fingerprint(control: object, candidate: dict[str, Any]) -> str:
 
 
 def _uia_labeled_by(control: object) -> Optional[object]:
-    """The UIA LabeledBy target for ``control``, or None."""
+    """The raw UIA LabeledBy element for ``control``, or None."""
 
-    # uiautomation exposes LabeledBy as property id 30092; prefer a named
-    # constant when the package provides one.
-    try:
-        import uiautomation as auto  # noqa: PLC0415
-    except Exception:
-        auto = None
-    prop_id = 30092
-    if auto is not None:
-        prop_id = int(getattr(auto, "LabeledByProperty", prop_id) or prop_id)
-    getter = getattr(control, "GetPropertyValue", None)
-    if not callable(getter):
-        return None
-    try:
-        labeled = getter(prop_id)
-    except Exception:  # noqa: BLE001
-        return None
-    return labeled if labeled is not None else None
+    # The typed COM getter returns IUIAutomationElement directly. The generic
+    # GetPropertyValue API returns VT_UNKNOWN, not a uiautomation Control.
+    element = _control_value(control, "Element", None)
+    return _control_value(element, "CurrentLabeledBy", None)
 
 
 def _uia_field_label(control: object) -> Optional[str]:
@@ -783,7 +770,7 @@ def _uia_field_label(control: object) -> Optional[str]:
 
     labeled = _uia_labeled_by(control)
     if labeled is not None:
-        name = " ".join(str(_control_value(labeled, "Name", "") or "").split())
+        name = " ".join(str(_control_value(labeled, "CurrentName", "") or "").split())
         if name:
             return name
     name = " ".join(str(_control_value(control, "Name", "") or "").split())
