@@ -44,6 +44,7 @@ from openadapt_flow.runtime.effects import (
     Verdict,
 )
 from openadapt_flow.runtime.replayer import Replayer
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 from tests.test_replayer_api_actuator import (
     GuiWritingBackend,
     _dirs,
@@ -103,8 +104,7 @@ def _fixture(url: str, **over) -> AdmissionFixture:
     # MockMed's own shape, named here: the engine assumes no app's paths.
     kw = dict(
         base_url=url,
-        records_path="/api/db",
-        records_key="records",
+        **mockmed_rest_read_kwargs(),
         write_path="/api/encounter",
         server_fields=frozenset({"source"}),
         params={"note": NOTE},
@@ -320,9 +320,7 @@ def test_refused_admission_leaves_gui_ladder(tmp_path):
         report = Replayer(
             backend,
             vision=_vision_that_confirms_saved(),
-            effect_verifier=RestRecordVerifier(
-                url, records_path="/api/db", records_key="records"
-            ),
+            effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
             poll_interval_s=0.01,
         ).run(_save_workflow(step), bundle_dir=bundle, run_dir=run_dir)
 
@@ -375,9 +373,7 @@ def test_admitted_binding_halts_on_indeterminate_without_gui_retry(tmp_path):
         report = Replayer(
             backend,
             vision=_vision_that_confirms_saved(),
-            effect_verifier=_IndeterminateVerifier(
-                url, records_path="/api/db", records_key="records"
-            ),
+            effect_verifier=_IndeterminateVerifier(url, **mockmed_rest_read_kwargs()),
             api_actuator=ApiActuator(url),
             poll_interval_s=0.01,
         ).run(_save_workflow(step), bundle_dir=bundle, run_dir=run_dir)
@@ -411,8 +407,7 @@ def test_admit_requires_actuated_then_confirmed():
         decision = admit_rest_binding(
             proposal,
             fixture=AdmissionFixture(
-                records_path="/api/db",
-                records_key="records",
+                **mockmed_rest_read_kwargs(),
                 write_path="/api/encounter",
                 server_fields=frozenset({"source"}),
                 base_url=url,

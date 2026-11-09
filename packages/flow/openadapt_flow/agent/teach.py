@@ -212,7 +212,13 @@ class TaughtEngine:
         self.config = config
 
     def execute(
-        self, entry: Any, run_id: str, inputs: dict[str, str], raw: Mapping[str, Any]
+        self,
+        entry: Any,
+        run_id: str,
+        inputs: dict[str, str],
+        raw: Mapping[str, Any],
+        *,
+        admitted_bundle_sha256: Optional[str] = None,
     ) -> Any:
         from openadapt_flow.agent.service import EngineResult
         from openadapt_flow.compile_agent import FirstRunCompiler

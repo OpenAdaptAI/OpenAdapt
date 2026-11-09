@@ -36,6 +36,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -674,6 +675,27 @@ def classify_outcome(
     return outcome
 
 
+def admitted_snapshot(bundle_dir: Path, admitted: str, root: Path) -> Optional[Path]:
+    """Copy ``bundle_dir`` under private ``root``; None unless it is ``admitted``.
+
+    The digest is recomputed from the copy, after copying, so an edit to the
+    live bundle at any point after the intake gate can't reach the run: the
+    copy either has the admitted bytes or the run is refused (#1890).
+    Symlinks are copied as their targets' bytes.
+    """
+
+    from openadapt_flow.intake.param_gate import bundle_sha256
+
+    snapshot = root / (Path(bundle_dir).name or "bundle")
+    try:
+        os.chmod(root, 0o700)
+        shutil.copytree(Path(bundle_dir), snapshot, symlinks=False)
+        digest = bundle_sha256(snapshot)
+    except Exception:  # noqa: BLE001 - unreadable/uncopyable bundle: refuse
+        return None
+    return snapshot if digest == admitted else None
+
+
 class FlowRunner:
     """Execute one governed run per call via the ``openadapt-flow`` CLI."""
 
@@ -687,6 +709,7 @@ class FlowRunner:
         params_file: Path,
         url: Optional[str],
         cloud_execution_id: Optional[str] = None,
+        admitted_bundle_sha256: Optional[str] = None,
     ) -> list[str]:
         cmd = [
             *self.config.flow_cli,
@@ -718,6 +741,11 @@ class FlowRunner:
             cmd += ["--cloud-execution-id", cloud_execution_id]
         if self.config.hold_on_halt_s > 0:
             cmd += ["--hold-on-halt", f"{self.config.hold_on_halt_s:g}"]
+        if admitted_bundle_sha256:
+            # The intake grant's exact bundle identity (#1890): the CLI
+            # refuses any bundle whose recomputed digest differs, at load,
+            # at authorization, and again where replay reloads it.
+            cmd += ["--admitted-bundle-sha256", admitted_bundle_sha256]
         cmd += list(self.config.extra_run_args)
         return cmd
 
@@ -730,12 +758,69 @@ class FlowRunner:
         url_override: Optional[str] = None,
         run_id: Optional[str] = None,
         cloud_execution_id: Optional[str] = None,
+        admitted_bundle_sha256: Optional[str] = None,
     ) -> RunOutcome:
         """Run the bundle once. Params travel via ``--params-file`` (never argv).
 
         ``run_id`` lets a caller hand out the id before the run finishes. It
         must be a single safe path component; a fresh one is made otherwise.
+
+        ``admitted_bundle_sha256`` is the digest an intake grant admitted
+        (#1890). The CLI then runs a private snapshot of the bundle whose
+        digest was checked after copying, never the live directory, and is
+        told the digest so it refuses any other bytes itself.
         """
+        if admitted_bundle_sha256 is None:
+            return self._run(
+                workflow=workflow,
+                bundle_dir=bundle_dir,
+                params=params,
+                url_override=url_override,
+                run_id=run_id,
+                cloud_execution_id=cloud_execution_id,
+            )
+        snapshot_root = Path(tempfile.mkdtemp(prefix="openadapt_admitted_bundle_"))
+        try:
+            snapshot = admitted_snapshot(
+                Path(bundle_dir), admitted_bundle_sha256, snapshot_root
+            )
+            if snapshot is None:
+                return RunOutcome(
+                    status="refused",
+                    workflow=workflow,
+                    run_id=run_id if run_id and is_safe_run_id(run_id) else None,
+                    reason="policy_refused",
+                    failed_checks=["admitted_bundle_changed"],
+                    refused_before_start=True,
+                    process_started=False,
+                    detail=(
+                        "The workflow bundle no longer matches the bundle the "
+                        "intake grant admitted. Nothing was executed."
+                    ),
+                )
+            return self._run(
+                workflow=workflow,
+                bundle_dir=snapshot,
+                params=params,
+                url_override=url_override,
+                run_id=run_id,
+                cloud_execution_id=cloud_execution_id,
+                admitted_bundle_sha256=admitted_bundle_sha256,
+            )
+        finally:
+            shutil.rmtree(snapshot_root, ignore_errors=True)
+
+    def _run(
+        self,
+        *,
+        workflow: str,
+        bundle_dir: Path,
+        params: dict[str, str],
+        url_override: Optional[str] = None,
+        run_id: Optional[str] = None,
+        cloud_execution_id: Optional[str] = None,
+        admitted_bundle_sha256: Optional[str] = None,
+    ) -> RunOutcome:
         url = self.config.url
         if run_id is None or not is_safe_run_id(run_id):
             run_id = new_run_id()
@@ -771,7 +856,12 @@ class FlowRunner:
             with os.fdopen(params_fd, "w") as fh:
                 json.dump({k: str(v) for k, v in (params or {}).items()}, fh)
             cmd = self._build_command(
-                Path(bundle_dir), run_dir, params_file, url, cloud_execution_id
+                Path(bundle_dir),
+                run_dir,
+                params_file,
+                url,
+                cloud_execution_id,
+                admitted_bundle_sha256=admitted_bundle_sha256,
             )
             try:
                 # Decode with replacement: a strict decode error would surface

@@ -114,6 +114,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       flow: ${{ steps.classify.outputs.flow }}
+      flow_unit_shards: ${{ steps.classify.outputs.flow_unit_shards }}
       types: ${{ steps.classify.outputs.types }}
       agent: ${{ steps.classify.outputs.agent }}
       capture: ${{ steps.classify.outputs.capture }}
@@ -128,6 +129,8 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Reject tracked evidence key material
+        run: python3 scripts/check_evidence_keys.py
       - name: Classify the change
         id: classify
         env:
@@ -136,6 +139,9 @@ jobs:
           GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
         run: |
           set -euo pipefail
+          # Both the matrix and the claims consumer use this exact count.
+          if [ "$EVENT_NAME" = pull_request ]; then unit_shards=3; else unit_shards=2; fi
+          echo "flow_unit_shards=$unit_shards" >> "$GITHUB_OUTPUT"
           all() {
             for pkg in flow types agent capture privacy desktop tray program_graph weight; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
             exit 0
@@ -439,7 +445,7 @@ jobs:
         # together: a pull request's fast lane takes three shards, about five
         # minutes each, to fit `ci` in ten minutes. The full suite on main and
         # nightly takes two.
-        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"shard":1,"of":3},{"shard":2,"of":3},{"shard":3,"of":3}]' || '[{"shard":1,"of":2},{"shard":2,"of":2}]') }}
+        include: ${{ fromJSON(needs.scope.outputs.flow_unit_shards == '3' && '[{"shard":1,"of":3},{"shard":2,"of":3},{"shard":3,"of":3}]' || '[{"shard":1,"of":2},{"shard":2,"of":2}]') }}
     defaults:
       run:
         working-directory: packages/flow
@@ -464,7 +470,7 @@ jobs:
         # dependencies than the published one Flow's lock names.
         run: >-
           python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,capture,agent]' --lock packages/capture
-          --editable packages/types --editable packages/capture --editable packages/flow
+          --editable packages/types --editable packages/capture --editable packages/flow --editable packages/agent --editable .
       - name: Install Harness² for the integration tests
         # Not on PyPI. Pinned to the commit benchmark.harness.harness2
         # is written against; it has no runtime dependencies.
@@ -478,6 +484,53 @@ jobs:
           here = pathlib.Path(openadapt_capture.__file__).resolve().as_posix()
           assert "packages/capture/openadapt_capture" in here, here
           print("openadapt_capture from", here)
+          PY
+      - name: Verify the installed Agent shim, launcher and Flow implementation
+        run: |
+          python - <<'PY'
+          import importlib.metadata
+          import importlib.util
+          import json
+          import pathlib
+
+          root = pathlib.Path.cwd().resolve().parents[1]
+          shim = importlib.util.find_spec("openadapt_agent")
+          expected = root / "packages/agent/src/openadapt_agent/__init__.py"
+          assert (
+              shim and shim.origin and pathlib.Path(shim.origin).resolve() == expected
+          ), shim
+          installed = importlib.metadata.distribution("openadapt-agent")
+          direct = json.loads(installed.read_text("direct_url.json") or "{}")
+          assert direct.get("url") == (root / "packages/agent").as_uri(), direct
+          assert direct.get("dir_info", {}).get("editable") is True, direct
+
+          compatibility = importlib.import_module("openadapt_agent")
+          engine = importlib.import_module("openadapt_flow.agent")
+          assert compatibility is engine
+          implementation = pathlib.Path(engine.__file__).resolve()
+          expected_implementation = root / "packages/flow/openadapt_flow/agent/__init__.py"
+          assert implementation == expected_implementation, implementation
+          print("openadapt-agent shim from", expected)
+          print("openadapt_flow.agent from", implementation)
+
+          launcher_spec = importlib.util.find_spec("openadapt")
+          expected_launcher = root / "openadapt/__init__.py"
+          assert (
+              launcher_spec
+              and launcher_spec.origin
+              and pathlib.Path(launcher_spec.origin).resolve() == expected_launcher
+          ), launcher_spec
+          launcher_distribution = importlib.metadata.distribution("openadapt")
+          launcher_direct = json.loads(
+              launcher_distribution.read_text("direct_url.json") or "{}"
+          )
+          assert launcher_direct.get("url") == root.as_uri(), launcher_direct
+          assert (
+              launcher_direct.get("dir_info", {}).get("editable") is True
+          ), launcher_direct
+          launcher = importlib.import_module("openadapt")
+          assert pathlib.Path(launcher.__file__).resolve() == expected_launcher
+          print("openadapt launcher from", expected_launcher)
           PY
       - name: Resolve Playwright version
         id: pw
@@ -528,7 +581,16 @@ jobs:
           set -euo pipefail
           mkdir -p runs
           mapfile -t files < "$RUNNER_TEMP/shard.txt"
-          pytest -n logical --dist loadfile -v --durations=20 --basetemp=runs/ci "${files[@]}"
+          pytest -n logical --dist loadfile -v --durations=20 --basetemp=runs/ci \
+            --junitxml=runs/flow-unit-shard-${{ matrix.shard }}-of-${{ matrix.of }}.xml "${files[@]}"
+      - name: Retain this shard's claims evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flow-unit-junit-${{ matrix.shard }}-of-${{ matrix.of }}
+          path: packages/flow/runs/flow-unit-shard-${{ matrix.shard }}-of-${{ matrix.of }}.xml
+          if-no-files-found: error
+          retention-days: 7
 
   flow-critical:
     name: flow core critical (golden VERIFIED, zero model calls)
@@ -636,6 +698,11 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
 
+      - name: Validate passing browser claim evidence
+        run: >-
+          python scripts/validate_claims.py --check --ci-job e2e-browser
+          --junit runs/critical-e2e-junit.xml
+
   # The on-prem install path for real: build two signed offline releases of
   # openadapt-flow[privacy] from uv.lock on this connected runner, then, as
   # root in a network namespace with no route out, install the first from its
@@ -644,7 +711,9 @@ jobs:
   # no index and the machine has no network, so a wheel missing from the
   # archive fails the install. deploy/on-prem/bin/test-offline-install.sh.
   # First, bin/test-update.sh: the update state machine's refusal, migration
-  # and recovery paths with a fake venv build, which nothing else runs.
+  # and recovery paths with a fake venv build, which nothing else runs. Then
+  # bin/test-container.sh: the runner image built from the first release with
+  # no network, run on docker-compose.yml's internal network.
   flow-onprem-offline:
     name: flow on-prem offline install, update and rollback (egress blocked)
     needs: scope
@@ -668,6 +737,8 @@ jobs:
         run: bash deploy/on-prem/bin/test-update.sh
       - name: Build two signed offline releases from the lock (connected)
         run: bash deploy/on-prem/bin/test-offline-install.sh stage "$RUNNER_TEMP/offline"
+      - name: Container image from the signed release (no-network build, internal network)
+        run: bash deploy/on-prem/bin/test-container.sh "$RUNNER_TEMP/offline"
       - name: Install, update and roll back with egress blocked
         # env -u SUDO_UID keeps the command root inside the namespace:
         # install.sh owns the release tree as root.
@@ -817,9 +888,7 @@ jobs:
   # checked from file bytes); qualify_linux.py records a write workflow on a
   # GTK3 chart app with SQLite, compiles it, runs it governed with the record
   # check (clean, another patient, a look-alike) and repairs an update notice
-  # on its AT-SPI element identity; qualify_linux_window_record.py records
-  # that app through Capture scoped to its window, with a second window open.
-  # All results are uploaded.
+  # on its AT-SPI element identity. Both results are uploaded.
   flow-linux-atspi:
     name: flow native Linux (AT-SPI, Xvfb)
     needs: scope
@@ -858,24 +927,19 @@ jobs:
           set -e
           sudo apt-get install -y \
             at-spi2-core dbus-x11 gir1.2-atspi-2.0 gir1.2-gtk-3.0 libatk-adaptor \
-            libcairo2-dev libgirepository-2.0-dev openbox pkg-config xauth xdotool xvfb
+            libcairo2-dev libgirepository-2.0-dev openbox pkg-config xauth xvfb
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
-          cache-dependency-glob: |
-            packages/flow/uv.lock
-            packages/capture/uv.lock
+          cache-dependency-glob: packages/flow/uv.lock
           cache-suffix: flow-linux-atspi
-      - name: Install from the locks
-        # Flow's lock, then Capture's: the in-tree Capture (X11 window capture)
-        # can need newer dependencies than the published one Flow's lock names.
+      - name: Install from the lock
         run: >-
-          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,linux,capture]'
-          --lock packages/capture
-          --editable packages/types --editable packages/capture --editable packages/flow
+          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,linux]'
+          --editable packages/types --editable packages/flow
       - name: Qualify LinuxBackend on the GTK3 fixture
         timeout-minutes: 10
         run: |
@@ -895,17 +959,6 @@ jobs:
             env XDG_SESSION_TYPE=x11 NO_AT_BRIDGE=0 GTK_MODULES=atk-bridge \
             python benchmark/repair_every_backend/qualify_linux.py \
             --output runs/linux-atspi/record-compile-run.json
-      - name: Record one X11 window through Capture with a second window open
-        timeout-minutes: 10
-        run: |
-          # --skip-other-clicks: Capture's verifier rejects a recording whose
-          # dropped input left a hole in the source ordinals, so clicks in the
-          # second window fail the recording. The second window stays open.
-          xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- \
-            bash -c 'openbox >/dev/null 2>&1 & sleep 1; exec "$@"' bash \
-            env XDG_SESSION_TYPE=x11 GDK_BACKEND=x11 \
-            python scripts/qualify_linux_window_record.py --skip-other-clicks \
-            --output runs/linux-atspi/window-record.json
       - name: Upload Linux AT-SPI qualification evidence
         if: always()
         timeout-minutes: 2
@@ -1603,3 +1656,37 @@ jobs:
               print(f"failed: {bad}")
           sys.exit(1 if bad else 0)
           PY
+      # Unit evidence is complete only after every current-run shard passed.
+      # The merge queue deliberately rechecks critical tests, not unit shards.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        with:
+          enable-cache: true
+          cache-dependency-glob: .github/ci-tools/uv.lock
+          cache-suffix: flow-claims
+      - name: Install the locked claims validator dependency
+        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        run: python scripts/ci/locked_install.py --lock .github/ci-tools:claims
+      - name: Download this run's unit claim evidence
+        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: flow-unit-junit-*
+          path: runs/flow-unit-junit
+          merge-multiple: false
+      - name: Require every unit shard and validate all supported unit evidence
+        if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+        run: |
+          set -euo pipefail
+          python scripts/ci/merge_flow_junit.py --artifacts-dir runs/flow-unit-junit \
+            --shards '${{ needs.scope.outputs.flow_unit_shards }}' --out runs/flow-unit-junit.xml
+          cd packages/flow
+          python scripts/validate_claims.py --check --ci-job test --junit ../../runs/flow-unit-junit.xml

@@ -25,6 +25,7 @@ def main(argv: list[str] | None = None) -> int:
             "Integrated OpenEMR add-patient-note end-to-end proof "
             "(compiled arm, $0; paid agent arm gated off and never invoked)."
         ),
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--out",

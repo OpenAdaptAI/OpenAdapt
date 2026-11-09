@@ -55,6 +55,7 @@ if TYPE_CHECKING:
     # Type-only import for the Step.effects forward reference. The RUNTIME
     # import is at the BOTTOM of this module (see the note there) to avoid a
     # circular import through openadapt_flow.runtime's package init.
+    from openadapt_flow.locale_invariants import LocaleInvariants
     from openadapt_flow.qualification import QualificationProject
     from openadapt_flow.runtime.effects.effect import Effect
 
@@ -259,6 +260,11 @@ class TokenTemplate(BaseModel):
     idsh: bool = False
     glyph: bool = False
     gen: bool = False
+    bearing: Optional[bool] = Field(
+        default=None,
+        description="identity-bearing (identity.identity_bearing); None in "
+        "bundles compiled before the flag, which count every token",
+    )
 
 
 class ConcatTemplate(BaseModel):
@@ -1179,6 +1185,11 @@ class ParamSpec(BaseModel):
     required, and enum choices. Additive: ``Workflow.param_specs`` lives
     ALONGSIDE the frozen ``Workflow.params`` dict; a bundle with an empty
     ``param_specs`` behaves exactly as before.
+
+    ``intake_field`` (optional) names the intake document field this tool
+    parameter may come from. When set, the MCP/runtime gate refuses a call
+    whose value does not match the trusted intake provenance for that field
+    (#1890). Unset means the parameter is not intake-bound.
     """
 
     name: str
@@ -1192,6 +1203,23 @@ class ParamSpec(BaseModel):
     choices: list[str] = Field(
         default_factory=list, description="Allowed values for an enum param."
     )
+    intake_field: Optional[str] = Field(
+        default=None,
+        description=(
+            "Intake field name this parameter may be filled from. When set, "
+            "a taught-tool call must match the registered intake provenance "
+            "for that field, or it is refused."
+        ),
+    )
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Omit unset ``intake_field`` so existing bundle digests stay stable."""
+
+        data: dict[str, Any] = handler(self)
+        if self.intake_field is None:
+            data.pop("intake_field", None)
+        return data
 
 
 class PredicateKind(str, Enum):
@@ -2008,6 +2036,45 @@ class HoverEvidence(BaseModel):
     dwell_ms: int = Field(default=800, ge=0, le=5000)
 
 
+class NativeSelectOption(BaseModel):
+    """One option in a bounded, observed native HTML select census."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    value: str = Field(max_length=512, strict=True)
+    label: str = Field(max_length=512, strict=True)
+    disabled: bool = Field(strict=True)
+
+
+class NativeSelectContract(BaseModel):
+    """Exact semantic selection, distinct from remote text-and-key input."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: Literal["html_single_select"] = "html_single_select"
+    value: str = Field(max_length=512, strict=True)
+    label: str = Field(min_length=1, max_length=512, strict=True)
+    options: tuple[NativeSelectOption, ...] = Field(min_length=1, max_length=2048)
+
+    @model_validator(mode="after")
+    def _unique_option(self) -> "NativeSelectContract":
+        chosen = [option for option in self.options if option.value == self.value]
+        normalized = " ".join(self.label.split()).casefold()
+        if (
+            not normalized
+            or len(chosen) != 1
+            or chosen[0].label != self.label
+            or chosen[0].disabled
+            or sum(
+                " ".join(option.label.split()).casefold() == normalized
+                for option in self.options
+            )
+            != 1
+        ):
+            raise ValueError("native selection needs one enabled, unambiguous option")
+        return self
+
+
 class Step(BaseModel):
     id: str
     intent: str = Field(description="Human-readable purpose of the step")
@@ -2042,6 +2109,7 @@ class Step(BaseModel):
             " compiler.annotate.FieldLabelAnnotator)."
         ),
     )
+    native_selection: Optional[NativeSelectContract] = None
     selection_commit_key: Optional[Literal["Enter", "Tab"]] = Field(
         default=None,
         description=(
@@ -2244,6 +2312,8 @@ class Step(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.target_param is None:
             data.pop("target_param", None)
+        if self.native_selection is None:
+            data.pop("native_selection", None)
         return data
 
     @model_validator(mode="after")
@@ -2272,6 +2342,22 @@ class Step(BaseModel):
                 raise ValueError("HOTKEY steps require a key and at least one modifier")
         elif self.modifiers:
             raise ValueError("modifiers are valid only for HOTKEY steps")
+        if self.native_selection is not None:
+            if (
+                self.action is not ActionKind.SELECT_OPTION
+                or self.selection_commit_key is not None
+                or self.selection_region is not None
+                or self.secret
+                or self.param is not None
+                or self.text != self.native_selection.label
+                or self.anchor is None
+                or self.anchor.structural is None
+                or not self.anchor.structural.selector
+            ):
+                raise ValueError(
+                    "native selection requires a literal SELECT_OPTION with an exact "
+                    "structural anchor and no remote selection contract"
+                )
         if (self.selection_commit_key is None) != (self.selection_region is None):
             raise ValueError(
                 "selection_commit_key and selection_region must be set together"
@@ -2288,9 +2374,9 @@ class Step(BaseModel):
                     "option-selection contracts require the demonstrated field "
                     "anchor for fresh pre-commit re-resolution"
                 )
-        elif self.action is ActionKind.SELECT_OPTION:
+        elif self.action is ActionKind.SELECT_OPTION and self.native_selection is None:
             raise ValueError(
-                "SELECT_OPTION requires selection_commit_key and selection_region"
+                "SELECT_OPTION requires a native contract or selection_commit_key and selection_region"
             )
         if self.submit_binding is not None:
             # The binding stands in for a record identity on the visual path
@@ -3295,6 +3381,9 @@ class Workflow(BaseModel):
     # or a hosted run summary. Empty for browser/native bundles, preserving
     # their serialized form through the compatibility serializer below.
     backend_hints: Optional[BackendHints] = None
+    #: Locale, date order and keyboard layout recorded with the demonstration
+    #: (#1897). Checked before replay; omitted from serialized bytes when unset.
+    locale_invariants: Optional["LocaleInvariants"] = None
     # -- surface binding (roadmap Section 5) --------------------------------
     # The exact execution surface this workflow was recorded/qualified on and
     # the execution mode that surface implies. A bound workflow refuses to run
@@ -3414,6 +3503,8 @@ class Workflow(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.backend_hints is None:
             data.pop("backend_hints", None)
+        if self.locale_invariants is None:
+            data.pop("locale_invariants", None)
         if self.surface is None:
             data.pop("surface", None)
         if self.execution_mode is None:
@@ -3915,8 +4006,8 @@ class ActionDeliveryReceipt(BaseModel):
         default=None,
         pattern=r"^[0-9a-f]{64}$",
         description=(
-            "SELECT_OPTION only: SHA-256 of the exact option text dispatched "
-            "without retaining the possibly sensitive value."
+            "SELECT_OPTION only: SHA-256 of the exact native option value, "
+            "or the remote type-ahead text dispatched, without retaining it."
         ),
     )
     selection_commit_key: Optional[Literal["Enter", "Tab"]] = Field(
@@ -4723,13 +4814,17 @@ class CheckToClickRecheck(BaseModel):
 
     Records which checked regions changed on the fresh frame taken just
     before the click, and what the runtime did: re-observed the target and
-    its identity on that frame, or refused the click. No pixels.
+    its identity on that frame, refused the click, or (``settled``) clicked
+    because the fresh frame matched an earlier confirmed one, as a blinking
+    caret does. ``settled_on`` then counts how many confirmations back that
+    frame was (1 = the one before the latest). No pixels.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     changed: list[Literal["target", "identity", "hover", "frame_size"]]
-    outcome: Literal["reobserved", "aborted"]
+    outcome: Literal["reobserved", "aborted", "settled"]
+    settled_on: Optional[int] = Field(default=None, ge=1)
 
 
 class StepResult(BaseModel):
@@ -6400,6 +6495,7 @@ class RunReport(BaseModel):
 # OCR/cv2/model deps) runtime package loads cleanly and Step's schema can be
 # completed. Effect enters this module's globals so ``model_rebuild`` resolves
 # the forward reference; bundles with no effects are unaffected.
+from openadapt_flow.locale_invariants import LocaleInvariants  # noqa: E402,F401
 from openadapt_flow.qualification import QualificationProject  # noqa: E402,F401
 from openadapt_flow.runtime.effects.effect import Effect  # noqa: E402,F401
 

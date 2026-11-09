@@ -60,7 +60,9 @@ def _demo_admitter(key_dir: Path):
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--cache", default=None, help="cache directory (default: temp)")
     parser.add_argument(
         "--yes",

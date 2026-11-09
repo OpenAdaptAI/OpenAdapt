@@ -309,6 +309,8 @@ def test_ledger_prices_opus() -> None:
 
 
 def test_the_emitted_mcp_server_parses(tmp_path: Path) -> None:
+    import runpy
+
     from openadapt_flow.compile_agent.emit import emit_mcp
     from openadapt_flow.jit.signature import TaskSignature
 
@@ -320,7 +322,12 @@ def test_the_emitted_mcp_server_parses(tmp_path: Path) -> None:
     tree = ast.parse(path.read_text())
     funcs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef)]
     assert funcs == ["demo_add_note"]
-    assert "note: str" in path.read_text()
+    pytest.importorskip("mcp")
+    namespace = runpy.run_path(str(path))
+    tool = next(iter(namespace["mcp"]._tool_manager._tools.values()))
+    assert set(tool.parameters["properties"]) == {"note"}
+    assert tool.parameters["properties"]["note"]["type"] == "string"
+    assert tool.parameters["required"] == ["note"]
 
 
 # -- the save gate ----------------------------------------------------------------

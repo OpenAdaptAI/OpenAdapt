@@ -69,7 +69,7 @@ def cmd_variants(args: argparse.Namespace) -> int:
         print(
             f"Authored variant set {variant_set.name!r} at {args.out}: "
             f"{len(variant_set.variants)} admitted variant(s). Each keeps its own "
-            "QualificationAdmissionEnvelope; `run` routes before it executes."
+            "signed run permission; run routes before it executes."
         )
         return 0
     if action == "add":

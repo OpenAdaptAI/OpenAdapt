@@ -12,6 +12,10 @@ from pathlib import Path
 from typing import Optional
 
 from openadapt_flow.console.decision_supervisor import DecisionSupervisorThread
+from openadapt_flow.console.identity import (
+    ConsoleIdentityPolicy,
+    ConsoleIdentityResolver,
+)
 from openadapt_flow.runtime.durable.attended_service import AttendedActionService
 
 #: The only address the console ever binds. Not configurable.
@@ -31,6 +35,8 @@ def serve(
     decision_supervisor: Optional[DecisionSupervisorThread] = None,
     port: int = DEFAULT_PORT,
     repair_store: Path | str | None = None,
+    identity_policy: ConsoleIdentityPolicy | None = None,
+    identity_resolver: ConsoleIdentityResolver | None = None,
 ) -> None:
     """Build the app and serve it on ``http://127.0.0.1:<port>`` (blocking).
 
@@ -57,6 +63,8 @@ def serve(
         access_token=access_token,
         attended_service=attended_service,
         repair_store=repair_store,
+        identity_policy=identity_policy,
+        identity_resolver=identity_resolver,
     )
     # URL fragments are consumed entirely by the browser and are never sent in
     # HTTP requests or uvicorn access logs.  The UI removes the fragment before
