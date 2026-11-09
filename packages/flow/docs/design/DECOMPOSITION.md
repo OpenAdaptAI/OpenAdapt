@@ -595,7 +595,7 @@ that:
 | File | Line budget |
 |---|---:|
 | `packages/flow/openadapt_flow/runtime/replayer.py` | 19859 |
-| `packages/flow/openadapt_flow/__main__.py` | 13953 |
+| `packages/flow/openadapt_flow/__main__.py` | 14119 |
 | `packages/flow/openadapt_flow/qualification.py` | 5882 |
 | `packages/flow/openadapt_flow/ir.py` | 6514 |
 | `packages/desktop/openadapt_desktop/dispatch.py` | 6524 |

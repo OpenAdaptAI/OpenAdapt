@@ -328,3 +328,68 @@ def test_identical_copies_moved_to_two_files_pass(tmp_path: Path) -> None:
 
     assert result.ok, (result.missing, result.new_bodies)
     assert result.moved == 2
+
+
+# One item of each unit kind, to move between the branches of a
+# ``TYPE_CHECKING`` block. Each branch keeps an anchor that never moves, so a
+# failure can only come from the item.
+BRANCH_ITEMS = {
+    "statement": ("", "    FOUND = os.getcwd()\n"),
+    "function": ("", "    def found():\n        return 1\n"),
+    "method": (
+        "    class Host:\n        'host'\n",
+        "    class Host:\n        'host'\n\n        def found(self):\n"
+        "            return 1\n",
+    ),
+}
+
+
+def _branches(if_body: str, else_body: str) -> str:
+    return (
+        "import os\nfrom typing import TYPE_CHECKING\n\n"
+        f"if TYPE_CHECKING:\n    ANCHOR = 1\n{if_body}"
+        f"else:\n    ANCHOR = 2\n{else_body}"
+    )
+
+
+def _branch_case(tmp_path: Path, kind: str, direction: str, moved: bool) -> Path:
+    plain, with_item = BRANCH_ITEMS[kind]
+    if direction == "if->else":
+        base = _branches(with_item, plain)
+        after = _branches(plain, with_item) if moved else base
+    else:
+        base = _branches(plain, with_item)
+        after = _branches(with_item, plain) if moved else base
+    repo = _init(tmp_path, {f"{PKG}/branches.py": base, f"{PKG}/__init__.py": ""})
+    # A re-export keeps the file changed in the controls too.
+    _write(repo, f"{PKG}/branches.py", after + "\nALIAS = os.sep\n")
+    return repo
+
+
+CASES = [(k, d) for k in BRANCH_ITEMS for d in ("if->else", "else->if")]
+
+
+@pytest.mark.parametrize("kind, direction", CASES)
+def test_code_moved_between_type_checking_branches_fails(
+    tmp_path: Path, kind: str, direction: str
+) -> None:
+    """Which branch code sits in decides whether it runs."""
+    repo = _branch_case(tmp_path, kind, direction, moved=True)
+
+    result = _verify(repo)
+
+    assert not result.ok
+    assert result.missing, result.new_bodies
+    assert verify_moved_code.main(["--root", str(repo), "--base", "HEAD"]) == 1
+
+
+@pytest.mark.parametrize("kind, direction", CASES)
+def test_code_kept_in_its_type_checking_branch_passes(
+    tmp_path: Path, kind: str, direction: str
+) -> None:
+    repo = _branch_case(tmp_path, kind, direction, moved=False)
+
+    result = _verify(repo)
+
+    assert result.ok, (result.missing, result.new_bodies)
+    assert verify_moved_code.main(["--root", str(repo), "--base", "HEAD"]) == 0

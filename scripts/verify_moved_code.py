@@ -49,8 +49,8 @@ class Unit:
     lineno: int
     dump: str
     is_function: bool
-    # A statement that documents or declares but does nothing at run time:
-    # a docstring, or an annotation with no value (a protocol attribute).
+    # Code that runs nothing new: a docstring, an annotation with no value (a
+    # protocol attribute), ``pass``, a protocol stub or a re-export.
     is_declaration: bool = False
     # Module-level names a function reads (it looks them up in its module).
     reads: frozenset[str] = frozenset()
@@ -83,7 +83,9 @@ def _is_type_checking_block(node: ast.stmt) -> bool:
 
     Such blocks hold imports and the mixin base alias. The ``else`` branch runs
     at import time, so neither branch is skipped as a whole: imports in it are
-    ignored and every other statement is a unit like any other.
+    ignored and every other statement is a unit like any other. Each unit keeps
+    the branch it sits in as part of its identity (see ``units``), so code that
+    moves from one branch to the other is a deletion plus new code.
     """
     return (
         isinstance(node, ast.If)
@@ -149,13 +151,20 @@ def units(source: str, file: str) -> tuple[list[Unit], dict[str, list[str]]]:
     out: list[Unit] = []
     bases: dict[str, list[str]] = {}
 
-    def walk(body: list[ast.stmt], prefix: str) -> None:
+    def walk(body: list[ast.stmt], prefix: str, scope: str = "") -> None:
+        # ``scope`` is the chain of ``TYPE_CHECKING`` branches around ``body``.
+        # Whether code runs depends on it, so it is part of every unit's
+        # comparable dump: the same statement, function or method in the other
+        # branch is a different unit.
+        def key(dump: str) -> str:
+            return f"{scope}{dump}" if scope else dump
+
         for node in body:
             if _is_import(node):
                 continue
             if _is_type_checking_block(node):
-                walk(node.body, prefix)
-                walk(node.orelse, prefix)
+                walk(node.body, prefix, f"{scope}[TYPE_CHECKING:if]")
+                walk(node.orelse, prefix, f"{scope}[TYPE_CHECKING:else]")
                 continue
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 reads = frozenset(
@@ -168,8 +177,9 @@ def units(source: str, file: str) -> tuple[list[Unit], dict[str, list[str]]]:
                         file,
                         prefix + node.name,
                         node.lineno,
-                        _dump(node),
+                        key(_dump(node)),
                         True,
+                        is_declaration=_is_stub(node),
                         reads=reads,
                     )
                 )
@@ -187,7 +197,7 @@ def units(source: str, file: str) -> tuple[list[Unit], dict[str, list[str]]]:
                             file,
                             f"{name}(<bases>)",
                             node.lineno,
-                            "\n".join(_dump(n) for n in header),
+                            key("\n".join(_dump(n) for n in header)),
                             False,
                         )
                     )
@@ -197,11 +207,11 @@ def units(source: str, file: str) -> tuple[list[Unit], dict[str, list[str]]]:
                             file,
                             f"{name}@{ast.unparse(deco)}",
                             node.lineno,
-                            _dump(deco),
+                            key(_dump(deco)),
                             False,
                         )
                     )
-                walk(node.body, name + ".")
+                walk(node.body, name + ".", scope)
             else:
                 label = f"{prefix}<statement line {node.lineno}>"
                 declaration = (
@@ -211,6 +221,7 @@ def units(source: str, file: str) -> tuple[list[Unit], dict[str, list[str]]]:
                         and not _has_call([node.annotation])
                     )
                     or isinstance(node, ast.Pass)
+                    or _is_reexport(node)
                     or (
                         isinstance(node, ast.Expr)
                         and isinstance(node.value, ast.Constant)
@@ -218,7 +229,7 @@ def units(source: str, file: str) -> tuple[list[Unit], dict[str, list[str]]]:
                     )
                 )
                 out.append(
-                    Unit(file, label, node.lineno, _dump(node), False, declaration)
+                    Unit(file, label, node.lineno, key(_dump(node)), False, declaration)
                 )
 
     walk(tree.body, "")
@@ -347,17 +358,6 @@ def verify(root: Path, base: str, search: list[str]) -> Result:
             continue
         old = base_source(root, base, path)
         old_dumps = Counter(u.dump for u in units(old, path)[0]) if old else Counter()
-        tree = ast.parse(new_file.read_text(encoding="utf-8"), filename=path)
-        stubs = {
-            _dump(n)
-            for n in ast.walk(tree)
-            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and _is_stub(n)
-        }
-        reexports = {
-            _dump(n)
-            for n in ast.walk(tree)
-            if isinstance(n, ast.stmt) and _is_reexport(n)
-        }
         for unit in units(new_file.read_text(encoding="utf-8"), path)[0]:
             if unit.dump in old_dumps:
                 old_dumps[unit.dump] -= 1
@@ -367,8 +367,8 @@ def verify(root: Path, base: str, search: list[str]) -> Result:
             if base_units[unit.dump] > 0:
                 base_units[unit.dump] -= 1  # moved here from a changed file
                 continue
-            # Protocol attribute declarations and docstrings are not logic.
-            if unit.dump in stubs or unit.dump in reexports or unit.is_declaration:
+            # Stubs, re-exports, declarations and docstrings are not logic.
+            if unit.is_declaration:
                 result.new_stubs.append(unit)
             else:
                 result.new_bodies.append(unit)
