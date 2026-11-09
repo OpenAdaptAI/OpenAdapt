@@ -389,7 +389,8 @@ def require_production_qualification(
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Require an exact-SHA dispatched CI full-matrix qualification."
+        description="Require an exact-SHA dispatched CI full-matrix qualification.",
+        allow_abbrev=False,
     )
     parser.add_argument("--repository", required=True)
     parser.add_argument("--sha", required=True)

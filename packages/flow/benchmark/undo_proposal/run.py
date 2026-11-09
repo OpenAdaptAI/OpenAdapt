@@ -56,8 +56,8 @@ class Fixture:
 
 def _fixtures() -> dict[str, Fixture]:
     from benchmark.harness.mockloan.demo import record_disbursement_demo
-    from openadapt_flow.mockloan.fault_server import serve as serve_loan
     from openadapt_flow import demo_driver
+    from openadapt_flow.mockloan.fault_server import serve as serve_loan
     from openadapt_flow.mockmed.fault_server import serve as serve_med
 
     return {
@@ -185,7 +185,6 @@ def _bind_save_effect(
 
 def _contract(directory: Path, base_url: str, fixture: Fixture, body: dict) -> Path:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
     from openadapt_flow.reward.bundle import write_bundle
 
     match: dict[str, Any] = {k: str(body[k]) for k in fixture.match_fields}
@@ -378,7 +377,9 @@ def markdown_table(summary: dict[str, Any]) -> str:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--fixture", action="append", default=None)
     parser.add_argument(

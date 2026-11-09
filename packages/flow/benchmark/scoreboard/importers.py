@@ -305,13 +305,15 @@ def openemr() -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     sub = parser.add_subparsers(dest="cmd", required=True)
-    p = sub.add_parser("openimis-demo")
+    p = sub.add_parser("openimis-demo", allow_abbrev=False)
     p.add_argument("--run-id", required=True)
     p.add_argument("--program-only", action="store_true")
     p.add_argument("--first-run-only", action="store_true")
-    sub.add_parser("openemr")
+    sub.add_parser("openemr", allow_abbrev=False)
     args = parser.parse_args()
     if args.cmd == "openimis-demo":
         openimis_demo(args.run_id, args.program_only, args.first_run_only)

@@ -1,0 +1,9 @@
+{
+  "name": "com.openadapt.extension",
+  "description": "OpenAdapt optional Chrome extension evidence host",
+  "path": "HOST_PATH_PLACEHOLDER",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://EXTENSION_ID_PLACEHOLDER/"
+  ]
+}

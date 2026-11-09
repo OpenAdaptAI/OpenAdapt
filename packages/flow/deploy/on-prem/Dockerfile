@@ -1,37 +1,47 @@
-# openadapt-flow on-prem runner image — built OFFLINE from a local wheelhouse.
+# openadapt-flow on-prem runner image, built with no network from a signed
+# release archive (bin/build-release.sh).
 #
-# Air-gapped hosts do not reach PyPI. Build this on a connected staging host (or
-# with a pre-populated ./wheels) and copy the resulting image tar into the
-# clinic via removable media (`docker save` / `docker load`).
+# Do not run `docker build` on this file directly. bin/build-image.sh checks the
+# archive's signature against the pinned vendor key, extracts it, lays out the
+# build context below and builds with `--network none`, so pip can only use
+# the release's own wheels (the ones pinned by uv.lock):
 #
-# Prepare the wheelhouse off-site:
-#   pip download 'openadapt-flow[privacy]' -d deploy/on-prem/wheels
-# Then build (context = repo root, per docker-compose.yml):
-#   docker build -f deploy/on-prem/Dockerfile -t openadapt-flow-onprem:local .
+#   release/   the extracted release: VERSION, wheels/, requirements.lock.txt
+#   on-prem/   the runtime scripts, compose file, docs and this Dockerfile
+#              (build-image.sh names each file; nothing else is copied)
 #
-# [STUB] the ./wheels wheelhouse is NOT committed (it is large and version-
-# specific). Without it the build fails LOUDLY rather than reaching the network.
+# The base image must already be in the local image store (`docker load` it
+# on an air-gapped host). Its default is pinned by digest; the release must be
+# built for the same Python minor version and CPU architecture (see
+# build-release.sh). Move the result in with `docker save` / `docker load`.
 
-FROM python:3.11-slim
+ARG BASE_IMAGE=python:3.12-slim@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30
+FROM ${BASE_IMAGE}
 
-# Never let pip reach the internet from inside the image build.
 ENV PIP_NO_INDEX=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
     OPENADAPT_FLOW_SCRUB=on
 
-WORKDIR /opt/openadapt-flow
+# The same install as install.sh (lib-release.sh rel_build_release): only the
+# release's wheels, the exact version the archive declares, then a dependency
+# consistency check.
+COPY release /tmp/release
+RUN set -eu; \
+    version="$(cat /tmp/release/VERSION)"; \
+    python -m venv /opt/openadapt-flow/venv; \
+    /opt/openadapt-flow/venv/bin/pip install --no-index --only-binary=:all: \
+        --find-links /tmp/release/wheels "openadapt-flow[privacy]==${version}"; \
+    /opt/openadapt-flow/venv/bin/pip check; \
+    printf '%s\n' "$version" > /opt/openadapt-flow/VERSION; \
+    rm -rf /tmp/release
 
-# Copy the offline wheelhouse (staged off-site) and the deploy scripts.
-COPY deploy/on-prem/wheels /tmp/wheels
-COPY deploy/on-prem /opt/openadapt-flow/deploy/on-prem
+COPY on-prem /opt/openadapt-flow/deploy/on-prem
 
-# Install the engine + privacy extra from local wheels only.
-RUN pip install --no-index --find-links /tmp/wheels 'openadapt-flow[privacy]' \
-    && rm -rf /tmp/wheels
+ENV PATH="/opt/openadapt-flow/venv/bin:/opt/openadapt-flow/deploy/on-prem/bin:${PATH}"
 
 # Storage root is a bind-mounted, host-encrypted volume at runtime.
 WORKDIR /srv/openadapt
-ENV PATH="/opt/openadapt-flow/deploy/on-prem:${PATH}"
 
-# Default: process the local job queue. Overridden by docker-compose command.
-CMD ["deploy/on-prem/bin/run-queue.sh", "watch"]
+# Absolute path: the working directory is the storage volume, not the scripts.
+CMD ["/opt/openadapt-flow/deploy/on-prem/bin/run-queue.sh", "watch"]

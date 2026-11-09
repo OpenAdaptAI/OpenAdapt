@@ -2976,7 +2976,8 @@ def create_server(
 def main(argv: Optional[list[str]] = None) -> None:
     """CLI entry point: run the agent server until interrupted."""
     parser = argparse.ArgumentParser(
-        description="OpenAdapt-flow in-guest Windows agent"
+        description="OpenAdapt-flow in-guest Windows agent",
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--host",
